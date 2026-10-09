@@ -109,7 +109,7 @@ test("automation drawer retains failed drafts and supports responsive create, ed
   await page.setViewportSize({ width: 1440, height: 844 });
   await newButton.click();
   await drawer.getByRole("combobox", { name: "Automation trigger" }).click();
-  await page.locator(".ant-select-item-option").filter({ hasText: /^Event$/ }).click();
+  await page.locator(".ant-select-item-option").filter({ hasText: /^Shared Event \(webhook\)$/ }).click();
   await expect(drawer.getByRole("combobox", { name: "Automation Event" })).toBeVisible();
   await drawer.getByRole("textbox", { name: "Automation name" }).fill("Event selection boundary");
   await drawer.getByRole("textbox", { name: "Automation instructions" }).fill("Review incoming orders.");

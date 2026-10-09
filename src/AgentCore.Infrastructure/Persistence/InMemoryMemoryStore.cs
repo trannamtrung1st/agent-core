@@ -9,6 +9,8 @@ public sealed class InMemoryMemoryStore : IMemoryStore
 {
     private readonly object _gate = new();
 
+    public InMemoryCoreEventStore CoreEvents { get; set; } = new();
+
     internal object AdmissionGate => _gate;
     internal AgentRunMemoryState AgentRuns { get; } = new();
 
@@ -114,6 +116,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
             if (existing.Origin != snapshot.Origin)
                 throw AgentCoreErrors.Conflict("Session origin is immutable.");
             Store(snapshot, replaceEntries: snapshot.DurablyDeletedAt is not null);
+            CoreEvents.Append(CoreEventPersistence.Session(existing, snapshot, snapshot.Origin.InitialBackgroundAgentRunId is { } id ? AgentRuns.Runs.GetValueOrDefault(id) : null));
             return ValueTask.CompletedTask;
         }
     }

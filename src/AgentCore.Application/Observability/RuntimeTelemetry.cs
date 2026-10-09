@@ -19,6 +19,13 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> Dropped = Meter.CreateCounter<long>("dropped_items");
     private static readonly Counter<long> MemoryRetrieval = Meter.CreateCounter<long>("memory_retrieval");
     private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
+    private static readonly Counter<long> EventFilters = Meter.CreateCounter<long>("automation_event_filters");
+    public static void RecordEventFilter(string source, string outcome) => EventFilters.Add(1, new KeyValuePair<string, object?>("source", source), new KeyValuePair<string, object?>("outcome", outcome));
+    private static readonly Counter<long> EventDeliveries = Meter.CreateCounter<long>("automation_event_delivery_attempts");
+    public static void RecordEventDelivery(string source, string outcome) => EventDeliveries.Add(1,
+        new KeyValuePair<string, object?>("source", source == "core" ? "core" : "webhook"),
+        new KeyValuePair<string, object?>("outcome", outcome switch
+        { "emitted" or "matched" or "filtered" or "filter_error" or "coalesced" or "duplicate" or "policy_denied" or "loop_skipped" or "budget_skipped" or "admitted" or "recovered" => outcome, _ => "other" }));
     private static readonly Counter<long> AutomationEvents = Meter.CreateCounter<long>("trigger_registration_events");
     private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
     private static readonly Counter<long> ResponseRepairs = Meter.CreateCounter<long>("llm.response.repair");

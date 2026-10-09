@@ -51,3 +51,8 @@ DESTINATIONS: Reuse AutomationDestination and CompletionDeliveryStatus across Ch
 
 
 WAIT: Shared AgentRunDetails displays typed Waiting separately from approval/retry, with deadline and owned child links. Waiting remains active in Automation/Run polling and exposes existing Cancel. Result handling links open the exact successful parent Run. No new collection or design system is introduced; inherited drawers are confirmed at desktop/tablet/mobile widths.
+
+
+### Core Event preset and filter authoring
+
+The existing Instance Triggers drawer owns Custom/preset selection, a third Core Event trigger, optional expression, dispatch/window and read-only sample testing. Presets fill disabled editable drafts and explain prerequisites. Core types are Instance-owned built-in signals; Shared Events remain webhook resources in global Connections. Preserve shared Ant Design v6 model/reasoning controls, 640px/full-mobile drawer, footer reachability, focus return and stale-result invalidation. Test status uses aria-live and a stable accessible button label. Delivery diagnostics show safe status/code/revision with independent retry. Product behavior is owned by docs/13 and docs/14; this is presentation context only.

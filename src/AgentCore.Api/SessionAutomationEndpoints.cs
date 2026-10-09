@@ -1,3 +1,4 @@
+using AgentCore.Application.Triggers;
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Application.Observability;
@@ -88,7 +89,7 @@ public static class SessionAutomationEndpoints
     {
         var (kind, zone, summary) = registration.Trigger is ScheduleTrigger scheduled
             ? Describe(scheduled.Schedule)
-            : ("event", (string?)null, $"Event {registration.EventId}");
+            : (registration.Trigger is CoreEventTrigger ? "coreEvent" : "event", (string?)null, AutomationRules.Describe(registration.Trigger));
         return new SessionAutomationResponse(
             registration.AutomationId.ToString(),
             registration.Instructions,

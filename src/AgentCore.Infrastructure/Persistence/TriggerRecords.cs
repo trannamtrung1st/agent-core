@@ -2,6 +2,12 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class AutomationRecord
 {
+    public string? PresetId { get; set; }
+    public int? PresetVersion { get; set; }
+    public string? CoreEventKey { get; set; }
+    public string? FilterExpression { get; set; }
+    public int DispatchMode { get; set; }
+    public int? DispatchWindowSeconds { get; set; }
     public int ExecutionTargetKind { get; set; }
     public string? TargetSessionId { get; set; }
     public string? ReportToSessionId { get; set; }

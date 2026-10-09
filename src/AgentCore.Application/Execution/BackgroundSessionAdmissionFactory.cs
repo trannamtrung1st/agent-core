@@ -57,6 +57,7 @@ public static class BackgroundSessionAdmissionFactory
         var kind = occurrence.SourceKind switch
         {
             TriggerSourceKind.Schedule => ActivationKind.ScheduledWork,
+            TriggerSourceKind.CoreEvent => ActivationKind.CoreEvent,
             TriggerSourceKind.ApplicationEvent => ActivationKind.ApplicationEvent,
             TriggerSourceKind.ManualInvocation => ActivationKind.ManualBackground,
             _ => throw new ArgumentException("Occurrence source is not supported.", nameof(occurrence))
@@ -69,7 +70,7 @@ public static class BackgroundSessionAdmissionFactory
         var entry = new ConversationEntry(entryId, 1, occurrence.SourceEventId, ConversationRole.User,
             text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, admittedAtUtc);
         var activation = new Activation(activationId, sessionId, kind, [entryId], occurrence.SourceEventId,
-            occurrence.OccurrenceId, null, null, occurrence.DedupeKey, admittedAtUtc);
+            occurrence.OccurrenceId, null, null, occurrence.DedupeKey, admittedAtUtc, occurrence.EvidenceJson);
         var run = AgentRun.Create(agentRunId,
             new AgentRunOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
             new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget),

@@ -1438,3 +1438,10 @@ Historical AgentRun/Browser v2 freezes remain unchanged; P10/P11 remain unopened
 - [x] Record final evidence and earlier local environment failures in the [verification report](docs/reports/durable-completion-inbox-result-handoff-wait-verification.md#post-closure-claim-renewal-and-unavailable-wait-targets-2026-10-08).
 
 This closure changes documentation only. Original completion-inbox/Automation freeze records remain historical; no additional UI change, migration reopening or P10/P11 work is included.
+
+## Core Events and Automation presets (2026-10-10)
+
+- [x] Implement additive Core triggers/outbox, shared restricted filters, disabled templates, durable coalescing/source coverage, and Admin/Chat authoring.
+- [x] Complete integrated local/hosted acceptance on `743429ebb9a1e8b5989744a704f89e09bc25ff21`: 3,122 local backend tests (16 opt-in skips), 832 frontend tests/build, 11 local browser journeys, Compose survival and all five [hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37982193102).
+
+[Verification](docs/reports/core-events-automation-presets-verification.md) owns current results. Historical closure records and P10/P11 remain unchanged.

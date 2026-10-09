@@ -103,7 +103,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
                     target.AutomationId,
                     target.AgentInstanceId,
                     target.ProfileId,
-                    ExternalEventDeliveryStatus.Pending);
+                    ExternalEventDeliveryStatus.Pending, target.Snapshot);
             }
 
             return ValueTask.FromResult(new ExternalEventAdmit(ExternalEventAdmitKind.Admitted, candidate));
@@ -125,6 +125,18 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
                 .Take(Math.Max(1, limit))
                 .ToArray();
             return ValueTask.FromResult<IReadOnlyList<ExternalEventDelivery>>(rows);
+        }
+    }
+
+    public ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            if (!_deliveries.TryGetValue((eventId, automationId), out var d) || d.Status == ExternalEventDeliveryStatus.Skipped)
+                return ValueTask.FromResult(new EventFilterResult(null, "error", "delivery-unavailable"));
+            if (d.Decision is not null) return ValueTask.FromResult(d.Decision);
+            _deliveries[(eventId, automationId)] = d with { Decision = decision };
+            return ValueTask.FromResult(decision);
         }
     }
 

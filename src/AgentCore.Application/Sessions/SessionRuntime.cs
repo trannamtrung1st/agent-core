@@ -812,9 +812,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private void LaunchOccurrence(EventContext context, OccurrenceDelivery delivery)
     {
-        var kind = delivery.SourceKind == TriggerSourceKind.Schedule
-            ? TriggerKind.ScheduledOccurrence
-            : TriggerKind.ApplicationEvent;
+        var kind = delivery.SourceKind switch { TriggerSourceKind.Schedule => TriggerKind.ScheduledOccurrence, TriggerSourceKind.CoreEvent => TriggerKind.CoreEvent, _ => TriggerKind.ApplicationEvent };
         var responseId = _ids.NewId();
         var turn = ++_turnGeneration;
         var trigger = new AgentTrigger(delivery.OccurrenceId, kind, delivery.EvidenceJson);
@@ -2346,7 +2344,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
         _brainEvaluationCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         var evaluationToken = _brainEvaluationCts.Token;
-        if (trigger.Kind is not (TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent))
+        if (trigger.Kind is not (TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.CoreEvent))
         {
             PinModelSelectionIfMissing();
         }
@@ -5939,7 +5937,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (_boundAgentRun is { } run)
             return ResolvePinnedModel(new ExecutionModelPin(run.PinnedModel.CatalogKey, run.PinnedModel.ProviderAlias,
                 run.PinnedModel.ModelId, run.PinnedModel.ReasoningEffort, ExecutionModelSource.ConversationDefault));
-        if (kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent
+        if (kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.CoreEvent
             && _activeOccurrencePin is ExecutionModelPin pin)
         {
             return ResolvePinnedModel(pin);
@@ -5950,13 +5948,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     }
 
     private ModelGenerationProvenance? OccurrenceProvenance(TriggerKind kind) =>
-        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent
+        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.CoreEvent
             && _activeOccurrencePin is ExecutionModelPin pin
             ? new ModelGenerationProvenance(pin.CatalogKey, pin.ProviderAlias, pin.ModelId, pin.ReasoningEffort)
             : null;
 
     private string? ReasoningEffortFor(TriggerKind kind) => _boundAgentRun is { } run ? run.PinnedModel.ReasoningEffort :
-        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent
+        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.CoreEvent
             && _activeOccurrencePin is ExecutionModelPin pin
             ? pin.ReasoningEffort
             : _snapshot.ModelSelection?.ReasoningEffort;

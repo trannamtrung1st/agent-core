@@ -16,9 +16,13 @@ public static class AutomationRules
             || current.Provenance.AuthorizationOrigin != proposed.Provenance.AuthorizationOrigin
             || current.Provenance.SourceSessionId != proposed.Provenance.SourceSessionId
             || current.Provenance.SourceEventId != proposed.Provenance.SourceEventId
-            || current.Provenance.CreatedAt != proposed.Provenance.CreatedAt))
+            || current.Provenance.CreatedAt != proposed.Provenance.CreatedAt
+            || current.Provenance.PresetId != proposed.Provenance.PresetId || current.Provenance.PresetVersion != proposed.Provenance.PresetVersion))
             throw AgentCoreErrors.Forbidden("Automation provenance cannot change.");
     }
+
+    public static TriggerSourceKind Source(AutomationTrigger trigger) => trigger.Kind switch
+    { AutomationTriggerKind.CoreEvent => TriggerSourceKind.CoreEvent, AutomationTriggerKind.Event => TriggerSourceKind.ApplicationEvent, _ => TriggerSourceKind.Schedule };
 
     public static bool IsManual(TriggerOccurrence occurrence) => occurrence.SourceKind == TriggerSourceKind.ManualInvocation;
 
@@ -26,8 +30,8 @@ public static class AutomationRules
     {
         if (!IsManual(occurrence)) return occurrence.SourceKind;
         using var json = JsonDocument.Parse(occurrence.EvidenceJson);
-        return json.RootElement.TryGetProperty("triggerKind", out var kind) && kind.GetString() == "Event"
-            ? TriggerSourceKind.ApplicationEvent : TriggerSourceKind.Schedule;
+        return json.RootElement.TryGetProperty("triggerKind", out var kind) ? kind.GetString() switch
+        { "Event" => TriggerSourceKind.ApplicationEvent, "CoreEvent" => TriggerSourceKind.CoreEvent, _ => TriggerSourceKind.Schedule } : TriggerSourceKind.Schedule;
     }
 
     public static string Evidence(Automation automation, object? triggerContext = null) =>
@@ -44,6 +48,7 @@ public static class AutomationRules
 
     public static string Describe(AutomationTrigger trigger) => trigger switch
     {
+        CoreEventTrigger e => $"Core Event · {e.CoreEventKey}",
         EventTrigger e => $"Event {e.EventId:D}",
         ScheduleTrigger { Schedule: OneShotSchedule s } => $"Once · {s.AtUtc:O}",
         ScheduleTrigger { Schedule: FixedIntervalSchedule s } => $"Every {s.IntervalSeconds} seconds",

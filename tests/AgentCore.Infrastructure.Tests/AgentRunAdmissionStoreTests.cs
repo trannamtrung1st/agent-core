@@ -150,7 +150,11 @@ public sealed class AgentRunAdmissionStoreTests
         var command = new AgentRunCommand.Complete(run.Revision, Now, run.Claim!.Generation, quiet ? "" : "Finished",
             quiet ? AgentRunOutcomeKind.NoAction : AgentRunOutcomeKind.Response, quiet ? null : draft.EntryId);
         var completed = await f.Runs.CommitOutcomeAsync(outcome, 2, Owner, run.AgentRunId, command, quiet ? draft.EntryId : null);
+        var receipt = Assert.Single(await f.CoreEvents.PendingAsync());
+        Assert.Equal("run.completed", receipt.Event.Key);
+        Assert.Equal(Owner.AgentInstanceId, receipt.Event.Owner.AgentInstanceId);
         await f.ReopenAsync();
+        Assert.Equal(receipt.Event.EventId, Assert.Single(await f.CoreEvents.PendingAsync()).Event.EventId);
         Assert.Equal(AgentRunStatus.Completed, (await f.Runs.GetAsync(Owner, run.AgentRunId))!.Status);
         Assert.Equal(quiet ? AgentRunOutcomeKind.NoAction : AgentRunOutcomeKind.Response, completed.Result!.OutcomeKind);
         Assert.Equal(3, (await f.Memory.LoadAsync(snapshot.SessionId))!.Revision);
@@ -174,6 +178,7 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.Equal(snapshot.Title, (await f.Memory.LoadAsync(snapshot.SessionId))!.Title);
         Assert.Equal(1, (await f.Memory.LoadAsync(snapshot.SessionId))!.Revision);
         Assert.True((await f.Runs.GetAsync(Owner, run.AgentRunId))!.CancellationRequested);
+        Assert.Empty(await f.CoreEvents.PendingAsync());
     }
 
     [Theory]
@@ -1510,6 +1515,73 @@ public sealed class AgentRunAdmissionStoreTests
                 result.Text, AgentRunOutcomeKind.Response, result.EntryId), null);
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Terminal_failure_and_session_transitions_emit_once_and_rollback_has_no_receipt(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var (snapshot, run) = UserTurn();
+        await f.Runs.AdmitAsync(snapshot, 0, run);
+        run = await Claim(f, run);
+        run = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Fail(run.Revision, Now,
+            run.Claim!.Generation, "provider-unavailable", "Safe fixture", true, Now.AddSeconds(1)));
+        Assert.Empty(await f.CoreEvents.PendingAsync());
+        run = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, Now.AddSeconds(1), Guid.NewGuid(), Now.AddMinutes(1)));
+        await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Fail(run.Revision, Now.AddSeconds(2),
+            run.Claim!.Generation, "provider-unavailable", "Safe fixture", false, null));
+        var failed = Assert.Single(await f.CoreEvents.PendingAsync());
+        Assert.Equal("run.failed", failed.Event.Key);
+        Assert.DoesNotContain("Safe fixture", failed.Event.DataJson);
+        var complete = snapshot with { Revision = 2, LifecycleStatus = SessionLifecycleStatus.Completed };
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Memory.SaveAsync(complete with { Revision = 3 }, 2).AsTask());
+        Assert.Single(await f.CoreEvents.PendingAsync());
+        await f.Memory.SaveAsync(complete, 1);
+        await f.Memory.SaveAsync(complete, 1);
+        var ended = complete with { Revision = 3, LifecycleStatus = SessionLifecycleStatus.Ended };
+        await f.Memory.SaveAsync(ended, 2);
+        await f.ReopenAsync();
+        var emitted = await f.CoreEvents.PendingAsync();
+        Assert.Equal(3, emitted.Count);
+        Assert.Contains(emitted, e => e.Event.Key == "session.completed");
+        Assert.Contains(emitted, e => e.Event.Key == "session.ended");
+        Assert.All(emitted, e => Assert.Equal(new TriggerOwner(Owner.AgentInstanceId, Owner.ProfileId), e.Event.Owner));
+    }
+
+    [Fact]
+    public void User_text_cannot_forge_causation_and_plain_native_signal_cannot_break_completion()
+    {
+        foreach (var kind in new[] { ActivationKind.UserTurn, ActivationKind.ApplicationEvent })
+        {
+            var evidence = kind == ActivationKind.UserTurn
+                ? "{\"triggerContext\":{\"causation\":{\"triggerDepth\":4,\"visitedAutomationIds\":[]}}}"
+                : "{\"Text\":\"Native plain signal\"}";
+            var activation = new Activation(Guid.NewGuid(), Guid.NewGuid(), kind, [Guid.NewGuid()], null,
+                kind == ActivationKind.ApplicationEvent ? Guid.NewGuid() : null, null, null, "test", Now, evidence);
+            var run = NewRun(activation).TakeClaim(Guid.NewGuid(), Now, Now.AddMinutes(1));
+            var failed = run.Fail(run.Revision, run.Claim!.Generation, "safe-failure", "Safe fixture", false, Now, null, Guid.NewGuid);
+            Assert.Equal(0, CoreEventPersistence.Run(run, failed)!.TriggerDepth);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void Coalesced_causation_preserves_all_distinct_visited_automations(bool wrapped)
+    {
+        var visited = Enumerable.Range(0, 7).Select(_ => Guid.NewGuid()).ToArray();
+        var root = Guid.NewGuid();
+        var evidence = System.Text.Json.JsonSerializer.Serialize(new { triggerContext = new { causation = new
+        { rootAgentRunId = root, triggerDepth = 2, visitedAutomationIds = visited.Concat(visited).ToArray() } } });
+        if (wrapped) evidence = System.Text.Json.JsonSerializer.Serialize(new { Text = evidence });
+        var activation = new Activation(Guid.NewGuid(), Guid.NewGuid(), ActivationKind.CoreEvent, [Guid.NewGuid()],
+            null, Guid.NewGuid(), null, null, "bucket:fixture", Now, evidence);
+        var run = NewRun(activation).TakeClaim(Guid.NewGuid(), Now, Now.AddMinutes(1));
+        var failed = run.Fail(run.Revision, run.Claim!.Generation, "safe-failure", "Safe fixture", false, Now, null, Guid.NewGuid);
+        var emitted = CoreEventPersistence.Run(run, failed)!;
+        Assert.Equal(root, emitted.RootAgentRunId);
+        Assert.Equal(2, emitted.TriggerDepth);
+        Assert.Equal(visited, emitted.VisitedAutomationIds);
+    }
+
     private static (SessionSnapshot Snapshot, AgentRun Run) UserTurn(Guid? sessionId = null)
     {
         var entries = new[] { "Check A", "Check B" }.Select((text, index) => new ConversationEntry(Guid.NewGuid(), index + 1,
@@ -1578,6 +1650,7 @@ public sealed class AgentRunAdmissionStoreTests
     }
     private sealed class Fixture : IAsyncDisposable
     {
+        internal ICoreEventStore CoreEvents => _factory is null ? ((InMemoryMemoryStore)Memory).CoreEvents : new SqliteCoreEventStore(_factory);
         private string? _path;
         private Factory? _factory;
         public IMemoryStore Memory { get; private set; } = null!;

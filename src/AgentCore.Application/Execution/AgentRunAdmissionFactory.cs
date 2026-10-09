@@ -31,6 +31,7 @@ public static class AgentRunAdmissionFactory
         var kind = trigger.Kind switch
         {
             TriggerKind.ScheduledOccurrence => ActivationKind.ScheduledWork,
+            TriggerKind.CoreEvent => ActivationKind.CoreEvent,
             TriggerKind.ApplicationEvent => ActivationKind.ApplicationEvent,
             TriggerKind.ManualInvocation => ActivationKind.ManualBackground,
             _ => ActivationKind.Initiative

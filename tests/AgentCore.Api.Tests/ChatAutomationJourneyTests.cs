@@ -129,6 +129,38 @@ public sealed class ChatAutomationJourneyTests
             && r.Tools!.Any(t => t.Name == ToolCatalog.ExperienceConsolidate) == authorizedAtRun);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task Current_user_turn_creates_disabled_review_preset_through_normal_chat_authoring()
+    {
+        var model = new RecurringActionModel();
+        await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"chat-preset-{Guid.NewGuid():N}.db"), languageModel: model, configure: services =>
+        { services.RemoveAll<ILanguageModelResolver>(); services.AddSingleton<ILanguageModelResolver>(new StaticLanguageModelResolver(model)); });
+        var services = host.Services;
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 22);
+        var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
+        await using var hub = new HubConnectionBuilder().WithUrl(new Uri(host.Server.BaseAddress, "/hubs/session"), options =>
+        { options.HttpMessageHandlerFactory = _ => host.Server.CreateHandler(); options.Transports = HttpTransportType.LongPolling; TestOwnerCapability.Apply(options, services); }).AddMessagePackProtocol().Build();
+        var ready = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hub.On<ServerEvent>("SessionEvent", frame => { if (frame.Type == "session.ready") ready.TrySetResult(frame.AttachmentId!); if (frame.Type == "agent.response.completed") completed.TrySetResult(); });
+        ClientCommand<T> Command<T>(string type, long sequence, T payload, string? attachment = null) => new() { ProtocolVersion = 1, EventId = Guid.NewGuid().ToString(), SessionId = session.SessionId.ToString(), Timestamp = DateTimeOffset.UtcNow.ToString("o"), Sequence = sequence, Type = type, Payload = payload, AttachmentId = attachment };
+        await hub.StartAsync();
+        Assert.True((await hub.InvokeAsync<CommandAck>("Attach", Command("session.attach", 0, new AttachPayload { OwnerCapability = TestOwnerCapability.Token(services) }))).Accepted);
+        var attachment = await ready.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True((await hub.InvokeAsync<CommandAck>("SendText", Command("user.text", 1, new UserTextPayload { Text = "Create the Review recent work preset automation." }, attachment))).Accepted);
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        var automation = Assert.Single(await services.GetRequiredService<ITriggerStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), null));
+        Assert.Equal(AutomationStatus.Disabled, automation.Status);
+        Assert.IsType<CoreEventTrigger>(automation.Trigger);
+        Assert.Equal("review-recent-work", automation.Provenance.PresetId);
+        Assert.Equal(TriggerAuthorizationOrigin.CurrentUserTurn, automation.Provenance.AuthorizationOrigin);
+        Assert.Equal(session.SessionId, automation.Provenance.SourceSessionId);
+        var presets = await services.GetRequiredService<AutomationPresetCatalog>().OptionsAsync(instance.InstanceId);
+        Assert.False(presets.Single(p => p.Template.PresetId == "review-recent-work").Eligible);
+        Assert.False(presets.Single(p => p.Template.PresetId == "consolidate-continuity").Eligible);
+        Assert.False(presets.Single(p => p.Template.PresetId == "improve-harness").Eligible);
+    }
+
     private sealed class AutomationClock(DateTimeOffset initial) : TimeProvider
     {
         private DateTimeOffset now = initial;
@@ -150,6 +182,14 @@ public sealed class ChatAutomationJourneyTests
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var user = request.Messages.LastOrDefault(m => m.Role == ModelRole.User);
+            if (user?.Text == "Create the Review recent work preset automation.")
+            {
+                if (!request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.AutomationCreate))
+                { yield return new ModelToolCallEvent(new("create-preset", ToolCatalog.AutomationCreate, "{\"presetId\":\"review-recent-work\",\"executionTarget\":\"backgroundSession\"}")); yield return new ModelCompleted(ModelStopReason.ToolCalls); }
+                else { yield return new ModelTextDelta("Saved the disabled review preset."); yield return new ModelCompleted(ModelStopReason.Completed); }
+                yield break;
+            }
+
             if (user?.Text == UserRequest)
             {
                 if (!request.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.AutomationCreate))

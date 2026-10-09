@@ -708,6 +708,8 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
         });
         builder.ConfigureTestServices(services =>
         {
+            services.RemoveAll<ICoreEventStore>();
+            services.AddSingleton<ICoreEventStore, SqliteCoreEventStore>();
             services.RemoveAll<IAgentRunStore>();
             services.AddSingleton<IAgentRunStore>(provider => new SqliteAgentRunStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),

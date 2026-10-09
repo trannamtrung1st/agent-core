@@ -398,3 +398,8 @@ Shared Event authoring retains the established Admin drawer/footer and one-time 
 ### Model reasoning presentation
 
 Reuse the existing Chat Model dropdown and Admin ExecutionModelFields composition. Preserve token-owned shell/control insets and mobile wrapping. All reasoning controls present supported intensity in `none → minimal → low → medium → high → xhigh → max` order through the shared utility; unknown/adaptive modes use discrete choices outside the slider. Slider value text names the visible effort. Model switching preserves supported effort and selects the new configured default only when needed. Catalog names/capabilities come from backend descriptors; unavailable saved model keys remain explicit. No automatic routing controls or extra model-tier badges.
+
+
+### Core Event preset and filter authoring
+
+The existing Instance Triggers drawer owns Custom/preset selection, a third Core Event trigger, optional expression, dispatch/window and read-only sample testing. Presets fill disabled editable drafts and explain prerequisites. Core types are Instance-owned built-in signals; Shared Events remain webhook resources in global Connections. Preserve shared Ant Design v6 model/reasoning controls, 640px/full-mobile drawer, footer reachability, focus return and stale-result invalidation. Test status uses aria-live and a stable accessible button label. Delivery diagnostics show safe status/code/revision with independent retry. Product behavior is owned by docs/13 and docs/14; this is presentation context only.

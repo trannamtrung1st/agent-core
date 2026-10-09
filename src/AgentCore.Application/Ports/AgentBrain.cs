@@ -13,7 +13,8 @@ public enum TriggerKind
     ScheduledOccurrence,
     ApplicationEvent,
     ManualInvocation,
-    BackgroundCompleted
+    BackgroundCompleted,
+    CoreEvent
 }
 
 public sealed record AgentTrigger(Guid EventId, TriggerKind Kind, string? Text, string? EnvironmentKind = null);

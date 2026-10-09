@@ -74,7 +74,7 @@ test("nested shared Event creation preserves Automation draft and lifecycle link
   await drawer.getByLabel("Automation name", { exact: true }).fill(name);
   await drawer.getByLabel("Automation instructions", { exact: true }).fill(instructions);
   await drawer.getByLabel("Automation trigger", { exact: true }).click();
-  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: /^Event$/ }).click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: /^Shared Event \(webhook\)$/ }).click();
   const managerButton = drawer.getByRole("button", { name: "Create or manage Events", exact: true });
   await managerButton.click();
   const manager = page.getByRole("dialog", { name: "Global Events", exact: true });

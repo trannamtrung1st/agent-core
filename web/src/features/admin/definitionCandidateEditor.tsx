@@ -45,7 +45,8 @@ const INITIATIVE_TRIGGERS = [
 
 const TRIGGER_SOURCE_KINDS = [
   { value: "schedule", label: "Schedule" },
-  { value: "applicationEvent", label: "Application event" }
+  { value: "applicationEvent", label: "Shared Event (webhook)" },
+  { value: "coreEvent", label: "Core Event" }
 ];
 
 export function DefinitionCandidateEditor({

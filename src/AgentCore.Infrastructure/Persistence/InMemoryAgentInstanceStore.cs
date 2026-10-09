@@ -9,6 +9,8 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 {
+    public InMemoryCoreEventStore CoreEvents { get; set; } = new();
+
     private readonly object _gate = new();
     internal object CredentialGate => _gate;
     private readonly Dictionary<Guid, AgentInstance> _instances = [];
@@ -253,6 +255,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 }
 
                 InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
+                foreach (var e in CoreEventPersistence.Instance(previous, next)) CoreEvents.Append(e);
                 return ValueTask.FromResult(next);
             }
         }
@@ -337,6 +340,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 }
 
                 InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
+                foreach (var e in CoreEventPersistence.Instance(previous, next)) CoreEvents.Append(e);
                 return ValueTask.FromResult(next);
             }
         }
@@ -430,6 +434,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 }
 
                 InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
+                foreach (var e in CoreEventPersistence.Instance(previous, next)) CoreEvents.Append(e);
                 return ValueTask.FromResult(next);
             }
         }
@@ -522,6 +527,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 UpdatedAt = updatedAt,
                 Revision = instance.Revision + 1
             };
+            foreach (var e in CoreEventPersistence.Instance(instance, _instances[instanceId])) CoreEvents.Append(e);
             return ValueTask.CompletedTask;
         }
     }
@@ -590,6 +596,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
             }
             InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
             _instances[update.InstanceId] = next;
+            foreach (var e in CoreEventPersistence.Instance(instance, next)) CoreEvents.Append(e);
             return ValueTask.FromResult(next);
         }
     }

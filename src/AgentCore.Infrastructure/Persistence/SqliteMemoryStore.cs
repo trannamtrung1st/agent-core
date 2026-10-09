@@ -249,6 +249,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         if (current.Origin != snapshot.Origin)
             throw AgentCoreErrors.Conflict("Session origin is immutable.");
         ApplySession(existing, snapshot);
+        AgentRun? originRun = null;
+        if (snapshot.Origin.InitialBackgroundAgentRunId is { } initialId && snapshot.LifecycleStatus != current.LifecycleStatus)
+        { var initial = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == initialId.ToString("D"), cancellationToken); if (initial is not null) originRun = AgentRunStoreMapping.ToDomain(initial); }
+        CoreEventPersistence.Stage(db, CoreEventPersistence.Session(current, snapshot, originRun));
         await UpsertEntriesAsync(db, existing, snapshot, cancellationToken).ConfigureAwait(false);
     }
 

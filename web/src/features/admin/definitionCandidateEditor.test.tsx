@@ -259,25 +259,25 @@ describe("definition candidate editor", () => {
   it("blocks fractional recurrence with an inline error and saves after correction", async () => {
     mockDraft();
     await openDraft();
-    // These controls remain mounted across edits/tab switches. Avoid repeated accessible-name
-    // traversal of the full Admin tree while retaining the real form/save integration.
-    const saveDraft = screen.getByRole("button", { name: /^Save draft$/ });
-    const capabilitiesTab = screen.getByRole("tab", { name: /^Capabilities$/ });
-    const definitionTab = screen.getByRole("tab", { name: /^Definition$/ });
+    // These controls stay mounted across draft tabs. Reuse their accessible
+    // handles instead of rescanning the entire AntD form after every change.
+    const save = screen.getByRole("button", { name: "Save draft" });
+    const capabilitiesTab = screen.getByRole("tab", { name: "Capabilities" });
+    const definitionTab = screen.getByRole("tab", { name: "Definition" });
     setSpin("Minimum recurrence days", "0.5");
     expect(screen.getByLabelText("Minimum recurrence days")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText("Minimum recurrence days")).toHaveAccessibleDescription(
       "Whole days. 1 to 365. Minimum recurrence days must be a whole number from 1 to 365.");
-    expect(saveDraft).toBeDisabled();
+    expect(save).toBeDisabled();
     fireEvent.click(capabilitiesTab);
-    expect(saveDraft).toBeInTheDocument();
-    expect(saveDraft).toBeDisabled();
+    expect(save).toBeInTheDocument();
+    expect(save).toBeDisabled();
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
     fireEvent.click(definitionTab);
     setSpin("Minimum recurrence days", "2");
     expect(screen.getByLabelText("Minimum recurrence days")).not.toHaveAttribute("aria-invalid", "true");
-    expect(saveDraft).toBeInTheDocument();
-    fireEvent.click(saveDraft);
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
     await waitFor(() => expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
       draftId, 2, expect.objectContaining({ triggerPolicy: expect.objectContaining({ minRecurrenceDays: 2 }) })));
   });
@@ -441,7 +441,7 @@ describe("definition candidate editor", () => {
     setSpin("One-shot horizon days", "14");
     setSpin("Minimum recurrence days", "2");
     setSpin("Minimum fixed interval seconds", "120");
-    await chooseOption("Allowed source kinds", "Application event");
+    await chooseOption("Allowed source kinds", "Shared Event (webhook)");
     setText("Metadata key 1", "team");
     setText("Metadata value 1", "platform");
 

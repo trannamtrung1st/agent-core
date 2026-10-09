@@ -39,7 +39,7 @@ public static class TriggerScheduleTurnPreflight
         }
 
         var text = HeuristicTriggerCommandAuthorizer.NormalizeTurn(currentUserText);
-        return ScheduleContinuationLanguage.LooksScheduleRelated(text, conversationLanguage, scheduleContext);
+        return text.Contains("automation", StringComparison.Ordinal) || text.Contains("core event", StringComparison.Ordinal) || text.Contains("preset", StringComparison.Ordinal) || ScheduleContinuationLanguage.LooksScheduleRelated(text, conversationLanguage, scheduleContext);
     }
 }
 
@@ -57,6 +57,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         @"\b(can you|could you|do you)\b.{0,20}\b(schedule|remind)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    private static readonly Regex EventAutomationCreate = new(@"\b(create|set up|enable)\b.{0,80}\b(automation|core event|review recent work|consolidate continuity|improve agent harness)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex AgentDirectedCreate = new(
         @"\b(remind me|notify me|ping me|alert me|nudge me|wake me|set a reminder|schedule a\b|schedule\b.{0,80}\b(at|for|in)\b|every\s+\w+\s+remind|\bsay\b.{0,60}\bto me\b|\b(in|after)\s+\d+\s*(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs)\b.{0,40}\b(to me|me)\b)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -114,7 +115,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
 
         var allowed = requestedAction switch
         {
-            TriggerCommandAction.Create => MatchesCreate(text, conversationLanguage, scheduleContext, scheduleDraft),
+            TriggerCommandAction.Create => EventAutomationCreate.IsMatch(text) || MatchesCreate(text, conversationLanguage, scheduleContext, scheduleDraft),
             TriggerCommandAction.List => MatchesList(text, conversationLanguage),
             TriggerCommandAction.Update => MatchesUpdate(text, conversationLanguage, scheduleContext),
             TriggerCommandAction.Cancel => MatchesCancel(text, conversationLanguage, scheduleContext),

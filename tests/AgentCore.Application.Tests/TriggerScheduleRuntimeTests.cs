@@ -341,7 +341,9 @@ public sealed class TriggerScheduleRuntimeTests
         Assert.True(await runtime.SubmitUserTextAsync("yes"));
         await runtime.WaitUntilIdleAsync();
 
-        var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
+        var rows = await harness.Store.ListAsync(owner, null);
+        Assert.True(rows.Count == 1, string.Join("\n", runtime.Snapshot.Entries.Select(e => e.Text)));
+        var saved = Assert.Single(rows);
         Assert.Equal(AutomationStatus.Active, saved.Status);
         Assert.Equal("Sneaky", saved.Instructions);
         var schedule = Assert.IsType<OneShotSchedule>(saved.Schedule);
@@ -549,7 +551,9 @@ public sealed class TriggerScheduleRuntimeTests
         Assert.True(await runtime.SubmitUserTextAsync("I approve"));
         await runtime.WaitUntilIdleAsync();
 
-        var saved = Assert.Single(await harness.Store.ListAsync(owner, null));
+        var rows = await harness.Store.ListAsync(owner, null);
+        Assert.True(rows.Count == 1, string.Join("\n", runtime.Snapshot.Entries.Select(e => e.Text)));
+        var saved = Assert.Single(rows);
         Assert.Equal("Sneaky", saved.Instructions);
     }
 

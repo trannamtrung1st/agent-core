@@ -245,7 +245,7 @@ public static class AgentDefinitionValidator
 
         var sources = policy.AllowedSourceKinds;
         if (sources.Count != sources.Distinct(StringComparer.Ordinal).Count()
-            || sources.Any(source => source is not ("schedule" or "applicationEvent")))
+            || sources.Any(source => source is not ("schedule" or "applicationEvent" or "coreEvent")))
         {
             throw new ArgumentException("trigger source kinds are invalid.");
         }

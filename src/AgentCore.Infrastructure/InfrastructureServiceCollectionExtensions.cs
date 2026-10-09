@@ -161,6 +161,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.AddSingleton<SqliteCredentialStore>();
             services.AddSingleton<ICredentialStore>(p => p.GetRequiredService<SqliteCredentialStore>());
             services.AddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<SqliteCredentialStore>());
+            services.AddSingleton<ICoreEventStore, SqliteCoreEventStore>();
             services.AddSingleton<IExternalEventStore>(provider => new SqliteExternalEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
             services.TryAddSingleton<IOwnerCapabilityStore, SqliteOwnerCapabilityStore>();
@@ -171,13 +172,16 @@ public static class InfrastructureServiceCollectionExtensions
         }
         else
         {
-            services.TryAddSingleton<InMemoryMemoryStore>();
+            services.TryAddSingleton<InMemoryCoreEventStore>();
+            services.TryAddSingleton<ICoreEventStore>(p => p.GetRequiredService<InMemoryCoreEventStore>());
+            services.TryAddSingleton<InMemoryMemoryStore>(p => new InMemoryMemoryStore { CoreEvents = p.GetRequiredService<InMemoryCoreEventStore>() });
             services.TryAddSingleton<IMemoryStore>(provider => provider.GetRequiredService<InMemoryMemoryStore>());
             services.TryAddSingleton<IStructuredMemoryStore, InMemoryStructuredMemoryStore>();
             services.TryAddSingleton<InMemoryAgentInstanceStore>();
             services.TryAddSingleton<IAgentInstanceStore>(provider =>
             {
                 var instances = provider.GetRequiredService<InMemoryAgentInstanceStore>();
+                instances.CoreEvents = provider.GetRequiredService<InMemoryCoreEventStore>();
                 instances.EventStore = provider.GetRequiredService<InMemoryAdminEventStore>();
                 return instances;
             });
@@ -227,7 +231,7 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<InMemoryAgentDefinitionAdminStore>(),
                     provider.GetRequiredService<InMemoryAdminEventStore>(),
                     (InMemoryExperienceStore)provider.GetRequiredService<IExperienceStore>(),
-                    provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetRequiredService<IAgentCredentialBindingStore>(), provider.GetService<IBrowser>());
+                    provider.GetRequiredService<IAgentInstanceWorkspaceStore>(), provider.GetRequiredService<IAgentCredentialBindingStore>(), provider.GetService<IBrowser>(), provider.GetRequiredService<InMemoryCoreEventStore>());
             });
             services.TryAddSingleton<IAdminP7eHistoryMutator>(provider =>
                 new InMemoryAdminP7eHistoryMutator(
@@ -350,7 +354,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ITriggerPolicyRecoveryService, TriggerPolicyRecoveryService>();
         services.TryAddSingleton<ITriggerInstancePolicyReconciliationService, TriggerInstancePolicyReconciliationService>();
         services.TryAddSingleton<IDurableApplicationEventIngress, DurableOrderEventIngress>();
+        services.TryAddSingleton<IEventFilterEvaluator, AgentCore.Infrastructure.Events.RestrictedEventFilter>();
         services.TryAddSingleton<ExternalEventIngress>();
+        services.TryAddSingleton<CoreEventDispatcher>();
+        services.TryAddSingleton<AutomationPresetCatalog>();
         services.TryAddSingleton<WebhookEventService>();
         services.TryAddSingleton<TriggerOccurrenceRouter>();
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
@@ -397,7 +404,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AgentInstanceWorkspaceService>(),
             provider.GetRequiredService<CredentialService>(),
             provider.GetRequiredService<AdminAutomationAuthoringService>(),
-            provider.GetRequiredService<AgentInstanceSkillService>()));
+            provider.GetRequiredService<AgentInstanceSkillService>(),
+            provider.GetRequiredService<ICoreEventStore>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

@@ -5,7 +5,7 @@ namespace AgentCore.Application.Tools;
 public static class ToolResources
 {
     public static bool IsOccurrence(TriggerKind kind) =>
-        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.ManualInvocation;
+        kind is TriggerKind.ScheduledOccurrence or TriggerKind.ApplicationEvent or TriggerKind.ManualInvocation or TriggerKind.CoreEvent;
 
     public static bool IsSessionTool(string toolName) =>
         ToolRegistry.TryGet(toolName, out var descriptor) && descriptor.Scope == ToolResourceScope.Session;
