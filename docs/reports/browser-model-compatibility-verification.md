@@ -1,6 +1,6 @@
 # Browser model compatibility enhancement
 
-User-authorized scope: all recommendations from the DeepSeek/Luna review, on `develop/branch-1`. This follows browser discovery recovery `13ba2f59`; its earlier five-job CI run does not verify this enhancement. The native cutover freeze `345e8f7a` remains historical. P10/P11 remain unopened.
+User-authorized scope: all recommendations from the DeepSeek/Luna review, on `develop/branch-1`. Implementation candidate: `27a984784cb0b38809f2863a507e8917d1650d0f`. This follows browser discovery recovery `13ba2f59`; its earlier five-job CI run does not verify this enhancement. The native cutover freeze `345e8f7a` remains historical. P10/P11 remain unopened.
 
 ## Implemented behavior
 
@@ -18,6 +18,8 @@ The two-origin generic SSO fixture redirects from the application to an identity
 Offline scenarios exercise normal login, third-call refusal followed by valid recovery, continued malformed-strategy termination, userSteer after protected fill, denied identity origin, unknown binding and wrong credential origin. The interruption case proves the next Run sees previous loaded/fill evidence, empty current capability loads, and no authenticated state. Background Experience regressions verify rejected content cannot change its source or promote memory and terminates within the recovery budget.
 
 The cross-model comparison requires explicit `AGENTCORE_BROWSER_BENCHMARK_LIVE=1` plus `OPENROUTER_API_KEY`; default suites skip it without credentials. Each configuration executes three isolated trials with Medium effort. Metrics contain model/configuration, trial, request/tool counts, valid/malformed calls, repeated/blocked failures, capability load, externally verified completion and elapsed time. No prompts, arguments, URLs or protected values are logged. The optional higher-effort Luna comparison was not requested as a mandatory configuration and was not run.
+
+Reproduce the offline coverage with `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~BrowserModelCompatibilityTests`. To explicitly run the paid six-trial comparison, provide the key privately in the environment and run `AGENTCORE_BROWSER_BENCHMARK_LIVE=1 dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~Three_natural_instruction_trials_per_model --logger "console;verbosity=detailed"`. Chromium must be installed for the test project's Playwright revision.
 
 ## Initial live comparison — retained failures
 

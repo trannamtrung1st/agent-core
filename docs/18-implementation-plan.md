@@ -465,3 +465,7 @@ Authorized focused work on the existing Browser v2/AgentRun substrate: shared re
 ### Browser model compatibility enhancement
 
 The user authorized all review recommendations after browser discovery recovery `13ba2f59`. This follow-up simplifies the model-facing find schema, bounds repeated invalid strategies across checkpoints, derives trusted current/prior Run facts, and adds an opt-in two-origin synthetic SSO comparison. It publishes immutable General Assistant v20 / Secretary v7. The prior native cutover freeze and earlier CI evidence remain historical; current gates are tracked in [browser model compatibility verification](reports/browser-model-compatibility-verification.md). P10/P11 remain unopened.
+
+### Browser Run finalization follow-up
+
+The user authorized all reply-failure recommendations and deferred waiting for hosted CI. This extends the existing Session/AgentRun path with a reply reserve inside the unchanged interactive deadline, bounded tool-free finalization, precise cancellation/timeout causes, sanitized prior failure facts and separate action/reply presentation. It does not introduce another browser engine or replay side effects. [Finalization verification](reports/browser-run-finalization-verification.md) records local execution and deferred acceptance; P10/P11 remain unopened.

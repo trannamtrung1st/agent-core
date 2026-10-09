@@ -10,6 +10,10 @@ public static class EffectReceipts
         (receipts ?? []).OfType<EffectReceipt>().Take(20).Select(receipt => (receipt.Tool, receipt.Status) switch
         {
             (ToolCatalog.BrowserClose, "closed" or "already_closed") => new EffectReceipt(ToolCatalog.BrowserClose, receipt.Status, "Browser closed"),
+            (ToolCatalog.BrowserClick, "ok") => new EffectReceipt(ToolCatalog.BrowserClick, "ok", "Browser control clicked; submission not confirmed"),
+            (ToolCatalog.BrowserType, "ok") => new EffectReceipt(ToolCatalog.BrowserType, "ok", "Browser field updated"),
+            (ToolCatalog.BrowserFillForm, "ok") => new EffectReceipt(ToolCatalog.BrowserFillForm, "ok", "Browser form fields updated"),
+            (ToolCatalog.BrowserFillCredential, "ok") => new EffectReceipt(ToolCatalog.BrowserFillCredential, "ok", "Protected browser field filled; sign-in not confirmed"),
             (ToolCatalog.MemoryConsolidate, "consolidated") => new EffectReceipt(ToolCatalog.MemoryConsolidate, "consolidated", "Learned memories consolidated"),
             (ToolCatalog.ExperienceConsolidate, "consolidated") => new EffectReceipt(ToolCatalog.ExperienceConsolidate, "consolidated", "Experience consolidated"),
             (ToolCatalog.MemoryForget, "forgotten") => new EffectReceipt(ToolCatalog.MemoryForget, "forgotten", "Learned memory forgotten; source history retained"),
@@ -25,6 +29,13 @@ public static class EffectReceipts
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
                 return false;
+            }
+            if (document.RootElement.TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null) return false;
+            if (tool is ToolCatalog.BrowserClick or ToolCatalog.BrowserType or ToolCatalog.BrowserFillForm or ToolCatalog.BrowserFillCredential
+                && TryString(document.RootElement, "status", out var actionStatus) && actionStatus == "ok")
+            {
+                receipt = ModelSafe([new EffectReceipt(tool, actionStatus, "")]).Single();
+                return true;
             }
 
             if (ToolCatalog.IsIdentityMaintenance(tool) && TryString(document.RootElement, "status", out var maintenanceStatus)

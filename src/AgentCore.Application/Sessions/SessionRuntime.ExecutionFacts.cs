@@ -11,7 +11,7 @@ public sealed partial class SessionRuntime
         var page = await _agentRuns.ListPageAsync(current.Owner, current.SessionId, current.AgentRunId, 1, ct).ConfigureAwait(false);
         var previous = page.Items.FirstOrDefault();
         if (previous is null || !previous.IsTerminal) return null;
-        var interruption = _snapshot.Entries.LastOrDefault(e => e.ResponseId == previous.ResponseId)?.InterruptReason;
-        return RunExecutionFacts.Previous(previous, interruption);
+        var entry = _snapshot.Entries.LastOrDefault(e => e.ResponseId == previous.ResponseId);
+        return RunExecutionFacts.Previous(previous, entry?.InterruptReason, entry?.Failure);
     }
 }

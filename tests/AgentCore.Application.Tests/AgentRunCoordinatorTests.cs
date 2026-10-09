@@ -93,6 +93,26 @@ public sealed class AgentRunCoordinatorTests
     }
 
     [Fact]
+    public async Task Deadline_settlement_is_terminal_only_and_cannot_settle_a_reclaimed_generation()
+    {
+        var f = await Fixture.CreateAsync();
+        await f.Coordinator.DispatchAsync(Owner, f.Run.AgentRunId);
+        var first = Assert.Single(f.Dispatcher.Dispatched);
+        f.Time.Advance(AgentRunCoordinator.ClaimDuration + TimeSpan.FromSeconds(1));
+        Assert.Equal(1, await f.Coordinator.ExecuteRunnableAsync(8));
+        var resumed = f.Dispatcher.Dispatched[1];
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Store.ApplyAsync(Owner, resumed.AgentRunId,
+            new AgentRunCommand.DeadlineExceeded(resumed.Revision, f.Time.GetUtcNow(), first.Claim!.Generation)).AsTask());
+        Assert.Equal(AgentRunStatus.Running, (await f.Store.GetAsync(Owner, resumed.AgentRunId))!.Status);
+        f.Time.Advance(AgentRunCoordinator.ClaimDuration);
+        var failed = await f.Store.ApplyAsync(Owner, resumed.AgentRunId,
+            new AgentRunCommand.DeadlineExceeded(resumed.Revision, f.Time.GetUtcNow(), resumed.Claim!.Generation));
+        Assert.Equal(AgentRunStatus.Failed, failed.Status);
+        Assert.Equal("run-deadline", failed.Failure!.Code);
+        Assert.Null(failed.NextRetryAtUtc);
+    }
+
+    [Fact]
     public async Task Uncertain_external_effect_is_terminalized_without_dispatch_or_retry()
     {
         var f = await Fixture.CreateAsync();

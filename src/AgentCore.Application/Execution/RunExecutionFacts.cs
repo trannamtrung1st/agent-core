@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
+using AgentCore.Domain.Diagnostics;
 
 namespace AgentCore.Application.Execution;
 
@@ -12,14 +13,16 @@ internal static class RunExecutionFacts
     internal static string Current(Guid? runId, IReadOnlyList<string> loaded, IEnumerable<ModelMessage> receipts) =>
         Describe("current", runId, "running", null, loaded, receipts);
 
-    internal static string Previous(AgentRun run, string? interruption)
+    internal static string Previous(AgentRun run, string? interruption, FailureReference? failure = null)
     {
         AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var receipts);
-        return Describe("previous", run.AgentRunId, run.Status.ToString(), interruption, run.LoadedCapabilityIds, receipts ?? []);
+        var failureCode = run.Failure?.Code is "run-deadline" or "tool-deadline" or "tool-timeout" or "tool-step-limit" or "tool-output-limit" or "invalid-tool-strategy"
+            or "provider-timeout" or "provider-cancelled" or "provider-invalidresponse" or "provider-unavailable" ? run.Failure.Code : null;
+        return Describe("previous", run.AgentRunId, run.Status.ToString(), interruption, run.LoadedCapabilityIds, receipts ?? [], failureCode, failure);
     }
 
     private static string Describe(string scope, Guid? runId, string status, string? interruption,
-        IReadOnlyList<string> loaded, IEnumerable<ModelMessage> receipts)
+        IReadOnlyList<string> loaded, IEnumerable<ModelMessage> receipts, string? failureCode = null, FailureReference? failure = null)
     {
         var outcomes = new Dictionary<(string Tool, string Outcome), int>();
         foreach (var receipt in receipts.Where(r => r.Role == ModelRole.Tool && r.Name is not null))
@@ -39,7 +42,8 @@ internal static class RunExecutionFacts
                         "not_found" or "ambiguous_target" => "target_unresolved",
                         _ => "failed"
                     }
-                    : root.TryGetProperty("status", out var success) && success.ValueKind == JsonValueKind.String && success.GetString() == "ok" ? "succeeded" : null;
+                    : root.TryGetProperty("status", out var success) && success.ValueKind == JsonValueKind.String
+                        && (success.GetString() == "ok" || receipt.Name == ToolCatalog.BrowserClose && success.GetString() is "closed" or "already_closed") ? "succeeded" : null;
                 if (outcome is not null) outcomes[(receipt.Name!, outcome)] = outcomes.GetValueOrDefault((receipt.Name!, outcome)) + 1;
             }
             catch (JsonException) { }
@@ -48,7 +52,11 @@ internal static class RunExecutionFacts
             + JsonSerializer.Serialize(new
             {
                 scope, runId, status,
-                interruption = interruption is "userSteer" or "userCancel" or "disconnect" ? interruption : null,
+                failureCode,
+                failureReason = failure?.FailureReason is { } reason && AgentCore.Domain.Diagnostics.DiagnosticDetailAllowlist.FailureReasons.Contains(reason) ? reason : null,
+                diagnosticId = failure?.DiagnosticId,
+                finalizationReason = RunFinalization.Restore(receipts),
+                interruption = interruption is "userSteer" or "userCancel" or "userStop" or "disconnect" or "disconnected" ? interruption : null,
                 loadedCapabilities = loaded.Where(c => ToolRegistry.TryGet(c, out _)).Distinct().Order(StringComparer.Ordinal).Take(64),
                 toolOutcomes = outcomes.OrderBy(o => o.Key.Tool, StringComparer.Ordinal).ThenBy(o => o.Key.Outcome, StringComparer.Ordinal).Take(64)
                     .Select(o => new { tool = o.Key.Tool, outcome = o.Key.Outcome, count = o.Value }),

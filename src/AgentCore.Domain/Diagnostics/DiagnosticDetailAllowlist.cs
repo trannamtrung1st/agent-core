@@ -37,6 +37,11 @@ public static class DiagnosticDetailAllowlist
         "incompleteToolCall",
         "circuitOpen",
         "invalidToolStrategy",
+        "runDeadline",
+        "providerTimeout",
+        "providerCancelled",
+        "toolTimeout",
+        "finalizationToolCall",
         "streamLimit"
     };
 

@@ -200,6 +200,31 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
         var diagnosticUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        if (diagnosticUser.Contains("synthetic-finalization-", StringComparison.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var results = request.Messages.Skip(request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User) + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
+            var origin = System.Text.RegularExpressions.Regex.Match(diagnosticUser, @"http://127\.0\.0\.1:\d+").Value;
+            if (!results.Any(m => m.Name == ToolCatalog.BrowserNavigate) && origin.Length > 0)
+            {
+                yield return new ModelToolCallEvent(new("finalize-navigate", ToolCatalog.BrowserNavigate, JsonSerializer.Serialize(new { url = origin + "/" })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else if (!results.Any(m => m.Name == ToolCatalog.BrowserClose))
+            {
+                yield return new ModelToolCallEvent(new("finalize-close", ToolCatalog.BrowserClose, "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else if (!request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Core finalization phase: "))
+                || diagnosticUser.Contains("synthetic-finalization-fail", StringComparison.Ordinal))
+                yield return new ModelFailed(new(ProviderErrorCode.Timeout, "Synthetic final reply timed out.", FailureReason: "totalTimeout"));
+            else
+            {
+                yield return new ModelSemanticResponseReady(new("Browser closure is recorded. Sign-out was not verified.", new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            yield break;
+        }
         if (diagnosticUser.Contains("synthetic-invalid-tool-turn", StringComparison.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();

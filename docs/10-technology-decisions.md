@@ -298,6 +298,7 @@ Unless a later item records a tested change:
 | Per-tool timeout | 30 s |
 | Overall tool deadline, standard | 180 s |
 | Overall tool deadline, interactive browser | 300 s |
+| Reply finalization reserve, interactive browser | Last 30 s within the 300 s budget; no new tools; 2,048 output tokens max |
 | Overall tool deadline, unattended bound browser | 240 s |
 | Tool output | 8 MiB |
 | Sandbox memory | 64 MiB |

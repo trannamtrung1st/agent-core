@@ -18,7 +18,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class TerminalDisplayRepairTests
+public sealed partial class TerminalDisplayRepairTests
 {
     [Fact]
     public async Task Oversized_pending_write_is_rejected_before_any_workspace_effect()
@@ -522,7 +522,8 @@ public sealed class TerminalDisplayRepairTests
         FakeTimeProvider? clock,
         string[] tools,
         SessionToolExecutor? executor = null,
-        IArtifactReferenceAuthorizer? artifactAuthorizer = null)
+        IArtifactReferenceAuthorizer? artifactAuthorizer = null,
+        Microsoft.Extensions.Logging.ILogger? logger = null)
     {
         var time = clock ?? new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -574,7 +575,7 @@ public sealed class TerminalDisplayRepairTests
             new CapturingSessionOutput(),
             ids,
             time,
-            NullLogger<SessionRuntime>.Instance,
+            logger ?? NullLogger<SessionRuntime>.Instance,
             artifacts: artifactAuthorizer,
             tools: executor ?? new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll));
     }
@@ -756,6 +757,7 @@ public sealed class TerminalDisplayRepairTests
         public int ObserveCalls { get; private set; }
 
         public int CloseCalls { get; private set; }
+        public Action? OnClose { get; set; }
 
         public bool IsAvailable => true;
 
@@ -788,6 +790,7 @@ public sealed class TerminalDisplayRepairTests
         public ValueTask<BrowserResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             CloseCalls++;
+            OnClose?.Invoke();
             return new(new BrowserResult(null, Status: "closed", DataJson: System.Text.Json.JsonSerializer.Serialize(new { status = "closed" })));
         }
 
