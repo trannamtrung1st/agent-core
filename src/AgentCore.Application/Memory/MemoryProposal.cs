@@ -6,7 +6,8 @@ namespace AgentCore.Application.Memory;
 public enum MemoryProposalOperation
 {
     Upsert = 0,
-    Delete = 1
+    Delete = 1,
+    Resolve = 2
 }
 
 public enum MemoryProposalSource
@@ -34,7 +35,12 @@ public enum MemoryAdmissionStatus
     UpdatedSessionOnly,
     Rejected,
     Unavailable,
-    Deleted
+    Deleted,
+    ApprovalRequired,
+    NotFound,
+    PartiallyDeleted,
+    Resolved,
+    AlreadyResolved
 }
 
 /// <summary>
@@ -128,7 +134,7 @@ public static class MemoryProposalCodec
         MemoryScopeHint? scope = null;
         if (item.TryGetProperty("scopeHint", out var scopeEl) && scopeEl.ValueKind == JsonValueKind.String)
         {
-            if (!Enum.TryParse<MemoryScopeHint>(scopeEl.GetString(), ignoreCase: true, out var parsedScope))
+            if (!Enum.TryParse<MemoryScopeHint>(scopeEl.GetString(), ignoreCase: true, out var parsedScope) || !Enum.IsDefined(parsedScope))
             {
                 return false;
             }
@@ -173,7 +179,7 @@ public static class MemoryProposalCodec
 public static class MemoryAdmissionPrompt
 {
     public const string SelectivityGuidance = """
-        Memory proposals are optional structured intents. Propose durable memory only when it is reasonably useful beyond this turn: stable preferences, durable facts, user goals, decisions, open loops, or working context likely to recur. Do not propose incidental small talk, ephemeral current state, duplicates, guesses stated as fact, assistant-invented details, secrets, or information the memory policy disallows. Do not say that information was saved, remembered, or forgotten. That wording rule is guidance. After a response completes successfully, the runtime records the admission outcome apart from the reply. It does not append that outcome to the answer. The receipt is the authoritative outcome. The runtime does not rewrite earlier sentences.
+        Memory proposals are optional structured intents. Propose durable memory only when it is reasonably useful beyond this turn: stable preferences, durable facts, user goals, decisions, open loops, or working context likely to recur. Use operation resolve with kind openLoop and its exact remembered subject when work is closed or completed. Resolution preserves the research and files and removes the loop from pending recall. Never express closing work as deletion. Forgetting learned information requires the offered memory.forget tool and exact owner approval; a source of userExplicit does not grant deletion authority. Workspace file deletion is a separate authorized action. Do not propose incidental small talk, ephemeral current state, duplicates, guesses stated as fact, assistant-invented details, secrets, or information the memory policy disallows. Do not say that information was saved, remembered, resolved, or forgotten before a Core-confirmed outcome. After a response completes successfully, the runtime records the admission outcome apart from the reply. The receipt is the authoritative outcome. The runtime does not rewrite earlier sentences.
         """;
 
 }

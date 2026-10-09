@@ -27,6 +27,71 @@ namespace AgentCore.Api.Tests;
 [Collection("identity-maintenance-telemetry")]
 public sealed class IdentityMaintenanceJourneyTests
 {
+    [Theory(Timeout = 60000)]
+    [InlineData(MemoryScope.Session)]
+    [InlineData(MemoryScope.IdentityUser)]
+    [InlineData(MemoryScope.User)]
+    public async Task Resolved_memory_survives_restart_and_forgetting_still_requires_exact_approval(MemoryScope scope)
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"memory-resolution-{Guid.NewGuid():N}.db");
+        Guid instanceId, sessionId, memoryId;
+        await using (var host = new ExperienceHost(db))
+        {
+            var services = host.Services;
+            instanceId = (await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 17)).InstanceId;
+            var definition = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+            var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
+            sessionId = session.SessionId;
+            var memories = services.GetRequiredService<IStructuredMemoryService>();
+            var context = SessionMemoryPrompt.CreateAdmissionContext("user_explicit", definition,
+                await services.GetRequiredService<IMemoryStore>().LoadProfileAsync(LocalUserProfile.Id), []);
+            var original = await memories.WriteAsync(new(sessionId), new(MemoryKind.OpenLoop, "Research", "Keep /home/report.md", []), context);
+            var item = scope switch
+            {
+                MemoryScope.IdentityUser => await memories.PromoteToIdentityUserAsync(new(sessionId), original.MemoryId, new(instanceId, LocalUserProfile.Id), true, context),
+                MemoryScope.User => await memories.PromoteSessionToUserAsync(new(sessionId), original.MemoryId, new(LocalUserProfile.Id), true, context),
+                _ => original
+            };
+            memoryId = item.MemoryId;
+            var resolution = await memories.ResolveOpenLoopsAsync(new(sessionId), new(instanceId, LocalUserProfile.Id), new(LocalUserProfile.Id), "Research");
+            Assert.All(resolution.Items, retained => Assert.Equal(MemoryItemStatus.Resolved, retained.Status));
+            var client = TestOwnerCapability.CreateOwnerClient(host);
+            (await client.PutAsync($"/api/v2/sessions/{sessionId}/workspace/content?path=/home/report.md", new ByteArrayContent("Retained report"u8.ToArray()))).EnsureSuccessStatusCode();
+        }
+        await using (var reopened = new ExperienceHost(db))
+        {
+            var services = reopened.Services;
+            var store = services.GetRequiredService<IStructuredMemoryStore>();
+            async Task<StructuredMemoryItem> ReadAsync() => (scope switch
+            {
+                MemoryScope.Session => await store.FindAsync(sessionId, memoryId),
+                MemoryScope.IdentityUser => await store.FindIdentityUserAsync(instanceId, LocalUserProfile.Id, memoryId),
+                _ => await store.FindUserAsync(LocalUserProfile.Id, memoryId)
+            })!;
+            var retained = await ReadAsync();
+            Assert.Equal(MemoryItemStatus.Resolved, retained.Status);
+            Assert.Equal("Keep /home/report.md", retained.Content);
+            var definition = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 17))!;
+            definition = definition with { MemoryPolicy = definition.MemoryPolicy! with { UserRetrieval = true } };
+            var service = Maintenance(services, definition);
+            var args = JsonSerializer.SerializeToElement(new { memoryId });
+            var call = new ModelToolCall("forget-resolved", ToolCatalog.MemoryForget, args.GetRawText());
+            var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instanceId);
+            var missing = await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(definition, sessionId, call, args, admission, null, default).AsTask());
+            Assert.Equal("ApprovalRequired", missing.Code);
+            var grant = new ToolApprovalGrant(Guid.NewGuid(), call.Name, ToolActionHash.Compute(call.Name, args), Guid.Empty, Guid.Empty, Guid.Empty);
+            await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(definition, sessionId, call, args, admission,
+                grant with { ActionHash = "wrong-action" }, default).AsTask());
+            Assert.Equal(JsonSerializer.Serialize(retained), JsonSerializer.Serialize(await ReadAsync()));
+            var outcome = JsonSerializer.SerializeToElement(await service.ExecuteAsync(definition, sessionId, call, args, admission, grant, default));
+            Assert.Equal("forgotten", outcome.GetProperty("status").GetString());
+            Assert.Equal(MemoryItemStatus.Deleted, (await ReadAsync()).Status);
+            Assert.Equal("", (await ReadAsync()).Content);
+            var client = TestOwnerCapability.CreateOwnerClient(reopened);
+            Assert.Equal("Retained report", await client.GetStringAsync($"/api/v2/sessions/{sessionId}/workspace/content?path=/home/report.md"));
+        }
+    }
+
     [Fact(Timeout = 60000)]
     public async Task Shared_User_memory_exact_replay_crosses_instances_and_SQLite_restart()
     {

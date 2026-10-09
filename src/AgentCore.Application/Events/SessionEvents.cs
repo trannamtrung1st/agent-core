@@ -334,10 +334,20 @@ public sealed record PublicMemoryReceipt(
 
         var subject = string.IsNullOrWhiteSpace(receipt.Subject) ? "that" : receipt.Subject.Trim();
         var label = receipt.Presentation == MemoryReceipt.Indicator
-            ? receipt.Operation == "delete" ? "Forgotten" : "Remembered"
-            : receipt.Operation == "delete"
-                ? $"Not forgotten: {subject}."
-                : $"Not saved: {subject}.";
+            ? receipt.Operation switch { "delete" => "Forgotten", "resolve" => "Closed", _ => "Remembered" }
+            : receipt.Outcome switch
+            {
+                "approvalRequired" => $"Not forgotten: {subject}. Forgetting requires approval.",
+                "notFound" => $"No matching {(receipt.Operation == "resolve" ? "open loop" : "memory")} found: {subject}.",
+                "unavailable" => $"Memory unavailable: {subject}.",
+                "partiallyDeleted" => $"Partially forgotten: {subject}. Some scopes could not be deleted.",
+                _ => receipt.Operation switch
+                {
+                    "delete" => $"Deletion rejected: {subject}.",
+                    "resolve" => $"Not closed: {subject}.",
+                    _ => $"Not saved: {subject}."
+                }
+            };
         return new PublicMemoryReceipt(
             receipt.Outcome,
             receipt.Operation,

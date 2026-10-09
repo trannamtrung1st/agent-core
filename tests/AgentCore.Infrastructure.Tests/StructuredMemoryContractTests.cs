@@ -13,6 +13,54 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class StructuredMemoryContractTests
 {
+    [Fact]
+    public async Task Resolution_is_atomic_scoped_idempotent_retains_lineage_and_allows_later_forgetting()
+    {
+        await ForEachStore(async store =>
+        {
+            var service = Service(store, Clock(), 16);
+            var session = new TrustedMemoryOwner(SessionA);
+            var identity = new TrustedIdentityUserOwner(Guid.NewGuid(), LocalUserProfile.Id);
+            var user = new TrustedUserOwner(LocalUserProfile.Id);
+            var original = await service.WriteAsync(session, new(MemoryKind.OpenLoop, "Research", "Keep /home/report.md", [Guid.NewGuid()]), Admission());
+            var promoted = await service.PromoteToIdentityUserAsync(session, original.MemoryId, identity, true, Admission());
+            var shared = await service.PromoteSessionToUserAsync(session, original.MemoryId, user, true, Admission());
+            var other = await service.WriteAsync(new(SessionB), new(MemoryKind.OpenLoop, "Research", "Another Session", []), Admission());
+            var otherIdentity = new TrustedIdentityUserOwner(Guid.NewGuid(), LocalUserProfile.Id);
+            await service.PromoteToIdentityUserAsync(new(SessionB), other.MemoryId, otherIdentity, true, Admission());
+            var result = await service.ResolveOpenLoopsAsync(session, identity, user, "  RESEARCH  ");
+            Assert.True(result.Changed);
+            Assert.Equal(3, result.Items.Count);
+            Assert.All(result.Items, item =>
+            {
+                Assert.Equal(MemoryItemStatus.Resolved, item.Status);
+                Assert.Equal("Keep /home/report.md", item.Content);
+                Assert.Equal("Research", item.Subject);
+            });
+            var retainedIdentity = (await store.FindIdentityUserAsync(identity.InstanceId, identity.ProfileId, promoted.MemoryId))!;
+            Assert.Equal(promoted.Provenance.SourceEntryIds, retainedIdentity.Provenance.SourceEntryIds);
+            Assert.Equal(promoted.Provenance.OriginMemoryId, retainedIdentity.Provenance.OriginMemoryId);
+            Assert.Equal(promoted.Provenance.OriginSessionId, retainedIdentity.Provenance.OriginSessionId);
+            Assert.Equal(promoted.Provenance.RecordedAt, retainedIdentity.Provenance.RecordedAt);
+            Assert.Equal(shared.Provenance.OriginMemoryId, (await store.FindUserAsync(user.ProfileId, shared.MemoryId))!.Provenance.OriginMemoryId);
+            Assert.Equal(0, await store.CountActiveAsync(SessionA));
+            Assert.Empty(await store.ListActiveIdentityUserAsync(identity.InstanceId, identity.ProfileId));
+            Assert.Empty(await store.ListActiveUserAsync(user.ProfileId));
+            Assert.Equal(MemoryItemStatus.Active, (await store.FindAsync(SessionB, other.MemoryId))!.Status);
+            Assert.Single(await store.ListActiveIdentityUserAsync(otherIdentity.InstanceId, otherIdentity.ProfileId));
+            var replay = await service.ResolveOpenLoopsAsync(session, identity, user, "Research");
+            Assert.False(replay.Changed);
+            Assert.Equal(System.Text.Json.JsonSerializer.Serialize(result.Items), System.Text.Json.JsonSerializer.Serialize(replay.Items));
+            Assert.Empty((await service.ResolveOpenLoopsAsync(session, identity, user, "Missing")).Items);
+            Assert.Equal(MemoryItemStatus.Deleted, (await service.DeleteAsync(session, original.MemoryId)).Status);
+            Assert.Equal("", (await service.DeleteIdentityUserAsync(identity, promoted.MemoryId, true)).Content);
+            Assert.Equal("", (await service.DeleteUserAsync(user, shared.MemoryId, true)).Subject);
+            var reopened = await service.WriteAsync(session, new(MemoryKind.OpenLoop, "Research", "New work", []), Admission());
+            Assert.Equal(MemoryItemStatus.Active, reopened.Status);
+            Assert.True((await service.ResolveOpenLoopsAsync(session, null, null, "Research")).Changed);
+        });
+    }
+
     private static readonly Guid SessionA = Guid.Parse("019944af-0008-7000-8000-0000000000a1");
     private static readonly Guid SessionB = Guid.Parse("019944af-0008-7000-8000-0000000000b1");
 

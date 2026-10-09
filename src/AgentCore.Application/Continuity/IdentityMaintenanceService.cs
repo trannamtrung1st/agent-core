@@ -146,7 +146,8 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
                 RuntimeTelemetry.RecordIdentityMaintenance("forget_completed");
                 return new { status = "already_forgotten", memoryId = memory.MemoryId, scope = memory.Scope.ToString() };
             }
-            if (memory.Status != MemoryItemStatus.Active) throw AgentCoreErrors.Conflict("Only a current active learned memory can be forgotten.");
+            if (memory.Status is not (MemoryItemStatus.Active or MemoryItemStatus.Resolved))
+                throw AgentCoreErrors.Conflict("Only an active or resolved learned memory can be forgotten.");
             switch (memory.Scope)
             {
                 case MemoryScope.Session: await memoryService.DeleteAsync(new(sessionId), memory.MemoryId, ct); break;

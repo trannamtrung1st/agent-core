@@ -23,7 +23,12 @@ public static class MemoryReceiptProjection
     public static MemoryReceipt FromResult(MemoryAdmissionResult result)
     {
         var proposal = result.Proposal;
-        var operation = proposal.Operation == MemoryProposalOperation.Delete ? "delete" : "upsert";
+        var operation = proposal.Operation switch
+        {
+            MemoryProposalOperation.Delete => "delete",
+            MemoryProposalOperation.Resolve => "resolve",
+            _ => "upsert"
+        };
         return new MemoryReceipt(
             Outcome(result.Status),
             operation,
@@ -38,6 +43,10 @@ public static class MemoryReceiptProjection
         MemoryProposalOperation operation,
         MemoryAdmissionStatus status)
     {
+        if (operation == MemoryProposalOperation.Delete
+            && MemoryProposalCodec.IsConversationalSource(source) && status != MemoryAdmissionStatus.Deleted)
+            return MemoryReceipt.Explicit;
+
         if (source != MemoryProposalSource.UserExplicit)
         {
             return MemoryReceipt.Silent;
@@ -49,6 +58,10 @@ public static class MemoryReceiptProjection
                 ? MemoryReceipt.Indicator
                 : MemoryReceipt.Explicit;
         }
+
+        if (operation == MemoryProposalOperation.Resolve)
+            return status is MemoryAdmissionStatus.Resolved or MemoryAdmissionStatus.AlreadyResolved
+                ? MemoryReceipt.Indicator : MemoryReceipt.Explicit;
 
         return status is MemoryAdmissionStatus.Stored
             or MemoryAdmissionStatus.Updated
@@ -69,6 +82,11 @@ public static class MemoryReceiptProjection
         MemoryAdmissionStatus.Deleted => "deleted",
         MemoryAdmissionStatus.Unavailable => "unavailable",
         MemoryAdmissionStatus.Rejected => "rejected",
+        MemoryAdmissionStatus.ApprovalRequired => "approvalRequired",
+        MemoryAdmissionStatus.NotFound => "notFound",
+        MemoryAdmissionStatus.PartiallyDeleted => "partiallyDeleted",
+        MemoryAdmissionStatus.Resolved => "resolved",
+        MemoryAdmissionStatus.AlreadyResolved => "alreadyResolved",
         _ => "rejected"
     };
 

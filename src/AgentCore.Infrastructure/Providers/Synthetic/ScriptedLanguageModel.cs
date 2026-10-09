@@ -286,6 +286,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
         var chunks = Select(request, lastUser);
         var proposals = TakeMemoryTurn();
+        if (MemorySemanticsScript.TryRespond(request, lastUser, out var memoryChunks, out var memoryProposals))
+        {
+            chunks = memoryChunks;
+            proposals = memoryProposals;
+        }
         if (lastUser.StartsWith("synthetic-inferred-frontend:", StringComparison.Ordinal))
         {
             var subject = lastUser.Split(':', 2)[1].Trim();

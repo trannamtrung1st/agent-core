@@ -29,6 +29,20 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         "tone"
     };
 
+    public ValueTask<MemoryResolutionResult> ResolveOpenLoopsAsync(
+        TrustedMemoryOwner session, TrustedIdentityUserOwner? identity, TrustedUserOwner? user,
+        string subject, CancellationToken cancellationToken = default)
+    {
+        var collapsed = StructuredMemoryItem.CollapseSubject(subject);
+        if (session.SessionId == Guid.Empty || collapsed.Length is 0 or > MemoryLimits.MaxSubjectCharacters
+            || identity is not null && (identity.InstanceId == Guid.Empty || identity.ProfileId == Guid.Empty)
+            || user is not null && user.ProfileId == Guid.Empty
+            || identity is not null && user is not null && identity.ProfileId != user.ProfileId)
+            throw AgentCoreErrors.Validation("OpenLoop resolution requires valid trusted owners and an exact subject.");
+        return store.ResolveOpenLoopsAsync(session, identity, user,
+            StructuredMemoryItem.SubjectKeyFor(collapsed), time.GetUtcNow(), cancellationToken);
+    }
+
     public async ValueTask<StructuredMemoryItem> WriteAsync(
         TrustedMemoryOwner owner,
         MemoryWriteProposal proposal,
@@ -99,7 +113,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         Guid memoryId,
         CancellationToken cancellationToken = default)
     {
-        var current = await RequireActiveAsync(owner, memoryId, cancellationToken).ConfigureAwait(false);
+        var current = await RequireActiveAsync(owner, memoryId, cancellationToken, includeResolved: true).ConfigureAwait(false);
         var now = time.GetUtcNow();
         var tombstone = current with
         {
@@ -341,7 +355,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         CancellationToken cancellationToken = default)
     {
         RequireIdentityAccess(owner, retrievalAllowed);
-        var current = await RequireIdentityAsync(owner, memoryId, cancellationToken).ConfigureAwait(false);
+        var current = await RequireIdentityAsync(owner, memoryId, cancellationToken, includeResolved: true).ConfigureAwait(false);
         var tombstone = current with
         {
             Status = MemoryItemStatus.Deleted,
@@ -471,7 +485,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
         CancellationToken cancellationToken = default)
     {
         RequireUserRetrieval(owner, retrievalAllowed);
-        var current = await RequireUserAsync(owner, memoryId, cancellationToken).ConfigureAwait(false);
+        var current = await RequireUserAsync(owner, memoryId, cancellationToken, includeResolved: true).ConfigureAwait(false);
         var tombstone = current with
         {
             Status = MemoryItemStatus.Deleted,
@@ -618,13 +632,14 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
     private async ValueTask<StructuredMemoryItem> RequireUserAsync(
         TrustedUserOwner owner,
         Guid memoryId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeResolved = false)
     {
         var current = await store.FindUserAsync(owner.ProfileId, memoryId, cancellationToken).ConfigureAwait(false);
         if (current is null
             || current.Scope != MemoryScope.User
             || current.OwnerProfileId != owner.ProfileId
-            || current.Status != MemoryItemStatus.Active)
+            || (current.Status != MemoryItemStatus.Active && !(includeResolved && current.Status == MemoryItemStatus.Resolved)))
         {
             throw AgentCoreErrors.NotFound("Memory was not found.");
         }
@@ -653,13 +668,14 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
     private async ValueTask<StructuredMemoryItem> RequireActiveAsync(
         TrustedMemoryOwner owner,
         Guid memoryId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeResolved = false)
     {
         var current = await store.FindAsync(owner.SessionId, memoryId, cancellationToken).ConfigureAwait(false);
         if (current is null
             || current.Scope != MemoryScope.Session
             || current.SessionId != owner.SessionId
-            || current.Status != MemoryItemStatus.Active)
+            || (current.Status != MemoryItemStatus.Active && !(includeResolved && current.Status == MemoryItemStatus.Resolved)))
         {
             throw AgentCoreErrors.NotFound("Memory was not found.");
         }
@@ -670,7 +686,8 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
     private async ValueTask<StructuredMemoryItem> RequireIdentityAsync(
         TrustedIdentityUserOwner owner,
         Guid memoryId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool includeResolved = false)
     {
         var current = await store.FindIdentityUserAsync(owner.InstanceId, owner.ProfileId, memoryId, cancellationToken)
             .ConfigureAwait(false);
@@ -678,7 +695,7 @@ public sealed class StructuredMemoryService(IStructuredMemoryStore store, IIdGen
             || current.Scope != MemoryScope.IdentityUser
             || current.OwnerInstanceId != owner.InstanceId
             || current.OwnerProfileId != owner.ProfileId
-            || current.Status != MemoryItemStatus.Active)
+            || (current.Status != MemoryItemStatus.Active && !(includeResolved && current.Status == MemoryItemStatus.Resolved)))
         {
             throw AgentCoreErrors.NotFound("Memory was not found.");
         }

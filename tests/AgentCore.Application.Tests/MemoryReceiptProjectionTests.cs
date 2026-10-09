@@ -14,10 +14,17 @@ public sealed class MemoryReceiptProjectionTests
     [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Upsert, MemoryAdmissionStatus.Updated, MemoryReceipt.Indicator, "Remembered")]
     [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Upsert, MemoryAdmissionStatus.AlreadyStored, MemoryReceipt.Indicator, "Remembered")]
     [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Upsert, MemoryAdmissionStatus.Rejected, MemoryReceipt.Explicit, "Not saved: project codename.")]
-    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Upsert, MemoryAdmissionStatus.Unavailable, MemoryReceipt.Explicit, "Not saved: project codename.")]
+    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Upsert, MemoryAdmissionStatus.Unavailable, MemoryReceipt.Explicit, "Memory unavailable: project codename.")]
     [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Delete, MemoryAdmissionStatus.Deleted, MemoryReceipt.Indicator, "Forgotten")]
-    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Delete, MemoryAdmissionStatus.Rejected, MemoryReceipt.Explicit, "Not forgotten: project codename.")]
-    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Delete, MemoryAdmissionStatus.Unavailable, MemoryReceipt.Explicit, "Not forgotten: project codename.")]
+    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Delete, MemoryAdmissionStatus.Rejected, MemoryReceipt.Explicit, "Deletion rejected: project codename.")]
+    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Delete, MemoryAdmissionStatus.Unavailable, MemoryReceipt.Explicit, "Memory unavailable: project codename.")]
+    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Resolve, MemoryAdmissionStatus.Resolved, MemoryReceipt.Indicator, "Closed")]
+    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Resolve, MemoryAdmissionStatus.AlreadyResolved, MemoryReceipt.Indicator, "Closed")]
+    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Resolve, MemoryAdmissionStatus.NotFound, MemoryReceipt.Explicit, "No matching open loop found: project codename.")]
+    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Delete, MemoryAdmissionStatus.NotFound, MemoryReceipt.Explicit, "No matching memory found: project codename.")]
+    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Delete, MemoryAdmissionStatus.ApprovalRequired, MemoryReceipt.Explicit, "Not forgotten: project codename. Forgetting requires approval.")]
+    [InlineData(MemoryProposalSource.AgentInferred, MemoryProposalOperation.Delete, MemoryAdmissionStatus.ApprovalRequired, MemoryReceipt.Explicit, "Not forgotten: project codename. Forgetting requires approval.")]
+    [InlineData(MemoryProposalSource.UserExplicit, MemoryProposalOperation.Delete, MemoryAdmissionStatus.PartiallyDeleted, MemoryReceipt.Explicit, "Partially forgotten: project codename. Some scopes could not be deleted.")]
     public void Visibility_follows_the_user_request_not_the_reply(
         MemoryProposalSource source,
         MemoryProposalOperation operation,
