@@ -22,7 +22,7 @@ public sealed partial class NativePlaywrightBrowser
     }
 
     private async Task<BrowserSnapshot> ObserveAsync(SessionBrowser session, Guid sessionId,
-        ILocator scope, int depth, BrowserTarget? target, CancellationToken ct, bool boxes = false)
+        ILocator scope, int depth, BrowserTarget? target, CancellationToken ct, bool boxes = false, IFrame? observedFrame = null)
     {
         if (CaptureProbe?.Invoke() is { } failure) throw failure;
         var native = await scope.AriaSnapshotAsync(new() { Depth = depth, Timeout = TimeoutMs() }).WaitAsync(ct);
@@ -30,7 +30,7 @@ public sealed partial class NativePlaywrightBrowser
         // Redaction precedes clipping: a partial protected value must never escape.
         var safe = Redact(native, secrets, session.ProtectedValues);
         var frames = new List<BrowserFrameInfo>();
-        foreach (var frame in session.Page.Frames.Where(f => f != session.Page.MainFrame && Allows(session, f.Url, true)).Take(20))
+        foreach (var frame in session.Page.Frames.Where(f => f != session.Page.MainFrame && PermittedFrame(session, f)).Take(20))
         {
             var reference = session.Frames.FirstOrDefault(p => p.Value.Frame == frame && p.Value.Generation == session.Generation).Key;
             if (reference is null) { reference = "fr_" + Guid.NewGuid().ToString("N"); session.Frames[reference] = new(frame, session.Generation); }
@@ -43,7 +43,8 @@ public sealed partial class NativePlaywrightBrowser
             SnapshotId: "snap_" + Guid.NewGuid().ToString("N"), TabRef: FindPageId(session),
             Boxes: boxes && target is not null && await scope.BoundingBoxAsync().WaitAsync(ct) is { } box
                 ? [new(target, box.X, box.Y, box.Width, box.Height)] : [],
-            Scope: target, Frames: frames, HasPasswordField: await session.Page.Locator("input[type=password]:visible").CountAsync().WaitAsync(ct) > 0);
+            Scope: target, Frames: frames, HasPasswordField: await (observedFrame?.Locator("input[type=password]:visible")
+                ?? session.Page.Locator("input[type=password]:visible")).CountAsync().WaitAsync(ct) > 0);
     }
 
     private async Task<BrowserResult> FindAsync(SessionBrowser session, BrowserFind query, CancellationToken ct)

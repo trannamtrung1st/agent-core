@@ -133,12 +133,16 @@ public sealed class GenerationRetryTests
     }
 
     [Fact]
-    public async Task Close_with_null_arguments_still_closes_once()
+    public async Task Close_with_null_arguments_rejects_then_recovers_with_empty_object()
     {
         var browser = new CountingBrowser();
         var model = new ScriptedModel(
             [
                 new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "null")),
+                new ModelCompleted(ModelStopReason.ToolCalls)
+            ],
+            [
+                new ModelToolCallEvent(new ModelToolCall("close-2", ToolCatalog.BrowserClose, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("Browser closed."));
@@ -148,6 +152,8 @@ public sealed class GenerationRetryTests
         Assert.True(await runtime.SubmitUserTextAsync("close the browser"));
         await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
+        Assert.Equal(3, model.Calls);
+        Assert.Contains(model.Requests[1].Messages, message => message.Role == ModelRole.Tool && message.Text.Contains("requires exactly {}", StringComparison.Ordinal));
         Assert.Equal(1, browser.CloseCalls);
         Assert.Equal(
             EntryStatus.Completed,
@@ -350,6 +356,7 @@ public sealed class GenerationRetryTests
         private int _calls;
 
         public int Calls => _calls;
+        public List<ModelRequest> Requests { get; } = [];
 
         public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
 
@@ -358,6 +365,7 @@ public sealed class GenerationRetryTests
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             await Task.Yield();
+            Requests.Add(request);
             var call = Interlocked.Increment(ref _calls);
             foreach (var evt in steps[call - 1])
             {

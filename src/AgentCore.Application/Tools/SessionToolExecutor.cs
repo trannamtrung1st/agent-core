@@ -216,12 +216,12 @@ public sealed partial class SessionToolExecutor(
         {
             if (string.Equals(call.Name, ToolCatalog.BrowserClose, StringComparison.Ordinal))
             {
-                if (!BrowserToolArguments.TryCanonicalizeClose(call.ArgumentsJson, out var closeError))
+                if (!BrowserToolArguments.TryValidateClose(call.ArgumentsJson, out var closeError))
                 {
                     return TextResult(closeError);
                 }
 
-                args = JsonSerializer.Deserialize<JsonElement>("{}", JsonOptions);
+                args = JsonSerializer.Deserialize<JsonElement>(call.ArgumentsJson, JsonOptions);
             }
             else
             {

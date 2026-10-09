@@ -125,7 +125,7 @@ public sealed class BrowserOriginHandoffTests
         var model = new SequencedModel(
             Navigate("a-1", "https://a.test/"),
             [
-                new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "null")),
+                new ModelToolCallEvent(new ModelToolCall("close-1", ToolCatalog.BrowserClose, "{}")),
                 new ModelCompleted(ModelStopReason.ToolCalls)
             ],
             Answer("The browser is closed."));

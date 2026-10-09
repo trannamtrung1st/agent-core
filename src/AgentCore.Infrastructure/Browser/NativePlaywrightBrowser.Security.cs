@@ -130,9 +130,10 @@ public sealed partial class NativePlaywrightBrowser
             ConsiderSecret(secrets, "cookie", cookie.Name, cookie.Value);
         }
 
-        foreach (var frame in (page ?? session.Page).Frames)
+        page ??= session.Page;
+        foreach (var frame in page.Frames)
         {
-            if (frame != session.Page.MainFrame && !Allows(session, frame.Url, true)) continue;
+            if (frame != page.MainFrame && !PermittedFrame(session, frame, page)) continue;
             var storedJson = await frame.EvaluateAsync<string>(ReadSecrets).WaitAsync(cancellationToken).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(storedJson)) continue;
             foreach (var item in JsonSerializer.Deserialize<List<BrowserSecretItem>>(storedJson, SecretJson) ?? [])

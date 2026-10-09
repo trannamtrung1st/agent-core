@@ -14,7 +14,7 @@ public sealed partial class NativePlaywrightBrowser
         {
             var frame = FindPageFrame(session, frameRef);
             if (frame is null) throw new BrowserTargetException("stale_frame");
-            if (!Allows(session, frame.Url, true)) throw new BrowserTargetDeniedException();
+            if (!PermittedFrame(session, frame)) throw new BrowserTargetDeniedException();
             root = frame.Locator("body");
         }
         if (target.Within is { } scope)
@@ -24,6 +24,14 @@ public sealed partial class NativePlaywrightBrowser
             if (count != 1) throw new BrowserTargetException(count == 0 ? "target_missing" : "ambiguous_target");
         }
         return Semantic(root, target.By, target.Value, target.Name, target.Exact, target.Visible, target.HasText);
+    }
+
+    private bool PermittedFrame(SessionBrowser session, IFrame frame, IPage? page = null)
+    {
+        page ??= session.Page;
+        for (IFrame? current = frame; current is not null && current != page.MainFrame; current = current.ParentFrame)
+            if (current.IsDetached || !Allows(session, current.Url, true)) return false;
+        return !page.IsClosed && page.Frames.Contains(frame);
     }
 
     private static ILocator Semantic(ILocator root, string by, string value, string? name, bool exact, bool? visible, string? hasText)

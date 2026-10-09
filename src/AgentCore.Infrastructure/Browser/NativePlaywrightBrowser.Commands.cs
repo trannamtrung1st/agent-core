@@ -94,8 +94,21 @@ public sealed partial class NativePlaywrightBrowser
                     return await GeolocationAsync(session, args, ct, Action);
                 case BrowserObserve args:
                     {
-                        var scope = args.Target is null ? session.Page.Locator("body") : await Target(args.Target);
-                        return new(null, await ObserveAsync(session, command.SessionId, scope!, args.Depth, args.Target, ct, args.Boxes));
+                        var reference = args.FrameRef ?? args.Target?.FrameRef;
+                        if (args.FrameRef is not null && args.Target?.FrameRef is not null && args.FrameRef != args.Target.FrameRef)
+                            return new("invalid_frame");
+                        var frame = reference is null ? null : FindPageFrame(session, reference);
+                        if (reference is not null && frame is null) return new("stale_frame");
+                        if (frame is not null && !PermittedFrame(session, frame)) return new("target_denied");
+                        var generation = session.Generation;
+                        var target = args.Target is null ? null : args.Target with { FrameRef = reference };
+                        var scope = target is null ? frame?.Locator("body") ?? session.Page.Locator("body") : await Target(target);
+                        var observation = await ObserveAsync(session, command.SessionId, scope!, args.Depth, target, ct, args.Boxes, frame);
+                        // Navigation/removal can happen while native observation is in flight.
+                        if (reference is not null && (session.Generation != generation || FindPageFrame(session, reference) != frame))
+                            return new("stale_frame");
+                        if (frame is not null && !PermittedFrame(session, frame)) return new("target_denied");
+                        return new(null, observation with { FrameRef = reference });
                     }
                 case BrowserFind args:
                     return await FindAsync(session, args, ct);

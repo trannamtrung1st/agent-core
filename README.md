@@ -152,3 +152,5 @@ The current semantic-action redesign publishes General Assistant v21 / Secretary
 Native browser cleanup now gives actionable pending-dialog recovery, confirms explicit closure and fences terminal progress after reload. Sign-out is verified independently from profile closure; see [cleanup lifecycle verification](docs/reports/browser-cleanup-lifecycle-verification.md).
 
 The final native reliability follow-up suppresses ordinary browser calls during an observed modal, preserves authorized recovery and bounds equivalent blocked failures through existing checkpoint/finalization behavior. Native dialog cancellation, closed-page and successive-dialog regressions use actual Chromium. [Verification](docs/reports/browser-blocked-dialog-recovery-verification.md) separates reproduced defects from the historical AHI trace and records local/hosted status.
+
+The scoped [native browser final reliability follow-up](docs/reports/browser-final-reliability-verification.md) tracks execution-aware Skill compatibility, permitted iframe-root observations, strict close repair and separate live-model acceptance evidence.

@@ -1,6 +1,8 @@
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Execution;
+using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Browser;
 using Microsoft.Playwright;
 
@@ -9,6 +11,115 @@ namespace AgentCore.Infrastructure.Tests;
 [Collection(BrowserChromiumCollection.Name)]
 public sealed class NativeBrowserSemanticActionTests
 {
+    [Fact]
+    public async Task Permitted_frame_roots_are_native_bounded_masked_and_generation_fenced()
+    {
+        var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true,
+            FixtureEnabled = true, FixturePort = 0, InteractionMode = "InteractiveDemo",
+            NavigationOrigins = ["http://127.0.0.1:5091"], InteractionOrigins = ["http://127.0.0.1:5091"] }, null);
+        await browser.StartAsync(CancellationToken.None);
+        var id = Guid.NewGuid();
+        try
+        {
+            var url = browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1";
+            Assert.Null((await browser.ExecuteAsync(new(id, new BrowserNavigate(url)))).ErrorCode);
+            var page = browser.ContextFor(id)!.Pages[0];
+            await page.FrameLocator("iframe").GetByRole(AriaRole.Button, new() { Name = "Save frame" }).WaitForAsync();
+            var frame = page.Frames.Single(f => f != page.MainFrame);
+            await frame.EvaluateAsync("""
+            () => {
+                document.body.insertAdjacentHTML('beforeend', '<label>Password<input type="password" value="frame-password-93742"></label><label>Token<input name="access_token" value="frame-token-93742"></label><p>frame-password-93742 frame-token-93742</p><iframe title="Denied nested" srcdoc="<h1>DENIED-NESTED-CONTENT</h1>"></iframe>');
+            }
+            """);
+            await frame.FrameLocator("iframe").GetByRole(AriaRole.Heading).WaitForAsync();
+            var main = (await browser.ExecuteAsync(new(id, new BrowserObserve()))).Observation!;
+            Assert.DoesNotContain("Save frame", main.Content);
+            var reference = Assert.Single(main.Frames!).Ref;
+            var root = await browser.ExecuteAsync(new(id, new BrowserObserve(FrameRef: reference)));
+            Assert.Null(root.ErrorCode);
+            Assert.Equal(reference, root.Observation!.FrameRef);
+            Assert.True(root.Observation.HasPasswordField);
+            Assert.Contains("Save frame", root.Observation.Content);
+            foreach (var forbidden in new[] { "frame-password-93742", "frame-token-93742", "DENIED-NESTED-CONTENT" })
+                Assert.DoesNotContain(forbidden, JsonSerializer.Serialize(root));
+            var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
+            var definition = new AgentDefinition(1, "frame-test", 1, new("Frame", "Role", "Description", "Tone"), [], "Use direct browser targets.",
+                new("answerNewTurn", true, true), new("balanced", false, "en", 2048),
+                new(false, 60_000, 120_000, 1, ["longSilence"], 0), new(false, "default", 1),
+                new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
+                new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserSnapshot]));
+            var receipt = await executor.ExecuteAsync(definition, id, new("frame-root", ToolCatalog.BrowserSnapshot, JsonSerializer.Serialize(new { frameRef = reference })), ToolLimits.MaxOutputBytes,
+                admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
+            var persisted = AgentRunToolCallCheckpoint.Write([new(ModelRole.Tool, receipt.Text, ToolCallId: "frame-root", Name: ToolCatalog.BrowserSnapshot)]);
+            foreach (var forbidden in new[] { "frame-password-93742", "frame-token-93742", "DENIED-NESTED-CONTENT" })
+                Assert.DoesNotContain(forbidden, persisted);
+            Assert.Contains(reference, receipt.Text);
+            var target = new BrowserTarget("role", "button", Name: "Save frame");
+            var scoped = await browser.ExecuteAsync(new(id, new BrowserObserve(target, FrameRef: reference)));
+            Assert.Null(scoped.ErrorCode);
+            Assert.Equal(reference, scoped.Observation!.Scope!.FrameRef);
+            Assert.Null((await browser.ExecuteAsync(new(id, new BrowserClick(target with { FrameRef = reference })))).ErrorCode);
+            Assert.Contains("Frame saved", await frame.Locator("body").InnerTextAsync());
+            await frame.EvaluateAsync("""() => {for(let i=0;i<1000;i++){const p=document.createElement('p');p.textContent='Bounded frame row '+i+' x'.repeat(80);document.body.append(p);}}""");
+            var large = await browser.ExecuteAsync(new(id, new BrowserObserve(FrameRef: reference)));
+            Assert.Null(large.ErrorCode);
+            Assert.True(large.Observation!.ContentTruncated);
+            Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(large.Observation.Content), 1, BrowserToolLimits.MaxSnapshotBytes);
+            using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => browser.ExecuteAsync(new(id, new BrowserObserve(FrameRef: reference)), cancelled.Token).AsTask());
+            await page.Locator("iframe").EvaluateAsync("(el) => el.src='/browser-native-frame.html?new=1'");
+            await page.FrameLocator("iframe").GetByRole(AriaRole.Button, new() { Name = "Save frame" }).WaitForAsync();
+            Assert.Equal("stale_frame", (await browser.ExecuteAsync(new(id, new BrowserObserve(FrameRef: reference)))).ErrorCode);
+            var next = Assert.Single((await browser.ExecuteAsync(new(id, new BrowserObserve()))).Observation!.Frames!).Ref;
+            await page.Locator("iframe").EvaluateAsync("el => el.remove()");
+            Assert.Equal("stale_frame", (await browser.ExecuteAsync(new(id, new BrowserObserve(FrameRef: next)))).ErrorCode);
+            Assert.Empty((await browser.ExecuteAsync(new(id, new BrowserObserve()))).Observation!.Frames!);
+            Assert.Equal("closed", (await browser.ExecuteAsync(new(id, new BrowserClose()))).Status);
+        }
+        finally { await browser.StopAsync(CancellationToken.None); }
+    }
+
+    [Fact]
+    public async Task Frame_inventory_excludes_cross_origin_and_denied_ancestor_interiors()
+    {
+        await using var deniedOrigin = new LoopbackBrowserFixtureHost(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        await deniedOrigin.StartAsync(0, CancellationToken.None);
+        var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true,
+            FixtureEnabled = true, FixturePort = 0, InteractionMode = "InteractiveDemo",
+            NavigationOrigins = ["http://127.0.0.1:5091"], InteractionOrigins = ["http://127.0.0.1:5091"] }, null);
+        await browser.StartAsync(CancellationToken.None);
+        var id = Guid.NewGuid();
+        try
+        {
+            Assert.Null((await browser.ExecuteAsync(new(id, new BrowserNavigate(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1")))).ErrorCode);
+            var page = browser.ContextFor(id)!.Pages[0];
+            await page.FrameLocator("iframe").GetByRole(AriaRole.Button, new() { Name = "Save frame" }).WaitForAsync();
+            var outer = page.Frames.Single(f => f != page.MainFrame);
+            await outer.EvaluateAsync("""
+            () => {
+                const permitted = document.createElement('iframe'); permitted.title = 'Permitted nested'; permitted.src = '/browser-native-frame.html?nested=1'; document.body.append(permitted);
+                const denied = document.createElement('iframe'); denied.title = 'Denied parent'; denied.srcdoc = '<h1>DENIED-ANCESTOR-TEXT</h1><iframe src="/browser-native-frame.html?denied-child=1"></iframe>'; document.body.append(denied);
+            }
+            """);
+            await outer.FrameLocator("iframe[title='Permitted nested']").GetByRole(AriaRole.Button, new() { Name = "Save frame" }).WaitForAsync();
+            await outer.FrameLocator("iframe[title='Denied parent']").FrameLocator("iframe").GetByRole(AriaRole.Button, new() { Name = "Save frame" }).WaitForAsync();
+            await page.EvaluateAsync("""url => { const frame = document.createElement('iframe'); frame.title = 'Cross-origin denied'; frame.src = url; document.body.append(frame); }""", deniedOrigin.Origin + "/browser-native-frame.html");
+            var observation = (await browser.ExecuteAsync(new(id, new BrowserObserve()))).Observation!;
+            Assert.Equal(2, observation.Frames!.Count);
+            Assert.DoesNotContain("DENIED-ANCESTOR-TEXT", JsonSerializer.Serialize(observation));
+            Assert.DoesNotContain(observation.Frames, f => f.Url.Contains("denied-child", StringComparison.Ordinal));
+            var nested = Assert.Single(observation.Frames, f => f.Url.Contains("nested=1", StringComparison.Ordinal));
+            var result = await browser.ExecuteAsync(new(id, new BrowserObserve(FrameRef: nested.Ref)));
+            Assert.Null(result.ErrorCode);
+            Assert.Contains("Save frame", result.Observation!.Content);
+            Assert.DoesNotContain("DENIED-ANCESTOR-TEXT", JsonSerializer.Serialize(result));
+            var foreign = Guid.NewGuid();
+            Assert.Null((await browser.ExecuteAsync(new(foreign, new BrowserNavigate(browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html?compact=1")))).ErrorCode);
+            Assert.Equal("stale_frame", (await browser.ExecuteAsync(new(foreign, new BrowserObserve(FrameRef: nested.Ref)))).ErrorCode);
+        }
+        finally { await browser.StopAsync(CancellationToken.None); }
+    }
+
     [Fact]
     public async Task Snapshot_then_direct_actions_verify_real_dom_without_discovery_and_deny_duplicates_and_secrets()
     {

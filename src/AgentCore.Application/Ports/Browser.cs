@@ -65,7 +65,7 @@ public sealed record BrowserSnapshot(
     string? TabRef = null,
     IReadOnlyList<BrowserTargetBox>? Boxes = null,
     BrowserTarget? Scope = null,
-    IReadOnlyList<BrowserFrameInfo>? Frames = null, bool HasPasswordField = false);
+    IReadOnlyList<BrowserFrameInfo>? Frames = null, bool HasPasswordField = false, string? FrameRef = null);
 
 public sealed record BrowserPageInfo(string PageId, string Url, bool Active);
 
@@ -169,7 +169,7 @@ public sealed record BrowserNavigate(string? Url = null, string Operation = "got
 {
     public override BrowserOperation Kind => BrowserOperation.Navigate;
 }
-public sealed record BrowserObserve(BrowserTarget? Target = null, int Depth = 32, bool Boxes = false) : BrowserCommand
+public sealed record BrowserObserve(BrowserTarget? Target = null, int Depth = 32, bool Boxes = false, string? FrameRef = null) : BrowserCommand
 {
     public override BrowserOperation Kind => BrowserOperation.Snapshot;
 }

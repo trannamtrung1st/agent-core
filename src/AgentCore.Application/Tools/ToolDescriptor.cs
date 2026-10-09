@@ -36,7 +36,9 @@ public sealed record ToolExecutionAdmission(
     string? OwnerTurnText = null,
     bool SupportsTools = true,
     AgentCore.Domain.Conversation.AgentRunModelPin? Model = null,
-    string? WorkspaceCwd = null, Guid? OwnedSessionId = null);
+    string? WorkspaceCwd = null, Guid? OwnedSessionId = null,
+    IReadOnlyList<AgentCore.Domain.Definitions.EffectiveSkill>? PinnedSkillCatalog = null,
+    IReadOnlyList<string>? ActiveSkillKeys = null);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,

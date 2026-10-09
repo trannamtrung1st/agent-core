@@ -68,8 +68,8 @@ internal static class AgentDefinitionCandidateValidator
         }
 
         var definition = candidate.ToPublished(1);
-        if (BrowserContractCutover.Retired(definition.SystemInstructions) || definition.SkillList.Any(skill => BrowserContractCutover.Retired(skill.Procedure)))
-            findings.Add(new("systemInstructions", "browser_contract_retired", BrowserContractCutover.Message, DefinitionValidationSeverity.Blocking));
+        if (BrowserContractCutover.Diagnostic(definition) is { } diagnostic)
+            findings.Add(new("systemInstructions", "browser_contract_retired", diagnostic, DefinitionValidationSeverity.Blocking));
         findings.AddRange(CollectModelBindingFindings(definition, catalog));
         if (findings.Count > 0)
         {

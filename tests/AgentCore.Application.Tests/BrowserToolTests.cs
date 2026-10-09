@@ -744,10 +744,8 @@ public sealed class BrowserToolTests
 
     [Theory]
     [InlineData("{}")]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("null")]
-    public async Task Close_canonicalizes_harmless_argument_shapes(string arguments)
+    [InlineData(" { } ")]
+    public async Task Close_accepts_only_empty_objects(string arguments)
     {
         var fake = new FakeBrowser();
         var result = await Executor(fake).ExecuteAsync(
@@ -761,6 +759,13 @@ public sealed class BrowserToolTests
     }
 
     [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("null")]
+    [InlineData("""{"arguments":"{}"}""")]
+    [InlineData("""{"target":{}}""")]
+    [InlineData("""{"parameters":{}}""")]
+    [InlineData("""{"dummy":"x"}""")]
     [InlineData("""{"mode":"openWeb"}""")]
     [InlineData("""{"headless":true}""")]
     [InlineData("""{"script":"page.evaluate(() => 1)"}""")]

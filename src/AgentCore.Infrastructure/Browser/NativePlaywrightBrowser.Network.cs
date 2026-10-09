@@ -575,6 +575,7 @@ public sealed partial class NativePlaywrightBrowser
         if (added)
         {
             page.FrameNavigated += (_, frame) => { if (ReferenceEquals(session.Page, page)) { AdvanceGeneration(session); } };
+            page.FrameDetached += (_, frame) => { if (ReferenceEquals(session.Page, page)) { AdvanceGeneration(session); } };
             page.Dialog += (_, dialog) => { session.Dialog = dialog; session.DialogSignal.TrySetResult(); };
             page.Console += (_, message) => { lock (session.PopupGate) { session.Console.Add(message.Type + ": " + (message.Text.Length > 1000 ? "[redacted oversized console message]" : message.Text)); if (session.Console.Count > 50) session.Console.RemoveAt(0); } };
             page.Request += (_, request) => { lock (session.PopupGate) { session.Network["req_" + Guid.NewGuid().ToString("N")] = request; if (session.Network.Count > 50) session.Network.Remove(session.Network.Keys.First()); } };

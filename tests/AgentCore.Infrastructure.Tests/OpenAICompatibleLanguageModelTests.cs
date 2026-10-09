@@ -447,6 +447,8 @@ public sealed class OpenAICompatibleLanguageModelTests
     [InlineData("browser.navigate", false)]
     [InlineData("browser.click", false)]
     [InlineData("browser.tabs", true)]
+    [InlineData("browser.close", false)]
+    [InlineData("browser.snapshot", false)]
     public async Task Focused_browser_schemas_map_to_provider_function_parameters(string name, bool operationRequired)
     {
         const string body = "data: {\"choices\":[{\"delta\":{\"content\":\"Ready\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
@@ -464,6 +466,17 @@ public sealed class OpenAICompatibleLanguageModelTests
         if (operationRequired)
             Assert.Equal(["operation"], schema.GetProperty("required").EnumerateArray().Select(field => field.GetString()));
         else if (name == "browser.navigate") Assert.False(schema.TryGetProperty("required", out _));
+        if (name == "browser.close")
+        {
+            Assert.Empty(fields.EnumerateObject());
+            Assert.False(schema.TryGetProperty("required", out _));
+        }
+        if (name == "browser.snapshot")
+        {
+            Assert.True(fields.TryGetProperty("frameRef", out var frame));
+            Assert.Equal("string", frame.GetProperty("type").GetString());
+            Assert.False(schema.TryGetProperty("required", out _));
+        }
         if (name == "browser.click")
         {
             Assert.False(fields.TryGetProperty("operation", out _));
@@ -475,6 +488,21 @@ public sealed class OpenAICompatibleLanguageModelTests
         using var original = JsonDocument.Parse(definition.ParametersJson);
         Assert.False(original.RootElement.TryGetProperty("oneOf", out _));
         Assert.Equal(original.RootElement.GetProperty("properties").GetRawText(), schema.GetProperty("properties").GetRawText());
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("null")]
+    [InlineData("{\"arguments\":{}}")]
+    public async Task Provider_preserves_close_argument_bytes_for_core_validation(string arguments)
+    {
+        var chunk = JsonSerializer.Serialize(new { choices = new[] { new { delta = new { tool_calls = new[] { new { index = 0, id = "close_1", type = "function", function = new { name = "browser_close", arguments } } } }, finish_reason = "tool_calls" } } });
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes("data: " + chunk + "\n\ndata: [DONE]\n\n")]);
+        var model = Create(handler, tools: true);
+        var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Close the browser")], Tools: [ToolRegistry.Get("browser.close").ModelDefinition]));
+        var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
+        Assert.Equal("browser.close", call.Name);
+        Assert.Equal(arguments, call.ArgumentsJson);
     }
 
     [Theory]

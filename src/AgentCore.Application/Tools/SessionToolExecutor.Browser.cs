@@ -15,11 +15,11 @@ public sealed partial class SessionToolExecutor
     {
         var started = Stopwatch.GetTimestamp();
         ToolExecutionResult Fail(string code, string message) => FitResult(remainingOutputBytes, FinishBrowser(name, started, Error(code, message)));
-        if (BrowserContractCutover.Retired(definition.SystemInstructions) || definition.SkillList.Any(skill => BrowserContractCutover.Retired(skill.Procedure)))
-            return Fail("browser_contract_retired", BrowserContractCutover.Message);
+        if (BrowserContractCutover.Diagnostic(definition, admission?.PinnedSkillCatalog, admission?.ActiveSkillKeys) is { } diagnostic)
+            return Fail("browser_contract_retired", diagnostic);
         if (!BrowserToolCatalog.TryGet(name, out var metadata)) return Fail("unsupported_operation", "Unknown browser feature.");
         if (!BrowserToolArguments.TryRequest(sessionId, name, args, out var request, out var argumentError))
-            return Fail(argumentError, BrowserToolArguments.ArgumentGuidance(args));
+            return Fail(argumentError, argumentError == "invalid_frame" ? BrowserFailureMessage(argumentError) : BrowserToolArguments.ArgumentGuidance(args));
         var denied = await BindBrowserAsync(sessionId, admission, ct).ConfigureAwait(false);
         if (denied is not null) return TextResult(FinishBrowser(name, started, denied));
         if (browser is null || !browser.IsAvailable && metadata.Feature != BrowserFeature.Configuration) return Fail("provider_unavailable", "Browser is unavailable.");
@@ -99,6 +99,7 @@ public sealed partial class SessionToolExecutor
         "target_denied",
         "target_missing",
         "invalid_target",
+        "invalid_frame",
         "credential_target_invalid",
         "stale_frame",
         "action_not_confirmed",
@@ -601,7 +602,7 @@ public sealed partial class SessionToolExecutor
         targets = observation.Targets.Select(e => new { target = e.Target, role = e.Role, name = ClipBrowser(e.Name, BrowserToolLimits.MaxAccessibleNameLength), actions = e.Actions, state = ControlState(e.State) }),
         truncated = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > BrowserToolLimits.MaxSnapshotBytes,
         hasMore = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > BrowserToolLimits.MaxSnapshotBytes,
-        settled = observation.Settled, scope = observation.Scope, frames = observation.Frames, boxes = observation.Boxes,
+        settled = observation.Settled, scope = observation.Scope, frameRef = observation.FrameRef, frames = observation.Frames, boxes = observation.Boxes,
         guidance = BrowserToolArguments.TargetGuidance
     }, DownloadJson);
 
@@ -664,6 +665,7 @@ public sealed partial class SessionToolExecutor
             "invalid" => "Browser arguments are invalid.",
             "target_denied" => "Browser target is not allowed.",
             "invalid_target" => BrowserToolArguments.TargetGuidance,
+            "invalid_frame" => "Use one current snapshot fr_ frame ID. If target.frameRef is also supplied it must match frameRef; omit frameRef for the main page.",
             "stale_frame" => "This frame is no longer current. Observe the current permitted frame inventory.",
             "action_not_confirmed" => "The page changed during the operation. Observe current state; do not replay an uncertain effect.",
             "target_missing" => "No current rendered target matches. Observe the page, narrow the semantics or render virtualized content before acting.",

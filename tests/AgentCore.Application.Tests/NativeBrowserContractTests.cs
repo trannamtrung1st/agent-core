@@ -27,6 +27,32 @@ public sealed class NativeBrowserContractTests
         Assert.Equal(1, browser.Commands);
     }
 
+    [Fact]
+    public async Task Browser_admission_checks_only_this_executions_active_skills()
+    {
+        var browser = new Subset(true);
+        var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
+        var old = new EffectiveSkill("instance:old", SkillOrigin.Instance, "old", "Old browser", "Historical", "Use browser.find and pass its opaque ref as scopeRef.", SkillProjection.OnDemand, [], []);
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, PinnedSkillCatalog: [old], ActiveSkillKeys: []);
+        var call = new AgentCore.Application.Ports.ModelToolCall("config", ToolCatalog.BrowserConfiguration, "{}");
+        var definition = Definition(ToolCatalog.BrowserConfiguration);
+        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission)).Text);
+        Assert.Equal(1, browser.Commands);
+        var rejected = await executor.ExecuteAsync(definition, Guid.NewGuid(), call, ToolLimits.MaxOutputBytes, admission: admission with { ActiveSkillKeys = [old.Key] });
+        Assert.Contains(old.Key, rejected.Text);
+        Assert.Contains("retired", rejected.Text);
+        Assert.Equal(1, browser.Commands);
+    }
+
+    [Theory]
+    [InlineData("{\"frameRef\":\"main\"}")]
+    [InlineData("{\"frameRef\":\"fr_00000000000000000000000000000000\",\"target\":{\"by\":\"label\",\"value\":\"Email\",\"frameRef\":\"fr_11111111111111111111111111111111\"}}")]
+    public void Snapshot_rejects_malformed_or_conflicting_frame_identity(string json)
+    {
+        Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserSnapshot, JsonSerializer.Deserialize<JsonElement>(json), out _, out var error));
+        Assert.Equal("invalid_frame", error);
+    }
+
     [Theory]
     [InlineData("role", "textbox")]
     [InlineData("text", "Email")]

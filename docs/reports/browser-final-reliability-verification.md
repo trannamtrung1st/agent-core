@@ -1,0 +1,46 @@
+# Native browser final reliability follow-up
+
+Date: 2026-10-09. Scoped follow-up to the accepted native Playwright redesign, based on main after `3438397a` (Run history and chat catalog fixes retained). Earlier reports remain historical evidence.
+
+## Root causes and production changes
+
+1. Retired-instruction enforcement scanned every pinned Skill and rejected vocabulary in historical prose. It now checks Definition system instructions and the current execution's active procedures. Default-active Always procedures remain checked at publication. Inactive OnDemand procedures remain discoverable, but activation returns `browser_contract_retired`, the resource key and explicit revision-checked owner repair guidance. Prompt projection and browser dispatch use the same pinned catalog/active keys. Deterministic directive/call detection distinguishes executable retired parameters from historical mentions and explicit upgrade warnings. This is not a general prose interpreter; strict tool argument validation independently denies retired calls. No owner publication is rewritten.
+2. Native main-page snapshots exclude iframe interiors, while the only frame path previously required an already-known interior target. Optional `browser.snapshot.frameRef` now selects a current permitted iframe's native body ARIA snapshot, optionally narrowed by one same-frame semantic target. The typed `BrowserObserve` path and existing `IBrowser` remain the only owners. Malformed/conflicting IDs produce `invalid_frame`; missing, detached, foreign or obsolete bindings produce `stale_frame`. Refresh inventory rather than guessing IDs. Every ancestor frame policy, current owned-page membership and generation are checked. Navigation/detachment clear inventory; post-capture checks discard stale results. Observation projection preserves `frameRef`, frame-local password-field presence, masking before clipping and existing serialized output budgets.
+3. Browser close previously canonicalized null/missing argument text to `{}`, despite the published empty-object schema. Both runtime and executor now reject null, empty text, wrappers and extra fields before any effect; valid empty objects retain their argument bytes. A concise repair receipt says to supply exactly `{}`. Existing malformed-call limits, execution budgets and cleanup/finalization reserves bound retries. No model-specific translation, schema flattening or unconditional success path was added.
+4. Frame policy checks now include denied ancestors in inventory, target resolution and secret collection. Secret collection explicitly uses the inspected owned tab, preserving masking for noncurrent tab URLs. Native SDK confirmation remains separate from application outcome verification and verified logout.
+
+## Regression and native acceptance evidence
+
+The former blanket check rejected an inactive historical Skill and harmless text containing `scopeRef`; regression tests now accept both and still reject active retired procedures with named repair instructions. Independent execution keys do not inherit another Run's activation. Existing checkpoint `BrowserContractVersion=1` remains unchanged: historical reads survive; unstamped executable browser checkpoints cannot resume. Frame-root calls restored from a checkpoint retain the literal ID and must resolve current native inventory again.
+
+Two older tests expected null close to succeed. The intervention-close fixture now sends valid `{}`; the generation-retry case now requires the malformed-call repair receipt, then exactly one real close on a corrected call and a completed answer. No assertion, origin rule or durable execution fence was weakened.
+
+Native Chromium cases exercise root and subtree snapshots, direct frame clicks verified independently in DOM, main-page exclusion of interiors, nested allowed frames, denied parent/child content, cross-origin denial, foreign-session IDs, password/token masking, bounded large content, cancellation, frame navigation/removal and tab return. The frame-root result passes through `SessionToolExecutor` and checkpoint serialization; protected values and denied interior text are absent from model receipts and persisted tool output. Browser logging retains existing classified status/timing metadata; no raw page content is added. Existing credential, origin, approval, modal recovery, ownership, interruption, persistent-profile and no-replay suites remain required.
+
+## Actual provider schema evidence
+
+`OpenAICompatibleLanguageModelTests` inspects the serialized HTTP function definitions, including nested role/literal target `oneOf`, optional frame roots and the minimal close object with no properties. The provider preserves schemas and argument bytes. Close extraction tests cover `{}`, null and an argument wrapper; Core validates them independently. Canonical frame format is described and constrained in snapshot and target schemas. Ordinary direct semantic actions still require neither discovery nor frame IDs for the main page.
+
+## Verification ledger
+
+Commands run from the repository root unless specified. All test data is disposable. Playwright uses separate local ports and data; the owner's live host is unchanged.
+
+| Check | Command / setup | Observed result |
+| --- | --- | --- |
+| Focused Application | `dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --filter 'FullyQualifiedName~NativeBrowserContractTests\|FullyQualifiedName~GenerationRetryTests\|FullyQualifiedName~BrowserContractCutoverTests\|FullyQualifiedName~BrowserOriginHandoffTests\|FullyQualifiedName~BrowserToolTests' --nologo -m:1 --verbosity quiet` | 121 passed |
+| Final native/provider focus | Infrastructure filters `NativeBrowserSemanticActionTests`, `Provider_preserves_close`, `Focused_browser_schemas` | 12 passed (including native executor/checkpoint masking) |
+| Full backend | `dotnet test AgentCore.sln --nologo -m:1 --verbosity normal` | Initial full run passed: Domain 173, Application 1480 + 3 opt-in skips, Infrastructure 944, API 401, order-event plugin 4. Final rerun pending; one SSO unknown-binding case failed under concurrent load, all three denial cases passed on immediate focused recheck |
+| Frontend unit | in `web`: `pnpm run test --run --maxWorkers=1` | Pending isolated rerun; concurrent runs timed out |
+| Production build | in `web`: `pnpm run build` | Passed; existing chunk-size warning |
+| Core Chromium | in `web`: `pnpm exec playwright test --project=synthetic --project=browser-stt --project=browser-browser` | 139 passed (16.5 minutes) |
+| Acceptance Chromium | Separate disposable DB per project: faithful-manual, admin-lifecycle, p76-admin, p97-harness, p9899-continuity, p910-continuity-maintenance, secretary-demo | Pending final execution |
+| Compose volume smoke | `scripts/compose-sqlite-volume.sh` with isolated project `browser-final-reliability`, image and port 5086; temporary file names isolated | Passed owner capability, seed, recreation and SQLite volume survival; initial Microsoft registry EOF succeeded on retry |
+| Exact behavior SHA hosted CI | Five jobs in `.github/workflows/synthetic.yml` | Pending commit and run |
+
+Core ports: API 5087/5089/5090, web 5187/5189/5190, fixtures 5097/5098/5099. Acceptance API/web/fixture: 5094/5194/5104; `PLAYWRIGHT_FAITHFUL_MANUAL=1` avoids extra speech hosts. Roots: `/private/tmp/browser-final-core` and `/private/tmp/browser-final-acceptance/<project>`. Logs under `/private/tmp/browser-final-*` are local, ephemeral diagnostics, not repository artifacts. Frontend unit verification will run without competing suites before acceptance is claimed.
+
+## Scope and remaining model evaluation
+
+No new persistent migration, checkpoint version, custom element index, execution owner, provider-specific branch or legacy adapter was introduced. Existing authorization, protected password-only sink, exact approvals, browser leases, origin policies and durable uncertain-effect handling remain authoritative. Prior milestone freeze SHAs are unchanged.
+
+No paid model invocation was authorized for this follow-up, so no new cross-model success/latency/token measurements are claimed. Historical Luna and DeepSeek trials in [the redesign report](browser-semantic-redesign-verification.md) and [Real UAT report](real-uat-browser-model-verification.md) are not final-candidate evidence. Structural failures and guessed IDs are addressed through the common schemas and actionable bounded validation; live-model acceptance, cleanup success, final reply completion and unnecessary recovery-call counts remain unverified on this behavior SHA. Synthetic success does not establish universal browser reliability. A future explicitly authorized comparison must separately score task outcome, logout, closure, reply completion, tool/recovery counts and measured provider usage across the same fixture and cold/warm profiles.

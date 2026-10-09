@@ -117,18 +117,19 @@ public static class BrowserToolArguments
         TryRequest(sessionId, tool, args, out var request, out var error) ? request
             : throw new ArgumentException(error + ": " + TargetGuidance);
 
-    public static bool TryCanonicalizeClose(string? json, out string errorJson)
+    public static bool TryValidateClose(string? json, out string errorJson)
     {
         errorJson = "";
-        if (string.IsNullOrWhiteSpace(json)) return true;
+        if (string.IsNullOrWhiteSpace(json))
+        { errorJson = "{\"error\":\"invalid\",\"message\":\"browser.close requires exactly {}. Omit every parameter.\"}"; return false; }
         try
         {
             using var document = JsonDocument.Parse(json);
             var value = document.RootElement;
-            if (value.ValueKind == JsonValueKind.Null || value.ValueKind == JsonValueKind.Object && !value.EnumerateObject().Any()) return true;
+            if (value.ValueKind == JsonValueKind.Object && !value.EnumerateObject().Any()) return true;
         }
         catch (JsonException) { }
-        errorJson = "{\"error\":\"invalid\",\"message\":\"close accepts an empty object.\"}";
+        errorJson = "{\"error\":\"invalid\",\"message\":\"browser.close requires exactly {}. Omit every parameter.\"}";
         return false;
     }
 
@@ -138,11 +139,17 @@ public static class BrowserToolArguments
         if (!BrowserToolCatalog.TryGet(tool, out var metadata)) { error = "unsupported_operation"; return false; }
         if (args.ValueKind == JsonValueKind.Object && args.EnumerateObject().Any(p => p.Name is "origins" or "targetOrigins" or "headless" or "enabled" or "interactionMode"))
         { error = "forbidden"; return false; }
+        if (tool == ToolCatalog.BrowserSnapshot && args.ValueKind == JsonValueKind.Object && args.TryGetProperty("frameRef", out var frame)
+            && (frame.ValueKind != JsonValueKind.String || !Regex.IsMatch(frame.GetString()!, "^fr_[a-f0-9]{32}$", RegexOptions.CultureInvariant)))
+        { error = "invalid_frame"; return false; }
         using var schema = JsonDocument.Parse(metadata.ParametersJson);
         if (!ValidateBrowserShape(args, schema.RootElement)) { if (InvalidTargetReason(args) is not null) error = "invalid_target"; return false; }
         try { request = Parse(sessionId, tool, args); }
         catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidOperationException) { return false; }
         if (request.Command is BrowserNavigate { Operation: "goto", Url: null or "" }) return false;
+        if (request.Command is BrowserObserve observe && (observe.FrameRef is not null && !Regex.IsMatch(observe.FrameRef, "^fr_[a-f0-9]{32}$", RegexOptions.CultureInvariant)
+            || observe.FrameRef is not null && observe.Target?.FrameRef is not null && observe.FrameRef != observe.Target.FrameRef))
+        { error = "invalid_frame"; return false; }
         if (!ValidTargets(args)) { error = "invalid_target"; return false; }
         if (request.Command is BrowserFillForm form && form.Fields.Any(f => (f.Value is not null) == (f.Checked is not null))) return false;
         if (request.Command is BrowserWaitFor wait && (wait.Condition == "target" && wait.Target is null

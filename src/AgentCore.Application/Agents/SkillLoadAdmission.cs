@@ -11,7 +11,7 @@ public static class SkillActivationLimits
     public const int MaxAggregateProcedureCharacters = 8000;
 }
 
-public sealed record SkillLoadRejection(string Id, string Reason);
+public sealed record SkillLoadRejection(string Id, string Reason, string? Message = null);
 
 public sealed record SkillLoadPlan(
     IReadOnlyList<string> Admitted,
@@ -23,7 +23,7 @@ public sealed record SkillLoadPlan(
 {
     public string ToToolResultJson()
     {
-        var rejected = Rejected.Select(item => new { id = item.Id, reason = item.Reason }).ToArray();
+        var rejected = Rejected.Select(item => new { id = item.Id, reason = item.Reason, message = item.Message }).ToArray();
         return JsonSerializer.Serialize(new
         {
             admitted = Admitted,
@@ -145,6 +145,12 @@ public static class SkillLoadAdmission
             }
 
             if (skill.Projection != SkillProjection.OnDemand) { rejected.Add(new(id, "not_on_demand")); continue; }
+
+            if (Tools.BrowserContractCutover.Retired(skill.Procedure))
+            {
+                rejected.Add(new(id, "browser_contract_retired", "Update this Skill to current direct-target browser instructions using its revision-checked owner update, then start a new Session."));
+                continue;
+            }
 
             if (budgetClosed
                 || characters + skill.Procedure.Length > SkillActivationLimits.MaxAggregateProcedureCharacters)

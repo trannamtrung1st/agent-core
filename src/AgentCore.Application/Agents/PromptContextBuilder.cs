@@ -4,6 +4,7 @@ using AgentCore.Application.Memory;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
@@ -43,7 +44,7 @@ public sealed class PromptContextBuilder(
 
     public PromptSections BuildSections(AgentContext context)
     {
-        BrowserContractCutover.EnsureCurrent(context.Definition, context.PinnedSkillCatalog);
+        BrowserContractCutover.EnsureCurrent(context.Definition, context.PinnedSkillCatalog, context.ActiveSkillKeys);
         var boundaryValid = SummaryBoundary.IsValid(
             context.Summary,
             context.SummarizedThroughEntrySequence,
@@ -506,6 +507,8 @@ public sealed class PromptContextBuilder(
                 continue;
             }
 
+            if (BrowserContractCutover.Retired(skill.Procedure))
+                throw AgentCoreErrors.Conflict($"Active Skill {skill.Key} ({skill.Name}): {BrowserContractCutover.Message}");
             procedures.Add($"Skill {skill.Key} ({skill.Name}):\n{skill.Procedure}");
         }
 

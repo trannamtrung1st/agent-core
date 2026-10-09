@@ -3165,14 +3165,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         {
                             if (string.Equals(call.Name, ToolCatalog.BrowserClose, StringComparison.Ordinal))
                             {
-                                if (!BrowserToolArguments.TryCanonicalizeClose(call.ArgumentsJson, out var closeError))
+                                if (!BrowserToolArguments.TryValidateClose(call.ArgumentsJson, out var closeError))
                                 {
                                     executionResult = ToolExecutionResult.FromText(closeError);
                                     args = default;
                                 }
                                 else
                                 {
-                                    args = JsonSerializer.Deserialize<JsonElement>("{}");
+                                    args = JsonSerializer.Deserialize<JsonElement>(call.ArgumentsJson);
                                 }
                             }
                             else
@@ -3231,7 +3231,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     allowedIntermediate,
                                     _snapshot.AgentInstanceId,
                                     Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
-                                    SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId), overallCts.Token);
+                                    SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills), overallCts.Token);
                             if (_runAuthority is not null && _boundAgentRun is { } authorizedRun)
                             {
                                 var currentDefinition = await _runAuthority.CurrentDefinitionAsync(authorizedRun, overallCts.Token).ConfigureAwait(false);
@@ -3334,7 +3334,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             args,
                                             overallCts.Token,
                                             _snapshot.Definition, SessionId,
-                                            new ToolExecutionAdmission(IsInitialBackgroundRun, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId))
+                                            new ToolExecutionAdmission(IsInitialBackgroundRun, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills))
                                         .ConfigureAwait(false);
                                     if (prepared.Preparation is null)
                                     {
@@ -3486,7 +3486,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 OwnerTurnText: trigger.Kind == TriggerKind.UserTurn ? trigger.Text : null,
                                                 SupportsTools: model.Capabilities.Tools,
                                                 Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Conversation.AgentRunModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null,
-                                                WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId))
+                                                WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills))
                                         .ConfigureAwait(false);
                                     if (executionResult.WorkspaceCwd is { } nextCwd)
                                     {

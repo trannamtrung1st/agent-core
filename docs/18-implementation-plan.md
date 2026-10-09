@@ -495,3 +495,7 @@ Authorized focused enhancement of existing `capabilities.load`: registry-based c
 ## Final native browser blocked-state recovery
 
 Authorized focused reliability review after `195d53df`, composed with capability discovery `bc0a7e94`. Fix only reproduced pending-modal loops and native dialog lifecycle defects using existing BrowserEvidenceProgress, tool receipts, finalization and native cancellation fences. No Browser redesign, additional tool, broader authority or P10/P11 work. Actual Chromium and owned Run acceptance, local suites and exact-behavior hosted gates are recorded separately in [verification](reports/browser-blocked-dialog-recovery-verification.md).
+
+## Scoped native browser reliability follow-up
+
+Execution-aware retired Skill validation, optional permitted iframe-root snapshots and strict empty-object close repair extend the accepted native browser foundation. They add no persistent migration, execution owner, legacy adapter or milestone. Prior freeze evidence remains historical. Current regression and exact-head acceptance evidence is tracked in [the follow-up report](reports/browser-final-reliability-verification.md); live-model evaluation remains separately unverified unless explicitly authorized.
