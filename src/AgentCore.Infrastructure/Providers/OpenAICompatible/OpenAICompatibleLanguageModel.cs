@@ -119,6 +119,10 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                     $"Provider did not return response headers within {Math.Max(1, _options.Timeouts.SetupSeconds)}s.",
                     ProviderFailureReason.SetupTimeout);
         }
+        catch (InvalidContinuationException error)
+        {
+            setupFailed = Fail(ProviderErrorCode.InvalidRequest, error.Message);
+        }
         catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException)
         {
             setupFailed = Fail(ProviderErrorCode.InvalidRequest, "Invalid language model continuation state.");
@@ -372,7 +376,9 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
 
     private HttpRequestMessage BuildRequest(ModelRequest request)
     {
-        var messages = MapMessages(request.Messages);
+        // Responses owns its input serialization and continuation validation.
+        // Do not first interpret its opaque state as Chat Completions state.
+        var messages = _options.Transport == ModelInferenceTransport.ChatCompletions ? MapMessages(request.Messages) : [];
 
         var body = new Dictionary<string, object?>
         {

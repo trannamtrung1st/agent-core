@@ -17,6 +17,15 @@ export function runActivationLabel(kind: string) {
     ImmediateBackground: "Immediate task", ManualBackground: "Manual task", BackgroundCompleted: "Completion report" } as Record<string, string>)[kind] ?? kind;
 }
 
+export function runBudgetLabel(value: string) {
+  return ({ Standard: "Standard", InteractiveBrowser: "Interactive Browser", UnattendedBoundBrowser: "Unattended Bound Browser",
+    system: "System default", definition: "Definition default", instance: "Instance override",
+    work: "Work", cleanup: "Cleanup", finalization: "Finalization", stepLimit: "Step limit reached",
+    runDeadline: "Execution time limit reached", checkpointCapacity: "Checkpoint capacity reached", outputLimit: "Output limit reached",
+    cleanupBlocked: "Cleanup blocked", notRequested: "Not requested", blocked: "Blocked", completed: "Completed", unverified: "Unverified"
+  } as Record<string, string>)[value] ?? value;
+}
+
 /** Localize the legacy one-shot ISO summary without rewriting other trigger kinds. */
 export function runTriggerLabel(summary: string) {
   const match = /^Once · (\d{4}-\d{2}-\d{2}T.+)$/.exec(summary);

@@ -21,7 +21,7 @@ test('Core Event presets stay opt-in, test filters without work, and preserve re
     await page.locator('.ant-select-item-option').filter({ hasText: new RegExp('^' + name + '$') }).click();
     await expect(drawer.getByRole('textbox', { name: 'Automation name' })).toHaveValue(name);
     await expect(drawer.getByRole('switch', { name: 'Enable automation' })).not.toBeChecked();
-    await expect(drawer.getByRole('combobox', { name: 'Automation trigger' })).toContainText('Schedule');
+    await expect(drawer.getByRole('combobox', { name: 'Core Event type' })).toHaveCount(0);
   }
   await drawer.getByRole('combobox', { name: 'Automation preset' }).click();
   await page.locator('.ant-select-item-option').filter({ hasText: /^Review recent work$/ }).click();

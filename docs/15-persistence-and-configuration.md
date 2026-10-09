@@ -1,5 +1,7 @@
 # Persistence and Configuration
 
+`EntryCompletionTime` adds nullable `ConversationEntries.CompletedAtUtc` (UTC Unix milliseconds). The Session mailbox records assistant terminal time once (completed, failed or interrupted), independently of immutable `CreatedAtUtc`, and preserves it through checkpoints, save retries and history reads. Historical rows remain null; migration does not guess past completion times or change entry ordering. User and application-message publication times remain `CreatedAtUtc`.
+
 ## Activation and AgentRun storage foundation
 
 The `ActivationAgentRunFoundation` migration adds Session `OriginJson` and `Surfaces`, plus `Activations`, `ActivationSourceEntries` and `AgentRuns`. Existing ordinary Session metadata defaults to UserChat/ChatList; no old execution rows are converted. Origin is immutable on subsequent saves. Surface mutation remains revision protected and does not change origin or lifecycle.
@@ -70,7 +72,7 @@ For bounded personal MVP sessions, `LoadMetadataAsync` does not load conversatio
 
 **Follow-on P1 observed and frozen:** Additive `lifecycleStatus` and purpose/deadline/policy persist on the snapshot; Application `LifecycleTransition` is the persist path for pause/resume/terminal outcomes and deadline expiry. Trusted-host `/api/v2/host/sessions` is the create/configuration surface for purpose/policy; ordinary public SessionView, catalog, `session.ready`, and history stay private of those fields. RequestComplete evaluation is observed. Session `SpeechLocaleOverride` persists independently of agent conversation language. See [Technology Decisions](10-technology-decisions.md#decision-provider-neutral-effective-speech-locale).
 
-**P2D session model selection (observed):** Persist concrete `SessionModelSelection` (catalog key, trusted provider alias, model ID, selection source, reasoning effort) on the snapshot. Default is not a stored pointer. Legacy sessions pin the configured default before the first post-upgrade generation. Assistant entries may store `ModelGenerationProvenance` for the turn that produced them; older rows may be null. Do not persist secrets. The shipped Real catalog default is `deepseek-v41-flash` (`deepseek/deepseek-v4.1-flash`, medium). Explicit choices are listed in the [Real model catalog](#real-model-catalog). OpenRouter Free stays experimental and is not the system default. See [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
+**P2D session model selection (observed):** Persist concrete `SessionModelSelection` (catalog key, trusted provider alias, model ID, selection source, reasoning effort) on the snapshot. Default is not a stored pointer. Legacy sessions pin the configured default before the first post-upgrade generation. Assistant entries may store `ModelGenerationProvenance` for the turn that produced them; older rows may be null. Do not persist secrets. The shipped Real catalog default is `deepseek-v41-flash` (`deepseek/deepseek-v4.1-flash`, low). Explicit choices are listed in the [Real model catalog](#real-model-catalog). OpenRouter Free stays experimental and is not the system default. See [Technology Decisions](10-technology-decisions.md#decision-session-model-selection-and-inference-controls).
 
 Summary metadata is additive. Format 0 is the legacy default. A semantic compaction candidate stores format 1, the UTC generation time, and `ModelGenerationProvenance` for the model that produced it. Loading a snapshot does not rewrite an existing summary.
 
@@ -209,7 +211,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
           "StructuredOutput": false,
           "Reasoning": true,
           "SupportedReasoningEfforts": ["low", "medium", "high"],
-          "DefaultReasoningEffort": "medium"
+          "DefaultReasoningEffort": "low"
         }
       ]
     },
@@ -520,25 +522,27 @@ Additive migration `20261009160526_ExecutionBudgets` adds nullable `AgentInstanc
 
 ## Real model catalog
 
-`ModelCatalogFactory.Real()` is the single built-in catalog source. Real launch/Compose configure the primary endpoint and default, without copying catalog entries. An explicit `Providers:ModelCatalog:Models` override replaces the catalog; operators must specify the complete desired set and its verified capabilities/transport. `PreferResponseFunction` explicitly selects the existing schema-bearing response function for semantic replies; native JSON Schema capability remains separately advertised and available to direct adapter requests. Unknown configured primary defaults fail startup rather than silently switching models. Synthetic entries and timing fixtures remain unchanged.
+`ModelCatalogFactory.Real()` is the single built-in catalog source. Real launch/Compose configure the primary endpoint and default, without copying catalog entries. An explicit `Providers:ModelCatalog:Models` override replaces the catalog; operators must specify the complete desired set and its verified capabilities/transport. `PreferResponseFunction` explicitly selects the existing schema-bearing response function for semantic replies; native JSON Schema capability remains separately advertised and available to direct adapter requests. Unknown configured primary defaults fail startup rather than silently switching models. Synthetic model identities and timing fixtures remain unchanged; reasoning-capable Alpha defaults to low.
 
 | Key | Model ID | Catalog effort default | Offered efforts, ascending | Transport |
 | --- | --- | --- | --- | --- |
-| `deepseek-v41-flash` | `deepseek/deepseek-v4.1-flash` | medium | low, medium, high, max | Chat Completions |
+| `deepseek-v41-flash` | `deepseek/deepseek-v4.1-flash` | low | low, medium, high, max | Chat Completions |
 | `gpt-6-luna` | `openai/gpt-6-luna` | low | none, low, medium, high, xhigh, max | Responses |
-| `claude-haiku-5.5` | `anthropic/claude-haiku-5.5` | medium | low, medium, high, xhigh, max | Chat Completions |
-| `gpt-6.1-sol` | `openai/gpt-6.1-sol` | medium | low, medium, high, xhigh, max | Responses |
+| `claude-haiku-5.5` | `anthropic/claude-haiku-5.5` | low | low, medium, high, xhigh, max | Chat Completions |
+| `gpt-6.1-sol` | `openai/gpt-6.1-sol` | low | low, medium, high, xhigh, max | Responses |
 | `openrouter-free` | `openrouter/free` | none | none offered | Chat Completions |
 
 DeepSeek remains the system default. All four fixed models advertise tools, vision and JSON Schema outputs in the [OpenRouter catalog API](https://openrouter.ai/api/v1/models) checked 2026-10-09. These are metadata claims; [verification](reports/model-catalog-refresh-verification.md) distinguishes live evidence. Luna and Sol have 1,050,000 context / 128,000 output tokens; Haiku has 1,000,000 / 128,000; DeepSeek lists 1,048,576 context and provider-dependent output limits (up to 943,718, lower on some routes). Runtime output budgets remain independent of provider maxima. Free routing is variable; it advertises only the existing conservative tools profile, with no image, structured-output or reasoning controls.
 
-Provider reasoning defaults are medium for Luna, Haiku and Sol, high for DeepSeek. Agent Core intentionally selects Luna low and retains DeepSeek medium. [DeepSeek documents medium as an accepted compatibility alias for high](https://api-docs.deepseek.com/guides/thinking_mode/); saved medium pins and requested provider values are unchanged. Haiku uses adaptive thinking internally; its five documented efforts are intensity levels, not an extra adaptive slider stop. Its OpenRouter endpoints currently advertise automatic tool choice only. Forced named/required choice fails visibly; the adapter never silently downgrades it. Omit non-default sampling values for Haiku.
+Provider reasoning defaults are medium for Luna, Haiku and Sol, high for DeepSeek. Agent Core selects low for every shipped reasoning-capable model, including Synthetic Alpha. Catalog and primary-provider fallbacks also use low when no explicit default is configured. Explicit operator overrides and persisted Session/Run efforts remain unchanged. [DeepSeek documents medium as an accepted compatibility alias for high](https://api-docs.deepseek.com/guides/thinking_mode/); saved medium pins and requested provider values are unchanged. Haiku uses adaptive thinking internally; its five documented efforts are intensity levels, not an extra adaptive slider stop. Its OpenRouter endpoints currently advertise automatic tool choice only. Forced named/required choice fails visibly; the adapter never silently downgrades it. Omit non-default sampling values for Haiku.
 
 The retired built-in keys `gpt-4o-mini-2024-07-18`, `gpt-4.1`, and `gpt-5.6-luna` are absent from new selection. Persisted concrete Session selections remain untouched: the resolver retains their exact provider/model IDs, and provider unavailability is surfaced normally. New selections/Definition validation reject absent keys; Automation/unattended admission reports `model-unavailable` for retired pins. Restore an explicit verified operator catalog entry to continue using a retired model, or deliberately choose a supported model through normal controls. No database reset, alias replacement, automatic routing or migration is performed.
 
 `Transport` is a trusted catalog setting (`ChatCompletions` by default, `Responses` explicitly). GPT-6.1 Sol requires Responses for tools; reasoning-enabled Luna does too, per [OpenAI deployment guidance](https://developers.openai.com/api/docs/guides/deployment-checklist). The adapter uses [OpenRouter's stateless Responses API](https://openrouter.ai/docs/api_reference/responses/overview): `store:false`, full input history, no `previous_response_id`. Opaque continuation tokens preserve model/transport-bound reasoning for tool rounds and durable checkpoints. Infrastructure owns encoding/decoding; Application stores opaque strings only. Tokens never appear in user text, tool arguments, public protocol or logs. Existing checkpoint byte limits continue to fail safely rather than dropping continuation state.
 
 DeepSeek sets `PreferResponseFunction:true` to preserve its established semantic execution path. Native schema plus tools passed a simple lookup but failed broader browser execution and a transient-tool-error trial; advertised native capability does not establish reliable simultaneous use. The response function retains the same validated semantic schema, reasoning effort, tool identities and usage; no model-name branching, capability downgrade or automatic fallback occurs. Other fixed models use native JSON Schema for semantic replies.
+
+Continuation decoding limits decoded UTF-8 bytes to 256 KiB and encoded text to the corresponding Base64 length. Mismatched model/transport state fails before an HTTP request instead of dropping reasoning. Responses input is serialized directly through its own path, without first interpreting continuation as Chat Completions state.
 
 ## Core Event outbox and filter snapshots
 

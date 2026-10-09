@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWorkReadState } from "./workReadState";
+import { messageTimestamp } from "./chatTime";
 import { App as AntApp, Alert, Button, Drawer, Flex, Layout, Tooltip, Typography } from "antd";
 import { ArrowLeftOutlined, MenuOutlined, PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import { isReadonlySession, isSessionModelBusy, useSessionStore } from "../../state/sessionStore";
@@ -250,7 +251,9 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
     })
     && (!inSession || state.connection === "ready");
   const headerTimestamp = inSession
-    ? state.entries.at(-1)?.createdAt
+    ? state.entries.map((entry) => messageTimestamp(entry, state.entries))
+        .reduce<string | undefined>((latest, timestamp) =>
+          !latest || Date.parse(timestamp) > Date.parse(latest) ? timestamp : latest, undefined)
       ?? state.catalogItems.find((item) => item.sessionId === state.sessionId)?.updatedAt
       ?? null
     : null;

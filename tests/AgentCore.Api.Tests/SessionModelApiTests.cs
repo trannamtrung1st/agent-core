@@ -21,7 +21,7 @@ public sealed class SessionModelApiTests : IClassFixture<AgentCoreApiFactory>
         var client = TestOwnerCapability.CreateOwnerClient(_factory);
         var catalog = await client.GetFromJsonAsync<ModelCatalogResponse>("/api/v2/models");
         Assert.Equal("scripted-alpha", catalog!.DefaultKey);
-        Assert.Contains(catalog.Models, model => model.Key == "scripted-alpha" && model.Reasoning && !model.StructuredOutput);
+        Assert.Contains(catalog.Models, model => model.Key == "scripted-alpha" && model.Reasoning && model.DefaultReasoningEffort == "low" && !model.StructuredOutput);
         Assert.Contains(catalog.Models, model => model.Key == "scripted-beta" && !model.Reasoning && model.StructuredOutput);
         var json = await (await client.GetAsync("/api/v2/models")).Content.ReadAsStringAsync();
         Assert.DoesNotContain("apiKey", json, StringComparison.OrdinalIgnoreCase);
@@ -40,8 +40,10 @@ public sealed class SessionModelApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal("scripted-alpha", view!.Model!.CatalogKey);
         Assert.Equal("Scripted Alpha", view.Model.DisplayName);
         Assert.Equal("systemDefault", view.Model.SelectionSource);
-        Assert.Equal("medium", view.Model.ReasoningEffort);
+        Assert.Equal("low", view.Model.ReasoningEffort);
         Assert.Equal("scripted-alpha", view.Model.ModelId);
+        var loaded = await client.GetFromJsonAsync<SessionViewResponse>($"/api/v2/sessions/{view.SessionId}");
+        Assert.Equal("low", loaded!.Model!.ReasoningEffort);
     }
 
     [Fact]

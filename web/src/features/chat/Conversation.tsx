@@ -6,7 +6,7 @@ import { AgentActivity } from "./AgentActivity";
 import type { AgentActivityState } from "./activityState";
 import { ChatMessage } from "./ChatMessage";
 import { orderConversationEntries } from "./conversationOrder";
-import { formatChatTime, statusLabel } from "./chatTime";
+import { formatChatTime, messageTimestamp, statusLabel } from "./chatTime";
 
 const REPLY_SPACE_RATIO = 0.5;
 const SCROLL_BOTTOM_SLACK = 2;
@@ -246,6 +246,7 @@ export function Conversation({
             <ChatMessage
               key={entry.entryId}
               entry={entry}
+              timestamp={messageTimestamp(entry, visibleEntries)}
               backgroundSource={entry.responseId ? completionSources[entry.responseId] : null}
               agentName={agentName}
               sessionId={sessionId}

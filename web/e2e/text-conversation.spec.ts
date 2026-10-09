@@ -348,10 +348,22 @@ test("Stop after refresh durably interrupts the same execution", async ({ page }
   const assistant = page.locator(".chat-message-assistant");
   await expect(assistant).toHaveCount(1);
   await expect(assistant.first()).toContainText("Hello");
+  const stoppedTime = await assistant.locator("time").getAttribute("datetime");
+  const stoppedEntry = await page.evaluate(async () => {
+    const capability = await fetch("/api/v1/local/owner-capability", { method: "POST" }).then(response => response.json());
+    const history = await fetch(`/api/v1/sessions/${location.pathname.split("/").at(-1)}/messages`, {
+      headers: { "X-AgentCore-Owner-Capability": capability.token }
+    }).then(response => response.json());
+    return history.items.find((entry: { role: string }) => entry.role === "assistant");
+  });
+  expect(stoppedEntry.status).toBe("interrupted");
+  expect(stoppedTime).toBe(stoppedEntry.completedAt);
+  expect(Date.parse(stoppedTime!)).toBeGreaterThanOrEqual(Date.parse(stoppedEntry.createdAt));
   await page.reload();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(assistant).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await expect(assistant.locator("time")).toHaveAttribute("datetime", stoppedTime!);
   expect((await page.evaluate(() => window.__agentCore?.conversationExecution?.()))?.executionId).toBeNull();
 });
 

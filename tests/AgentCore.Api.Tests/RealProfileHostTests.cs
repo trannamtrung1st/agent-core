@@ -35,7 +35,7 @@ public sealed class RealComposeHostFixture : IAsyncLifetime
         start.Environment["Providers__LanguageModels__primary-llm__Adapter"] = "OpenAICompatible";
         start.Environment["Providers__LanguageModels__primary-llm__BaseUrl"] = "https://openrouter.ai/api/v1/";
         start.Environment["Providers__LanguageModels__primary-llm__DefaultModel"] = "deepseek/deepseek-v4.1-flash";
-        start.Environment["Providers__LanguageModels__primary-llm__ReasoningEffort"] = "medium";
+        start.Environment["Providers__LanguageModels__primary-llm__ReasoningEffort"] = "low";
         start.Environment["Providers__LanguageModels__primary-llm__Vision"] = "false";
         start.Environment["Providers__LanguageModels__primary-llm__Tools"] = "true";
         start.Environment["Providers__ModelCatalog__DefaultKey"] = "deepseek-v41-flash";
@@ -125,7 +125,7 @@ public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
         var createdView = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
         Assert.Equal("deepseek-v41-flash", createdView!.Model!.CatalogKey);
         Assert.Equal("deepseek/deepseek-v4.1-flash", createdView.Model.ModelId);
-        Assert.Equal("medium", createdView.Model.ReasoningEffort);
+        Assert.Equal("low", createdView.Model.ReasoningEffort);
 
         var models = await client.GetFromJsonAsync<ModelCatalogResponse>("/api/v2/models");
         Assert.Equal("deepseek-v41-flash", models!.DefaultKey);

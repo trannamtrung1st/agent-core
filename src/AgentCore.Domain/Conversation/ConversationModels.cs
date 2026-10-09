@@ -35,7 +35,8 @@ public sealed record ConversationEntry(
     string? InterruptReason = null,
     ModelGenerationProvenance? ModelProvenance = null,
     FailureReference? Failure = null,
-    string? ApplicationMessageEffectKey = null)
+    string? ApplicationMessageEffectKey = null,
+    DateTimeOffset? CompletedAt = null)
 {
     public bool IsPromptTurn
     {

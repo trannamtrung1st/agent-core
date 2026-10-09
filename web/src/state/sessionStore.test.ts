@@ -17,6 +17,44 @@ function event(partial: Partial<ServerEvent> & Pick<ServerEvent, "type" | "seque
 }
 
 describe("applyServerEvent", () => {
+  it.each(["interrupted", "failed", "completed"])("preserves settled %s status and time against conflicting terminal events", (status) => {
+    const completedAt = "2026-09-15T00:03:00.000Z";
+    const restored = applyServerEvent({ ...emptySession(), attachmentId: "a1" }, event({
+      type: "session.ready", sequence: 1,
+      payload: { mode: "text", status: "attached", history: [{
+        entryId: "reply", sequence: 1, role: "assistant", responseId: "r1", text: "Shown",
+        createdAt: "2026-09-15T00:00:00.000Z", completedAt, status
+      }] }
+    }));
+    const late = applyServerEvent(restored, event({
+      type: status === "completed" ? "agent.response.interrupted" : "agent.response.completed",
+      sequence: 2, responseId: "r1", payload: { status: "completed", reason: "userStop", completedAt: "2026-09-15T00:09:00.000Z" }
+    }));
+    expect(late.entries[0]).toMatchObject({ status, completedAt, text: "Shown" });
+    expect(late.lastServerSequence).toBe(2);
+  });
+
+  it("uses the recorded completion time and preserves it through authoritative history", () => {
+    const startedAt = "2026-09-15T00:00:00.000Z";
+    const completedAt = "2026-09-15T00:03:00.000Z";
+    const started = applyServerEvent({ ...emptySession(), attachmentId: "a1" }, event({
+      type: "agent.response.started", sequence: 1, responseId: "r1", timestamp: startedAt,
+      payload: { entryId: "reply", entrySequence: 1 }
+    }));
+    const completed = applyServerEvent(started, event({
+      type: "agent.response.completed", sequence: 2, responseId: "r1", timestamp: "2026-09-15T00:04:00.000Z",
+      payload: { status: "completed", completedAt }
+    }));
+    expect(completed.entries[0]).toMatchObject({ createdAt: startedAt, completedAt });
+    const restored = historyFromPayload(completed.entries);
+    expect(restored[0]).toMatchObject({ createdAt: startedAt, completedAt });
+    const stale = applyServerEvent(completed, event({
+      type: "agent.response.completed", sequence: 3, responseId: "r1",
+      payload: { status: "completed", completedAt: "2026-09-15T00:09:00.000Z" }
+    }));
+    expect(stale.entries[0]?.completedAt).toBe(completedAt);
+  });
+
   it("appends text by textStart and ignores duplicates", () => {
     let state = applyServerEvent(
       { ...emptySession(), attachmentId: "a1", liveResponseId: "r1" },

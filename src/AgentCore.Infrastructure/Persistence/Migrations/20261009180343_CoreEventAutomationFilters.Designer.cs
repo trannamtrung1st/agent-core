@@ -1173,6 +1173,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("AttachmentRefsJson")
                         .HasColumnType("TEXT");
 
+                    b.Property<long?>("CompletedAtUtc")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 

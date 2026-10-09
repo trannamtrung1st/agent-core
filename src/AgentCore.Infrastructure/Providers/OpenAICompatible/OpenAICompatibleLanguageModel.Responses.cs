@@ -8,6 +8,7 @@ namespace AgentCore.Infrastructure.Providers.OpenAICompatible;
 public sealed partial class OpenAICompatibleLanguageModel
 {
     private const int MaxContinuationBytes = 256 * 1024;
+    private sealed class InvalidContinuationException(string message) : JsonException(message);
     private bool IsOpenRouter => _completions.Host.Equals("openrouter.ai", StringComparison.OrdinalIgnoreCase);
 
     // Only Infrastructure reads the opaque token. Pin the format and model to prevent cross-model replay.
@@ -22,13 +23,16 @@ public sealed partial class OpenAICompatibleLanguageModel
     private List<JsonElement> DecodeContinuation(string? token, ModelInferenceTransport transport)
     {
         if (token is null) return [];
-        if (token.Length > MaxContinuationBytes * 2) throw new JsonException("Continuation exceeds limit.");
+        if (token.Length > ((MaxContinuationBytes + 2) / 3) * 4) throw new InvalidContinuationException("Language model continuation exceeds the size limit.");
         try
         {
-            using var doc = JsonDocument.Parse(Convert.FromBase64String(token));
+            var bytes = Convert.FromBase64String(token);
+            if (bytes.Length > MaxContinuationBytes) throw new InvalidContinuationException("Language model continuation exceeds the size limit.");
+            using var doc = JsonDocument.Parse(bytes);
             var state = doc.RootElement;
             if (state.GetProperty("model").GetString() != _options.DefaultModel
-                || state.GetProperty("transport").GetString() != transport.ToString()) return [];
+                || state.GetProperty("transport").GetString() != transport.ToString())
+                throw new InvalidContinuationException("Language model continuation belongs to a different model or transport.");
             return state.GetProperty("items").EnumerateArray().Select(item => item.Clone()).ToList();
         }
         catch (FormatException) { throw new JsonException("Invalid continuation token."); }

@@ -6,12 +6,54 @@ using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Infrastructure.Tests;
 
 public sealed class MemoryStoreContractTests
 {
+    [Fact]
+    public async Task Completion_time_migration_preserves_historical_entries_without_inventing_a_time()
+    {
+        await using var sqlite = await SqliteAsync();
+        var legacy = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Historical reply");
+        var snapshot = First() with { Entries = [legacy] };
+        await sqlite.Store.SaveAsync(snapshot, 0);
+        await using (var db = await sqlite.Factory.CreateDbContextAsync())
+        {
+            await db.GetService<IMigrator>().MigrateAsync("20261008171951_ArtifactAgentRunOwnership");
+        }
+        await sqlite.Store.EnsureCreatedAsync();
+        var restored = (await sqlite.Store.LoadAsync(snapshot.SessionId))!.Entries[0];
+        Assert.Equal(legacy.Text, restored.Text);
+        Assert.Equal(legacy.Sequence, restored.Sequence);
+        Assert.Equal(legacy.CreatedAt, restored.CreatedAt);
+        Assert.Null(restored.CompletedAt);
+    }
+
+    [Fact]
+    public async Task Assistant_completion_time_survives_save_retry_and_sqlite_reopen()
+    {
+        await using var sqlite = await SqliteAsync();
+        foreach (var store in new IMemoryStore[] { new InMemoryMemoryStore(), sqlite.Store })
+        {
+            var legacy = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Historical reply");
+            var snapshot = First() with { Entries = [legacy] };
+            await store.SaveAsync(snapshot, 0);
+            var completedAt = legacy.CreatedAt.AddMinutes(3);
+            var updated = snapshot with { Revision = 2, Entries = [legacy with { CompletedAt = completedAt }] };
+            await store.SaveAsync(updated, 1);
+            await store.SaveAsync(updated, 1);
+            var restored = await store.LoadAsync(snapshot.SessionId);
+            Assert.Equal(legacy.CreatedAt, restored!.Entries[0].CreatedAt);
+            Assert.Equal(completedAt, restored.Entries[0].CompletedAt);
+            var freshStore = store == sqlite.Store ? new SqliteMemoryStore(sqlite.Factory, TimeProvider.System) : store;
+            Assert.Equal(completedAt, (await freshStore.ReadHistoryAsync(snapshot.SessionId, 0, 50))[0].CompletedAt);
+        }
+    }
+
     [Fact]
     public async Task Active_owned_pages_exclude_ineligible_sessions_and_visit_all_ids_once()
     {

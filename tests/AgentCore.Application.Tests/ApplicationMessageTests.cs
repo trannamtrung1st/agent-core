@@ -17,6 +17,51 @@ namespace AgentCore.Application.Tests;
 
 public sealed class ApplicationMessageTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Final_reply_records_completion_after_later_progress_without_changing_start_time(bool fail)
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
+        var startedAt = clock.GetUtcNow();
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(new AdvancingMessagingModel(clock, fail), new RuntimeAgentRunStore(), Definition(), output, clock);
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hello");
+        await runtime.WaitUntilIdleAsync();
+
+        var assistant = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
+        var notices = runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.ApplicationMessage).ToArray();
+        Assert.NotEmpty(notices);
+        Assert.Equal(fail ? EntryStatus.Failed : EntryStatus.Completed, assistant.Status);
+        Assert.Equal(startedAt, assistant.CreatedAt);
+        Assert.Equal(clock.GetUtcNow(), assistant.CompletedAt);
+        Assert.All(notices, notice => Assert.True(assistant.CompletedAt > notice.CreatedAt));
+        var completed = Assert.Single(output.Items.Select(item => item.Payload).OfType<ResponseCompletedOutput>());
+        Assert.Equal(assistant.CompletedAt, completed.CompletedAt);
+        Assert.Equal(assistant.CompletedAt, PublicHistory.FromEntry(assistant).CompletedAt);
+    }
+
+    private sealed class AdvancingMessagingModel(FakeTimeProvider clock, bool fail) : ILanguageModel
+    {
+        private readonly MessagingLanguageModel inner = new();
+        public ModelCapabilities Capabilities => inner.Capabilities;
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            clock.Advance(TimeSpan.FromSeconds(10));
+            await foreach (var item in inner.GenerateAsync(request, cancellationToken))
+            {
+                if (fail && item is ModelSemanticResponseReady)
+                {
+                    yield return new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidResponse, "Synthetic failure"));
+                    yield break;
+                }
+                yield return item;
+            }
+        }
+    }
+
     private const string FirstText = "Still checking the order";
     private const string SecondText = "Second notice";
     private const string ThirdText = "Third notice";
@@ -319,12 +364,14 @@ public sealed class ApplicationMessageTests
         var model = new LateMessageLanguageModel();
         var turns = new RuntimeAgentRunStore();
         var output = new CapturingSessionOutput();
-        await using var runtime = Create(model, turns, Definition(), output);
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
+        await using var runtime = Create(model, turns, Definition(), output, clock);
         await runtime.AttachAsync();
         await runtime.SubmitUserTextAsync("hello");
         await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var superseded = runtime.ActiveResponseId;
         Assert.NotNull(superseded);
+        clock.Advance(TimeSpan.FromSeconds(10));
 
         await runtime.SubmitPersistedUserTextAsync(
             "take over",
@@ -334,6 +381,13 @@ public sealed class ApplicationMessageTests
             UserTextBehavior.Interrupt);
         model.Release.TrySetResult();
         await runtime.WaitUntilIdleAsync();
+
+        var stopped = Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant && entry.ResponseId == superseded);
+        Assert.Equal(EntryStatus.Interrupted, stopped.Status);
+        Assert.Equal(clock.GetUtcNow(), stopped.CompletedAt);
+        Assert.True(stopped.CompletedAt > stopped.CreatedAt);
+        var terminal = Assert.Single(output.Items, item => item.ResponseId == superseded && item.Payload is ResponseCompletedOutput);
+        Assert.Equal(stopped.CompletedAt, ((ResponseCompletedOutput)terminal.Payload).CompletedAt);
 
         Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Text.Contains(SecondText, StringComparison.Ordinal));
         Assert.DoesNotContain(
@@ -457,9 +511,10 @@ public sealed class ApplicationMessageTests
         ILanguageModel model,
         RuntimeAgentRunStore turns,
         AgentDefinition definition,
-        CapturingSessionOutput? output = null)
+        CapturingSessionOutput? output = null,
+        FakeTimeProvider? clock = null)
     {
-        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
+        var time = clock ?? new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 80).Select(index => Guid.Parse($"019944af-00ee-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);

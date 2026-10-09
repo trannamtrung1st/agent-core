@@ -61,7 +61,7 @@ public sealed partial class SessionRuntime
             outcomeEntry = new ConversationEntry(draft?.EntryId ?? _ids.NewId(), draft?.Sequence ?? NextSequence(), null,
                 ConversationRole.Assistant, summary, run.ResponseId, EntryStatus.Completed, SessionMode.Text, 0, summary.Length,
                 draft?.CreatedAt ?? now, Envelope: new ResponseEnvelope(summary, null, [], ResponseSpeechMode.None),
-                ModelProvenance: new(run.PinnedModel.CatalogKey, run.PinnedModel.ProviderAlias, run.PinnedModel.ModelId, run.PinnedModel.ReasoningEffort));
+                ModelProvenance: new(run.PinnedModel.CatalogKey, run.PinnedModel.ProviderAlias, run.PinnedModel.ModelId, run.PinnedModel.ReasoningEffort), CompletedAt: now);
             _snapshot = draft is null ? Append(outcomeEntry)
                 : _snapshot with { Entries = _snapshot.Entries.Select(entry => entry.EntryId == draft.EntryId ? outcomeEntry : entry).ToArray() };
         }
@@ -79,7 +79,7 @@ public sealed partial class SessionRuntime
                     await PublishAsync(new SessionOutput(cause, run.ResponseId, new HistoryEntryUpsertOutput(PublicHistory.FromEntry(outcomeEntry))), token).ConfigureAwait(false);
                 else if (draftId is { } removed)
                     await PublishAsync(new SessionOutput(cause, run.ResponseId, new HistoryEntryRemovedOutput(removed)), token).ConfigureAwait(false);
-                await PublishAsync(new SessionOutput(cause, run.ResponseId, new ResponseCompletedOutput(false, HeardTextEndExclusive: 0)), token).ConfigureAwait(false);
+                await PublishAsync(new SessionOutput(cause, run.ResponseId, new ResponseCompletedOutput(false, HeardTextEndExclusive: 0, CompletedAt: outcomeEntry?.CompletedAt)), token).ConfigureAwait(false);
                 if (_boundAgentRun?.AgentRunId == run.AgentRunId) _boundAgentRun = null;
                 ClearAgentRunTerminalPending();
                 if (_activeResponseId == run.ResponseId) ClearActive();

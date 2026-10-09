@@ -18,6 +18,19 @@ function entry(partial: Partial<HistoryEntry> & Pick<HistoryEntry, "entryId" | "
 }
 
 describe("Conversation", () => {
+  it.each(["completed", "failed", "interrupted"].flatMap((status) =>
+    ["2026-09-15T00:03:00.000Z", null].map((completedAt) => ({ status, completedAt }))
+  ))("keeps $status reply time after progress with completion time $completedAt", ({ status, completedAt }) => {
+    const startedAt = "2026-09-15T00:00:00.000Z";
+    const noticeAt = "2026-09-15T00:02:00.000Z";
+    const { container } = render(<Conversation agentName="Alex" sessionId="s1" activity={{ kind: "idle" }} entries={[
+      entry({ entryId: "a1", role: "assistant", text: "Done", responseId: "r1", sequence: 1, createdAt: startedAt, completedAt, status }),
+      entry({ entryId: "m1", role: "applicationMessage", text: "Checking", responseId: "r1", sequence: 2, createdAt: noticeAt })
+    ]} />);
+    const times = [...container.querySelectorAll(".chat-message time")].map((time) => time.getAttribute("datetime"));
+    expect(times).toEqual([noticeAt, completedAt ?? noticeAt]);
+  });
+
   it("shows the empty prompt when there are no entries and no transcript chrome", () => {
     render(
       <Conversation agentName="Alex" sessionId="s1" entries={[]} activity={{ kind: "idle" }} />

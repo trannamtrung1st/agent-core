@@ -4,7 +4,7 @@ Status: implementation complete; integrated acceptance gates are in progress on 
 
 ## Scope and baseline
 
-Implementation starts at 16ed2365fb24e5c7b010df1ed6e77860afaa9862. The proposal is local/proposals/agent-core-core-events-filtering-presets-final-20261010.md. Remote main advanced to 347b8657f2c91a80b75ed5031dff73c067effcab during implementation; its model continuation, reasoning, budget UI and terminal reply-time changes are being reconciled before final verification. Historical freeze reports and published Definitions remain evidence for their original changes.
+Implementation starts at 16ed2365fb24e5c7b010df1ed6e77860afaa9862. The proposal is local/proposals/agent-core-core-events-filtering-presets-final-20261010.md. Remote main advanced to 347b8657f2c91a80b75ed5031dff73c067effcab during implementation; its model continuation, reasoning, budget UI and terminal reply-time changes are integrated before final verification. Historical freeze reports and published Definitions remain evidence for their original changes.
 
 Domain, Application, Contracts, API, Infrastructure persistence/providers and the existing Admin Automation editor own the extension. General Assistant v22 and Secretary v9 opt into coreEvent; prior immutable versions retain their policy. No preset is installed automatically.
 

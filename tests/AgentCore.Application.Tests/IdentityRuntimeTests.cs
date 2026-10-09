@@ -9,6 +9,7 @@ using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using System.Text.RegularExpressions;
 
 namespace AgentCore.Application.Tests;
 
@@ -194,11 +195,23 @@ public sealed class IdentityRuntimeTests
 
             var text = File.ReadAllText(path);
             Assert.DoesNotContain("OpenAI.", text, StringComparison.Ordinal);
-            // The provider-neutral transport enum is not a provider DTO.
-            Assert.DoesNotContain("ChatCompletion", System.Text.RegularExpressions.Regex.Replace(text, @"\bChatCompletions\b", ""), StringComparison.Ordinal);
+            Assert.False(ContainsChatCompletionDto(text), $"Provider DTO reference in {path}");
             Assert.DoesNotContain("openrouter", text, StringComparison.OrdinalIgnoreCase);
         }
     }
+
+    [Theory]
+    [InlineData("ModelInferenceTransport.ChatCompletions", false)]
+    [InlineData("ChatCompletion completion", true)]
+    [InlineData("ChatCompletionOptions options", true)]
+    [InlineData("StreamingChatCompletionUpdate update", true)]
+    public void Provider_dto_guard_allows_the_neutral_transport_name(string source, bool expected)
+    {
+        Assert.Equal(expected, ContainsChatCompletionDto(source));
+    }
+
+    private static bool ContainsChatCompletionDto(string source) =>
+        Regex.IsMatch(source, @"\b\w*ChatCompletion(?!s\b)\w*\b");
 
     private static AgentContext Context(AgentDefinition definition, string userText)
     {

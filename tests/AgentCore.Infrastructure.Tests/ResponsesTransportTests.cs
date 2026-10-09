@@ -30,14 +30,51 @@ public sealed class ResponsesTransportTests
         Assert.Single(recovered.OfType<ModelCompleted>()); Assert.Empty(recovered.OfType<ModelFailed>());
     }
 
-    [Fact]
-    public async Task Malformed_continuation_is_a_safe_request_error_without_an_http_call()
+    [Theory]
+    [InlineData("missing-fields")]
+    [InlineData("invalid-base64")]
+    [InlineData("invalid-json")]
+    [InlineData("invalid-root")]
+    [InlineData("invalid-items")]
+    [InlineData("wrong-model")]
+    [InlineData("wrong-transport")]
+    [InlineData("oversized-encoded")]
+    [InlineData("oversized-decoded")]
+    public async Task Invalid_continuation_is_a_safe_request_error_without_an_http_call(string scenario)
     {
         var handler = new RecordingHandler();
-        var call = new ModelToolCall("call-1", "lookup", "{}", Convert.ToBase64String(Encoding.UTF8.GetBytes("{}")));
+        var json = scenario switch
+        {
+            "missing-fields" => "{}",
+            "invalid-json" => "{broken-json",
+            "invalid-root" => "[]",
+            "invalid-items" => "{\"model\":\"test-reasoning-model\",\"transport\":\"Responses\",\"items\":{}}",
+            _ => JsonSerializer.Serialize(new { model = scenario == "wrong-model" ? "other-model" : "test-reasoning-model",
+                transport = scenario == "wrong-transport" ? "ChatCompletions" : "Responses", items = Array.Empty<object>() })
+        };
+        // 262145 decoded bytes still fit the rounded maximum encoded length.
+        if (scenario == "oversized-decoded") json = json.PadRight(262145);
+        var token = scenario == "invalid-base64" ? "invalid-sensitive-token!" : scenario == "oversized-encoded" ? new string('A', 349529)
+            : Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+        var call = new ModelToolCall("call-1", "lookup", "{}", token);
         var result = await Collect(Create(handler), new(Guid.NewGuid(), [new(ModelRole.Assistant, "", ToolCalls: [call])]));
-        Assert.Equal(ProviderErrorCode.InvalidRequest, Assert.Single(result.OfType<ModelFailed>()).Failure.Code);
+        var failure = Assert.Single(result.OfType<ModelFailed>()).Failure;
+        Assert.Equal(ProviderErrorCode.InvalidRequest, failure.Code);
+        Assert.DoesNotContain(token, failure.SafeMessage);
+        if (scenario.StartsWith("wrong-")) Assert.Contains("different model or transport", failure.SafeMessage);
+        if (scenario.StartsWith("oversized-")) Assert.Contains("size limit", failure.SafeMessage);
         Assert.Empty(handler.Bodies);
+        Assert.Empty(result.OfType<ModelCompleted>());
+    }
+
+    [Fact]
+    public async Task Continuation_at_the_decoded_size_limit_is_accepted()
+    {
+        var handler = new RecordingHandler(Event(new { type = "response.completed", response = new { status = "completed", output = Array.Empty<object>() } }));
+        var json = JsonSerializer.Serialize(new { model = "test-reasoning-model", transport = "Responses", items = Array.Empty<object>() }).PadRight(262144);
+        var call = new ModelToolCall("call-1", "lookup", "{}", Convert.ToBase64String(Encoding.UTF8.GetBytes(json)));
+        var result = await Collect(Create(handler), new(Guid.NewGuid(), [new(ModelRole.Assistant, "", ToolCalls: [call])]));
+        Assert.Single(handler.Bodies); Assert.Single(result.OfType<ModelCompleted>()); Assert.Empty(result.OfType<ModelFailed>());
     }
 
     [Fact]

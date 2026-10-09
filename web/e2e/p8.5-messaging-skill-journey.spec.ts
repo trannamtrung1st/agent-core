@@ -92,6 +92,17 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
     items.map((item) => item.getAttribute("data-role"))
   );
   expect(roles).toEqual(["user", "applicationMessage", "assistant"]);
+  const finalTime = await page.locator('[data-role="assistant"] time').getAttribute("datetime");
+  const progressTime = await page.locator('[data-role="applicationMessage"] time').getAttribute("datetime");
+  expect(Date.parse(finalTime!)).toBeGreaterThanOrEqual(Date.parse(progressTime!));
+  const history = await page.evaluate(async () => {
+    const capability = await fetch("/api/v1/local/owner-capability", { method: "POST" }).then((response) => response.json());
+    return fetch(`/api/v1/sessions/${location.pathname.split("/").at(-1)}/messages`, {
+      headers: { "X-AgentCore-Owner-Capability": capability.token }
+    }).then((response) => response.json());
+  });
+  const finalEntry = history.items.find((item: { role: string }) => item.role === "assistant");
+  expect(finalTime).toBe(finalEntry.completedAt);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "Open chats" })).toBeVisible();
@@ -112,6 +123,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 20_000 });
   await expect(page.getByText(intermediate)).toHaveCount(1);
   await expect(page.getByText("Still working")).toHaveCount(1);
+  await expect(page.locator('[data-role="assistant"] time')).toHaveAttribute("datetime", finalTime!);
   await expect(page.getByText(answer)).toHaveCount(1);
   const motion = await page.locator('[data-role="applicationMessage"]').evaluate((element) => {
     const style = getComputedStyle(element);

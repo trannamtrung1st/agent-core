@@ -22,7 +22,7 @@
         "Providers__LanguageModels__primary-llm__Adapter": "OpenAICompatible",
         "Providers__LanguageModels__primary-llm__BaseUrl": "https://openrouter.ai/api/v1/",
         "Providers__LanguageModels__primary-llm__DefaultModel": "deepseek/deepseek-v4.1-flash",
-        "Providers__LanguageModels__primary-llm__ReasoningEffort": "medium",
+        "Providers__LanguageModels__primary-llm__ReasoningEffort": "low",
         "Providers__LanguageModels__primary-llm__ReasoningObjectWire": "true",
         "Providers__LanguageModels__primary-llm__ExcludeVisibleReasoning": "true",
         "Providers__LanguageModels__primary-llm__Vision": "true",

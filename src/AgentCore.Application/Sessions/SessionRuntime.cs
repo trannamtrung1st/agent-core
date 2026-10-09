@@ -4216,6 +4216,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             DiscardStagedMemory();
             _responseTerminal = true;
             UpdateAssistant(EntryStatus.Interrupted, reason);
+            var completedAt = _snapshot.Entries.FirstOrDefault(entry => entry.EntryId == _activeEntryId)?.CompletedAt;
             await PublishAsync(
                     new SessionOutput(
                         context,
@@ -4249,7 +4250,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         true,
                                         HeardTextEndExclusive: heard,
                                         InterruptReason: reason,
-                                        SpeechText: PublicSpeechText())),
+                                        SpeechText: PublicSpeechText(),
+                                        CompletedAt: completedAt)),
                                 ct)
                             .ConfigureAwait(false);
                         if (reason == "userStop")
@@ -4268,7 +4270,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 true,
                                 HeardTextEndExclusive: heard,
                                 InterruptReason: reason,
-                                SpeechText: PublicSpeechText())),
+                                SpeechText: PublicSpeechText(),
+                                CompletedAt: completedAt)),
                         cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -4393,7 +4396,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     FinishReason: failed ? null : _modelFinishReason,
                                     SpeechText: PublicSpeechText(),
                                     MemoryReceipts: VisibleMemoryReceipts(),
-                                    EffectReceipts: VisibleEffectReceipts())),
+                                    EffectReceipts: VisibleEffectReceipts(),
+                                    CompletedAt: _snapshot.Entries.FirstOrDefault(entry => entry.EntryId == capturedEntryId)?.CompletedAt)),
                             ct)
                         .ConfigureAwait(false);
                 }
@@ -4532,6 +4536,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         Text = DisplayText(),
                         Status = status,
+                        CompletedAt = status != EntryStatus.Streaming ? entry.CompletedAt ?? _time.GetUtcNow() : entry.CompletedAt,
                         Envelope = EnvelopeFor(status),
                         FinishReason = status == EntryStatus.Completed ? _modelFinishReason : null,
                         InterruptReason = status switch
