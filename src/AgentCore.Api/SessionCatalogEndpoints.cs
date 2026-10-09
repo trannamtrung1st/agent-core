@@ -1,6 +1,7 @@
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Api.Realtime;
+using AgentCore.Application.Events;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -43,9 +44,19 @@ public static class SessionCatalogEndpoints
             var responses = new List<ChatAgentInstanceResponse>(items.Count);
             foreach (var item in items)
             {
-                var agent = await sessions
-                    .GetAgentAsync(item.DefinitionId, item.ActiveVersion, cancellationToken)
-                    .ConfigureAwait(false);
+                PublicAgentDescriptor agent;
+                try
+                {
+                    agent = await sessions
+                        .GetAgentAsync(item.DefinitionId, item.ActiveVersion, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (AgentCoreException ex) when (ex.Code == "NotFound")
+                {
+                    // Historical instances may pin retired built-ins. Keep their durable
+                    // state, but do not offer an identity that cannot create a new Session.
+                    continue;
+                }
                 responses.Add(new ChatAgentInstanceResponse(
                     item.InstanceId.ToString("D"),
                     item.DefinitionId,
