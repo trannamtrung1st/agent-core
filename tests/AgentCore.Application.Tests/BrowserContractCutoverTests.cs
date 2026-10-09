@@ -17,11 +17,20 @@ public sealed class BrowserContractCutoverTests
     [InlineData("Do not use browser.click with targetRef; use a direct target.")]
     [InlineData("Use browser.snapshot without scopeRef.")]
     [InlineData("Use browser.snapshot instead of targetRef.")]
+    [InlineData("Use native semantic targets; do not use scopeRef.")]
+    [InlineData("Use browser.snapshot without passing opaque refs.")]
     public void Historical_mentions_and_upgrade_guidance_are_not_executable(string text)
     {
         Assert.False(BrowserContractCutover.Retired(text));
         BrowserContractCutover.EnsureCurrent(SampleDefinitions.Examiner with { SystemInstructions = text });
     }
+
+    [Theory]
+    [InlineData("Use opaque refs from browser.find.")]
+    [InlineData("Call browser.click with targetRef.")]
+    [InlineData("Use browser.snapshot without scopeRef, then click with targetRef.")]
+    public void Positive_retired_directives_remain_rejected(string text) =>
+        Assert.True(BrowserContractCutover.Retired(text));
 
     [Fact]
     public void Inactive_obsolete_skill_does_not_block_prompt_or_independent_execution()

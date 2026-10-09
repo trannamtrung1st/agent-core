@@ -8,6 +8,7 @@ namespace AgentCore.Application.Tools;
 public static class BrowserContractCutover
 {
     public const int Version = 1;
+    private const string RetiredParameters = @"(?:scopeRef|targetRef|opaque refs?|password refs?|checkbox refs?|file-input refs?)";
     public const string Message = "The pinned browser instructions use the retired element-ref contract. Publish or adopt current direct-target instructions and start a new Session; historical data is retained.";
 
     public static bool Retired(string? instructions)
@@ -19,8 +20,8 @@ public static class BrowserContractCutover
         {
             var directive = Regex.Replace(line.Trim(), @"^(?:[-*]|\d+[.)])\s*", "");
             if (!Regex.IsMatch(directive, @"^(?:use|call|invoke|execute|pass|provide|set|click|fill|select|upload)\b|^browser\.\w+\s*\(", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)) continue;
-            var positive = Regex.Replace(directive, @"\b(?:not|never|without|omit|avoid|instead of)\s+(?:using\s+)?(?:scopeRef|targetRef|opaque ref|password ref|checkbox ref|file-input ref)\b", "", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            if (Regex.IsMatch(positive, @"\b(?:scopeRef|targetRef|opaque ref|password ref|checkbox ref|file-input ref)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)) return true;
+            var positive = Regex.Replace(directive, @"\b(?:not|never|without|omit|avoid|no|instead of)\s+(?:(?:use|using|pass|passing|provide|providing|set|setting)\s+)?" + RetiredParameters + @"\b", "", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (Regex.IsMatch(positive, @"\b" + RetiredParameters + @"\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)) return true;
             if (Regex.IsMatch(directive, "browser\\.\\w+.*[\"']ref[\"']\\s*:", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)) return true;
         }
         return false;
