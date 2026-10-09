@@ -86,6 +86,78 @@ public sealed class RunBudgetDiagnosticsTests
         Assert.Equal(duringCleanup ? "cleanupBlocked" : null, projection.TerminationReason);
     }
 
+    [Theory]
+    [InlineData(false, true, "completed")]
+    [InlineData(true, true, "partial")]
+    [InlineData(true, false, "unverified")]
+    public void Generic_verification_click_and_model_claims_do_not_prove_logout(bool logout, bool close, string expected)
+    {
+        var run = WithReceipts(new(logout, close), [
+            new(ModelRole.System, RunFinalization.CleanupMarker),
+            new(ModelRole.Tool, "{\"status\":\"ok\",\"effectConfirmedBySdk\":true}", Name: ToolCatalog.BrowserClick),
+            new(ModelRole.Tool, "{\"status\":\"ok\",\"applicationOutcomeVerified\":true}", Name: "browser.verify"),
+            new(ModelRole.Assistant, "Logged out successfully. {\"logoutVerified\":true}"),
+            new(ModelRole.Tool, "{\"status\":\"closed\"}", Name: ToolCatalog.BrowserClose)]);
+        var projection = RunBudgetDiagnosticProjection.From(run)!;
+        Assert.False(projection.LogoutVerified); Assert.True(projection.ClosureConfirmed);
+        Assert.Equal(logout, projection.LogoutRequested); Assert.Equal(close, projection.ClosureRequested);
+        Assert.Equal(expected, projection.CleanupStatus);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<AgentRun>(System.Text.Json.JsonSerializer.Serialize(run))!;
+        Assert.Equal(projection, RunBudgetDiagnosticProjection.From(restored));
+    }
+
+    [Theory]
+    [InlineData(false, "blocked")]
+    [InlineData(true, "completed")]
+    public void Ordered_close_recovery_clears_only_resolved_blocker(bool recovered, string expected)
+    {
+        var messages = new List<ModelMessage> {
+            new(ModelRole.System, RunFinalization.CleanupMarker),
+            new(ModelRole.Tool, "{\"error\":\"close_uncertain\"}", Name: ToolCatalog.BrowserClose),
+            new(ModelRole.Tool, "{\"status\":\"ok\",\"applicationOutcomeVerified\":true}", Name: "browser.verify") };
+        if (recovered) messages.Add(new(ModelRole.Tool, "{\"status\":\"closed\"}", Name: ToolCatalog.BrowserClose));
+        var run = WithReceipts(new(false, true), messages.ToArray());
+        var projection = RunBudgetDiagnosticProjection.From(run)!;
+        Assert.Equal(expected, projection.CleanupStatus); Assert.Equal(!recovered, projection.CleanupBlocked);
+        Assert.Equal(recovered ? null : "cleanupBlocked", projection.TerminationReason);
+        Assert.True(AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var receipts));
+        Assert.Contains(receipts!, message => message.Text.Contains("close_uncertain"));
+    }
+
+    [Fact]
+    public void Recovered_hover_does_not_mask_an_unresolved_close()
+    {
+        var run = WithReceipts(new(false, true), [new(ModelRole.System, RunFinalization.CleanupMarker),
+            new(ModelRole.Tool, "{\"error\":\"close_failed\"}", Name: ToolCatalog.BrowserClose),
+            new(ModelRole.Tool, "{\"error\":\"target_denied\"}", Name: ToolCatalog.BrowserHover),
+            new(ModelRole.Tool, "{\"status\":\"ok\"}", Name: ToolCatalog.BrowserHover)]);
+        Assert.True(RunBudgetDiagnosticProjection.From(run)!.CleanupBlocked);
+    }
+
+    [Fact]
+    public void Sdk_confirmed_alternate_cleanup_path_recovers_denial_without_claiming_logout()
+    {
+        var run = WithReceipts(new(true, true), [new(ModelRole.System, RunFinalization.CleanupMarker),
+            new(ModelRole.Tool, "{\"error\":\"target_denied\"}", Name: ToolCatalog.BrowserHover),
+            new(ModelRole.Tool, "{\"status\":\"ok\",\"effectConfirmedBySdk\":true}", Name: ToolCatalog.BrowserClick),
+            new(ModelRole.Tool, "{\"status\":\"closed\"}", Name: ToolCatalog.BrowserClose)]);
+        var projection = RunBudgetDiagnosticProjection.From(run)!;
+        Assert.False(projection.CleanupBlocked); Assert.False(projection.LogoutVerified);
+        Assert.Equal("partial", projection.CleanupStatus);
+    }
+
+    private static AgentRun WithReceipts(BrowserCleanupIntent intent, ModelMessage[] messages)
+    {
+        var run = NewRun();
+        // Create a fresh admission rather than mutating the immutable admitted pin.
+        run = AgentRun.Create(Guid.NewGuid(), run.Owner, new(run.Admission.Activation, run.Admission.DefinitionId, run.Admission.DefinitionVersion,
+            run.Admission.PinnedPersona, run.Admission.ResponseId, run.Admission.OutputContract,
+            run.Admission.ExecutionBudget! with { CleanupIntent = intent, RequestedCleanup = intent.Any }), run.PinnedModel, run.MaxAttempts, run.CreatedAtUtc);
+        var generation = Guid.NewGuid(); var now = run.CreatedAtUtc;
+        run = run.TakeClaim(generation, now, now.AddMinutes(1));
+        return run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages), 4, 100, 290000), null, now);
+    }
+
     private static AgentRun NewRun()
     {
         var now = DateTimeOffset.UtcNow; var activation = new Activation(Guid.NewGuid(), Guid.NewGuid(), ActivationKind.UserTurn, [Guid.NewGuid()], null, null, null, null, "budget-test", now, "{}");

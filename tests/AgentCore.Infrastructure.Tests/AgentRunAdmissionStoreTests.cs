@@ -34,7 +34,8 @@ public sealed class AgentRunAdmissionStoreTests
         await f.Memory.SaveAsync(snapshot, 0);
         var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "budget-pin", Now);
         var pin = ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser,
-            new(InteractiveBrowser: ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.Extended)), null);
+            new(InteractiveBrowser: ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.Extended)), null)
+            with { RequestedCleanup = true, CleanupIntent = new(true, false) };
         var run = AgentRun.Create(Guid.NewGuid(), Owner, new(activation, Definition.Id, Definition.Version, Definition.Identity,
             Guid.NewGuid(), AgentRunOutputContract.ConversationResponse, pin), new("synthetic", "synthetic", "synthetic", null), 3, Now);
         await f.Runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
@@ -1319,32 +1320,25 @@ public sealed class AgentRunAdmissionStoreTests
             {
                 await db.Database.MigrateAsync("20261008115119_AutomationDestinations");
                 var memory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now));
-                await memory.StageSaveAsync(db, parentSnapshot, 0, default);
-                await memory.StageSaveAsync(db, child.Snapshot, 0, default);
+                // Seed the historical schema without asking today's EF entry model to write later columns.
+                await memory.StageSaveAsync(db, parentSnapshot with { Entries = [] }, 0, default);
+                await memory.StageSaveAsync(db, child.Snapshot with { Entries = [] }, 0, default);
                 db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(parentSnapshot, parent));
                 db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(parent));
                 db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(child.Snapshot, completed));
                 db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(completed));
-                // Seed the historical entry schema directly: the current EF model includes a later nullable column.
-                var historicalEntries = db.ChangeTracker.Entries<EntryRecord>().Where(e => e.State == EntityState.Added).ToArray();
-                var entryRows = historicalEntries.Select(e => e.Properties.Where(p => p.Metadata.Name != nameof(EntryRecord.CompletedAtUtc))
-                    .Select(p => (Column: p.Metadata.GetColumnName(), Value: p.CurrentValue)).ToArray()).ToArray();
-                foreach (var entry in historicalEntries) entry.State = EntityState.Detached;
                 await db.SaveChangesAsync();
-                foreach (var row in entryRows)
-                {
-                    var columns = string.Join(", ", row.Select(p => "\"" + p.Column + "\""));
-                    var names = string.Join(", ", row.Select((_, i) => "@p" + i));
-                    var parameters = row.Select((p, i) => new SqliteParameter("@p" + i, p.Value ?? DBNull.Value)).ToArray();
-                    var insert = $"INSERT INTO ConversationEntries ({columns}) VALUES ({names})";
-                    await db.Database.ExecuteSqlRawAsync(insert, parameters);
-                }
+                foreach (var snapshot in new[] { parentSnapshot, child.Snapshot })
+                    foreach (var entry in snapshot.Entries)
+                        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ConversationEntries (EntryId, SessionId, EntrySequence, SourceEventId, Role, Text, ResponseId, Status, DeliveryMode, HeardTextEndExclusive, ReceivedTextEndExclusive, CreatedAtUtc) VALUES ({entry.EntryId.ToString("D")}, {snapshot.SessionId.ToString("D")}, {entry.Sequence}, {entry.SourceEventId?.ToString("D")}, {entry.Role.ToString()}, {entry.Text}, {entry.ResponseId?.ToString("D")}, {entry.Status.ToString()}, {entry.DeliveryMode.ToString()}, {entry.HeardTextEndExclusive}, {entry.ReceivedTextEndExclusive}, {entry.CreatedAt.ToUnixTimeMilliseconds()})");
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO BackgroundCompletionReceipts (ChildAgentRunId, AgentInstanceId, ProfileId, ParentActivationId, SkipReason, CreatedAtUtc) VALUES ({completed.AgentRunId.ToString("D")}, {Owner.AgentInstanceId.ToString("D")}, {Owner.ProfileId.ToString("D")}, NULL, 'quiet-outcome', {Now.ToUnixTimeMilliseconds()})");
                 await db.Database.MigrateAsync();
             }
             var upgradedMemory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now)); await upgradedMemory.EnsureCreatedAsync();
             var runs = new SqliteAgentRunStore(factory, upgradedMemory, new Diagnostics());
             Assert.Equal(parent.SessionId, (await upgradedMemory.LoadAsync(parent.SessionId))!.SessionId);
+            Assert.Equal(parentSnapshot.Entries.Select(e => e.EntryId), (await upgradedMemory.LoadAsync(parent.SessionId))!.Entries.Select(e => e.EntryId));
+            Assert.Equal(child.Snapshot.Entries.Select(e => e.Text), (await upgradedMemory.LoadAsync(child.Run.SessionId))!.Entries.Select(e => e.Text));
             Assert.Equal(completed.ResponseId, (await runs.GetAsync(Owner, completed.AgentRunId))!.ResponseId);
             var item = (await runs.GetCompletionInboxAsync(Owner, parent.SessionId, completed.AgentRunId, Now))!;
             Assert.Equal(Owner, item.Owner); Assert.Equal(child.Run.SessionId, item.ChildSessionId);

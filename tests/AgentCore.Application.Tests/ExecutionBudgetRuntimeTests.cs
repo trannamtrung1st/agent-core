@@ -100,11 +100,15 @@ public sealed partial class TerminalDisplayRepairTests
         Assert.Equal(37, run.Checkpoint!.StepCount); Assert.Equal(AgentRunStatus.Completed, run.Status);
         Assert.Equal(1, browser.CloseCalls);
         Assert.True(run.Admission.ExecutionBudget!.RequestedCleanup);
+        Assert.Equal(new BrowserCleanupIntent(true, true), run.Admission.ExecutionBudget.CleanupIntent);
         Assert.True(RunBudgetDiagnosticProjection.From(run)!.ClosureConfirmed);
     }
 
-    [Fact]
-    public async Task Step_exhaustion_finalizes_from_receipts_without_dispatching_extra_effect()
+    [Theory]
+    [InlineData("Inspect the asset.")]
+    [InlineData("Inspect the asset. Don't log out or close the browser yet.")]
+    [InlineData("Inspect the asset. Keep me signed in and leave the browser open.")]
+    public async Task Step_exhaustion_finalizes_from_receipts_without_dispatching_extra_effect(string text)
     {
         var browser = new CountingBrowser { ObservationContent = n => "Observed asset page " + n };
         var rounds = Enumerable.Range(0, 49).Select(i => new ModelGenerationEvent[] {
@@ -112,10 +116,11 @@ public sealed partial class TerminalDisplayRepairTests
         rounds.Add(FinalAnswer());
         var model = new RecordingModel(rounds.ToArray());
         await using var runtime = Create(model, browser, ToolCatalog.BrowserSnapshot);
-        await runtime.AttachAsync(); Assert.True(await runtime.SubmitUserTextAsync("Inspect the asset."));
+        await runtime.AttachAsync(); Assert.True(await runtime.SubmitUserTextAsync(text));
         await runtime.WaitUntilIdleAsync();
         var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime));
         Assert.Equal(48, browser.ObserveCalls); Assert.Equal(48, run.Checkpoint!.StepCount);
+        Assert.False(run.Admission.ExecutionBudget!.RequestedCleanup);
         Assert.Equal("stepLimit", RunBudgetDiagnosticProjection.From(run)!.TerminationReason);
         Assert.Null(model.Requests.Last().Tools);
         Assert.Equal(AgentRunStatus.Completed, run.Status);

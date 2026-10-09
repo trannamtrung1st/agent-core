@@ -49,6 +49,10 @@ public sealed partial class TerminalDisplayRepairTests
             Assert.Contains(RunFinalization.CleanupMarker, run.Checkpoint!.PayloadJson);
             Assert.Contains("closed", run.Checkpoint.PayloadJson);
             Assert.True(run.Checkpoint.StepCount <= 48);
+            var diagnostic = RunBudgetDiagnosticProjection.From(run)!;
+            Assert.True(diagnostic.ClosureConfirmed); Assert.False(diagnostic.LogoutVerified);
+            Assert.True(diagnostic.LogoutRequested); Assert.True(diagnostic.ClosureRequested);
+            Assert.Equal("partial", diagnostic.CleanupStatus);
             Assert.True(Encoding.UTF8.GetByteCount(run.Checkpoint.PayloadJson) + 8192 < AgentRunLimits.MaxCheckpointBytes);
             Assert.DoesNotContain("synthetic-budget-password", run.Checkpoint.PayloadJson);
             Assert.DoesNotContain("synthetic-budget-password", string.Join('\n', model.Requests.SelectMany(r => r.Messages).Select(m => m.Text)));

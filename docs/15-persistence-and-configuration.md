@@ -544,6 +544,8 @@ DeepSeek sets `PreferResponseFunction:true` to preserve its established semantic
 
 Continuation decoding limits decoded UTF-8 bytes to 256 KiB and encoded text to the corresponding Base64 length. Mismatched model/transport state fails before an HTTP request instead of dropping reasoning. Responses input is serialized directly through its own path, without first interpreting continuation as Chat Completions state.
 
+New budget admission JSON adds optional CleanupIntent (LogoutRequested/ClosureRequested) alongside RequestedCleanup. Existing nullable intent is unknown; historical Runs are readable without invented provenance. Both stores preserve the immutable structured pin through retry/reopen/reclaim. No new table/migration is required. Null Definition class profiles remove that explicit default through ordinary draft publication; adopting the new version changes inherited resolution, preserves Instance overrides and never revises existing Run pins.
+
 ## Core Event outbox and filter snapshots
 
 The additive `CoreEventAutomationFilters` migration preserves canonical Automation IDs, revisions, Schedule/webhook interpretation, occurrence dedupe and prior receipt/delivery rows. It adds nullable Core key/filter/preset fields, default everyMatch dispatch, frozen webhook snapshot/decision JSON, and CoreEvent receipts, per-subscription deliveries and durable buckets. Trigger/dispatch/preset check constraints enforce discriminant exclusivity and valid windows. No historical migration or user database is reset. Backup before upgrade; incompatible downgrade requires restoring that backup.

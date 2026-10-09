@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Triggers;
 using AgentCore.Application.Tools;
@@ -15,13 +14,20 @@ namespace AgentCore.Application.Execution;
 /// <summary>Freezes one effective model turn; the caller commits its input graph through IAgentRunStore.</summary>
 public static class AgentRunAdmissionFactory
 {
-    public static bool RequestsCleanup(string text) => Regex.IsMatch(text, @"\b(log\s*out|sign\s*out|logout|close\s+(?:the\s+)?browser)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    public static bool RequestsCleanup(string text) => BrowserCleanupIntentRecognition.From(text).Any;
+
+    private static EffectiveExecutionBudget WithCleanupIntent(EffectiveExecutionBudget budget, string text)
+    {
+        var intent = BrowserCleanupIntentRecognition.From(text);
+        return budget with { RequestedCleanup = intent.Any, CleanupIntent = intent };
+    }
 
     public sealed record SignalInput(TriggerKind TriggerKind, string? Text, string? EnvironmentKind);
 
     public static AgentRun ForAdmittedSignal(Guid activationId, Guid runId, Guid responseId, SessionSnapshot snapshot,
         AgentTrigger trigger, DateTimeOffset atUtc, IReadOnlyList<EffectiveSkill> catalog, ExecutionModelPin? occurrenceModel = null, EffectiveExecutionBudget? budget = null)
     {
+        if (budget is not null) budget = WithCleanupIntent(budget, trigger.Text ?? "");
         var kind = trigger.Kind switch
         {
             TriggerKind.ScheduledOccurrence => ActivationKind.ScheduledWork,
@@ -76,7 +82,7 @@ public static class AgentRunAdmissionFactory
         var activation = new Activation(activationId, snapshot.SessionId, ActivationKind.UserTurn,
             users.Select(entry => entry.EntryId).ToArray(), users[0].SourceEventId ?? users[0].EntryId,
             null, null, null, $"user-batch:{batchKey}", admittedAtUtc);
-        if (budget is not null) budget = budget with { RequestedCleanup = users.Any(user => RequestsCleanup(user.Text)) };
+        if (budget is not null) budget = WithCleanupIntent(budget, string.Join("\n", users.Select(user => user.Text)));
         return AgentRun.Create(agentRunId, new AgentRunOwner(instanceId, profileId),
             new AgentRunAdmission(activation, snapshot.Definition.Id, snapshot.Definition.Version, persona, responseId, AgentRunOutputContract.ConversationResponse, budget),
             new AgentRunModelPin(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),

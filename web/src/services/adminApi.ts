@@ -1088,3 +1088,15 @@ export async function setExecutionBudgets(instanceId: string, expectedRevision: 
   if (!response.ok) throw new Error(response.status === 409 ? 'The Instance changed. Reload and review your changes before saving.' : 'Execution budgets could not be saved. Check the host limits and retry.');
   return response.json();
 }
+
+export type ExecutionBudgetLimits = { maxSteps: number; durationSeconds: number; perToolSeconds: number };
+export async function getExecutionBudgetLimits(): Promise<ExecutionBudgetLimits> {
+  const response = await ownerFetch('/api/v2/admin/execution-budget-limits');
+  if (!response.ok) throw new Error('Execution limits could not be loaded.');
+  const value: ExecutionBudgetLimits = await response.json();
+  if (!value || !Number.isSafeInteger(value.maxSteps) || value.maxSteps < 8
+    || !Number.isSafeInteger(value.durationSeconds) || value.durationSeconds < 60
+    || !Number.isSafeInteger(value.perToolSeconds) || value.perToolSeconds < 1
+    || value.perToolSeconds > value.durationSeconds) throw new Error('Execution limits response is invalid.');
+  return value;
+}

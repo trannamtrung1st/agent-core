@@ -72,9 +72,13 @@ jobs:
         run: dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --nologo
 
   frontend:
-    name: Synthetic frontend
+    name: Synthetic frontend (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       DOTNET_NOLOGO: "1"
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
@@ -100,14 +104,19 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           # Large Admin AntD trees compete for CPU in jsdom on hosted runners.
-          # Keep fresh file isolation and existing timeouts; serialize the unit gate.
-          pnpm run test --run --maxWorkers=1
+          # Independent runners preserve one worker, fresh file isolation and
+          # existing test/job timeouts while covering every file across two shards.
+          pnpm run test --run --maxWorkers=1 --shard=${{ matrix.shard }}/2
           pnpm run build
 
   playwright-core:
-    name: Synthetic Playwright core
+    name: Synthetic Playwright core (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       DOTNET_NOLOGO: "1"
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
@@ -158,14 +167,15 @@ jobs:
           pnpm exec playwright test \
             --project=synthetic \
             --project=browser-stt \
-            --project=browser-browser
+            --project=browser-browser \
+            --shard=${{ matrix.shard }}/2
         # Chromium fake media devices only: text, capture PCM, playback, and duplex mute/disconnect. No keys, mic, speaker, or GPU.
 
       - name: Upload Playwright failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-core-failure
+          name: playwright-core-failure-${{ matrix.shard }}
           path: |
             web/test-results
             web/playwright-report

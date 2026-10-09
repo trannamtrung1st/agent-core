@@ -71,6 +71,7 @@ const sampleEffective: AdminEffectiveConfiguration = {
 };
 
 vi.mock("../../services/adminApi", () => ({
+  getExecutionBudgetLimits: vi.fn().mockResolvedValue({ maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 }),
   getExecutionBudgets: vi.fn().mockResolvedValue({ revision: 1, executionBudgets: null, definitionDefaults: null }),
   setExecutionBudgets: vi.fn(),
   instanceContinuityRequest: vi.fn().mockImplementation((_id: string, path: string) => Promise.resolve(path === "maintenance" ? { agentInstanceId: _id, allowAgentConsolidation: false, revision: 0 } : path === "thoughts" ? { minimumIntervalSeconds: 3600, items: [] } : { enabled: false, settingsRevision: 0, contextBudgetCharacters: 6000, items: [] })),

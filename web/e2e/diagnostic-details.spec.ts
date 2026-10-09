@@ -83,7 +83,7 @@ test("native sign-out confirmation completes before closure and final reply", as
   await page.goto("/");
   await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await page.getByLabel("Message").fill(`synthetic-browser-cleanup http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091"}/`);
+  await page.getByLabel("Message").fill(`synthetic-browser-cleanup http://127.0.0.1:${process.env.PLAYWRIGHT_FIXTURE_PORT ?? "5091"}/ Sign out and close browser.`);
   await page.getByRole("button", { name: "Send" }).click();
   const row = page.locator(".chat-message-assistant").last();
   await expect(row).toContainText("Sign-out verified at the login screen", { timeout: 30_000 });
@@ -92,6 +92,21 @@ test("native sign-out confirmation completes before closure and final reply", as
   await page.reload();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(page.locator(".chat-message-assistant").last()).toContainText("Sign-out verified at the login screen");
+  const sessionId = new URL(page.url()).pathname.split('/').at(-1)!;
+  const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
+  const headers = { "X-AgentCore-Owner-Capability": token! };
+  const session = await (await page.request.get(`/api/v2/sessions/${sessionId}`, { headers })).json();
+  const runs = await (await page.request.get(`/api/v2/sessions/${sessionId}/agent-runs`, { headers })).json();
+  const budget = runs.items[0].budget;
+  expect(budget).toMatchObject({ logoutRequested: true, closureRequested: true, logoutVerified: false,
+    closureConfirmed: true, cleanupBlocked: false, cleanupStatus: "partial" });
+  await page.goto(`/admin/instances/${session.agentInstanceId}/activity/runs`);
+  await page.getByRole('table', { name: 'Runs table' }).getByRole('button', { name: 'Chat turn', exact: true }).click();
+  const details = page.getByRole('dialog', { name: 'Run details', exact: true });
+  await expect(details).toContainText('Partially completed');
+  await expect(details).toContainText('Requested · Unverified. Observed evidence remains in the result');
+  await expect(details).toContainText('Requested · Confirmed');
+  await expect(details).toContainText('Sign-out verified at the login screen');
 });
 
 test("background work shows a seeded terminal diagnostic", async ({ page }) => {

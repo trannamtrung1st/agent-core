@@ -72,4 +72,10 @@ public sealed record ExecutionBudgetPolicy(ExecutionBudgetProfile? Standard = nu
     }
 }
 
-public sealed record EffectiveExecutionBudget(ExecutionBudgetClass Class, ExecutionBudgetProfile Profile, string Source, bool RequestedCleanup = false);
+public sealed record BrowserCleanupIntent(bool LogoutRequested, bool ClosureRequested)
+{
+    public bool Any => LogoutRequested || ClosureRequested;
+}
+
+public sealed record EffectiveExecutionBudget(ExecutionBudgetClass Class, ExecutionBudgetProfile Profile, string Source,
+    bool RequestedCleanup = false, BrowserCleanupIntent? CleanupIntent = null);
