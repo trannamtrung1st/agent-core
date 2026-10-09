@@ -86,8 +86,12 @@ test('Connections ingress activates configured Event instructions once and Runs 
   await automations.getByLabel('Automation instructions', { exact: true }).fill(instructions);
   await automations.getByRole('combobox', { name: 'Automation trigger', exact: true }).click();
   await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
-  await automations.getByRole('combobox', { name: 'Automation Event', exact: true }).click();
-  await page.locator('.ant-select-item-option').filter({ hasText: sourceName }).click();
+  const eventPicker = automations.getByRole('combobox', { name: 'Automation Event', exact: true });
+  await eventPicker.click();
+  // Earlier journeys leave a larger Event inventory. Search through the supported
+  // control so the exact option is rendered inside the virtualized popup.
+  await eventPicker.fill(sourceName);
+  await page.locator('.ant-select-item-option').filter({ hasText: `${sourceName} · ${credential.eventKey}` }).click();
   await expect(automations.getByLabel('Schedule time zone', { exact: true })).toHaveCount(0);
   await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
   const source = automations.getByRole('button', { name: `View automation: ${name}`, exact: true });

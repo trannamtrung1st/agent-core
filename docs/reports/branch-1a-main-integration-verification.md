@@ -19,6 +19,14 @@ Automatically merged prompt code preserves both bounded Core memory receipts and
 
 Local logs: `/tmp/branch-integration-api-recheck.log`, `/tmp/branch-integration-playwright.log`, `/tmp/branch-integration-launcher.log`. Full backend/frontend/build checks and all five exact-candidate hosted jobs are finalization gates; their terminal results are recorded in the PR and delivery message rather than transferred from either predecessor branch's passes.
 
+## Full-gate follow-up
+
+The combined full backend run passed **2,974 tests**: Domain 173, Infrastructure 932, Application 1,470, API 395, OrderEvents 4. Twelve explicit opt-in cases skipped; local Infrastructure exercised the Docker cases omitted on hosted runners. Production TypeScript/Vite build passed with the existing chunk-size warning.
+
+The first local frontend invocation selected Node 26.7 through pnpm despite the shell's Node 22.18. Six files/70 cases failed with unavailable native localStorage warnings. Direct execution of Vitest under Node 22 passed those **70/70**, then the complete **101 files/803 tests**. No storage polyfill, application change or assertion removal was made. Logs: `/tmp/branch-integration-frontend.log`, `/tmp/branch-integration-frontend-runtime-recheck.log`, `/tmp/branch-integration-frontend-node22.log`, `/tmp/branch-integration-build.log`.
+
+The first full local browser core run passed **137/138**. The remaining Event-automation test timed out clicking an off-viewport option in the larger catalog left by earlier journeys; the same file passed **2/2** with a fresh catalog. The selector now searches through the supported Event combobox before selecting the exact Event label/key, retaining ingress, deduplication, outcome and navigation assertions. Both tests passed **2/2** against the same populated disposable database from the failed full run. Logs: `/tmp/branch-integration-full-core.log`, `/tmp/branch-event-reproduction.log`, `/tmp/branch-event-populated-recheck.log`. A fresh complete core run and fresh exact-head hosted gates verify this follow-up before PR finalization.
+
 ## Real-model boundary
 
 [Real UAT verification](real-uat-browser-model-verification.md) retains the original outcomes: Luna's final cold-profile complete task passed; DeepSeek completed one earlier warm-profile task, while its final cold-profile run logged out but supplied four nonempty malformed close arguments. Operator cleanup is separate evidence. This merge neither claims both models are consistently error-free nor adds a permissive adapter to conceal the model limitation.
