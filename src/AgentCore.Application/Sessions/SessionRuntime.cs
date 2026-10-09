@@ -2780,6 +2780,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     working = working with { Tools = cleanupTools.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray() };
                 if (finalizationReason is not null) working = working with { Tools = null, ToolChoice = ModelToolChoice.Auto, ToolChoiceName = null,
                     MaxOutputTokens = Math.Min(working.MaxOutputTokens, 2048) };
+                if (projectionContext is not null)
+                {
+                    IReadOnlyList<ModelToolDefinition>? eligibleForGuide = null;
+                    if (pageBlocked || evidence.DialogPending || cleanupPhase)
+                    {
+                        // Use the same phase filter as executable schemas, including tools not yet loaded.
+                        eligibleForGuide = ProjectBrowserTools(working with
+                        { Tools = ToolCatalog.Eligible(_snapshot.Definition, projectionContext, _tools.ConfigurationGate) },
+                            pageBlocked, terminalBrowserContinuation, evidence.DialogPending).Tools ?? [];
+                        if (cleanupPhase) eligibleForGuide = eligibleForGuide.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray();
+                    }
+                    working = working with { Messages = PromptContextBuilder.WithToolEnvironmentSystem(
+                        working.Messages, projectionContext, working.Tools ?? [], _tools.ConfigurationGate, eligibleForGuide) };
+                }
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
                     ? binding.PinnedModel.CatalogKey : ToolResources.IsOccurrence(trigger.Kind)
                         ? _activeOccurrencePin?.CatalogKey : _snapshot.ModelSelection?.CatalogKey;

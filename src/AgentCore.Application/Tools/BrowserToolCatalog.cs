@@ -7,6 +7,7 @@ public sealed record BrowserToolMetadata(string Name, BrowserFeature Feature, st
         .Concat(Name.Split('.')[1].Split('_')).Concat(Feature switch
         {
             BrowserFeature.FillForm => new[] { "fill", "form", "forms", "checkbox", "checked", "switch" },
+            BrowserFeature.FillCredential => ["password", "credential", "credentials", "login", "signin", "protected"],
             BrowserFeature.Dialog => ["confirmation", "confirm", "modal", "alert", "prompt", "dismiss", "accept"],
             BrowserFeature.Console => ["logs", "errors", "messages"],
             BrowserFeature.NetworkInspect => ["traffic", "requests", "responses", "diagnostics"],
@@ -27,6 +28,7 @@ public sealed record BrowserToolMetadata(string Name, BrowserFeature Feature, st
         BrowserFeature.FillForm => "Fill multiple text fields or set checkbox/switch checked state. Each field has a direct target and exactly one of value or checked; every field is preflighted and rechecked before its effect.",
         BrowserFeature.Click => "Click a unique direct semantic target with optional button, clickCount or modifiers. For checkbox state use fill_form.",
         BrowserFeature.Type => "Replace a text field or contenteditable value; empty text clears it. slowly=true emits sequential keyboard events. Optional submit presses Enter. Passwords require the credential sink.",
+        BrowserFeature.FillCredential => "Fill an existing-account password input using a bound credentialRef from credentials.list. Core inserts the secret without exposing it. Requires a direct attached user turn and exact credential origin. A credential_target_invalid result means the selected element is not a password input: observe the form and target its password label or placeholder, then use this tool. Never use ordinary text tools for passwords. Field entry does not submit or prove sign-in.",
         BrowserFeature.Dialog => "Inspect, accept or dismiss an explicitly pending alert, confirm or prompt. Prompt text is optional on accept.",
         BrowserFeature.Screenshot => "Create a masked image Artifact in png/jpeg/webp. Vision models additionally receive image content; coordinate actions use mouse.",
         BrowserFeature.Drop => "Dispatch a structured text drop; artifact drops may return unsupported_operation.",

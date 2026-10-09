@@ -77,6 +77,10 @@ public sealed partial class TerminalDisplayRepairTests
             {
                 Assert.DoesNotContain(request.Tools ?? [], t => t.Name == ToolCatalog.BrowserFind);
                 Assert.Equal(authorized && request.Tools is not null, (request.Tools ?? []).Any(t => t.Name == ToolCatalog.BrowserDialog));
+                var environment = Assert.Single(request.Messages, m => m.Role == ModelRole.System
+                    && m.Text.StartsWith(AgentCore.Application.Agents.PromptContextBuilder.ToolEnvironmentPrefix)).Text;
+                Assert.DoesNotContain("browser.find", environment);
+                Assert.DoesNotContain("browser.click", environment);
             }
             if (step >= 2 && request.Tools is null || step == 2 && !authorized || step == 5 && !repeat)
             {

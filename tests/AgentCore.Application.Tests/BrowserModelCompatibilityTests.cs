@@ -26,6 +26,18 @@ namespace AgentCore.Application.Tests;
 
 public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
 {
+    [Fact]
+    public async Task Credential_discovery_and_wrong_target_recovery_sign_in_without_loading_any_skills()
+    {
+        await using var fixture = new GenericSsoFixture();
+        var model = new CredentialDiscoveryModel(fixture.ApplicationOrigin);
+        var result = await Trial(fixture, model, withoutSkills: true);
+        Assert.True(result.DomVerified);
+        Assert.True(result.Completed);
+        Assert.True(result.CapabilityLoaded);
+        Assert.Equal("credential_target_invalid", Assert.Single(result.FailureCodes));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -139,7 +151,7 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             "A model trial did not independently complete authenticated record retrieval; see safe trial metrics."));
     }
 
-    private async Task<TrialResult> Trial(GenericSsoFixture fixture, ILanguageModel model, bool steer = false, string? modelId = null)
+    private async Task<TrialResult> Trial(GenericSsoFixture fixture, ILanguageModel model, bool steer = false, string? modelId = null, bool withoutSkills = false)
     {
         var timer = Stopwatch.StartNew();
         var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = false, InteractionMode = "InteractiveDemo",
@@ -151,6 +163,7 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             var directory = new DirectoryInfo(AppContext.BaseDirectory);
             while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
             var definition = (await new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 21))!;
+            if (withoutSkills) definition = definition with { Skills = [] };
             definition = definition with { Environment = definition.Environment! with
             {
                 Capabilities = new("Selected", [ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot,
@@ -191,6 +204,12 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             var dom = page is not null && page.Url == fixture.ApplicationOrigin + "/record" && fixture.AcceptedLogins == 1 && fixture.ProtectedReads > 0
                 && await page.GetByRole(Microsoft.Playwright.AriaRole.Status).InnerTextAsync() == "Authenticated: AC-1042 is Ready for inspection.";
             var runs = await SessionRuntimeFixture.RunsForAsync(runtime);
+            if (withoutSkills)
+            {
+                Assert.All(runs, run => Assert.Empty(run.ActiveSkillKeys));
+                Assert.DoesNotContain(recording.Calls, call => call.Name == ToolCatalog.SkillsLoad);
+                Assert.DoesNotContain(recording.Requests.SelectMany(r => r.Messages), PromptContextBuilder.IsActiveSkillSystem);
+            }
             AgentRunToolCallCheckpoint.TryRead(runs.OrderByDescending(r => r.CreatedAtUtc).FirstOrDefault()?.Checkpoint, out var durable);
             var receipts = (durable ?? recording.Requests.SelectMany(r => r.Messages).ToArray()).Where(m => m.Role == ModelRole.Tool).DistinctBy(m => m.ToolCallId).ToArray();
             string? Error(ModelMessage message) { using var json = JsonDocument.Parse(message.Text); return json.RootElement.ValueKind == JsonValueKind.Object && json.RootElement.TryGetProperty("error", out var error) ? error.GetString() : null; }
@@ -228,6 +247,60 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             Requests.Add(request);
             await foreach (var item in model.GenerateAsync(request, ct))
             { if (item is ModelToolCallEvent call) Calls.Add(call.Call); yield return item; }
+        }
+    }
+
+    private sealed class CredentialDiscoveryModel(string origin) : ILanguageModel
+    {
+        private int _step;
+        public ModelCapabilities Capabilities => new(true, true, Tools: true);
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.Yield();
+            var step = _step++;
+            var environment = Assert.Single(request.Messages, m => m.Role == ModelRole.System && m.Text.StartsWith(PromptContextBuilder.ToolEnvironmentPrefix)).Text;
+            if (step == 0)
+            {
+                Assert.Contains("- browser.fill_credential: Fill an existing-account password input", environment);
+                Assert.DoesNotContain(request.Tools ?? [], t => t.Name == ToolCatalog.BrowserFillCredential);
+            }
+            if (step == 3)
+            {
+                using var receipt = JsonDocument.Parse(request.Messages.Last(m => m.Role == ModelRole.Tool).Text);
+                Assert.Equal("load_matched", receipt.RootElement.GetProperty("outcome").GetString());
+                Assert.Contains(request.Tools ?? [], t => t.Name == ToolCatalog.BrowserFillCredential);
+                Assert.DoesNotContain("- browser.fill_credential:", environment); // No stale on-demand entry after loading.
+            }
+            if (step == 5)
+            {
+                using var receipt = JsonDocument.Parse(request.Messages.Last(m => m.Role == ModelRole.Tool).Text);
+                Assert.Equal("credential_target_invalid", receipt.RootElement.GetProperty("error").GetString());
+                Assert.True(receipt.RootElement.GetProperty("capabilitySupported").GetBoolean());
+                Assert.False(receipt.RootElement.GetProperty("effectAttempted").GetBoolean());
+                Assert.Contains("password input", receipt.RootElement.GetProperty("nextStep").GetString());
+            }
+            (string Name, object Args) action = step switch
+            {
+                0 => (ToolCatalog.BrowserNavigate, new { url = origin + "/" }),
+                1 => (ToolCatalog.BrowserType, new { target = new BrowserTarget("label", "Email"), text = GenericSsoFixture.Email }),
+                2 => (ToolCatalog.CapabilitiesLoad, new { query = "sign in with saved password", limit = 1 }),
+                3 => (ToolCatalog.CredentialsList, new { }),
+                4 => (ToolCatalog.BrowserFillCredential, new { target = new BrowserTarget("label", "Email"), credentialRef = "demo-sso" }),
+                5 => (ToolCatalog.BrowserSnapshot, new { }),
+                6 => (ToolCatalog.BrowserFillCredential, new { target = new BrowserTarget("label", "Password"), credentialRef = "demo-sso" }),
+                7 => (ToolCatalog.BrowserClick, new { target = new BrowserTarget("role", "button", "Sign in") }),
+                8 => (ToolCatalog.BrowserSnapshot, new { }),
+                _ => ("", new { })
+            };
+            if (action.Name.Length == 0)
+            {
+                Assert.Contains("Ready for inspection", request.Messages.Last(m => m.Role == ModelRole.Tool).Text);
+                yield return new ModelSemanticResponseReady(new("AC-1042 is Ready for inspection.", new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed); yield break;
+            }
+            Assert.Contains(request.Tools ?? [], t => t.Name == action.Name);
+            yield return new ModelToolCallEvent(new("credential-discovery-" + step, action.Name, JsonSerializer.Serialize(action.Args)));
+            yield return new ModelCompleted(ModelStopReason.ToolCalls);
         }
     }
 

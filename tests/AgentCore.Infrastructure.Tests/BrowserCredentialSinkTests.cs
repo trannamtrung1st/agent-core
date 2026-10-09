@@ -39,8 +39,18 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             var usernameRef = (await BrowserTestQueries.Find(fixture.Session, session, "Username")).Target;
             var resolvedNonPassword = false;
             var wrongField = await fixture.Session.FillCredentialAsync(session, usernameRef!, (_, _) => { resolvedNonPassword = true; return ValueTask.FromResult(password); });
-            Assert.Equal("unsupported_operation", wrongField.ErrorCode);
+            Assert.Equal("credential_target_invalid", wrongField.ErrorCode);
             Assert.False(resolvedNonPassword);
+            var wrongReceipt = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { target = usernameRef, credentialRef = "store-admin" }));
+            using (var receipt = JsonDocument.Parse(wrongReceipt))
+            {
+                Assert.Equal("credential_target_invalid", receipt.RootElement.GetProperty("error").GetString());
+                Assert.Equal("target", receipt.RootElement.GetProperty("failureScope").GetString());
+                Assert.True(receipt.RootElement.GetProperty("capabilitySupported").GetBoolean());
+                Assert.False(receipt.RootElement.GetProperty("effectAttempted").GetBoolean());
+                Assert.Contains("browser.fill_credential", receipt.RootElement.GetProperty("nextStep").GetString());
+                Assert.DoesNotContain(password, wrongReceipt);
+            }
             var raw = await Execute(ToolCatalog.BrowserType, JsonSerializer.Serialize(new { target = passwordRef, text = "model-supplied" }));
             Assert.Contains("forbidden", raw);
             var detached = await Execute(ToolCatalog.BrowserFillCredential, JsonSerializer.Serialize(new { target = passwordRef, credentialRef = "store-admin" }), admission with { Detached = true, TriggerKind = TriggerKind.ScheduledOccurrence });

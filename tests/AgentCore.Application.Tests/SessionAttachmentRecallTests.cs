@@ -285,9 +285,9 @@ public sealed class SessionAttachmentRecallTests
                 new SessionAttachmentManifestItem(attachmentId, "proposal.md", "text/markdown", 1)
             ]);
         var environment = new PromptContextBuilder().BuildSections(context).EnvironmentSystem;
-        Assert.Contains("Role tools: (none).", environment, StringComparison.Ordinal);
+        Assert.Contains("Definition-authorized tool count before execution restrictions: 0.", environment, StringComparison.Ordinal);
         Assert.Contains(
-            "Effective tools this request: attachments.read.",
+            "Tools offered now (schemas attached): attachments.read.",
             environment,
             StringComparison.Ordinal);
     }
@@ -312,8 +312,8 @@ public sealed class SessionAttachmentRecallTests
             ],
             ModelSupportsTools: false);
         var environment = new PromptContextBuilder().BuildSections(context).EnvironmentSystem;
-        Assert.Contains("Role tools: (none).", environment, StringComparison.Ordinal);
-        Assert.Contains("Effective tools this request: (none).", environment, StringComparison.Ordinal);
+        Assert.Contains("Definition-authorized tool count before execution restrictions: 0.", environment, StringComparison.Ordinal);
+        Assert.Contains("Tools offered now (schemas attached): (none).", environment, StringComparison.Ordinal);
     }
 
     [Fact]

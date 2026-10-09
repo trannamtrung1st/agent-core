@@ -86,7 +86,7 @@ public sealed partial class NativePlaywrightBrowser
         {
             if (session.Dialog is not null) return Result("dialog_pending");
             var locator = await ResolveTargetAsync(session, target, true, token);
-            if (!await locator.EvaluateAsync<bool>("el => el.matches('input[type=password]')").WaitAsync(token)) return Result("unsupported_operation");
+            if (!await locator.EvaluateAsync<bool>("el => el.matches('input[type=password]')").WaitAsync(token)) return Result("credential_target_invalid");
             if (await ClassifyInterventionAsync(session.Page, token) != BrowserInterventionKind.None) return Result("user_intervention_required");
             var pageUrl = session.Page.Url;
             var generation = session.Generation;

@@ -482,6 +482,8 @@ The Pump 002 review authorizes actionable native dialog recovery, confirmed expl
 
 ## Capability discovery UX and reliability follow-up
 
+The authorized tool-awareness correction adds compact registry-derived orientation, fresh current-request readiness and a target-specific protected-fill recovery receipt. It remains within existing projection, discovery, Skill and credential boundaries; it does not automatically load all Skills or tool schemas. [Tool-awareness verification](reports/capability-tool-awareness-verification.md) separates this correction's deterministic runtime evidence from optional live-provider acceptance and historical discovery gates.
+
 Authorized focused enhancement of existing `capabilities.load`: registry-based concrete intents, compact actionable outcomes, bounded ineffective discovery and same-Run restoration. Definition authority, configuration/runtime eligibility, sensitive approvals, attached/detached restrictions, Skill procedures and fresh independent Run state remain authoritative. No new discovery subsystem, model-specific behavior, Browser provider, automatic grants or P10/P11 work. Local implementation and final acceptance are tracked separately in [discovery verification](reports/capability-discovery-reliability-verification.md). Hosted CI is deferred at the user's direction; this follow-up is not frozen until all required jobs pass on the implementation SHA.
 
 ## Final native browser blocked-state recovery

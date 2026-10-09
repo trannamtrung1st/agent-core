@@ -99,6 +99,7 @@ public sealed partial class SessionToolExecutor
         "target_denied",
         "target_missing",
         "invalid_target",
+        "credential_target_invalid",
         "stale_frame",
         "action_not_confirmed",
         "ambiguous_target",
@@ -562,6 +563,12 @@ public sealed partial class SessionToolExecutor
         }
 
         var code = BrowserErrorCodes.Contains(result.ErrorCode) ? result.ErrorCode : "provider_unavailable";
+        if (code == "credential_target_invalid")
+            return JsonSerializer.Serialize(new { error = code, failureScope = "target", capabilitySupported = true,
+                message = "Protected credential fill is supported, but the selected element is not a password input.",
+                nextStep = "Observe the sign-in form and target its existing-account password input by label or placeholder, then use browser.fill_credential. Never enter passwords using ordinary text tools.",
+                effectAttempted = result.EffectAttempted, effectConfirmedBySdk = result.EffectConfirmedBySdk,
+                applicationOutcomeVerified = result.ApplicationOutcomeVerified });
         if (code == "unsupported_operation" && result.AllowedActions is { Count: > 0 })
         {
             var allowed = result.AllowedActions

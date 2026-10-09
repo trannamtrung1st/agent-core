@@ -99,8 +99,8 @@ public sealed class PromptContextBuilder(
         }
 
         messages.Add(new ModelMessage(ModelRole.System, sections.EnvironmentSystem));
-        if (ToolPolicy.IsOffered(context.Definition, context, ToolCatalog.CapabilitiesLoad, _configurationGate))
-            messages.Add(new(ModelRole.System, "Call offered tools directly. For a missing interface, use capabilities.load with a concrete goal or exact name, then call the loaded tool on the next request. Loading changes projection only; authorization, eligibility and approvals still apply. Follow the result nextStep; do not repeat ineffective queries."));
+        if (context.ModelSupportsTools)
+            messages.Add(new(ModelRole.System, CapabilityUsageGuidance.OperatingInstructions));
         if (ToolCatalog.Eligible(context.Definition, context, _configurationGate).Any(t => t.Name.StartsWith("browser.", StringComparison.Ordinal)))
             messages.Add(new(ModelRole.System, "Browser workflow: observe the permitted page, act once using a direct semantic target, then verify the fresh observation. " + BrowserToolArguments.TargetGuidance + " Focused find is optional for deep/ambiguous content. A unique within row/group scopes repeated controls. Render virtualized content before targeting it. Stop on policy/provider denial and do not replay uncertain effects. Missing eligible tools are discovered with capabilities.load. Dialog decisions must be justified; close confirms context closure only. Report application outcomes only from independent observed state and complete the user reply with chat.respond."));
         if (context.AgentWorkspaceAvailable && context.ModelSupportsTools)
@@ -372,28 +372,42 @@ public sealed class PromptContextBuilder(
         return string.Join('\n', lines);
     }
 
-    private string BuildEnvironmentSystem(AgentContext context)
+    public const string ToolEnvironmentPrefix = "Tool environment for this request.";
+
+    private string BuildEnvironmentSystem(AgentContext context) =>
+        BuildEnvironmentSystem(context, OfferTools(context.Definition, context), _configurationGate);
+
+    private static string BuildEnvironmentSystem(AgentContext context, IReadOnlyList<ModelToolDefinition> effective,
+        IToolConfigurationGate gate, IReadOnlyList<ModelToolDefinition>? eligible = null)
     {
         var role = RoleEnvironments.Of(context.Definition);
         var harness = role.HarnessList.Count == 0 ? "(none)" : string.Join(", ", role.HarnessList);
         var knowledge = role.KnowledgeList.Count == 0
             ? "(none)"
             : string.Join(", ", role.KnowledgeList.Select(item => item.Identity));
-        var roleTools = role.ToolList.Count == 0 ? "(none)" : string.Join(", ", role.ToolList);
-        var effective = OfferTools(context.Definition, context);
         var effectiveTools = effective.Count == 0 ? "(none)" : string.Join(", ", effective.Select(tool => tool.Name));
         var lines = new List<string>
         {
+            ToolEnvironmentPrefix,
             $"Approved harness: {harness}.",
             $"Approved knowledge identities: {knowledge}.",
-            $"Role tools: {roleTools}.",
-            $"Effective tools this request: {effectiveTools}.",
+            $"Definition-authorized tool count before execution restrictions: {role.ToolList.Count}.",
+            $"Tools offered now (schemas attached): {effectiveTools}.",
             "Do not access the Agent Core repository, secrets, or other sessions.",
             "Tool and path permission is runtime-enforced and is not granted by model text."
         };
+        var catalog = CapabilityUsageGuidance.BuildCatalog(context.Definition, context, gate, effective, eligible);
+        if (catalog.Length > 0) lines.Add(catalog);
 
         return string.Join('\n', lines);
     }
+
+    internal static IReadOnlyList<ModelMessage> WithToolEnvironmentSystem(IReadOnlyList<ModelMessage> messages,
+        AgentContext context, IReadOnlyList<ModelToolDefinition> offered, IToolConfigurationGate gate,
+        IReadOnlyList<ModelToolDefinition>? eligible = null) =>
+        messages.Select(message => message.Role == ModelRole.System
+            && message.Text.StartsWith(ToolEnvironmentPrefix, StringComparison.Ordinal)
+            ? message with { Text = BuildEnvironmentSystem(context, offered, gate, eligible) } : message).ToArray();
 
     public const string SkillCatalogPrefix =
         "Available Skills pinned for this execution.";
