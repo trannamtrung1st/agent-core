@@ -60,6 +60,13 @@ public sealed class CoreEventAutomationJourneyTests
             Assert.Equal(1, await dispatcher.RunOnceAsync());
             var pending = Assert.Single(await services.GetRequiredService<ITriggerStore>().ListByDispositionAsync(AgentCore.Domain.Triggers.OccurrenceRoutingDisposition.Pending, 20));
             Assert.All(sourceIds, id => Assert.Contains(id.ToString(), pending.EvidenceJson));
+            var router = services.GetRequiredService<TriggerOccurrenceRouter>();
+            await router.RouteOnceAsync();
+            await services.GetRequiredService<AgentCore.Application.Execution.BackgroundOccurrenceIntake>().AcceptAwaitingAsync();
+            var queuedReview = Assert.Single(await runs.ListAsync(owner, 20), r => r.Admission.Activation.Kind == ActivationKind.CoreEvent);
+            var sourceArguments = JsonSerializer.SerializeToElement(new { sourceKind = "AgentRun", sourceId = sourceIds[0] });
+            await services.GetRequiredService<AgentCore.Application.Experience.ExperienceService>().InspectSourceAsync(instanceId, queuedReview.AgentRunId, sourceArguments, default, outputBudget: 128);
+            Assert.Equal(2, (await services.GetRequiredService<ICoreEventStore>().CoveragePageAsync(new(instanceId, LocalUserProfile.Id), Guid.Parse(automation.AutomationId), null, 24)).Items.Count);
             await UnifiedAutomationJourneyTests.Drain(services);
             var reviews = (await runs.ListAsync(owner, 20)).Where(r => r.Admission.Activation.Kind == ActivationKind.CoreEvent).ToArray();
             var review = Assert.Single(reviews);
@@ -200,6 +207,24 @@ public sealed class CoreEventAutomationJourneyTests
         Assert.Equal(AgentCore.Domain.Events.EventMatchStatus.LoopSkipped, Assert.Single(await events.DeliveriesAsync(staged[1])).Status);
         Assert.Equal("filter-expression-version", Assert.Single(await events.DeliveriesAsync(staged[2])).Code);
         Assert.Equal(0, await services.GetRequiredService<CoreEventDispatcher>().RunOnceAsync());
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Run_now_bypasses_core_filter_without_fabricating_a_source_event()
+    {
+        await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"core-manual-{Guid.NewGuid():N}.db"));
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 22);
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
+        var response = await client.PostAsJsonAsync(path, new AutomationRequest(0, true, "Manual",
+            "Inspect current state", new("coreEvent", CoreEventKey: "run.completed", FilterExpression: "false"),
+            ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")));
+        response.EnsureSuccessStatusCode();
+        var automation = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
+        (await client.PostAsJsonAsync(path + "/" + automation.AutomationId + "/run", new { expectedRevision = automation.Revision })).EnsureSuccessStatusCode();
+        var occurrence = Assert.Single(await host.Services.GetRequiredService<ITriggerStore>().ListByDispositionAsync(AgentCore.Domain.Triggers.OccurrenceRoutingDisposition.Pending, 20));
+        Assert.Equal(AgentCore.Domain.Triggers.TriggerSourceKind.ManualInvocation, occurrence.SourceKind);
+        Assert.Empty(await host.Services.GetRequiredService<ICoreEventStore>().PendingAsync());
     }
 
 }

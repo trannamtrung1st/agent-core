@@ -1325,7 +1325,20 @@ public sealed class AgentRunAdmissionStoreTests
                 db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(parent));
                 db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(child.Snapshot, completed));
                 db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(completed));
+                // Seed the historical entry schema directly: the current EF model includes a later nullable column.
+                var historicalEntries = db.ChangeTracker.Entries<EntryRecord>().Where(e => e.State == EntityState.Added).ToArray();
+                var entryRows = historicalEntries.Select(e => e.Properties.Where(p => p.Metadata.Name != nameof(EntryRecord.CompletedAtUtc))
+                    .Select(p => (Column: p.Metadata.GetColumnName(), Value: p.CurrentValue)).ToArray()).ToArray();
+                foreach (var entry in historicalEntries) entry.State = EntityState.Detached;
                 await db.SaveChangesAsync();
+                foreach (var row in entryRows)
+                {
+                    var columns = string.Join(", ", row.Select(p => "\"" + p.Column + "\""));
+                    var names = string.Join(", ", row.Select((_, i) => "@p" + i));
+                    var parameters = row.Select((p, i) => new SqliteParameter("@p" + i, p.Value ?? DBNull.Value)).ToArray();
+                    var insert = $"INSERT INTO ConversationEntries ({columns}) VALUES ({names})";
+                    await db.Database.ExecuteSqlRawAsync(insert, parameters);
+                }
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO BackgroundCompletionReceipts (ChildAgentRunId, AgentInstanceId, ProfileId, ParentActivationId, SkipReason, CreatedAtUtc) VALUES ({completed.AgentRunId.ToString("D")}, {Owner.AgentInstanceId.ToString("D")}, {Owner.ProfileId.ToString("D")}, NULL, 'quiet-outcome', {Now.ToUnixTimeMilliseconds()})");
                 await db.Database.MigrateAsync();
             }

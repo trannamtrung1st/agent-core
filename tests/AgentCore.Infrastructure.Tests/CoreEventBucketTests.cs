@@ -57,6 +57,29 @@ public sealed class CoreEventBucketTests
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
     }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Capacity_overflow_retains_owner_checked_source_coverage_without_another_pending_bucket(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"core-capacity-{Guid.NewGuid():N}.db");
+        var contexts = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        ICoreEventStore store = sqlite ? new SqliteCoreEventStore(contexts) : new InMemoryCoreEventStore();
+        var now = DateTimeOffset.UtcNow;
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var subscription = new EventSubscriptionSnapshot(Guid.NewGuid(), owner, 1, null, new(EventDispatchMode.CoalesceLatest, 60), TriggerSourceKind.ApplicationEvent, Guid.NewGuid());
+        if (sqlite) { await using var db = await contexts.CreateDbContextAsync(); await db.Database.MigrateAsync(); }
+        try
+        {
+            for (var i = 0; i < 33; i++)
+                await store.CoalesceAsync(new(Guid.NewGuid(), owner, "orders", now, JsonSerializer.Serialize(new { body = new string('a', 4800) })), subscription);
+            Assert.Equal(32, (await store.DueBucketsAsync(now.AddSeconds(61))).Count);
+            var overflow = Assert.Single((await store.CoveragePageAsync(owner, subscription.AutomationId, null, 24)).Items);
+            Assert.Equal("bucket-capacity", overflow.CompletionCode);
+            Assert.Empty((await store.CoveragePageAsync(new(owner.AgentInstanceId, Guid.NewGuid()), subscription.AutomationId, null, 24)).Items);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
+
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(options); public Task<AgentCoreDbContext> CreateDbContextAsync(CancellationToken ct = default) => Task.FromResult(CreateDbContext()); }
 }
