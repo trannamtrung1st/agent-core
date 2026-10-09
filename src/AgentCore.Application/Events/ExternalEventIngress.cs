@@ -83,6 +83,7 @@ public sealed class ExternalEventIngress(
         var kind = admitted.Kind == ExternalEventAdmitKind.Duplicate
             ? ExternalEventIngressKind.Duplicate
             : ExternalEventIngressKind.Admitted;
+        AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", kind == ExternalEventIngressKind.Duplicate ? "duplicate" : "emitted");
         Log(kind, eventKey, admitted.Event.EventId, created);
         return new ExternalEventIngressResult(kind, admitted.Event.EventId, null);
     }
@@ -91,6 +92,7 @@ public sealed class ExternalEventIngress(
     {
         var pending = await events.ListPendingDeliveriesAsync(null, 32, cancellationToken).ConfigureAwait(false);
         var created = 0;
+        if (pending.Count > 0) AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", "recovered");
         var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
         foreach (var eventId in pending.Select(item => item.EventId).Distinct())
         {
@@ -154,8 +156,9 @@ public sealed class ExternalEventIngress(
             data = payload.GetProperty("data") });
         var decision = delivery.Decision ?? (snapshot is { ExpressionVersion: not "js-expression-v1" } ? new(null, "error", "filter-expression-version") : snapshot?.FilterExpression is null ? new EventFilterResult(true, "matched")
             : filters?.Evaluate(snapshot.FilterExpression, envelope, cancellationToken) ?? new(null, "error", "filter-unavailable"));
-        await events.DecideDeliveryAsync(stored.EventId, delivery.AutomationId, decision, cancellationToken);
+        decision = await events.DecideDeliveryAsync(stored.EventId, delivery.AutomationId, decision, cancellationToken);
         AgentCore.Application.Observability.RuntimeTelemetry.RecordEventFilter("webhook", decision.Status);
+        AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", decision.Matched == true ? "matched" : decision.Matched == false ? "filtered" : "filter_error");
         if (depth >= 4)
         { await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, ExternalEventDeliveryStatus.Skipped, cancellationToken); return false; }
         if (decision.Matched != true)
@@ -170,6 +173,7 @@ public sealed class ExternalEventIngress(
             { await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, ExternalEventDeliveryStatus.Skipped, cancellationToken); return false; }
             await buckets.CoalesceAsync(new(stored.EventId, owner, source.EventKey, stored.AdmittedAtUtc, payload.GetProperty("data").GetRawText(), root, depth), snapshot, cancellationToken);
             await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, ExternalEventDeliveryStatus.Coalesced, cancellationToken);
+            AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", "coalesced");
             return false;
         }
         var outcome = await TryCreateOccurrenceAsync(
@@ -182,6 +186,7 @@ public sealed class ExternalEventIngress(
             cancellationToken, snapshot?.TriggerRevision).ConfigureAwait(false);
         await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, outcome.Status, cancellationToken)
             .ConfigureAwait(false);
+        AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", outcome.Status == ExternalEventDeliveryStatus.Admitted ? outcome.Created ? "admitted" : "duplicate" : "policy_denied");
         return outcome.Created;
     }
 

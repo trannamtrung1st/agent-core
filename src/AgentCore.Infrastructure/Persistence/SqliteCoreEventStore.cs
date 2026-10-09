@@ -86,12 +86,16 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
     }
     public async ValueTask<IReadOnlyList<CoreEventDelivery>> DeliveriesAsync(Guid eventId, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct); return (await db.CoreEventDeliveries.AsNoTracking().Where(d => d.EventId == eventId.ToString("D")).OrderBy(d => d.AutomationId).ToArrayAsync(ct)).Select(Read).ToArray(); }
-    public async ValueTask DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
+    public async ValueTask<EventFilterResult> DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await db.CoreEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && d.DecisionJson == null && d.Status == (int)EventMatchStatus.Pending)
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.DecisionJson, JsonSerializer.Serialize(decision, CoreEventPersistence.Json))
                 .SetProperty(d => d.Status, (int)(decision.Matched == true ? EventMatchStatus.Matched : decision.Matched == false ? EventMatchStatus.Filtered : EventMatchStatus.FilterError)).SetProperty(d => d.Code, decision.Code), ct);
+        var row = await db.CoreEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D"), ct);
+        return row?.DecisionJson is not null && row.Status is not ((int)EventMatchStatus.PolicySkipped or (int)EventMatchStatus.LoopSkipped or (int)EventMatchStatus.BudgetSkipped)
+            ? JsonSerializer.Deserialize<EventFilterResult>(row.DecisionJson, CoreEventPersistence.Json)!
+            : new(null, "error", "delivery-unavailable");
     }
     public async ValueTask FinishAsync(Guid eventId, Guid automationId, EventMatchStatus status, string? code = null, CancellationToken ct = default)
     {

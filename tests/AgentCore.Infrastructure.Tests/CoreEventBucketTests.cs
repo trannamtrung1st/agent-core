@@ -80,6 +80,39 @@ public sealed class CoreEventBucketTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
     }
 
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Late_worker_uses_first_durable_filter_decision_for_core_and_webhook(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"core-decision-{Guid.NewGuid():N}.db");
+        var contexts = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        var memory = new InMemoryCoreEventStore();
+        ICoreEventStore core = sqlite ? new SqliteCoreEventStore(contexts) : memory;
+        IExternalEventStore webhook = sqlite ? new SqliteExternalEventStore(contexts) : new InMemoryExternalEventStore();
+        var now = DateTimeOffset.UtcNow;
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var automationId = Guid.NewGuid();
+        var source = new CoreEventOccurrence(Guid.NewGuid(), "decision-fixture", owner, "run.completed", now, "{}");
+        if (sqlite) { await using var db = await contexts.CreateDbContextAsync(); await db.Database.MigrateAsync(); CoreEventPersistence.Stage(db, source); await db.SaveChangesAsync(); }
+        else memory.Append(source);
+        try
+        {
+            await core.SnapshotAsync(source.EventId, [new(automationId, owner, 1, "true", new())]);
+            var first = new EventFilterResult(null, "error", "filter-worker-budget");
+            Assert.Equal(first, await core.DecideAsync(source.EventId, automationId, first));
+            Assert.Equal(first, await core.DecideAsync(source.EventId, automationId, new(true, "matched")));
+            Assert.Equal(EventMatchStatus.FilterError, Assert.Single(await core.DeliveriesAsync(source.EventId)).Status);
+            var resource = new WebhookEvent(Guid.NewGuid(), "Decision fixture", WebhookEventKind.Webhook, "decision.fixture",
+                "safe-fixture-hash", WebhookEventStatus.Active, 1, now, now);
+            await webhook.CreateAsync(resource);
+            var receipt = new ExternalEvent(Guid.NewGuid(), resource.ResourceId, "fixture-1", now, now, "{}");
+            await webhook.AdmitAsync(receipt, [new(automationId, owner.AgentInstanceId, owner.ProfileId)]);
+            Assert.Equal(first, await webhook.DecideDeliveryAsync(receipt.EventId, automationId, first));
+            Assert.Equal(first, await webhook.DecideDeliveryAsync(receipt.EventId, automationId, new(true, "matched")));
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
+
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(options); public Task<AgentCoreDbContext> CreateDbContextAsync(CancellationToken ct = default) => Task.FromResult(CreateDbContext()); }
 }

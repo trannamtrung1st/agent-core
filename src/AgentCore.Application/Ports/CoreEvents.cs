@@ -22,7 +22,7 @@ public interface ICoreEventStore
     ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default);
     ValueTask SnapshotAsync(Guid eventId, IReadOnlyList<EventSubscriptionSnapshot> subscriptions, CancellationToken ct = default);
     ValueTask<IReadOnlyList<CoreEventDelivery>> DeliveriesAsync(Guid eventId, CancellationToken ct = default);
-    ValueTask DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default);
+    ValueTask<EventFilterResult> DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default);
     ValueTask FinishAsync(Guid eventId, Guid automationId, EventMatchStatus status, string? code = null, CancellationToken ct = default);
     ValueTask<IReadOnlyList<CoreEventDelivery>> ActivityAsync(TriggerOwner owner, CancellationToken ct = default);
 }

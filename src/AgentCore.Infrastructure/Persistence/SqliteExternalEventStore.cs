@@ -152,10 +152,15 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         return rows.Select(ToDelivery).ToArray();
     }
 
-    public async ValueTask DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
+    public async ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct);
         await db.ExternalEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && d.DecisionJson == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.DecisionJson, System.Text.Json.JsonSerializer.Serialize(decision, CoreEventPersistence.Json)), ct); }
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.DecisionJson, System.Text.Json.JsonSerializer.Serialize(decision, CoreEventPersistence.Json)), ct);
+        var row = await db.ExternalEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D"), ct);
+        return row?.DecisionJson is not null && row.Status != (int)ExternalEventDeliveryStatus.Skipped
+            ? System.Text.Json.JsonSerializer.Deserialize<EventFilterResult>(row.DecisionJson, CoreEventPersistence.Json)!
+            : new(null, "error", "delivery-unavailable");
+    }
 
     public async ValueTask MarkDeliveryAsync(
         Guid eventId,

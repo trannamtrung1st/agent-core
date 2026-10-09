@@ -46,7 +46,7 @@ public interface IExternalEventStore
         int limit,
         CancellationToken cancellationToken = default);
 
-    ValueTask DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default);
+    ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default);
 
     ValueTask MarkDeliveryAsync(
         Guid eventId,

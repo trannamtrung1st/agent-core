@@ -128,9 +128,17 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
         }
     }
 
-    public ValueTask DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
-    { lock (_gate) { if (_deliveries.TryGetValue((eventId, automationId), out var d) && d.Decision is null)
-        _deliveries[(eventId, automationId)] = d with { Decision = decision }; } return ValueTask.CompletedTask; }
+    public ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            if (!_deliveries.TryGetValue((eventId, automationId), out var d) || d.Status == ExternalEventDeliveryStatus.Skipped)
+                return ValueTask.FromResult(new EventFilterResult(null, "error", "delivery-unavailable"));
+            if (d.Decision is not null) return ValueTask.FromResult(d.Decision);
+            _deliveries[(eventId, automationId)] = d with { Decision = decision };
+            return ValueTask.FromResult(decision);
+        }
+    }
 
     public ValueTask MarkDeliveryAsync(
         Guid eventId,

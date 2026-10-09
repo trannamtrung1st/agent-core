@@ -61,9 +61,17 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
         receipts[eventId] = r with { Snapshotted = true }; } return ValueTask.CompletedTask; }
     public ValueTask<IReadOnlyList<CoreEventDelivery>> DeliveriesAsync(Guid eventId, CancellationToken ct = default)
     { lock (gate) return ValueTask.FromResult<IReadOnlyList<CoreEventDelivery>>(deliveries.Values.Where(d => d.EventId == eventId).OrderBy(d => d.Subscription.AutomationId).ToArray()); }
-    public ValueTask DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
-    { lock (gate) { if (deliveries.TryGetValue((eventId, automationId), out var d) && d.Decision is null)
-        deliveries[(eventId, automationId)] = d with { Decision = decision, Status = decision.Matched == true ? EventMatchStatus.Matched : decision.Matched == false ? EventMatchStatus.Filtered : EventMatchStatus.FilterError, Code = decision.Code }; } return ValueTask.CompletedTask; }
+    public ValueTask<EventFilterResult> DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
+    {
+        lock (gate)
+        {
+            if (!deliveries.TryGetValue((eventId, automationId), out var d)) return ValueTask.FromResult(new EventFilterResult(null, "error", "delivery-unavailable"));
+            if (d.Status is EventMatchStatus.PolicySkipped or EventMatchStatus.LoopSkipped or EventMatchStatus.BudgetSkipped) return ValueTask.FromResult(new EventFilterResult(null, "error", "delivery-unavailable"));
+            if (d.Decision is not null) return ValueTask.FromResult(d.Decision);
+            deliveries[(eventId, automationId)] = d with { Decision = decision, Status = decision.Matched == true ? EventMatchStatus.Matched : decision.Matched == false ? EventMatchStatus.Filtered : EventMatchStatus.FilterError, Code = decision.Code };
+            return ValueTask.FromResult(decision);
+        }
+    }
     public ValueTask FinishAsync(Guid eventId, Guid automationId, EventMatchStatus status, string? code = null, CancellationToken ct = default)
     { lock (gate) { if (deliveries.TryGetValue((eventId, automationId), out var d) && d.Status is EventMatchStatus.Pending or EventMatchStatus.Matched) deliveries[(eventId, automationId)] = d with { Status = status, Code = code }; } return ValueTask.CompletedTask; }
     public ValueTask<IReadOnlyList<CoreEventDelivery>> ActivityAsync(TriggerOwner owner, CancellationToken ct = default)
