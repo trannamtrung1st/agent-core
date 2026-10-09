@@ -19,7 +19,7 @@ describe('event filter testing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Test filter' }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Not matched'));
     expect(request).toHaveBeenCalledWith('owned-instance', 'automations/filter-test', 'POST', { expression: 'event.data.total < 100', event: sample });
-    
+
     fireEvent.change(screen.getByLabelText('Event filter expression'), { target: { value: 'event.data.total' } });
     fireEvent.click(screen.getByRole('button', { name: 'Test filter' }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('The expression must return true or false.'));
