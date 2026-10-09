@@ -172,6 +172,28 @@ public sealed class InvalidToolCallRecoveryTests
     }
 
     [Fact]
+    public void Invalid_frame_recovery_is_bounded_restorable_and_preserves_corrected_snapshot()
+    {
+        var first = new ModelToolCall("one", ToolCatalog.BrowserSnapshot, "{\"frameRef\":\"main\"}");
+        var second = first with { ArgumentsJson = "{\"frameRef\":\"guessed\"}" };
+        var recovery = new InvalidToolCallRecovery([]);
+        var receipt = recovery.Note(first, "{\"error\":\"invalid_frame\"}", out _);
+        receipt = recovery.Note(second, "{\"error\":\"invalid_frame\"}", out _);
+        Assert.NotNull(recovery.Refuse(first));
+        var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new(ModelRole.Tool, receipt, Name: ToolCatalog.BrowserSnapshot)]), 1, 0, 300000);
+        Assert.True(AgentRunToolCallCheckpoint.TryRead(checkpoint, out var messages));
+        var restored = new InvalidToolCallRecovery(messages!);
+        Assert.NotNull(restored.Refuse(second));
+        Assert.Null(restored.Refuse(first with { ArgumentsJson = "{}" }));
+        var stale = "{\"error\":\"stale_frame\"}";
+        Assert.Equal(stale, restored.Note(first, stale, out _));
+        restored.Note(first, restored.Refuse(first)!, out var exhausted);
+        Assert.False(exhausted);
+        restored.Note(first, restored.Refuse(first)!, out exhausted);
+        Assert.True(exhausted);
+    }
+
+    [Fact]
     public void Execution_facts_never_promote_untrusted_values_or_login_claims()
     {
         var receipts = new ModelMessage[]

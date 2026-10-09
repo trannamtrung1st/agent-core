@@ -22,15 +22,25 @@ internal sealed class GenericSsoFixture : IAsyncDisposable
     internal int ProtectedReads;
     internal GenericSsoFixture()
     {
-        _application = Listener(); _application.Start();
-        _identity = Listener(); _identity.Start();
+        _application = Listener();
+        try { _identity = Listener(); }
+        catch { _application.Close(); _stop.Dispose(); throw; }
         _servers = [Serve(_application, false), Serve(_identity, true)];
     }
     private static HttpListener Listener()
     {
-        using var socket = new TcpListener(IPAddress.Loopback, 0); socket.Start();
-        var port = ((IPEndPoint)socket.LocalEndpoint).Port;
-        var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); return listener;
+        // A released ephemeral port can be taken before HttpListener binds it.
+        // Retry fixture setup only; never retry a browser effect or loosen assertions.
+        for (var attempt = 0; ; attempt++)
+        {
+            using var socket = new TcpListener(IPAddress.Loopback, 0); socket.Start();
+            var port = ((IPEndPoint)socket.LocalEndpoint).Port;
+            var listener = new HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            socket.Stop();
+            try { listener.Start(); return listener; }
+            catch (HttpListenerException) when (attempt < 4) { listener.Close(); }
+            catch { listener.Close(); throw; }
+        }
     }
     private async Task Serve(HttpListener listener, bool identity)
     {

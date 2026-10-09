@@ -36,7 +36,7 @@ internal static class RunExecutionFacts
                 var outcome = root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String
                     ? error.GetString() switch
                     {
-                        "invalid" or "invalid_reference" or "ValidationError" => "invalid_arguments",
+                        "invalid" or "invalid_target" or "invalid_frame" or "invalid_reference" or "ValidationError" => "invalid_arguments",
                         "invalid_tool_strategy_blocked" => "invalid_strategy_blocked",
                         "forbidden" or "target_denied" or "user_intervention_required" => "policy_blocked",
                         "not_found" or "ambiguous_target" => "target_unresolved",

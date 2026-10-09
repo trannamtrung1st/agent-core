@@ -45,7 +45,7 @@ internal sealed class InvalidToolCallRecovery
             using var json = JsonDocument.Parse(result);
             if (json.RootElement.ValueKind != JsonValueKind.Object) return result;
             var invalid = json.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String
-                && error.GetString() is "invalid" or "invalid_target" or "ValidationError" or "invalid_tool_strategy_blocked";
+                && error.GetString() is "invalid" or "invalid_target" or "invalid_frame" or "ValidationError" or "invalid_tool_strategy_blocked";
             JsonElement outcome = default;
             var ineffectiveDiscovery = call.Name == ToolCatalog.CapabilitiesLoad && json.RootElement.TryGetProperty("outcome", out outcome)
                 && outcome.ValueKind == JsonValueKind.String && outcome.GetString() is "load_no_match" or "load_unavailable" or "load_already_projected" or "load_over_budget";
@@ -107,6 +107,9 @@ internal sealed class InvalidToolCallRecovery
             // Overloaded find calls differing only in guessed labels are the same malformed strategy.
             // Native lookup failures retain values so a corrected accessible name remains permitted.
             if (json.RootElement.ValueKind != JsonValueKind.Object) data = "non_object:" + json.RootElement.ValueKind;
+            else if (call.Name == ToolCatalog.BrowserSnapshot
+                && !BrowserToolArguments.TryRequest(Guid.Empty, call.Name, json.RootElement, out _, out var frameError) && frameError == "invalid_frame")
+                data = "frame_validation";
             else if (call.Name.StartsWith("browser.", StringComparison.Ordinal)
                 && BrowserToolArguments.InvalidTargetReason(json.RootElement) is { } reason)
                 data = "target_validation:" + reason;
