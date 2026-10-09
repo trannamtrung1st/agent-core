@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Alert, Button, Collapse, Flex, Form, InputNumber, Select, Spin, Typography, theme } from 'antd';
 import { getExecutionBudgets, setExecutionBudgets, type ExecutionBudgetPolicy, type ExecutionBudgetProfile } from '../../services/adminApi';
 import type { DefinitionCandidate } from './definitionCandidate';
@@ -9,6 +9,7 @@ const limits = { maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 };
 const fields = ['maxSteps', 'durationSeconds', 'perToolSeconds'] as const;
 const fieldLabels = { maxSteps: 'Steps', durationSeconds: 'Duration (seconds)', perToolSeconds: 'Per-tool timeout (seconds)' };
 const minimums = { maxSteps: 8, durationSeconds: 60, perToolSeconds: 1 };
+const emptyPolicy: ExecutionBudgetPolicy = {};
 function preset(kind: typeof classes[number], value: number): ExecutionBudgetProfile {
   const [steps, seconds] = kind === 'interactiveBrowser' ? [48, 300] : kind === 'unattendedBoundBrowser' ? [32, 240] : [24, 180];
   return { maxSteps: steps * (value + 1), durationSeconds: seconds * (value + 1), perToolSeconds: 30, preset: value };
@@ -21,7 +22,7 @@ export function validExecutionBudgets(policy: ExecutionBudgetPolicy) {
     && Number.isInteger(p.durationSeconds) && p.durationSeconds >= 60 && p.durationSeconds <= limits.durationSeconds
     && Number.isInteger(p.perToolSeconds) && p.perToolSeconds >= 1 && p.perToolSeconds <= limits.perToolSeconds; });
 }
-function BudgetFields({ value, inherited, instance, disabled, onChange }: {
+const BudgetFields = memo(function BudgetFields({ value, inherited, instance, disabled, onChange }: {
   value: ExecutionBudgetPolicy; inherited?: ExecutionBudgetPolicy; instance?: boolean; disabled?: boolean; onChange: (v: ExecutionBudgetPolicy) => void;
 }) {
   const { token } = theme.useToken();
@@ -58,13 +59,21 @@ function BudgetFields({ value, inherited, instance, disabled, onChange }: {
     })}
     {!validExecutionBudgets(value) && <Alert showIcon type="error" title="Use whole values within the host limits before saving." />}
   </Flex>;
-}
+});
 export function DefinitionExecutionBudgets({ candidate, busy, readOnly, onChange }: {
   candidate: DefinitionCandidate; busy: boolean; readOnly?: boolean; onChange: (v: DefinitionCandidate) => void;
 }) {
+  // Other draft fields change frequently. Keep this control group stable while
+  // merging budget edits into the latest candidate, rather than an older draft.
+  const latest = useRef({ candidate, onChange });
+  latest.current = { candidate, onChange };
+  const updateBudget = useCallback((executionBudgets: ExecutionBudgetPolicy) => {
+    const current = latest.current;
+    current.onChange({ ...current.candidate, executionBudgets });
+  }, []);
   return <section className="admin-draft-form-section" aria-label="Execution budgets"><Typography.Title level={5}>Execution budgets</Typography.Title>
-    <BudgetFields value={(candidate.executionBudgets as ExecutionBudgetPolicy | null) ?? {}} disabled={busy || readOnly}
-      onChange={v => onChange({ ...candidate, executionBudgets: v })} />
+    <BudgetFields value={(candidate.executionBudgets as ExecutionBudgetPolicy | null) ?? emptyPolicy} disabled={busy || readOnly}
+      onChange={updateBudget} />
   </section>;
 }
 export function InstanceExecutionBudgets({ instanceId, archived, onUpdated }: { instanceId: string; archived: boolean; onUpdated: () => void }) {
@@ -97,7 +106,7 @@ export function InstanceExecutionBudgets({ instanceId, archived, onUpdated }: { 
     <Typography.Title level={5} style={{ margin: 0 }}>Execution budgets</Typography.Title>
     {error && <Alert showIcon type="error" title={error} action={<Button onClick={() => { preserveDraft.current = !!dirty; setAttempt(v => v + 1); }}>Reload</Button>} />}
     {!loaded ? !error && <Spin aria-label="Loading execution budgets" /> : <>
-      <BudgetFields value={value} inherited={loaded.definitionDefaults ?? {}} instance disabled={busy || archived} onChange={setValue} />
+      <BudgetFields value={value} inherited={loaded.definitionDefaults ?? emptyPolicy} instance disabled={busy || archived} onChange={setValue} />
       {dirty && <Typography.Text type="secondary">Unsaved budget changes</Typography.Text>}
       <Flex gap={token.paddingSM} wrap><Button type="primary" loading={busy} disabled={!dirty || archived || !validExecutionBudgets(value)} onClick={() => void save()}>Save execution budgets</Button>
         <Button disabled={!dirty || busy} onClick={() => setValue(loaded.executionBudgets ?? {})}>Discard changes</Button></Flex>

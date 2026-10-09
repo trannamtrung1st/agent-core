@@ -22,6 +22,17 @@ describe('execution budgets', () => {
     expect(screen.getByText(/96 steps · 10 minutes · 30s per tool · Definition default/)).toBeVisible();
     expect(screen.getByLabelText('Interactive Browser profile')).toBeInTheDocument();
   });
+  it('preserves the latest unrelated Definition edits when changing a budget', async () => {
+    const first = { identity: { name: 'Original' }, executionBudgets: { interactiveBrowser: profile } };
+    const previousChange = vi.fn(); const currentChange = vi.fn();
+    const { rerender } = render(<ConfigProvider><App><DefinitionExecutionBudgets candidate={first} busy={false} onChange={previousChange} /></App></ConfigProvider>);
+    rerender(<ConfigProvider><App><DefinitionExecutionBudgets candidate={{ ...first, identity: { name: 'Updated' } }} busy={false} onChange={currentChange} /></App></ConfigProvider>);
+    fireEvent.mouseDown(screen.getByLabelText('Interactive Browser profile'));
+    fireEvent.click(await screen.findByText('Deep Workflow'));
+    expect(previousChange).not.toHaveBeenCalled();
+    expect(currentChange).toHaveBeenCalledWith(expect.objectContaining({ identity: { name: 'Updated' },
+      executionBudgets: expect.objectContaining({ interactiveBrowser: expect.objectContaining({ maxSteps: 144 }) }) }));
+  });
   it('inherits each class independently, retains a conflicting draft and permits discard', async () => {
     vi.mocked(api.getExecutionBudgets).mockResolvedValue({ revision: 3, executionBudgets: { interactiveBrowser: profile }, definitionDefaults: null });
     vi.mocked(api.setExecutionBudgets).mockRejectedValue(new Error('The Instance changed. Reload and review your changes before saving.'));
