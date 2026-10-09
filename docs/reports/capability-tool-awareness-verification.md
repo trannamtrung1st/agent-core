@@ -41,3 +41,5 @@ The completed workflow log is `/tmp/capability-awareness-ci-final.log`. The subs
 ## Acceptance limits
 
 The new workflow evidence uses a deterministic scripted model and actual Chromium, not a live model or private UAT site. No additional paid inference trials were performed. The earlier native-browser proposal's live-model comparison acceptance remains separate and incomplete. Existing running backend processes must use the rebuilt implementation before exhibiting this correction; Definition authority and active credential bindings are unchanged.
+
+Subsequent user-authorized checks against current Real-profile data, additional observation fitting corrections and owner Skill repairs are recorded separately in [Real UAT browser model verification](real-uat-browser-model-verification.md). They do not retroactively change the Synthetic evidence or exact CI commit recorded above.

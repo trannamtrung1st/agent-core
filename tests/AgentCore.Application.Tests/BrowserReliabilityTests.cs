@@ -9,6 +9,30 @@ namespace AgentCore.Application.Tests;
 
 public sealed class BrowserReliabilityTests
 {
+    [Fact]
+    public async Task Scoped_native_table_keeps_values_that_fit_the_serialized_result_budget()
+    {
+        var rows = string.Join("\n", Enumerable.Range(1, 30)
+            .Select(i => $"    - row \"Sensor {i} 界 value {i * 10} Good\":\n      - cell \"Sensor {i}\"\n      - cell \"{i * 10}\""));
+        var browser = new DenseBrowser
+        {
+            Snapshot = new("https://example.test/asset", "Asset", "- table:\n" + rows, false, [],
+                SnapshotId: "snap_table", TabRef: "pg_table")
+        };
+        var definition = await CapabilityProjectionTests.Definition(ToolCatalog.BrowserSnapshot);
+        var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
+        const int budget = 2600;
+        var result = await executor.ExecuteAsync(definition, Guid.NewGuid(),
+            new("table", ToolCatalog.BrowserSnapshot, "{\"target\":{\"by\":\"role\",\"value\":\"table\"}}"), budget,
+            admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
+        using var json = JsonDocument.Parse(result.Text);
+        var content = json.RootElement.GetProperty("content").GetString()!;
+        Assert.Contains("Sensor 10", content);
+        Assert.DoesNotContain('\uFFFD', content);
+        Assert.True(json.RootElement.GetProperty("hasMore").GetBoolean());
+        Assert.InRange(Encoding.UTF8.GetByteCount(result.Text), budget - 32, budget);
+    }
+
     [Theory]
     [InlineData(512)]
     [InlineData(1024)]
@@ -71,7 +95,7 @@ public sealed class BrowserReliabilityTests
 
     private sealed class DenseBrowser : IBrowser
     {
-        public BrowserSnapshot Snapshot { get; } = new("https://example.test/", "Dense", new string('界', 3000), true,
+        public BrowserSnapshot Snapshot { get; init; } = new("https://example.test/", "Dense", new string('界', 3000), true,
             Enumerable.Range(0, 2000).Select(i => new BrowserElement(new BrowserTarget("role", "button", Name: "Entry " + i), "button", "Entry " + i, ["click"])).ToArray(),
             SnapshotId: "snap_dense", TabRef: "pg_dense");
         public bool IsAvailable => true;

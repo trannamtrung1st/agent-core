@@ -42,16 +42,21 @@ internal static class BrowserResultProjection
             }
             if (Bytes(minimal) > budget) return null; // A metadata envelope is impossible in this headroom.
         }
-        var reserve = Math.Max(0, budget - Bytes(minimal));
         if (key == "targets")
         {
-            root["content"] = ToolJsonResults.ClipUtf8Prefix(content, reserve / 8);
-            // JSON escaping may use more bytes than the decoded strings.
-            while (Bytes(root.ToJsonString()) > budget)
+            // Measure the serialized envelope, rather than reserving eight bytes for
+            // every content byte. Native ARIA text is the observation itself; that
+            // conservative estimate hid table values even in narrowly scoped reads.
+            var low = 0;
+            var high = Encoding.UTF8.GetByteCount(content);
+            while (low < high)
             {
-                root["content"] = ToolJsonResults.ClipUtf8Prefix(root["content"]!.GetValue<string>(), reserve / 16);
-                reserve /= 2;
+                var middle = low + (high - low + 1) / 2;
+                root["content"] = ToolJsonResults.ClipUtf8Prefix(content, middle);
+                if (Bytes(root.ToJsonString()) <= budget) low = middle;
+                else high = middle - 1;
             }
+            root["content"] = ToolJsonResults.ClipUtf8Prefix(content, low);
         }
         var selected = (JsonArray)root[key]!;
         foreach (var entry in entries)
