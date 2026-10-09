@@ -8,7 +8,7 @@ public static class BackgroundSessionAdmissionFactory
 {
     public static (SessionSnapshot Session, AgentRun Run) ForImmediate(Guid sessionId, Guid entryId,
         Guid activationId, Guid runId, Guid responseId, SessionSnapshot parent, AgentRun source,
-        string toolCallId, string objective, string? title, bool reportCompletion, DateTimeOffset now)
+        string toolCallId, string objective, string? title, bool reportCompletion, DateTimeOffset now, EffectiveExecutionBudget? budget = null)
     {
         var entry = new ConversationEntry(entryId, 1, source.Admission.Activation.SourceEventId, ConversationRole.User,
             objective, null, EntryStatus.Completed, SessionMode.Text, 0, objective.Length, now);
@@ -16,7 +16,7 @@ public static class BackgroundSessionAdmissionFactory
         var activation = new Activation(activationId, sessionId, ActivationKind.ImmediateBackground, [entryId],
             entry.SourceEventId, null, parent.SessionId, source.AgentRunId, key, now);
         var run = AgentRun.Create(runId, source.Owner, new(activation, source.DefinitionId, source.DefinitionVersion,
-            source.PinnedPersona, responseId, AgentRunOutputContract.BackgroundOutcome), source.PinnedModel, AgentRunLimits.DefaultMaxAttempts, now,
+            source.PinnedPersona, responseId, AgentRunOutputContract.BackgroundOutcome, budget), source.PinnedModel, AgentRunLimits.DefaultMaxAttempts, now,
             source.PinnedSkillCatalog, source.PinnedSkillCatalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var origin = new SessionOrigin(SessionOriginKind.ImmediateBackground, parent.SessionId, source.AgentRunId,
             runId, reportCompletionToOrigin: reportCompletion,
@@ -38,7 +38,8 @@ public static class BackgroundSessionAdmissionFactory
     {
         var entry = new ConversationEntry(entryId, 1, activationId, ConversationRole.User, objective, null, EntryStatus.Completed, SessionMode.Text, 0, objective.Length, now);
         var activation = new Activation(activationId, sessionId, ActivationKind.ManualBackground, [entryId], activationId, null, null, null, key, now);
-        var run = AgentRun.Create(runId, new(instance.InstanceId, profileId), new(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome),
+        var run = AgentRun.Create(runId, new(instance.InstanceId, profileId), new(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome,
+                ExecutionBudgetResolver.Resolve(definition, instance.ExecutionBudgets, false)),
             model, AgentRunLimits.DefaultMaxAttempts, now, skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var session = new SessionSnapshot(1, sessionId, 1, definition, SessionMode.Text, null, SessionStatus.Created, [entry], "", 0, null,
             profileId, now, now, instance.InstanceId, Title: title, LastEntrySequence: 1, PinnedPersona: persona,
@@ -50,7 +51,7 @@ public static class BackgroundSessionAdmissionFactory
     public static (SessionSnapshot Session, AgentRun Run) ForOccurrence(Guid sessionId, Guid entryId,
         Guid activationId, Guid agentRunId, Guid responseId, TriggerOccurrence occurrence,
         AgentDefinition definition, AgentIdentity persona, long personaRevision, ExecutionModelPin model,
-        IReadOnlyList<EffectiveSkill> skills, DateTimeOffset admittedAtUtc, string? title = null)
+        IReadOnlyList<EffectiveSkill> skills, DateTimeOffset admittedAtUtc, string? title = null, EffectiveExecutionBudget? budget = null)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
         var kind = occurrence.SourceKind switch
@@ -71,7 +72,7 @@ public static class BackgroundSessionAdmissionFactory
             occurrence.OccurrenceId, null, null, occurrence.DedupeKey, admittedAtUtc);
         var run = AgentRun.Create(agentRunId,
             new AgentRunOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
-            new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome),
+            new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget),
             new AgentRunModelPin(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc, pinnedSkillCatalog: skills,
             activeSkillKeys: skills.Where(skill => skill.Projection == SkillProjection.Always)

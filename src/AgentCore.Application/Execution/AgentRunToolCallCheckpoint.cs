@@ -134,19 +134,22 @@ public static class AgentRunToolCallCheckpoint
             throw new ArgumentException("Wait result was already appended or its call is missing.");
         var payload = JsonSerializer.Serialize(document with { Messages = document.Messages.Append(MessageDto.From(
             new ModelMessage(ModelRole.Tool, result, ToolCallId: toolCallId, Name: "execution.wait"))).ToArray() }, CheckpointJson);
-        return new AgentRunCheckpoint(payload, checkpoint.StepCount, checkpoint.OutputBytes + Encoding.UTF8.GetByteCount(result), checkpoint.RemainingOverallBudgetMs);
+        return new AgentRunCheckpoint(payload, checkpoint.StepCount, checkpoint.OutputBytes + Encoding.UTF8.GetByteCount(result), checkpoint.RemainingOverallBudgetMs, checkpoint.ActiveExecutionMs, checkpoint.BudgetRecordedAtUtc);
     }
 
     public static int ToolResultBudget(IReadOnlyList<ModelMessage> messages, ModelToolCall call,
         bool observationRequired, string? blockedActionHash, TriggerKind kind = TriggerKind.ScheduledOccurrence,
-        IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null)
+        IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, int cleanupReserve = 0)
     {
+        var compacted = messages.ToList();
+        BrowserSnapshotCompaction.Compact(compacted);
+        messages = compacted;
         var withResult = messages.Append(new ModelMessage(ModelRole.Tool, string.Empty,
             ToolCallId: call.Id, Name: call.Name)).ToArray();
         var overhead = Encoding.UTF8.GetByteCount(Write(withResult, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState));
         // A UTF-8 byte can expand to six bytes in a JSON string (for example, a control character).
         // Tool adapters receive a conservative text budget; admission still checks the exact document.
-        return Math.Max(0, AgentRunLimits.MaxCheckpointBytes - overhead - RecoveryHeadroom(blockedActionHash) - CompletionReserve(kind) - FinishRequiredReserve()) / 6;
+        return Math.Max(0, AgentRunLimits.MaxCheckpointBytes - overhead - RecoveryHeadroom(blockedActionHash) - CompletionReserve(kind) - FinishRequiredReserve() - cleanupReserve) / 6;
     }
 
     // Recovery may need to persist a SHA-256 blocked-action hash without replaying an uncertain browser effect.

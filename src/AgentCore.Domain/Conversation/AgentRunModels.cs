@@ -18,7 +18,7 @@ public static class AgentRunLimits
     public const int MaxImmediateChildren = 2;
     public const int MaxActiveBackgroundRuns = 8;
     public const int MaxBackgroundObjectiveCharacters = 4000;
-    public const int MaxCheckpointBytes = 65_536;
+    public const int MaxCheckpointBytes = 262_144;
     public const int MaxPreviewCharacters = 12_000;
     public const int MaxPreparedActionBytes = 8_192;
     public const int MaxToolNameCharacters = 128;
@@ -176,9 +176,9 @@ public sealed class AgentRunProgress
 
 public sealed class AgentRunCheckpoint
 {
-    public AgentRunCheckpoint(string payloadJson, int stepCount, long outputBytes, int remainingOverallBudgetMs)
+    public AgentRunCheckpoint(string payloadJson, int stepCount, long outputBytes, int remainingOverallBudgetMs, int? activeExecutionMs = null, DateTimeOffset? budgetRecordedAtUtc = null)
     {
-        if (stepCount < 0 || outputBytes < 0 || remainingOverallBudgetMs < 0)
+        if (stepCount < 0 || outputBytes < 0 || remainingOverallBudgetMs < 0 || activeExecutionMs < 0)
         {
             throw new ArgumentException("Checkpoint counters cannot be negative.");
         }
@@ -187,6 +187,9 @@ public sealed class AgentRunCheckpoint
         StepCount = stepCount;
         OutputBytes = outputBytes;
         RemainingOverallBudgetMs = remainingOverallBudgetMs;
+        AgentRunTime.RequireUtc(budgetRecordedAtUtc, "Budget clock");
+        ActiveExecutionMs = activeExecutionMs;
+        BudgetRecordedAtUtc = budgetRecordedAtUtc;
     }
 
     public string PayloadJson { get; }
@@ -196,6 +199,15 @@ public sealed class AgentRunCheckpoint
     public long OutputBytes { get; }
 
     public int RemainingOverallBudgetMs { get; }
+    public int? ActiveExecutionMs { get; }
+    public DateTimeOffset? BudgetRecordedAtUtc { get; }
+    public AgentRunCheckpoint StampBudgetClock(DateTimeOffset? atUtc) => new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs, ActiveExecutionMs, atUtc);
+    public AgentRunCheckpoint PauseBudgetClock(DateTimeOffset atUtc)
+    {
+        if (BudgetRecordedAtUtc is not { } recorded || ActiveExecutionMs is not { } active) return this;
+        var elapsed = (int)Math.Clamp((atUtc - recorded).TotalMilliseconds, 0, RemainingOverallBudgetMs);
+        return new(PayloadJson, StepCount, OutputBytes, RemainingOverallBudgetMs - elapsed, checked(active + elapsed));
+    }
 }
 
 public enum AgentRunOutcomeKind

@@ -1,3 +1,4 @@
+import { DefinitionExecutionBudgets } from "./ExecutionBudgetsSection";
 import { DefinitionSkillsSection } from './DefinitionSkillsSection';
 import { useEffect, useId, useState } from "react";
 import { Alert, Button, Flex, Input, InputNumber, Segmented, Select, Switch, Typography } from "antd";
@@ -257,6 +258,8 @@ function DefinitionCandidateForm({
           />
         </label>
       </section>
+
+      <DefinitionExecutionBudgets candidate={candidate} busy={busy} readOnly={readOnly} onChange={onCandidateChange} />
 
       {showSkills && <DefinitionSkillsSection candidate={candidate} busy={busy} readOnly={readOnly} onChange={onCandidateChange} />}
 

@@ -292,16 +292,17 @@ Unless a later item records a tested change:
 | Extraction output | 256 KiB |
 | Parser timeout | 10 s |
 | Parser memory | 256 MiB |
-| Tool steps, standard | 24 max |
-| Tool steps, interactive browser | 48 max |
-| Tool steps, unattended bound browser | 32 max |
-| Per-tool timeout | 30 s |
-| Overall tool deadline, standard | 180 s |
-| Overall tool deadline, interactive browser | 300 s |
-| Requested cleanup reserve, interactive browser | 60 s before the final 30 s; native dialog/observation/action/closure subset, unchanged authorization |
-| Reply finalization reserve, interactive browser | Last 30 s within the 300 s budget; no new tools; 2,048 output tokens max |
-| Overall tool deadline, unattended bound browser | 240 s |
+| Tool steps, standard | Default 24; configurable up to host ceiling 144 |
+| Tool steps, interactive browser | Standard 48; Extended 96; Deep Workflow 144 |
+| Tool steps, unattended bound browser | Default 32; independent class profile |
+| Per-tool timeout | Default/host maximum 30 s; custom 1–30 s |
+| Overall active execution deadline, standard | Default 180 s; host ceiling 900 s |
+| Overall active execution deadline, interactive browser | Standard 300 s; Extended 600 s; Deep Workflow 900 s |
+| Requested cleanup reserve, interactive browser | 60 s plus final 30 s inside total; 4–12 steps derived from profile; 8 KiB checkpoint headroom; authorized hover/scroll/wait/verify/key interactions included |
+| Reply finalization reserve, interactive browser | Last 30 s inside admitted total; no new tools; 2,048 output tokens max |
+| Overall active execution deadline, unattended bound browser | Default 240 s; independent class profile |
 | Tool output | 8 MiB |
+| Durable Run checkpoint | 256 KiB system ceiling after measured compaction |
 | Sandbox memory | 64 MiB |
 | Sandbox CPUs | 0.5 |
 | Sandbox PIDs | 32 |

@@ -51,7 +51,7 @@ internal static class AdminHttpMapping
             instance.PersonaRevision,
             ToPersona(instance.Persona),
             instance.UnattendedModelCatalogKey,
-            instance.UnattendedReasoningEffort);
+            instance.UnattendedReasoningEffort, ExecutionBudgets: instance.ExecutionBudgets is null ? null : JsonSerializer.SerializeToElement(instance.ExecutionBudgets, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
 
     public static AdminEffectiveConfigurationResponse ToEffectiveConfiguration(AdminEffectiveConfiguration config) =>
         new(

@@ -12,6 +12,7 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
     public const string RecordResource = "AgentCore.Infrastructure.Browser.Fixture.record.html";
     public const string IsolateResource = "AgentCore.Infrastructure.Browser.Fixture.isolate.html";
     public const string ChallengeResource = "AgentCore.Infrastructure.Browser.Fixture.challenge.html";
+    public const string BudgetWorkflowResource = "AgentCore.Infrastructure.Browser.Fixture.budget-workflow.html";
     public const string CredentialLoginResource = "AgentCore.Infrastructure.Browser.Fixture.credential-login.html";
     public const string LoginResource = "AgentCore.Infrastructure.Browser.Fixture.login.html";
     public const string SignupResource = "AgentCore.Infrastructure.Browser.Fixture.signup.html";
@@ -246,6 +247,12 @@ internal sealed class LoopbackBrowserFixtureHost : IAsyncDisposable
             if (string.Equals(path, "/challenge", StringComparison.Ordinal))
             {
                 await WriteResourceAsync(context, ChallengeResource, 200).ConfigureAwait(false);
+                return;
+            }
+
+            if (string.Equals(path, "/budget-workflow", StringComparison.Ordinal))
+            {
+                await WriteResourceAsync(context, BudgetWorkflowResource, 200).ConfigureAwait(false);
                 return;
             }
 

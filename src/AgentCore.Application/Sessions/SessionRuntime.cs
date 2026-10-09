@@ -1812,7 +1812,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             PinModelSelectionIfMissing();
             var run = AgentCore.Application.Execution.AgentRunAdmissionFactory.ForAdmittedSignal(
                 _ids.NewId(), _ids.NewId(), input.ResponseId, _snapshot, input.Trigger, _time.GetUtcNow(),
-                input.SkillCatalog ?? [], ToolResources.IsOccurrence(input.Trigger.Kind) ? _activeOccurrencePin : null);
+                input.SkillCatalog ?? [], ToolResources.IsOccurrence(input.Trigger.Kind) ? _activeOccurrencePin : null,
+                await _tools.ResolveExecutionBudgetAsync(_snapshot.AgentInstanceId, _snapshot.Definition, false, cancellationToken));
             _agentRunAdmissionPending = true;
             RequestPersist(_snapshot, admittedRun: run, onAdmitted: committed => run = committed, then: async ct =>
             {
@@ -2635,26 +2636,35 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, cancellationToken), _tools.ConfigurationGate);
         await using var backgroundBrowser = IsInitialBackgroundRun
             ? await _tools.OpenOccurrenceBrowserAsync(SessionId, _snapshot.AgentInstanceId, cancellationToken).ConfigureAwait(false) : null;
-        var budget = ToolExecutionBudget.Resolve(new ToolBudgetSignal(
+        var budget = executionRun?.Admission.ExecutionBudget is { } pinnedBudget ? ToolExecutionBudget.FromPin(pinnedBudget)
+            : ToolExecutionBudget.Resolve(new ToolBudgetSignal(
             InteractiveBrowser: trigger.Kind == TriggerKind.UserTurn
                 && ToolCatalog.AuthorizesBrowser(budgetTools),
             PersistentBrowserLease: backgroundBrowser?.PersistentBrowserLease == true));
-        var toolDeadline = request.Tools is { Count: > 0 };
+        var toolDeadline = request.Tools is { Count: > 0 } || executionRun?.Admission.ExecutionBudget is not null;
         var remainingBudget = checkpoint is null ? budget.Overall
             : TimeSpan.FromMilliseconds(checkpoint.RemainingOverallBudgetMs);
+        var activeStartedAt = _time.GetUtcNow();
+        var pausedTime = TimeSpan.Zero;
+        var previousActiveMs = checkpoint?.ActiveExecutionMs ?? (checkpoint is null ? 0 : Math.Max(0, (int)budget.Overall.TotalMilliseconds - checkpoint.RemainingOverallBudgetMs));
+        int ActiveExecutionMs() => previousActiveMs + Math.Max(0, (int)(_time.GetUtcNow() - activeStartedAt - pausedTime).TotalMilliseconds);
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, remainingBudget) : null;
         var overallDeadline = toolDeadline ? _time.GetUtcNow() + remainingBudget : (DateTimeOffset?)null;
         var generateToken = toolDeadline ? overallCts.Token : cancellationToken;
         var finalizationReason = RunFinalization.Restore(CheckpointSuffix());
         var cleanupPhase = CheckpointSuffix().Any(m => m.Role == ModelRole.System && m.Text == RunFinalization.CleanupMarker);
+        var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
+            ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
+        var cleanupSteps = cleanupRequested ? budget.CleanupStepReserve : 0;
         async Task BeginCleanupAsync()
         {
             if (cleanupPhase || finalizationReason is not null || budget.CleanupReserve == TimeSpan.Zero
-                || overallDeadline - _time.GetUtcNow() > budget.CleanupReserve + budget.FinalizationReserve) return;
+                || overallDeadline - _time.GetUtcNow() > budget.CleanupReserve + budget.FinalizationReserve
+                    && steps < budget.MaxSteps - cleanupSteps) return;
             cleanupPhase = true;
             messages.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker));
-            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
         }
         using var workCts = CancellationTokenSource.CreateLinkedTokenSource(generateToken);
         using ITimer? workTimer = toolDeadline && budget.FinalizationReserve > TimeSpan.Zero
@@ -2677,10 +2687,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             foreach (var unexecuted in AgentRunToolCallCheckpoint.PendingCalls(CheckpointSuffix()))
                 messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"finalization_reserve\"}", ToolCallId: unexecuted.Id, Name: unexecuted.Name));
             messages.Add(new ModelMessage(ModelRole.System, RunFinalization.Marker + reason));
-            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
         }
         try
         {
+            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
+                overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
             while (!generateToken.IsCancellationRequested)
             {
                 await BeginCleanupAsync().ConfigureAwait(false);
@@ -2936,7 +2948,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         _protocolRepair = "attempted";
                         RuntimeTelemetry.RecordResponseRepair(repairReason!, "started", repairPhase);
                         await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
-                            overallDeadline, generateToken, repairReason).ConfigureAwait(false);
+                            overallDeadline, generateToken, repairReason, ActiveExecutionMs()).ConfigureAwait(false);
                         retryGeneration = true;
                         break;
                     }
@@ -2955,6 +2967,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         retryGeneration = true;
                         break;
                     }
+                    if (evt is ModelFailed or ModelCompleted)
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
+                            overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
                     if (evt is ModelFailed { Failure.Code: ProviderErrorCode.Cancelled } providerCancelled && !cancellationToken.IsCancellationRequested)
                     {
                         await MailboxModelAsync(cause, request.ResponseId, providerCancelled with
@@ -3065,14 +3080,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                 if (steps + (resumingBatch ? 0 : pending.Count) > budget.MaxSteps)
                 {
-                    await MailboxModelAsync(
-                            cause,
-                            request.ResponseId,
-                            new ModelFailed(new ProviderFailure(
-                                ProviderErrorCode.InvalidRequest,
-                                "Tool step limit reached.")),
-                            overallCts.Token)
-                        .ConfigureAwait(false);
+                    if (finalizationReason is null && !publishedVisible)
+                    {
+                        await BeginFinalizationAsync("stepLimit").ConfigureAwait(false);
+                        continue;
+                    }
+                    await MailboxModelAsync(cause, request.ResponseId,
+                        new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest,
+                            "Tool step limit reached.", FailureReason: "stepLimit")), overallCts.Token).ConfigureAwait(false);
                     return;
                 }
 
@@ -3089,21 +3104,33 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                 if (!resumingBatch)
                 {
+                    // Pending identity/arguments must fit before any effect is admitted.
+                    // A refused, uncommitted batch cannot be replayed after recovery.
+                    var proposed = CheckpointSuffix().Append(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending)).ToArray();
+                    var admissionReserve = AgentRunToolCallCheckpoint.CompletionReserve(trigger.Kind)
+                        + (!cleanupPhase && cleanupRequested ? budget.CleanupCheckpointReserve : 0);
+                    if (!AgentRunToolCallCheckpoint.TryWriteWithReserve(proposed, false, null, admissionReserve,
+                            out _, _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0))
+                    {
+                        if (cleanupRequested && !cleanupPhase)
+                        {
+                            cleanupPhase = true;
+                            messages.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker));
+                            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
+                                overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                        }
+                        else await BeginFinalizationAsync("checkpointCapacity").ConfigureAwait(false);
+                        continue;
+                    }
                     messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
                     steps += pending.Count;
                 }
-                await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+                await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
                 var allowedIntermediate = _intermediateMessagingAllowed;
                 var substantiveWorkInBatch = false;
                 foreach (var call in pending)
                 {
                     await BeginCleanupAsync().ConfigureAwait(false);
-                    if (cleanupPhase && !RunFinalization.CleanupTool(call.Name))
-                    {
-                        messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"cleanup_reserve\"}", ToolCallId: call.Id, Name: call.Name));
-                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
-                        continue;
-                    }
                     if (!await AdmitToolActivityAsync(
                                 cause,
                                 request.ResponseId,
@@ -3123,21 +3150,35 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             : "{\"completed\":true,\"recovered\":true,\"message\":\"The action completed before recovery; it was not repeated.\"}";
                         messages.Add(new ModelMessage(ModelRole.Tool, recovered, ToolCallId: call.Id, Name: call.Name));
                         outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(recovered));
-                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                         continue;
                     }
+                    if (cleanupPhase && !RunFinalization.CleanupTool(call.Name))
+                    {
+                        messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"cleanup_reserve\"}", ToolCallId: call.Id, Name: call.Name));
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                        continue;
+                    }
                     var checkpointBudget = AgentRunToolCallCheckpoint.ToolResultBudget(CheckpointSuffix(), call,
-                            _boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate, _boundAgentRun?.SideEffect.ActionHash, trigger.Kind, _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0);
+                            _boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate, _boundAgentRun?.SideEffect.ActionHash, trigger.Kind, _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0,
+                            cleanupReserve: !cleanupPhase && cleanupRequested ? budget.CleanupCheckpointReserve : 0);
                     var resultBudget = Math.Min(ToolLimits.MaxOutputBytes - outputBytes, checkpointBudget);
                     if (call.Name != ToolCatalog.WorkComplete && (resultBudget < 256 || checkpointCapacityReached))
                     {
                         // Refuse before dispatch: no effect can occur without room for its durable result.
-                        checkpointCapacityReached = true;
+                        var capacityReason = ToolLimits.MaxOutputBytes - outputBytes < 256 ? "outputLimit" : "checkpointCapacity";
+                        if (!cleanupPhase && cleanupRequested && capacityReason == "checkpointCapacity")
+                        {
+                            cleanupPhase = true;
+                            messages.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker));
+                        }
+                        else checkpointCapacityReached = true;
                         var refusal = AgentRunToolCallCheckpoint.FinishRequired;
                         messages.Add(new ModelMessage(ModelRole.Tool, refusal, ToolCallId: call.Id, Name: call.Name));
                         outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(refusal));
-                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                        if (checkpointCapacityReached) await BeginFinalizationAsync(capacityReason).ConfigureAwait(false);
                         continue;
                     }
                     var operationId = _ids.NewId();
@@ -3367,6 +3408,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 if (!preparedFailed
                                     && policy == ToolPolicyDecision.RequireApproval)
                                 {
+                                    var approvalWaitStarted = _time.GetUtcNow();
                                     var pausedOverallRemaining = PauseToolClock(overallTimer, overallDeadline);
                                     workTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
                                     cleanupTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
@@ -3394,6 +3436,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     }
                                     finally
                                     {
+                                        pausedTime += _time.GetUtcNow() - approvalWaitStarted;
                                         overallDeadline = ResumeToolClock(
                                             overallTimer,
                                             overallCts,
@@ -3645,7 +3688,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         Parts: executionResult.Parts,
                         ToolCallId: call.Id,
                         Name: call.Name));
-                    await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken).ConfigureAwait(false);
+                    await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
                     if (effectFenced)
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                     if (call.Name.StartsWith("browser.", StringComparison.Ordinal) && BrowserDialogPending(executionResult.Text)

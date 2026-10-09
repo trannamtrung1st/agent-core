@@ -154,3 +154,7 @@ Native browser cleanup now gives actionable pending-dialog recovery, confirms ex
 The final native reliability follow-up suppresses ordinary browser calls during an observed modal, preserves authorized recovery and bounds equivalent blocked failures through existing checkpoint/finalization behavior. Native dialog cancellation, closed-page and successive-dialog regressions use actual Chromium. [Verification](docs/reports/browser-blocked-dialog-recovery-verification.md) separates reproduced defects from the historical AHI trace and records local/hosted status.
 
 The scoped [native browser final reliability follow-up](docs/reports/browser-final-reliability-verification.md) tracks execution-aware Skill compatibility, permitted iframe-root observations, strict close repair and separate live-model acceptance evidence.
+
+## Configurable execution budgets
+
+Definition defaults and independent Instance overrides select bounded Standard, Interactive Browser and Unattended Bound Browser profiles. Each Run pins its effective limits; changes apply to the next Run, including the next message of an existing Session. Requested cleanup has coordinated time, step, checkpoint and reply reserves, and Activity separates verified cleanup from browser closure. See [the verification report](docs/reports/execution-budget-cleanup-verification.md) and [resource limits](docs/10-technology-decisions.md#planned-resource-limits).

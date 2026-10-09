@@ -44,7 +44,8 @@ public sealed record AdminEffectiveConfigurationResponse(
     AdminDurableExecutionEligibilityResponse DurableExecutionEligibility,
     string? UnattendedModelCatalogKey = null,
     string? UnattendedReasoningEffort = null,
-    AdminBrowserConfigurationResponse? Browser = null);
+    AdminBrowserConfigurationResponse? Browser = null,
+    System.Text.Json.JsonElement? ExecutionBudgets = null);
 
 public sealed record AdminPersonaResponse(string Name, string Role, string Description, string Tone);
 
@@ -301,7 +302,8 @@ public sealed record AdminAgentInstanceResponse(
     AdminPersonaResponse Persona,
     string? UnattendedModelCatalogKey = null,
     string? UnattendedReasoningEffort = null,
-    AdminBrowserConfigurationResponse? Browser = null);
+    AdminBrowserConfigurationResponse? Browser = null,
+    System.Text.Json.JsonElement? ExecutionBudgets = null);
 
 public sealed record AdminSetUnattendedModelRequest(
     long ExpectedRevision,
@@ -404,3 +406,5 @@ public sealed record AdminEventResponse(
     JsonElement Summary);
 
 public sealed record AdminBrowserConfigurationResponse(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotBytes, int MaxCaptureBytes, int MaxDownloadBytes, string Engine = "unknown");
+
+public sealed record AdminSetExecutionBudgetsRequest(long ExpectedRevision, System.Text.Json.JsonElement? ExecutionBudgets);

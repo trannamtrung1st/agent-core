@@ -141,7 +141,8 @@ public sealed partial class SessionRuntime
         if (users.Count == 0 || users.Any(entry => _undurableUserEntryIds.Contains(entry.EntryId))) return false;
         PinModelSelectionIfMissing();
         var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(_ids.NewId(), _ids.NewId(), _ids.NewId(),
-            _snapshot, users, _time.GetUtcNow(), await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, ct));
+            _snapshot, users, _time.GetUtcNow(), await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, ct),
+            await _tools.ResolveExecutionBudgetAsync(_snapshot.AgentInstanceId, _snapshot.Definition, true, ct));
         _agentRunAdmissionPending = true;
         var proposed = _snapshot with { PendingAgentInputIds = _snapshot.PendingAgentInputIds.Except(users.Select(entry => entry.EntryId)).ToArray() };
         RequestPersist(proposed, admittedRun: run, onAdmitted: committed => run = committed, then: async token =>

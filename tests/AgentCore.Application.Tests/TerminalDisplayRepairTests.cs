@@ -523,7 +523,7 @@ public sealed partial class TerminalDisplayRepairTests
         string[] tools,
         SessionToolExecutor? executor = null,
         IArtifactReferenceAuthorizer? artifactAuthorizer = null,
-        Microsoft.Extensions.Logging.ILogger? logger = null, RoleEnvironment? environment = null)
+        Microsoft.Extensions.Logging.ILogger? logger = null, RoleEnvironment? environment = null, ExecutionBudgetPolicy? executionBudgets = null)
     {
         var time = clock ?? new FakeTimeProvider(DateTimeOffset.Parse("2026-10-02T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
@@ -543,7 +543,7 @@ public sealed partial class TerminalDisplayRepairTests
             new VoiceConfiguration(false, "default", 1.0),
             new ProviderPreferences("primary-llm", "primary-stt", "primary-tts"),
             new Dictionary<string, string>(StringComparer.Ordinal),
-            environment ?? new RoleEnvironment(ToolAllowlist: tools));
+            environment ?? new RoleEnvironment(ToolAllowlist: tools), ExecutionBudgets: executionBudgets);
         var snapshot = new SessionSnapshot(
             1,
             ids.NewSessionId(),
@@ -755,6 +755,7 @@ public sealed partial class TerminalDisplayRepairTests
         public List<string> Navigated { get; } = [];
 
         public int ObserveCalls { get; private set; }
+        public Func<int, string>? ObservationContent { get; set; }
 
         public int CloseCalls { get; private set; }
         public Action? OnClose { get; set; }
@@ -784,7 +785,7 @@ public sealed partial class TerminalDisplayRepairTests
         {
             ObserveCalls++;
             var url = Navigated.Count == 0 ? "https://zigwheels.test/" : Navigated[^1];
-            return new(new BrowserResult(null, new BrowserSnapshot(url, "Zigwheels", "Open", false, [])));
+            return new(new BrowserResult(null, new BrowserSnapshot(url, "Zigwheels", ObservationContent?.Invoke(ObserveCalls) ?? "Open", false, [])));
         }
 
         public ValueTask<BrowserResult> CloseAsync(Guid sessionId, CancellationToken cancellationToken = default)

@@ -1,3 +1,4 @@
+import { InstanceExecutionBudgets, validExecutionBudgets } from "./ExecutionBudgetsSection";
 import { groupedCapabilityOptions, reconcileAlwaysCapabilities } from "./capabilityOptions";
 import { InstanceSkillsSection } from "./InstanceSkillsSection";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
@@ -1242,7 +1243,7 @@ function DefinitionDetail({
   };
 
   const saveDraft = async () => {
-    if (!activeDraft || jsonError || automationNumberErrors(candidate).length > 0) {
+    if (!activeDraft || jsonError || automationNumberErrors(candidate).length > 0 || !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy)) {
       return;
     }
     setBusy(true);
@@ -1709,10 +1710,10 @@ function DraftEditor({
     }
   }, [catalogReady, candidateLocked, editorView, capabilities.capabilityMode, capabilityCatalog, onCandidateChange]);
   const numberErrors = automationNumberErrors(candidate);
-  const saveBlocked = candidateLocked || numberErrors.length > 0 || (editorView === "form" && !catalogReady);
+  const saveBlocked = candidateLocked || !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy) || numberErrors.length > 0 || (editorView === "form" && !catalogReady);
   const saveBlockedMessage = candidateLocked
     ? "Advanced JSON is invalid — fix it before saving. This does not change the draft revision."
-    : numberErrors[0]?.message ?? "Authoring options are loading. Wait before saving or use Advanced JSON.";
+    : !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy) ? "Execution budgets require whole values within the host limits." : numberErrors[0]?.message ?? "Authoring options are loading. Wait before saving or use Advanced JSON.";
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
   const [logicalPath, setLogicalPath] = useState("");
@@ -2544,7 +2545,7 @@ export function InstanceDetail({
                 key: "identity",
                 label: "Identity & version",
                 children: <Tabs activeKey={identityTab} onChange={key => setActiveTab("identity", key as AdminInstanceSection)} aria-label="Identity sections" items={[
-                  { key: "profile", label: "Profile", children: <InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} /> },
+                  { key: "profile", label: "Profile", children: <Flex vertical gap={token.padding}><InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} /><InstanceExecutionBudgets key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} onUpdated={onInstanceChanged} /></Flex> },
                   { key: "workspace", label: "Workspace", children: <InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} /> }
                 ]} />
               }]),

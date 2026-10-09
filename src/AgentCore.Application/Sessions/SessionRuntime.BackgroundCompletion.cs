@@ -62,7 +62,8 @@ public sealed partial class SessionRuntime
                 null, primary.SessionId, primary.AgentRunId, "completion:" + string.Join(":", batch.Select(b => b.Run.AgentRunId.ToString("D"))), now, evidence);
             var skills = await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, ct).ConfigureAwait(false);
             var report = AgentRun.Create(_ids.NewId(), RunOwner, new(activation, _snapshot.Definition.Id, _snapshot.Definition.Version,
-                _snapshot.PinnedPersona ?? _snapshot.Definition.Identity, _ids.NewId(), AgentRunOutputContract.CompletionReport), new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
+                _snapshot.PinnedPersona ?? _snapshot.Definition.Identity, _ids.NewId(), AgentRunOutputContract.CompletionReport,
+                    await _tools.ResolveExecutionBudgetAsync(_snapshot.AgentInstanceId, _snapshot.Definition, false, ct)), new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
                 AgentRunLimits.DefaultMaxAttempts, now, skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
             var current = _runAuthority is null ? _snapshot.Definition : await _runAuthority.CurrentDefinitionAsync(report, ct).ConfigureAwait(false);
             if (_deactivated || _snapshot.ArchivedAt is not null || _snapshot.DurablyDeletedAt is not null || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus)

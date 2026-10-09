@@ -446,6 +446,15 @@ public sealed class AgentRun
     {
         ArgumentNullException.ThrowIfNull(checkpoint);
         RequireOperational(expectedRevision, generation);
+        if (Checkpoint is { } previous && (checkpoint.StepCount < previous.StepCount
+            || checkpoint.OutputBytes < previous.OutputBytes
+            || checkpoint.RemainingOverallBudgetMs > previous.RemainingOverallBudgetMs
+            || previous.ActiveExecutionMs is { } active && (checkpoint.ActiveExecutionMs is null || checkpoint.ActiveExecutionMs < active)))
+            throw new ArgumentException("Execution checkpoint accounting cannot reset consumed resources.");
+        if (Admission.ExecutionBudget is { } pin && (checkpoint.StepCount > pin.Profile.MaxSteps
+            || checkpoint.RemainingOverallBudgetMs > pin.Profile.DurationSeconds * 1000))
+            throw new ArgumentException("Execution checkpoint exceeds its admitted budget.");
+        if (checkpoint.ActiveExecutionMs is not null) checkpoint = checkpoint.StampBudgetClock(updatedAtUtc);
         var progress = progressSummary is null ? Progress : new AgentRunProgress(progressSummary, updatedAtUtc);
         return Copy(
             Status,
@@ -694,7 +703,7 @@ public sealed class AgentRun
                         payload,
                         Checkpoint.StepCount,
                         Checkpoint.OutputBytes,
-                        Checkpoint.RemainingOverallBudgetMs);
+                        Checkpoint.RemainingOverallBudgetMs, Checkpoint.ActiveExecutionMs, Checkpoint.BudgetRecordedAtUtc);
                 return Copy(
                     AgentRunStatus.Running,
                     Revision + 1,
@@ -1233,6 +1242,14 @@ public sealed class AgentRun
             throw new ArgumentException("Updated time cannot move backwards.");
         }
 
+        if (Status == AgentRunStatus.Running && status == AgentRunStatus.Running && Claim?.Generation != claim?.Generation && checkpoint is not null)
+            checkpoint = checkpoint.PauseBudgetClock(Claim is { } expired && expired.LeaseExpiresAtUtc < updatedAtUtc
+                ? expired.LeaseExpiresAtUtc : updatedAtUtc).StampBudgetClock(updatedAtUtc);
+        else if (Status == AgentRunStatus.Running && status != AgentRunStatus.Running && checkpoint is not null)
+            checkpoint = checkpoint.PauseBudgetClock(Claim is { } oldClaim && oldClaim.LeaseExpiresAtUtc < updatedAtUtc
+                ? oldClaim.LeaseExpiresAtUtc : updatedAtUtc);
+        else if (Status != AgentRunStatus.Running && status == AgentRunStatus.Running && checkpoint?.ActiveExecutionMs is not null)
+            checkpoint = checkpoint.StampBudgetClock(updatedAtUtc);
         return new(
             AgentRunId,
             Owner,

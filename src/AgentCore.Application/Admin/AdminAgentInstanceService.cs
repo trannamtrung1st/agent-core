@@ -259,6 +259,17 @@ public sealed class AdminAgentInstanceService(
         return updatedPersona;
     }
 
+    public async ValueTask<AgentInstance> SetExecutionBudgetsAsync(Guid instanceId, long expectedRevision,
+        ExecutionBudgetPolicy? policy, CancellationToken ct = default)
+    {
+        var instance = await RequireManagedAsync(instanceId, ct).ConfigureAwait(false);
+        if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Only active Instances can change execution budgets.");
+        try { policy?.Validate(); }
+        catch (ArgumentException ex) { throw AgentCoreErrors.Validation(ex.Message); }
+        return await instances.UpdateWithExpectedRevisionAsync(new(instanceId, expectedRevision,
+            SetExecutionBudgets: true, ExecutionBudgets: policy), time.GetUtcNow(), ct).ConfigureAwait(false);
+    }
+
     public async ValueTask<AgentInstance> SetUnattendedModelAsync(
         Guid instanceId,
         long expectedRevision,

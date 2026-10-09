@@ -26,6 +26,35 @@ public sealed class AgentRunAdmissionStoreTests
     private const string Hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Effective_budget_and_accounting_survive_reopen_retry_and_reclaim(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var snapshot = Snapshot(Guid.NewGuid(), []);
+        await f.Memory.SaveAsync(snapshot, 0);
+        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "budget-pin", Now);
+        var pin = ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser,
+            new(InteractiveBrowser: ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.Extended)), null);
+        var run = AgentRun.Create(Guid.NewGuid(), Owner, new(activation, Definition.Id, Definition.Version, Definition.Identity,
+            Guid.NewGuid(), AgentRunOutputContract.ConversationResponse, pin), new("synthetic", "synthetic", "synthetic", null), 3, Now);
+        await f.Runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
+        var claimed = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(1, Now, Guid.NewGuid(), Now.AddMinutes(1)));
+        var saved = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(claimed.Revision, Now.AddSeconds(1), claimed.Claim!.Generation,
+            new("{}", 30, 5000, 450000, 150000), null));
+        var retry = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Fail(saved.Revision, Now.AddSeconds(2), saved.Claim!.Generation,
+            "provider-unavailable", "Temporary provider failure", true, Now.AddSeconds(3)));
+        await f.ReopenAsync();
+        var restored = (await f.Runs.GetAsync(Owner, run.AgentRunId))!;
+        Assert.Equal(pin, restored.Admission.ExecutionBudget); Assert.Equal(30, restored.Checkpoint!.StepCount);
+        Assert.Equal(151000, restored.Checkpoint.ActiveExecutionMs); Assert.Equal(449000, restored.Checkpoint.RemainingOverallBudgetMs);
+        var second = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(retry.Revision, Now.AddSeconds(3), Guid.NewGuid(), Now.AddMinutes(1)));
+        var recovered = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Recover(second.Revision, Now.AddMinutes(1)));
+        await f.ReopenAsync();
+        Assert.Equal(pin, (await f.Runs.GetAsync(Owner, run.AgentRunId))!.Admission.ExecutionBudget);
+        Assert.Equal(30, recovered.Checkpoint!.StepCount); Assert.Equal(5000, recovered.Checkpoint.OutputBytes);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Native_live_receipt_and_run_admit_atomically_and_replay_reuses_the_committed_identity(bool sqlite)

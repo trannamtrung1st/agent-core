@@ -47,7 +47,8 @@ public sealed partial class SessionRuntime
             var proposal = BackgroundSessionAdmissionFactory.ForImmediate(_ids.NewSessionId(), _ids.NewId(), _ids.NewId(),
                 _ids.NewId(), _ids.NewId(), _snapshot, source, input.Call.Id, objective.GetString()!.Trim(),
                 title.ValueKind == JsonValueKind.String ? title.GetString() : null,
-                report.ValueKind != JsonValueKind.False, _time.GetUtcNow());
+                report.ValueKind != JsonValueKind.False, _time.GetUtcNow(),
+                await _tools.ResolveExecutionBudgetAsync(_snapshot.AgentInstanceId, _snapshot.Definition, false, ct));
             var result = await _agentRuns.AdmitImmediateAsync(proposal.Session, proposal.Run, input.Context.AgentRunGeneration!.Value, ct).ConfigureAwait(false);
             input.Completed.TrySetResult(JsonSerializer.Serialize(new { started = true, backgroundSessionId = result.Run.SessionId,
                 agentRunId = result.Run.AgentRunId, alreadyStarted = !result.Created }));

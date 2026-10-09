@@ -516,6 +516,8 @@ public sealed partial class SqliteAgentInstanceStore(
             row.ActiveVersion = activeVersion;
         }
 
+        if (update.SetExecutionBudgets)
+            row.ExecutionBudgetsJson = update.ExecutionBudgets is null ? null : JsonSerializer.Serialize(update.ExecutionBudgets, Json);
         if (update.SetUnattendedModel)
         {
             row.UnattendedModelCatalogKey = string.IsNullOrWhiteSpace(update.UnattendedModelCatalogKey)
@@ -565,7 +567,8 @@ public sealed partial class SqliteAgentInstanceStore(
             row.PersonaRevision,
             row.UnattendedModelCatalogKey,
             row.UnattendedReasoningEffort,
-            row.HarnessManagementJson is null ? null : JsonSerializer.Deserialize<HarnessManagementState>(row.HarnessManagementJson, Json));
+            row.HarnessManagementJson is null ? null : JsonSerializer.Deserialize<HarnessManagementState>(row.HarnessManagementJson, Json),
+            row.ExecutionBudgetsJson is null ? null : JsonSerializer.Deserialize<ExecutionBudgetPolicy>(row.ExecutionBudgetsJson, Json));
 
     private static AgentInstanceRecord Map(AgentInstance instance) =>
         new()
@@ -581,6 +584,7 @@ public sealed partial class SqliteAgentInstanceStore(
             PersonaRevision = instance.PersonaRevision,
             UnattendedModelCatalogKey = instance.UnattendedModelCatalogKey,
             UnattendedReasoningEffort = instance.UnattendedReasoningEffort,
+            ExecutionBudgetsJson = instance.ExecutionBudgets is null ? null : JsonSerializer.Serialize(instance.ExecutionBudgets, Json),
             HarnessManagementJson = instance.HarnessManagement is null ? null : JsonSerializer.Serialize(instance.HarnessManagement, Json)
         };
 }

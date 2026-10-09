@@ -50,8 +50,11 @@ public sealed partial class SessionRuntime
     }
 
     private async Task SaveRunCheckpointAsync(EventContext cause, Guid responseId, IReadOnlyList<ModelMessage> messages,
-        int steps, int outputBytes, DateTimeOffset? deadline, CancellationToken ct, string? protocolRepairReason = null)
+        int steps, int outputBytes, DateTimeOffset? deadline, CancellationToken ct, string? protocolRepairReason = null, int? activeExecutionMs = null)
     {
+        var compacted = messages.ToList();
+        BrowserSnapshotCompaction.Compact(compacted);
+        messages = compacted;
         var run = _boundAgentRun ?? throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
         var observationRequired = run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
             && run.SideEffect.ActionHash is not null;
@@ -66,7 +69,7 @@ public sealed partial class SessionRuntime
             throw AgentCoreErrors.Validation("AgentRun checkpoint capacity reached.");
         var remaining = deadline is null ? 0 : Math.Max(0, (int)Math.Min(int.MaxValue, (deadline.Value - _time.GetUtcNow()).TotalMilliseconds));
         await RequestAgentRunCommandAsync(cause, responseId, (current, now) => new AgentRunCommand.Checkpoint(
-            current.Revision, now, current.Claim!.Generation, new AgentRunCheckpoint(payload, steps, outputBytes, remaining), null), ct).ConfigureAwait(false);
+            current.Revision, now, current.Claim!.Generation, new AgentRunCheckpoint(payload, steps, outputBytes, remaining, activeExecutionMs), null), ct).ConfigureAwait(false);
     }
 
     private Task<AgentRun?> MarkRunEffectAsync(EventContext cause, Guid responseId, ModelToolCall call,

@@ -27,10 +27,16 @@ internal static class BrowserSnapshotCompaction
         foreach (var index in discoveries.Take(Math.Max(0, discoveries.Length - RecentDiscoveries)))
             messages[index] = messages[index] with { Text = DiscoveryReceipt(messages[index].Text), Parts = null };
 
-        if (full.Count <= RecentFullObservations)
-        {
-            return;
-        }
+        // Revisit compacted observations too: a previously useful page excerpt may
+        // become superseded on a later round. Keep the latest excerpt per page.
+        var compacted = Enumerable.Range(0, messages.Count).Where(i => IsCompactedObservation(messages[i])).ToArray();
+        var all = compacted.Concat(full).Order().ToArray();
+        var latest = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var index in all) latest[PageUrl(messages[index].Text, index)] = index;
+        foreach (var index in compacted)
+            if (latest[PageUrl(messages[index].Text, index)] != index)
+                messages[index] = messages[index] with { Text = Receipt(messages[index].Text, false), Parts = null };
+        if (full.Count <= RecentFullObservations) return;
 
         var keepFrom = full.Count - RecentFullObservations;
         var latestByUrl = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -76,6 +82,18 @@ internal static class BrowserSnapshotCompaction
         });
     }
 
+    private static bool IsCompactedObservation(ModelMessage message)
+    {
+        if (message.Role != ModelRole.Tool || message.Name?.StartsWith("browser.", StringComparison.Ordinal) != true) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(message.Text);
+            return doc.RootElement.TryGetProperty("compacted", out var compacted) && compacted.ValueKind == JsonValueKind.True
+                && doc.RootElement.TryGetProperty("contentExcerpt", out _);
+        }
+        catch (JsonException) { return false; }
+    }
+
     private static bool IsFullObservation(ModelMessage message)
     {
         if (message.Role != ModelRole.Tool
@@ -91,7 +109,7 @@ internal static class BrowserSnapshotCompaction
         {
             using var document = JsonDocument.Parse(message.Text);
             var root = document.RootElement;
-            return root.TryGetProperty("untrustedBrowserContent", out var marker)
+            return !root.TryGetProperty("error", out _) && root.TryGetProperty("untrustedBrowserContent", out var marker)
                 && marker.ValueKind == JsonValueKind.True
                 && root.TryGetProperty("targets", out var elements)
                 && elements.ValueKind == JsonValueKind.Array;
@@ -132,6 +150,7 @@ internal static class BrowserSnapshotCompaction
             url = Read(root, "url");
             title = Read(root, "title");
             visible = Read(root, "content");
+            if (visible.Length == 0) visible = Read(root, "contentExcerpt");
             effectAttempted = ReadBoolean(root, "effectAttempted");
             effectConfirmedBySdk = ReadBoolean(root, "effectConfirmedBySdk");
             applicationOutcomeVerified = ReadBoolean(root, "applicationOutcomeVerified");

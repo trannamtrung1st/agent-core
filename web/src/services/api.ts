@@ -65,6 +65,7 @@ export type SessionResponse = {
 };
 
 export type AgentRun = {
+  budget?: { class: string; source: string; maxSteps: number; durationSeconds: number; perToolSeconds: number; stepsConsumed: number; activeExecutionMs: number; phase: string; terminationReason: string | null; cleanupStatus: string; closureConfirmed: boolean } | null;
   agentRunId: string; sessionId: string; activationId: string; activationKind: string;
   status: string; revision: number; attemptCount: number; maxAttempts: number;
   cancellationRequested: boolean; cancellationAvailable: boolean; progress: string | null;

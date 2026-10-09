@@ -81,6 +81,17 @@ public sealed partial class SessionToolExecutor(
         return new(state.Policy, state.PolicyRevision, instance.ActiveVersion);
     }
 
+    public async ValueTask<EffectiveExecutionBudget> ResolveExecutionBudgetAsync(Guid owner, AgentDefinition definition,
+        bool interactive, CancellationToken ct)
+    {
+        var instance = _agentInstances is null ? null : await _agentInstances.FindAsync(owner, ct).ConfigureAwait(false);
+        // Session behavior stays pinned, while resource defaults apply to the next Run.
+        var current = instance is not null && _agentDefinitions is not null
+            ? await _agentDefinitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct).ConfigureAwait(false) : null;
+        return AgentCore.Application.Execution.ExecutionBudgetResolver.Resolve(
+            definition with { ExecutionBudgets = current is null ? definition.ExecutionBudgets : current.ExecutionBudgets }, instance?.ExecutionBudgets, interactive);
+    }
+
     public ValueTask<IReadOnlyList<EffectiveSkill>> ResolveSkillCatalogAsync(Guid? owner, AgentDefinition definition, CancellationToken ct) =>
         owner is Guid id && _agentInstances is not null ? new EffectiveSkillCatalogResolver(_agentInstances).ResolveAsync(id, definition, ct)
         : definition.SkillList.Count == 0 ? ValueTask.FromResult<IReadOnlyList<EffectiveSkill>>([])

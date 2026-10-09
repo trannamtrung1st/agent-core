@@ -144,6 +144,7 @@ public static class AgentDefinitionValidator
         ValidateEnvironment(RoleEnvironments.Of(definition));
         ValidateTriggerPolicy(definition.TriggerPolicy);
         ValidateSkills(definition.Skills);
+        definition.ExecutionBudgets?.Validate();
     }
 
     private static void ValidateSkills(IReadOnlyList<SkillSpec>? skills)

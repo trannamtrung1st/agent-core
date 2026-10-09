@@ -22,11 +22,15 @@ public sealed class InstanceSkillsStartupTests
                 await old.GetService<IMigrator>().MigrateAsync("20261007114116_InstanceSkillsCutover");
             var store = new SqliteAgentInstanceStore(factory, new AgentCore.Infrastructure.Identity.SystemIdGenerator(TimeProvider.System));
             var first = Guid.NewGuid(); var second = Guid.NewGuid(); var skillId = Guid.NewGuid().ToString("D"); var now = DateTimeOffset.UtcNow;
-            foreach (var owner in new[] { first, second })
-                await store.InsertAsync(new AgentCore.Domain.Definitions.AgentInstance(owner, "examiner", 1,
-                    new("Alex", "Examiner", "Help", "Calm"), AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active, now, now));
             var existing = new AgentInstanceSkill(skillId, first, "Review", "Review evidence", "Retained procedure", SkillProjection.OnDemand, true, [], 1, now, now, SkillAuthor.Admin);
-            await store.MutateSkillsAsync(new(first, 1, InstanceSkill: existing));
+            // Seed the historical schema using its own columns, before forward migrations.
+            await using (var old = factory.CreateDbContext())
+            {
+                var persona = System.Text.Json.JsonSerializer.Serialize(new AgentIdentity("Alex", "Examiner", "Help", "Calm"));
+                foreach (var owner in new[] { first, second })
+                    await old.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentInstances (InstanceId, DefinitionId, ActiveVersion, PersonaJson, Lifecycle, CreatedAtUtc, UpdatedAtUtc, Revision, PersonaRevision) VALUES ({owner.ToString("D")}, {"examiner"}, {1}, {persona}, {"Active"}, {now.ToUnixTimeMilliseconds()}, {now.ToUnixTimeMilliseconds()}, {1}, {1})");
+                await old.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentInstanceSkills (SkillId, AgentInstanceId, Name, Description, Procedure, Projection, Enabled, RequiredCapabilitiesJson, Revision, CreatedAtUtc, UpdatedAtUtc, CreatedBy) VALUES ({skillId}, {first.ToString("D")}, {existing.Name}, {existing.Description}, {existing.Procedure}, {(int)existing.Projection}, {true}, {"[]"}, {1}, {now.ToUnixTimeMilliseconds()}, {now.ToUnixTimeMilliseconds()}, {(int)SkillAuthor.Admin})");
+            }
             await using (var migrated = factory.CreateDbContext()) await migrated.Database.MigrateAsync();
             var retained = Assert.Single((await store.ReadSkillsAsync(first)).InstanceSkills);
             Assert.Equal(existing.SkillId, retained.SkillId); Assert.Equal(existing.Revision, retained.Revision);

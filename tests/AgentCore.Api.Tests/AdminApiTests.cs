@@ -25,6 +25,28 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Execution_budget_updates_enforce_owner_ceiling_and_revision_and_expose_effective_values()
+    {
+        var client = OwnerClient();
+        var created = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new AdminCreateAgentInstanceRequest("general-assistant", 21));
+        created.EnsureSuccessStatusCode();
+        var instance = (await created.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!;
+        var url = $"/api/v2/admin/agent-instances/{instance.InstanceId}/execution-budgets";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync(url)).StatusCode);
+        var before = JsonDocument.Parse(await client.GetStringAsync(url));
+        Assert.Equal(48, before.RootElement.GetProperty("effective").GetProperty("InteractiveBrowser").GetProperty("profile").GetProperty("maxSteps").GetInt32());
+        var invalid = await client.PostAsJsonAsync(url, new { expectedRevision = instance.Revision, executionBudgets = new { interactiveBrowser = new { maxSteps = 145, durationSeconds = 900, perToolSeconds = 30, preset = 3 } } });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        var policy = new { interactiveBrowser = new { maxSteps = 96, durationSeconds = 600, perToolSeconds = 30, preset = 1 } };
+        var saved = await client.PostAsJsonAsync(url, new { expectedRevision = instance.Revision, executionBudgets = policy });
+        saved.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(url, new { expectedRevision = instance.Revision, executionBudgets = policy })).StatusCode);
+        using var after = JsonDocument.Parse(await client.GetStringAsync(url));
+        Assert.Equal("instance", after.RootElement.GetProperty("effective").GetProperty("InteractiveBrowser").GetProperty("source").GetString());
+        Assert.Equal(24, after.RootElement.GetProperty("effective").GetProperty("Standard").GetProperty("profile").GetProperty("maxSteps").GetInt32());
+    }
+
+    [Fact]
     public async Task Admin_definitions_require_owner_capability()
     {
         var client = _factory.CreateClient();

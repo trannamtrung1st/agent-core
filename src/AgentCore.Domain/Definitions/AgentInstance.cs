@@ -18,4 +18,5 @@ public sealed record AgentInstance(
     long PersonaRevision = 1,
     string? UnattendedModelCatalogKey = null,
     string? UnattendedReasoningEffort = null,
-    HarnessManagementState? HarnessManagement = null);
+    HarnessManagementState? HarnessManagement = null,
+    ExecutionBudgetPolicy? ExecutionBudgets = null);

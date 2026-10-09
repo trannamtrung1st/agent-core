@@ -154,7 +154,14 @@ public static class BackgroundSessionEndpoints
         run.Admission.Activation.DedupeKey.StartsWith("experience:", StringComparison.Ordinal) ? run.AgentRunId.ToString("D") : null,
         run.Admission.Activation.TriggerOccurrenceId?.ToString("D"),
         run.Admission.Activation.Kind == ActivationKind.BackgroundCompleted ? run.Admission.Activation.SourceSessionId?.ToString("D") : null,
-        run.Wait is { } wait ? new(wait.Mode.ToString(), wait.Until.ToString(), wait.BackgroundSessionIds.Select(id => id.ToString("D")).ToArray(), HttpMapping.Format(wait.DeadlineUtc)) : null);
+        run.Wait is { } wait ? new(wait.Mode.ToString(), wait.Until.ToString(), wait.BackgroundSessionIds.Select(id => id.ToString("D")).ToArray(), HttpMapping.Format(wait.DeadlineUtc)) : null, ToBudget(run));
+
+    private static AgentRunBudgetResponse? ToBudget(AgentRun run)
+    {
+        var d = AgentCore.Application.Execution.RunBudgetDiagnosticProjection.From(run);
+        return d is null ? null : new(d.Class, d.Source, d.MaxSteps, d.DurationSeconds, d.PerToolSeconds,
+            d.StepsConsumed, d.ActiveExecutionMs, d.Phase, d.TerminationReason, d.CleanupStatus, d.ClosureConfirmed);
+    }
 
     private static async Task<BackgroundSessionResponse> ToSessionAsync(SessionSnapshot session, AgentRun? initial,
         bool ownerActive, IArtifactStore artifacts, IAgentRunStore runs, CancellationToken ct)

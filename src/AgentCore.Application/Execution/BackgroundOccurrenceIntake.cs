@@ -102,7 +102,8 @@ public sealed class BackgroundOccurrenceIntake(
                 occurrence.OccurrenceId, null, null, $"automation:{occurrence.OccurrenceId:D}", time.GetUtcNow(), evidence);
             var run = AgentRun.Create(ids.NewId(), new(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
                 new(activation, target.Definition.Id, target.Definition.Version, target.PinnedPersona ?? target.Definition.Identity,
-                    ids.NewId(), AgentRunOutputContract.ConversationResponse),
+                    ids.NewId(), AgentRunOutputContract.ConversationResponse,
+                    ExecutionBudgetResolver.Resolve(target.Definition with { ExecutionBudgets = definition.ExecutionBudgets }, instance.ExecutionBudgets, false)),
                 new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort),
                 AgentRunLimits.DefaultMaxAttempts, time.GetUtcNow(), catalog,
                 catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
@@ -123,7 +124,8 @@ public sealed class BackgroundOccurrenceIntake(
             definition, cancellationToken).ConfigureAwait(false);
         return BackgroundSessionAdmissionFactory.ForOccurrence(ids.NewSessionId(), ids.NewId(), ids.NewId(),
             ids.NewId(), ids.NewId(), occurrence, definition, instance.Persona, instance.PersonaRevision,
-            pin, skills, time.GetUtcNow(), automation?.Name);
+            pin, skills, time.GetUtcNow(), automation?.Name,
+            ExecutionBudgetResolver.Resolve(definition, instance.ExecutionBudgets, false));
     }
     private async ValueTask RejectTargetAsync(TriggerOccurrence occurrence, string reason, CancellationToken ct)
     {

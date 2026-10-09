@@ -10,7 +10,7 @@ public sealed record AgentRunResponse(string AgentRunId, string SessionId, strin
     string Status, long Revision, int AttemptCount, int MaxAttempts, bool CancellationRequested, bool CancellationAvailable,
     string? Progress, string? NextRetryAt, string CreatedAt, string UpdatedAt, AgentRunApprovalResponse? Approval,
     AgentRunOutcomeResponse? Outcome, string? FailureCode, string? FailureSummary, string? DiagnosticId,
-    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null);
+    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null, AgentRunBudgetResponse? Budget = null);
 public sealed record AgentRunPageResponse(IReadOnlyList<AgentRunResponse> Items, string? NextCursor, bool HasMore);
 public sealed record BackgroundSessionOriginResponse(string Kind, string InitialAgentRunId, string? ParentSessionId,
     string? ParentAgentRunId, string? AutomationId, string? OccurrenceId, bool ReportCompletion);
@@ -24,3 +24,6 @@ public sealed record DecideAgentRunApprovalRequest(long ExpectedRevision, long E
 
 public sealed record InstanceActivitySessionResponse(SessionCatalogItemResponse Session, string Origin, IReadOnlyList<string> Surfaces);
 public sealed record InstanceActivitySessionPageResponse(IReadOnlyList<InstanceActivitySessionResponse> Items, string? NextCursor, bool HasMore);
+
+public sealed record AgentRunBudgetResponse(string Class, string Source, int MaxSteps, int DurationSeconds, int PerToolSeconds,
+    int StepsConsumed, int ActiveExecutionMs, string Phase, string? TerminationReason, string CleanupStatus, bool ClosureConfirmed);

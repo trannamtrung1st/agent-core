@@ -445,6 +445,37 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapGet("/execution-budget-limits", () => Results.Json(ExecutionBudgetCeilings.Default));
+        group.MapGet("/agent-instances/{instanceId:guid}/execution-budgets", async (
+            Guid instanceId, IAgentInstanceStore instances, IAgentDefinitionStore definitions, CancellationToken ct) =>
+        {
+            try
+            {
+                var instance = await instances.FindAsync(instanceId, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
+                var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct)
+                    ?? throw AgentCoreErrors.NotFound("Active Definition was not found.");
+                return Results.Json(new { instance.Revision, instance.ExecutionBudgets, DefinitionDefaults = definition.ExecutionBudgets,
+                    Effective = Enum.GetValues<ExecutionBudgetClass>().ToDictionary(kind => kind.ToString(),
+                        kind => ExecutionBudgetPolicy.Resolve(kind, definition.ExecutionBudgets, instance.ExecutionBudgets)),
+                    HostLimits = ExecutionBudgetCeilings.Default });
+            }
+            catch (AgentCoreException ex) { return ProblemResults.From(ex); }
+        });
+
+        group.MapPost("/agent-instances/{instanceId:guid}/execution-budgets", async (
+            Guid instanceId, AdminSetExecutionBudgetsRequest request, AdminAgentInstanceService instances, CancellationToken ct) =>
+        {
+            try
+            {
+                if (request.ExpectedRevision < 1) throw AgentCoreErrors.Validation("expectedRevision must be positive.");
+                var updated = await instances.SetExecutionBudgetsAsync(instanceId, request.ExpectedRevision,
+                    request.ExecutionBudgets?.Deserialize<ExecutionBudgetPolicy>(new JsonSerializerOptions(JsonSerializerDefaults.Web)), ct);
+                return Results.Json(AdminHttpMapping.ToAgentInstance(updated));
+            }
+            catch (JsonException) { return ProblemResults.From(AgentCoreErrors.Validation("Execution budgets must contain whole numeric limits.")); }
+            catch (AgentCoreException ex) { return ProblemResults.From(ex); }
+        });
+
         group.MapPost("/agent-instances/{instanceId:guid}/unattended-model", async (
             Guid instanceId,
             AdminSetUnattendedModelRequest? request,

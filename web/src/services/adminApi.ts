@@ -1068,3 +1068,18 @@ export type Automation = { requiresTools?: boolean; requiresVision?: boolean; ex
 export type AutomationPolicy = { allowOneShot: boolean; allowDaily: boolean; allowWeekly: boolean; allowFixedInterval: boolean;
   allowIndefiniteRecurrence: boolean; oneShotHorizonDays: number; minRecurrenceDays: number; minFixedIntervalSeconds: number; maxActiveRegistrations: number; allowEvents?: boolean };
 export type AutomationReview = { items: Automation[]; policy?: AutomationPolicy | null };
+
+export type ExecutionBudgetProfile = { maxSteps: number; durationSeconds: number; perToolSeconds: number; preset: number };
+export type ExecutionBudgetPolicy = Partial<Record<'standard' | 'interactiveBrowser' | 'unattendedBoundBrowser', ExecutionBudgetProfile | null>>;
+export async function getExecutionBudgets(instanceId: string): Promise<{ revision: number; executionBudgets: ExecutionBudgetPolicy | null; definitionDefaults: ExecutionBudgetPolicy | null }> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/execution-budgets`);
+  if (!response.ok) throw new Error('Execution budgets could not be loaded. Retry the read.');
+  return response.json();
+}
+export async function setExecutionBudgets(instanceId: string, expectedRevision: number, executionBudgets: ExecutionBudgetPolicy): Promise<{ revision: number }> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/execution-budgets`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision, executionBudgets })
+  });
+  if (!response.ok) throw new Error(response.status === 409 ? 'The Instance changed. Reload and review your changes before saving.' : 'Execution budgets could not be saved. Check the host limits and retry.');
+  return response.json();
+}

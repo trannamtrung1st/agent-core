@@ -499,3 +499,7 @@ Authorized focused reliability review after `195d53df`, composed with capability
 ## Scoped native browser reliability follow-up
 
 Execution-aware retired Skill validation, optional permitted iframe-root snapshots and strict empty-object close repair extend the accepted native browser foundation. They add no persistent migration, execution owner, legacy adapter or milestone. Prior freeze evidence remains historical. Current regression and exact-head acceptance evidence is tracked in [the follow-up report](reports/browser-final-reliability-verification.md); live-model evaluation remains separately unverified unless explicitly authorized.
+
+## Configurable execution budget follow-up
+
+The user-requested bounded resource/cleanup enhancement uses existing Definition/Instance authoring, AgentRun admission/checkpoint and native browser owners. It does not open P10/P11 or change earlier milestone freeze SHAs. Scope and before/after measurements are recorded in [execution-budget verification](reports/execution-budget-cleanup-verification.md); acceptance requires full local gates and hosted CI on the exact final candidate.

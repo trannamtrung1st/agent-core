@@ -66,7 +66,8 @@ public sealed record AgentInstanceRevisionUpdate(
     string? UnattendedModelCatalogKey = null,
     string? UnattendedReasoningEffort = null,
     HarnessManagementState? HarnessManagement = null,
-    AdminEventAppend? History = null, IReadOnlyList<SkillSpec>? DefinitionSkills = null);
+    AdminEventAppend? History = null, IReadOnlyList<SkillSpec>? DefinitionSkills = null,
+    bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null);
 
 public interface IAgentInstanceService
 {

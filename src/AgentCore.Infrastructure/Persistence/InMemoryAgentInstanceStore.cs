@@ -237,6 +237,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 {
                     ActiveVersion = activeVersion,
                     HarnessManagement = update.HarnessManagement ?? instance.HarnessManagement,
+                ExecutionBudgets = update.SetExecutionBudgets ? update.ExecutionBudgets : instance.ExecutionBudgets,
                     UpdatedAt = updatedAt,
                     Revision = instance.Revision + 1
                 };
@@ -574,6 +575,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 Revision = instance.Revision + 1,
                 PersonaRevision = personaRevision,
                 HarnessManagement = update.HarnessManagement ?? instance.HarnessManagement,
+                ExecutionBudgets = update.SetExecutionBudgets ? update.ExecutionBudgets : instance.ExecutionBudgets,
                 UnattendedModelCatalogKey = update.SetUnattendedModel
                     ? NullIfBlank(update.UnattendedModelCatalogKey)
                     : instance.UnattendedModelCatalogKey,

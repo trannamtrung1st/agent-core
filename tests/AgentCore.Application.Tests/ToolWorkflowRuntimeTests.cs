@@ -67,16 +67,18 @@ public sealed class ToolWorkflowRuntimeTests
     }
 
     [Fact]
-    public async Task Tool_step_cap_fails_closed()
+    public async Task Tool_step_cap_finalizes_from_recorded_work_without_more_effects()
     {
         await using var runtime = await CreateSupportAsync(alwaysToolCall: true);
         await runtime.Runtime.AttachAsync();
         Assert.True(await runtime.Runtime.SubmitUserTextAsync("Run the support case for order 91."));
         await runtime.Runtime.WaitUntilIdleAsync();
         var assistant = runtime.Runtime.Snapshot.Entries.Last(entry => entry.Role == ConversationRole.Assistant);
-        Assert.Equal(EntryStatus.Failed, assistant.Status);
-        var error = Assert.IsType<ErrorOutput>(Assert.Single(runtime.Output.Items, item => item.Payload is ErrorOutput).Payload);
-        Assert.Equal("Tool step limit reached.", error.SafeMessage);
+        Assert.Equal(EntryStatus.Completed, assistant.Status);
+        var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime.Runtime));
+        Assert.Equal(24, run.Checkpoint!.StepCount);
+        Assert.Contains("Core finalization phase: stepLimit", run.Checkpoint.PayloadJson);
+        Assert.DoesNotContain(runtime.Output.Items, item => item.Payload is ErrorOutput);
     }
 
     [Fact]

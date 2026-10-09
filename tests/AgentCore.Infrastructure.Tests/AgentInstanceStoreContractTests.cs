@@ -13,6 +13,24 @@ public abstract class AgentInstanceStoreContractTests
     protected abstract Task ForEachStoresAsync(Func<IAgentInstanceStore, Task> exercise);
 
     [Fact]
+    public async Task Budget_overrides_are_revision_checked_independent_and_can_return_to_inheritance()
+    {
+        await ForEachStoresAsync(async store =>
+        {
+            var now = DateTimeOffset.Parse("2026-10-09T00:00:00Z");
+            var first = SampleManaged(now); var second = first with { InstanceId = Guid.NewGuid() };
+            await store.InsertAsync(first); await store.InsertAsync(second);
+            var policy = new ExecutionBudgetPolicy(InteractiveBrowser: ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.DeepWorkflow));
+            var updated = await store.UpdateWithExpectedRevisionAsync(new(first.InstanceId, 1, SetExecutionBudgets: true, ExecutionBudgets: policy), now.AddSeconds(1));
+            Assert.Equal(policy, updated.ExecutionBudgets); Assert.Equal(policy, (await store.FindAsync(first.InstanceId))!.ExecutionBudgets);
+            Assert.Null((await store.FindAsync(second.InstanceId))!.ExecutionBudgets);
+            Assert.Equal("Conflict", (await Assert.ThrowsAsync<AgentCoreException>(() => store.UpdateWithExpectedRevisionAsync(new(first.InstanceId, 1, SetExecutionBudgets: true), now.AddSeconds(2)).AsTask())).Code);
+            var inherited = await store.UpdateWithExpectedRevisionAsync(new(first.InstanceId, updated.Revision, SetExecutionBudgets: true), now.AddSeconds(2));
+            Assert.Null(inherited.ExecutionBudgets);
+        });
+    }
+
+    [Fact]
     public async Task Maintenance_pages_visit_every_instance_once_in_stable_id_order()
     {
         await ForEachStoresAsync(async store =>

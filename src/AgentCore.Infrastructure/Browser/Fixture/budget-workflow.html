@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><head><title>Asset inspection fixture</title><style>#menu{display:none}#account:hover #menu{display:block}</style></head><body>
+<main id="app"></main>
+<script>
+let signedIn=false;let view='Attribute';let revision=0;let stage=0;
+function login(){signedIn=false;document.querySelector('#app').innerHTML='<h1>Sign in</h1><label>Email<input aria-label="Email"></label><label>Password<input aria-label="Password" type="password"></label><button onclick="signin()">Sign in</button>';}
+function signin(){if(document.querySelector('[aria-label=Password]').value==='synthetic-budget-password'){signedIn=true;render();}}
+function render(){let data=Array.from({length:24},(_,i)=>'<tr><td>Measurement '+i+'</td><td>'+('bounded fixture data '.repeat(10))+'</td></tr>').join('');document.querySelector('#app').innerHTML='<h1>Authenticated asset workspace</h1><button onclick="stage=1;render()">Data Management</button>'+(stage>=1?'<button onclick="stage=2;render()">AI Engineering</button>':'')+(stage>=2?'<button onclick="stage=3;render()">Pump 002</button>':'')+(stage>=3?'<h2>Pump 002</h2>'+['Attribute','Table','Media'].map(x=>'<button role="tab" onclick="view=\''+x+'\';revision++;render()">'+x+'</button>').join('')+'<h3>'+view+' inspection '+revision+'</h3><table><caption>'+view+' data</caption>'+data+'</table>':'')+'<div id="account"><button>Account</button><div id="menu"><button onclick="login()">Log out</button></div></div>';}
+login();
+</script></body></html>

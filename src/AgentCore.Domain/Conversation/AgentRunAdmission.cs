@@ -8,7 +8,7 @@ public enum AgentRunOutputContract { ConversationResponse, BackgroundOutcome, Co
 public sealed class AgentRunAdmission
 {
     public AgentRunAdmission(Activation activation, string definitionId, int definitionVersion,
-        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract)
+        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null)
     {
         ArgumentNullException.ThrowIfNull(activation);
         ArgumentNullException.ThrowIfNull(pinnedPersona);
@@ -18,6 +18,10 @@ public sealed class AgentRunAdmission
         if (activation.Kind == ActivationKind.UserTurn && responseId is null)
             throw new ArgumentException("A user turn requires stable response identity.");
         if (!Enum.IsDefined(outputContract)) throw new ArgumentException("Output contract is invalid.");
+        executionBudget?.Profile.Validate();
+        if (executionBudget is not null && (!Enum.IsDefined(executionBudget.Class) || executionBudget.Source is not ("instance" or "definition" or "system")))
+            throw new ArgumentException("Execution budget class/source is invalid.");
+        ExecutionBudget = executionBudget;
         OutputContract = outputContract;
         Activation = activation;
         DefinitionId = AgentRunText.RequireToken(definitionId, AgentRunLimits.MaxDefinitionIdCharacters, "Definition");
@@ -26,6 +30,7 @@ public sealed class AgentRunAdmission
         ResponseId = responseId;
     }
 
+    public EffectiveExecutionBudget? ExecutionBudget { get; }
     public AgentRunOutputContract OutputContract { get; }
     public Activation Activation { get; }
     public string DefinitionId { get; }
