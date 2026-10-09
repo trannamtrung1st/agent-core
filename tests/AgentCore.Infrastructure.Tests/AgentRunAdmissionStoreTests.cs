@@ -1314,19 +1314,25 @@ public sealed class AgentRunAdmissionStoreTests
             {
                 await db.Database.MigrateAsync("20261008115119_AutomationDestinations");
                 var memory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now));
-                await memory.StageSaveAsync(db, parentSnapshot, 0, default);
-                await memory.StageSaveAsync(db, child.Snapshot, 0, default);
+                // Seed the historical schema without asking today's EF entry model to write later columns.
+                await memory.StageSaveAsync(db, parentSnapshot with { Entries = [] }, 0, default);
+                await memory.StageSaveAsync(db, child.Snapshot with { Entries = [] }, 0, default);
                 db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(parentSnapshot, parent));
                 db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(parent));
                 db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(child.Snapshot, completed));
                 db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(completed));
                 await db.SaveChangesAsync();
+                foreach (var snapshot in new[] { parentSnapshot, child.Snapshot })
+                    foreach (var entry in snapshot.Entries)
+                        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ConversationEntries (EntryId, SessionId, EntrySequence, SourceEventId, Role, Text, ResponseId, Status, DeliveryMode, HeardTextEndExclusive, ReceivedTextEndExclusive, CreatedAtUtc) VALUES ({entry.EntryId.ToString("D")}, {snapshot.SessionId.ToString("D")}, {entry.Sequence}, {entry.SourceEventId?.ToString("D")}, {entry.Role.ToString()}, {entry.Text}, {entry.ResponseId?.ToString("D")}, {entry.Status.ToString()}, {entry.DeliveryMode.ToString()}, {entry.HeardTextEndExclusive}, {entry.ReceivedTextEndExclusive}, {entry.CreatedAt.ToUnixTimeMilliseconds()})");
                 await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO BackgroundCompletionReceipts (ChildAgentRunId, AgentInstanceId, ProfileId, ParentActivationId, SkipReason, CreatedAtUtc) VALUES ({completed.AgentRunId.ToString("D")}, {Owner.AgentInstanceId.ToString("D")}, {Owner.ProfileId.ToString("D")}, NULL, 'quiet-outcome', {Now.ToUnixTimeMilliseconds()})");
                 await db.Database.MigrateAsync();
             }
             var upgradedMemory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now)); await upgradedMemory.EnsureCreatedAsync();
             var runs = new SqliteAgentRunStore(factory, upgradedMemory, new Diagnostics());
             Assert.Equal(parent.SessionId, (await upgradedMemory.LoadAsync(parent.SessionId))!.SessionId);
+            Assert.Equal(parentSnapshot.Entries.Select(e => e.EntryId), (await upgradedMemory.LoadAsync(parent.SessionId))!.Entries.Select(e => e.EntryId));
+            Assert.Equal(child.Snapshot.Entries.Select(e => e.Text), (await upgradedMemory.LoadAsync(child.Run.SessionId))!.Entries.Select(e => e.Text));
             Assert.Equal(completed.ResponseId, (await runs.GetAsync(Owner, completed.AgentRunId))!.ResponseId);
             var item = (await runs.GetCompletionInboxAsync(Owner, parent.SessionId, completed.AgentRunId, Now))!;
             Assert.Equal(Owner, item.Owner); Assert.Equal(child.Run.SessionId, item.ChildSessionId);
