@@ -120,6 +120,15 @@ test.describe('Morgan secretary Synthetic journey', () => {
       await page.locator('.ant-select-item-option').filter({ hasText: tool }).last().click();
       await page.keyboard.press('Escape');
     }
+    // The deterministic schedule fixture needs these schemas immediately;
+    // authorization alone does not project advanced Automation tools.
+    for (const tool of ['automation.create', 'automation.inspect', 'automation.disable', 'automation.run',
+      'automation.list', 'automation.update', 'automation.delete']) {
+      const select = editor.getByRole('combobox', { name: 'Always projected capabilities', exact: true });
+      await select.click(); await select.fill(tool);
+      await page.locator('.ant-select-item-option').filter({ hasText: tool }).last().click();
+      await page.keyboard.press('Escape');
+    }
     await saveDraft(page);
     await page.reload();
     await expect(editor.getByLabel('Definition name', { exact: true })).toHaveValue('Executive Secretary');

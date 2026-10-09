@@ -111,7 +111,6 @@ public sealed class BackgroundSessionJourneyTests
         var fileA = await artifacts.CreateAsync(child.Session.SessionId, "A.txt", "text/plain", "A"u8.ToArray(), null, null, agentRunId: original.AgentRunId);
         var path = $"/api/v2/sessions/{child.Session.SessionId}";
         var before = (await client.GetFromJsonAsync<BackgroundSessionResponse>(path + "/background"))!;
-        (await client.PostAsJsonAsync(path + "/continue-in-chat", new { })).EnsureSuccessStatusCode();
         foreach (var summary in new[] { "Result B", "Result C" })
         {
             var current = (await memory.LoadAsync(child.Session.SessionId))!;
@@ -122,6 +121,9 @@ public sealed class BackgroundSessionJourneyTests
             await artifacts.CreateAsync(child.Session.SessionId, summary + ".txt", "text/plain", "later"u8.ToArray(), null, null, agentRunId: followup.AgentRunId);
         }
         await artifacts.CreateAsync(child.Session.SessionId, "legacy.txt", "text/plain", "unknown"u8.ToArray(), null, null);
+        // Direct-store arrangement must finish before foregrounding creates a
+        // mailbox-owned runtime which may persist its own detach checkpoint.
+        (await client.PostAsJsonAsync(path + "/continue-in-chat", new { })).EnsureSuccessStatusCode();
         await Check(client);
         if (sqlite)
         {

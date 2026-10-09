@@ -74,7 +74,10 @@ test("Admin pins All with always projection and Chat loads only the needed inter
   const initial = await send("inspect");
   await expect(initial).toContainText("capabilities.load");
   await expect(initial).not.toContainText("workspace.write");
-  await expect(initial).not.toContainText("browser.navigate");
+  // Authorized core browser tools are eligible bootstrap interfaces.
+  await expect(initial).toContainText("browser.navigate");
+  await expect(initial).toContainText("browser.close");
+  await expect(initial).not.toContainText("browser.set_geolocation");
   const written = await send("write");
   await expect(written).toContainText('"name":"workspace.write"');
   await expect(written).not.toContainText('"error":');

@@ -79,3 +79,19 @@ Local checks on this cleanup:
 - Current contract consumers were searched for obsolete names (only the explicit no-alias regression retains `latestRun`); Markdown local links and `git diff --check` passed.
 
 Logs: `/private/tmp/background-final-acceptance.log`, `/private/tmp/background-final-ci.json`, `/private/tmp/background-final-api-wire.log`, `/private/tmp/background-final-unit.log`, `/private/tmp/background-final-build.log`, `/private/tmp/background-final-playwright.log`. This is verified local cleanup on top of `afe01cef`, not a claim that its earlier hosted workflow covers these edits or that all five jobs passed. Earlier full-suite results remain historical; applicable affected-scope checks were repeated here.
+
+## Non-UI CI fixture repair (2026-10-09)
+
+Started on main `3947e51af21486f6b16b1f7e568f3f2bdef17cb7`. Read failed [workflow 37829186299](https://github.com/trannamtrung1st/agent-core/actions/runs/37829186299) and compared the targeted corrections in [PR #4](https://github.com/trannamtrung1st/agent-core/pull/4), without merging its wider browser refactor. The user explicitly assigned only non-UI/UX failures to this session; credential/background title selectors and durable retry navigation are handled separately.
+
+The SQLite API fixture previously admitted B/C directly through stores after Continue had created a mailbox-owned runtime. Its checkpoint could race those expected revisions. Direct-store arrangement now completes before Continue; the test still checks initial result/file preservation, repeat Continue and SQLite reopen. The actual browser journey independently exercises B/C after Continue, so real user sequencing remains covered.
+
+The Secretary fixture now explicitly projects its already authorized Automation schemas, preserving the schedule expectation instead of accepting the Synthetic fallback. The capability journey expects authorized `browser.navigate` and `browser.close` bootstrap interfaces and still excludes advanced `browser.set_geolocation` and unloaded `workspace.write`. This matches the existing ToolProjectionService and canonical bootstrap policy; no production policy, storage or UI changes were made.
+
+Local checks:
+
+- `dotnet test tests/AgentCore.Api.Tests --filter FullyQualifiedName~BackgroundSessionJourneyTests --nologo -m:1 -p:UseSharedCompilation=false -nodeReuse:false`: **3 passed**, including InMemory/SQLite and reopen.
+- `dotnet test tests/AgentCore.Application.Tests --filter FullyQualifiedName~CapabilityProjectionTests --nologo -m:1 -p:UseSharedCompilation=false -nodeReuse:false`: **27 passed**, including authorization/discovery, execution load persistence and next-Run reset.
+- `CI=1 PLAYWRIGHT_FAITHFUL_MANUAL=1 PLAYWRIGHT_API_PORT=5280 PLAYWRIGHT_WEB_PORT=5273 PLAYWRIGHT_FIXTURE_PORT=5291 PLAYWRIGHT_SQLITE_PATH=/private/tmp/non-ui-fixtures-e2e.db pnpm exec playwright test e2e/capability-projection.spec.ts e2e/secretary-demo.spec.ts e2e/agent-run-background-session.spec.ts --project=synthetic --project=secretary-demo`: **6 passed**, 1.4 minutes. Secretary creates Call John with the expected scheduled answer, inspects provenance and quiet/attention outcomes, and completes browser record lookup. Capability inspection/bootstrap/on-demand workspace loading and real A/B/C original-result stability pass.
+
+Logs: `/private/tmp/non-ui-main-ci-failed.log`, `/private/tmp/non-ui-api.log`, `/private/tmp/non-ui-capability.log`, `/private/tmp/non-ui-playwright.log`. These are local checks on main's repair, not acceptance transferred from the PR SHA. Hosted closure remains unconfirmed until the resulting exact main SHA has all five green jobs; publication does not itself establish that result.
