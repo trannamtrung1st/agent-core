@@ -69,3 +69,24 @@ Review logs remain ignored under `local/verification/admin-ui-feedback/logs/`. A
 The remaining changed navigation cases also passed: `review-navigation.log` records 7 checks across shared Events, the Admin memory/Automation journey, Admin lifecycle, continuity maintenance and Experience/Skill Automation. This used `review.playwright.config.mts` (same isolated API/Vite ports and database `/private/tmp/agent-core-ui-review.db`, only the first two web servers, projects Synthetic/Admin lifecycle/P9.10/P9.8–9.9) and the following files: `shared-events.spec.ts`, `admin-lifecycle.spec.ts`, `p910-continuity-maintenance.spec.ts`, `p9899-continuity.spec.ts`, `z-admin-memory-automation-journey.spec.ts`. Together with the earlier 17-case batch, these cover 22 distinct browser scenarios; repeated Event checks are not additional unique coverage. The new focus regression passed on the settled source.
 
 The final focused frontend batch passed all 43 tests in 4 files (`review-unit-final.log`, 302.02s), using the earlier Node 22 invocation with all four changed test files together and `--maxWorkers=1`. Superseded restricted workers were stopped after the final run was established. The settled-source TypeScript check, production build, staged whitespace check and canonical-document link checks passed. The jsdom textarea measurement warning is fixture-only; live browser layout showed no overflow.
+
+## Background Work UI selector follow-up
+
+The next supplied review identified two remaining browser selectors that treated Background Work task titles as buttons. This UI-only follow-up updates `credential-bindings-work.spec.ts` to inspect Morning review through its row’s **View original result** action, assert the Needs attention result, and return to the catalog before checking the quiet row. `durable-journeys.spec.ts` uses that same action for the exact seeded retry Session. Its fixture helper reads the created Run’s Session ID because the preserved original-task title differs from the later Chat title; the test no longer assumes Retry fixture is the original title. Cancellation and reload assertions remain intact. No product UI, runtime, projection, scheduling or persistence behavior changed.
+
+From `web/`, the final command was:
+
+```sh
+PATH=/Users/trungtran/.nvm/versions/node/v22.18.0/bin:$PATH \
+PLAYWRIGHT_API_PORT=5108 PLAYWRIGHT_WEB_PORT=5198 \
+PLAYWRIGHT_SQLITE_PATH=/private/tmp/agent-core-background-selector-final.db \
+/Users/trungtran/.nvm/versions/node/v22.18.0/bin/node node_modules/@playwright/test/cli.js test \
+  --config=../local/verification/admin-ui-feedback/playwright.config.mts \
+  e2e/credential-bindings-work.spec.ts e2e/durable-journeys.spec.ts e2e/background-work.spec.ts
+```
+
+All 5 scenarios passed (45.0s); ignored log: `local/verification/admin-ui-feedback/logs/background-selectors-final.log`. Coverage includes attention/quiet labels, exact approvals, source navigation, bulk-read recovery and detached reminder/retry cancellation surviving reload. The earlier attempt passed credential bindings but failed the retry selector because it still assumed the Chat title matched the original-task heading; the final run supersedes it.
+
+Playwright MCP separately exercised original-result inspection with public DTO fixtures in the running Synthetic app: keyboard activation of View original result, the expected Needs attention summary, Back with restored action focus, and reopening at 390px without page overflow. Console errors and unexpected HTTP failures were absent. Backend behavior for cancellation/reload was exercised by the durable CLI scenario, not the mocked MCP result.
+
+`git diff --check` passed. No application code changed, so production build and frontend component suites were not rerun for this selector-only slice. Changes were reviewed on top of the concurrently published `6e3395a7` CI-fixture commit and preserve its work. The supplied review reports failed hosted CI on `3947e51a`; this local UI verification does not establish exact-commit integrated acceptance or a new freeze.

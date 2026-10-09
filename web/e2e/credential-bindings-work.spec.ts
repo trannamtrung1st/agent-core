@@ -44,7 +44,12 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   await expect(attentionWork).toBeVisible({ timeout: 12_000 });
   await attentionWork.click();
   await expect(drawer.getByText('Unread · needs attention')).toHaveCount(1);
-  await expect(drawer.getByRole('button', { name: 'Morning review', exact: true })).toBeVisible();
+  const attentionRow = drawer.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Morning review', exact: true }) });
+  await expect(attentionRow.getByRole('button', { name: 'View original result', exact: true })).toBeVisible();
+  await attentionRow.getByRole('button', { name: 'View original result', exact: true }).click();
+  const result = page.getByRole('dialog', { name: 'Morning review', exact: true });
+  await expect(result.getByRole('region', { name: 'Needs attention', exact: true })).toContainText('Low stock on AC Keyboard.');
+  await result.getByRole('button', { name: 'All background Sessions', exact: true }).click();
   const quietRow = drawer.getByRole('listitem').filter({ hasText: 'Quiet check' });
   await expect(quietRow).toBeVisible(); await expect(quietRow.getByText('Unread · needs attention')).toHaveCount(0);
   const closeAgain = drawer.getByRole("button", { name: "Close" });
