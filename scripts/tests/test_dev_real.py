@@ -4,7 +4,9 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
 
 
@@ -84,6 +86,55 @@ class DevRealTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("API exited before becoming ready", result.stderr)
         self.assertFalse((self.root / "local/dev/web.pid").exists())
+
+    def test_denied_process_inspection_preserves_tracking_and_fails_stop(self):
+        started = self.run_script("start", "--api-only")
+        self.assertEqual(started.returncode, 0, started.stderr)
+        pids = self.pids()
+        self.command("ps", "echo 'ps: Operation not permitted' >&2; exit 1")
+        try:
+            stopped = self.run_script("stop")
+            self.assertNotEqual(stopped.returncode, 0)
+            self.assertIn("Cannot inspect PID", stopped.stderr)
+            self.assertNotIn("Stopped API and web", stopped.stdout)
+            self.assertEqual(self.pids(), pids)
+        finally:
+            (self.bin / "ps").unlink()
+        self.assertTrue(all(self.alive(pid) for pid in pids))
+        recovered = self.run_script("stop")
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        self.assertTrue(all(not self.alive(pid) for pid in pids))
+
+    def test_stop_kills_child_that_outlives_launcher_and_ignores_term(self):
+        child_pid_file = self.root / "child.pid"
+        child = self.root / "child.py"
+        child.write_text("import os, pathlib, signal, time\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            f"pathlib.Path({str(child_pid_file)!r}).write_text(str(os.getpid()))\n"
+            "time.sleep(300)\n")
+        launcher = self.root / "launcher.py"
+        launcher.write_text("import subprocess, sys\n"
+            f"subprocess.Popen([sys.executable, {str(child)!r}]).wait()\n")
+        self.command("pnpm", f'exec "{sys.executable}" "{launcher}"')
+        # Shorten only the shutdown deadline, without replacing process probes.
+        self.command("seq", "echo 1")
+        started = self.run_script("start", "--api-only")
+        self.assertEqual(started.returncode, 0, started.stderr)
+        for _ in range(100):
+            if child_pid_file.exists():
+                break
+            time.sleep(0.02)
+        child_pid = int(child_pid_file.read_text())
+        pids = self.pids()
+        try:
+            stopped = self.run_script("stop")
+            self.assertEqual(stopped.returncode, 0, stopped.stderr)
+            self.assertTrue(all(not self.alive(pid) for pid in pids))
+            self.assertFalse(self.alive(child_pid), "TERM-resistant child survived stop")
+            self.assertFalse((self.root / "local/dev/web.pid").exists())
+        finally:
+            if self.alive(child_pid):
+                os.kill(child_pid, signal.SIGKILL)
 
 
 if __name__ == "__main__":
