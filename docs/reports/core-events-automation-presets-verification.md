@@ -14,7 +14,7 @@ The six safe event sources share the ordinary Automation occurrence and AgentRun
 
 Core snapshots freeze on first outbox fan-out; webhook snapshots freeze at authenticated receipt. Decisions, revision, expression version/hash and dispatch survive restart. Current disable, owner/source authority and preset prerequisites stay live. Depth four and visited Automation IDs bound chains. User text cannot set trusted causation.
 
-Migration CoreEventAutomationFilters appends columns, enum values and three tables. It preserves Schedule/webhook rows and existing webhook receipt identities. Populated prior-schema migration tests inspect nullable defaults and reopen persisted subscribers. SQLite and InMemory tests exercise terminal emission, retry exclusions, rollback, lifecycle distinction and coverage.
+Migration CoreEventAutomationFilters appends columns, enum values and three tables. The forward EventDispatchDefault migration preserves the everyMatch SQL default through SQLite rebuilds. It preserves Schedule/webhook rows and existing webhook receipt identities. Populated prior-schema migration tests inspect nullable defaults and reopen persisted subscribers. SQLite and InMemory tests exercise terminal emission, retry exclusions, rollback, lifecycle distinction and coverage.
 
 Buckets retain up to 24 references within a bounded payload; at most 32 are pending per Automation. Overflow and failed flushes retain source coverage and safe reason codes. Owner-checked cursor pages enumerate unfinished references, and experience.source validates exact sources before acknowledging inspected coverage. History is retained for the Instance lifetime and purged on deletion; there is no timer that deletes undelivered or unreviewed evidence.
 

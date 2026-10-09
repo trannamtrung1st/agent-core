@@ -460,6 +460,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
                 table.HasCheckConstraint("CK_Automations_Dispatch", "(DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (DispatchMode = 1 AND DispatchWindowSeconds BETWEEN 60 AND 3600)");
                 table.HasCheckConstraint("CK_Automations_Preset", "(PresetId IS NULL AND PresetVersion IS NULL) OR (PresetId IS NOT NULL AND PresetVersion >= 1)");
             });
+            entity.Property(row => row.DispatchMode).HasDefaultValue(0);
             entity.HasKey(row => row.AutomationId);
             entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();

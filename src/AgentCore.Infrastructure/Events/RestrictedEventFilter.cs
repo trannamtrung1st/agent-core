@@ -44,7 +44,14 @@ public sealed class RestrictedEventFilter : IEventFilterEvaluator
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception e) when (e is not OutOfMemoryException and not StackOverflowException)
-        { return new(null, "error", e is TimeoutException or OperationCanceledException ? "filter-timeout" : "filter-evaluation-error"); }
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var code = deadline.IsCancellationRequested || e is TimeoutException or OperationCanceledException
+                ? "filter-timeout" : e.GetType().Name switch
+                { "ExecutionCanceledException" => "filter-timeout", "MemoryLimitExceededException" => "filter-memory-budget",
+                    "StatementsCountOverflowException" => "filter-statement-budget", _ => "filter-evaluation-error" };
+            return new(null, "error", code);
+        }
         finally { Workers.Release(); }
     }
 

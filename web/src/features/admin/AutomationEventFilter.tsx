@@ -12,6 +12,9 @@ const failureText: Record<string, string> = {
   "filter-envelope-budget": "Keep the sample within 8 KiB.",
   "filter-envelope-schema": "Use an event envelope with schemaVersion 1.",
   "filter-timeout": "The test took too long. Simplify the expression and retry.",
+  "filter-memory-budget": "Simplify the sample and expression to fit the evaluation budget.",
+  "filter-statement-budget": "Simplify the expression to fit the evaluation budget.",
+  "filter-expression-version": "Use a filter supported by the current application version.",
   "filter-worker-budget": "The evaluator is busy. Retry this test.",
   "filter-evaluation-error": "Check missing fields and simplify the expression before retrying."
 };

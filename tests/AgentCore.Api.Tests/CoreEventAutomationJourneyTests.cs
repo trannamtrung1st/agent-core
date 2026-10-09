@@ -76,6 +76,14 @@ public sealed class CoreEventAutomationJourneyTests
             Assert.All(sourceIds, id => Assert.Contains(records, r => r.SourceId == id));
             Assert.Empty((await services.GetRequiredService<ICoreEventStore>().CoveragePageAsync(new(instanceId, LocalUserProfile.Id), Guid.Parse(automation.AutomationId), null, 24)).Items);
             Assert.Equal(0, await dispatcher.RunOnceAsync()); // review itself fails the UserTurn filter
+            // A saved preset with no new source remains an ordinary, quiet successful Run.
+            (await client.PostAsJsonAsync(path + "/" + automation.AutomationId + "/run", new { expectedRevision = automation.Revision })).EnsureSuccessStatusCode();
+            await UnifiedAutomationJourneyTests.Drain(services);
+            var quiet = Assert.Single(await runs.ListAsync(owner, 20), r => r.Admission.Activation.Kind == ActivationKind.ManualBackground);
+            Assert.Equal(AgentRunOutcomeKind.NoAction, quiet.Result!.OutcomeKind);
+            Assert.Equal(2, (await services.GetRequiredService<IExperienceStore>().ListAsync(instanceId, 20)).Count);
+            Assert.DoesNotContain((await services.GetRequiredService<IMemoryStore>().LoadAsync(quiet.SessionId))!.Entries, e => e.Role == ConversationRole.Assistant);
+            Assert.Equal(0, await dispatcher.RunOnceAsync());
         }
         await using (var restarted = new ExperienceHost(db, clock: clock))
         {

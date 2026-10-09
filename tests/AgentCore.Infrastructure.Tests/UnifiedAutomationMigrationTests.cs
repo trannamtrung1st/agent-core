@@ -37,6 +37,15 @@ public sealed class UnifiedAutomationMigrationTests
                     preserved[table] = await ReadRowAsync(connection, table, oldSchema: true);
                 }
                 await db.GetService<IMigrator>().MigrateAsync();
+                await using (var defaults = connection.CreateCommand())
+                {
+                    defaults.CommandText = "PRAGMA table_info('Automations');";
+                    await using var reader = await defaults.ExecuteReaderAsync();
+                    var found = false;
+                    while (await reader.ReadAsync())
+                        if (reader.GetString(1) == "DispatchMode") { Assert.Equal("0", reader.GetString(4)); found = true; }
+                    Assert.True(found);
+                }
                 foreach (var table in preserved.Keys)
                     Assert.Equal(preserved[table], await ReadRowAsync(connection, table, oldSchema: false));
             }

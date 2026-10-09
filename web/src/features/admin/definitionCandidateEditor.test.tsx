@@ -433,7 +433,7 @@ describe("definition candidate editor", () => {
     setSpin("One-shot horizon days", "14");
     setSpin("Minimum recurrence days", "2");
     setSpin("Minimum fixed interval seconds", "120");
-    await chooseOption("Allowed source kinds", "Application event");
+    await chooseOption("Allowed source kinds", "Shared Event (webhook)");
     setText("Metadata key 1", "team");
     setText("Metadata value 1", "platform");
 
