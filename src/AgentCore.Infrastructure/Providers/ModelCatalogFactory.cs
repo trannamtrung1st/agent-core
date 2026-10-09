@@ -68,7 +68,7 @@ internal static class ModelCatalogFactory
                     structuredOutput: false,
                     reasoning: true,
                     ["low", "medium", "high"],
-                    "medium"),
+                    "low"),
                 Descriptor(
                     ScriptedBetaKey,
                     "Scripted Beta",
@@ -98,13 +98,13 @@ internal static class ModelCatalogFactory
         new ConfigurationModelCatalog(DeepSeekV41FlashKey,
         [
             Descriptor(DeepSeekV41FlashKey, "DeepSeek V4.1 Flash", "primary-llm", DeepSeekV41FlashModelId,
-                true, true, true, true, ["low", "medium", "high", "max"], "medium", preferResponseFunction: true),
+                true, true, true, true, ["low", "medium", "high", "max"], "low", preferResponseFunction: true),
             Descriptor(Gpt6LunaKey, "GPT-6 Luna", "primary-llm", Gpt6LunaModelId,
                 true, true, true, true, Gpt6LunaReasoningEfforts, "low", transport: ModelInferenceTransport.Responses),
             Descriptor(ClaudeHaiku55Key, "Claude Haiku 5.5", "primary-llm", ClaudeHaiku55ModelId,
-                true, true, true, true, ReasoningEfforts, "medium"),
+                true, true, true, true, ReasoningEfforts, "low"),
             Descriptor(Gpt61SolKey, "GPT-6.1 Sol", "primary-llm", Gpt61SolModelId,
-                true, true, true, true, ReasoningEfforts, "medium", transport: ModelInferenceTransport.Responses),
+                true, true, true, true, ReasoningEfforts, "low", transport: ModelInferenceTransport.Responses),
             Descriptor(OpenRouterFreeKey, "OpenRouter Free (experimental)", "primary-llm", OpenRouterFreeModelId,
                 true, false, false, false, [], null, costCategory: "free")
         ]);
@@ -120,7 +120,7 @@ internal static class ModelCatalogFactory
         var reasoning = !string.IsNullOrWhiteSpace(languageModel.ReasoningEffort)
             || string.Equals(modelId, DeepSeekV41FlashModelId, StringComparison.Ordinal);
         var defaultEffort = string.IsNullOrWhiteSpace(languageModel.ReasoningEffort)
-            ? (reasoning ? "medium" : null)
+            ? (reasoning ? "low" : null)
             : languageModel.ReasoningEffort.Trim();
         var efforts = reasoning ? new[] { "low", "medium", "high" } : Array.Empty<string>();
         var display = string.Equals(key, DeepSeekV41FlashKey, StringComparison.Ordinal)
@@ -169,7 +169,7 @@ internal static class ModelCatalogFactory
             .ToArray();
         var reasoning = entry.Reasoning || efforts.Length > 0;
         var defaultEffort = string.IsNullOrWhiteSpace(entry.DefaultReasoningEffort)
-            ? (reasoning ? languageModel?.ReasoningEffort ?? "medium" : null)
+            ? (reasoning ? languageModel?.ReasoningEffort ?? "low" : null)
             : entry.DefaultReasoningEffort.Trim();
         return Descriptor(
             entry.Key.Trim(),

@@ -10,6 +10,23 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class ModelCatalogFactoryTests
 {
     [Fact]
+    public void Missing_primary_and_configured_catalog_efforts_default_to_low()
+    {
+        var primary = ModelCatalogFactory.FromPrimary(new() { DefaultModel = ModelCatalogFactory.DeepSeekV41FlashModelId });
+        Assert.Equal("low", primary.Default.DefaultReasoningEffort);
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Providers:ModelCatalog:Models:0:Key"] = "custom",
+            ["Providers:ModelCatalog:Models:0:Reasoning"] = "true",
+            ["Providers:ModelCatalog:Models:0:SupportedReasoningEfforts:0"] = "low",
+            ["Providers:ModelCatalog:Models:0:SupportedReasoningEfforts:1"] = "high"
+        }).Build();
+        var catalog = ModelCatalogFactory.Create("Synthetic", null, configuration);
+        Assert.Equal("low", catalog.Default.DefaultReasoningEffort);
+        Assert.Equal("high", ModelCatalogFactory.Create("Synthetic", new() { ReasoningEffort = "high" }, configuration).Default.DefaultReasoningEffort);
+    }
+
+    [Fact]
     public void Synthetic_exposes_deterministic_fake_models()
     {
         var catalog = ModelCatalogFactory.Create("Synthetic", new LanguageModelProviderOptions { Adapter = "Scripted" }, configuration: null);
@@ -17,7 +34,7 @@ public sealed class ModelCatalogFactoryTests
         Assert.Equal(["scripted-alpha", "scripted-beta", "scripted-vision"], catalog.Models.Select(model => model.Key).ToArray());
         Assert.True(catalog.Get("scripted-alpha")!.Reasoning);
         Assert.Equal(["low", "medium", "high"], catalog.Get("scripted-alpha")!.SupportedReasoningEfforts);
-        Assert.Equal("medium", catalog.Get("scripted-alpha")!.DefaultReasoningEffort);
+        Assert.Equal("low", catalog.Get("scripted-alpha")!.DefaultReasoningEffort);
         Assert.False(catalog.Get("scripted-beta")!.Reasoning);
         Assert.False(catalog.Get("scripted-alpha")!.StructuredOutput);
         Assert.True(catalog.Get("scripted-beta")!.StructuredOutput);
@@ -62,8 +79,8 @@ public sealed class ModelCatalogFactoryTests
         foreach (var retired in new[] { "gpt-4o-mini-2024-07-18", "gpt-4.1", "gpt-5.6-luna" }) Assert.Null(catalog.Get(retired));
         Assert.Equal("low", catalog.Get(ModelCatalogFactory.Gpt6LunaKey)!.DefaultReasoningEffort);
         Assert.Equal(ModelCatalogFactory.Gpt6LunaReasoningEfforts, catalog.Get(ModelCatalogFactory.Gpt6LunaKey)!.SupportedReasoningEfforts);
-        Assert.Equal("medium", catalog.Get(ModelCatalogFactory.Gpt61SolKey)!.DefaultReasoningEffort);
-        Assert.Equal("medium", catalog.Get(ModelCatalogFactory.ClaudeHaiku55Key)!.DefaultReasoningEffort);
+        Assert.Equal("low", catalog.Get(ModelCatalogFactory.Gpt61SolKey)!.DefaultReasoningEffort);
+        Assert.Equal("low", catalog.Get(ModelCatalogFactory.ClaudeHaiku55Key)!.DefaultReasoningEffort);
         Assert.Equal(ModelInferenceTransport.Responses, catalog.Get(ModelCatalogFactory.Gpt61SolKey)!.Transport);
         Assert.Equal(ModelInferenceTransport.Responses, catalog.Get(ModelCatalogFactory.Gpt6LunaKey)!.Transport);
         Assert.True(catalog.Get(ModelCatalogFactory.DeepSeekV41FlashKey)!.PreferResponseFunction);
@@ -74,6 +91,7 @@ public sealed class ModelCatalogFactoryTests
         {
             Assert.True(model.Tools); Assert.True(model.Vision); Assert.True(model.StructuredOutput);
             Assert.Contains(model.DefaultReasoningEffort, model.SupportedReasoningEfforts);
+            Assert.Equal("low", model.DefaultReasoningEffort);
         }
     }
 
@@ -155,6 +173,11 @@ public sealed class ModelCatalogFactoryTests
         var catalog = ModelCatalogFactory.Real();
         var launch = File.ReadAllText(Path.Combine(root, "src/AgentCore.Api/Properties/launchSettings.json"));
         var compose = File.ReadAllText(Path.Combine(root, "docker-compose.real.yml"));
+        Assert.Contains("\"Providers__LanguageModels__primary-llm__ReasoningEffort\": \"low\"", launch, StringComparison.Ordinal);
+        Assert.Contains("${AGENTCORE_LLM_REASONING_EFFORT:-low}", compose, StringComparison.Ordinal);
+        Assert.Contains("AGENTCORE_LLM_REASONING_EFFORT=low", File.ReadAllText(Path.Combine(root, ".env.example")), StringComparison.Ordinal);
+        var shipped = new ConfigurationBuilder().AddJsonFile(Path.Combine(root, "src/AgentCore.Api/appsettings.json")).Build();
+        Assert.Equal("low", ModelCatalogFactory.Create("Synthetic", null, shipped).Default.DefaultReasoningEffort);
         Assert.Equal(5, catalog.Models.Count);
         Assert.DoesNotContain("Providers__ModelCatalog__Models__", launch, StringComparison.Ordinal);
         Assert.DoesNotContain("Providers__ModelCatalog__Models__", compose, StringComparison.Ordinal);
