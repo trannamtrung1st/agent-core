@@ -15,10 +15,11 @@ using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
+using Xunit.Abstractions;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class NativeBrowserLiveJourneyTests
+public sealed class NativeBrowserLiveJourneyTests(ITestOutputHelper evidence)
 {
     [NativeBrowserLiveFact]
     public async Task Configured_real_model_completes_generic_spa_through_owned_runtime()
@@ -61,10 +62,12 @@ public sealed class NativeBrowserLiveJourneyTests
                 browserLease: browser);
             await runtime.AttachAsync();
             var url = browser.HostPolicy.NavigationOrigins.Single() + "/browser-native.html";
-            Assert.True(await runtime.SubmitUserTextAsync($"Use the browser at {url}. Find and activate Asset 159, fill the Title field with Native browser proof and the Notes field with Generic SPA verified. Set Enabled to checked. Verify the resulting fields and report what happened. Use only this fixture; do not use web search or other websites."));
+            Assert.True(await runtime.SubmitUserTextAsync($"Use the browser at {url}. Find and activate Asset 159, fill the Title field with Native browser proof and the Notes field with Generic SPA verified. Set Enabled to checked. Load browser.fill_form through capabilities.load if it is not offered, and use browser.fill_form to set all three fields together. Verify the resulting fields and report what happened. Use only this fixture; do not use web search or other websites."));
             using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             await output.WaitForAsync(item => item.Payload is ResponseCompletedOutput or ErrorOutput, deadline.Token);
             await runtime.WaitUntilIdleAsync();
+            evidence.WriteLine("Model: " + Environment.GetEnvironmentVariable("AGENTCORE_LLM_MODEL") + "; requests: " + recording.Requests.Count
+                + "; tools: " + string.Join(", ", recording.Calls.Select(call => call.Name)));
             var errors = output.Items.Select(item => item.Payload).OfType<ErrorOutput>().ToArray();
             Assert.True(errors.Length == 0, "Runtime errors: " + string.Join(", ", errors.Select(error => $"{error.Category}/{error.Code}/{error.FailureReason}")));
             var context = browser.ContextFor(id);
@@ -81,6 +84,7 @@ public sealed class NativeBrowserLiveJourneyTests
             Assert.Contains(recording.Calls, call => call.Name == ToolCatalog.CapabilitiesLoad);
             Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
             Assert.NotEmpty(runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed).Text);
+            evidence.WriteLine("DOM verified: Selected Asset 159; Title=Native browser proof; Notes=Generic SPA verified; Enabled=true; completed response without runtime errors.");
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }
