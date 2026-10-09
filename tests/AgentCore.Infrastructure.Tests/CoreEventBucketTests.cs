@@ -166,6 +166,41 @@ public sealed class CoreEventBucketTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
     }
 
+    [Theory]
+    [InlineData(false, false)] [InlineData(true, false)]
+    [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Bucket_budget_includes_causation_and_retains_oversize_source_coverage(bool sqlite, bool oversize)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"core-causal-budget-{Guid.NewGuid():N}.db");
+        var contexts = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        ICoreEventStore store = sqlite ? new SqliteCoreEventStore(contexts) : new InMemoryCoreEventStore();
+        var now = DateTimeOffset.UtcNow;
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var subscription = new EventSubscriptionSnapshot(Guid.NewGuid(), owner, 1, null, new(EventDispatchMode.CoalesceLatest, 60), TriggerSourceKind.ApplicationEvent, Guid.NewGuid());
+        var visited = Enumerable.Range(0, oversize ? 180 : 50).Select(_ => Guid.NewGuid()).ToArray();
+        if (sqlite) { await using var db = await contexts.CreateDbContextAsync(); await db.Database.MigrateAsync(); }
+        try
+        {
+            for (var i = 0; i < (oversize ? 1 : 3); i++)
+                await store.CoalesceAsync(new(Guid.NewGuid(), owner, "orders", now, "{}", Guid.NewGuid(), 2, visited), subscription);
+            var buckets = await store.DueBucketsAsync(now.AddSeconds(61));
+            if (oversize)
+            {
+                Assert.Empty(buckets);
+                var coverage = Assert.Single((await store.CoveragePageAsync(owner, subscription.AutomationId, null, 24)).Items);
+                Assert.Equal("evidence-budget", coverage.CompletionCode);
+                Assert.Equal(visited, coverage.Source.VisitedAutomationIds);
+            }
+            else
+            {
+                Assert.Equal(2, buckets.Count);
+                Assert.Equal(3, buckets.Sum(b => b.Sources.Count));
+                Assert.All(buckets.SelectMany(b => b.Sources), source => Assert.Equal(visited, source.VisitedAutomationIds));
+            }
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
+
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(options); public Task<AgentCoreDbContext> CreateDbContextAsync(CancellationToken ct = default) => Task.FromResult(CreateDbContext()); }
 }

@@ -27,9 +27,11 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
             deliveries.TryGetValue((source.EventId, subscription.AutomationId), out var delivery);
             if (subscription.SourceKind == TriggerSourceKind.CoreEvent && delivery?.Status != EventMatchStatus.Matched) return ValueTask.CompletedTask;
             if (buckets.Values.Any(b => b.Subscription.AutomationId == subscription.AutomationId && b.Sources.Any(e => e.EventId == source.EventId))) return ValueTask.CompletedTask;
-            var bucket = buckets.Values.Where(b => !b.Flushed && b.Subscription == subscription && b.DueAtUtc > source.ReceivedAtUtc && b.Sources.Count < 24 && b.Sources.Sum(e => e.DataJson.Length + 180) + source.DataJson.Length + 180 < 5500).OrderBy(b => b.DueAtUtc).FirstOrDefault();
+            var bucket = buckets.Values.Where(b => !b.Flushed && b.Subscription == subscription && b.DueAtUtc > source.ReceivedAtUtc && EventBucketPacking.CanAppend(b.Sources, source)).OrderBy(b => b.DueAtUtc).FirstOrDefault();
             bucket = bucket is null ? new(CoreEventPersistence.Id($"bucket:{source.EventId:D}:{subscription.AutomationId:D}"), subscription, source.ReceivedAtUtc.AddSeconds(subscription.Dispatch.WindowSeconds!.Value), [source]) : bucket with { Sources = bucket.Sources.Append(source).ToArray() };
-            if (!buckets.ContainsKey(bucket.BucketId) && buckets.Values.Count(b => !b.Flushed && b.Subscription.AutomationId == subscription.AutomationId) >= 32)
+            if (!EventBucketPacking.CanAppend([], source))
+                bucket = bucket with { Flushed = true, CompletionCode = "evidence-budget" };
+            else if (!buckets.ContainsKey(bucket.BucketId) && buckets.Values.Count(b => !b.Flushed && b.Subscription.AutomationId == subscription.AutomationId) >= 32)
                 bucket = bucket with { Flushed = true, CompletionCode = "bucket-capacity" };
             buckets[bucket.BucketId] = bucket;
             if (delivery is not null) deliveries[(source.EventId, subscription.AutomationId)] = delivery with { Status = bucket.CompletionCode is null ? EventMatchStatus.Coalesced : EventMatchStatus.BudgetSkipped, Code = bucket.CompletionCode };

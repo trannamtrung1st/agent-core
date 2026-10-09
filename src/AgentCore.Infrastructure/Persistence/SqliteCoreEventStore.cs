@@ -42,12 +42,14 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
         if (subscription.SourceKind == TriggerSourceKind.CoreEvent && delivery?.Status != (int)EventMatchStatus.Matched) return;
         if (await db.CoreEventBuckets.AnyAsync(b => b.AutomationId == subscription.AutomationId.ToString("D") && EF.Functions.Like(b.PayloadJson, "%" + source.EventId.ToString("D") + "%"), ct)) return;
         var rows = await db.CoreEventBuckets.Where(b => !b.Flushed && b.AutomationId == subscription.AutomationId.ToString("D") && b.TriggerRevision == subscription.TriggerRevision && b.DueAtUtc > source.ReceivedAtUtc.ToUnixTimeMilliseconds()).OrderBy(b => b.DueAtUtc).Take(32).ToArrayAsync(ct);
-        var row = rows.FirstOrDefault(r => { var b = JsonSerializer.Deserialize<CoreEventBucket>(r.PayloadJson, CoreEventPersistence.Json)!; return b.Sources.Count < 24 && b.Sources.Sum(e => e.DataJson.Length + 180) + source.DataJson.Length + 180 < 5500; });
+        var row = rows.FirstOrDefault(r => { var b = JsonSerializer.Deserialize<CoreEventBucket>(r.PayloadJson, CoreEventPersistence.Json)!; return EventBucketPacking.CanAppend(b.Sources, source); });
         CoreEventBucket bucket;
         if (row is null)
         {
             bucket = new(CoreEventPersistence.Id($"bucket:{source.EventId:D}:{subscription.AutomationId:D}"), subscription, source.ReceivedAtUtc.AddSeconds(subscription.Dispatch.WindowSeconds!.Value), [source]);
-            if (await db.CoreEventBuckets.CountAsync(b => !b.Flushed && b.AutomationId == subscription.AutomationId.ToString("D"), ct) >= 32)
+            if (!EventBucketPacking.CanAppend([], source))
+                bucket = bucket with { Flushed = true, CompletionCode = "evidence-budget" };
+            else if (await db.CoreEventBuckets.CountAsync(b => !b.Flushed && b.AutomationId == subscription.AutomationId.ToString("D"), ct) >= 32)
                 bucket = bucket with { Flushed = true, CompletionCode = "bucket-capacity" };
             row = new() { BucketId = bucket.BucketId.ToString("D"), AutomationId = subscription.AutomationId.ToString("D"), TriggerRevision = subscription.TriggerRevision, DueAtUtc = bucket.DueAtUtc.ToUnixTimeMilliseconds(), Flushed = bucket.Flushed };
             db.CoreEventBuckets.Add(row);
