@@ -547,6 +547,13 @@ export async function continueInChat(sessionId: string): Promise<{ sessionId: st
 export async function listAgentRuns(sessionId: string, cursor?: string, limit = 20): Promise<CursorPage<AgentRun>> {
   return runRequest(`/api/v2/sessions/${sessionId}/agent-runs?${new URLSearchParams({ limit: String(limit), ...(cursor ? { before: cursor } : {}) })}`);
 }
+export type InstanceActivitySession = { session: CatalogItem; origin: string; surfaces: string[] };
+export async function getInstanceSession(instanceId: string, sessionId: string): Promise<InstanceActivitySession> {
+  return runRequest(`/api/v2/agent-instances/${instanceId}/sessions/${sessionId}`);
+}
+export async function listInstanceSessions(instanceId: string, cursor?: string): Promise<CursorPage<InstanceActivitySession>> {
+  return runRequest(`/api/v2/agent-instances/${instanceId}/sessions?${new URLSearchParams({ limit: "20", ...(cursor ? { cursor } : {}) })}`);
+}
 export async function listInstanceAgentRuns(instanceId: string, cursor?: string, limit = 20): Promise<CursorPage<AgentRun>> {
   return runRequest(`/api/v2/agent-instances/${instanceId}/agent-runs?${new URLSearchParams({ limit: String(limit), ...(cursor ? { before: cursor } : {}) })}`);
 }

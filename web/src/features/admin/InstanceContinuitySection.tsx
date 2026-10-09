@@ -1,19 +1,13 @@
 import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState, type Key } from "react";
-import { Alert, App, Button, Descriptions, Drawer, Empty, Flex, Form, Spin, Switch, Table, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Descriptions, Empty, Flex, Form, Spin, Switch, Table, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
-import { getInstanceAgentRun, listInstanceAgentRuns, type AgentRun } from "../../services/api";
 import { instanceContinuityRequest as request, type IdentityMaintenanceSettings, type ExperienceItem, type ExperienceReview } from "../../services/adminApi";
-import { AgentRunDetails, AgentRunStatus } from "../chat/AgentRunDetails";
-import { useCursorPages } from "../chat/useCursorPages";
-import { DrawerListFooter } from "../chat/DrawerListFooter";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
-import { runActivationLabel, type RunSource } from "../chat/runPresentation";
-import { formatChatTime } from "../chat/chatTime";
 import { AdminSessionPicker } from "./AdminSessionPicker";
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString() : "Not yet";
@@ -25,47 +19,6 @@ function useResponseOrder() {
   return order;
 }
 
-export function InstanceRunsSection({ instanceId, open, wide = true, inline = false, selectedAgentRunId, onClose, onSource, onRun, detailsOnly, afterClose }: {
-  instanceId: string; open: boolean; wide?: boolean; inline?: boolean; selectedAgentRunId?: string; onClose: () => void;
-  onSource?: (source: RunSource) => void; onRun?: (runId: string) => void; detailsOnly?: boolean; afterClose?: () => void;
-}) {
-  const { token } = theme.useToken();
-  const page = useCursorPages(instanceId, open && !detailsOnly, listInstanceAgentRuns);
-  const [selected, setSelected] = useState<AgentRun | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    let current = true; let generation = 0; setSelected(null); setError(null);
-    async function refresh() {
-      if (!open || !selectedAgentRunId) return;
-      const request = ++generation;
-      try { const row = await getInstanceAgentRun(instanceId, selectedAgentRunId);
-        if (current && request === generation) { setSelected(prior => prior && prior.revision > row.revision ? prior : row); setError(null); }
-      } catch (reason) { if (current && request === generation) setError(reason instanceof Error ? reason.message : "Unable to load this run. Return to Runs and try again."); }
-    }
-    void refresh(); const timer = window.setInterval(() => void refresh(), 5_000);
-    return () => { current = false; generation++; window.clearInterval(timer); };
-  }, [instanceId, selectedAgentRunId, open]);
-  const content = detailsOnly ? <Flex vertical gap={token.padding}>
-    {selected?.automationId ? <Button onClick={() => onSource?.({ kind: "automation", automationId: selected.automationId! })}>View Automation</Button>
-      : selected?.experienceId ? <Button onClick={() => onSource?.({ kind: "experience", agentRunId: selected.agentRunId })}>View Experience</Button> : null}
-    {error ? <Alert type="error" showIcon title={error} /> : selected ? <AgentRunDetails run={selected} onChange={setSelected} /> : <Spin aria-label="Loading run details" />}
-  </Flex> : <Flex vertical gap={token.padding}>
-    {page.error ? <Alert type="error" showIcon title={page.error} /> : null}
-    <Table<AgentRun> aria-label="Runs table" className="admin-collection-table" size="small" rowKey="agentRunId"
-      loading={page.loading} dataSource={page.items} pagination={false} scroll={{ x: 850 }}
-      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No runs yet. Runs appear when this Agent takes a turn." /> }}
-      columns={[
-        { title: "Run", key: "run", width: 320, render: (_, row) => <Button type="link" className="admin-collection-name" onClick={() => onRun?.(row.agentRunId)}>{row.agentRunId}</Button> },
-        { title: "Turn", dataIndex: "activationKind", key: "kind", width: 180, render: (value: string) => runActivationLabel(value) },
-        { title: "Status", key: "status", width: 150, render: (_, row) => <AgentRunStatus run={row} /> },
-        { title: "Updated", key: "updated", width: 200, render: (_, row) => <time dateTime={row.updatedAt}>{formatChatTime(row.updatedAt) ?? "Unknown time"}</time> }
-      ]} />
-    <DrawerListFooter loadingMore={page.loadingMore} hasMore={page.hasMore} error={page.error} count={page.items.length} onLoadMore={() => void page.loadMore()} onRetry={() => void page.retry()} />
-  </Flex>;
-  if (inline) return <section aria-label="Runs">{content}</section>;
-  return <Drawer title={detailsOnly ? "Run details" : "Runs"} open={open} onClose={onClose} className="background-work-drawer"
-    size={wide ? "min(640px, 100vw)" : "100vw"} afterOpenChange={visible => { if (!visible) afterClose?.(); }}>{content}</Drawer>;
-}
 
 function Failure({ error, reload }: { error: AdminFailureNotice | null; reload: () => void }) {
   return error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={reload}>Reload</Button>} /> : null;

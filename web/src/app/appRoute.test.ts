@@ -45,7 +45,7 @@ describe("appRoute", () => {
       });
     }
     const instanceId = "019944af-00d1-7000-8000-000000000001";
-    for (const tab of ["identity", "runs", "credentials", "effective"] as const) {
+    for (const tab of ["identity", "activity", "credentials", "effective"] as const) {
       expect(parseAppRoute(adminInstancePath(instanceId, tab))).toEqual({
         area: "admin", view: "instance", instanceId, tab
       });
@@ -77,9 +77,14 @@ describe("appRoute", () => {
     expect(parseAppRoute(`${base}/unknown`)).not.toHaveProperty("tab");
     expect(parseAppRoute("/admin/definitions/examiner/unknown")).not.toHaveProperty("tab");
     expect(parseAppRoute("/admin/definitions/%E0%A4%A")).toEqual({ area: "chat" });
-    expect(adminInstancePath(base.split("/").at(-1)!, "runs", "automations")).toBe(`${base}/runs`);
+    expect(adminInstancePath(base.split("/").at(-1)!, "activity", "automations")).toBe(`${base}/activity`);
   });
 
+  it("migrates legacy Runs links and round-trips Activity views", () => {
+    const instanceId = "019944af-00d1-7000-8000-000000000001";
+    expect(parseAppRoute(`/admin/instances/${instanceId}/runs`)).toEqual({ area: "admin", view: "instance", instanceId, tab: "activity", section: "runs" });
+    for (const section of ["sessions", "runs"] as const) expect(parseAppRoute(adminInstancePath(instanceId, "activity", section))).toEqual({ area: "admin", view: "instance", instanceId, tab: "activity", section });
+  });
   it("remembers the last chat url", () => {
     sessionStorage.clear();
     rememberChatUrl("/admin");

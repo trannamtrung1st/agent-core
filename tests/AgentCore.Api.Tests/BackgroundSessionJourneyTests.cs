@@ -42,6 +42,27 @@ public sealed class BackgroundSessionJourneyTests
         var child = BackgroundSessionAdmissionFactory.ForImmediate(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             proposedParent, source, "http-background", "Check progress without blocking chat", "Progress check", true, now);
         await runs.AdmitImmediateAsync(child.Session, child.Run, source.Claim!.Generation);
+        // Activity includes chat and background contexts, independent of run count or chat visibility.
+        var empty = await sessions.CreateForInstanceAsync(instanceId, SessionMode.Text);
+        var foreignInstance = TestInstances.Create(client, "examiner", 1);
+        var foreignSession = await sessions.CreateForInstanceAsync(foreignInstance, SessionMode.Text);
+        var activityPath = $"/api/v2/agent-instances/{instanceId}/sessions";
+        var activity = await client.GetFromJsonAsync<InstanceActivitySessionPageResponse>(activityPath);
+        Assert.Equal(3, activity!.Items.Count);
+        Assert.Contains(activity.Items, row => row.Session.SessionId == empty.SessionId.ToString());
+        Assert.DoesNotContain(activity.Items, row => row.Session.SessionId == foreignSession.SessionId.ToString());
+        var task = Assert.Single(activity.Items, row => row.Session.SessionId == child.Session.SessionId.ToString());
+        Assert.Equal("ImmediateBackground", task.Origin);
+        Assert.Equal(new[] { "BackgroundWork" }, task.Surfaces);
+        var firstPage = await client.GetFromJsonAsync<InstanceActivitySessionPageResponse>(activityPath + "?limit=1");
+        Assert.True(firstPage!.HasMore);
+        var nextPage = await client.GetFromJsonAsync<InstanceActivitySessionPageResponse>(activityPath + "?limit=2&cursor=" + Uri.EscapeDataString(firstPage.NextCursor!));
+        Assert.Equal(3, firstPage.Items.Concat(nextPage!.Items).Select(row => row.Session.SessionId).Distinct().Count());
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(activityPath + $"/{foreignSession.SessionId}")).StatusCode);
+        Assert.Equal(child.Session.SessionId.ToString(), (await client.GetFromJsonAsync<InstanceActivitySessionResponse>(activityPath + $"/{child.Session.SessionId}"))!.Session.SessionId);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(activityPath + "?limit=101")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{Guid.NewGuid()}/sessions")).StatusCode);
+        using (var anonymous = factory.CreateClient()) Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(activityPath)).StatusCode);
         var artifacts = services.GetRequiredService<IArtifactStore>();
         for (var index = 0; index < 51; index++)
             await artifacts.CreateAsync(child.Session.SessionId, $"result-{index}.txt", "text/plain", "result"u8.ToArray(), null, null, agentRunId: child.Run.AgentRunId);

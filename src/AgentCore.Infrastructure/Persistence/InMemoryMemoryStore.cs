@@ -272,6 +272,16 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         }
     }
 
+    public ValueTask<SessionCatalogPage> ListInstanceSessionsAsync(AgentRunOwner owner, string? cursor, int limit, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            var items = _sessions.Values.Where(session => session.AgentInstanceId == owner.AgentInstanceId && session.ProfileId == owner.ProfileId).Select(CloneMeta).ToArray();
+            return ValueTask.FromResult(CatalogCursor.Page(items, cursor, limit, true));
+        }
+    }
+
     public ValueTask<SessionCatalogPage> ListCatalogAsync(
         string? cursor,
         int limit,

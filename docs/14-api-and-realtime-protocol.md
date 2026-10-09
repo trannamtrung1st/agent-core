@@ -568,3 +568,10 @@ execution.wait accepts either mode duration with seconds, or mode background wit
 Both Background Session endpoints resolve the owned Run by immutable `SessionOrigin.InitialBackgroundAgentRunId`; the field `initialRun` denotes this initial Run, or null if unavailable, never the newest conversation Run. `originalTitle` is nullable retained creation provenance; historical titles are not inferred from mutable Chat titles. Result/status/attempts/progress/failure/attention and displayed result time belong to that Run. `completionDelivery` remains a live query against the same initial identity.
 
 `GET /api/v2/sessions/{sessionId}/artifacts/page` accepts optional UUID `agentRunId`. The Run must belong to this owned Session (404 otherwise); filtering precedes paging/cursor validation. An unfiltered request retains all Session files. Counts and Background Work files use the same filter. Existing metadata/content download routes retain Session ownership authorization.
+
+
+## Instance Activity read contracts
+
+Owner-protected `GET /api/v2/agent-instances/{instanceId}/sessions?limit=20&cursor=...` returns `{items:[{session:<SessionCatalogItemResponse>,origin:<SessionOriginKind>,surfaces:["ChatList"|"BackgroundWork"]}],nextCursor,hasMore}`. It checks the Instance exists, scopes by exact Instance and trusted local profile before paging, includes all surfaces and archived Sessions, excludes durably deleted Sessions, and sorts by UpdatedAt/SessionId descending. Limits are 1–100; invalid limits/cursors return 400. A Session with multiple Runs/surfaces appears once; zero-run contexts are included. No Run count, duration or invented status is returned.
+
+`GET /api/v2/agent-instances/{instanceId}/sessions/{sessionId}` returns one identical Activity metadata record, independent of the current page. Missing, deleted, foreign-Instance and foreign-profile Sessions return 404. Both reads require the owner capability (401 without it) and allow archived Instance inspection. Existing instance AgentRun APIs remain independent from this collection. No write, persistent relationship, Session lifecycle or realtime contract changes.

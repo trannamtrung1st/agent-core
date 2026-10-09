@@ -2631,3 +2631,5 @@ body,
 .composer-shell:focus-within {
   border-color: var(--ac-color-primary);
 }
+
+.admin-activity-id.ant-typography { font-size: var(--ac-font-size-label); overflow-wrap: anywhere; }

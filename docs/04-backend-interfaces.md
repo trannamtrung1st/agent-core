@@ -626,3 +626,8 @@ Exact GetCompletionInboxAsync lookup and ListBackgroundPageAsync cursor reads re
 ## Original background task reads and Artifact provenance
 
 Background Work reads `IAgentRunStore.GetAsync(owner, InitialBackgroundAgentRunId)` and checks the returned Session identity; newer Runs cannot replace it. The existing completion delivery query remains independent. `IArtifactStore.CreateAsync` accepts optional trusted `agentRunId`, supplied by the current ToolExecutionAdmission for create/create_from_workspace browser screenshots/downloads and sandbox export. Non-execution materialization and historical records keep null ownership. `ListPageAsync` accepts an optional Run filter; both stores filter before cursor validation and paging. No timestamps or file order determine attribution. File bytes, quotas and Session download authorization stay unchanged.
+
+
+## Instance Activity catalog read
+
+`IMemoryStore.ListInstanceSessionsAsync(AgentRunOwner owner, string? cursor, int limit, CancellationToken)` projects bounded Session metadata for the exact Instance/profile across all surfaces, including archived contexts and excluding durably deleted ones. InMemory and SQLite retain descending UpdatedAt/SessionId cursor semantics. The SQLite read filters ownership before paging and materializes at most limit + 1 metadata rows with their snapshot, without loading entries or performing per-row Run/artifact queries. Existing Chat and Background Work catalog ports retain their surface filters. This is a read projection over existing Session ownership, not a new persistence model or domain relationship.

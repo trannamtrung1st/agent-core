@@ -460,6 +460,9 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     public ValueTask<SessionCatalogPage> ListBackgroundSessionsAsync(AgentRunOwner owner, string? cursor, int limit,
         bool includeArchived = false, CancellationToken ct = default) => ListSurfaceCatalogAsync(SessionSurface.BackgroundWork, owner, cursor, limit, includeArchived, ct);
 
+    public ValueTask<SessionCatalogPage> ListInstanceSessionsAsync(AgentRunOwner owner, string? cursor, int limit, CancellationToken ct = default) =>
+        ListSurfaceCatalogAsync(SessionSurface.None, owner, cursor, limit, true, ct);
+
     public ValueTask<SessionCatalogPage> ListCatalogAsync(string? cursor, int limit, bool includeArchived, CancellationToken cancellationToken = default) =>
         ListSurfaceCatalogAsync(SessionSurface.ChatList, null, cursor, limit, includeArchived, cancellationToken);
 
@@ -473,7 +476,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var query = db.Sessions.AsNoTracking().Include(item => item.Snapshot)
-            .Where(row => row.DurablyDeletedAtUtc == null && (row.Surfaces & (int)surface) != 0);
+            .Where(row => row.DurablyDeletedAtUtc == null);
+        if (surface != SessionSurface.None) query = query.Where(row => (row.Surfaces & (int)surface) != 0);
         if (owner is { } scopedOwner) query = query.Where(row => row.AgentInstanceId == scopedOwner.AgentInstanceId.ToString("D") && row.Snapshot!.ProfileId == scopedOwner.ProfileId.ToString("D"));
         if (!includeArchived)
         {
@@ -486,7 +490,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             var key = id.ToString("D");
             query = query.Where(row =>
                 row.UpdatedAtUtc < ms
-                || (row.UpdatedAtUtc == ms && string.CompareOrdinal(row.SessionId, key) < 0));
+                || (row.UpdatedAtUtc == ms && string.Compare(row.SessionId, key) < 0));
         }
 
         var rows = await query

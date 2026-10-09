@@ -115,7 +115,9 @@ import { AdminRetryAction, showAdminFailure } from "./adminFailure";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { startManagedPublicationChat } from "./adminManagedChat";
 import { InstanceWorkspaceSection } from "./InstanceWorkspaceSection";
-import { IdentityMaintenanceSection, ExperienceSection, InstanceRunsSection, type ExperienceSelection } from "./InstanceContinuitySection";
+import { InstanceRunsSection } from "./InstanceRunsSection";
+import { InstanceSessionsSection } from "./InstanceActivitySection";
+import { IdentityMaintenanceSection, ExperienceSection, type ExperienceSelection } from "./InstanceContinuitySection";
 import { InstanceAutomationsSection } from "./InstanceAutomationsSection";
 import type { AutomationSelection, RunSource } from "../chat/runPresentation";
 import { InstanceMemoryAutomationPanel } from "./instanceMemoryAutomation";
@@ -2404,6 +2406,7 @@ export function InstanceDetail({
 }) {
   const { token } = theme.useToken();
   const [activeTab, updateActiveTab] = useState<AdminInstanceTab>(tab ?? "identity");
+  const [activityTab, setActivityTab] = useState("sessions");
   const [continuityTab, setContinuityTab] = useState("memory");
   const [automationTab, setAutomationTab] = useState("automations");
   const [identityTab, setIdentityTab] = useState("profile");
@@ -2415,6 +2418,7 @@ export function InstanceDetail({
   const restoreRunFocus = useRef(false);
   useEffect(() => {
     updateActiveTab(tab ?? "identity");
+    if (tab === "activity") setActivityTab(section ?? "sessions");
     if (tab === "continuity") setContinuityTab(section ?? "memory");
     if (tab === "automation") setAutomationTab(section ?? "automations");
     if (tab === "identity") setIdentityTab(section ?? "profile");
@@ -2424,20 +2428,36 @@ export function InstanceDetail({
     setSourceSelection(source && /^[0-9a-f-]{36}$/i.test(source) ? { kind: "automation", automationId: source, request: Date.now() } : undefined);
     setExperienceSelection(undefined); setSelectedAgentRunId(undefined); setRunDetailsOpen(false);
   }, [instanceId]);
+  useEffect(() => {
+    const sync = () => {
+      const id = new URLSearchParams(window.location.search).get("run");
+      setSelectedAgentRunId(id ?? undefined); setRunDetailsOpen(!!id);
+    };
+    sync(); window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, [instanceId]);
+  const closeRun = () => {
+    restoreRunFocus.current = true;
+    const params = new URLSearchParams(window.location.search); params.delete("run");
+    navigateToAppPath(`${window.location.pathname}${params.size ? `?${params}` : ""}`, true);
+  };
   const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
-    const nextSection = selectedSection ?? (next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : undefined);
+    const nextSection = selectedSection ?? (next === "activity" ? activityTab : next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : undefined);
     updateActiveTab(next);
+    if (next === "activity") setActivityTab(nextSection ?? "sessions");
     if (next === "continuity" && nextSection) setContinuityTab(nextSection);
     if (next === "automation" && nextSection) setAutomationTab(nextSection);
     if (next === "identity") setIdentityTab(nextSection ?? "profile");
     navigateToAppPath(adminInstancePath(instanceId, next, nextSection as AdminInstanceSection | undefined));
   };
   const viewRun = (workId?: string) => {
-    if (!workId) { setActiveTab("runs"); return; }
+    if (!workId) { setActiveTab("activity", "runs"); return; }
     runOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     restoreRunFocus.current = false;
     setSelectedAgentRunId(workId);
     setRunDetailsOpen(true);
+    const params = new URLSearchParams(window.location.search); params.set("run", workId);
+    navigateToAppPath(`${window.location.pathname}?${params}`);
   };
   const viewSource = (source: RunSource) => {
     restoreRunFocus.current = false;
@@ -2541,9 +2561,11 @@ export function InstanceDetail({
                   ]} />
                 </Flex>
               }] : []),
-              ...([{ key: "runs", label: "Runs", children:
-                resolved.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId} open={activeTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("automation")} /> : <Alert type="info" showIcon title="Runs are available when this instance is active" description="Unarchive the instance from Identity & version to inspect execution history." />
-              }]),
+              { key: "activity", label: "Activity", children: <Tabs activeKey={activityTab} aria-label="Activity views"
+                onChange={key => setActiveTab("activity", key as AdminInstanceSection)} items={[
+                  { key: "sessions", label: "Sessions", children: <InstanceSessionsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} open={activeTab === "activity" && activityTab === "sessions"} /> },
+                  { key: "runs", label: "Runs", children: <InstanceRunsSection instanceId={instanceId} open={activeTab === "activity" && activityTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("activity", "sessions")} /> }
+                ]} /> },
               {
                 key: "credentials", label: "Credentials",
                 children: <InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={resolved.instanceLifecycle !== "Active"} />
@@ -2569,9 +2591,9 @@ export function InstanceDetail({
         />
         </div>
       ) : null}
-      {resolved?.instanceLifecycle === "Active" ? <InstanceRunsSection instanceId={instanceId}
+      {resolved ? <InstanceRunsSection instanceId={instanceId}
         open={runDetailsOpen} detailsOnly selectedAgentRunId={selectedAgentRunId} onSource={viewSource}
-        onClose={() => { restoreRunFocus.current = true; setRunDetailsOpen(false); }}
+        onClose={closeRun}
         afterClose={() => { if (restoreRunFocus.current && runOpener.current?.isConnected) runOpener.current.focus({ preventScroll: true }); }} /> : null}
     </Flex>
   );

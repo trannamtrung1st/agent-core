@@ -13,6 +13,27 @@ public static class BackgroundSessionEndpoints
 {
     public static void Map(WebApplication app)
     {
+        app.MapGet("/api/v2/agent-instances/{instanceId:guid}/sessions", (Guid instanceId, string? cursor, int? limit,
+            IMemoryStore memory, ILocalUserProfileService profiles, IAgentInstanceStore instances, CancellationToken ct) => Safe(async () =>
+        {
+            if (await instances.FindAsync(instanceId, ct).ConfigureAwait(false) is null) throw AgentCoreErrors.NotFound("Agent Instance was not found.");
+            var profile = await profiles.GetLocalProfileAsync(ct).ConfigureAwait(false);
+            var page = await memory.ListInstanceSessionsAsync(new(instanceId, profile.ProfileId), cursor, limit ?? 20, ct).ConfigureAwait(false);
+            return Results.Json(new InstanceActivitySessionPageResponse(page.Items.Select(session => new InstanceActivitySessionResponse(
+                HttpMapping.ToCatalogItem(session), session.Origin.Kind.ToString(),
+                new[] { SessionSurface.ChatList, SessionSurface.BackgroundWork }.Where(flag => session.Surfaces.HasFlag(flag)).Select(flag => flag.ToString()).ToArray())).ToArray(),
+                page.NextCursor, page.HasMore));
+        })).AddEndpointFilter<OwnerCapabilityFilter>();
+        app.MapGet("/api/v2/agent-instances/{instanceId:guid}/sessions/{sessionId:guid}", (Guid instanceId, Guid sessionId,
+            IMemoryStore memory, ILocalUserProfileService profiles, CancellationToken ct) => Safe(async () =>
+        {
+            var profile = await profiles.GetLocalProfileAsync(ct).ConfigureAwait(false);
+            var session = await memory.LoadMetadataAsync(sessionId, ct).ConfigureAwait(false);
+            if (session is null || session.AgentInstanceId != instanceId || session.ProfileId != profile.ProfileId || session.DurablyDeletedAt is not null)
+                throw AgentCoreErrors.NotFound("Session was not found.");
+            return Results.Json(new InstanceActivitySessionResponse(HttpMapping.ToCatalogItem(session), session.Origin.Kind.ToString(),
+                new[] { SessionSurface.ChatList, SessionSurface.BackgroundWork }.Where(flag => session.Surfaces.HasFlag(flag)).Select(flag => flag.ToString()).ToArray()));
+        })).AddEndpointFilter<OwnerCapabilityFilter>();
         var owned = app.MapGroup("/api/v2/agent-instances/{instanceId:guid}/background-sessions").AddEndpointFilter<OwnerCapabilityFilter>();
         owned.MapGet("", (Guid instanceId, string? cursor, int? limit, bool? includeArchived, IMemoryStore memory,
             ILocalUserProfileService profiles, IAgentInstanceStore instances, IAgentRunStore runs, IArtifactStore artifacts, CancellationToken ct) => Safe(async () =>

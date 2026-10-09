@@ -58,6 +58,7 @@ test("collection links wrap without overlapping adjacent cells at desktop and mo
   await expect(details.getByText("No action", { exact: true }).first()).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(details).toBeHidden();
+  await page.getByRole("tab", { name: "Activity", exact: true }).click();
   await page.getByRole("tab", { name: "Runs", exact: true }).click();
   const runs = page.getByRole("table", { name: "Runs table", exact: true });
   await expect(runs).toContainText("Scheduled task");
