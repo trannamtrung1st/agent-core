@@ -34,7 +34,9 @@ test('Instance Skills: authorized Chat creation, next-turn load, owner editor an
   const errors: string[] = []; const failed: string[] = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('requestfailed', r => failed.push(r.url()));
+  const creation = page.waitForResponse(r => r.url().endsWith('/api/v2/admin/agent-instances') && r.request().method() === 'POST' && r.ok());
   const name = `Skills ${Date.now()}`; const id = await create(page, name);
+  const pin = await (await creation).json();
   await chat(page, name); await send(page, 'Learn this accounting Skill.');
   await expect(page.getByText('Saved the accounting Skill. It applies to the next execution.', { exact: true })).toBeVisible();
   await send(page, 'Use my accounting Skill.');
@@ -57,7 +59,7 @@ test('Instance Skills: authorized Chat creation, next-turn load, owner editor an
   await expect(page.getByRole('dialog')).toContainText('independent Instance Skill');
   await page.getByRole('dialog').getByRole('button', { name: 'Customize', exact: true }).click();
   await expect(page.getByRole('switch', { name: 'Enable Definition Skill Record lookup', exact: true })).not.toBeChecked();
-  await expect(local.getByText('Copied from general-assistant v21 · browser.record.lookup', { exact: true })).toBeVisible();
+  await expect(local.getByText(`Copied from ${pin.definitionId} v${pin.activeVersion} · browser.record.lookup`, { exact: true })).toBeVisible();
   await page.getByRole('switch', { name: 'Enable Instance Skill Accounting', exact: true }).click();
   await expect(page.getByRole('switch', { name: 'Enable Instance Skill Accounting', exact: true })).not.toBeChecked();
   await page.reload(); await expect(page.getByRole('switch', { name: 'Enable Instance Skill Accounting', exact: true })).not.toBeChecked();

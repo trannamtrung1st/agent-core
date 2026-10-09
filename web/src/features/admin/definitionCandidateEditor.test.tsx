@@ -258,18 +258,25 @@ describe("definition candidate editor", () => {
   it("blocks fractional recurrence with an inline error and saves after correction", async () => {
     mockDraft();
     await openDraft();
+    // These controls stay mounted across draft tabs. Reuse their accessible
+    // handles instead of rescanning the entire AntD form after every change.
+    const save = screen.getByRole("button", { name: "Save draft", exact: true });
+    const capabilitiesTab = screen.getByRole("tab", { name: "Capabilities", exact: true });
+    const definitionTab = screen.getByRole("tab", { name: "Definition", exact: true });
     setSpin("Minimum recurrence days", "0.5");
     expect(screen.getByLabelText("Minimum recurrence days")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText("Minimum recurrence days")).toHaveAccessibleDescription(
       "Whole days. 1 to 365. Minimum recurrence days must be a whole number from 1 to 365.");
-    expect(screen.getByRole("button", { name: /^Save draft$/ })).toBeDisabled();
-    fireEvent.click(screen.getByRole("tab", { name: /^Capabilities$/ }));
-    expect(screen.getByRole("button", { name: /^Save draft$/ })).toBeDisabled();
+    expect(save).toBeDisabled();
+    fireEvent.click(capabilitiesTab);
+    expect(save).toBeInTheDocument();
+    expect(save).toBeDisabled();
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("tab", { name: /^Definition$/ }));
+    fireEvent.click(definitionTab);
     setSpin("Minimum recurrence days", "2");
     expect(screen.getByLabelText("Minimum recurrence days")).not.toHaveAttribute("aria-invalid", "true");
-    fireEvent.click(screen.getByRole("button", { name: /^Save draft$/ }));
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
     await waitFor(() => expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
       draftId, 2, expect.objectContaining({ triggerPolicy: expect.objectContaining({ minRecurrenceDays: 2 }) })));
   });
