@@ -72,19 +72,26 @@ export function InstanceExecutionBudgets({ instanceId, archived, onUpdated }: { 
   const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof getExecutionBudgets>> | null>(null);
   const [value, setValue] = useState<ExecutionBudgetPolicy>({}); const [busy, setBusy] = useState(false);
   const preserveDraft = useRef(false);
+  const scope = useRef(instanceId);
+  const epoch = useRef(0);
   const [error, setError] = useState<string | null>(null); const [attempt, setAttempt] = useState(0);
-  useEffect(() => { let current = true; setLoaded(null); setError(null);
+  useEffect(() => { let current = true; epoch.current++;
+    if (scope.current !== instanceId) { scope.current = instanceId; preserveDraft.current = false; setValue({}); }
+    setLoaded(null); setError(null); setBusy(false);
     getExecutionBudgets(instanceId).then(v => { if (current) { setLoaded(v); if (!preserveDraft.current) setValue(v.executionBudgets ?? {}); preserveDraft.current = false; } })
       .catch(e => { if (current) setError(e instanceof Error ? e.message : 'Budgets could not be loaded.'); });
-    return () => { current = false; };
+    return () => { current = false; epoch.current++; };
   }, [instanceId, attempt]);
   const dirty = loaded && JSON.stringify(value) !== JSON.stringify(loaded.executionBudgets ?? {});
   async function save() {
     if (!loaded || !validExecutionBudgets(value)) return;
+    const generation = epoch.current;
     setBusy(true); setError(null);
-    try { const updated = await setExecutionBudgets(instanceId, loaded.revision, value); setLoaded({ ...loaded, revision: updated.revision, executionBudgets: value }); onUpdated(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'The Instance changed. Reload and review before saving.'); }
-    finally { setBusy(false); }
+    try { const updated = await setExecutionBudgets(instanceId, loaded.revision, value);
+      if (generation === epoch.current) { setLoaded({ ...loaded, revision: updated.revision, executionBudgets: value }); onUpdated(); }
+    }
+    catch (e) { if (generation === epoch.current) setError(e instanceof Error ? e.message : 'The Instance changed. Reload and review before saving.'); }
+    finally { if (generation === epoch.current) setBusy(false); }
   }
   return <Flex vertical gap={token.padding}>
     <Typography.Title level={5} style={{ margin: 0 }}>Execution budgets</Typography.Title>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App, ConfigProvider } from 'antd';
 import { DefinitionExecutionBudgets, InstanceExecutionBudgets, validExecutionBudgets } from './ExecutionBudgetsSection';
@@ -42,5 +42,26 @@ describe('execution budgets', () => {
     fireEvent.click(screen.getByText('Discard changes'));
     expect(screen.queryByText(/Unsaved budget changes/)).not.toBeInTheDocument();
     expect(screen.getByText(/24 steps · 3 minutes · 30s per tool · System default/)).toBeVisible();
+  });
+  it('ignores an earlier Instance save after switching to another Instance', async () => {
+    let complete!: (value: Awaited<ReturnType<typeof api.setExecutionBudgets>>) => void;
+    vi.mocked(api.getExecutionBudgets).mockImplementation(async id => ({ revision: id === 'first' ? 3 : 9,
+      executionBudgets: id === 'first' ? { interactiveBrowser: profile } : null, definitionDefaults: null }));
+    vi.mocked(api.setExecutionBudgets).mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+    const updated = vi.fn();
+    const view = (id: string) => <ConfigProvider><App><InstanceExecutionBudgets instanceId={id} archived={false} onUpdated={updated} /></App></ConfigProvider>;
+    const { rerender } = render(view('first'));
+    await screen.findByText(/96 steps · 10 minutes · 30s per tool · Instance override/);
+    fireEvent.mouseDown(screen.getByLabelText('Interactive Browser profile'));
+    fireEvent.click(await screen.findByText('Deep Workflow'));
+    fireEvent.click(screen.getByText('Save execution budgets'));
+    await waitFor(() => expect(complete).toBeTypeOf('function'));
+    rerender(view('second'));
+    await screen.findByText(/48 steps · 5 minutes · 30s per tool · System default/);
+    await act(async () => complete({ revision: 4 }));
+    expect(updated).not.toHaveBeenCalled();
+    expect(screen.getByText(/48 steps · 5 minutes · 30s per tool · System default/)).toBeVisible();
+    expect(screen.queryByText('144 steps · 15 minutes · 30s per tool · Instance override', { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Unsaved budget changes/)).not.toBeInTheDocument();
   });
 });
