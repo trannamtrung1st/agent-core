@@ -42,7 +42,8 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
             }
 
             var created = new SemanticResponseLanguageModel(
-                BindCatalogCapabilities(Create(modelId, descriptor), descriptor));
+                BindCatalogCapabilities(Create(modelId, descriptor), descriptor),
+                preferResponseFunction: descriptor?.PreferResponseFunction == true);
             _clients[route] = created;
             return created;
         }
@@ -54,6 +55,7 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
         options.DefaultModel = modelId;
         if (descriptor is not null && string.Equals(descriptor.ModelId, modelId, StringComparison.Ordinal))
         {
+            options.Transport = descriptor.Transport;
             options.Tools = descriptor.Tools;
             options.Vision = descriptor.Vision;
             options.StructuredOutput = descriptor.StructuredOutput;
@@ -102,6 +104,7 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
             BaseUrl = source.BaseUrl,
             ApiKey = source.ApiKey,
             DefaultModel = source.DefaultModel,
+            Transport = source.Transport,
             ReasoningEffort = source.ReasoningEffort,
             ReasoningObjectWire = source.ReasoningObjectWire,
             ExcludeVisibleReasoning = source.ExcludeVisibleReasoning,

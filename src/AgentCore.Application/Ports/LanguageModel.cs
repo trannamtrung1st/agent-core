@@ -25,7 +25,8 @@ public sealed record ModelTextContent(string Text) : ModelContentPart;
 
 public sealed record ModelImageContent(string ContentType, byte[] Bytes, string FileName) : ModelContentPart;
 
-public sealed record ModelToolCall(string Id, string Name, string ArgumentsJson);
+/// <summary>ContinuationToken is opaque adapter state, never display text or tool arguments.</summary>
+public sealed record ModelToolCall(string Id, string Name, string ArgumentsJson, string? ContinuationToken = null);
 
 public sealed record ModelToolDefinition(string Name, string Description, string ParametersJson);
 

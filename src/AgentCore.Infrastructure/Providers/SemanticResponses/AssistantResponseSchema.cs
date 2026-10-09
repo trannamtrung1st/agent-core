@@ -273,7 +273,7 @@ internal static class AssistantResponseSchema
             {
                 ["name"] = SchemaName,
                 ["strict"] = true,
-                ["schema"] = JsonSerializer.Deserialize<JsonElement>(JsonSchemaFor(contract))!
+                ["schema"] = OpenAICompatible.OpenAiCompatibleToolSchema.Normalize(JsonSchemaFor(contract))!
             }
         };
 

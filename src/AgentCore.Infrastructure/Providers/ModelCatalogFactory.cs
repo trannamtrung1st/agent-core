@@ -8,15 +8,16 @@ internal static class ModelCatalogFactory
 {
     public const string DeepSeekV41FlashKey = "deepseek-v41-flash";
     public const string DeepSeekV41FlashModelId = "deepseek/deepseek-v4.1-flash";
-    public const string Gpt4oMini20240718Key = "gpt-4o-mini-2024-07-18";
-    public const string Gpt4oMini20240718ModelId = "openai/gpt-4o-mini-2024-07-18";
     public const string OpenRouterFreeKey = "openrouter-free";
     public const string OpenRouterFreeModelId = "openrouter/free";
-    public const string Gpt41Key = "gpt-4.1";
-    public const string Gpt41ModelId = "openai/gpt-4.1";
-    public const string Gpt56LunaKey = "gpt-5.6-luna";
-    public const string Gpt56LunaModelId = "openai/gpt-5.6-luna";
-    public static readonly string[] Gpt56LunaReasoningEfforts = ["max", "xhigh", "high", "medium", "low", "none"];
+    public const string Gpt6LunaKey = "gpt-6-luna";
+    public const string Gpt6LunaModelId = "openai/gpt-6-luna";
+    public const string ClaudeHaiku55Key = "claude-haiku-5.5";
+    public const string ClaudeHaiku55ModelId = "anthropic/claude-haiku-5.5";
+    public const string Gpt61SolKey = "gpt-6.1-sol";
+    public const string Gpt61SolModelId = "openai/gpt-6.1-sol";
+    public static readonly string[] Gpt6LunaReasoningEfforts = ["none", "low", "medium", "high", "xhigh", "max"];
+    public static readonly string[] ReasoningEfforts = ["low", "medium", "high", "xhigh", "max"];
     public const string ScriptedAlphaKey = "scripted-alpha";
     public const string ScriptedBetaKey = "scripted-beta";
     public const string ScriptedVisionKey = "scripted-vision";
@@ -92,67 +93,21 @@ internal static class ModelCatalogFactory
                     null)
             ]);
 
+    // Verified against OpenRouter /models and provider docs on 2026-10-09.
     public static IModelCatalog Real() =>
-        new ConfigurationModelCatalog(
-            DeepSeekV41FlashKey,
-            [
-                Descriptor(
-                    DeepSeekV41FlashKey,
-                    "DeepSeek V4.1 Flash",
-                    "primary-llm",
-                    DeepSeekV41FlashModelId,
-                    tools: true,
-                    vision: false,
-                    structuredOutput: false,
-                    reasoning: true,
-                    ["low", "medium", "high"],
-                    "medium"),
-                Descriptor(
-                    Gpt4oMini20240718Key,
-                    "GPT-4o mini 2024-07-18",
-                    "primary-llm",
-                    Gpt4oMini20240718ModelId,
-                    tools: true,
-                    vision: true,
-                    structuredOutput: true,
-                    reasoning: false,
-                    [],
-                    null),
-                Descriptor(
-                    OpenRouterFreeKey,
-                    "OpenRouter Free",
-                    "primary-llm",
-                    OpenRouterFreeModelId,
-                    tools: true,
-                    vision: false,
-                    structuredOutput: false,
-                    reasoning: false,
-                    [],
-                    null,
-                    costCategory: "free"),
-                Descriptor(
-                    Gpt41Key,
-                    "GPT-4.1",
-                    "primary-llm",
-                    Gpt41ModelId,
-                    tools: true,
-                    vision: true,
-                    structuredOutput: true,
-                    reasoning: false,
-                    [],
-                    null),
-                Descriptor(
-                    Gpt56LunaKey,
-                    "GPT-5.6 Luna",
-                    "primary-llm",
-                    Gpt56LunaModelId,
-                    tools: true,
-                    vision: true,
-                    structuredOutput: true,
-                    reasoning: true,
-                    Gpt56LunaReasoningEfforts,
-                    "low")
-            ]);
+        new ConfigurationModelCatalog(DeepSeekV41FlashKey,
+        [
+            Descriptor(DeepSeekV41FlashKey, "DeepSeek V4.1 Flash", "primary-llm", DeepSeekV41FlashModelId,
+                true, true, true, true, ["low", "medium", "high", "max"], "medium", preferResponseFunction: true),
+            Descriptor(Gpt6LunaKey, "GPT-6 Luna", "primary-llm", Gpt6LunaModelId,
+                true, true, true, true, Gpt6LunaReasoningEfforts, "low", transport: ModelInferenceTransport.Responses),
+            Descriptor(ClaudeHaiku55Key, "Claude Haiku 5.5", "primary-llm", ClaudeHaiku55ModelId,
+                true, true, true, true, ReasoningEfforts, "medium"),
+            Descriptor(Gpt61SolKey, "GPT-6.1 Sol", "primary-llm", Gpt61SolModelId,
+                true, true, true, true, ReasoningEfforts, "medium", transport: ModelInferenceTransport.Responses),
+            Descriptor(OpenRouterFreeKey, "OpenRouter Free (experimental)", "primary-llm", OpenRouterFreeModelId,
+                true, false, false, false, [], null, costCategory: "free")
+        ]);
 
     public static IModelCatalog FromPrimary(LanguageModelProviderOptions languageModel)
     {
@@ -181,10 +136,11 @@ internal static class ModelCatalogFactory
                     modelId,
                     languageModel.Tools,
                     languageModel.Vision,
-                    structuredOutput: false,
+                    structuredOutput: languageModel.StructuredOutput,
                     reasoning,
                     efforts,
-                    defaultEffort)
+                    defaultEffort,
+                    transport: languageModel.Transport)
             ]);
     }
 
@@ -227,7 +183,7 @@ internal static class ModelCatalogFactory
             efforts,
             defaultEffort,
             entry.ContextCategory,
-            entry.CostCategory);
+            entry.CostCategory, entry.Transport, entry.PreferResponseFunction);
     }
 
     private static ModelDescriptor Descriptor(
@@ -242,7 +198,9 @@ internal static class ModelCatalogFactory
         IReadOnlyList<string> efforts,
         string? defaultEffort,
         string? contextCategory = null,
-        string? costCategory = null) =>
+        string? costCategory = null,
+        ModelInferenceTransport transport = ModelInferenceTransport.ChatCompletions,
+        bool preferResponseFunction = false) =>
         new(
             key,
             displayName,
@@ -255,7 +213,7 @@ internal static class ModelCatalogFactory
             efforts,
             defaultEffort,
             contextCategory,
-            costCategory);
+            costCategory, transport, preferResponseFunction);
 
     private static IModelCatalog WithPrimaryDefault(IModelCatalog catalog, LanguageModelProviderOptions? languageModel)
     {
@@ -270,7 +228,7 @@ internal static class ModelCatalogFactory
             .ToArray();
         if (matches.Length == 0)
         {
-            return catalog;
+            throw new InvalidOperationException($"Configured DefaultModel '{modelId}' is not in the model catalog. Select an available model or provide an explicit catalog override.");
         }
 
         var match = matches.Length == 1

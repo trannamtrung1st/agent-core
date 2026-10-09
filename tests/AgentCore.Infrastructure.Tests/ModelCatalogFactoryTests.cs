@@ -44,7 +44,7 @@ public sealed class ModelCatalogFactoryTests
     }
 
     [Fact]
-    public void Real_catalog_includes_previous_working_models_without_changing_the_default()
+    public void Real_catalog_contains_exact_target_models_without_changing_the_default()
     {
         var catalog = ModelCatalogFactory.Create(
             "Real",
@@ -58,33 +58,35 @@ public sealed class ModelCatalogFactoryTests
             },
             configuration: null);
         Assert.Equal("deepseek-v41-flash", catalog.DefaultKey);
-        Assert.Equal(
-            ["deepseek-v41-flash", "gpt-4o-mini-2024-07-18", "openrouter-free", "gpt-4.1", "gpt-5.6-luna"],
-            catalog.Models.Select(model => model.Key).ToArray());
-        Assert.Equal("openai/gpt-4o-mini-2024-07-18", catalog.Get("gpt-4o-mini-2024-07-18")!.ModelId);
-        Assert.False(catalog.Get("gpt-4o-mini-2024-07-18")!.Reasoning);
-        Assert.True(catalog.Get("gpt-4o-mini-2024-07-18")!.Tools);
-        Assert.Equal("openrouter/free", catalog.Get("openrouter-free")!.ModelId);
-        Assert.False(catalog.Get("openrouter-free")!.Reasoning);
-        Assert.True(catalog.Get("openrouter-free")!.Tools);
-        var gpt41 = catalog.Get("gpt-4.1");
-        Assert.Equal("openai/gpt-4.1", gpt41!.ModelId);
-        Assert.True(gpt41.Tools);
-        Assert.True(gpt41.StructuredOutput);
-        Assert.False(gpt41.Reasoning);
-        var luna = catalog.Get(ModelCatalogFactory.Gpt56LunaKey);
-        Assert.Equal("GPT-5.6 Luna", luna!.DisplayName);
-        Assert.Equal(ModelCatalogFactory.Gpt56LunaModelId, luna.ModelId);
-        Assert.True(luna.Tools);
-        Assert.True(luna.Vision);
-        Assert.True(luna.StructuredOutput);
-        Assert.True(luna.Reasoning);
-        Assert.Equal(ModelCatalogFactory.Gpt56LunaReasoningEfforts, luna.SupportedReasoningEfforts);
-        Assert.Equal("low", luna.DefaultReasoningEffort);
+        Assert.Equal(["deepseek-v41-flash", "gpt-6-luna", "claude-haiku-5.5", "gpt-6.1-sol", "openrouter-free"], catalog.Models.Select(m => m.Key));
+        foreach (var retired in new[] { "gpt-4o-mini-2024-07-18", "gpt-4.1", "gpt-5.6-luna" }) Assert.Null(catalog.Get(retired));
+        Assert.Equal("low", catalog.Get(ModelCatalogFactory.Gpt6LunaKey)!.DefaultReasoningEffort);
+        Assert.Equal(ModelCatalogFactory.Gpt6LunaReasoningEfforts, catalog.Get(ModelCatalogFactory.Gpt6LunaKey)!.SupportedReasoningEfforts);
+        Assert.Equal("medium", catalog.Get(ModelCatalogFactory.Gpt61SolKey)!.DefaultReasoningEffort);
+        Assert.Equal("medium", catalog.Get(ModelCatalogFactory.ClaudeHaiku55Key)!.DefaultReasoningEffort);
+        Assert.Equal(ModelInferenceTransport.Responses, catalog.Get(ModelCatalogFactory.Gpt61SolKey)!.Transport);
+        Assert.Equal(ModelInferenceTransport.Responses, catalog.Get(ModelCatalogFactory.Gpt6LunaKey)!.Transport);
+        Assert.True(catalog.Get(ModelCatalogFactory.DeepSeekV41FlashKey)!.PreferResponseFunction);
+        Assert.Equal("anthropic/claude-haiku-5.5", catalog.Get("claude-haiku-5.5")!.ModelId);
+        Assert.Equal("openai/gpt-6.1-sol", catalog.Get("gpt-6.1-sol")!.ModelId);
+        Assert.Equal("openai/gpt-6-luna", catalog.Get("gpt-6-luna")!.ModelId);
+        foreach (var model in catalog.Models.Where(m => m.Key != "openrouter-free"))
+        {
+            Assert.True(model.Tools); Assert.True(model.Vision); Assert.True(model.StructuredOutput);
+            Assert.Contains(model.DefaultReasoningEffort, model.SupportedReasoningEfforts);
+        }
+    }
+
+    [Theory]
+    [InlineData("openai/gpt-4.1")]
+    [InlineData("unknown/model")]
+    public void Unavailable_primary_default_is_rejected_instead_of_silently_substituted(string modelId)
+    {
+        Assert.Throws<InvalidOperationException>(() => ModelCatalogFactory.Create("Real", new() { DefaultModel = modelId }, null));
     }
 
     [Fact]
-    public void Resolver_applies_gpt56_luna_descriptor_capabilities()
+    public void Resolver_applies_gpt6_luna_descriptor_capabilities()
     {
         var services = new ServiceCollection();
         services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory());
@@ -105,13 +107,13 @@ public sealed class ModelCatalogFactoryTests
             catalog);
         var resolved = resolver.Resolve(
             new AgentCore.Domain.Conversation.SessionModelSelection(
-                ModelCatalogFactory.Gpt56LunaKey,
+                ModelCatalogFactory.Gpt6LunaKey,
                 "primary-llm",
-                ModelCatalogFactory.Gpt56LunaModelId,
+                ModelCatalogFactory.Gpt6LunaModelId,
                 AgentCore.Domain.Conversation.ModelSelectionSource.User,
                 "low"),
             ModelPurpose.Conversation);
-        var descriptor = catalog.Get(ModelCatalogFactory.Gpt56LunaKey)!;
+        var descriptor = catalog.Get(ModelCatalogFactory.Gpt6LunaKey)!;
         Assert.Equal(descriptor.Tools, resolved.Capabilities.Tools);
         Assert.Equal(descriptor.Vision, resolved.Capabilities.Vision);
         Assert.Equal(descriptor.StructuredOutput, resolved.Capabilities.StructuredOutput);
@@ -142,7 +144,7 @@ public sealed class ModelCatalogFactoryTests
             },
             configuration);
         Assert.Equal("deepseek-v41-flash", catalog.DefaultKey);
-        Assert.Contains(catalog.Models, model => model.Key == "gpt-4o-mini-2024-07-18");
+        Assert.Contains(catalog.Models, model => model.Key == "gpt-6-luna");
         Assert.DoesNotContain(catalog.Models, model => model.Key == "scripted-alpha");
     }
 
@@ -153,17 +155,12 @@ public sealed class ModelCatalogFactoryTests
         var catalog = ModelCatalogFactory.Real();
         var launch = File.ReadAllText(Path.Combine(root, "src/AgentCore.Api/Properties/launchSettings.json"));
         var compose = File.ReadAllText(Path.Combine(root, "docker-compose.real.yml"));
-        foreach (var model in catalog.Models)
-        {
-            Assert.Contains(model.Key, launch, StringComparison.Ordinal);
-            Assert.Contains(model.ModelId, launch, StringComparison.Ordinal);
-            Assert.Contains(model.Key, compose, StringComparison.Ordinal);
-            Assert.Contains(model.ModelId, compose, StringComparison.Ordinal);
-        }
-
+        Assert.Equal(5, catalog.Models.Count);
+        Assert.DoesNotContain("Providers__ModelCatalog__Models__", launch, StringComparison.Ordinal);
+        Assert.DoesNotContain("Providers__ModelCatalog__Models__", compose, StringComparison.Ordinal);
         Assert.Contains("\"Providers__ModelCatalog__DefaultKey\": \"deepseek-v41-flash\"", launch, StringComparison.Ordinal);
         Assert.Contains("Providers__ModelCatalog__DefaultKey: deepseek-v41-flash", compose, StringComparison.Ordinal);
-        Assert.Contains("Providers__ModelCatalog__Models__0__ModelId: deepseek/deepseek-v4.1-flash", compose, StringComparison.Ordinal);
+
         Assert.DoesNotContain("Models__0__ModelId: ${AGENTCORE_LLM_MODEL", compose, StringComparison.Ordinal);
         Assert.DoesNotContain("Models__1__ModelId: ${AGENTCORE_LLM_MODEL", compose, StringComparison.Ordinal);
         Assert.DoesNotContain("Models__2__ModelId: ${AGENTCORE_LLM_MODEL", compose, StringComparison.Ordinal);
@@ -179,12 +176,12 @@ public sealed class ModelCatalogFactoryTests
             new LanguageModelProviderOptions
             {
                 Adapter = "OpenAICompatible",
-                DefaultModel = ModelCatalogFactory.Gpt4oMini20240718ModelId
+                DefaultModel = ModelCatalogFactory.Gpt6LunaModelId
             },
             RealCatalogConfiguration());
-        Assert.Equal(ModelCatalogFactory.Gpt4oMini20240718Key, catalog.DefaultKey);
+        Assert.Equal(ModelCatalogFactory.Gpt6LunaKey, catalog.DefaultKey);
         Assert.Equal(ModelCatalogFactory.DeepSeekV41FlashModelId, catalog.Get(ModelCatalogFactory.DeepSeekV41FlashKey)!.ModelId);
-        Assert.Equal(ModelCatalogFactory.Gpt4oMini20240718ModelId, catalog.Default.ModelId);
+        Assert.Equal(ModelCatalogFactory.Gpt6LunaModelId, catalog.Default.ModelId);
     }
 
     [Fact]
@@ -193,7 +190,11 @@ public sealed class ModelCatalogFactoryTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>(RealCatalogEntries())
             {
-                ["Providers:ModelCatalog:Models:0:ModelId"] = ModelCatalogFactory.Gpt4oMini20240718ModelId
+                ["Providers:ModelCatalog:DefaultKey"] = ModelCatalogFactory.DeepSeekV41FlashKey,
+                ["Providers:ModelCatalog:Models:0:Key"] = ModelCatalogFactory.DeepSeekV41FlashKey,
+                ["Providers:ModelCatalog:Models:0:ModelId"] = ModelCatalogFactory.Gpt6LunaModelId,
+                ["Providers:ModelCatalog:Models:1:Key"] = ModelCatalogFactory.Gpt6LunaKey,
+                ["Providers:ModelCatalog:Models:1:ModelId"] = ModelCatalogFactory.Gpt6LunaModelId
             })
             .Build();
         var catalog = ModelCatalogFactory.Create(
@@ -201,11 +202,11 @@ public sealed class ModelCatalogFactoryTests
             new LanguageModelProviderOptions
             {
                 Adapter = "OpenAICompatible",
-                DefaultModel = ModelCatalogFactory.Gpt4oMini20240718ModelId
+                DefaultModel = ModelCatalogFactory.Gpt6LunaModelId
             },
             configuration);
-        Assert.Equal(ModelCatalogFactory.Gpt4oMini20240718Key, catalog.DefaultKey);
-        Assert.Equal(ModelCatalogFactory.Gpt4oMini20240718ModelId, catalog.Get(ModelCatalogFactory.DeepSeekV41FlashKey)!.ModelId);
+        Assert.Equal(ModelCatalogFactory.Gpt6LunaKey, catalog.DefaultKey);
+        Assert.Equal(ModelCatalogFactory.Gpt6LunaModelId, catalog.Get(ModelCatalogFactory.DeepSeekV41FlashKey)!.ModelId);
     }
 
     [Fact]
@@ -356,19 +357,19 @@ public sealed class ModelCatalogFactoryTests
             ModelPurpose.Conversation);
         var gpt = resolver.Resolve(
             new AgentCore.Domain.Conversation.SessionModelSelection(
-                ModelCatalogFactory.Gpt4oMini20240718Key,
+                ModelCatalogFactory.Gpt6LunaKey,
                 "primary-llm",
-                ModelCatalogFactory.Gpt4oMini20240718ModelId,
+                ModelCatalogFactory.Gpt6LunaModelId,
                 AgentCore.Domain.Conversation.ModelSelectionSource.User,
                 null),
             ModelPurpose.Conversation);
 
-        Assert.False(catalog.Get(ModelCatalogFactory.DeepSeekV41FlashKey)!.StructuredOutput);
-        Assert.True(catalog.Get(ModelCatalogFactory.Gpt4oMini20240718Key)!.StructuredOutput);
-        Assert.False(deepseek.Capabilities.StructuredOutput);
+        Assert.True(catalog.Get(ModelCatalogFactory.DeepSeekV41FlashKey)!.StructuredOutput);
+        Assert.True(catalog.Get(ModelCatalogFactory.Gpt6LunaKey)!.StructuredOutput);
+        Assert.True(deepseek.Capabilities.StructuredOutput);
         Assert.True(gpt.Capabilities.StructuredOutput);
         Assert.True(gpt.Capabilities.Vision);
-        Assert.False(deepseek.Capabilities.Vision);
+        Assert.True(deepseek.Capabilities.Vision);
         Assert.False(primary.StructuredOutput);
         Assert.False(primary.Vision);
     }
@@ -442,63 +443,7 @@ public sealed class ModelCatalogFactoryTests
     private static IConfiguration RealCatalogConfiguration() =>
         new ConfigurationBuilder().AddInMemoryCollection(RealCatalogEntries()).Build();
 
-    private static Dictionary<string, string?> RealCatalogEntries() =>
-        new()
-        {
-            ["Providers:ModelCatalog:DefaultKey"] = ModelCatalogFactory.DeepSeekV41FlashKey,
-            ["Providers:ModelCatalog:Models:0:Key"] = ModelCatalogFactory.DeepSeekV41FlashKey,
-            ["Providers:ModelCatalog:Models:0:DisplayName"] = "DeepSeek V4.1 Flash",
-            ["Providers:ModelCatalog:Models:0:ProviderAlias"] = "primary-llm",
-            ["Providers:ModelCatalog:Models:0:ModelId"] = ModelCatalogFactory.DeepSeekV41FlashModelId,
-            ["Providers:ModelCatalog:Models:0:Tools"] = "true",
-            ["Providers:ModelCatalog:Models:0:Vision"] = "false",
-            ["Providers:ModelCatalog:Models:0:StructuredOutput"] = "false",
-            ["Providers:ModelCatalog:Models:0:Reasoning"] = "true",
-            ["Providers:ModelCatalog:Models:0:SupportedReasoningEfforts:0"] = "low",
-            ["Providers:ModelCatalog:Models:0:SupportedReasoningEfforts:1"] = "medium",
-            ["Providers:ModelCatalog:Models:0:SupportedReasoningEfforts:2"] = "high",
-            ["Providers:ModelCatalog:Models:0:DefaultReasoningEffort"] = "medium",
-            ["Providers:ModelCatalog:Models:1:Key"] = ModelCatalogFactory.Gpt4oMini20240718Key,
-            ["Providers:ModelCatalog:Models:1:DisplayName"] = "GPT-4o mini 2024-07-18",
-            ["Providers:ModelCatalog:Models:1:ProviderAlias"] = "primary-llm",
-            ["Providers:ModelCatalog:Models:1:ModelId"] = ModelCatalogFactory.Gpt4oMini20240718ModelId,
-            ["Providers:ModelCatalog:Models:1:Tools"] = "true",
-            ["Providers:ModelCatalog:Models:1:Vision"] = "true",
-            ["Providers:ModelCatalog:Models:1:StructuredOutput"] = "true",
-            ["Providers:ModelCatalog:Models:1:Reasoning"] = "false",
-            ["Providers:ModelCatalog:Models:2:Key"] = ModelCatalogFactory.OpenRouterFreeKey,
-            ["Providers:ModelCatalog:Models:2:DisplayName"] = "OpenRouter Free",
-            ["Providers:ModelCatalog:Models:2:ProviderAlias"] = "primary-llm",
-            ["Providers:ModelCatalog:Models:2:ModelId"] = ModelCatalogFactory.OpenRouterFreeModelId,
-            ["Providers:ModelCatalog:Models:2:Tools"] = "true",
-            ["Providers:ModelCatalog:Models:2:Vision"] = "false",
-            ["Providers:ModelCatalog:Models:2:StructuredOutput"] = "false",
-            ["Providers:ModelCatalog:Models:2:Reasoning"] = "false",
-            ["Providers:ModelCatalog:Models:2:CostCategory"] = "free",
-            ["Providers:ModelCatalog:Models:3:Key"] = ModelCatalogFactory.Gpt41Key,
-            ["Providers:ModelCatalog:Models:3:DisplayName"] = "GPT-4.1",
-            ["Providers:ModelCatalog:Models:3:ProviderAlias"] = "primary-llm",
-            ["Providers:ModelCatalog:Models:3:ModelId"] = ModelCatalogFactory.Gpt41ModelId,
-            ["Providers:ModelCatalog:Models:3:Tools"] = "true",
-            ["Providers:ModelCatalog:Models:3:Vision"] = "true",
-            ["Providers:ModelCatalog:Models:3:StructuredOutput"] = "true",
-            ["Providers:ModelCatalog:Models:3:Reasoning"] = "false",
-            ["Providers:ModelCatalog:Models:4:Key"] = ModelCatalogFactory.Gpt56LunaKey,
-            ["Providers:ModelCatalog:Models:4:DisplayName"] = "GPT-5.6 Luna",
-            ["Providers:ModelCatalog:Models:4:ProviderAlias"] = "primary-llm",
-            ["Providers:ModelCatalog:Models:4:ModelId"] = ModelCatalogFactory.Gpt56LunaModelId,
-            ["Providers:ModelCatalog:Models:4:Tools"] = "true",
-            ["Providers:ModelCatalog:Models:4:Vision"] = "true",
-            ["Providers:ModelCatalog:Models:4:StructuredOutput"] = "true",
-            ["Providers:ModelCatalog:Models:4:Reasoning"] = "true",
-            ["Providers:ModelCatalog:Models:4:SupportedReasoningEfforts:0"] = "max",
-            ["Providers:ModelCatalog:Models:4:SupportedReasoningEfforts:1"] = "xhigh",
-            ["Providers:ModelCatalog:Models:4:SupportedReasoningEfforts:2"] = "high",
-            ["Providers:ModelCatalog:Models:4:SupportedReasoningEfforts:3"] = "medium",
-            ["Providers:ModelCatalog:Models:4:SupportedReasoningEfforts:4"] = "low",
-            ["Providers:ModelCatalog:Models:4:SupportedReasoningEfforts:5"] = "none",
-            ["Providers:ModelCatalog:Models:4:DefaultReasoningEffort"] = "low"
-        };
+    private static Dictionary<string, string?> RealCatalogEntries() => new();
 
     private static string FindRepoRoot()
     {

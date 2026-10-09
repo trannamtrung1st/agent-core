@@ -467,7 +467,7 @@ Credential-name classification normalizes separators and camel case in protected
 
 Persistent profiles remain Agent-Instance-owned and are independent of credentials. `browser.close` returns `closed` only after native context closure is confirmed, or `already_closed` when no live context remains. `close_failed` and `close_uncertain` retain owned live state until actual closure; reset refuses to delete an unconfirmed live profile. Best-effort shutdown cleanup remains separate. Confirmed close releases live state/locks but retains the profile directory and may retain authentication; sign-out requires independent application evidence. A competing process receives `profile_busy`. Profile reset is a separate owner action. Caller cancellation propagates its original token; timed-out/cancelled native actions must be fenced before another operation acquires the session gate. Core retains the durable approval acknowledgement, receipt and uncertain-effect recovery boundaries.
 
-The historical P9/P9.5/P9.6 reports describe their original runtime at frozen SHAs. Native wrapper acceptance is tracked independently in the [implementation plan](18-implementation-plan.md#native-playwright-wrapper-full-cutover).
+The historical P9/P9.5/P9.6 reports describe their original runtime at frozen SHAs. Native wrapper acceptance is tracked independently in the [implementation plan](18-implementation-plan.md#historical-native-playwright-wrapper-full-cutover).
 
 ## System credentials and browser profiles
 
@@ -669,3 +669,8 @@ Retired-instruction validation applies to Definition system instructions and pro
 ## Execution budget contracts
 
 `ExecutionBudgetPolicy` carries optional Standard, InteractiveBrowser and UnattendedBoundBrowser profiles on Definition/Candidate and Instance. Null class entries inherit independently. `EffectiveExecutionBudget` stores class, values, source and whether frozen user input requested cleanup in immutable `AgentRunAdmission`; it grants no capability. `AgentRunCheckpoint` adds nullable active-execution milliseconds and a budget-clock timestamp. Running-to-wait/retry/terminal transitions charge elapsed time through the claim lease, then pause; reclaim resumes from the same pin and counters. Historical null fields preserve the earlier context-selected profile and checkpoint remaining time. `IAgentInstanceStore` updates budgets with the existing expected-revision mutation.
+
+
+### Model transport continuation
+
+`ModelDescriptor.Transport` expresses a trusted inference protocol preference; `PreferResponseFunction` selects the existing schema-bearing semantic channel independently of native schema capability; HTTP/vendor DTOs stay in Infrastructure. `ModelToolCall.ContinuationToken` is bounded opaque adapter state. Application forwards it unchanged with assistant tool-call messages and durable checkpoints; it never parses it or projects it to Chat/Admin. The adapter verifies model and transport before replaying reasoning. Cancellation, normalized tool events, usage and semantic final responses use the existing ILanguageModel contract. See [catalog configuration](15-persistence-and-configuration.md#real-model-catalog).

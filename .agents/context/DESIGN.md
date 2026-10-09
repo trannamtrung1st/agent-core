@@ -393,3 +393,8 @@ Shared Event authoring retains the established Admin drawer/footer and one-time 
 - **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
 - **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
 - **Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`.
+
+
+### Model reasoning presentation
+
+Reuse the existing Chat Model dropdown and Admin ExecutionModelFields composition. Preserve token-owned shell/control insets and mobile wrapping. All reasoning controls present supported intensity in `none → minimal → low → medium → high → xhigh → max` order through the shared utility; unknown/adaptive modes use discrete choices outside the slider. Slider value text names the visible effort. Model switching preserves supported effort and selects the new configured default only when needed. Catalog names/capabilities come from backend descriptors; unavailable saved model keys remain explicit. No automatic routing controls or extra model-tier badges.

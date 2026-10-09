@@ -9,6 +9,8 @@ public enum ModelPurpose
     CompletionEvaluation
 }
 
+public enum ModelInferenceTransport { ChatCompletions, Responses }
+
 public sealed record ModelDescriptor(
     string Key,
     string DisplayName,
@@ -21,7 +23,9 @@ public sealed record ModelDescriptor(
     IReadOnlyList<string> SupportedReasoningEfforts,
     string? DefaultReasoningEffort,
     string? ContextCategory = null,
-    string? CostCategory = null);
+    string? CostCategory = null,
+    ModelInferenceTransport Transport = ModelInferenceTransport.ChatCompletions,
+    bool PreferResponseFunction = false);
 
 public interface IModelCatalog
 {

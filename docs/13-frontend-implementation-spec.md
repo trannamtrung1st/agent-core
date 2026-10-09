@@ -309,3 +309,8 @@ AgentRunDetails is shared with Admin and Chat. WaitingForSignal is Waiting with 
 ## Execution budget configuration
 
 Definition drafts expose per-class Standard/Extended/Deep Workflow/Custom profiles in the existing form and revision-checked save. Instance Profile exposes independent Inherit Definition/Override controls, effective values and source, Advanced step/duration/per-tool limits, host ceilings, immediate validation, unsaved changes, Save and Discard. A concurrency conflict retains the draft; Reload fetches the latest revision without discarding edits, allowing review before retry. Changes apply to the next Run, including in an existing Session. Shared Run details show the immutable profile/source, consumed steps and active time, phase, termination reason and cleanup status. Confirmed browser closure is displayed independently from sign-out verification.
+
+
+### Reasoning control ordering
+
+All Chat, Definition, Instance unattended and Automation model controls use the shared semantic presentation order `none → minimal → low → medium → high → xhigh → max`, filtered to the selected model's supported values. API/config insertion order is never the slider order. Right/Up increase and Left/Down decrease; Home/End select the lowest/highest supported effort. Screen-reader value text names that same effort. Unknown/adaptive modes remain discrete choices outside slider intensity. Sorting never mutates persisted values or requested provider efforts. Explicit model switching retains a valid effort; an unsupported selection uses the new model's configured default. Existing unavailable model keys remain visibly unavailable and require explicit correction.

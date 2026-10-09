@@ -23,6 +23,8 @@ public sealed class ModelCatalogEntryOptions
     public string? DefaultReasoningEffort { get; set; }
     public string? ContextCategory { get; set; }
     public string? CostCategory { get; set; }
+    public ModelInferenceTransport Transport { get; set; }
+    public bool PreferResponseFunction { get; set; }
 }
 
 public sealed class ConfigurationModelCatalog : IModelCatalog

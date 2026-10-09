@@ -5,7 +5,7 @@ using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.Providers.SemanticResponses;
 
-public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILanguageModel
+public sealed class SemanticResponseLanguageModel(ILanguageModel inner, bool preferResponseFunction = false) : ILanguageModel
 {
     public ILanguageModel Inner { get; } = inner;
 
@@ -25,7 +25,7 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
             yield break;
         }
 
-        if (Capabilities.StructuredOutput)
+        if (Capabilities.StructuredOutput && !preferResponseFunction)
         {
             await foreach (var item in GenerateNativeAsync(request, cancellationToken).ConfigureAwait(false))
             {
@@ -70,6 +70,11 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
                     otherCalls.Add(call.Call);
                     continue;
                 case ModelCompleted completed when completed.Reason == ModelStopReason.ToolCalls && otherCalls.Count > 0:
+                    // A response-function call can precede executable calls in the
+                    // same provider round. Keep its opaque round state when discarding it.
+                    if (otherCalls[0].ContinuationToken is null
+                        && responseCalls.Select(call => call.ContinuationToken).FirstOrDefault(token => token is not null) is { } continuation)
+                        otherCalls[0] = otherCalls[0] with { ContinuationToken = continuation };
                     foreach (var other in otherCalls)
                     {
                         yield return new ModelToolCallEvent(other);
@@ -273,6 +278,9 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner) : ILangu
         var sessionTools = request.Tools is { Count: > 0 };
         return instructed with
         {
+            // The function schema carries the same structured contract. Do not also
+            // request a native final envelope while the model is selecting a function.
+            ResponseContract = null,
             Tools = tools,
             ToolChoice = sessionTools ? ModelToolChoice.Required : ModelToolChoice.Named,
             ToolChoiceName = sessionTools ? null : AssistantResponseSchema.ResponseFunctionName

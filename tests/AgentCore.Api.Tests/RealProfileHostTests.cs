@@ -39,58 +39,6 @@ public sealed class RealComposeHostFixture : IAsyncLifetime
         start.Environment["Providers__LanguageModels__primary-llm__Vision"] = "false";
         start.Environment["Providers__LanguageModels__primary-llm__Tools"] = "true";
         start.Environment["Providers__ModelCatalog__DefaultKey"] = "deepseek-v41-flash";
-        start.Environment["Providers__ModelCatalog__Models__0__Key"] = "deepseek-v41-flash";
-        start.Environment["Providers__ModelCatalog__Models__0__DisplayName"] = "DeepSeek V4.1 Flash";
-        start.Environment["Providers__ModelCatalog__Models__0__ProviderAlias"] = "primary-llm";
-        start.Environment["Providers__ModelCatalog__Models__0__ModelId"] = "deepseek/deepseek-v4.1-flash";
-        start.Environment["Providers__ModelCatalog__Models__0__Tools"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__0__Vision"] = "false";
-        start.Environment["Providers__ModelCatalog__Models__0__StructuredOutput"] = "false";
-        start.Environment["Providers__ModelCatalog__Models__0__Reasoning"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__0"] = "low";
-        start.Environment["Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__1"] = "medium";
-        start.Environment["Providers__ModelCatalog__Models__0__SupportedReasoningEfforts__2"] = "high";
-        start.Environment["Providers__ModelCatalog__Models__0__DefaultReasoningEffort"] = "medium";
-        start.Environment["Providers__ModelCatalog__Models__1__Key"] = "gpt-4o-mini-2024-07-18";
-        start.Environment["Providers__ModelCatalog__Models__1__DisplayName"] = "GPT-4o mini 2024-07-18";
-        start.Environment["Providers__ModelCatalog__Models__1__ProviderAlias"] = "primary-llm";
-        start.Environment["Providers__ModelCatalog__Models__1__ModelId"] = "openai/gpt-4o-mini-2024-07-18";
-        start.Environment["Providers__ModelCatalog__Models__1__Tools"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__1__Vision"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__1__StructuredOutput"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__1__Reasoning"] = "false";
-        start.Environment["Providers__ModelCatalog__Models__2__Key"] = "openrouter-free";
-        start.Environment["Providers__ModelCatalog__Models__2__DisplayName"] = "OpenRouter Free";
-        start.Environment["Providers__ModelCatalog__Models__2__ProviderAlias"] = "primary-llm";
-        start.Environment["Providers__ModelCatalog__Models__2__ModelId"] = "openrouter/free";
-        start.Environment["Providers__ModelCatalog__Models__2__Tools"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__2__Vision"] = "false";
-        start.Environment["Providers__ModelCatalog__Models__2__StructuredOutput"] = "false";
-        start.Environment["Providers__ModelCatalog__Models__2__Reasoning"] = "false";
-        start.Environment["Providers__ModelCatalog__Models__2__CostCategory"] = "free";
-        start.Environment["Providers__ModelCatalog__Models__3__Key"] = "gpt-4.1";
-        start.Environment["Providers__ModelCatalog__Models__3__DisplayName"] = "GPT-4.1";
-        start.Environment["Providers__ModelCatalog__Models__3__ProviderAlias"] = "primary-llm";
-        start.Environment["Providers__ModelCatalog__Models__3__ModelId"] = "openai/gpt-4.1";
-        start.Environment["Providers__ModelCatalog__Models__3__Tools"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__3__Vision"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__3__StructuredOutput"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__3__Reasoning"] = "false";
-        start.Environment["Providers__ModelCatalog__Models__4__Key"] = "gpt-5.6-luna";
-        start.Environment["Providers__ModelCatalog__Models__4__DisplayName"] = "GPT-5.6 Luna";
-        start.Environment["Providers__ModelCatalog__Models__4__ProviderAlias"] = "primary-llm";
-        start.Environment["Providers__ModelCatalog__Models__4__ModelId"] = "openai/gpt-5.6-luna";
-        start.Environment["Providers__ModelCatalog__Models__4__Tools"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__4__Vision"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__4__StructuredOutput"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__4__Reasoning"] = "true";
-        start.Environment["Providers__ModelCatalog__Models__4__SupportedReasoningEfforts__0"] = "max";
-        start.Environment["Providers__ModelCatalog__Models__4__SupportedReasoningEfforts__1"] = "xhigh";
-        start.Environment["Providers__ModelCatalog__Models__4__SupportedReasoningEfforts__2"] = "high";
-        start.Environment["Providers__ModelCatalog__Models__4__SupportedReasoningEfforts__3"] = "medium";
-        start.Environment["Providers__ModelCatalog__Models__4__SupportedReasoningEfforts__4"] = "low";
-        start.Environment["Providers__ModelCatalog__Models__4__SupportedReasoningEfforts__5"] = "none";
-        start.Environment["Providers__ModelCatalog__Models__4__DefaultReasoningEffort"] = "low";
         start.Environment["OPENROUTER_API_KEY"] = "test-key-not-for-live-calls";
         _process = await ProcessHostLauncher.StartApiAsync(start, TimeSpan.FromSeconds(60)).ConfigureAwait(false);
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
@@ -182,26 +130,26 @@ public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
         var models = await client.GetFromJsonAsync<ModelCatalogResponse>("/api/v2/models");
         Assert.Equal("deepseek-v41-flash", models!.DefaultKey);
         Assert.Contains(models.Models, model => model.Key == "deepseek-v41-flash" && model.Reasoning);
-        Assert.Contains(models.Models, model => model.Key == "gpt-4o-mini-2024-07-18" && !model.Reasoning);
+        Assert.Contains(models.Models, model => model.Key == "gpt-6-luna" && model.Reasoning);
         Assert.Contains(models.Models, model => model.Key == "openrouter-free" && !model.Reasoning);
-        Assert.Contains(models.Models, model => model.Key == "gpt-4.1" && model.StructuredOutput && !model.Reasoning);
-        var luna = Assert.Single(models.Models, model => model.Key == "gpt-5.6-luna");
+        Assert.Contains(models.Models, model => model.Key == "claude-haiku-5.5" && model.StructuredOutput && model.Reasoning);
+        var luna = Assert.Single(models.Models, model => model.Key == "gpt-6-luna");
         Assert.True(luna.Tools);
         Assert.True(luna.Vision);
         Assert.True(luna.StructuredOutput);
         Assert.True(luna.Reasoning);
-        Assert.Equal(["max", "xhigh", "high", "medium", "low", "none"], luna.SupportedReasoningEfforts);
+        Assert.Equal(["none", "low", "medium", "high", "xhigh", "max"], luna.SupportedReasoningEfforts);
         Assert.Equal("low", luna.DefaultReasoningEffort);
         Assert.DoesNotContain(models.Models, model => model.Key == "scripted-alpha");
 
         var mini = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("gpt-4o-mini-2024-07-18")));
+            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("gpt-6-luna", "none")));
         Assert.Equal(HttpStatusCode.Created, mini.StatusCode);
         var miniView = await mini.Content.ReadFromJsonAsync<SessionViewResponse>();
-        Assert.Equal("gpt-4o-mini-2024-07-18", miniView!.Model!.CatalogKey);
-        Assert.Equal("openai/gpt-4o-mini-2024-07-18", miniView.Model.ModelId);
-        Assert.Null(miniView.Model.ReasoningEffort);
+        Assert.Equal("gpt-6-luna", miniView!.Model!.CatalogKey);
+        Assert.Equal("openai/gpt-6-luna", miniView.Model.ModelId);
+        Assert.Equal("none", miniView.Model.ReasoningEffort);
 
         var free = await client.PostAsJsonAsync(
             "/api/v2/sessions",
@@ -213,11 +161,11 @@ public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
 
         var lunaSession = await client.PostAsJsonAsync(
             "/api/v2/sessions",
-            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("gpt-5.6-luna", "low")));
+            new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("gpt-6-luna", "low")));
         Assert.Equal(HttpStatusCode.Created, lunaSession.StatusCode);
         var lunaView = await lunaSession.Content.ReadFromJsonAsync<SessionViewResponse>();
-        Assert.Equal("gpt-5.6-luna", lunaView!.Model!.CatalogKey);
-        Assert.Equal("openai/gpt-5.6-luna", lunaView.Model.ModelId);
+        Assert.Equal("gpt-6-luna", lunaView!.Model!.CatalogKey);
+        Assert.Equal("openai/gpt-6-luna", lunaView.Model.ModelId);
         Assert.Equal("low", lunaView.Model.ReasoningEffort);
 
         var voice = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "voice"));

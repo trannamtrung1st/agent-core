@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure.Providers.OpenAICompatible;
 
-public sealed class OpenAICompatibleLanguageModel : ILanguageModel
+public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
 {
     public const string HttpClientName = "openai-compatible-llm";
     public const string RequestTelemetryStage = "llm.request";
@@ -43,7 +43,9 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         _breaker = breaker ?? new GenerationCircuitBreaker(_time);
         _logger = logger;
         _http.Timeout = Timeout.InfiniteTimeSpan;
-        _completions = JoinCompletions(options.BaseUrl);
+        _completions = options.Transport == ModelInferenceTransport.Responses
+            ? new Uri(JoinCompletions(options.BaseUrl), "../responses")
+            : JoinCompletions(options.BaseUrl);
         Capabilities = new ModelCapabilities(
             StreamingText: true,
             Cancellation: true,
@@ -117,6 +119,10 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                     $"Provider did not return response headers within {Math.Max(1, _options.Timeouts.SetupSeconds)}s.",
                     ProviderFailureReason.SetupTimeout);
         }
+        catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            setupFailed = Fail(ProviderErrorCode.InvalidRequest, "Invalid language model continuation state.");
+        }
         catch (HttpRequestException)
         {
             _breaker.RecordFailure();
@@ -162,6 +168,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             var functionChannel = request.Tools?.Any(tool => tool.Name == AssistantResponseSchema.ResponseFunctionName) == true;
             var functionPreamble = new StringBuilder();
             var drafts = new Dictionary<int, ToolCallDraft>();
+            var continuation = new List<JsonElement>();
             var idle = TimeSpan.FromSeconds(Math.Max(1, _options.Timeouts.StreamIdleSeconds));
 
             await using var enumerator = parser
@@ -236,7 +243,9 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                 ModelFailed? parseFailed = null;
                 try
                 {
-                    mappedEvents = MapPayloadEvents(
+                    mappedEvents = _options.Transport == ModelInferenceTransport.Responses
+                        ? MapResponsesPayload(payload, drafts, continuation, toolsOffered, ref stop, ref inputTokens, ref outputTokens)
+                        : MapPayloadEvents(
                         payload,
                         toolsOffered,
                         drafts,
@@ -244,8 +253,9 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                         ref inputTokens,
                         ref outputTokens,
                         ref sawChoice);
+                    if (_options.Transport == ModelInferenceTransport.ChatCompletions) CaptureChatContinuation(payload, continuation);
                 }
-                catch (JsonException)
+                catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException)
                 {
                     _breaker.RecordFailure();
                     parseFailed = Fail(ProviderErrorCode.Unavailable, "Language model stream was malformed.", ProviderFailureReason.StreamMalformed);
@@ -294,6 +304,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                             break;
                     }
                 }
+                if (_options.Transport == ModelInferenceTransport.Responses && stop is not null) break;
             }
 
             if (stop == ModelStopReason.LengthLimit && drafts.Count > 0)
@@ -310,6 +321,12 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             if (stop == ModelStopReason.ToolCalls)
             {
                 _breaker.RecordSuccess();
+                string? continuationToken = null;
+                ModelFailed? continuationFailure = null;
+                try { continuationToken = EncodeContinuation(continuation); }
+                catch (JsonException) { continuationFailure = Fail(ProviderErrorCode.InvalidResponse, "Language model continuation exceeded the size limit.", ProviderFailureReason.StreamLimit); }
+                if (continuationFailure is not null) { yield return continuationFailure; yield break; }
+                var firstDraft = true;
                 foreach (var draft in drafts.OrderBy(pair => pair.Key).Select(pair => pair.Value))
                 {
                     if (string.IsNullOrWhiteSpace(draft.Id) || string.IsNullOrWhiteSpace(draft.Name))
@@ -321,7 +338,9 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                     yield return new ModelToolCallEvent(new ModelToolCall(
                         draft.Id,
                         OpenAiCompatibleToolNames.ToCanonicalName(draft.Name, request.Tools),
-                        draft.Arguments.ToString()));
+                        draft.Arguments.ToString(),
+                        firstDraft ? continuationToken : null));
+                    firstDraft = false;
                 }
 
                 yield return new ModelCompleted(ModelStopReason.ToolCalls, inputTokens, outputTokens);
@@ -359,6 +378,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         {
             ["model"] = _options.DefaultModel,
             ["stream"] = true,
+            ["stream_options"] = new { include_usage = true },
             ["max_tokens"] = request.MaxOutputTokens,
             ["messages"] = messages
         };
@@ -380,7 +400,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                 body["reasoning"] = new Dictionary<string, object?>
                 {
                     ["effort"] = effort.Trim(),
-                    ["exclude"] = _options.ExcludeVisibleReasoning
+                    ["exclude"] = _options.ExcludeVisibleReasoning && request.Tools is not { Count: > 0 }
                 };
             }
             else
@@ -400,6 +420,8 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
             body["response_format"] = AssistantResponseSchema.OpenAiCompatibleResponseFormat(request.ResponseContract);
         }
 
+        if (_options.Transport == ModelInferenceTransport.Responses) body = ResponsesBody(request, body);
+        if (IsOpenRouter) body["provider"] = new { require_parameters = true };
         var json = JsonSerializer.Serialize(body);
         var message = new HttpRequestMessage(HttpMethod.Post, _completions)
         {
@@ -426,7 +448,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
     private static bool HasImageParts(ModelRequest request) =>
         request.Messages.Any(message => message.Parts?.OfType<ModelImageContent>().Any() == true);
 
-    private static object[] MapMessages(IReadOnlyList<ModelMessage> messages)
+    private object[] MapMessages(IReadOnlyList<ModelMessage> messages)
     {
         var mapped = new List<Dictionary<string, object?>>(messages.Count + 4);
         var imageContinuations = new List<Dictionary<string, object?>>();
@@ -498,7 +520,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         };
     }
 
-    private static Dictionary<string, object?> MapMessage(ModelMessage message)
+    private Dictionary<string, object?> MapMessage(ModelMessage message)
     {
         if (message.Role == ModelRole.Tool)
         {
@@ -513,7 +535,7 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
         };
         if (message.ToolCalls is { Count: > 0 } calls)
         {
-            return new Dictionary<string, object?>
+            var mapped = new Dictionary<string, object?>
             {
                 ["role"] = role,
                 ["content"] = string.IsNullOrEmpty(message.Text) ? null : message.Text,
@@ -528,6 +550,9 @@ public sealed class OpenAICompatibleLanguageModel : ILanguageModel
                     }
                 }).ToArray()
             };
+            var state = DecodeContinuation(calls.FirstOrDefault()?.ContinuationToken, ModelInferenceTransport.ChatCompletions);
+            if (state.Count > 0) mapped["reasoning_details"] = state;
+            return mapped;
         }
 
         if (message.Parts is { Count: > 0 } parts)

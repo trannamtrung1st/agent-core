@@ -68,6 +68,35 @@ public sealed class SemanticResponseLanguageModelTests
     private static readonly ModelRequest Contracted = Bare with { ResponseContract = Contract };
 
     [Fact]
+    public async Task Explicit_response_function_policy_retains_native_capability_and_validates_structured_final()
+    {
+        const string json = """{"disposition":"Complete","action":{"kind":"chat.respond"},"displayText":"Verified","speech":{"mode":"same","text":null},"blocks":[],"memory":[]}""";
+        var inner = new ScriptedInner([new ModelToolCallEvent(new("final", AssistantResponseSchema.ResponseFunctionName, json)),
+            new ModelCompleted(ModelStopReason.ToolCalls, 21, 9)], structured: true, tools: true);
+        var model = new SemanticResponseLanguageModel(inner, preferResponseFunction: true);
+        var events = await CollectAsync(model, Contracted);
+        Assert.True(model.Capabilities.StructuredOutput);
+        Assert.Null(inner.LastRequest!.ResponseContract);
+        Assert.Contains(inner.LastRequest.Tools!, tool => tool.Name == AssistantResponseSchema.ResponseFunctionName);
+        Assert.Equal("Verified", Assert.Single(events.OfType<ModelSemanticResponseReady>()).Response.DisplayText);
+        Assert.Equal(21, Assert.Single(events.OfType<ModelCompleted>()).InputTokens);
+        Assert.Empty(events.OfType<ModelToolCallEvent>());
+    }
+
+    [Fact]
+    public async Task Discarded_response_function_carries_round_continuation_to_executable_call()
+    {
+        var inner = new ScriptedInner([
+            new ModelToolCallEvent(new("final", AssistantResponseSchema.ResponseFunctionName, "{}", "opaque-round-state")),
+            new ModelToolCallEvent(new("lookup", "lookup", "{}")),
+            new ModelCompleted(ModelStopReason.ToolCalls)], structured: true, tools: true);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner, preferResponseFunction: true), Contracted);
+        var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
+        Assert.Equal("lookup", call.Name); Assert.Equal("opaque-round-state", call.ContinuationToken);
+        Assert.Empty(events.OfType<ModelSemanticResponseReady>());
+    }
+
+    [Fact]
     public async Task Null_contract_passes_text_delta_through()
     {
         var inner = new ScriptedInner([new ModelTextDelta("raw"), new ModelCompleted(ModelStopReason.Completed)]);

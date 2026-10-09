@@ -253,7 +253,7 @@ This table does not reopen P1. P2B structured-response work is observed separate
 
 | Slice | Production behavior | Evidence |
 | --- | --- | --- |
-| P2D catalog | Trusted `IModelCatalog` / `ILanguageModelResolver`; Synthetic fake models; Real default `deepseek-v41-flash` / `deepseek/deepseek-v4.1-flash` / medium; Real also offers `gpt-4o-mini-2024-07-18`, `openrouter-free`, `gpt-4.1`, and `gpt-5.6-luna` | **Observed** |
+| P2D catalog | Trusted `IModelCatalog` / `ILanguageModelResolver`; Synthetic fake models; Real default `deepseek-v41-flash` / `deepseek/deepseek-v4.1-flash` / medium; Real also offers `gpt-6-luna`, `claude-haiku-5.5`, `gpt-6.1-sol`, and experimental `openrouter-free` | **Observed** |
 | P2D persistence | Concrete `SessionModelSelection`; legacy pin before first post-upgrade generation; per-turn provenance | **Observed** |
 | P2D runtime | Session-aware resolve for Conversation/Initiative/CompletionEvaluation; persist-before-use live switch; `SessionBusy` while generating | **Observed** |
 | P2D API/UI | Safe catalog API; create/mutate catalog-level choices; Codex-like Default + effort controls; session isolation | **Observed** |
@@ -377,7 +377,7 @@ General Assistant exit for this closure:
 
 ## Handoff rule
 
-Implementation begins with Milestone 1 in a separate task. Native realtime is not an implementation milestone, prerequisite or runtime branch anywhere in this MVP plan. If a provider cannot meet a capability, implement the specified degraded policy and report its measured trade-off; do not quietly change the architecture. Each implementation milestone should update run/test instructions to actual commands as its artifacts are introduced. Apply the [hosted-provider verification policy](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in): default tests stay Synthetic/offline; OpenRouter opt-in adapter smoke may use `openrouter/free`; the Real/demo catalog default is the shipped fixed model ID `deepseek/deepseek-v4.1-flash`, and the same catalog also offers `openai/gpt-4o-mini-2024-07-18`, `openrouter/free`, `openai/gpt-4.1`, and `openai/gpt-5.6-luna` as session choices; OpenAI speech live checks may wait for `OPENAI_API_KEY`. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`).
+Implementation begins with Milestone 1 in a separate task. Native realtime is not an implementation milestone, prerequisite or runtime branch anywhere in this MVP plan. If a provider cannot meet a capability, implement the specified degraded policy and report its measured trade-off; do not quietly change the architecture. Each implementation milestone should update run/test instructions to actual commands as its artifacts are introduced. Apply the [hosted-provider verification policy](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in): default tests stay Synthetic/offline; OpenRouter opt-in adapter smoke may use `openrouter/free`; the Real/demo catalog default is the shipped fixed model ID `deepseek/deepseek-v4.1-flash`, and the same catalog also offers `openai/gpt-6-luna`, `anthropic/claude-haiku-5.5`, `openai/gpt-6.1-sol`, and experimental `openrouter/free` as session choices; OpenAI speech live checks may wait for `OPENAI_API_KEY`. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`).
 
 ## P9.7 — Agent-assisted / self-managed harness authoring
 
@@ -503,3 +503,8 @@ Execution-aware retired Skill validation, optional permitted iframe-root snapsho
 ## Configurable execution budget follow-up
 
 The user-requested bounded resource/cleanup enhancement uses existing Definition/Instance authoring, AgentRun admission/checkpoint and native browser owners. It does not open P10/P11 or change earlier milestone freeze SHAs. Scope and before/after measurements are recorded in [execution-budget verification](reports/execution-budget-cleanup-verification.md); acceptance requires full local gates and hosted CI on the exact final candidate.
+
+
+### Model catalog and reasoning controls refresh
+
+Authorized focused enhancement of shipped P2D selection/provider paths: five Real entries, retirement of three built-ins, shared ascending reasoning presentation and catalog-selected stateless Responses transport. No new application milestone or P10/P11 work. Historical acceptance SHAs remain unchanged. [Verification ledger](reports/model-catalog-refresh-verification.md) separates offline/runtime checks from live compatibility and remaining acceptance gaps.

@@ -288,13 +288,14 @@ public static class AgentRunToolCallCheckpoint
                 Text,
                 ToolCallId: ToolCallId,
                 Name: Name,
-                ToolCalls: ToolCalls?.Select(call => new ModelToolCall(call.Id, call.Name, call.Completion?.ArgumentsJson() ?? call.ArgumentsJson!)).ToArray());
+                ToolCalls: ToolCalls?.Select(call => new ModelToolCall(call.Id, call.Name, call.Completion?.ArgumentsJson() ?? call.ArgumentsJson!, call.ContinuationToken)).ToArray());
     }
 
     // Compact completion data avoids double JSON escaping of a
     // maximum valid summary. UTF-16 base64 has a fixed bound for every .NET character, independent of content.
     private sealed record ToolCallDto(string Id, string Name, string? ArgumentsJson,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CompletionDto? Completion = null)
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CompletionDto? Completion = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ContinuationToken = null)
     {
         public static ToolCallDto From(ModelToolCall call)
         {
@@ -304,18 +305,18 @@ public static class AgentRunToolCallCheckpoint
                 {
                     using var json = JsonDocument.Parse(call.ArgumentsJson);
                     var args = json.RootElement;
-                    if (args.ValueKind != JsonValueKind.Object) return new(call.Id, call.Name, call.ArgumentsJson);
+                    if (args.ValueKind != JsonValueKind.Object) return new(call.Id, call.Name, call.ArgumentsJson, ContinuationToken: call.ContinuationToken);
                     string summary; bool attention;
                     if (WorkCompletionRequest.TryParse(args, [], out var result, out attention, out _))
                     {
                         summary = WorkCompletionRequest.Summary(result);
                         return new(call.Id, call.Name, null, new(Convert.ToBase64String(Encoding.Unicode.GetBytes(summary)), attention,
-                            args.GetProperty("outcome").GetString()));
+                            args.GetProperty("outcome").GetString()), call.ContinuationToken);
                     }
                 }
                 catch (JsonException) { }
             }
-            return new(call.Id, call.Name, call.ArgumentsJson);
+            return new(call.Id, call.Name, call.ArgumentsJson, ContinuationToken: call.ContinuationToken);
         }
     }
     private sealed record CompletionDto(string SummaryUtf16, bool AttentionRequired, string? Outcome)

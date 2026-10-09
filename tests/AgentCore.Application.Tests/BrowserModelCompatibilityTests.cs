@@ -17,6 +17,7 @@ using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
+using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -127,28 +128,48 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
 
     [BrowserBenchmarkTheory]
     [InlineData("deepseek/deepseek-v4.1-flash")]
-    [InlineData("openai/gpt-5.6-luna")]
+    [InlineData("openai/gpt-6-luna")]
+    [InlineData("anthropic/claude-haiku-5.5")]
+    [InlineData("openai/gpt-6.1-sol")]
     public async Task Three_natural_instruction_trials_per_model(string modelId)
     {
         var results = new List<TrialResult>();
         using var http = new HttpClient();
+        var descriptor = ModelCatalogFactory.Real().Models.Single(m => m.ModelId == modelId);
+        var transport = descriptor.Transport;
         var model = new OpenAICompatibleLanguageModel(http, new LanguageModelProviderOptions
         {
             Adapter = "OpenAICompatible", BaseUrl = "https://openrouter.ai/api/v1/", ApiKey = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY"),
-            DefaultModel = modelId, Tools = true, StructuredOutput = false, ReasoningEffort = "medium", ReasoningObjectWire = true,
+            DefaultModel = modelId, Transport = transport, Tools = descriptor.Tools, Vision = descriptor.Vision, StructuredOutput = descriptor.StructuredOutput, ReasoningEffort = descriptor.DefaultReasoningEffort, ReasoningObjectWire = true,
             Timeouts = new() { SetupSeconds = 20, StreamIdleSeconds = 60, TotalSeconds = 120 }
         });
         var firstTrial = int.TryParse(Environment.GetEnvironmentVariable("AGENTCORE_BROWSER_BENCHMARK_FIRST_TRIAL"), out var requested) && requested is >= 1 and <= 3 ? requested : 1;
         for (var trial = firstTrial; trial <= 3; trial++)
         {
             await using var fixture = new GenericSsoFixture();
-            var result = await Trial(fixture, new SemanticResponseLanguageModel(model), modelId: modelId);
+            var result = await Trial(fixture, new SemanticResponseLanguageModel(model, descriptor.PreferResponseFunction), modelId: modelId);
             results.Add(result);
             // Safe metrics only: no calls/arguments, prompts, refs, secrets, page contents or URLs.
-            output.WriteLine(JsonSerializer.Serialize(new { model = modelId, effort = "medium", trial, transport = trial == firstTrial ? "cold-client" : "warm-client", profile = "cold", result }));
+            output.WriteLine(JsonSerializer.Serialize(new { model = modelId, effort = descriptor.DefaultReasoningEffort, trial, inferenceTransport = transport.ToString(), client = trial == firstTrial ? "cold-client" : "warm-client", profile = "cold", estimatedCostUsd = EstimatedCost(modelId, result), result }));
         }
+        output.WriteLine(JsonSerializer.Serialize(new { modelId, trials = results.Count,
+            verifiedCompletions = results.Count(r => r.DomVerified && r.Completed && r.ReplyCompleted),
+            estimatedCostPerVerifiedCompletionUsd = results.Any(r => r.DomVerified && r.Completed && r.ReplyCompleted)
+                ? results.Sum(r => EstimatedCost(modelId, r)) / results.Count(r => r.DomVerified && r.Completed && r.ReplyCompleted) : (double?)null }));
         Assert.All(results, result => Assert.True(result.DomVerified && result.Completed && result.ReplyCompleted && result.CapabilityLoaded,
             "A model trial did not independently complete authenticated record retrieval; see safe trial metrics."));
+    }
+
+    // 2026-10-09 OpenRouter base-rate estimates; excludes caching, long-context tiers and routing variation.
+    private static double EstimatedCost(string modelId, TrialResult result)
+    {
+        var (inputRate, outputRate) = modelId switch
+        {
+            "openai/gpt-6-luna" or "anthropic/claude-haiku-5.5" => (0.1, 0.5),
+            "openai/gpt-6.1-sol" => (2.0, 10.0),
+            _ => (0.3, 1.2)
+        };
+        return (result.InputTokens * inputRate + result.OutputTokens * outputRate) / 1_000_000;
     }
 
     private async Task<TrialResult> Trial(GenericSsoFixture fixture, ILanguageModel model, bool steer = false, string? modelId = null, bool withoutSkills = false)
@@ -228,17 +249,19 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
                 runs.Any(r => r.LoadedCapabilityIds.Contains(ToolCatalog.BrowserFillCredential)), dom, completed, timedOut, Math.Round(timer.Elapsed.TotalSeconds, 1),
                 recording.Calls.Count(c => c.Name == ToolCatalog.BrowserFind),
                 receipts.Where(r => r.Name?.StartsWith("browser.") == true).Select(r => System.Text.Encoding.UTF8.GetByteCount(r.Text)).DefaultIfEmpty().Max(),
-                receipts.Select(Error).Where(e => e is not null).Distinct().ToArray()!, replyCompleted);
+                receipts.Select(Error).Where(e => e is not null).Distinct().ToArray()!, replyCompleted, recording.InputTokens, recording.OutputTokens);
         }
         finally { await browser.StopAsync(CancellationToken.None); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
     private sealed record TrialResult(int ModelRequests, int ToolCalls, int ValidCalls, int MalformedCalls, int BlockedCalls, int RepeatedFailures,
         bool CapabilityLoaded, bool DomVerified, bool Completed, bool TimedOut, double ElapsedSeconds,
-        int FindCalls, int MaxBrowserReceiptBytes, string?[] FailureCodes, bool ReplyCompleted);
+        int FindCalls, int MaxBrowserReceiptBytes, string?[] FailureCodes, bool ReplyCompleted, int InputTokens, int OutputTokens);
 
     private sealed class RecordingModel(ILanguageModel model) : ILanguageModel
     {
+        internal int InputTokens { get; private set; }
+        internal int OutputTokens { get; private set; }
         internal List<ModelToolCall> Calls { get; } = [];
         internal List<ModelRequest> Requests { get; } = [];
         public ModelCapabilities Capabilities => model.Capabilities;
@@ -246,7 +269,9 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
         {
             Requests.Add(request);
             await foreach (var item in model.GenerateAsync(request, ct))
-            { if (item is ModelToolCallEvent call) Calls.Add(call.Call); yield return item; }
+            { if (item is ModelToolCallEvent call) Calls.Add(call.Call);
+                if (item is ModelCompleted completed) { InputTokens += completed.InputTokens ?? 0; OutputTokens += completed.OutputTokens ?? 0; }
+                yield return item; }
         }
     }
 

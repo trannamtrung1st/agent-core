@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_MODEL_KEY,
   ModelPicker,
+  nextEffortForModel,
   effortSelectValue,
   modelSelectValue,
   selectedCatalogModel,
@@ -167,5 +168,42 @@ describe("ModelPicker", () => {
     expect(screen.queryByRole("button", { name: "Model" })).not.toBeInTheDocument();
     rerender(<ModelPicker models={models} {...props} />);
     expect(screen.getByRole("button", { name: "Model" })).toBeInTheDocument();
+  });
+});
+
+
+describe("ascending reasoning slider", () => {
+  it("maps keyboard increases to higher wire efforts with descending catalog input", async () => {
+    const onEffortChange = vi.fn();
+    const descending = [{ ...models[0], supportedReasoningEfforts: ["max", "xhigh", "high", "medium", "low", "minimal", "none"] }];
+    render(<ModelPicker models={descending} defaultKey="scripted-alpha" modelValue="scripted-alpha"
+      effortValue="low" onModelChange={vi.fn()} onEffortChange={onEffortChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    const slider = await screen.findByRole("slider");
+    expect(slider).toHaveAttribute("aria-valuemin", "0");
+    expect(slider).toHaveAttribute("aria-valuemax", "6");
+    expect(slider).toHaveAttribute("aria-valuenow", "2");
+    expect(slider).toHaveAttribute("aria-valuetext", "Low");
+    fireEvent.keyDown(slider, { key: "ArrowRight", keyCode: 39 });
+    fireEvent.keyUp(slider, { key: "ArrowRight", keyCode: 39 });
+    expect(onEffortChange).toHaveBeenLastCalledWith("medium");
+    fireEvent.keyDown(slider, { key: "End", keyCode: 35 });
+    fireEvent.keyUp(slider, { key: "End", keyCode: 35 });
+    expect(onEffortChange).toHaveBeenLastCalledWith("max");
+    fireEvent.keyDown(slider, { key: "Home", keyCode: 36 });
+    fireEvent.keyUp(slider, { key: "Home", keyCode: 36 });
+    expect(onEffortChange).toHaveBeenLastCalledWith("none");
+  });
+  it("retains a supported value on model switch and falls back to the new default", () => {
+    expect(nextEffortForModel(models, "scripted-alpha", null, "high")).toBe("high");
+    expect(nextEffortForModel(models, "scripted-alpha", null, "max")).toBe("medium");
+  });
+  it("presents adaptive mode without pretending it is an intensity", async () => {
+    render(<ModelPicker models={[{ ...models[0], supportedReasoningEfforts: ["high", "adaptive", "low"] }]}
+      defaultKey="scripted-alpha" modelValue="scripted-alpha" effortValue="adaptive"
+      onModelChange={vi.fn()} onEffortChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    expect(await screen.findByRole("combobox", { name: "Reasoning mode" })).toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
   });
 });

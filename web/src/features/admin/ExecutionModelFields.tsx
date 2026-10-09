@@ -1,3 +1,4 @@
+import { orderedReasoningEfforts, retainedReasoningEffort } from "../models/reasoningEfforts";
 import { useId } from "react";
 import { Flex, Select, theme } from "antd";
 import type { ModelDescriptor } from "../../services/api";
@@ -15,11 +16,11 @@ export function ExecutionModelFields({ models, modelKey, reasoningEffort, disabl
     {showLabels ? <label htmlFor={modelId}>{modelLabel}</label> : null}
     <Select id={modelId} aria-label={modelLabel} value={modelKey} disabled={disabled} showSearch optionFilterProp="label"
       options={[{ value: "", label: defaultLabel }, ...models.map(model => ({ value: model.key, label: model.displayName }))]}
-      onChange={key => onChange(key, "")} />
+      onChange={key => onChange(key, retainedReasoningEffort(models.find(model => model.key === key), reasoningEffort))} />
     {selected && selected.supportedReasoningEfforts.length > 0 ? <Flex vertical gap={token.paddingXS}>
       <label htmlFor={effortId}>{effortLabel}</label>
       <Select id={effortId} aria-label={effortLabel} value={reasoningEffort} disabled={disabled}
-      options={[{ value: "", label: "Model default" }, ...selected.supportedReasoningEfforts.map(value => ({ value, label: value }))]}
+      options={[{ value: "", label: "Model default" }, ...orderedReasoningEfforts(selected.supportedReasoningEfforts).map(value => ({ value, label: value }))]}
       onChange={effort => onChange(modelKey, effort)} />
     </Flex> : null}
   </Flex>;

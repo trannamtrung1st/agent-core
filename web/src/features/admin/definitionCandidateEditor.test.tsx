@@ -342,6 +342,23 @@ describe("definition candidate editor", () => {
     expect(saved.skills).toEqual([inherited, { ...refund, procedure: "REFUND_PROCEDURE_EDITED" }]);
   });
 
+  it("orders descending model efforts without rewriting the selected candidate", async () => {
+    const descending = { ...authoringOptions, models: authoringOptions.models.map(model => ({ ...model,
+      supportedReasoningEfforts: [...model.supportedReasoningEfforts].reverse() })) };
+    vi.mocked(listAdminAuthoringOptions).mockResolvedValue(descending);
+    const changed = vi.fn();
+    render(<DefinitionCandidateEditor candidate={storedCandidate} view="form" jsonText={candidateToJson(storedCandidate)}
+      busy={false} showSkills={false} onCandidateChange={changed} onJsonTextChange={vi.fn()} onViewChange={vi.fn()} />);
+    await screen.findByTitle("Scripted Alpha");
+    fireEvent.mouseDown(screen.getByLabelText("Reasoning"));
+    await screen.findByRole("listbox");
+    expect([...document.querySelectorAll(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content")]
+      .map(option => option.textContent)).toEqual(["Low", "Medium", "High"]);
+    expect(changed).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTitle("High"));
+    expect(changed.mock.lastCall![0].modelDefaults.reasoningEffort).toBe("high");
+  });
+
   it("edits every supported candidate area through the form and saves that candidate", async () => {
     mockDraft({ ...storedCandidate, skills: [{
       id: "refund.handle", name: "Refund", description: "Handle a refund",

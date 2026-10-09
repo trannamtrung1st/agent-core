@@ -1,3 +1,4 @@
+import { orderedReasoningEfforts, retainedReasoningEffort } from "../models/reasoningEfforts";
 import { DefinitionExecutionBudgets } from "./ExecutionBudgetsSection";
 import { DefinitionSkillsSection } from './DefinitionSkillsSection';
 import { useEffect, useId, useState } from "react";
@@ -162,9 +163,9 @@ function DefinitionCandidateForm({
   const interruptionClassifier = readString(candidate, ["providerPreferences", "interruptionClassifier"]);
   const voiceOn = readBoolean(candidate, ["voice", "enabled"]);
   const selectedModel = authoring?.models.find((item) => item.key === modelKey) ?? null;
-  const reasoningChoices = selectedModel
+  const reasoningChoices = orderedReasoningEfforts(selectedModel
     ? selectedModel.supportedReasoningEfforts
-    : [...new Set(authoring?.models.flatMap((item) => item.supportedReasoningEfforts) ?? [])];
+    : authoring?.models.flatMap((item) => item.supportedReasoningEfforts) ?? []);
   const speechMissing = voiceOn && (speechRecognizer.trim().length === 0 || speechSynthesizer.trim().length === 0);
   const goalRows = goals.length > 0 ? goals : [""];
   const metadataRows = readMetadataRows(candidate);
@@ -445,7 +446,7 @@ function DefinitionCandidateForm({
               const allowed = model?.supportedReasoningEfforts ?? [];
               const currentEffort = readString(next, ["modelDefaults", "reasoningEffort"]);
               if (currentEffort.length > 0 && !allowed.includes(currentEffort)) {
-                next = writeModelDefault(next, "reasoningEffort", "");
+                next = writeModelDefault(next, "reasoningEffort", retainedReasoningEffort(model, currentEffort));
               }
               onCandidateChange(next);
             }}

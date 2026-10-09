@@ -1,6 +1,7 @@
+import { reasoningEffortChoices } from "../models/reasoningEfforts";
 import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
-import { Button, Dropdown, Flex, Slider, Tag, Tooltip, Typography, theme } from "antd";
+import { Button, Dropdown, Flex, Select, Slider, Tag, Tooltip, Typography, theme } from "antd";
 import {
   BulbOutlined,
   CheckOutlined,
@@ -202,8 +203,8 @@ export function ModelPicker({
         ? defaultKey ?? DEFAULT_MODEL_KEY
         : modelValue;
   const selected = models.length === 0 ? null : selectedCatalogModel(models, selectValue, defaultKey);
-  const efforts = selected?.supportedReasoningEfforts ?? [];
-  const effortIndex = effortValue && efforts.length > 0 ? Math.max(0, efforts.indexOf(effortValue)) : 0;
+  const { levels: efforts, modes } = reasoningEffortChoices(selected?.supportedReasoningEfforts ?? []);
+  const effortIndex = efforts.indexOf(effortValue ?? selected?.defaultReasoningEffort ?? "");
   const [effortPreviewIndex, setEffortPreviewIndex] = useState(effortIndex);
 
   useEffect(() => {
@@ -214,7 +215,7 @@ export function ModelPicker({
     return null;
   }
 
-  const showEffort = Boolean(selected?.reasoning && efforts.length > 0);
+  const showEffort = Boolean(selected?.reasoning && (efforts.length > 0 || modes.length > 0));
   const compact = layout === "row";
 
   function closePicker(): void {
@@ -284,18 +285,26 @@ export function ModelPicker({
             <Typography.Text type="secondary">Reasoning</Typography.Text>
             <Typography.Text>{formatEffortLabel(efforts[effortPreviewIndex] ?? effortValue)}</Typography.Text>
           </Flex>
-          <Slider
+          {efforts.length > 0 && !modes.includes(effortValue ?? "") ? <Slider
             min={0}
             max={Math.max(0, efforts.length - 1)}
             step={1}
             dots
             tooltip={{ open: false }}
-            value={effortPreviewIndex}
-            disabled={disabled}
+            value={Math.max(0, effortPreviewIndex)}
+            disabled={disabled || efforts.length === 1}
+            ariaValueTextFormatterForHandle={(value) => formatEffortLabel(efforts[value ?? 0])}
             onChange={(value) => setEffortPreviewIndex(value)}
             onChangeComplete={(value) => onEffortChange(efforts[value] ?? null)}
             aria-label="Reasoning effort"
-          />
+          /> : null}
+          {modes.length > 0 ? <Select
+            aria-label="Reasoning mode"
+            value={effortValue}
+            disabled={disabled}
+            options={[...efforts, ...modes].map(value => ({ value, label: formatEffortLabel(value) }))}
+            onChange={onEffortChange}
+          /> : null}
         </Flex>
       ) : null}
     </Flex>
@@ -327,7 +336,7 @@ export function ModelPicker({
         }}
       >
         <Flex align="center" gap={token.paddingXS}>
-          <span className="model-picker-name">{selected?.displayName ?? "Model"}</span>
+          <span className="model-picker-name">{selected?.displayName ?? `${selectValue} (unavailable)`}</span>
           {selectValue === defaultKey ? (
             <Tag variant="filled" style={{ marginInlineEnd: 0 }}>
               Default

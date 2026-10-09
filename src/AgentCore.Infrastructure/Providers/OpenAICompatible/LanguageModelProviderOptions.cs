@@ -1,3 +1,4 @@
+using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAI;
 
@@ -9,6 +10,7 @@ public sealed class LanguageModelProviderOptions
     public string? BaseUrl { get; set; }
     public string? ApiKey { get; set; }
     public string? DefaultModel { get; set; }
+    public ModelInferenceTransport Transport { get; set; }
     public string? ReasoningEffort { get; set; }
     /// <summary>
     /// When true, send OpenRouter-style <c>reasoning</c> object (effort + exclude) instead of legacy <c>reasoning_effort</c> only.
