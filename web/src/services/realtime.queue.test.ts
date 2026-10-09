@@ -60,6 +60,118 @@ describe("Codex-style pending send queue", () => {
     expect(useSessionStore.getState().pendingSendQueue.map((item) => item.text)).toEqual(["U2", "U3"]);
   });
 
+  it("sends a draft immediately with interrupt semantics while preserving the local FIFO", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Later" });
+    await sendDraft();
+    const queue = useSessionStore.getState().pendingSendQueue;
+    useSessionStore.setState({ draft: "Change direction" });
+    await sendDraft("interrupt");
+    expect(invoke).toHaveBeenCalledWith("SendText", expect.objectContaining({ payload: expect.objectContaining({ text: "Change direction", behavior: "interrupt" }) }));
+    expect(useSessionStore.getState().pendingSendQueue).toEqual(queue);
+    expect(useSessionStore.getState().draft).toBe("");
+    expect(useSessionStore.getState().entries.some(entry => entry.role === "user" && entry.text === "Change direction")).toBe(true);
+  });
+
+  it("does not send an empty steer or consume the queue when idle", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    const queue = [{ localId: "q1", eventId: "e1", text: "Later", attachmentIds: [], attachments: [] }];
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", draft: "  ", pendingSendQueue: queue });
+    await sendDraft("interrupt");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().pendingSendQueue).toEqual(queue);
+  });
+
+  it("restores a rejected steer draft without queueing it", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: false, error: { message: "Try again", category: "Validation", code: "ValidationError" } });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Change direction" });
+    await sendDraft("interrupt");
+    expect(useSessionStore.getState().draft).toBe("Change direction");
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(0);
+    expect(useSessionStore.getState().entries).toHaveLength(0);
+    expect(useSessionStore.getState().error).toBe("Try again");
+  });
+
+  it("preserves a new steer draft when a send acknowledgement is in flight", async () => {
+    let accept!: (ack: { accepted: boolean }) => void;
+    const invoke = vi.fn(() => new Promise<{ accepted: boolean }>(resolve => { accept = resolve; }));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "First" });
+    const first = sendDraft("interrupt");
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+    useSessionStore.setState({ draft: "Second" });
+    const second = sendDraft("interrupt");
+    accept({ accepted: true });
+    await Promise.all([first, second]);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(useSessionStore.getState().draft).toBe("Second");
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(0);
+  });
+
+  it.each(["idle", "generating"])("retries an uncertain draft steer while %s without consuming a newer draft or files", async (outputState) => {
+    const invoke = vi.fn().mockRejectedValueOnce(new Error("Disconnected")).mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Steer now" });
+    await sendDraft("interrupt");
+    const original = invoke.mock.calls[0][1];
+    const newFile = { localId: "newFile", displayName: "next.txt", contentType: "text/plain", byteSize: 4, status: "uploading" as const, progress: 20, attachmentId: null, error: null };
+    useSessionStore.setState({ draft: "New unsent draft", pendingAttachments: [newFile] });
+    hooks.handleEvent({ protocolVersion: 1, sessionId: "s1", attachmentId: "a2", eventId: "ready", sequence: 1, timestamp: new Date().toISOString(), correlationId: "ready", causationId: null, responseId: null, type: "session.ready", payload: { history: [], mode: "text", status: "attached", outputState, activeResponseId: outputState === "generating" ? "r1" : null } });
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    expect(invoke.mock.calls[1][1]).toMatchObject({ eventId: original.eventId, payload: { text: "Steer now", attachmentIds: [], behavior: "interrupt" } });
+    expect(useSessionStore.getState().draft).toBe("New unsent draft");
+    expect(useSessionStore.getState().pendingAttachments).toEqual([newFile]);
+    expect(useSessionStore.getState().pendingSendQueue).toHaveLength(0);
+  });
+
+  it.each(["rejected", "disconnected"])("preserves newer attachments when a steer is %s", async (outcome) => {
+    let settle!: (value: unknown) => void;
+    let disconnect!: (reason: Error) => void;
+    const invoke = vi.fn(() => new Promise((resolve, reject) => { settle = resolve; disconnect = reject; }));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    const sentFile = { localId: "oldFile", displayName: "old.txt", contentType: "text/plain", byteSize: 4, status: "ready" as const, progress: 100, attachmentId: "oldId", error: null };
+    const newFile = { ...sentFile, localId: "newFile", displayName: "new.txt", attachmentId: "newId" };
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Steer", pendingAttachments: [sentFile] });
+    const sending = sendDraft("interrupt");
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(1));
+    useSessionStore.setState({ draft: "Next", pendingAttachments: [newFile] });
+    if (outcome === "disconnected") disconnect(new Error("Disconnected"));
+    else settle({ accepted: false, error: { message: "Rejected", category: "Validation", code: "ValidationError" } });
+    await sending;
+    expect(useSessionStore.getState().draft).toBe("Next");
+    expect(useSessionStore.getState().pendingAttachments).toEqual([newFile, sentFile]);
+  });
+
+  it("steers attachment-only content without consuming another queued message", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    const file = { localId: "file1", displayName: "notes.txt", contentType: "text/plain", byteSize: 4, status: "ready" as const, progress: 100, attachmentId: "att1", error: null };
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Later" });
+    await sendDraft();
+    const queue = useSessionStore.getState().pendingSendQueue;
+    useSessionStore.setState({ pendingAttachments: [file] });
+    await sendDraft("interrupt");
+    expect(invoke).toHaveBeenCalledWith("SendText", expect.objectContaining({ payload: { text: "", attachmentIds: ["att1"], behavior: "interrupt" } }));
+    expect(useSessionStore.getState().pendingAttachments).toHaveLength(0);
+    expect(useSessionStore.getState().pendingSendQueue).toEqual(queue);
+  });
+
+  it("clears restored attachments after a successful retry with the same steer event ID", async () => {
+    const invoke = vi.fn().mockRejectedValueOnce(new Error("Disconnected")).mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    const file = { localId: "file1", displayName: "notes.txt", contentType: "text/plain", byteSize: 4, status: "ready" as const, progress: 100, attachmentId: "att1", error: null };
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: "Steer", pendingAttachments: [file] });
+    await sendDraft("interrupt");
+    expect(useSessionStore.getState().pendingAttachments).toEqual([file]);
+    await sendDraft("interrupt");
+    expect(invoke.mock.calls[1][1].eventId).toBe(invoke.mock.calls[0][1].eventId);
+    expect(useSessionStore.getState().pendingAttachments).toHaveLength(0);
+    expect(useSessionStore.getState().entries).toHaveLength(1);
+  });
+
   it("dispatches only the queue head after natural completion", async () => {
     const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({ invoke, send: vi.fn() } as never);

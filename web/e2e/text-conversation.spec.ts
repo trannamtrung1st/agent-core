@@ -412,6 +412,39 @@ test("queued send and Stop keep the local queue without starting R2", async ({ p
 
 const STEER_PROBE = "[test:steer-probe]";
 
+for (const modifier of ["Meta", "Control"]) {
+  test(`composer ${modifier}+Enter steers immediately and preserves queued messages`, async ({ page }) => {
+    await page.goto("/");
+    await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
+    if (modifier === "Control") await page.setViewportSize({ width: 390, height: 844 });
+    const message = page.getByRole("textbox", { name: "Message" });
+    await message.fill("Please hold the line");
+    // The same shortcut also sends immediately before any response exists.
+    await message.press(`${modifier}+Enter`);
+    await expect(page.locator(".chat-message-assistant").first()).toContainText("Hello", { timeout: 15_000 });
+    await message.fill("Queued head");
+    await message.press("Enter");
+    await message.fill("Queued tail");
+    await message.press("Enter");
+    await message.press(`${modifier}+Enter`);
+    await expect(queuedMessages(page)).toContainText("Queued head");
+    await expect(queuedMessages(page)).toContainText("Queued tail");
+    await expect(page.locator(".chat-message-user")).toHaveCount(1);
+    await message.fill("First line");
+    await message.press("Shift+Enter");
+    await expect(message).toHaveValue("First line\n");
+    await message.fill("Immediate steer hold the line");
+    await message.press(`${modifier}+Enter`);
+    await expect(page.locator(".chat-message-assistant").first()).toContainText("Interrupted", { timeout: 5_000 });
+    await expect(page.locator(".chat-message-user").filter({ hasText: "Immediate steer hold the line" })).toBeVisible();
+    await expect(message).toHaveValue("");
+    await expect(queuedMessages(page).locator(".pending-send-queue-text")).toHaveText(["Queued head", "Queued tail"]);
+    await expect(page.locator(".chat-message-user")).toHaveCount(2);
+    await page.getByRole("button", { name: "Stop", exact: true }).click();
+    await expect(queuedMessages(page)).toContainText("Queued head");
+  });
+}
+
 test("Steer interrupts R1 promptly and auto-dispatch follows completion", async ({ page }) => {
   await page.goto("/");
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);

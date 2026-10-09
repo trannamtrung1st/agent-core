@@ -502,7 +502,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
                       muted={state.muted}
                       placeholder={`Message ${agentName}...`}
                       onDraftChange={setDraft}
-                      onSend={() => void sendDraft()}
+                      onSend={(behavior) => void sendDraft(behavior)}
                       onStop={() => void cancelRenderedResponse()}
                       onVoice={() => void requestVoice()}
                       onCancelVoice={() => void cancelVoice()}
