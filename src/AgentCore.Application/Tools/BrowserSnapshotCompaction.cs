@@ -8,6 +8,7 @@ internal static class BrowserSnapshotCompaction
     internal const int RecentFullObservations = 1;
     internal const int DuplicateReceiptChars = 240;
     internal const int PageEvidenceChars = 1200;
+    internal const int RecentDiscoveries = 8;
 
     internal static void Compact(List<ModelMessage> messages)
     {
@@ -20,13 +21,11 @@ internal static class BrowserSnapshotCompaction
             }
         }
 
-        if (full.Count > 0)
-        {
-            // Compact earlier discovery evidence in history; the provider retains live semantic Locators.
-            for (var index = 0; index < full[^1]; index++)
-                if (messages[index] is { Role: ModelRole.Tool, Name: "browser.find" } found)
-                    messages[index] = found with { Text = Receipt(found.Text, false), Parts = null };
-        }
+        // A read-only snapshot does not invalidate native refs. Keep recent discoveries
+        // available across observations; failures and ambiguity retain their repair evidence.
+        var discoveries = Enumerable.Range(0, messages.Count).Where(i => IsSuccessfulDiscovery(messages[i])).ToArray();
+        foreach (var index in discoveries.Take(Math.Max(0, discoveries.Length - RecentDiscoveries)))
+            messages[index] = messages[index] with { Text = DiscoveryReceipt(messages[index].Text), Parts = null };
 
         if (full.Count <= RecentFullObservations)
         {
@@ -49,6 +48,32 @@ internal static class BrowserSnapshotCompaction
             var rich = latestByUrl[urlKey] == index;
             messages[index] = message with { Text = Receipt(message.Text, rich), Parts = null };
         }
+    }
+
+    private static bool IsSuccessfulDiscovery(ModelMessage message)
+    {
+        if (message is not { Role: ModelRole.Tool, Name: "browser.find" }) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(message.Text);
+            var root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object && !root.TryGetProperty("error", out _)
+                && (!root.TryGetProperty("status", out var status) || status.ValueKind == JsonValueKind.String && status.GetString() == "ok")
+                && root.TryGetProperty("matches", out var matches) && matches.ValueKind == JsonValueKind.Array && matches.GetArrayLength() > 0;
+        }
+        catch (JsonException) { return false; }
+    }
+
+    private static string DiscoveryReceipt(string text)
+    {
+        using var document = JsonDocument.Parse(text);
+        var root = document.RootElement;
+        return JsonSerializer.Serialize(new
+        {
+            untrustedBrowserContent = true, compacted = true, status = "ok",
+            matchCount = root.TryGetProperty("matchCount", out var count) && count.ValueKind == JsonValueKind.Number && count.TryGetInt32(out var value) ? value : root.GetProperty("matches").GetArrayLength(),
+            guidance = "An earlier search succeeded; its detailed evidence was compacted. Use browser.find to obtain a current ref if needed."
+        });
     }
 
     private static bool IsFullObservation(ModelMessage message)

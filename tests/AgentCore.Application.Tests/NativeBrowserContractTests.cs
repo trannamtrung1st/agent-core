@@ -9,6 +9,35 @@ namespace AgentCore.Application.Tests;
 public sealed class NativeBrowserContractTests
 {
     [Fact]
+    public async Task Malformed_discovery_explains_query_repair_before_reference_repair()
+    {
+        const string overloaded = """{"role":"textbox","name":"Email","text":"Email","label":"Email","placeholder":"Enter your email","scopeRef":"","frameRef":""}""";
+        Assert.False(BrowserToolArguments.TryRequest(Guid.NewGuid(), ToolCatalog.BrowserFind,
+            JsonSerializer.Deserialize<JsonElement>(overloaded), out _, out var error));
+        Assert.Equal("invalid", error);
+        var browser = new Subset();
+        var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
+        var definition = Definition(ToolCatalog.BrowserFind, ToolCatalog.BrowserSnapshot);
+        foreach (var args in new[] { overloaded, "{}", "{\"label\":\"Email\",\"name\":\"Email\"}" })
+        {
+            var result = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("find", ToolCatalog.BrowserFind, args),
+                ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
+            Assert.Contains("Choose exactly one", result.Text);
+            Assert.Contains("placeholder", result.Text);
+            Assert.Contains("Omit", result.Text);
+        }
+        var badScope = await executor.ExecuteAsync(definition, Guid.NewGuid(),
+            new("find", ToolCatalog.BrowserFind, "{\"placeholder\":\"Enter your email\",\"scopeRef\":\"\"}"),
+            ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn));
+        Assert.Contains("invalid_reference", badScope.Text);
+        Assert.Contains("scopeRef", badScope.Text);
+        var snapshot = await executor.ExecuteAsync(definition, Guid.NewGuid(),
+            new("snapshot", ToolCatalog.BrowserSnapshot, "{\"targetRef\":\"\"}"), ToolLimits.MaxOutputBytes,
+            admission: new(false, TriggerKind.UserTurn));
+        Assert.Contains("Omit it to inspect the page", snapshot.Text);
+        Assert.Equal(0, browser.Commands);
+    }
+    [Fact]
     public void Relational_text_filter_is_bounded_literal_neutral_data_and_requires_a_primary_query()
     {
         var id = Guid.NewGuid();

@@ -150,7 +150,7 @@ public sealed class BrowserReliabilityRuntimeTests
             Results.AddRange(results.Where(r => !Results.Any(old => old.ToolCallId == r.ToolCallId)));
             var step = _steps.GetValueOrDefault(request.ResponseId); _steps[request.ResponseId] = step + 1;
             var close = request.Messages.Last(m => m.Role == ModelRole.User).Text.Contains("Close", StringComparison.Ordinal);
-            string Reference() { using var json = JsonDocument.Parse(results.Last().Text); return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!; }
+            string Reference() { using var json = JsonDocument.Parse(results.Last(r => r.Name == ToolCatalog.BrowserFind).Text); return json.RootElement.GetProperty("matches")[0].GetProperty("ref").GetString()!; }
             object args; string tool;
             if (close)
             {
@@ -173,14 +173,23 @@ public sealed class BrowserReliabilityRuntimeTests
                 (string Tool, object Args) planned = step switch
                 {
                     0 => (ToolCatalog.BrowserNavigate, new { url }),
-                    1 => (ToolCatalog.BrowserFind, targetRole == "generic" ? (object)new { text = "Entry 1999" } : new { role = targetRole, name = "Entry 1999" }),
-                    2 => (ToolCatalog.BrowserClick, new { @ref = Reference() }),
-                    3 => (ToolCatalog.CapabilitiesLoad, new { query = "browser.fill_form", limit = 1 }),
-                    4 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Summary" }),
-                    5 => (ToolCatalog.BrowserFillForm, new { fields = new[] { new { @ref = Reference(), value = "Verified change" } } }),
-                    6 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Summary" }),
+                    1 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Email", text = "Email", label = "Email", placeholder = "Enter your email", scopeRef = "", frameRef = "" }),
+                    2 => (ToolCatalog.BrowserSnapshot, new { }),
+                    3 => (ToolCatalog.BrowserFind, targetRole == "generic" ? (object)new { text = "Entry 1999" } : new { role = targetRole, name = "Entry 1999" }),
+                    4 => (ToolCatalog.BrowserSnapshot, new { }),
+                    5 => (ToolCatalog.BrowserClick, new { @ref = Reference() }),
+                    6 => (ToolCatalog.CapabilitiesLoad, new { query = "browser.fill_form", limit = 1 }),
+                    7 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Summary" }),
+                    8 => (ToolCatalog.BrowserFillForm, new { fields = new[] { new { @ref = Reference(), value = "Verified change" } } }),
+                    9 => (ToolCatalog.BrowserFind, new { role = "textbox", name = "Summary" }),
                     _ => ("", new { })
                 };
+                if (step == 3)
+                {
+                    using var failure = JsonDocument.Parse(results.Last(r => r.Name == ToolCatalog.BrowserFind).Text);
+                    Assert.Equal("invalid", failure.RootElement.GetProperty("error").GetString());
+                    Assert.Contains("Choose exactly one", failure.RootElement.GetProperty("message").GetString());
+                }
                 (tool, args) = planned;
                 if (tool.Length == 0)
                 {

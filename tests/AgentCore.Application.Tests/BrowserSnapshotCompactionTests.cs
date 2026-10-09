@@ -7,16 +7,38 @@ namespace AgentCore.Application.Tests;
 public sealed class BrowserSnapshotCompactionTests
 {
     [Fact]
-    public void New_snapshot_removes_prior_find_refs()
+    public void New_snapshot_preserves_recent_discovery_refs_and_failures()
     {
         var messages = new List<ModelMessage>
         {
             new(ModelRole.Tool, "{\"matches\":[{\"ref\":\"el_old\",\"name\":\"Asset 159\"}]}", Name: "browser.find"),
+            new(ModelRole.Tool, "{\"error\":\"invalid_reference\",\"message\":\"Omit an unused scopeRef.\"}", Name: "browser.find"),
             Observation(1, "el_latest")
         };
         BrowserSnapshotCompaction.Compact(messages);
-        Assert.DoesNotContain("el_old", messages[0].Text);
-        Assert.Contains("el_latest", messages[1].Text);
+        Assert.Contains("el_old", messages[0].Text);
+        Assert.Contains("invalid_reference", messages[1].Text);
+        Assert.Contains("Omit an unused scopeRef", messages[1].Text);
+        Assert.Contains("el_latest", messages[2].Text);
+    }
+
+    [Fact]
+    public void Older_discoveries_keep_outcomes_without_unbounded_reference_history()
+    {
+        var messages = Enumerable.Range(0, 20).Select(i => new ModelMessage(ModelRole.Tool,
+            JsonSerializer.Serialize(new { status = "ok", matchCount = 1, matches = new[] { new { @ref = $"el_found_{i}" } } }),
+            Name: "browser.find")).ToList();
+        var error = "{\"error\":\"not_found\",\"message\":\"No rendered target matches.\"}";
+        messages.Insert(0, new(ModelRole.Tool, error, Name: "browser.find"));
+        messages.Add(Observation(1, "el_latest"));
+        BrowserSnapshotCompaction.Compact(messages);
+        BrowserSnapshotCompaction.Compact(messages);
+        Assert.Equal(error, messages[0].Text);
+        Assert.Equal(8, messages.Count(m => m.Text.Contains("el_found_", StringComparison.Ordinal)));
+        using var receipt = JsonDocument.Parse(messages[1].Text);
+        Assert.Equal("ok", receipt.RootElement.GetProperty("status").GetString());
+        Assert.Equal(1, receipt.RootElement.GetProperty("matchCount").GetInt32());
+        Assert.Contains("browser.find", receipt.RootElement.GetProperty("guidance").GetString());
     }
     [Fact]
     public void Repeated_browser_rounds_keep_only_the_latest_full_observations()

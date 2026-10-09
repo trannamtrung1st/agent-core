@@ -17,7 +17,11 @@ public sealed partial class SessionToolExecutor
         ToolExecutionResult Fail(string code, string message) => FitResult(remainingOutputBytes, FinishBrowser(name, started, Error(code, message)));
         if (!BrowserToolCatalog.TryGet(name, out var metadata)) return Fail("unsupported_operation", "Unknown browser feature.");
         if (!BrowserToolArguments.TryRequest(sessionId, name, args, out var request, out var argumentError))
-            return Fail(argumentError, BrowserFailureMessage(argumentError));
+            return Fail(argumentError, name == ToolCatalog.BrowserFind && argumentError is "invalid" or "invalid_reference"
+                ? (argumentError == "invalid_reference" ? "An optional scopeRef is invalid. Omit it for an unscoped search, or use an opaque container ref returned by browser.find. " : "") + BrowserToolArguments.FindQueryGuidance
+                : name == ToolCatalog.BrowserSnapshot && argumentError == "invalid_reference"
+                    ? "An optional targetRef is invalid. Omit it to inspect the page, or use an opaque el_ ref returned by browser.find for a subtree."
+                    : BrowserFailureMessage(argumentError));
         var denied = await BindBrowserAsync(sessionId, admission, ct).ConfigureAwait(false);
         if (denied is not null) return TextResult(FinishBrowser(name, started, denied));
         if (browser is null || !browser.IsAvailable && metadata.Feature != BrowserFeature.Configuration) return Fail("provider_unavailable", "Browser is unavailable.");

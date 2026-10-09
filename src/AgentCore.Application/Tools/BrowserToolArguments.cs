@@ -6,6 +6,7 @@ namespace AgentCore.Application.Tools;
 
 public static class BrowserToolArguments
 {
+    internal const string FindQueryGuidance = "Choose exactly one of role (with optional name), text, label, placeholder, altText, title or testId. Omit all unused fields; do not populate them with empty strings or guesses. For Email, use {\"placeholder\":\"Enter your email\"} or {\"role\":\"textbox\",\"name\":\"Email\"}. Omit scopeRef and frameRef unless narrowing to a discovered container or frame. Find creates its own opaque ref and needs no prior snapshot.";
     private static readonly Regex OpaqueRef = new(
         "^el_[A-Za-z0-9_-]{22}$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -106,10 +107,10 @@ public static class BrowserToolArguments
         { error = "forbidden"; return false; }
         using var schema = JsonDocument.Parse(metadata.ParametersJson);
         if (!ValidateBrowserShape(args, schema.RootElement)) return false;
-        if (!ValidReferences(args)) { error = "invalid_reference"; return false; }
         request = Request(sessionId, tool, args);
         if (request.Operation == BrowserOperation.Navigate && (request.Options.Operation is null or "goto") && string.IsNullOrWhiteSpace(request.Options.Url)) return false;
         if (request.Operation == BrowserOperation.Find && !ValidQuery(request.Options.Query)) return false;
+        if (!ValidReferences(args)) { error = "invalid_reference"; return false; }
         error = ""; return true;
     }
 
