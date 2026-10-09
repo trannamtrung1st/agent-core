@@ -55,6 +55,8 @@ public sealed partial class NativePlaywrightBrowser
         BrowserResult Data(object value) => new(null, DataJson: JsonSerializer.Serialize(value));
         try
         {
+            if (session.Dialog?.Page?.IsClosed == true)
+            { session.Dialog = null; session.PendingAction = null; }
             if (command.Operation == BrowserOperation.GetConfig) return Configuration(session);
             if (session.Dialog is not null && command.Operation != BrowserOperation.Dialog) return new("dialog_pending");
             if (command.Operation is not (BrowserOperation.Tabs or BrowserOperation.Dialog)) await AdoptOpenWebPageAsync(session, ct);
@@ -156,11 +158,29 @@ public sealed partial class NativePlaywrightBrowser
                         // A modal blocks page JS, including the live storage/password secret collector.
                         // Mask the entire untrusted message rather than trusting stale pre-dialog evidence.
                         if (args.Operation == "inspect") return Data(new { kind = dialog.Type, message = "[redacted]", messageRedacted = true });
-                        if (DialogResolutionProbe is { } resolve) await resolve(dialog).WaitAsync(ct);
-                        else if (args.Operation == "accept") await dialog.AcceptAsync(args.PromptText).WaitAsync(ct);
-                        else await dialog.DismissAsync().WaitAsync(ct);
-                        session.Dialog = null;
-                        if (session.PendingAction is { } pending) { await pending.WaitAsync(ct); session.PendingAction = null; }
+                        activeAction = DialogResolutionProbe is { } resolve ? resolve(dialog)
+                            : args.Operation == "accept" ? dialog.AcceptAsync(args.PromptText) : dialog.DismissAsync();
+                        try { await activeAction.WaitAsync(ct); }
+                        catch (PlaywrightException ex) when (ex.Message.Contains("already handled", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (ReferenceEquals(session.Dialog, dialog)) session.Dialog = null;
+                            return new("dialog_missing");
+                        }
+                        activeAction = null;
+                        if (ReferenceEquals(session.Dialog, dialog)) session.Dialog = null;
+                        if (session.PendingAction is { } pending)
+                        {
+                            activeAction = pending;
+                            if (await Task.WhenAny(pending, session.DialogSignal.Task).WaitAsync(ct) != pending)
+                            {
+                                activeAction = null;
+                                return new("dialog_pending");
+                            }
+                            await pending.WaitAsync(ct);
+                            activeAction = null;
+                            session.PendingAction = null;
+                        }
+                        if (session.Dialog is not null) return new("dialog_pending");
                         session.DialogSignal = new(TaskCreationOptions.RunContinuationsAsynchronously); return new(null, await CaptureAsync(session, command.SessionId, ct));
                     }
                 case BrowserOperation.WaitFor:

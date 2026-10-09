@@ -477,3 +477,7 @@ The Pump 002 review authorizes actionable native dialog recovery, confirmed expl
 ## Capability discovery UX and reliability follow-up
 
 Authorized focused enhancement of existing `capabilities.load`: registry-based concrete intents, compact actionable outcomes, bounded ineffective discovery and same-Run restoration. Definition authority, configuration/runtime eligibility, sensitive approvals, attached/detached restrictions, Skill procedures and fresh independent Run state remain authoritative. No new discovery subsystem, model-specific behavior, Browser provider, automatic grants or P10/P11 work. Local implementation and final acceptance are tracked separately in [discovery verification](reports/capability-discovery-reliability-verification.md). Hosted CI is deferred at the user's direction; this follow-up is not frozen until all required jobs pass on the implementation SHA.
+
+## Final native browser blocked-state recovery
+
+Authorized focused reliability review after `195d53df`, composed with capability discovery `bc0a7e94`. Fix only reproduced pending-modal loops and native dialog lifecycle defects using existing BrowserEvidenceProgress, tool receipts, finalization and native cancellation fences. No Browser redesign, additional tool, broader authority or P10/P11 work. Actual Chromium and owned Run acceptance, local suites and exact-behavior hosted gates are recorded separately in [verification](reports/browser-blocked-dialog-recovery-verification.md).

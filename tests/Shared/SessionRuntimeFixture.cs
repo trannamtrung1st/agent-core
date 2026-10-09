@@ -86,6 +86,20 @@ internal static class SessionRuntimeFixture
         return context.Runs.ListForSessionAsync(new(runtime.Snapshot.AgentInstanceId, runtime.Snapshot.ProfileId!.Value), runtime.SessionId);
     }
 
+    internal static async Task<AgentRun> ResumeDurationWaitAsync(SessionRuntime runtime)
+    {
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        var context = Contexts.GetValue(runtime, _ => throw new InvalidOperationException("Unknown fixture."));
+        if (context.Time is not FakeTimeProvider clock) throw new InvalidOperationException("Wait fixture requires controlled time.");
+        var owner = new AgentRunOwner(runtime.Snapshot.AgentInstanceId, runtime.Snapshot.ProfileId!.Value);
+        var waiting = (await context.Runs.ListForSessionAsync(owner, runtime.SessionId)).Single(run => run.Status == AgentRunStatus.WaitingForSignal);
+        clock.Advance(waiting.Wait!.DeadlineUtc - clock.GetUtcNow());
+        var resumed = await context.Runs.ApplyAsync(owner, waiting.AgentRunId,
+            new AgentRunCommand.ResumeWait(waiting.Revision, clock.GetUtcNow(), Guid.NewGuid(), clock.GetUtcNow().AddMinutes(5)));
+        if (!await runtime.DispatchAgentRunAsync(resumed.AgentRunId, false)) throw new InvalidOperationException("Fixture wait dispatch was rejected.");
+        return waiting;
+    }
+
     internal static async Task<bool> DispatchRetryAsync(SessionRuntime runtime)
     {
         await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(10));

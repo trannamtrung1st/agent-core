@@ -8,6 +8,25 @@ using AgentCore.Infrastructure.Tools;
 namespace AgentCore.Application.Tests;
 public sealed class NativeBrowserContractTests
 {
+    [Fact]
+    public async Task Malformed_configuration_is_rejected_before_provider_execution_using_the_empty_object_schema()
+    {
+        var browser = new Subset(true);
+        var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
+        var definition = Definition(ToolCatalog.BrowserConfiguration);
+        foreach (var args in new[] { "[]", "\"bad\"", "{bad", "{\"unknown\":true}" })
+        {
+            var result = await executor.ExecuteAsync(definition, Guid.NewGuid(), new("config", ToolCatalog.BrowserConfiguration, args), ToolLimits.MaxOutputBytes,
+                admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn));
+            Assert.Contains("invalid", result.Text);
+            Assert.Contains("message", result.Text);
+        }
+        Assert.Equal(0, browser.Commands);
+        Assert.DoesNotContain("error", (await executor.ExecuteAsync(definition, Guid.NewGuid(), new("valid", ToolCatalog.BrowserConfiguration, "{}"), ToolLimits.MaxOutputBytes,
+            admission: new ToolExecutionAdmission(false, TriggerKind.UserTurn))).Text);
+        Assert.Equal(1, browser.Commands);
+    }
+
     [Theory]
     [InlineData("role", "textbox")]
     [InlineData("text", "Email")]

@@ -2623,7 +2623,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var terminalBrowserContinuation = false;
         var checkpointCapacityReached = false;
         string? continuationInstruction = null;
-        var evidence = new BrowserEvidenceProgress();
+        var evidence = new BrowserEvidenceProgress(CheckpointSuffix());
         var invalidCalls = new InvalidToolCallRecovery(CheckpointSuffix());
         var invalidRecoveryExhausted = invalidCalls.Exhausted;
         var executionRun = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun : null;
@@ -2744,6 +2744,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 prompt.Insert(factsIndex, new ModelMessage(ModelRole.System, RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, CheckpointSuffix())));
                 if (previousFacts is not null) prompt.Insert(factsIndex + 1, new ModelMessage(ModelRole.System, previousFacts));
                 if (invalidRecoveryExhausted) prompt.Add(new ModelMessage(ModelRole.System, "Repeated invalid or ineffective tool strategy remains blocked. Finish from existing evidence and report the blocker; do not request more tools."));
+                if (evidence.DialogPending) prompt.Add(new ModelMessage(ModelRole.System, BrowserEvidenceProgress.DialogInstruction));
+                if (evidence.RepeatedDialogInstruction is { } repeatedDialogInstruction) prompt.Add(new ModelMessage(ModelRole.System, repeatedDialogInstruction));
                 if (budget.CleanupReserve > TimeSpan.Zero) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.BrowserLifecycleInstruction));
                 if (cleanupPhase && finalizationReason is null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupInstruction));
                 if (finalizationReason is not null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.Instruction));
@@ -2767,7 +2769,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             trigger,
                             model),
                         pageBlocked,
-                        terminalBrowserContinuation);
+                        terminalBrowserContinuation, evidence.DialogPending);
                 if (invalidRecoveryExhausted) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (checkpointCapacityReached) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
@@ -3243,6 +3245,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             {
                                 executionResult = ToolExecutionResult.FromText(invalidRefusal);
                             }
+                            else if (evidence.Refuse(call, args) is { } dialogRefusal)
+                            {
+                                executionResult = ToolExecutionResult.FromText(dialogRefusal);
+                            }
                             else if (ToolCatalog.IsCompletionTool(call.Name))
                             {
                                 var completion = await RequestCompletionToolAsync(cause, request.ResponseId, call, overallCts.Token).ConfigureAwait(false);
@@ -3541,6 +3547,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         toolDetail);
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
+                    evidence.NoteResult(call, executionResult.Text);
                     executionResult = executionResult with { Text = invalidCalls.Note(call, executionResult.Text, out var recoveryExhausted) };
                     invalidRecoveryExhausted |= recoveryExhausted;
                     harnessSources.AddRange(HarnessChatTools.Sources(call, executionResult.Text));
@@ -3630,6 +3637,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         var recoveryContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken).ConfigureAwait(false);
                         var recovery = await RequestCapabilityLoadAsync(cause, request.ResponseId, "{}", recoveryContext, generateToken, dialogRecovery: true).ConfigureAwait(false);
                         if (recovery.LoadedIds is { } recoveredIds) loadedCapabilities = recoveredIds;
+                    }
+                    if (finalizationReason is null && evidence.DialogRecoveryExhausted)
+                    {
+                        await BeginFinalizationAsync("browserBlocked").ConfigureAwait(false);
+                        break;
                     }
                     if (finalizationReason is null && workTimer is not null && overallDeadline - _time.GetUtcNow() <= budget.FinalizationReserve + budget.PerTool)
                     {
@@ -6561,7 +6573,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
-    private static ModelRequest ProjectBrowserTools(ModelRequest request, bool pageBlocked, bool terminalOnly)
+    private static ModelRequest ProjectBrowserTools(ModelRequest request, bool pageBlocked, bool terminalOnly, bool dialogPending = false)
     {
         if (terminalOnly)
         {
@@ -6573,13 +6585,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             };
         }
 
-        if (!pageBlocked || request.Tools is not { Count: > 0 } tools)
+        if ((!pageBlocked && !dialogPending) || request.Tools is not { Count: > 0 } tools)
         {
             return request;
         }
 
         var offered = tools
-            .Where(tool => tool.Name is not (ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserFind) && !BrowserToolCatalog.IsInteraction(tool.Name))
+            .Where(tool => (!dialogPending || !tool.Name.StartsWith("browser.", StringComparison.Ordinal) || BrowserEvidenceProgress.DialogRecoveryTool(tool.Name))
+                && (!pageBlocked || tool.Name is not (ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserFind) && !BrowserToolCatalog.IsInteraction(tool.Name)))
             .ToArray();
         if (offered.Length == tools.Count)
         {
