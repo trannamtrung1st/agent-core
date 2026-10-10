@@ -559,3 +559,24 @@ Bucket completion preserves its first committed outcome in both stores, includin
 Coalesced causation retains every distinct visited Automation ID from its trusted activation evidence, which remains limited to 8 KiB. The depth limit is four; the visited set is not truncated to four IDs, since grouping independent chains can produce a larger union. Resulting Run and Session events retain that set for same-chain suppression.
 
 The forward EventDispatchDefault migration restores the SQL everyMatch default after the Core constraints rebuild. Existing Automation values and IDs are retained, including canonical Schedule writers that omit new optional event configuration.
+
+### Browser operational budgets
+
+`Browser:Limits` binds one immutable `BrowserOperationalLimits` record at host startup. Invalid values fail validation; restart applies configuration changes predictably without changing in-flight budgets. Admin Effective configuration and `browser.get_config` display actual host budgets. Operational overrides may lower existing security ceilings; they cannot authorize tools, origins or credentials. The model schemas retain their absolute ranges; runtime admission enforces effective input budgets and native waits/finds apply the lower host budget. Definition/Instance execution budgets remain separate cumulative Run budgets.
+
+| Setting | Default | Allowed range | Scope / unit |
+| --- | ---: | --- | --- |
+| OperationTimeoutMs | 25000 | 100–30000 | One operation including setup/read/action/capture, ms |
+| SnapshotBytes | 8000 | 256–8000 | One UTF-8 observation |
+| CaptureBytes | 1500000 | 1024–1500000 | One encoded screenshot |
+| DownloadBytes | 5242880 | 1024–5242880 | One file |
+| CapturesPerScope | 4 | 1–4 | AgentRun / occurrence, Session fallback |
+| DownloadsPerScope | 2 | 1–2 | AgentRun / occurrence, Session fallback |
+| FindMatches | 20 | 1–20 | One find result |
+| WaitTimeoutMs | 5000 | 100–5000 | One explicit state wait, ms |
+| TextInputLength | 500 | 1–500 | Each text/form/drop/dialog/storage input or verification string, UTF-16 characters |
+| AutomaticSettleMs | 1600 | 100–5000 | One automatic quiet-page wait, ms |
+
+`Browser:ScreenshotPrivacy` defaults to `DomMasking`; `Disabled` rejects capture for hosts requiring stronger visual confidentiality. Unknown values fail startup validation. This setting and destination restrictions remain host-controlled. Neither API nor model inputs mutate host budgets. Existing Admin Definition/Instance controls still own overall Run time/steps independently.
+
+Tool schema maxima continue to describe absolute safety ceilings. `browser.get_config` and Admin show the effective, possibly lower host budgets; runtime validation enforces those budgets. Overall AgentRun output/time limits remain independently authoritative.

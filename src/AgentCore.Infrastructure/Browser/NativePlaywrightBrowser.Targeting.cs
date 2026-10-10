@@ -64,9 +64,9 @@ public sealed partial class NativePlaywrightBrowser
         if (count > 1) throw new BrowserTargetException("ambiguous_target");
         if (count == 0) return locator;
         var frameUrl = await locator.EvaluateAsync<string>("el => el.ownerDocument.location.href").WaitAsync(ct);
-        if (mutation ? !BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode, frameUrl,
-                LeaseOrigins(session) ?? _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed
-            : !Allows(session, frameUrl, true)) throw new BrowserTargetDeniedException();
+        if (!Allows(session, frameUrl, true) || mutation && !BrowserTargetPolicy.EvaluateAct(
+                _policy.InteractionMode, frameUrl, _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed)
+            throw new BrowserTargetDeniedException();
         var description = await locator.EvaluateAsync<string>(DescribeElement).WaitAsync(ct);
         if (description == "null") throw new BrowserTargetException("forbidden");
         if (requireAction)

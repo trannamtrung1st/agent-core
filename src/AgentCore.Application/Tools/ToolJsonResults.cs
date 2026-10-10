@@ -40,6 +40,8 @@ public static class ToolJsonResults
 
         var browser = BrowserResultProjection.Fit(maxBytes, json);
         if (browser is not null) return browser;
+        var evidence = BrowserResultProjection.FitEvidence(maxBytes, json);
+        if (evidence is not null) return evidence;
 
         if (Encoding.UTF8.GetByteCount(TruncatedFallback) <= maxBytes)
         {

@@ -2,6 +2,9 @@ namespace AgentCore.Application.Tools;
 
 public static class BrowserToolLimits
 {
+    public const int DefaultOperationTimeoutMs = 25000;
+    public const int MaxOperationTimeoutMs = 30000;
+    public const int MaxDocumentBytes = 16 * 1024 * 1024;
     public const int MaxUrlLength = 2048;
     public const int MaxFillLength = 500;
     public const int MaxTitleLength = 300;

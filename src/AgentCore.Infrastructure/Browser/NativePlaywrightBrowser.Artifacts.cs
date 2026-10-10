@@ -20,16 +20,20 @@ public sealed partial class NativePlaywrightBrowser
         BrowserScreenshotRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (_options.ScreenshotPrivacy == "Disabled") return new("forbidden", null, 0);
         await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
         if (!IsAvailable || !_sessions.TryGetValue(request.SessionId, out var session))
         {
             return new BrowserScreenshotResult("provider_unavailable", null, 0);
         }
 
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(OperationTimeout);
+        var ct = deadline.Token;
         var entered = false;
         try
         {
-            await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await session.Gate.WaitAsync(ct).ConfigureAwait(false);
             entered = true;
             if (!IsAllowed(session, session.Page.Url))
             {
@@ -42,11 +46,11 @@ public sealed partial class NativePlaywrightBrowser
             ILocator? target = null;
             if (request.Target is not null)
             {
-                try { target = await ResolveTargetAsync(session, request.Target, false, cancellationToken); }
+                try { target = await ResolveTargetAsync(session, request.Target, false, ct); }
                 catch (BrowserTargetException ex) { return new(ex.Code, null, 0); }
                 catch (BrowserTargetDeniedException) { return new("target_denied", null, 0); }
             }
-            var secrets = await CollectSecretsAsync(session, cancellationToken);
+            var secrets = await CollectSecretsAsync(session, ct);
             var redactions = 0;
             var width = session.Page.ViewportSize?.Width ?? BrowserToolLimits.MaxCaptureWidth;
             var height = session.Page.ViewportSize?.Height ?? BrowserToolLimits.MaxCaptureHeight;
@@ -80,15 +84,22 @@ public sealed partial class NativePlaywrightBrowser
                   }
                   for (const input of document.querySelectorAll('input, textarea, select'))
                     if (matches(input.value || '')) mask(input.getBoundingClientRect());
+                  for (const element of document.querySelectorAll('canvas, svg')) mask(element.getBoundingClientRect());
+                  for (const element of document.querySelectorAll('*')) {
+                    for (const pseudo of ['::before', '::after']) {
+                      const content = getComputedStyle(element, pseudo).content || '';
+                      if (matches(content)) mask(element.getBoundingClientRect());
+                    }
+                  }
                   return count;
                 }
-                """, secrets).WaitAsync(cancellationToken);
-                    redactions += await frame.EvaluateAsync<int>(MaskSensitiveScript).WaitAsync(cancellationToken);
+                """, secrets).WaitAsync(ct);
+                    redactions += await frame.EvaluateAsync<int>(MaskSensitiveScript).WaitAsync(ct);
                 }
                 var frameMasks = session.Page.Locator("iframe");
                 if (request.FullPage)
                 {
-                    var dimensions = await session.Page.EvaluateAsync<int[]>("() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]").WaitAsync(cancellationToken);
+                    var dimensions = await session.Page.EvaluateAsync<int[]>("() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]").WaitAsync(ct);
                     width = dimensions[0]; height = dimensions[1];
                     if (width > 1920 || height > 12000) return new("capture_too_large", null, redactions, width, height);
                 }
@@ -97,11 +108,11 @@ public sealed partial class NativePlaywrightBrowser
                     {
                         Type = ScreenshotType.Png, FullPage = request.FullPage, Scale = ScreenshotScale.Css,
                         Caret = ScreenshotCaret.Hide, Mask = [frameMasks], Timeout = TimeoutMs()
-                    }).WaitAsync(cancellationToken);
+                    }).WaitAsync(ct);
                 else
                     png = await target.ScreenshotAsync(new LocatorScreenshotOptions
                     { Type = ScreenshotType.Png, Scale = ScreenshotScale.Css, Caret = ScreenshotCaret.Hide,
-                      Mask = [session.Page.Locator("input[type=password], input[type=hidden]"), frameMasks], Timeout = TimeoutMs() }).WaitAsync(cancellationToken);
+                      Mask = [session.Page.Locator("input[type=password], input[type=hidden]"), frameMasks], Timeout = TimeoutMs() }).WaitAsync(ct);
                 if (format != "png")
                 {
                     using var image = SKImage.FromEncodedData(png);
@@ -113,7 +124,7 @@ public sealed partial class NativePlaywrightBrowser
             {
                 foreach (var frame in maskedFrames)
                     try { await frame.EvaluateAsync(ClearMaskScript).WaitAsync(TimeSpan.FromSeconds(1)); }
-                    catch (Exception ex) when (ex is PlaywrightException or TimeoutException) { }
+                    catch (Exception ex) when (ex is PlaywrightException or TimeoutException) { await CloseQuietlyAsync(session.Context); ForgetClosed(session); }
             }
 
             _logger.LogInformation(
@@ -122,17 +133,18 @@ public sealed partial class NativePlaywrightBrowser
                 png.Length,
                 width,
                 height);
-            if (png.Length > BrowserToolLimits.MaxCaptureBytes)
+            if (png.Length > _policy.Limits.CaptureBytes)
             {
                 return new BrowserScreenshotResult("capture_too_large", null, redactions, width, height);
             }
 
             return new BrowserScreenshotResult(null, png, redactions, width, height, "image/" + format);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw;
+            return new("timeout", null, 0);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) when (IsTimeout(ex))
         {
             return new BrowserScreenshotResult("timeout", null, 0);
@@ -187,92 +199,92 @@ public sealed partial class NativePlaywrightBrowser
         return true;
     }
 
-    private static bool DeclaredOverDownloadCap(IDictionary<string, string> headers)
+    private bool DeclaredOverDownloadCap(IDictionary<string, string> headers)
     {
         foreach (var pair in headers)
         {
             if (pair.Key.Equals("content-length", StringComparison.OrdinalIgnoreCase)
                 && long.TryParse(pair.Value, out var length))
             {
-                return length > BrowserToolLimits.MaxDownloadBytes;
+                return length > _policy.Limits.DownloadBytes;
             }
         }
 
         return false;
     }
 
-    private static readonly HttpClient AttachmentProbe = new(new SocketsHttpHandler
+    private async Task StreamDocumentAsync(SessionBrowser session, IRoute route, string url, int call, bool documentNavigation)
     {
-        AllowAutoRedirect = false,
-        UseCookies = false,
-        AutomaticDecompression = DecompressionMethods.None,
-        MaxResponseDrainSize = 0
-    })
-    {
-        Timeout = Timeout.InfiniteTimeSpan
-    };
-
-    private async Task<BrowserDownload?> TryStreamAttachmentAsync(SessionBrowser session, IRoute route, string url, int call)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(TimeoutMs()));
-        HttpResponseMessage response;
+        // A child frame may load after its parent operation has returned. Its bounded
+        // page read must not inherit the expired operation token. Root navigation and
+        // its attachment retain the initiating operation's cancellation boundary.
+        var operationOwned = documentNavigation && session.OperationActive && route.Request.Frame == session.Page.MainFrame;
+        using var timeout = operationOwned
+            ? CancellationTokenSource.CreateLinkedTokenSource(session.OperationToken)
+            : new CancellationTokenSource();
+        timeout.CancelAfter(OperationTimeout);
+        var ct = timeout.Token;
+        session.InFlightRoute = route;
         try
         {
-            using var request = AttachmentProbeRequest(route, url);
-            response = await AttachmentProbe
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or InvalidOperationException)
-        {
-            return null;
-        }
-
-        using (response)
-        {
-            if (IsRedirect((int)response.StatusCode))
+            using var request = new HttpRequestMessage(new HttpMethod(route.Request.Method), url);
+            if (route.Request.PostDataBuffer is { } body)
             {
-                return null;
+                if (body.Length > BrowserToolLimits.MaxDocumentBytes) { await AbortQuietlyAsync(route); return; }
+                request.Content = new ByteArrayContent(body);
             }
+            foreach (var pair in await route.Request.AllHeadersAsync())
+                if (pair.Key is not ("host" or "content-length" or "transfer-encoding"))
+                    if (!request.Headers.TryAddWithoutValidation(pair.Key, pair.Value)) request.Content?.Headers.TryAddWithoutValidation(pair.Key, pair.Value);
 
-            if (!TryAttachmentFileName(HeaderMap(response), out var downloadName))
+            using var client = new HttpClient(new SocketsHttpHandler
             {
-                return null;
-            }
-
-            try
+                Proxy = new WebProxy(ProxyFor(Guid.Empty, session.AgentInstanceId).Server), UseProxy = true,
+                AllowAutoRedirect = false, UseCookies = false, MaxResponseDrainSize = 0,
+                AutomaticDecompression = DecompressionMethods.None
+            }) { Timeout = Timeout.InfiniteTimeSpan };
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            var headers = HeaderMap(response);
+            if (IsRedirect((int)response.StatusCode) && !RedirectStaysAllowed(session, url, headers, documentNavigation))
             {
-                return await ReadBoundedAttachmentAsync(session, response, downloadName, call, timeout.Token)
-                    .ConfigureAwait(false);
+                if (documentNavigation) session.DeniedNavigation = true;
+                await AbortQuietlyAsync(route);
+                return;
             }
-            catch (OperationCanceledException) when (!IsCancelled(session, call))
+            if (documentNavigation && TryAttachmentFileName(headers, out var name))
             {
-                return new BrowserDownload("download_rejected", downloadName, null, null);
+                var download = await ReadBoundedAttachmentAsync(session, response, name, call, ct);
+                ct.ThrowIfCancellationRequested();
+                lock (session.PopupGate)
+                {
+                    if (!session.OperationActive || session.OperationCall != call || IsCancelled(session, call)) return;
+                    if (session.StagedDownloads.Count < _policy.Limits.DownloadsPerScope) session.StagedDownloads.Add(download);
+                }
+                await route.FulfillAsync(new() { Status = 204, Body = "" });
+                return;
             }
+            // Documents also have a memory ceiling. Encoded bytes and response headers remain intact.
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81920];
+            while (true)
+            {
+                var read = await stream.ReadAsync(chunk, ct);
+                if (read == 0) break;
+                if (buffer.Length + read > BrowserToolLimits.MaxDocumentBytes) { await AbortQuietlyAsync(route); return; }
+                buffer.Write(chunk, 0, read);
+            }
+            ct.ThrowIfCancellationRequested();
+            if (operationOwned && IsCancelled(session, call)) { await AbortQuietlyAsync(route); return; }
+            await route.FulfillAsync(new() { Status = (int)response.StatusCode, Headers = headers, BodyBytes = buffer.ToArray() });
         }
-    }
-
-    private async Task<BrowserDownload> ReadCappedAttachmentAsync(
-        SessionBrowser session,
-        IRoute route,
-        string url,
-        string downloadName,
-        int call)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(TimeoutMs()));
-        try
+        catch (OperationCanceledException)
         {
-            using var request = AttachmentProbeRequest(route, url);
-            using var response = await AttachmentProbe
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
-                .ConfigureAwait(false);
-            return await ReadBoundedAttachmentAsync(session, response, downloadName, call, timeout.Token)
-                .ConfigureAwait(false);
+            if (session.OperationActive && session.OperationCall == call && !IsCancelled(session, call)) session.TimedOut = true;
+            await AbortQuietlyAsync(route);
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or InvalidOperationException)
-        {
-            return new BrowserDownload("download_rejected", downloadName, null, null);
-        }
+        catch (HttpRequestException) { await AbortQuietlyAsync(route); }
+        finally { if (ReferenceEquals(session.InFlightRoute, route)) session.InFlightRoute = null; }
     }
 
     private async Task<BrowserDownload> ReadBoundedAttachmentAsync(
@@ -290,7 +302,7 @@ public sealed partial class NativePlaywrightBrowser
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
         var chunk = new byte[81920];
-        var limit = BrowserToolLimits.MaxDownloadBytes + 1;
+        var limit = _policy.Limits.DownloadBytes;
         while (true)
         {
             if (IsCancelled(session, call))
@@ -315,31 +327,17 @@ public sealed partial class NativePlaywrightBrowser
         return BrowserDownloadPolicy.Classify(downloadName, buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
     }
 
-    private static HttpRequestMessage AttachmentProbeRequest(IRoute route, string url)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        foreach (var name in new[] { "cookie", "authorization", "accept" })
-        {
-            if (route.Request.Headers.TryGetValue(name, out var value) && !string.IsNullOrEmpty(value))
-            {
-                request.Headers.TryAddWithoutValidation(name, value);
-            }
-        }
-
-        return request;
-    }
-
     private static Dictionary<string, string> HeaderMap(HttpResponseMessage response)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var pair in response.Headers)
         {
-            map[pair.Key] = string.Join(", ", pair.Value);
+            map[pair.Key] = string.Join(pair.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase) ? "\n" : ", ", pair.Value);
         }
 
         foreach (var pair in response.Content.Headers)
         {
-            map[pair.Key] = string.Join(", ", pair.Value);
+            map[pair.Key] = string.Join(pair.Key.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase) ? "\n" : ", ", pair.Value);
         }
 
         return map;
@@ -391,15 +389,16 @@ public sealed partial class NativePlaywrightBrowser
                 ? new BrowserDownload("download_rejected", null, null, null) : download).ToArray();
     }
 
-    private static async Task<BrowserDownload> ReadDownloadAsync(IDownload download, CancellationToken cancellationToken)
+    private async Task<BrowserDownload> ReadDownloadAsync(IDownload download, CancellationToken cancellationToken)
     {
         var fileName = BrowserDownloadPolicy.SanitizeFileName(download.SuggestedFilename);
         try
         {
-            await using var stream = await download.CreateReadStreamAsync().ConfigureAwait(false);
+            using var cancel = cancellationToken.Register(() => _ = CancelDownloadQuietlyAsync(download));
+            await using var stream = await download.CreateReadStreamAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
             using var buffer = new MemoryStream();
             var chunk = new byte[81920];
-            var limit = BrowserToolLimits.MaxDownloadBytes + 1;
+            var limit = _policy.Limits.DownloadBytes;
             while (true)
             {
                 var read = await stream.ReadAsync(chunk.AsMemory(0, chunk.Length), cancellationToken).ConfigureAwait(false);
@@ -435,13 +434,29 @@ public sealed partial class NativePlaywrightBrowser
 
             return classified;
         }
+        catch (OperationCanceledException) { await CancelDownloadQuietlyAsync(download); throw; }
         catch (PlaywrightException)
         {
             return new BrowserDownload("download_rejected", fileName, null, null);
         }
+        finally
+        {
+            try { await download.DeleteAsync().WaitAsync(TimeSpan.FromSeconds(1)); }
+            catch (Exception ex) when (ex is PlaywrightException or TimeoutException) { }
+        }
+    }
+
+    private static async Task CancelDownloadQuietlyAsync(IDownload download)
+    {
+        try { await download.CancelAsync().WaitAsync(TimeSpan.FromSeconds(1)); }
+        catch (Exception ex) when (ex is PlaywrightException or TimeoutException) { }
+        try { await download.DeleteAsync().WaitAsync(TimeSpan.FromSeconds(1)); }
+        catch (Exception ex) when (ex is PlaywrightException or TimeoutException) { }
     }
 
     private sealed record BrowserScreenshotRequest(Guid SessionId, string Format = "png", bool FullPage = false, BrowserTarget? Target = null);
     private sealed record BrowserScreenshotResult(string? ErrorCode, byte[]? Png, int RedactionCount,
-        int Width = 0, int Height = 0, string ContentType = "image/png");
+        int Width = 0, int Height = 0, string? ContentType = null);
+
+    // Reuse the settle observer for freshness. No page content or protected values leave this check.
 }

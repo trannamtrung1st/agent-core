@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Browser;
 
 public sealed partial class NativePlaywrightBrowser
 {
-    private BrowserNewContextOptions ContextOptions(IPlaywright driver)
+    private BrowserNewContextOptions ContextOptions(IPlaywright driver, string? proxyServer = null)
     {
         var environment = _options.Environment;
         BrowserNewContextOptions result;
@@ -45,6 +45,7 @@ public sealed partial class NativePlaywrightBrowser
         result.IsMobile = environment.IsMobile ?? result.IsMobile;
         result.HasTouch = environment.HasTouch ?? result.HasTouch;
         result.DeviceScaleFactor = environment.DeviceScaleFactor ?? result.DeviceScaleFactor;
+        result.Proxy = new() { Server = proxyServer ?? _destinationProxy!.Server };
         result.AcceptDownloads = true;
         // Native routing cannot inspect requests handled by a service worker.
         result.ServiceWorkers = ServiceWorkerPolicy.Block;
@@ -86,10 +87,15 @@ public sealed partial class NativePlaywrightBrowser
                 websocketOrigins = "resource origin policy",
                 navigationOriginCount = _policy.NavigationOrigins.Count,
                 interactionOriginCount = _policy.EffectiveInteractionOrigins.Count, resourceOriginCount = _policy.EffectiveResourceOrigins.Count,
+                screenshotPrivacy = _options.ScreenshotPrivacy,
+                screenshotPrivacyLimitations = "DOM masking cannot guarantee arbitrary raster, CSS background, shadow DOM or dynamic visual secrets. Strict confidentiality requires Disabled.",
                 originRestrictionsApply = true, permissions = "Geolocation requires exact-origin approval. Initial/same-origin set preserves overrides; clear or origin change resets all permission overrides (Playwright limitation).",
                 contextSettings = "Device, locale, timezone and touch settings apply at context creation; active contexts are retained."
             },
-            limits = new { snapshotBytes = BrowserToolLimits.MaxSnapshotBytes, captureBytes = BrowserToolLimits.MaxCaptureBytes, downloadBytes = BrowserToolLimits.MaxDownloadBytes }
+            limits = _policy.Limits,
+            securityCeilings = BrowserOperationalLimits.Default with
+            { OperationTimeoutMs = BrowserToolLimits.MaxOperationTimeoutMs, AutomaticSettleMs = BrowserToolLimits.MaxObserveTimeoutMs },
+            limitApplicability = "Host budgets are pinned at startup. Bytes apply per request; captures/downloads per AgentRun or occurrence (Session fallback). Input length is UTF-16 characters; deadlines/waits are milliseconds."
         }, JsonSerializerOptions.Web));
     }
 

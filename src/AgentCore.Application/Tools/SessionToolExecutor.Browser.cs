@@ -23,6 +23,7 @@ public sealed partial class SessionToolExecutor
         var denied = await BindBrowserAsync(sessionId, admission, ct).ConfigureAwait(false);
         if (denied is not null) return TextResult(FinishBrowser(name, started, denied));
         if (browser is null || !browser.IsAvailable && metadata.Feature != BrowserFeature.Configuration) return Fail("provider_unavailable", "Browser is unavailable.");
+        if (!BrowserToolArguments.WithinOperationalLimits(request.Command, browser.HostPolicy.Limits)) return Fail("invalid", "Input exceeds the effective host browser budget.");
         if (!browser.Provider.Supports(metadata.Feature)) return Fail("unsupported_operation", "The active provider does not support this feature.");
         if (metadata.Feature == BrowserFeature.VisionMouse && admission?.SupportsVision != true) return Fail("forbidden", "Coordinate actions require a vision model.");
         if (metadata.Feature is BrowserFeature.FillCredential or BrowserFeature.Geolocation
@@ -79,7 +80,7 @@ public sealed partial class SessionToolExecutor
             }
             if (result.Bytes is { Length: > 0 } bytes)
             {
-                if (bytes.Length > BrowserToolLimits.MaxDownloadBytes) return Fail("capture_too_large", "Browser output exceeds the byte budget.");
+                if (bytes.Length > (metadata.Feature == BrowserFeature.Screenshot ? browser.HostPolicy.Limits.CaptureBytes : browser.HostPolicy.Limits.DownloadBytes)) return Fail("capture_too_large", "Browser output exceeds the byte budget.");
                 var stored = await StoreBrowserBytesAsync(sessionId, admission, result.FileName ?? "browser-output", result.ContentType ?? "application/octet-stream", bytes, ct);
                 if (stored.Error is not null) return TextResult(FinishBrowser(name, started, stored.Error));
                 var json = JsonSerializer.Serialize(new { status = "ok", artifactId = stored.ArtifactId, byteSize = bytes.Length, contentType = result.ContentType });
@@ -120,6 +121,7 @@ public sealed partial class SessionToolExecutor
         "close_uncertain",
         "last_tab",
         "no_popup",
+        "capture_invalid",
         "capture_too_large",
         "capture_limit",
         "download_rejected",
@@ -301,7 +303,7 @@ public sealed partial class SessionToolExecutor
                 return TextResult(FinishBrowser(ToolCatalog.BrowserScreenshot, started, Error(code, "Browser capture failed.")));
             }
 
-            if (captured.Bytes.Length > BrowserToolLimits.MaxCaptureBytes)
+            if (captured.Bytes.Length > browser.HostPolicy.Limits.CaptureBytes)
             {
                 ReleaseCapture(admission, sessionId);
                 return TextResult(FinishBrowser(
@@ -344,7 +346,7 @@ public sealed partial class SessionToolExecutor
         lock (_captureGate)
         {
             var count = _captureCounts.GetValueOrDefault(key);
-            if (count >= BrowserToolLimits.MaxCapturesPerScope)
+            if (count >= browser!.HostPolicy.Limits.CapturesPerScope)
             {
                 return false;
             }
@@ -408,6 +410,9 @@ public sealed partial class SessionToolExecutor
             return new DownloadReceipt(download.ErrorCode ?? "download_rejected", fileName, null, null, null);
         }
 
+        if (bytes.Length > browser!.HostPolicy.Limits.DownloadBytes)
+            return new DownloadReceipt("download_too_large", fileName, null, null, null);
+
         if (!BrowserDownloadPolicy.TryAccept(fileName, bytes, out var contentType, out var error))
         {
             return new DownloadReceipt(error, fileName, null, null, null);
@@ -446,7 +451,7 @@ public sealed partial class SessionToolExecutor
         lock (_captureGate)
         {
             var count = _downloadCounts.GetValueOrDefault(key);
-            if (count >= BrowserToolLimits.MaxDownloadsPerScope)
+            if (count >= browser!.HostPolicy.Limits.DownloadsPerScope)
             {
                 return false;
             }
@@ -546,7 +551,7 @@ public sealed partial class SessionToolExecutor
         return data.ToJsonString();
     }
 
-    private static string FromBrowserProvider(BrowserResult result)
+    private string FromBrowserProvider(BrowserResult result)
     {
         if (string.IsNullOrEmpty(result.ErrorCode))
         {
@@ -594,14 +599,14 @@ public sealed partial class SessionToolExecutor
             applicationOutcomeVerified = result.ApplicationOutcomeVerified });
     }
 
-    private static string SerializeBrowserSnapshot(BrowserSnapshot observation, BrowserResult result) => JsonSerializer.Serialize(new
+    private string SerializeBrowserSnapshot(BrowserSnapshot observation, BrowserResult result) => JsonSerializer.Serialize(new
     {
         status = "ok", effectAttempted = result.EffectAttempted, effectConfirmedBySdk = result.EffectConfirmedBySdk, applicationOutcomeVerified = result.ApplicationOutcomeVerified, untrustedBrowserContent = true, snapshotId = observation.SnapshotId,
         tabRef = observation.TabRef, url = ClipBrowser(observation.Url, BrowserToolLimits.MaxUrlLength), title = ClipBrowser(observation.Title, BrowserToolLimits.MaxTitleLength),
-        content = ToolJsonResults.ClipUtf8Prefix(observation.Content, BrowserToolLimits.MaxSnapshotBytes),
+        content = ToolJsonResults.ClipUtf8Prefix(observation.Content, browser!.HostPolicy.Limits.SnapshotBytes),
         targets = observation.Targets.Select(e => new { target = e.Target, role = e.Role, name = ClipBrowser(e.Name, BrowserToolLimits.MaxAccessibleNameLength), actions = e.Actions, state = ControlState(e.State) }),
-        truncated = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > BrowserToolLimits.MaxSnapshotBytes,
-        hasMore = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > BrowserToolLimits.MaxSnapshotBytes,
+        truncated = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > browser!.HostPolicy.Limits.SnapshotBytes,
+        hasMore = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > browser!.HostPolicy.Limits.SnapshotBytes,
         settled = observation.Settled, scope = observation.Scope, frameRef = observation.FrameRef, frames = observation.Frames, boxes = observation.Boxes,
         guidance = BrowserToolArguments.TargetGuidance
     }, DownloadJson);
@@ -722,7 +727,7 @@ public sealed partial class SessionToolExecutor
         IAsyncDisposable? lease = null;
         if (sessionId != Guid.Empty && agentInstanceId != Guid.Empty && browser is { IsAvailable: true }
             && _configurationGate.IsConfigured(ToolCatalog.BrowserNavigate) && browser is IBrowserContextUse use)
-            lease = await use.EnterUnattendedAsync(agentInstanceId, [], ct);
+            lease = await use.EnterUnattendedAsync(agentInstanceId, null, ct);
         return new OccurrenceBrowserScope(browser, sessionId, lease);
     }
 

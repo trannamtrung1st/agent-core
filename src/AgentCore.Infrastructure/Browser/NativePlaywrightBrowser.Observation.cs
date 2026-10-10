@@ -13,12 +13,18 @@ public sealed partial class NativePlaywrightBrowser
         var url = previous.Url;
         await previous.CloseAsync(); ForgetPage(session, previous);
         session.Dialog = null; session.PendingAction = null;
-        BeginCall(session);
-        session.Page = await session.Context.NewPageAsync();
-        RememberPage(session, session.Page); AdvanceGeneration(session);
-        if (IsAllowed(session, url))
-            try { await session.Page.GotoAsync(url, new() { Timeout = 1000, WaitUntil = WaitUntilState.DOMContentLoaded }); }
-            catch (PlaywrightException) { }
+        var recoveryCall = BeginCall(session);
+        session.OperationActive = false;
+        try
+        {
+            AdvanceGeneration(session);
+            session.Page = await session.Context.NewPageAsync();
+            RememberPage(session, session.Page); AdvanceGeneration(session);
+            if (IsAllowed(session, url))
+                try { await session.Page.GotoAsync(url, new() { Timeout = 1000, WaitUntil = WaitUntilState.DOMContentLoaded }); }
+                catch (PlaywrightException) { }
+        }
+        finally { await EndCallAsync(session, recoveryCall); }
     }
 
     private async Task<BrowserSnapshot> ObserveAsync(SessionBrowser session, Guid sessionId,
@@ -38,8 +44,8 @@ public sealed partial class NativePlaywrightBrowser
         }
         return new(SafeBrowserUrl(session.Page.Url, secrets, session.ProtectedValues),
             Clip(Redact(await session.Page.TitleAsync().WaitAsync(ct), secrets, session.ProtectedValues), BrowserToolLimits.MaxTitleLength),
-            ToolJsonResults.ClipUtf8Prefix(safe, BrowserToolLimits.MaxSnapshotBytes),
-            depth < 32 || System.Text.Encoding.UTF8.GetByteCount(safe) > BrowserToolLimits.MaxSnapshotBytes, [], await ClassifyInterventionAsync(session.Page, ct),
+            ToolJsonResults.ClipUtf8Prefix(safe, _policy.Limits.SnapshotBytes),
+            depth < 32 || System.Text.Encoding.UTF8.GetByteCount(safe) > _policy.Limits.SnapshotBytes, [], await ClassifyInterventionAsync(session.Page, ct),
             SnapshotId: "snap_" + Guid.NewGuid().ToString("N"), TabRef: FindPageId(session),
             Boxes: boxes && target is not null && await scope.BoundingBoxAsync().WaitAsync(ct) is { } box
                 ? [new(target, box.X, box.Y, box.Width, box.Height)] : [],
@@ -56,7 +62,7 @@ public sealed partial class NativePlaywrightBrowser
         var secrets = await CollectSecretsAsync(session, ct);
         var samples = new List<object>();
         // Ordinals sample observations only; direct actions always use a strict unique semantic Locator.
-        for (var i = query.Offset; i < Math.Min(total, query.Offset + query.Limit); i++)
+        for (var i = query.Offset; i < Math.Min(total, query.Offset + Math.Min(query.Limit, _policy.Limits.FindMatches)); i++)
         {
             var candidate = locator.Nth(i);
             var metadata = await candidate.EvaluateAsync<string>(DescribeElement).WaitAsync(ct);
@@ -76,7 +82,7 @@ public sealed partial class NativePlaywrightBrowser
         {
             status = total == 1 ? "ok" : "ambiguous_target", tabRef = FindPageId(session), matches = samples,
             matchCount = total, returnedCount = samples.Count, offset = query.Offset,
-            nextOffset = Math.Min(total, query.Offset + query.Limit), hasMore = query.Offset + query.Limit < total,
+            nextOffset = Math.Min(total, query.Offset + Math.Min(query.Limit, _policy.Limits.FindMatches)), hasMore = query.Offset + Math.Min(query.Limit, _policy.Limits.FindMatches) < total,
             guidance = "Act directly using target semantics; narrow duplicates with within or hasText. Samples confer no positional authority.",
             untrustedBrowserContent = true
         }, JsonSerializerOptions.Web));

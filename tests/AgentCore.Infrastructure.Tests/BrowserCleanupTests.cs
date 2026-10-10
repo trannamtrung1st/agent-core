@@ -20,6 +20,8 @@ public sealed class BrowserCleanupTests
             await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/credential-login")));
             var page = browser.ContextFor(id)!.Pages[0];
             await page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).ClickAsync();
+            var inspectedRecord = await Run("browser.verify", new { condition = "text", text = "AC-CREDENTIAL-1042" });
+            Assert.True(inspectedRecord.ApplicationOutcomeVerified);
             async Task Pending()
             {
                 var target = await BrowserTestQueries.Find(browser, id, "Sign out");
@@ -38,10 +40,14 @@ public sealed class BrowserCleanupTests
             Assert.Null((await Run(ToolCatalog.BrowserDialog, new { operation = "dismiss" })).ErrorCode);
             Assert.True(await Authenticated());
             await Pending();
-            Assert.Null((await Run(ToolCatalog.BrowserDialog, new { operation = "accept" })).ErrorCode);
+            var accepted = await Run(ToolCatalog.BrowserDialog, new { operation = "accept" });
+            Assert.Null(accepted.ErrorCode); Assert.False(accepted.ApplicationOutcomeVerified);
             Assert.False(await Authenticated());
             Assert.True(await page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true }).IsVisibleAsync());
-            Assert.Equal("closed", (await Run(ToolCatalog.BrowserClose, new { })).Status);
+            var verifiedSignout = await Run("browser.verify", new { condition = "visible", target = new { by = "role", value = "button", name = "Sign in", exact = true } });
+            Assert.True(verifiedSignout.ApplicationOutcomeVerified);
+            var closure = await Run(ToolCatalog.BrowserClose, new { });
+            Assert.Equal("closed", closure.Status); Assert.True(closure.EffectConfirmedBySdk); Assert.False(closure.ApplicationOutcomeVerified);
             Assert.True(page.IsClosed);
             Assert.Equal("already_closed", (await Run(ToolCatalog.BrowserClose, new { })).Status);
         }

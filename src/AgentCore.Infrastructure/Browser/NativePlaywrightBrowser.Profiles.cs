@@ -207,9 +207,10 @@ public sealed partial class NativePlaywrightBrowser
     public async ValueTask ReleaseAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        await using var interactive = await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        _sessionOwners.TryRemove(sessionId, out _);
         if (_sessions.TryRemove(sessionId, out var session))
         {
-            _sessionOwners.TryRemove(sessionId, out _);
             if (!session.Persistent)
             {
                 await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
@@ -222,7 +223,7 @@ public sealed partial class NativePlaywrightBrowser
 
     public async ValueTask<IAsyncDisposable> EnterUnattendedAsync(
         Guid agentInstanceId,
-        IReadOnlyList<string> origins,
+        IReadOnlyList<string>? origins,
         CancellationToken cancellationToken = default)
     {
         if (agentInstanceId == Guid.Empty)
@@ -232,15 +233,17 @@ public sealed partial class NativePlaywrightBrowser
 
         var gate = _contextUse.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        _unattendedLeases[agentInstanceId] = origins.ToArray();
-        return new UnattendedLease(this, agentInstanceId, gate);
+        var lease = new UnattendedLease(this, agentInstanceId, gate, origins?.ToArray());
+        _unattendedLeases[agentInstanceId] = lease;
+        ProxyFor(Guid.Empty, agentInstanceId).FenceConnections();
+        return lease;
     }
 
     public void AdoptUnattendedFlow(Guid agentInstanceId)
     {
-        if (agentInstanceId != Guid.Empty && _unattendedLeases.ContainsKey(agentInstanceId))
+        if (agentInstanceId != Guid.Empty && _unattendedLeases.TryGetValue(agentInstanceId, out var lease))
         {
-            _unattendedOwner.Value = agentInstanceId;
+            _unattendedOwner.Value = lease;
         }
     }
 
@@ -257,8 +260,8 @@ public sealed partial class NativePlaywrightBrowser
         if (!_sessionOwners.TryGetValue(sessionId, out var owner)
             || owner is not Guid agentInstanceId
             || agentInstanceId == Guid.Empty
-            || !_unattendedLeases.ContainsKey(agentInstanceId)
-            || _unattendedOwner.Value == agentInstanceId)
+            || _unattendedOwner.Value is { } flow && _unattendedLeases.TryGetValue(agentInstanceId, out var current)
+                && ReferenceEquals(flow, current))
         {
             return NoopHold.Instance;
         }
@@ -273,27 +276,29 @@ public sealed partial class NativePlaywrightBrowser
         return new InteractiveHold(gate);
     }
 
-    private string[]? LeaseOrigins(Guid sessionId)
-    {
-        if (_sessionOwners.TryGetValue(sessionId, out var owner)
-            && owner is Guid agentInstanceId
-            && _unattendedLeases.TryGetValue(agentInstanceId, out var origins))
-        {
-            return origins.Length == 0 ? null : origins;
-        }
-
-        if (_unattendedOwner.Value is Guid current && _unattendedLeases.TryGetValue(current, out var leased))
-        {
-            return leased.Length == 0 ? null : leased;
-        }
-
-        return null;
-    }
+    // Null inherits the host policy; an empty restriction denies every origin.
+    private string[]? LeaseOrigins(Guid sessionId) =>
+        _sessionOwners.TryGetValue(sessionId, out var owner) && owner is Guid agent
+            && _unattendedLeases.TryGetValue(agent, out var lease) ? lease.Origins : null;
 
     private string[]? LeaseOrigins(SessionBrowser session) =>
-        session.AgentInstanceId is Guid agentInstanceId && _unattendedLeases.TryGetValue(agentInstanceId, out var origins)
-            ? (origins.Length == 0 ? null : origins)
-            : null;
+        session.AgentInstanceId is Guid agent && _unattendedLeases.TryGetValue(agent, out var lease) ? lease.Origins : null;
+
+    private BrowserDestinationProxy ProxyFor(Guid sessionId, Guid? agentInstanceId)
+    {
+        if (agentInstanceId is null) return _destinationProxy!;
+        var key = (Agent: true, Id: agentInstanceId.Value);
+        return _ownerProxies.GetOrAdd(key, _ => new Lazy<BrowserDestinationProxy>(() =>
+        {
+            var proxy = new BrowserDestinationProxy(_policy, uri =>
+                agentInstanceId is not Guid agent || !_unattendedLeases.TryGetValue(agent, out var lease)
+                    || lease.Origins is null || BrowserTargetPolicy.EvaluateDestination(uri.AbsoluteUri, lease.Origins).Allowed);
+            // One resolver policy, including deterministic test injection, for every native context.
+            proxy.ResolveAsync = (host, ct) => _destinationProxy!.ResolveAsync(host, ct);
+            proxy.Start();
+            return proxy;
+        })).Value;
+    }
 
     private async Task<SessionBrowser> EnsureSessionAsync(Guid sessionId, CancellationToken cancellationToken)
     {
@@ -316,27 +321,82 @@ public sealed partial class NativePlaywrightBrowser
         }
 
         var browser = await EnsureBrowserAsync(cancellationToken).ConfigureAwait(false);
-        var environmentOptions = ContextOptions(_playwright!);
-        var context = await browser.NewContextAsync(environmentOptions)
-            .WaitAsync(cancellationToken)
-            .ConfigureAwait(false);
-        await context.AddInitScriptAsync(BrowserPageSettle.InitScript).WaitAsync(cancellationToken).ConfigureAwait(false);
-        var page = await context.NewPageAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-        page.SetDefaultTimeout(TimeoutMs());
-        page.SetDefaultNavigationTimeout(TimeoutMs());
-        var session = new SessionBrowser(context, page) { Environment = DescribeEnvironment(environmentOptions) };
-        RememberPage(session, page);
+        var boundOwner = _sessionOwners.TryGetValue(sessionId, out var sessionOwner) ? sessionOwner : null;
+        var environmentOptions = ContextOptions(_playwright!, ProxyFor(sessionId, boundOwner).Server);
+        var context = await OwnContextAsync(browser.NewContextAsync(environmentOptions), cancellationToken);
+        try
+        {
+            await InitializeStageAsync("initScript", context, cancellationToken);
+            await context.AddInitScriptAsync(BrowserPageSettle.InitScript).WaitAsync(cancellationToken);
+            await InitializeStageAsync("page", context, cancellationToken);
+            var page = await context.NewPageAsync().WaitAsync(cancellationToken);
+            page.SetDefaultTimeout(TimeoutMs());
+            page.SetDefaultNavigationTimeout(TimeoutMs());
+            var session = new SessionBrowser(context, page)
+            {
+                Environment = DescribeEnvironment(environmentOptions),
+                AgentInstanceId = _sessionOwners.TryGetValue(sessionId, out var ownerId) ? ownerId : null
+            };
+            await InstallRoutesAsync(session, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!_sessions.TryAdd(sessionId, session))
+            {
+                await CloseQuietlyAsync(context);
+                return _sessions[sessionId];
+            }
+            return session;
+        }
+        catch
+        {
+            await CloseQuietlyAsync(context);
+            throw;
+        }
+    }
+
+    private async Task InitializeStageAsync(string stage, IBrowserContext context, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (InitializationProbe is { } probe) await probe(stage, context).WaitAsync(ct);
+    }
+
+    private async Task InstallRoutesAsync(SessionBrowser session, CancellationToken ct)
+    {
+        var context = session.Context;
+        RememberPage(session, session.Page);
+        await InitializeStageAsync("routes", context, ct);
+        await context.RouteAsync("**/*", route => RouteAsync(session, route)).WaitAsync(ct);
+        await context.RouteWebSocketAsync("**/*", socket => RouteWebSocket(session, socket)).WaitAsync(ct);
+        // Publish lifecycle hooks only after setup; unpublished contexts cannot evict live entries.
         context.Close += (_, _) => ForgetClosed(session);
         context.Page += (_, opened) => OnContextPage(session, opened);
-        await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
-        await context.RouteWebSocketAsync("**/*", socket => RouteWebSocket(session, socket)).ConfigureAwait(false);
-        if (!_sessions.TryAdd(sessionId, session))
-        {
-            await CloseQuietlyAsync(context).ConfigureAwait(false);
-            return _sessions[sessionId];
-        }
+    }
 
-        return session;
+    private static async Task<IPlaywright> OwnDriverAsync(Task<IPlaywright> creation, CancellationToken ct)
+    {
+        try { return await creation.WaitAsync(ct); }
+        catch (OperationCanceledException)
+        {
+            _ = creation.ContinueWith(result =>
+            {
+                if (result.IsCompletedSuccessfully) DisposeQuietly(result.Result);
+                else _ = result.Exception;
+            }, TaskScheduler.Default);
+            throw;
+        }
+    }
+
+    private static async Task<IBrowserContext> OwnContextAsync(Task<IBrowserContext> creation, CancellationToken ct)
+    {
+        try { return await creation.WaitAsync(ct); }
+        catch (OperationCanceledException)
+        {
+            _ = creation.ContinueWith(async result =>
+            {
+                if (result.IsCompletedSuccessfully) await CloseQuietlyAsync(result.Result);
+                else _ = result.Exception;
+            }, TaskScheduler.Default).Unwrap();
+            throw;
+        }
     }
 
     private async Task<SessionBrowser> EnsurePersistentAsync(Guid agentInstanceId, CancellationToken cancellationToken)
@@ -371,6 +431,7 @@ public sealed partial class NativePlaywrightBrowser
 
             FileStream? lease = null;
             IPlaywright? playwright = null;
+            IBrowserContext? context = null;
             try
             {
                 try
@@ -387,8 +448,8 @@ public sealed partial class NativePlaywrightBrowser
                     throw new BrowserProfileException("profile_busy");
                 }
 
-                playwright = await Playwright.CreateAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-                var environmentOptions = ContextOptions(playwright);
+                playwright = await OwnDriverAsync(Playwright.CreateAsync(), cancellationToken);
+                var environmentOptions = ContextOptions(playwright, ProxyFor(Guid.Empty, agentInstanceId).Server);
                 var options = new BrowserTypeLaunchPersistentContextOptions
                 {
                     Headless = _options.Headless,
@@ -402,19 +463,19 @@ public sealed partial class NativePlaywrightBrowser
                     DeviceScaleFactor = environmentOptions.DeviceScaleFactor,
                     UserAgent = environmentOptions.UserAgent,
                     ServiceWorkers = ServiceWorkerPolicy.Block,
-                    Args = ["--disable-popup-blocking"]
+                    Args = ["--disable-popup-blocking", "--proxy-bypass-list=<-loopback>", "--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"],
+                    Proxy = new() { Server = environmentOptions.Proxy!.Server }
                 };
                 if (!string.IsNullOrWhiteSpace(_options.Channel))
                 {
                     options.Channel = _options.Channel;
                 }
 
-                IBrowserContext context;
                 try
                 {
-                    context = await playwright.Chromium.LaunchPersistentContextAsync(directory, options)
-                        .WaitAsync(cancellationToken)
-                        .ConfigureAwait(false);
+                    context = await OwnContextAsync(playwright.Chromium.LaunchPersistentContextAsync(directory, options), cancellationToken);
+                    await InitializeStageAsync("persistent", context, cancellationToken);
+                    await InitializeStageAsync("initScript", context, cancellationToken);
                     await context.AddInitScriptAsync(BrowserPageSettle.InitScript).WaitAsync(cancellationToken).ConfigureAwait(false);
                 }
                 catch (PlaywrightException ex)
@@ -427,7 +488,8 @@ public sealed partial class NativePlaywrightBrowser
                     throw new BrowserProfileException(busy ? "profile_busy" : "profile_unavailable");
                 }
 
-                var page = context.Pages.FirstOrDefault() ?? await context.NewPageAsync().ConfigureAwait(false);
+                await InitializeStageAsync("page", context, cancellationToken);
+                var page = context.Pages.FirstOrDefault() ?? await context.NewPageAsync().WaitAsync(cancellationToken);
                 page.SetDefaultTimeout(TimeoutMs());
                 page.SetDefaultNavigationTimeout(TimeoutMs());
                 var session = new SessionBrowser(context, page)
@@ -438,19 +500,18 @@ public sealed partial class NativePlaywrightBrowser
                     AgentInstanceId = agentInstanceId,
                     Environment = DescribeEnvironment(environmentOptions)
                 };
-                RememberPage(session, page);
-                context.Close += (_, _) => ForgetClosed(session);
-                context.Page += (_, opened) => OnContextPage(session, opened);
-                await context.RouteAsync("**/*", route => RouteAsync(session, route)).ConfigureAwait(false);
-                await context.RouteWebSocketAsync("**/*", socket => RouteWebSocket(session, socket)).ConfigureAwait(false);
+                await InstallRoutesAsync(session, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 _persistent[agentInstanceId] = session;
                 lease = null;
                 playwright = null;
+                context = null;
                 return session;
             }
             finally
             {
-                playwright?.Dispose();
+                if (context is not null) await CloseQuietlyAsync(context);
+                DisposeQuietly(playwright);
                 lease?.Dispose();
             }
         }
@@ -496,9 +557,10 @@ public sealed partial class NativePlaywrightBrowser
         }
     }
 
-    private sealed class UnattendedLease(NativePlaywrightBrowser owner, Guid agentInstanceId, SemaphoreSlim gate)
+    private sealed class UnattendedLease(NativePlaywrightBrowser owner, Guid agentInstanceId, SemaphoreSlim gate, string[]? origins)
         : IAsyncDisposable
     {
+        public string[]? Origins { get; } = origins;
         private int _disposed;
 
         public ValueTask DisposeAsync()
@@ -508,11 +570,10 @@ public sealed partial class NativePlaywrightBrowser
                 return ValueTask.CompletedTask;
             }
 
+            if (owner._ownerProxies.TryGetValue((true, agentInstanceId), out var proxy) && proxy.IsValueCreated)
+                proxy.Value.FenceConnections();
             owner._unattendedLeases.TryRemove(agentInstanceId, out _);
-            if (owner._unattendedOwner.Value == agentInstanceId)
-            {
-                owner._unattendedOwner.Value = null;
-            }
+            if (ReferenceEquals(owner._unattendedOwner.Value, this)) owner._unattendedOwner.Value = null;
 
             gate.Release();
             return ValueTask.CompletedTask;

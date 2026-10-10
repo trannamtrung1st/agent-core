@@ -21,6 +21,11 @@ public sealed class BrowserOptions
 
     public string? Channel { get; set; }
 
+    // DomMasking is best-effort. Strict visual confidentiality disables capture entirely.
+    public string ScreenshotPrivacy { get; set; } = "DomMasking";
+
+    public BrowserOperationalLimits Limits { get; set; } = new();
+
     public BrowserEnvironmentOptions Environment { get; set; } = new();
 
     public bool FixtureEnabled { get; set; } = true;
@@ -44,7 +49,7 @@ public sealed class BrowserOptions
             ResolveInteraction(ResolveNavigation()),
             ResourceOrigins ?? [],
             ResolvePolicy(),
-            ResolveProfile());
+            ResolveProfile()) { Limits = Limits };
 
     public BrowserProfileMode ResolveProfile() =>
         string.Equals(ProfileMode, nameof(BrowserProfileMode.PersistentAgent), StringComparison.OrdinalIgnoreCase)
