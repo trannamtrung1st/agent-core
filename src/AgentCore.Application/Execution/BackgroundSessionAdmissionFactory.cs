@@ -31,7 +31,7 @@ public static class BackgroundSessionAdmissionFactory
             LastEntrySequence: 1, Purpose: SessionPurpose.OngoingDefault, CompletionPolicy: SessionCompletionPolicy.Default,
             LifecycleSource: LifecycleTransitionSource.System, LifecycleChangedAt: now,
             ModelSelection: new(model.CatalogKey, model.ProviderAlias, model.ModelId,
-                parent.ModelSelection?.SelectionSource ?? ModelSelectionSource.Host, model.ReasoningEffort), PinnedPersona: persona,
+                parent.ModelSelection?.SelectionSource ?? ModelSelectionSource.Host, model.ReasoningEffort, parent.ModelSelection?.HasExplicitReasoningEffort == true), PinnedPersona: persona,
             PinnedPersonaRevision: configuration.PersonaRevision, Origin: origin, Surfaces: SessionSurface.BackgroundWork);
         return (session, run);
     }

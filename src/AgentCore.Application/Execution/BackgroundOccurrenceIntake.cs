@@ -90,7 +90,7 @@ public sealed class BackgroundOccurrenceIntake(
             }
             var originalTarget = target!;
             target = target! with { Definition = definition, PinnedPersona = resolved?.Persona ?? instance.Persona,
-                ModelSelection = target!.ModelSelection?.SelectionSource is ModelSelectionSource.User or ModelSelectionSource.Host ? target.ModelSelection : SessionModelBinder.PinDefault(models, definition) };
+                ModelSelection = target!.ModelSelection?.SelectionSource is ModelSelectionSource.User or ModelSelectionSource.Host ? target.ModelSelection : SessionModelBinder.RefreshDefault(models, definition, target.ModelSelection) };
             ExecutionModelPin selected;
             try { selected = AutomationDestinationPolicy.Pin(target!, models, requiresVision: automation?.RequiresVision == true, requiresTools: automation?.RequiresTools == true); }
             catch (AgentCoreException)

@@ -23,7 +23,7 @@ public sealed class ScopedInstanceConfigurationTests
     private static WebApplicationFactory<Program> Host(bool sqlite, string db) => sqlite ? new ExperienceHost(db) : new AgentCoreApiFactory();
     private static WebApplicationFactory<Program> ControlledHost(bool sqlite, string db) => Host(sqlite, db).WithWebHostBuilder(builder =>
         builder.ConfigureTestServices(services => {
-            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IHostedService) && d.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService)).ToArray())
+            foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IHostedService) && (d.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService) || d.ImplementationType == typeof(AgentCore.Api.BackgroundOccurrenceIntakeHostedService) || d.ImplementationType == typeof(AgentCore.Api.TriggerSchedulerHostedService))).ToArray())
                 services.Remove(descriptor);
         }));
     [Theory]
@@ -286,6 +286,49 @@ public sealed class ScopedInstanceConfigurationTests
         await settings.PatchAsync(instance.InstanceId, "triggerPolicy", disabled.InstanceRevision, new Dictionary<string, JsonElement>(), ["enabled"]);
         Assert.Equal(AutomationStatus.Active, (await triggers.GetAsync(owner, automation.AutomationId))!.Status);
         Assert.Equal("Concurrent owner edit", (await triggers.GetAsync(owner, automation.AutomationId))!.Instructions);
+    }
+
+    [Theory]
+    [InlineData(false, false)] [InlineData(false, true)]
+    [InlineData(true, false)] [InlineData(true, true)]
+    public async Task Fresh_occurrence_resolves_adopted_configuration_and_retains_existing_session_effort(bool sqlite, bool existingSession)
+    {
+        await using var host = ControlledHost(sqlite, Path.Combine(Path.GetTempPath(), $"scoped-occurrence-{Guid.NewGuid():N}.db"));
+        var services = host.Services;
+        var admin = services.GetRequiredService<AdminAgentInstanceService>();
+        var instance = await admin.CreateManagedAsync("general-assistant", 21);
+        var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId,
+            SessionMode.Text, speechLocaleOverride: "en-GB", reasoningEffort: "high");
+        var settings = services.GetRequiredService<AgentInstanceSettingsService>();
+        var saved = await settings.PatchAsync(instance.InstanceId, "conversationPolicy", instance.Revision,
+            new Dictionary<string, JsonElement> { ["maxOutputTokens"] = JsonSerializer.SerializeToElement(2048) }, []);
+        var resources = await services.GetRequiredService<AgentInstanceResourceService>().UpsertAsync(instance.InstanceId,
+            saved.InstanceRevision, null, null, "occurrence/current.md", AgentDefinitionResourceKind.Knowledge,
+            "text/markdown", Encoding.UTF8.GetBytes("Current occurrence knowledge."));
+        instance = await admin.ReassociateActiveVersionAsync(instance.InstanceId, 22, resources.InstanceRevision);
+        var authoring = services.GetRequiredService<AdminAutomationAuthoringService>();
+        var automation = await authoring.SaveAsync(instance.InstanceId, null, 0, true, "Current configuration", "Say hello",
+            new ScheduleTrigger(new OneShotSchedule(DateTimeOffset.UtcNow.AddDays(1), "UTC")), null, null,
+            executionTarget: existingSession ? AutomationExecutionTarget.Existing(session.SessionId) : AutomationExecutionTarget.Background,
+            completionDelivery: AutomationCompletionDelivery.None);
+        await authoring.RunNowAsync(instance.InstanceId, automation.AutomationId, automation.Revision);
+        await services.GetRequiredService<TriggerOccurrenceRouter>().RouteOnceAsync();
+        Assert.Equal(1, (await services.GetRequiredService<BackgroundOccurrenceIntake>().AcceptAwaitingAsync()).Accepted);
+        var run = Assert.Single(await services.GetRequiredService<IAgentRunStore>().ListRunnableAsync(DateTimeOffset.UtcNow, 100));
+        Assert.Equal(22, run.DefinitionVersion);
+        Assert.Equal(instance.Revision, run.Admission.Configuration!.InstanceRevision);
+        Assert.Equal(2048, run.Admission.Configuration.Definition.ConversationPolicy.MaxOutputTokens);
+        Assert.Contains(run.Admission.Configuration.Resources, r => r.VirtualPath == "/agent/instance/resources/occurrence/current.md");
+        var retained = (await services.GetRequiredService<IMemoryStore>().LoadAsync(session.SessionId))!;
+        Assert.Equal(21, retained.Definition.Version);
+        Assert.Equal("en-GB", retained.SpeechLocaleOverride);
+        if (existingSession)
+        {
+            Assert.Equal(session.SessionId, run.SessionId);
+            Assert.Equal("high", run.PinnedModel.ReasoningEffort);
+            Assert.True(retained.ModelSelection!.HasExplicitReasoningEffort);
+        }
+        else Assert.NotEqual(session.SessionId, run.SessionId);
     }
 
     private sealed class Output : ISessionOutput

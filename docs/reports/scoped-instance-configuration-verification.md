@@ -42,16 +42,16 @@ Local checks use Synthetic and disposable SQLite files/roots under `/private/tmp
 
 | Check | Observed result |
 | --- | --- |
-| Full Domain | 185 passed. |
-| Full Application | 1588 passed, 6 live opt-in skipped before final reasoning-preference correction; focused model refresh: 7 passed. |
-| Full Infrastructure | 1080 passed, 9 live opt-in skipped before the final preference column; populated scoped migration passed. |
+| Full Domain | 185 passed on the committed candidate. |
+| Full Application | 1589 passed, 6 live opt-in skipped after the preference correction; focused model refresh: 7 passed. |
+| Full Infrastructure | 1080 passed, 9 live opt-in skipped before the final preference column; populated scoped migration passed. The subsequent full run exposed four deliberately old-schema tests using the current EF shape. Historical projections/seeding now use only available columns; the five-case populated/rejection migration group passes. Final full gate pending. |
 | Full API initial candidate | 422 passed, 2 live opt-in skipped, 5 failures: two promotion assertions omitted retained baseline resources; three recovery/timing cases. Corrected promotion checks passed; isolated recovery/approval rerun: 31 passed. Final full gate pending. |
 | Order Events | 4 passed. |
-| Scoped API journeys | 10 passed across InMemory/SQLite, including generation race, resource rejection, dependent Skill disable refusal, reviewed promotion and atomic Automation policy cases. |
+| Scoped API journeys | 14 passed across InMemory/SQLite, including generation race, resource rejection, dependent Skill disable refusal, reviewed promotion and atomic Automation policy cases, and fresh occurrence admission into both an existing conversation and a new background Session. |
 | Frontend | Build passed with the existing large-chunk warning. Full unit run had 826 passed and 11 failures; follow-up isolated files had timeout failures on the busy local machine. Final hosted/full gate pending; no failed check is marked accepted. |
 | Synthetic Playwright | Initial broad run: 134 passed, 10 failures. Corrected rerun: 25 passed, 2 failures, subsequently corrected (retained settings disclosure and persisted reasoning preference). Final focused scoped journey: 1 passed; Session model/effort journeys: 2 passed. Final hosted/full gate pending. |
 | Compose | Isolated `scoped-verification` image built and host started. A 2048 sparse token override and owner revision survived container restart on its persistent volume. Final exact-commit packaging gate pending. |
-| Markdown sync | 13 changed Markdown files, 502 local links and 13 complete JSON examples checked; no link/fence/JSON errors. |
+| Markdown sync | 15 changed Markdown files, 515 local links and 13 complete JSON examples checked; no link/fence/JSON errors. |
 
 Commands: `dotnet test AgentCore.sln --no-restore --nologo --disable-build-servers -m:1 -p:UseSharedCompilation=false`; focused project filters for scoped configuration, historical migrations, model binding, Harness approval and recovery; `pnpm --dir web exec vitest run --maxWorkers=1 --minWorkers=1`; `pnpm --dir web build`; isolated `CI=1` Playwright core/Admin/Harness projects; isolated Docker Compose build/start/restart. Detailed local command logs are `/private/tmp/scoped-*.log`; these disposable logs are not portable hosted acceptance artifacts.
 

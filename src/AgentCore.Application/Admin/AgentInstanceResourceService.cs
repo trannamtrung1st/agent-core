@@ -122,7 +122,7 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
             return new InstanceResourceView("definition:" + r.ResourceId.ToString("D"), "Definition", r.LogicalPath, r.Kind,
                 r.MediaType, r.ContentSha256, r.ByteLength, state?.EnabledOverride ?? true, state?.EnabledOverride,
                 state?.Revision ?? 0, "/agent/resources/" + r.LogicalPath,
-                enabledSkills.Where(s => s.ResourcePaths.Contains(r.LogicalPath, StringComparer.Ordinal)).Select(s => s.Key).ToArray());
+                enabledSkills.Where(s => s.Origin == SkillOrigin.Definition && s.ResourcePaths.Contains(r.LogicalPath, StringComparer.Ordinal)).Select(s => s.Key).ToArray());
         });
         return inherited.Concat(local.InstanceResources.Select(r => new InstanceResourceView("instance:" + r.ResourceId.ToString("D"), "Instance",
             r.LogicalPath, r.Kind, r.MediaType, r.ContentSha256, r.ByteLength, r.Enabled, null, r.Revision,

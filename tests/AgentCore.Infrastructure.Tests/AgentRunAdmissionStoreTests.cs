@@ -1319,10 +1319,9 @@ public sealed class AgentRunAdmissionStoreTests
             await using (var db = await factory.CreateDbContextAsync())
             {
                 await db.Database.MigrateAsync("20261008115119_AutomationDestinations");
-                var memory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now));
-                // Seed the historical schema without asking today's EF entry model to write later columns.
-                await memory.StageSaveAsync(db, parentSnapshot with { Entries = [] }, 0, default);
-                await memory.StageSaveAsync(db, child.Snapshot with { Entries = [] }, 0, default);
+                // Copy only columns available in the historical schema, then retain its legacy entry shape below.
+                await MigrationSessionSeed.CopyPersistedSessionAsync(factory, parentSnapshot with { Entries = [] }, "20261008115119_AutomationDestinations");
+                await MigrationSessionSeed.CopyPersistedSessionAsync(factory, child.Snapshot with { Entries = [] }, "20261008115119_AutomationDestinations");
                 db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(parentSnapshot, parent));
                 db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(parent));
                 db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(child.Snapshot, completed));
