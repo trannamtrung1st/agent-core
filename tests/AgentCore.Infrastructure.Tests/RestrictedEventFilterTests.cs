@@ -3,7 +3,6 @@ using AgentCore.Infrastructure.Events;
 
 namespace AgentCore.Infrastructure.Tests;
 
-[Collection("Event filter memory")]
 public sealed class RestrictedEventFilterTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     private readonly RestrictedEventFilter filters = new();
@@ -95,37 +94,4 @@ public sealed class RestrictedEventFilterTests(Xunit.Abstractions.ITestOutputHel
             JsonSerializer.SerializeToElement(new { data = new { status = "unpaid" } })).Matched);
     }
 
-    [Fact]
-    public void Repeated_evaluations_have_bounded_allocations_and_post_gc_heap_growth()
-    {
-        var envelope = Envelope;
-        const string expression = "event.data.total >= 100 && event.data.status === 'paid'";
-        // Warm JIT/parser/engine caches before comparing retained managed bytes.
-        for (var i = 0; i < 256; i++) Assert.True(filters.Evaluate(expression, envelope).Matched);
-        var baseline = CollectHeap();
-        for (var batch = 0; batch < 3; batch++)
-        {
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 0; i < 1000; i++) Assert.True(filters.Evaluate(expression, envelope).Matched);
-            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            var retained = CollectHeap() - baseline;
-            output.WriteLine($"Batch {batch + 1}: {allocated / 1000} allocated bytes/evaluation; {retained} retained bytes above warmed baseline.");
-            // Deliberately broad regression ceilings, not a Jint/process memory guarantee.
-            Assert.InRange(allocated / 1000, 1L, 1024 * 1024L);
-            Assert.True(retained < 8 * 1024 * 1024L, $"Post-GC heap grew by {retained} bytes.");
-        }
-        GC.KeepAlive(envelope);
-        GC.KeepAlive(filters);
-    }
-
-    private static long CollectHeap()
-    {
-        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
-        GC.WaitForPendingFinalizers();
-        return GC.GetTotalMemory(forceFullCollection: true);
-    }
 }
-
-// Heap measurements must not overlap other test collections' allocations or evaluations.
-[CollectionDefinition("Event filter memory", DisableParallelization = true)]
-public sealed class EventFilterMemoryCollection;

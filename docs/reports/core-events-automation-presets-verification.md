@@ -213,3 +213,20 @@ A separate task-owned Synthetic JSON probe performs 3,000 evaluations, forces fu
 | Temporary probe build | **Passed**, zero warnings/errors; `/tmp/core-jint-probe-build.log`. |
 
 Commands use `dotnet test <absolute Infrastructure/API test project> --no-restore --nologo` with `FullyQualifiedName` filters for `RestrictedEventFilterTests`, `EventRecoveryOperationsTests`, `CoreEventAutomationJourneyTests`, `CoreEventStabilizationTests` and `TriggerSchedulerPhaseIsolationTests`. All **52 focused tests pass**. As in the operational follow-up, SDK 10.0.400 is unavailable locally; commands launch from the temporary SDK 10.0.100 selector without changing repository configuration. Exact requested-SDK execution and hosted CI are unverified. Real Jint execution timeout and cancellation during execution were not deterministically forced by these tests; timeout recovery uses controlled evaluator outcomes, and engine cleanup on unwinding follows the scoped disposal construct. No broader milestone acceptance is claimed, and hosted CI is not awaited as requested.
+
+### Resource hygiene re-review — 2026-10-10
+
+Reviewed `49e2f888` against the evaluator, Jint 4.4.1 lifecycle contract, actual construction sites, and canonical implementation/technology/testing descriptions. The production scoped disposal, fresh event isolation, four-worker limit and prepared-expression lifetime remain consistent; no further production defect was identified. The coverage gap was that the repeated-memory regression measured only successful matches. It now measures matched, filtered, non-Boolean and actual Jint property-access exception paths separately, with 256 warmup calls plus three batches of 1,000 each. Memory tests have their own nonparallel collection; ordinary filter tests retain their normal collection scheduling. The technology decision now explicitly distinguishes Jint's allocation budget from the complete CLR/process heap and records deterministic disposal.
+
+Final-source Infrastructure filtering, memory, cursor/store parity, buckets, scheduler and webhook checks: **65 passed**, zero failures/skips, `/tmp/core-jint-review-infra.log`. Select both filter classes with `FullyQualifiedName~RestrictedEventFilter` alongside `EventRecoveryOperationsTests`, `CoreEventBucketTests`, `TriggerSchedulerTests` and `ExternalEvent`. The four memory paths execute **12,000 measured evaluations** in total:
+
+| Path | Allocated bytes/evaluation | Largest post-GC growth above warmed baseline |
+| --- | --- | --- |
+| Matched | 27,016 | 417,576 bytes |
+| Filtered | 24,760 | 182,176 bytes |
+| Non-Boolean | 23,912 | 377,168 bytes |
+| Jint exception | 28,256 | No positive growth (all batches below baseline) |
+
+Fresh Synthetic API execution: **five real Core/webhook journey cases passed** in `/tmp/core-jint-review-journey.log`; **14 stabilization/scheduler boundary cases passed** in `/tmp/core-jint-review-api.log`. Expected durable matching/coalescing admissions, frozen-snapshot recovery, sibling isolation, bounded exhaustion, cancellation propagation and completed Runs remain verified. Total re-review coverage: **84 passed**, zero failures/skips. These tests use the same SDK 10.0.100 fallback; requested SDK 10.0.400 and hosted CI remain unverified, and the real execution-time timeout/cancellation limitation above remains. No frontend/Compose source changed, broader gates were not rerun, and no new milestone closure is claimed.
+
+Documentation checks validate 135 relative links/anchors and balanced code fences across the three changed documents, with only the same three missing historical local screenshots already recorded above. `git diff --check` passes.
