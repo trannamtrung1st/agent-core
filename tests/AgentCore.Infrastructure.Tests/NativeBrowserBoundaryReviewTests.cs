@@ -48,7 +48,8 @@ public sealed class NativeBrowserBoundaryReviewTests
             Assert.Equal("original", await field.InputValueAsync());
             await field.ScrollIntoViewIfNeededAsync();
             var box = (await field.BoundingBoxAsync())!;
-            Assert.Equal("target_denied", (await Run("browser.mouse", new { operation = "click", x = box.X + box.Width / 2, y = box.Y + box.Height / 2 })).ErrorCode);
+            var screenshot = await Run("browser.screenshot", new { }); Assert.Null(screenshot.ErrorCode);
+            Assert.Equal("target_denied", (await Run("browser.mouse", new { operation = "click", x = box.X + box.Width / 2, y = box.Y + box.Height / 2, snapshotId = screenshot.Observation!.SnapshotId })).ErrorCode);
             var recovered = await browser.ExecuteAsync(BrowserTestRequests.Inspect(id));
             Assert.Null(recovered.ErrorCode);
             Assert.DoesNotContain("original", recovered.Observation!.Content);

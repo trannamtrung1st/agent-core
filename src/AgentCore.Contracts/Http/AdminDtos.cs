@@ -405,6 +405,9 @@ public sealed record AdminEventResponse(
     int? Version,
     JsonElement Summary);
 
-public sealed record AdminBrowserConfigurationResponse(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotBytes, int MaxCaptureBytes, int MaxDownloadBytes, string Engine = "unknown");
+public sealed record AdminBrowserConfigurationResponse(string ProviderId, string DisplayName, bool Enabled, bool Ready, string ProfileMode, string PolicyMode, IReadOnlyList<string> SupportedFeatures, int MaxSnapshotBytes, int MaxCaptureBytes, int MaxDownloadBytes, string Engine = "unknown", AdminBrowserLimitsResponse? Limits = null);
 
 public sealed record AdminSetExecutionBudgetsRequest(long ExpectedRevision, System.Text.Json.JsonElement? ExecutionBudgets);
+
+public sealed record AdminBrowserLimitsResponse(int OperationTimeoutMs, int CapturesPerScope, int DownloadsPerScope,
+    int FindMatches, int WaitTimeoutMs, int TextInputLength, int AutomaticSettleMs);

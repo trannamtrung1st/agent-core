@@ -154,11 +154,15 @@ public sealed class BrowserEnvironmentJourneyTests
             var page = browser.ContextFor(id)!.Pages[0];
             // A generic scrollable surface needs no application-specific selectors or fixture behavior.
             await page.EvaluateAsync("() => { const panel=document.createElement('div'); panel.id='wheel-probe'; panel.style='position:fixed;inset:100px auto auto 100px;width:300px;height:300px;overflow:scroll;z-index:999;background:white'; panel.innerHTML='<div style=\"width:2000px;height:2000px\">Scroll surface</div>'; document.body.append(panel); }");
-            Assert.Equal("invalid", (await Run(new { operation = "wheel", x = 200, y = 200 })).ErrorCode);
-            Assert.Equal("invalid", (await Run(new { operation = "wheel", x = 200, y = 200, deltaY = 2001 })).ErrorCode);
-            Assert.Null((await Run(new { operation = "wheel", x = 200, y = 200, deltaX = 300, deltaY = 250 })).ErrorCode);
+            var shot = await browser.ExecuteAsync(new(id, new BrowserScreenshot())); Assert.Null(shot.ErrorCode);
+            var snapshotId = shot.Observation!.SnapshotId;
+            Assert.Equal("invalid", (await Run(new { operation = "wheel", x = 200, y = 200, snapshotId })).ErrorCode);
+            Assert.Equal("invalid", (await Run(new { operation = "wheel", x = 200, y = 200, deltaY = 2001, snapshotId })).ErrorCode);
+            Assert.Null((await Run(new { operation = "wheel", x = 200, y = 200, deltaX = 300, deltaY = 250, snapshotId })).ErrorCode);
             await page.WaitForFunctionAsync("() => { const e=document.getElementById('wheel-probe'); return e.scrollLeft >= 300 && e.scrollTop >= 250; }");
-            Assert.Null((await Run(new { operation = "wheel", x = 200, y = 200, deltaX = -300, deltaY = -250 })).ErrorCode);
+            shot = await browser.ExecuteAsync(new(id, new BrowserScreenshot())); Assert.Null(shot.ErrorCode);
+            snapshotId = shot.Observation!.SnapshotId;
+            Assert.Null((await Run(new { operation = "wheel", x = 200, y = 200, deltaX = -300, deltaY = -250, snapshotId })).ErrorCode);
             await page.WaitForFunctionAsync("() => { const e=document.getElementById('wheel-probe'); return e.scrollLeft === 0 && e.scrollTop === 0; }");
             Assert.Equal(new[] { 0, 0 }, await page.EvaluateAsync<int[]>("() => { const e=document.getElementById('wheel-probe'); return [e.scrollLeft,e.scrollTop]; }"));
         }

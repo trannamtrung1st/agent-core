@@ -30,6 +30,7 @@ public sealed record BrowserHostPolicy(
     BrowserPolicyMode PolicyMode = BrowserPolicyMode.Restricted,
     BrowserProfileMode ProfileMode = BrowserProfileMode.EphemeralSession)
 {
+    public BrowserOperationalLimits Limits { get; init; } = BrowserOperationalLimits.Default;
     public IReadOnlyList<string> TargetOrigins => NavigationOrigins;
 
     public IReadOnlyList<string> EffectiveInteractionOrigins => InteractionOrigins ?? NavigationOrigins;
@@ -122,7 +123,7 @@ public interface IBrowserContextUse
 {
     ValueTask<IAsyncDisposable> EnterUnattendedAsync(
         Guid agentInstanceId,
-        IReadOnlyList<string> origins,
+        IReadOnlyList<string>? origins,
         CancellationToken cancellationToken = default);
 
     void AdoptUnattendedFlow(Guid agentInstanceId);
@@ -289,7 +290,7 @@ public sealed record BrowserGenerateLocator(BrowserTarget Target) : BrowserComma
 {
     public override BrowserOperation Kind => BrowserOperation.GenerateLocator;
 }
-public sealed record BrowserMouse(string Operation, float X, float Y, float? TargetX = null, float? TargetY = null, float? DeltaX = null, float? DeltaY = null) : BrowserCommand
+public sealed record BrowserMouse(string Operation, float X, float Y, float? TargetX = null, float? TargetY = null, float? DeltaX = null, float? DeltaY = null, string? SnapshotId = null) : BrowserCommand
 {
     public override BrowserOperation Kind => BrowserOperation.Mouse;
 }

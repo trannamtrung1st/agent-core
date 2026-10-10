@@ -153,10 +153,28 @@ public static class BrowserToolArguments
         if (!ValidTargets(args)) { error = "invalid_target"; return false; }
         if (request.Command is BrowserFillForm form && form.Fields.Any(f => (f.Value is not null) == (f.Checked is not null))) return false;
         if (request.Command is BrowserWaitFor wait && (wait.Condition == "target" && wait.Target is null
-            || wait.Condition is "text" or "textGone" && wait.Text is null || wait.Condition == "url" && wait.Url is null)) return false;
-        if (request.Command is BrowserVerify verify && verify.Target is null && string.IsNullOrWhiteSpace(verify.Text)) return false;
+            || wait.Condition is "text" or "textGone" && string.IsNullOrWhiteSpace(wait.Text) || wait.Condition == "url" && wait.Url is null)) return false;
+        if (request.Command is BrowserVerify verify && !ValidVerification(verify)) return false;
         error = ""; return true;
     }
+
+    public static bool WithinOperationalLimits(BrowserCommand command, BrowserOperationalLimits limits) => command switch
+    {
+        BrowserTypeText args => args.Text.Length <= limits.TextInputLength,
+        BrowserDrop args => (args.Text?.Length ?? 0) <= limits.TextInputLength,
+        BrowserDialog args => (args.PromptText?.Length ?? 0) <= limits.TextInputLength,
+        BrowserLocalStorage args => (args.Value?.Length ?? 0) <= limits.TextInputLength,
+        BrowserSessionStorage args => (args.Value?.Length ?? 0) <= limits.TextInputLength,
+        BrowserFillForm args => args.Fields.All(field => field.Value is null || field.Value.Length <= limits.TextInputLength),
+        BrowserVerify args => (args.Text?.Length ?? 0) <= limits.TextInputLength && (args.Value?.Length ?? 0) <= limits.TextInputLength,
+        _ => true
+    };
+
+    public static bool ValidVerification(BrowserVerify args) =>
+        args.Condition is "visible" or "hidden" or "text" or "value" or "checked"
+        && (args.Target is not null || !string.IsNullOrWhiteSpace(args.Text))
+        && (args.Condition != "text" || !string.IsNullOrWhiteSpace(args.Text))
+        && (args.Condition != "value" || args.Target is not null && args.Value is not null);
 
     private static bool ValidTargets(JsonElement value)
     {

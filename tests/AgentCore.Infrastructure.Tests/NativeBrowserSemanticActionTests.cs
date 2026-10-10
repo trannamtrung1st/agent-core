@@ -67,7 +67,8 @@ public sealed class NativeBrowserSemanticActionTests
             Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(large.Observation.Content), 1, BrowserToolLimits.MaxSnapshotBytes);
             using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => browser.ExecuteAsync(new(id, new BrowserObserve(FrameRef: reference)), cancelled.Token).AsTask());
-            await page.Locator("iframe").EvaluateAsync("(el) => el.src='/browser-native-frame.html?new=1'");
+            await NativeBrowserFixtureActions.ApplyAsync(browser, id, page.MainFrame,
+                "() => { document.querySelector('iframe').src='/browser-native-frame.html?new=1'; }");
             await page.FrameLocator("iframe").GetByRole(AriaRole.Button, new() { Name = "Save frame" }).WaitForAsync();
             Assert.Equal("stale_frame", (await browser.ExecuteAsync(new(id, new BrowserObserve(FrameRef: reference)))).ErrorCode);
             var next = Assert.Single((await browser.ExecuteAsync(new(id, new BrowserObserve()))).Observation!.Frames!).Ref;
@@ -95,7 +96,7 @@ public sealed class NativeBrowserSemanticActionTests
             var page = browser.ContextFor(id)!.Pages[0];
             await page.FrameLocator("iframe").GetByRole(AriaRole.Button, new() { Name = "Save frame" }).WaitForAsync();
             var outer = page.Frames.Single(f => f != page.MainFrame);
-            await outer.EvaluateAsync("""
+            await NativeBrowserFixtureActions.ApplyAsync(browser, id, outer, """
             () => {
                 const permitted = document.createElement('iframe'); permitted.title = 'Permitted nested'; permitted.src = '/browser-native-frame.html?nested=1'; document.body.append(permitted);
                 const denied = document.createElement('iframe'); denied.title = 'Denied parent'; denied.srcdoc = '<h1>DENIED-ANCESTOR-TEXT</h1><iframe src="/browser-native-frame.html?denied-child=1"></iframe>'; document.body.append(denied);

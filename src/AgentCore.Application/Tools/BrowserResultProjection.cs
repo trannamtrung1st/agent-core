@@ -84,5 +84,18 @@ internal static class BrowserResultProjection
         return Bytes(result) <= budget ? result : null;
     }
 
+    internal static string? FitEvidence(int budget, string json)
+    {
+        JsonObject? source;
+        try { source = JsonNode.Parse(json) as JsonObject; }
+        catch (System.Text.Json.JsonException) { return null; }
+        if (source is null || !source.ContainsKey("effectAttempted")) return null;
+        var envelope = new JsonObject { ["truncated"] = true };
+        foreach (var key in new[] { "error", "status", "effectAttempted", "effectConfirmedBySdk", "applicationOutcomeVerified" })
+            if (source.ContainsKey(key)) envelope[key] = source[key]?.DeepClone();
+        var result = envelope.ToJsonString();
+        return Bytes(result) <= budget ? result : null;
+    }
+
     private static int Bytes(string value) => Encoding.UTF8.GetByteCount(value);
 }

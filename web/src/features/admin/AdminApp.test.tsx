@@ -480,12 +480,18 @@ describe("AdminApp", () => {
     render(<EffectiveConfigView config={{ ...sampleEffective, browser: {
       providerId: "subset", displayName: "Test browser", engine: "chromium", enabled: true, ready: false,
       profileMode: "EphemeralSession", policyMode: "Restricted", supportedFeatures: ["Navigate", "Snapshot", "Click"],
-      maxSnapshotBytes: 8000, maxCaptureBytes: 1500000, maxDownloadBytes: 5242880
+      maxSnapshotBytes: 512, maxCaptureBytes: 1500000, maxDownloadBytes: 5242880,
+      limits: { operationTimeoutMs: 25000, capturesPerScope: 3, downloadsPerScope: 1, findMatches: 10,
+        waitTimeoutMs: 2500, textInputLength: 200, automaticSettleMs: 1600 }
     } }} />);
     const browser = screen.getByRole("region", { name: "Browser provider" });
     expect(within(browser).getByText("chromium")).toBeInTheDocument();
     expect(within(browser).getByText("Unavailable")).toBeInTheDocument();
     expect(within(browser).getByText("Navigate, Snapshot, Click")).toBeInTheDocument();
+    expect(within(browser).getByText(/Snapshot 512 UTF-8 bytes/)).toBeInTheDocument();
+    expect(within(browser).getByText(/Deadline 25000 ms/)).toBeInTheDocument();
+    expect(within(browser).getByText(/3 screenshots and 1 download per Run/)).toBeInTheDocument();
+    expect(within(browser).getByText(/changes apply after host restart/)).toBeInTheDocument();
     expect(within(browser).queryByText(/Trace/)).not.toBeInTheDocument();
     const identity = screen.getByLabelText("Instance identity");
     expect(within(identity).queryByText("Compatibility / legacy")).not.toBeInTheDocument();

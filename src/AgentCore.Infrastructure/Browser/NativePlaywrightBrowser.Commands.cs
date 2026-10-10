@@ -23,6 +23,8 @@ public sealed partial class NativePlaywrightBrowser
     public async ValueTask<BrowserResult> ExecuteAsync(BrowserRequest command, CancellationToken cancellationToken = default)
     {
         if (!BrowserToolCatalog.TryGet(BrowserToolArguments.ToolName(command.Operation), out var metadata) || !Provider.Supports(metadata.Feature)) return new("unsupported_operation");
+        if (!BrowserToolArguments.WithinOperationalLimits(command.Command, _policy.Limits)) return new("invalid");
+        if (command.Command is BrowserWaitFor wait) command = command with { Command = wait with { TimeoutMs = Math.Min(wait.TimeoutMs, _policy.Limits.WaitTimeoutMs) } };
         if (command.Operation == BrowserOperation.Navigate) return await NavigateAsync(command, cancellationToken);
         if (command.Operation == BrowserOperation.Close)
         {
@@ -40,7 +42,13 @@ public sealed partial class NativePlaywrightBrowser
         {
             var capture = await CaptureViewportAsync(new BrowserScreenshotRequest(command.SessionId, captureArgs.Format,
                 captureArgs.FullPage, captureArgs.Target), cancellationToken);
-            return new(capture.ErrorCode, Bytes: capture.Png, ContentType: capture.ContentType, FileName: "screenshot." + capture.ContentType.Split('/')[1], RedactionCount: capture.RedactionCount, Width: capture.Width, Height: capture.Height);
+            if (capture.ErrorCode is not null)
+                return new(capture.ErrorCode, RedactionCount: capture.RedactionCount, Width: capture.Width, Height: capture.Height);
+            var extension = capture.ContentType switch { "image/png" => "png", "image/jpeg" => "jpeg", "image/webp" => "webp", _ => null };
+            if (extension is null || capture.Png is not { Length: > 0 }) return new("capture_invalid");
+            return new(null, Bytes: capture.Png, ContentType: capture.ContentType, FileName: "screenshot." + extension,
+                RedactionCount: capture.RedactionCount, Width: capture.Width, Height: capture.Height,
+                Observation: capture.Observation, DataJson: JsonSerializer.Serialize(new { coordinateEvidence = capture.CoordinateEvidence }));
         }
         await using var interactive = await EnterInteractiveAsync(command.SessionId, cancellationToken).ConfigureAwait(false);
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -48,7 +56,7 @@ public sealed partial class NativePlaywrightBrowser
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromMilliseconds(TimeoutMs()));
         var ct = deadline.Token;
-        var call = BeginCall(session);
+        var call = BeginCall(session, ct);
         using var cancel = ct.Register(() => CancelCall(session, call));
         session.DeniedNavigation = false; session.PopupCode = null; session.TimedOut = false;
         Task? activeAction = null;
@@ -74,7 +82,7 @@ public sealed partial class NativePlaywrightBrowser
         catch (RegexMatchTimeoutException) { return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
         catch (TimeoutException) { return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
         catch (PlaywrightException ex) { return new((await FailAsync(session, metadata.Feature.ToString(), "interaction", ex)).ErrorCode, EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
-        finally { session.Gate.Release(); }
+        finally { await EndCallAsync(session, session.OperationCall); session.Gate.Release(); }
 
         async Task<BrowserResult> Dispatch()
         {
@@ -88,6 +96,7 @@ public sealed partial class NativePlaywrightBrowser
                 || command.Command is BrowserDialog { Operation: "inspect" };
             if (!readsOnly && !BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode,
                 session.Page.Url, _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed) return new("forbidden");
+            if (!readsOnly && command.Command is not BrowserMouse) session.VisualSnapshotId = null;
             switch (command.Command)
             {
                 case BrowserSetGeolocation args:
@@ -149,7 +158,7 @@ public sealed partial class NativePlaywrightBrowser
                         if (operation == "new")
                         {
                             var url = args.Url;
-                            if (!BrowserTargetPolicy.EvaluateDestination(url, LeaseOrigins(session) ?? _policy.NavigationOrigins, _policy.PolicyMode).Allowed) return new("target_denied");
+                            if (!Allows(session, url!, true)) return new("target_denied");
                             // Page creation can finish late; close the context if cancellation wins that race.
                             effectAttempted = true; effectConfirmed = false;
                             var creation = session.Context.NewPageAsync();
@@ -228,7 +237,7 @@ public sealed partial class NativePlaywrightBrowser
                         }
                         if (condition is "text" or "textGone")
                         {
-                            if (text is null) return new("invalid");
+                            if (string.IsNullOrWhiteSpace(text)) return new("invalid");
                             // A hidden first match must neither block an existing visible match
                             // nor prove that every matching text has disappeared.
                             await session.Page.GetByText(text, new PageGetByTextOptions { Exact = false })
@@ -335,7 +344,7 @@ public sealed partial class NativePlaywrightBrowser
                 case BrowserDrop args:
                     {
                         var target = await Target(args.Target); if (target is null) return new("target_missing"); if (!await Ordinary(target)) return new("forbidden");
-                        var text = args.Text; if (text is null) return new("invalid");
+                        var text = args.Text; if (string.IsNullOrWhiteSpace(text)) return new("invalid");
                         await Action(target.EvaluateAsync("(el, data) => { const transfer = new DataTransfer(); transfer.setData(data.mime, data.text); el.dispatchEvent(new DragEvent('drop', {bubbles:true,dataTransfer:transfer})); }", new { mime = args.MimeType ?? "text/plain", text })); break;
                     }
                 case BrowserHighlight args:
@@ -357,15 +366,21 @@ public sealed partial class NativePlaywrightBrowser
                     }
                 case BrowserVerify args:
                     {
+                        if (!BrowserToolArguments.ValidVerification(args)) return new("invalid");
                         var target = await Target(args.Target ?? new BrowserTarget("text", args.Text!, Exact: false), args.Condition == "hidden");
                         if (target is null) return new("target_missing");
                         if (args.Condition == "value" && !await Ordinary(target)) return new("forbidden");
                         var passed = args.Condition switch
-                        { "visible" => await target.IsVisibleAsync().WaitAsync(ct), "hidden" => !await target.IsVisibleAsync().WaitAsync(ct), "checked" => await target.IsCheckedAsync().WaitAsync(ct), "text" => (await target.InnerTextAsync().WaitAsync(ct)).Contains(args.Text ?? "", StringComparison.Ordinal), "value" => await target.InputValueAsync().WaitAsync(ct) == args.Value, _ => false };
+                        { "visible" => await target.IsVisibleAsync().WaitAsync(ct), "hidden" => !await target.IsVisibleAsync().WaitAsync(ct), "checked" => await target.IsCheckedAsync().WaitAsync(ct), "text" => (await target.InnerTextAsync().WaitAsync(ct)).Contains(args.Text!, StringComparison.Ordinal), "value" => await target.InputValueAsync().WaitAsync(ct) == args.Value, _ => false };
                         return Data(new { passed }) with { ApplicationOutcomeVerified = passed };
                     }
                 case BrowserMouse args:
                     {
+                        if (session.VisualSessionId != command.SessionId || args.SnapshotId is null || args.SnapshotId != session.VisualSnapshotId
+                            || !ReferenceEquals(session.VisualPage, session.Page)
+                            || session.VisualPageGeneration != session.Generation
+                            || session.VisualState != await ReadVisualStateAsync(session.Page, ct))
+                            return new("stale_visual_evidence");
                         var x = args.X; var y = args.Y; var viewport = session.Page.ViewportSize;
                         if (viewport is null || !float.IsFinite(x) || !float.IsFinite(y) || x < 0 || y < 0 || x > viewport.Width || y > viewport.Height) return new("invalid");
                         async Task<bool> SafePoint(float px, float py) => await session.Page.EvaluateAsync<bool>(
@@ -438,6 +453,7 @@ public sealed partial class NativePlaywrightBrowser
 
         async Task Action(Task action)
         {
+            session.VisualSnapshotId = null;
             activeAction = action;
             effectAttempted = true; effectConfirmed = false;
             ActionStartedProbe?.Invoke();

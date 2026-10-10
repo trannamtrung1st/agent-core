@@ -211,7 +211,7 @@ public sealed class ResponsesCheckpointRecoveryTests
             File.WriteAllText(Path.Combine(root, "counters.json"), JsonSerializer.Serialize(counts));
             return ValueTask.FromResult(new BrowserResult(null, new BrowserSnapshot(Origins[0], "Counters", $"{target} count={counts[target]}", false, []), EffectAttempted: true, EffectConfirmedBySdk: true));
         }
-        public ValueTask<IAsyncDisposable> EnterUnattendedAsync(Guid owner, IReadOnlyList<string> origins, CancellationToken ct = default) => ValueTask.FromResult<IAsyncDisposable>(new Lease());
+        public ValueTask<IAsyncDisposable> EnterUnattendedAsync(Guid owner, IReadOnlyList<string>? origins, CancellationToken ct = default) => ValueTask.FromResult<IAsyncDisposable>(new Lease());
         public void AdoptUnattendedFlow(Guid owner) { }
         private sealed class Lease : IAsyncDisposable { public ValueTask DisposeAsync() => ValueTask.CompletedTask; }
     }

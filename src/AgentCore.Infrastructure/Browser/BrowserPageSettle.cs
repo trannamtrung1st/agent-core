@@ -24,10 +24,18 @@ internal static class BrowserPageSettle
     public const string InitScript = """
         (() => {
           if (window.__acSettle) return;
-          const state = { generation: 0, inflight: 0 };
+          const state = { generation: 0, inflight: 0, visualGeneration: 0 };
           window.__acSettle = state;
           const bump = () => { state.generation += 1; };
-          const observer = new MutationObserver(bump);
+          const isMask = node => node.nodeType === 1 && (node.hasAttribute('data-agent-mask') || node.nodeName === 'X-PW-GLASS');
+          const observer = new MutationObserver(records => {
+            bump();
+            if (records.some(record => record.type !== 'childList'
+                ? !isMask(record.target)
+                : [...record.addedNodes, ...record.removedNodes].some(node => !isMask(node))))
+              state.visualGeneration += 1;
+          });
+          document.addEventListener('scroll', () => { state.visualGeneration += 1; }, true);
           const arm = () => {
             const root = document.documentElement;
             if (!root || root.__acSettleObserved) return;
@@ -36,8 +44,7 @@ internal static class BrowserPageSettle
               subtree: true,
               childList: true,
               characterData: true,
-              attributes: true,
-              attributeFilter: ["class", "hidden", "aria-busy", "aria-hidden", "style"]
+              attributes: true
             });
           };
           if (document.documentElement) arm();
@@ -46,9 +53,12 @@ internal static class BrowserPageSettle
           if (typeof originalFetch === "function") {
             window.fetch = function (...args) {
               state.inflight += 1;
-              return Promise.resolve(originalFetch.apply(this, args)).finally(() => {
-                state.inflight = Math.max(0, state.inflight - 1);
-              });
+              try {
+                return Promise.resolve(originalFetch.apply(this, args)).then(response => {
+                  state.inflight = Math.max(0, state.inflight - 1);
+                  return response;
+                }, error => { state.inflight = Math.max(0, state.inflight - 1); throw error; });
+              } catch (error) { state.inflight = Math.max(0, state.inflight - 1); throw error; }
             };
           }
           const originalSend = XMLHttpRequest.prototype.send;
@@ -57,7 +67,8 @@ internal static class BrowserPageSettle
             this.addEventListener("loadend", () => {
               state.inflight = Math.max(0, state.inflight - 1);
             }, { once: true });
-            return originalSend.apply(this, args);
+            try { return originalSend.apply(this, args); }
+            catch (error) { state.inflight = Math.max(0, state.inflight - 1); throw error; }
           };
         })();
         """;
@@ -65,7 +76,7 @@ internal static class BrowserPageSettle
     private const string ReadScript = """
         () => {
           const state = window.__acSettle;
-          if (!state) return [0, 0];
+          if (!state) return [-1, 1];
           return [state.generation || 0, state.inflight || 0];
         }
         """;

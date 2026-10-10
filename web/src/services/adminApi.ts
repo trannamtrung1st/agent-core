@@ -52,6 +52,8 @@ export type AdminEffectiveConfiguration = {
     maxSnapshotBytes: number;
     maxCaptureBytes: number;
     maxDownloadBytes: number;
+    limits?: { operationTimeoutMs: number; capturesPerScope: number; downloadsPerScope: number;
+      findMatches: number; waitTimeoutMs: number; textInputLength: number; automaticSettleMs: number } | null;
   } | null;
   definitionSource: string;
   definitionId: string;

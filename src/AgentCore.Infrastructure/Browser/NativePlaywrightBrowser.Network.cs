@@ -49,7 +49,7 @@ public sealed partial class NativePlaywrightBrowser
                         url,
                         lease ?? _policy.NavigationOrigins,
                         lease is null ? _policy.PolicyMode : BrowserPolicyMode.Restricted);
-                    if (popup.Allowed)
+                    if (popup.Allowed && Allows(session, url, true))
                     {
                         RememberPage(session, page);
                         await route.ContinueAsync().ConfigureAwait(false);
@@ -141,114 +141,8 @@ public sealed partial class NativePlaywrightBrowser
         }
     }
 
-    private async Task FulfillWithoutLeavingPolicyAsync(SessionBrowser session, IRoute route, string url, bool documentNavigation)
-    {
-        var call = session.OperationCall;
-        if (documentNavigation
-            && string.Equals(route.Request.Method, "GET", StringComparison.OrdinalIgnoreCase))
-        {
-            var streamed = await TryStreamAttachmentAsync(session, route, url, call).ConfigureAwait(false);
-            if (streamed is not null)
-            {
-                lock (session.PopupGate)
-                {
-                    session.StagedDownloads.Add(streamed);
-                }
-
-                if (IsCancelled(session, call))
-                {
-                    await AbortQuietlyAsync(route).ConfigureAwait(false);
-                    return;
-                }
-
-                await route.FulfillAsync(new RouteFulfillOptions
-                {
-                    Status = 204,
-                    ContentType = "text/plain",
-                    Body = ""
-                }).ConfigureAwait(false);
-                return;
-            }
-        }
-
-        session.InFlightRoute = route;
-        IAPIResponse response;
-        try
-        {
-            if (IsCancelled(session, call))
-            {
-                await AbortQuietlyAsync(route).ConfigureAwait(false);
-                return;
-            }
-
-            response = await route.FetchAsync(new RouteFetchOptions
-            {
-                MaxRedirects = 0,
-                Timeout = TimeoutMs()
-            }).ConfigureAwait(false);
-            if (IsCancelled(session, call))
-            {
-                await AbortQuietlyAsync(route).ConfigureAwait(false);
-                return;
-            }
-        }
-        catch (PlaywrightException ex) when (IsTimeout(ex))
-        {
-            session.TimedOut = true;
-            await AbortQuietlyAsync(route).ConfigureAwait(false);
-            return;
-        }
-        catch (PlaywrightException) when (IsCancelled(session, call))
-        {
-            await AbortQuietlyAsync(route).ConfigureAwait(false);
-            return;
-        }
-        finally
-        {
-            if (ReferenceEquals(session.InFlightRoute, route))
-            {
-                session.InFlightRoute = null;
-            }
-        }
-
-        if (IsRedirect(response.Status) && !RedirectStaysAllowed(session, url, response.Headers, documentNavigation))
-        {
-            if (documentNavigation)
-            {
-                session.DeniedNavigation = true;
-            }
-
-            await AbortQuietlyAsync(route).ConfigureAwait(false);
-            return;
-        }
-
-        if (IsCancelled(session, call))
-        {
-            await AbortQuietlyAsync(route).ConfigureAwait(false);
-            return;
-        }
-
-        if (documentNavigation && TryAttachmentFileName(response.Headers, out var downloadName))
-        {
-            var staged = DeclaredOverDownloadCap(response.Headers)
-                ? new BrowserDownload("download_too_large", downloadName, null, null)
-                : await ReadCappedAttachmentAsync(session, route, response.Url, downloadName, call).ConfigureAwait(false);
-            lock (session.PopupGate)
-            {
-                session.StagedDownloads.Add(staged);
-            }
-
-            await route.FulfillAsync(new RouteFulfillOptions
-            {
-                Status = 204,
-                ContentType = "text/plain",
-                Body = ""
-            }).ConfigureAwait(false);
-            return;
-        }
-
-        await route.FulfillAsync(new RouteFulfillOptions { Response = response }).ConfigureAwait(false);
-    }
+    private Task FulfillWithoutLeavingPolicyAsync(SessionBrowser session, IRoute route, string url, bool documentNavigation) =>
+        StreamDocumentAsync(session, route, url, session.OperationCall, documentNavigation);
 
     private bool RedirectStaysAllowed(SessionBrowser session, string requestUrl, IDictionary<string, string> headers, bool documentNavigation)
     {
@@ -471,6 +365,10 @@ public sealed partial class NativePlaywrightBrowser
         var lease = LeaseOrigins(session);
         if (lease is not null)
         {
+            var hostAllowed = documentNavigation
+                ? BrowserTargetPolicy.EvaluateDestination(url, _policy.NavigationOrigins, _policy.PolicyMode).Allowed
+                : BrowserTargetPolicy.EvaluateResource(url, _policy.NavigationOrigins, _policy.EffectiveResourceOrigins, _policy.PolicyMode).Allowed;
+            if (!hostAllowed) return false;
             return documentNavigation
                 ? BrowserTargetPolicy.EvaluateDestination(url, lease, BrowserPolicyMode.Restricted).Allowed
                 : BrowserTargetPolicy.EvaluateResource(url, lease, lease, BrowserPolicyMode.Restricted).Allowed;
@@ -506,10 +404,10 @@ public sealed partial class NativePlaywrightBrowser
         var lease = LeaseOrigins(session);
         return lease is null
             ? IsAllowed(url)
-            : BrowserTargetPolicy.EvaluateDestination(url, lease, BrowserPolicyMode.Restricted).Allowed;
+            : IsAllowed(url) && BrowserTargetPolicy.EvaluateDestination(url, lease, BrowserPolicyMode.Restricted).Allowed;
     }
 
-    private static void RememberOpenPages(SessionBrowser session)
+    private void RememberOpenPages(SessionBrowser session)
     {
         foreach (var page in session.Context.Pages.ToArray())
         {
@@ -553,7 +451,7 @@ public sealed partial class NativePlaywrightBrowser
         }
     }
 
-    private static void RememberPage(SessionBrowser session, IPage? page)
+    private void RememberPage(SessionBrowser session, IPage? page)
     {
         if (page is null || PageClosed(page))
         {
@@ -583,7 +481,9 @@ public sealed partial class NativePlaywrightBrowser
             {
                 lock (session.PopupGate)
                 {
-                    session.PendingDownloads.Add(download);
+                    if (session.OperationActive && session.PendingDownloads.Count < _policy.Limits.DownloadsPerScope && !session.OperationToken.IsCancellationRequested)
+                        session.PendingDownloads.Add(download);
+                    else _ = CancelDownloadQuietlyAsync(download);
                 }
             };
         }

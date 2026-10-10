@@ -22,12 +22,8 @@ public static class BrowserTargetPolicy
             return rejected;
         }
 
-        if (policyMode == BrowserPolicyMode.OpenWeb)
-        {
-            return IsMetadataTarget(uri)
-                ? BrowserTargetDecision.Deny("target_denied", "Browser target is not allowed.")
-                : BrowserTargetDecision.Allow;
-        }
+        if (IsMetadataTarget(uri)) return BrowserTargetDecision.Deny("target_denied", "Browser target is not allowed.");
+        if (policyMode == BrowserPolicyMode.OpenWeb) return BrowserTargetDecision.Allow;
 
         if (!IsListedOrigin(uri, targetOrigins))
         {
@@ -134,6 +130,11 @@ public static class BrowserTargetPolicy
             return false;
         }
 
+        return IsForbiddenAddress(address);
+    }
+
+    public static bool IsForbiddenAddress(IPAddress address)
+    {
         if (address.IsIPv4MappedToIPv6)
         {
             address = address.MapToIPv4();
@@ -142,10 +143,12 @@ public static class BrowserTargetPolicy
         var bytes = address.GetAddressBytes();
         if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
         {
-            return bytes[0] == 169 && bytes[1] == 254;
+            return bytes[0] == 169 && bytes[1] == 254 || bytes[0] == 0 || bytes[0] >= 224
+                || address.Equals(IPAddress.Parse("100.100.100.200"));
         }
 
-        return bytes.Length == 16 && bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80;
+        return address.Equals(IPAddress.IPv6Any) || address.IsIPv6Multicast || address.IsIPv6LinkLocal
+            || address.Equals(IPAddress.Parse("fd00:ec2::254"));
     }
 
     public static bool IsLoopback(string? url)

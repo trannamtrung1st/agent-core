@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Plant operations</title>
+<style>
+body{margin:0;font:16px system-ui;color:#18283b;background:#eef3f8}nav{position:absolute;inset:0 auto 0 0;width:230px;padding:24px;background:#18283b;color:white;box-sizing:border-box}button,input{font:inherit;padding:8px}nav button{display:block;margin:14px 0}main{margin-left:255px;padding:24px}table{border-collapse:collapse;width:540px;background:white}td,th{padding:16px;border-bottom:1px solid #cad6e2;text-align:left}aside{background:white;padding:24px;margin-top:20px}label{display:block;margin:12px 0}.weak{position:absolute;left:650px;top:140px;width:60px;height:50px;background:#1266c4;cursor:pointer;border-radius:8px}.weak:after{content:"";position:absolute;left:22px;top:14px;border-left:18px solid white;border-top:12px solid transparent;border-bottom:12px solid transparent}.wrong{left:740px;background:#59697b}
+</style>
+<nav aria-label="Workspace navigation"><h2>North plant</h2><button onclick="show('Overview')">Overview</button><details open><summary>Projects</summary><button onclick="show('Cooling project')">Cooling project</button><button onclick="show('Boiler project')">Boiler project</button></details></nav>
+<main><h1 id="project">Overview</h1><section id="form"><h2>Inspection notes</h2><label>Notes <input id="notes"></label><button onclick="outcome.textContent='Notes saved: '+notes.value">Save notes</button></section><section id="assets" hidden><h2>Assets</h2><table aria-label="Project assets"><thead><tr><th>Record</th><th>Type</th><th>Action</th></tr></thead><tbody><tr><td>PUMP-1042</td><td>Cooling pump</td><td><button onclick="inspect('PUMP-1042')">Inspect</button></td></tr><tr><td>PUMP-2077</td><td>Backup pump</td><td><button onclick="inspect('PUMP-2077')">Inspect</button></td></tr></tbody></table></section><section id="weak" hidden><h2>PUMP-1042 visual controls</h2><p>The blue arrow opens the pump detail panel; the gray arrow opens the backup.</p><div class="weak" onclick="inspect('PUMP-1042')"></div><div class="weak wrong" onclick="inspect('PUMP-2077')"></div></section><aside aria-label="Asset detail" id="detail" hidden></aside><p id="status" role="status">Nothing selected</p><input type="password" value="private-fixture-password" hidden><input type="hidden" name="api_token" value="private-fixture-token"></main>
+<script>
+const outcome=document.getElementById('status');
+const mode=new URLSearchParams(location.search).get('mode')||'dashboard';
+form.hidden=mode!=='accessible';weak.hidden=mode!=='weak';
+function show(name){project.textContent=name;assets.hidden=mode==='weak'||mode==='accessible';outcome.textContent='Project: '+name;detail.hidden=true}
+function inspect(record){detail.hidden=false;detail.textContent='Asset '+record+' — pressure 4.2 bar — inspection current';outcome.textContent='Selected '+record}
+</script></html>

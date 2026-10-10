@@ -407,7 +407,7 @@ public sealed class BrowserLifecycleTests
             FixtureOrigin);
 
         public int UnattendedLeases { get; private set; }
-        public ValueTask<IAsyncDisposable> EnterUnattendedAsync(Guid owner, IReadOnlyList<string> origins, CancellationToken ct = default)
+        public ValueTask<IAsyncDisposable> EnterUnattendedAsync(Guid owner, IReadOnlyList<string>? origins, CancellationToken ct = default)
         {
             UnattendedLeases++;
             return ValueTask.FromResult<IAsyncDisposable>(new FixtureLease());

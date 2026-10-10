@@ -26,17 +26,20 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
     private readonly ConcurrentDictionary<Guid, SessionBrowser> _persistent = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _profileGates = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _contextUse = new();
-    private readonly ConcurrentDictionary<Guid, string[]> _unattendedLeases = new();
+    private readonly ConcurrentDictionary<Guid, UnattendedLease> _unattendedLeases = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _interactiveWaiters = new();
-    private readonly AsyncLocal<Guid?> _unattendedOwner = new();
+    private readonly AsyncLocal<UnattendedLease?> _unattendedOwner = new();
     private readonly ConcurrentBag<IPlaywright> _retiredDrivers = [];
     private readonly TimeProvider _time;
+    private readonly ConcurrentDictionary<(bool Agent, Guid Id), Lazy<BrowserDestinationProxy>> _ownerProxies = new();
+    private BrowserDestinationProxy? _destinationProxy;
     private IPlaywright? _playwright;
     private Microsoft.Playwright.IBrowser? _browser;
     private BrowserHostPolicy _policy;
     private int _runtimeReady;
     private int _stopped;
 
+    internal Func<string, IBrowserContext, Task>? InitializationProbe { get; set; }
     internal Func<Exception?>? CaptureProbe { get; set; }
     internal Func<IPage, int, int, Task>? ResizeProbe { get; set; }
     internal Func<IPage, Task>? ActivateTabProbe { get; set; }
@@ -51,7 +54,10 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         ILoggerFactory? loggerFactory,
         Func<CancellationToken, Task<bool>>? chromiumProbe = null, TimeProvider? timeProvider = null)
     {
+        options.Limits.Validate();
+        if (options.ScreenshotPrivacy is not ("DomMasking" or "Disabled")) throw new ArgumentException("Invalid browser screenshot privacy policy.");
         _options = options;
+        OperationTimeout = TimeSpan.FromMilliseconds(options.Limits.OperationTimeoutMs);
         _time = timeProvider ?? TimeProvider.System;
         _logger = loggerFactory?.CreateLogger<NativePlaywrightBrowser>()
             ?? NullLogger<NativePlaywrightBrowser>.Instance;
@@ -60,6 +66,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         _policy = options.ToHostPolicy();
     }
 
+    internal BrowserDestinationProxy? DestinationProxy => _destinationProxy;
+    internal bool HasBinding(Guid id) => _sessionOwners.ContainsKey(id);
     internal LoopbackBrowserFixtureHost Fixture => _fixture;
 
     internal bool? LaunchedHeadless { get; private set; }
@@ -115,6 +123,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             return;
         }
 
+        _destinationProxy = new BrowserDestinationProxy(_policy);
+        _destinationProxy.Start();
+
         Volatile.Write(ref _runtimeReady, 1);
     }
 
@@ -159,6 +170,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         _browser = null;
         _playwright = null;
         DrainRetiredDrivers();
+        foreach (var proxy in _ownerProxies.Values.Where(proxy => proxy.IsValueCreated)) await proxy.Value.DisposeAsync();
+        _ownerProxies.Clear();
+        if (_destinationProxy is not null) await _destinationProxy.DisposeAsync();
         await _fixture.DisposeAsync().ConfigureAwait(false);
     }
 
@@ -172,6 +186,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             return Unavailable();
         }
 
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(OperationTimeout);
+        var ct = deadline.Token;
         var operation = ((BrowserNavigate)request.Command).Operation is "back" or "forward" or "reload" ? ((BrowserNavigate)request.Command).Operation : "goto";
         if (operation == "goto")
         {
@@ -190,7 +207,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
                     ((BrowserNavigate)request.Command).Url,
                     leasedOrigins,
                     BrowserPolicyMode.Restricted);
-            if (!decision.Allowed)
+            if (!decision.Allowed || !BrowserTargetPolicy.EvaluateDestination(((BrowserNavigate)request.Command).Url,
+                    _policy.NavigationOrigins, _policy.PolicyMode).Allowed)
             {
                 return Result(decision.Code ?? "target_denied");
             }
@@ -201,16 +219,18 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         BrowserResult Outcome(BrowserResult result) => result with { EffectAttempted = attempted, EffectConfirmedBySdk = confirmed };
         SessionBrowser? session = null;
         var entered = false;
+        int? operationCall = null;
         try
         {
-            session = await EnsureSessionAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
-            await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            session = await EnsureSessionAsync(request.SessionId, ct).ConfigureAwait(false);
+            await session.Gate.WaitAsync(ct).ConfigureAwait(false);
             entered = true;
             session.DeniedNavigation = false;
             session.PopupCode = null;
             session.TimedOut = false;
-            var call = BeginCall(session);
-            using var registration = cancellationToken.Register(() => CancelCall(session, call));
+            var call = BeginCall(session, ct);
+            operationCall = call;
+            using var registration = ct.Register(() => CancelCall(session, call));
             try
             {
                 attempted = true;
@@ -221,7 +241,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
                             Timeout = TimeoutMs(),
                             WaitUntil = WaitUntilState.DOMContentLoaded
                         })
-                        .WaitAsync(cancellationToken)
+                        .WaitAsync(ct)
                         .ConfigureAwait(false);
                 }
                 else if (operation == "forward")
@@ -231,7 +251,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
                             Timeout = TimeoutMs(),
                             WaitUntil = WaitUntilState.DOMContentLoaded
                         })
-                        .WaitAsync(cancellationToken)
+                        .WaitAsync(ct)
                         .ConfigureAwait(false);
                 }
                 else if (operation == "reload")
@@ -241,7 +261,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
                             Timeout = TimeoutMs(),
                             WaitUntil = WaitUntilState.DOMContentLoaded
                         })
-                        .WaitAsync(cancellationToken)
+                        .WaitAsync(ct)
                         .ConfigureAwait(false);
                 }
                 else
@@ -253,7 +273,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
                                 Timeout = TimeoutMs(),
                                 WaitUntil = WaitUntilState.DOMContentLoaded
                             })
-                        .WaitAsync(cancellationToken)
+                        .WaitAsync(ct)
                         .ConfigureAwait(false);
                 }
                 confirmed = true;
@@ -281,7 +301,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
             if (session.DeniedNavigation || !IsAllowed(session, session.Page.Url))
             {
-                await RestoreAllowedPageAsync(session, cancellationToken).ConfigureAwait(false);
+                await RestoreAllowedPageAsync(session, ct).ConfigureAwait(false);
                 return Outcome(Result("target_denied"));
             }
 
@@ -293,7 +313,12 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
                 "navigate",
                 BrowserSnapshotSettle.Automatic,
                 timeoutMs: null,
-                cancellationToken).ConfigureAwait(false));
+                ct).ConfigureAwait(false));
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            if (session is not null) await FinishCancellationAsync(session);
+            return Outcome(Result("timeout"));
         }
         catch (OperationCanceledException)
         {
@@ -340,6 +365,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
             if (entered)
             {
+                if (operationCall is { } completed) await EndCallAsync(session!, completed);
                 session?.Gate.Release();
             }
         }
@@ -365,11 +391,12 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
             try
             {
-                _playwright = await Playwright.CreateAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+                _playwright = await OwnDriverAsync(Playwright.CreateAsync(), cancellationToken);
                 var options = new BrowserTypeLaunchOptions
                 {
                     Headless = _options.Headless,
-                    Args = ["--disable-popup-blocking"]
+                    Args = ["--disable-popup-blocking", "--proxy-bypass-list=<-loopback>", "--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"],
+                    Proxy = new() { Server = _destinationProxy!.Server }
                 };
                 if (!string.IsNullOrWhiteSpace(_options.Channel)) options.Channel = _options.Channel;
                 _browser = await _playwright.Chromium.LaunchAsync(options).WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -383,6 +410,13 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
                 _browser = null;
                 _logger.LogWarning("Browser provider is unavailable.");
                 throw new BrowserLaunchException();
+            }
+            catch
+            {
+                DisposeQuietly(_playwright);
+                _playwright = null;
+                _browser = null;
+                throw;
             }
         }
         finally
@@ -534,12 +568,26 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         session.Page.SetDefaultNavigationTimeout(TimeoutMs());
     }
 
-    private static int BeginCall(SessionBrowser session)
+    private static int BeginCall(SessionBrowser session, CancellationToken ct = default)
     {
+        session.OperationLifetime?.Dispose();
+        session.OperationLifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        session.OperationToken = session.OperationLifetime.Token;
+        session.OperationActive = true;
         session.CallPages = session.Context.Pages.ToHashSet();
         var call = session.OperationCall + 1;
         session.OperationCall = call;
         return call;
+    }
+
+    private static async Task EndCallAsync(SessionBrowser session, int call)
+    {
+        if (session.OperationCall != call) return;
+        session.OperationActive = false;
+        if (session.OperationLifetime is { } lifetime) { await lifetime.CancelAsync(); lifetime.Dispose(); session.OperationLifetime = null; }
+        IDownload[] pending;
+        lock (session.PopupGate) { session.StagedDownloads.Clear(); pending = session.PendingDownloads.ToArray(); session.PendingDownloads.Clear(); }
+        foreach (var download in pending) await CancelDownloadQuietlyAsync(download);
     }
 
     private void CancelCall(SessionBrowser session, int call)
@@ -653,7 +701,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             if (settle != BrowserSnapshotSettle.None)
             {
                 var budget = settle == BrowserSnapshotSettle.Automatic
-                    ? BrowserPageSettle.AutomaticDeadlineMs
+                    ? _policy.Limits.AutomaticSettleMs
                     : Math.Clamp(
                         timeoutMs ?? BrowserToolLimits.DefaultObserveTimeoutMs,
                         BrowserToolLimits.MinObserveTimeoutMs,
@@ -753,7 +801,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         || (exception is PlaywrightException && exception.Message.Contains("Timeout", StringComparison.Ordinal));
 
     private bool IsCancelled(SessionBrowser session, int call) =>
-        Volatile.Read(ref session.CancelledCall) == call;
+        session.OperationCall != call || Volatile.Read(ref session.CancelledCall) == call;
 
     private static bool IsCancel(Exception exception, CancellationToken cancellationToken) =>
         cancellationToken.IsCancellationRequested
@@ -776,7 +824,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         {
             await context.CloseAsync().ConfigureAwait(false);
         }
-        catch (PlaywrightException)
+        catch (Exception ex) when (ex is PlaywrightException or ObjectDisposedException)
         {
         }
     }
@@ -804,6 +852,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
     private static void AdvanceGeneration(SessionBrowser session)
     {
         Interlocked.Increment(ref session.Generation);
+        session.VisualSnapshotId = null;
         session.Frames.Clear();
     }
 
@@ -837,6 +886,11 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         public int RuntimeClosed;
 
         public int Generation;
+        public string? VisualSnapshotId;
+        public string? VisualState;
+        public IPage? VisualPage;
+        public Guid VisualSessionId;
+        public int VisualPageGeneration;
 
         public string? LastAllowedUrl { get; set; }
 
@@ -850,6 +904,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
         public bool AcceptingMainPage { get; set; }
 
+        public bool OperationActive { get; set; }
+        public CancellationTokenSource? OperationLifetime { get; set; }
+        public CancellationToken OperationToken { get; set; }
         public int OperationCall { get; set; }
 
         public int CancelledCall = -1;

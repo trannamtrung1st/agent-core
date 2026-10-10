@@ -87,7 +87,9 @@ internal static class AdminHttpMapping
                 config.DurableExecutionEligibility.CanAcceptNewTriggeredWork),
             config.UnattendedModelCatalogKey,
             config.UnattendedReasoningEffort,
-            config.Browser is { } browser ? new AdminBrowserConfigurationResponse(browser.ProviderId, browser.DisplayName, browser.Enabled, browser.Ready, browser.ProfileMode, browser.PolicyMode, browser.SupportedFeatures, browser.MaxSnapshotBytes, browser.MaxCaptureBytes, browser.MaxDownloadBytes, browser.Engine) : null);
+            config.Browser is { } browser ? new AdminBrowserConfigurationResponse(browser.ProviderId, browser.DisplayName, browser.Enabled, browser.Ready, browser.ProfileMode, browser.PolicyMode, browser.SupportedFeatures, browser.MaxSnapshotBytes, browser.MaxCaptureBytes, browser.MaxDownloadBytes, browser.Engine,
+                browser.Limits is { } limits ? new AdminBrowserLimitsResponse(limits.OperationTimeoutMs, limits.CapturesPerScope,
+                    limits.DownloadsPerScope, limits.FindMatches, limits.WaitTimeoutMs, limits.TextInputLength, limits.AutomaticSettleMs) : null) : null);
 
     private static AdminPersonaResponse ToPersona(AgentIdentity persona) =>
         new(persona.Name, persona.Role, persona.Description, persona.Tone);
