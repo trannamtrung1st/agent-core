@@ -111,6 +111,24 @@ public sealed class MultiTriggerAutomationJourneyTests
         Assert.Equal(builtinRun.TriggerOrigin! with { Summary = "Core Event · instance.config_changed" }, historicalRun.TriggerOrigin);
 
     }
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("[null]")]
+    [InlineData("[null,null]")]
+    public async Task Invalid_child_collections_are_validation_errors_without_partial_writes(string children)
+    {
+        await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"invalid-children-{Guid.NewGuid():N}.db"));
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var route = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
+        var body = System.Text.Json.Nodes.JsonNode.Parse("{\"expectedRevision\":0,\"enabled\":false,\"name\":\"Invalid children\",\"instructions\":\"Keep valid configuration\",\"executionTarget\":{\"kind\":\"backgroundSession\"},\"completionDelivery\":{\"kind\":\"none\"}}")!;
+        body["triggers"] = System.Text.Json.Nodes.JsonNode.Parse(children);
+        var response = await client.PostAsJsonAsync(route, body);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty((await client.GetFromJsonAsync<AutomationReview>(route))!.Items);
+    }
+
     private sealed class ExplicitUserAuthorizer : AgentCore.Application.Triggers.ITriggerCommandAuthorizer
     {
         public ValueTask<AgentCore.Application.Triggers.TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(string? text, string? language,

@@ -104,7 +104,9 @@ internal static class AdminAutomationEndpoints
     };
     internal static IReadOnlyList<AutomationTriggerRecord> ParseTriggers(AutomationRequest request)
     {
-        if (request.Triggers is null) throw AgentCoreErrors.Validation("Use the canonical triggers collection.");
+        if (request.Triggers is null || request.Triggers.Count is 0 or > TriggerLimits.MaxEventSubscriptions)
+            throw AgentCoreErrors.Validation("Use one Schedule or 1–32 Event subscriptions.");
+        if (request.Triggers.Any(t => t is null)) throw AgentCoreErrors.Validation("Every trigger must be a configured child record.");
         return request.Triggers.Select(t => new AutomationTriggerRecord(Guid.Parse(t.TriggerId ?? ""), ParseTrigger(t), t.Enabled, t.Revision)).ToArray();
     }
     private static AutomationTrigger ParseTrigger(AutomationTriggerDto? trigger)
