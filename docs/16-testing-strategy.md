@@ -505,3 +505,7 @@ Frontend tests and Synthetic Playwright cover unified catalog/read-only Built-in
 
 
 `automation-editor-recovery.spec.ts` treats Event children as a collection keyed by stable `triggerId`, preserving identity, enabled flags, source references and multiplicity without assuming response order. The mixed enabled/disabled sibling case forwards a real HTTP save and deliberately reverses its child response order, then asserts retained data by ID. SQLite may reconstruct children in ID order; that is not an Automation wire order guarantee. The other catalog-recovery/disabled-save scenarios remain covered.
+
+### Heading metadata layout verification
+
+For supporting heading text, inspect title/metadata proximity and wrapping at 1440/768/767/390px. Exercise inventory search/no-match recovery, Instance Persona/Lifecycle inspection, and local Settings edit/Discard with the unsaved marker beside the section title. Check actual bounding boxes, page overflow, console errors and failed requests. Component regressions cover Admin, Settings, Execution budgets, Definition editor, Background Work and Automations. Helpers open collapsible sections by accessible name rather than raw text including supporting labels. The [local heading verification report](reports/heading-metadata-layout-verification.md) records this change’s executed checks and remaining chat drawer runtime gap; documentation sync does not renew runtime or hosted acceptance.

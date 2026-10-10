@@ -80,13 +80,14 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, o
       const changed = Object.keys(draft.set).length + draft.clear.length > 0;
       const title = titles[section.section];
       const hasOverrides = Object.keys(draft.set).length > 0 || Object.keys(section.overrides).some(field => !draft.clear.includes(field));
-      return { key: section.section, label: title, extra: <Flex align="center" gap={token.paddingXS}>
+      return { key: section.section, label: <Flex wrap align="center" gap={token.paddingXS}>
+        <span>{title}</span>
         {changed && <Typography.Text type="secondary">Unsaved changes</Typography.Text>}
         {hasOverrides && <Tooltip trigger={['hover', 'focus', 'click']} title={changed ? 'Unsaved Instance overrides' : 'This section has Instance overrides.'}><InfoCircleOutlined tabIndex={0} aria-label={`${title}: Instance override`} /></Tooltip>}
       </Flex>, children: <Flex vertical gap={token.padding} role="group" aria-label={`${title} settings`}>
         {!own && <Button style={{ alignSelf: 'flex-start' }} aria-label={`Customize ${title}`} disabled={archived || busy} onClick={() => setCustomized(current => ({ ...current, [section.section]: true }))}>Customize</Button>}
         {section.section === 'instructions' && own && <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Saving replaces the complete operating instructions for this Instance. Review the inherited instructions before editing.</Typography.Paragraph>}
-        <Form layout="vertical" className="admin-config-form admin-settings-form admin-settings-field-grid instance-settings-form">
+        <Form layout="vertical" className={`admin-config-form admin-settings-form admin-settings-field-grid instance-settings-form${section.section === 'instructions' ? ' admin-settings-instructions' : ''}`}>
           {(fieldOrder[section.section] ?? Object.keys(section.effective)).filter(field => field in section.effective).map(field => {
             const inherited = section.effective[field];
             const value = draft.clear.includes(field) ? section.definitionDefaults?.[field] ?? null : field in draft.set ? draft.set[field] : inherited;

@@ -59,3 +59,7 @@ HANDOFF: CompletionDeliveryStatus adds Ready, In use and Handled in conversation
 ORIGINAL RESULT: Background Work preserves original title/status/result/attempts/attention/files across continued Chat. Continue in chat becomes Open chat with modest Continued in chat text; delivery accounting remains separate. Unknown historical file ownership is explained, and missing initial Runs remain explicitly unavailable. Reuse AntD Collapse for conversation Run history and existing wrapping/reading-region rules. See docs/reports/background-original-result-verification.md for this successor’s evidence; earlier closure is historical.
 
 BOUNDED REVIEW: October 9, 2026 inspection confirms the current Background Work catalog/detail layout with long original titles, attention/quiet outcomes, keyboard inspection/Back focus and 1440/768/390px sizing. No additional visual change was needed. Await settled drawer geometry after breakpoint transitions before capturing. See docs/reports/background-work-ui-review-verification.md; this is local verification and does not renew hosted acceptance.
+
+## Heading metadata sync (2026-10-10)
+
+Background Work initial Run status and Automations status follow the task title in a left-aligned wrapping row with an 8px compact gap. Background task titles use their natural width and wrap without growing to push status away. See [local verification](../../docs/reports/heading-metadata-layout-verification.md): live Admin checks at 1440/768/767/390px; chat drawer component coverage only. This sync adds no runtime run or hosted acceptance.

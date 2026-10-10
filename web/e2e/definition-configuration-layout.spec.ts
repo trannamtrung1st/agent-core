@@ -78,6 +78,10 @@ test('Definition configuration retains edits and navigation across shared sectio
       expect(Math.abs(toggle!.y + toggle!.height - field!.y - field!.height)).toBeLessThanOrEqual(1);
     }
     await editor.getByLabel('System instructions').scrollIntoViewIfNeeded();
+    const instructions = await editor.getByLabel('System instructions').boundingBox();
+    const instructionsSection = await editor.getByRole('region', { name: 'Instructions', exact: true }).boundingBox();
+    expect(Math.abs(instructions!.width - instructionsSection!.width)).toBeLessThanOrEqual(1);
+    if (width === 1440) expect(instructions!.width).toBeGreaterThan(768);
     const save = await editor.getByRole('button', { name: 'Save draft', exact: true }).boundingBox();
     expect(save!.y).toBeGreaterThanOrEqual(0);
     expect(save!.y + save!.height).toBeLessThanOrEqual(900);

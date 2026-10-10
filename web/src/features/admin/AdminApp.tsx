@@ -900,7 +900,7 @@ function InventorySection({
   );
   return (
     <section aria-label={title} className="admin-inventory-section">
-      <Flex align="baseline" justify="space-between" gap={12} className="admin-inventory-heading">
+      <Flex align="baseline" wrap gap="var(--ac-space-compact)" className="admin-inventory-heading">
         <Typography.Title level={4}>{title}</Typography.Title>
         {countLabel ? <Typography.Text type="secondary">{countLabel}</Typography.Text> : null}
       </Flex>
@@ -1550,7 +1550,7 @@ function DefinitionDetail({
                   { key: "drafts", label: "Drafts", children: <>
                     {!lifecycleLoading && draftSummaries.length > 0 ? (
                       <div className="admin-draft-list">
-                        <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-list-heading">
+                        <Flex align="baseline" wrap gap="var(--ac-space-compact)" className="admin-draft-list-heading">
                           <Typography.Text strong>Existing drafts</Typography.Text>
                           <Typography.Text type="secondary">{draftSummaries.length}</Typography.Text>
                         </Flex>
@@ -1933,23 +1933,23 @@ function DraftEditor({
 
   return (
     <Flex vertical gap={12} className="admin-draft-editor">
-      <Flex align="start" justify="space-between" gap={12} wrap="wrap" className="admin-draft-editor-heading">
-        <div>
+      <Flex vertical gap={token.paddingXS} className="admin-draft-editor-heading">
+        <Flex align="baseline" wrap gap={token.paddingXS}>
           <Typography.Title level={5}>
             {activeDraft.sourceVersion != null
               ? `Editing draft from v${activeDraft.sourceVersion}`
               : "Editing draft"}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            Revision {activeDraft.revision} · Updated {formatAdminTimestamp(activeDraft.updatedAt)}
+          <Typography.Text
+            type="secondary"
+            copyable={{ text: activeDraft.draftId, tooltips: ["Copy draft ID", "Copied"] }}
+            className="admin-draft-id"
+          >
+            ID {activeDraft.draftId.slice(0, 8)}…
           </Typography.Text>
-        </div>
-        <Typography.Text
-          type="secondary"
-          copyable={{ text: activeDraft.draftId, tooltips: ["Copy draft ID", "Copied"] }}
-          className="admin-draft-id"
-        >
-          ID {activeDraft.draftId.slice(0, 8)}…
+        </Flex>
+        <Typography.Text type="secondary">
+          Revision {activeDraft.revision} · Updated {formatAdminTimestamp(activeDraft.updatedAt)}
         </Typography.Text>
       </Flex>
       <DraftEditorActions
@@ -2884,7 +2884,7 @@ export function InstanceManagedControls({
       description="Update the persona, active definition version, and lifecycle."
       className="admin-instance-management" bodyClassName="admin-instance-control-grid">
         <section className="admin-instance-persona" aria-label="Persona editor">
-          <Flex align="baseline" justify="space-between" gap={12} wrap="wrap">
+          <Flex align="baseline" gap="var(--ac-space-compact)" wrap>
             <Typography.Title level={5}>Persona</Typography.Title>
             <Typography.Text type="secondary">
               Rev {config.personaRevision}
@@ -3005,7 +3005,7 @@ export function InstanceManagedControls({
             </Flex>
           </section>
           <section className="admin-instance-lifecycle" aria-label="Lifecycle controls">
-            <Flex align="baseline" justify="space-between" gap={12} wrap="wrap">
+            <Flex align="baseline" gap="var(--ac-space-compact)" wrap>
               <Typography.Title level={5}>Lifecycle</Typography.Title>
               <Tag color={config.instanceLifecycle === "Active" ? "green" : "default"}>
                 {config.instanceLifecycle}

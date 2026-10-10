@@ -12,6 +12,7 @@ The [design guide](../../../../.agents/context/DESIGN.md) owns presentation guid
 - The body stack clears direct Typography margins so paragraphs do not add another gap.
 - Use `extra` for heading actions. Preserve accessible action labels and loading/disabled states at the call site.
 - Avoid another padded container inside the panel body. Child controls retain their normal Ant Design internal padding.
+- Operating instructions uses the shared `admin-settings-instructions` form variant to fill the section width. Its multiline textarea is excluded from the short-control cap; other Settings forms retain their 48rem bound.
 
 ```tsx
 <AgentConfigurationPanel

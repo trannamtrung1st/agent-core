@@ -258,7 +258,7 @@ function DefinitionCandidateForm({
           <Collapse items={[
             {
               key: "instructions", label: "Operating instructions", children: (
-                <section className="admin-draft-form-section admin-settings-form" aria-label="Instructions">
+                <section className="admin-draft-form-section admin-settings-form admin-settings-instructions" aria-label="Instructions">
                   <label className="admin-draft-field">
                     <Typography.Text>System instructions</Typography.Text>
                     <Input.TextArea
@@ -547,8 +547,10 @@ function DefinitionCandidateForm({
               )
             },
             {
-              key: "triggerPolicy", label: "Trigger restrictions",
-              extra: triggerErrors.length > 0 ? <Typography.Text type="danger" aria-hidden>Needs attention</Typography.Text> : undefined,
+              key: "triggerPolicy", label: <Flex wrap align="center" gap="var(--ac-space-compact)">
+                <span>Trigger restrictions</span>
+                {triggerErrors.length > 0 && <Typography.Text type="danger" aria-hidden>Needs attention</Typography.Text>}
+              </Flex>,
               children: (
                 <section className="admin-draft-form-section admin-settings-form" aria-label="Automation policy">
                   {(

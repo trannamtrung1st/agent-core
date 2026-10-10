@@ -652,7 +652,6 @@ body,
 
 /* Work names are content headings; history has one explicit action. */
 .background-work-item-title.ant-typography {
-  flex: 1 1 12rem;
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
@@ -1611,7 +1610,8 @@ body,
 }
 
 .admin-inventory-heading .ant-typography-secondary {
-  flex: 0 0 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 12px;
 }
 
@@ -1877,7 +1877,7 @@ body,
 }
 
 .admin-draft-editor-heading h5.ant-typography {
-  margin: 0 0 var(--ac-space-compact);
+  margin: 0;
 }
 
 .admin-draft-id {
@@ -2286,6 +2286,7 @@ body,
 .admin-configuration-sections,
 .admin-configuration-sections .ant-tabs-content-holder { min-width: 0; }
 .admin-settings-form { width: 100%; max-width: 48rem; min-width: 0; }
+.admin-settings-form.admin-settings-instructions { max-width: none; }
 .admin-definition-settings .admin-draft-form-section:not(:first-child) {
   padding-block-start: 0;
   border-block-start: 0;
@@ -2295,7 +2296,7 @@ body,
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--ac-space-section);
 }
-.admin-definition-settings .admin-draft-field > .ant-input,
+.admin-definition-settings .admin-draft-field > .ant-input:not(.admin-draft-instructions),
 .admin-definition-settings .admin-draft-field > .ant-select { max-width: 20rem; }
 .admin-definition-settings .admin-draft-field > .ant-select-multiple { max-width: none; }
 .admin-definition-settings .admin-draft-field > .ant-input-number { max-width: 12rem; }

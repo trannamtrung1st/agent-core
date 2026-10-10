@@ -88,3 +88,9 @@ Current source baseline: `9145e66e`. Preserve the refactored branch compositions
 Built-in subscriber inspection uses an 8px heading/selector/table stack, compact collection table, 500px local scroll, 280px ellipsis name and 220px wrapping state columns. Full accessible names and titles accompany shortened display text. Delivery diagnostics use the same wrapping/tabular-numeral owner and 650px local scroll. Existing 640px/full-mobile drawers and 40px mobile controls apply to both. Exact owned navigation, stale-read guards and recovery remain feature behavior under docs/13.
 
 The main UI consistency report records Synthetic interactions and computed widths/insets at 1440/768/767/390px, 40 focused component tests and 13 browser checks. This context sync reuses that evidence; it does not rerun the application or renew hosted acceptance.
+
+## Heading metadata sync (2026-10-10)
+
+Inventory/draft counts, draft title/ID, Persona revision, Lifecycle status, Settings markers and collapsed attention labels follow their titles in a left-aligned wrapping row with an 8px compact gap. Draft revision/update remain below the title/ID. Heading actions and numeric table alignment retain their separate owners. See [local verification](../../docs/reports/heading-metadata-layout-verification.md): live Admin checks at 1440/768/767/390px; chat drawer component coverage only. This sync adds no runtime run or hosted acceptance.
+
+Operating instructions width refinement: reuse `admin-settings-instructions` to fill the section in Definition drafts, immutable inspection and Instance settings; exclude its textarea from the short-field cap. Other forms retain 48rem and compact controls. Verify saved long text and no horizontal page overflow across wide/mobile layouts.

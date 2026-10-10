@@ -241,9 +241,12 @@ async function renderCandidate(candidate: DefinitionCandidate = storedCandidate)
 
 function openSettings(...sections: string[]) {
   fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
-  const names = new Set(sections.length ? sections : ["Operating instructions", "Model defaults"]);
-  const headers = screen.getAllByRole("button").filter(header => names.has(header.textContent?.trim() ?? "") && header.getAttribute("aria-expanded") === "false");
-  for (const header of headers) fireEvent.click(header);
+  const settings = document.querySelector<HTMLElement>(".admin-definition-settings > .ant-collapse")!;
+  const names = sections.length ? sections : ["Operating instructions", "Model defaults"];
+  for (const name of names) {
+    const header = within(settings).getByRole("button", { name });
+    if (header.getAttribute("aria-expanded") === "false") fireEvent.click(header);
+  }
 }
 
 async function chooseOption(label: string, optionName: string) {

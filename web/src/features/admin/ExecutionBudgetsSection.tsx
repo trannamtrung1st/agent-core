@@ -11,9 +11,12 @@ const fieldLabels = { maxSteps: 'Steps', durationSeconds: 'Duration (seconds)', 
 const minimums = { maxSteps: 8, durationSeconds: 60, perToolSeconds: 1 };
 const emptyPolicy: ExecutionBudgetPolicy = {};
 function ExecutionBudgetPanel({ children, needsAttention }: { children: ReactNode; needsAttention?: boolean }) {
+  const { token } = theme.useToken();
   return <section aria-label="Execution budgets"><Collapse defaultActiveKey={['budgets']} items={[{
-    key: 'budgets', label: 'Execution budgets',
-    extra: needsAttention ? <Typography.Text type="danger" aria-hidden>Needs attention</Typography.Text> : undefined,
+    key: 'budgets', label: <Flex wrap align="center" gap={token.paddingXS}>
+      <span>Execution budgets</span>
+      {needsAttention && <Typography.Text type="danger" aria-hidden>Needs attention</Typography.Text>}
+    </Flex>,
     children,
   }]} /></section>;
 }

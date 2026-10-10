@@ -188,7 +188,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
         <ul ref={list} className="background-work-list" aria-label="Background Sessions">
           {page.items.map(item => <li className="background-work-item" key={item.session.sessionId} data-background-session-id={item.session.sessionId}>
             <Flex vertical gap={token.paddingXS}>
-              <Flex wrap align="center" justify="space-between" gap={token.paddingXS}>
+              <Flex wrap align="center" gap={token.paddingXS}>
                 <Typography.Title level={5} className="background-work-item-title">{item.originalTitle ?? "Background task"}</Typography.Title>
                 {item.initialRun ? <AgentRunStatus run={item.initialRun} /> : null}
               </Flex>
