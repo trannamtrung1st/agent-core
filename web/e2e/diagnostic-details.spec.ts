@@ -34,7 +34,9 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
 
 test("repeated blocked strategies remain bounded and terminal finalization diagnostics survive reload", async ({ page }) => {
   await page.goto("/");
-  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 }, {
+    interactiveBrowser: { maxSteps: 8, durationSeconds: 300, perToolSeconds: 30, preset: 3 }
+  });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("synthetic-invalid-tool-turn");
   await page.getByRole("button", { name: "Send" }).click();
@@ -47,8 +49,8 @@ test("repeated blocked strategies remain bounded and terminal finalization diagn
   await expect(page.getByRole("status")).toHaveText("Copied");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Reason: finalizationToolCall");
   const run = await latestRun(page);
-  expect(run.budget.stepsConsumed).toBeGreaterThan(2);
-  expect(run.budget.stepsConsumed).toBeLessThanOrEqual(run.budget.maxSteps);
+  expect(run.budget.maxSteps).toBe(8);
+  expect(run.budget.stepsConsumed).toBe(8);
   expect(run.budget.terminationReason).toBe("stepLimit");
   await page.reload();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });

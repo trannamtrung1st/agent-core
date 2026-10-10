@@ -54,11 +54,14 @@ test.describe('Morgan secretary Synthetic journey', () => {
   }
 
   async function saveDraft(page: Page) {
-    await Promise.all([
+    const [response] = await Promise.all([
       page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes('/definition-drafts/') && r.ok()),
       draftEditorSection(page).getByRole('button', { name: 'Save draft', exact: true }).click()
     ]);
     await expect(draftEditorSection(page).getByRole('button', { name: 'Save draft', exact: true })).toBeDisabled();
+    const saved = await response.json();
+    expect(saved.candidate.triggerPolicy.enabled).toBe(true);
+    expect(saved.candidate.triggerPolicy.allowedSourceKinds).toEqual(['schedule']);
   }
 
   // Real page errors, transport failures, and server errors always fail the journey.
@@ -141,6 +144,12 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await completeDefinitionDraftPublishGate(page, editor);
     await publishDraftFromInstructions(page, editor);
+    const publication = await page.request.get(`/api/v2/admin/definitions/${definitionId}/versions/1?sourceKind=ForkDurable`,
+      { headers: await headers(page) });
+    expect(publication.ok()).toBe(true);
+    const published = await publication.json();
+    expect(published.triggerPolicy.enabled).toBe(true);
+    expect(published.triggerPolicy.allowedSourceKinds).toEqual(['schedule']);
     await page.goto('/admin');
     await page.getByRole('tab', { name: 'Instances', exact: true }).click();
     await page.getByRole('button', { name: 'New instance', exact: true }).click();

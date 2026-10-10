@@ -3,6 +3,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
 
 namespace AgentCore.Infrastructure.Persistence;
 
@@ -164,6 +165,10 @@ public sealed class SqliteAgentDefinitionAdminStore(
         catch (DbUpdateConcurrencyException)
         {
             throw AgentCoreErrors.Conflict("Draft revision is stale.");
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 5 or 6 })
+        {
+            throw AgentCoreErrors.Conflict("Draft write is busy. Reload the draft before retrying.");
         }
 
         return AgentDefinitionAdminMapping.MapDraft(row);

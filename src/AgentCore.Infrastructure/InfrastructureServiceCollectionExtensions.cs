@@ -142,7 +142,8 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<IDefinitionDraftEvaluationStore>(provider =>
                 new SqliteDefinitionDraftEvaluationStore(
                     provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
-                    provider.GetRequiredService<IIdGenerator>()));
+                    provider.GetRequiredService<IIdGenerator>(),
+                    Math.Max(1, persistence.BusyTimeoutMs)));
             services.AddSingleton<IBrowserPrivacyStore, SqliteBrowserPrivacyStore>();
             services.AddSingleton<IAdminEventStore>(provider => new SqliteAdminEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
