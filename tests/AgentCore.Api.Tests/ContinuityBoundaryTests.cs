@@ -252,7 +252,7 @@ public sealed class ContinuityBoundaryTests
         var harness = s.GetRequiredService<HarnessManagementService>();
         instance = await harness.ConfigureAsync(id, instance.Revision, new(HarnessManagementMode.Assisted, [HarnessManagementScope.KnowledgeResources], [], []));
         var response = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{id}/automations", new {
-            expectedRevision = 0, enabled = true, name = "Review", instructions = "synthetic-automation-improve", executionTarget = new { kind = "backgroundSession" }, completionDelivery = new { kind = "none" }, trigger = new { kind = "schedule", schedule = new { kind = "fixedInterval", interval = 3600, anchorAtUtc = DateTimeOffset.UtcNow.AddHours(1).ToString("o") } }, origin = "UserTurn", ownerId = Guid.NewGuid() });
+            expectedRevision = 0, enabled = true, name = "Review", instructions = "synthetic-automation-improve", executionTarget = new { kind = "backgroundSession" }, completionDelivery = new { kind = "none" }, triggers = new[] { new { triggerId = Guid.NewGuid().ToString(), revision = 1, enabled = true, kind = "schedule", schedule = new { kind = "fixedInterval", interval = 3600, anchorAtUtc = DateTimeOffset.UtcNow.AddHours(1).ToString("o") } } }, origin = "UserTurn", ownerId = Guid.NewGuid() });
         response.EnsureSuccessStatusCode();
         var reg = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
         var automations = s.GetRequiredService<AdminAutomationAuthoringService>();

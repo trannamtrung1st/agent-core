@@ -820,32 +820,14 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("AuthorizationOrigin")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("CoreEventKey")
-                        .HasColumnType("TEXT");
-
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
-
-                    b.Property<int>("DispatchMode")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(0);
-
-                    b.Property<int?>("DispatchWindowSeconds")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("EventId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
 
                     b.Property<int>("ExecutionTargetKind")
                         .HasColumnType("INTEGER");
 
                     b.Property<long?>("ExpiresAtUtc")
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("FilterExpression")
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("Instructions")
                         .IsRequired()
@@ -895,10 +877,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("ScheduleJson")
-                        .HasMaxLength(4000)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("SourceEventId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
@@ -917,18 +895,13 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("TargetSessionId")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("TriggerKind")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("TriggerRevision")
+                    b.Property<int>("TriggerMode")
                         .HasColumnType("INTEGER");
 
                     b.Property<long>("UpdatedAtUtc")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("AutomationId");
-
-                    b.HasIndex("EventId", "Status");
 
                     b.HasIndex("AgentInstanceId", "ProfileId", "Status");
 
@@ -938,11 +911,72 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_Automations_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
 
-                            t.HasCheckConstraint("CK_Automations_Dispatch", "(DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (DispatchMode = 1 AND DispatchWindowSeconds BETWEEN 60 AND 3600)");
+                            t.HasCheckConstraint("CK_Automations_Mode", "TriggerMode IN (0,1)");
 
                             t.HasCheckConstraint("CK_Automations_Preset", "(PresetId IS NULL AND PresetVersion IS NULL) OR (PresetId IS NOT NULL AND PresetVersion >= 1)");
+                        });
+                });
 
-                            t.HasCheckConstraint("CK_Automations_Trigger", "(TriggerKind = 0 AND ScheduleJson IS NOT NULL AND EventId IS NULL AND CoreEventKey IS NULL AND FilterExpression IS NULL AND DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (TriggerKind = 1 AND ScheduleJson IS NULL AND EventId IS NOT NULL AND CoreEventKey IS NULL) OR (TriggerKind = 2 AND ScheduleJson IS NULL AND EventId IS NULL AND CoreEventKey IS NOT NULL)");
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AutomationTriggerRecordEntity", b =>
+                {
+                    b.Property<string>("TriggerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AutomationId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CoreEventKey")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DispatchMode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("DispatchWindowSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EventId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FilterExpression")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ScheduleJson")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TriggerId");
+
+                    b.HasIndex("AutomationId", "CoreEventKey")
+                        .IsUnique()
+                        .HasFilter("CoreEventKey IS NOT NULL");
+
+                    b.HasIndex("AutomationId", "EventId")
+                        .IsUnique()
+                        .HasFilter("EventId IS NOT NULL");
+
+                    b.HasIndex("AutomationId", "Kind")
+                        .IsUnique()
+                        .HasFilter("Kind = 0");
+
+                    b.HasIndex("EventId", "Enabled");
+
+                    b.ToTable("AutomationTriggers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AutomationTriggers_Dispatch", "(DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (DispatchMode = 1 AND DispatchWindowSeconds BETWEEN 60 AND 3600)");
+
+                            t.HasCheckConstraint("CK_AutomationTriggers_Identity", "length(TriggerId) = 36 AND TriggerId <> '00000000-0000-0000-0000-000000000000' AND Revision >= 1");
+
+                            t.HasCheckConstraint("CK_AutomationTriggers_Source", "(Kind = 0 AND ScheduleJson IS NOT NULL AND EventId IS NULL AND CoreEventKey IS NULL AND FilterExpression IS NULL AND DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (Kind = 1 AND ScheduleJson IS NULL AND EventId IS NOT NULL AND CoreEventKey IS NULL) OR (Kind = 2 AND ScheduleJson IS NULL AND EventId IS NULL AND CoreEventKey IN ('run.completed','run.failed','session.completed','session.ended','instance.config_changed','harness.definition_adopted'))");
                         });
                 });
 
@@ -1046,6 +1080,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TriggerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("TriggerRevision")
                         .HasColumnType("INTEGER");
 
@@ -1061,10 +1099,14 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("EventId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("AutomationId")
+                    b.Property<string>("TriggerId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AutomationId")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
@@ -1085,7 +1127,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("EventId", "AutomationId");
+                    b.HasKey("EventId", "TriggerId");
 
                     b.HasIndex("AgentInstanceId", "ProfileId", "Status");
 
@@ -1337,11 +1379,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("AutomationId")
-                        .HasMaxLength(36)
+                    b.Property<string>("TriggerId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AutomationId")
                         .IsRequired()
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
@@ -1360,9 +1406,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("EventId", "AutomationId");
+                    b.HasKey("EventId", "TriggerId");
 
-                    b.HasIndex("Status", "EventId", "AutomationId");
+                    b.HasIndex("Status", "EventId", "TriggerId");
 
                     b.ToTable("ExternalEventDeliveries", (string)null);
                 });
@@ -1895,6 +1941,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("TargetSessionId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TriggerId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long?>("TriggerRevision")
                         .HasColumnType("INTEGER");
 
@@ -2039,6 +2088,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AutomationTriggerRecordEntity", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AutomationRecord", null)
+                        .WithMany("Triggers")
+                        .HasForeignKey("AutomationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.BackgroundCompletionReceiptRecord", b =>
                 {
                     b.HasOne("AgentCore.Infrastructure.Persistence.AgentRunRecord", null)
@@ -2091,6 +2149,11 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("LiveSessionId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AutomationRecord", b =>
+                {
+                    b.Navigation("Triggers");
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SessionRecord", b =>

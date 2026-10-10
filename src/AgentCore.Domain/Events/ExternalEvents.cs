@@ -130,7 +130,8 @@ public sealed record ExternalEventDelivery(
     Guid AutomationId,
     Guid AgentInstanceId,
     Guid ProfileId,
-    ExternalEventDeliveryStatus Status, EventSubscriptionSnapshot? Snapshot = null, EventFilterResult? Decision = null);
+    ExternalEventDeliveryStatus Status, EventSubscriptionSnapshot? Snapshot = null, EventFilterResult? Decision = null)
+{ public Guid TriggerId { get; init; } = Snapshot?.TriggerId ?? AutomationId; }
 
 public sealed class ExternalEvent
 {

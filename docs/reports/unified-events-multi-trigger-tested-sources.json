@@ -1,0 +1,493 @@
+{
+  "baseline_head": "38a610071a7a472506d98ab466ee45503f7a9466",
+  "candidate_base_head": "3de4f095cf012b52ecbe85d1747e851db5442735",
+  "candidate_kind": "shared local working tree",
+  "files": [
+    {
+      "path": "src/AgentCore.Api/AdminAutomationEndpoints.cs",
+      "sha256": "b66918c3a33ffc51c0a230b21317cccc73c32eef1c11518ef1c863820e55f8c7"
+    },
+    {
+      "path": "src/AgentCore.Api/AdminBrowserPrivacyEndpoints.cs",
+      "sha256": "91b17c0e9b01f4a87887d3e09628b50cd94a0fad2646186a599d9655c5531a5e"
+    },
+    {
+      "path": "src/AgentCore.Api/AdminEndpoints.cs",
+      "sha256": "e25f5687491e0f9333639504d664399b6c28591893f12cf505426f9df997beb3"
+    },
+    {
+      "path": "src/AgentCore.Api/AdminWebhookEventEndpoints.cs",
+      "sha256": "7f0b0f6352026a6cde22bb9e016f196b12b13216b89ff0fd94c3f8294234f1e7"
+    },
+    {
+      "path": "src/AgentCore.Api/BackgroundSessionEndpoints.cs",
+      "sha256": "725721e120578cdb7cfefbfcf3b446b608349dc8bad6e78fa0093bf5523b2419"
+    },
+    {
+      "path": "src/AgentCore.Api/SessionAutomationEndpoints.cs",
+      "sha256": "c71a68e76ca1bc8b34196faea92792b8914d706e9ba9e7cd92eb7f78bbfd3700"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/AdminEvent.cs",
+      "sha256": "5d50ac8db4ca96d38a52146d429bffcbb59cad97f7b7b645c9f02c610592b30a"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/AdminEventSummaryPolicy.cs",
+      "sha256": "4cc3d04bb4dbe3ca25a1207eb74a46c9c1d22913d77dae35d52453e939775fe9"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/BrowserPrivacyService.cs",
+      "sha256": "a36136838cf5258bfad547772d0bfeab60eb958db9366d8a1072ee28e3a2daa1"
+    },
+    {
+      "path": "src/AgentCore.Application/Events/CoreEventDispatcher.cs",
+      "sha256": "37e3e23d2f2d9b1bfa88c04258f5b91c1b9ef94ce194bf5905dbd32058ee41a2"
+    },
+    {
+      "path": "src/AgentCore.Application/Events/ExternalEventIngress.cs",
+      "sha256": "2a226e49a8cacaa2120c3bfd1f5e0cb8177d81e72a7a551f40160fb8f14b589c"
+    },
+    {
+      "path": "src/AgentCore.Application/Events/UnifiedEventCatalog.cs",
+      "sha256": "11cab2fb74980c87c0cc955f389a1fc84b35cb58a7fc5f16af7d891bcbe549fc"
+    },
+    {
+      "path": "src/AgentCore.Application/Execution/BrowserCleanupIntentRecognition.cs",
+      "sha256": "216133bdd4915aa0281ae5ff9461722fa4a79d0da71be0696878f90a7c01d6a5"
+    },
+    {
+      "path": "src/AgentCore.Application/Execution/RunFinalization.cs",
+      "sha256": "ae770dda7dde0e5908e835355ba655958a7bbc6e9152aaa88f4f3563c028d4d1"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/Browser.cs",
+      "sha256": "aa6f8061469fbfd087c138762aeb64590c5033df0f66d7cf26188ac0e1005c32"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/BrowserPrivacy.cs",
+      "sha256": "4fac54df920dac303162800b6c6a07f7ca5fb2a61f9d6346aa904a68531773eb"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/CoreEvents.cs",
+      "sha256": "ec1555541d750d810de0de33518ab3edd28d36395abdc5944c83f055f9cc23bf"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/ExternalEvents.cs",
+      "sha256": "37d4498a2780655dca1d4ed75bfc1a0d2136eb3b7fd0e4d002a6940204f56d00"
+    },
+    {
+      "path": "src/AgentCore.Application/Sessions/SessionRuntime.cs",
+      "sha256": "5d09307a6c89e0509a44042f21c0f533439234eae811fa28901ae366966ab792"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/BrowserEvidenceProgress.cs",
+      "sha256": "699fbda8ba2d1a4a0a99cca7edb55066495246ea34e5cb5b1ce6e59b17db83fd"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/BrowserObservationGuidance.cs",
+      "sha256": "18bfa63b29edaa444979728856f5fa9a4180011ff93a556b00a0ba8f752ad053"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.Browser.cs",
+      "sha256": "cf2c7bfd26321bc869e3dab15e8e596d05fec2b1dead976b1f5f011297fb2e3c"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.cs",
+      "sha256": "f8efd93bb716554330f0cd7927f10f80399e06ed541e23ddae0d2fb64f6b80a1"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/ToolRegistry.cs",
+      "sha256": "b004ddbefa7de0fbfee5ef1d7cefd07a0efc3e3fe4f21b998d279268a81be47e"
+    },
+    {
+      "path": "src/AgentCore.Application/Triggers/AdminAutomationAuthoringService.cs",
+      "sha256": "6d12f0cb7e3fa3311558bcf1e595ed04f11371c3101de4bdc8c2198717b5ccb2"
+    },
+    {
+      "path": "src/AgentCore.Application/Triggers/AutomationRules.cs",
+      "sha256": "f4ef19c91c94d81a0d99c9020c5c2d73a575c7203ce0973a63a03c11503e9ae7"
+    },
+    {
+      "path": "src/AgentCore.Application/Triggers/TriggerOccurrenceRouting.cs",
+      "sha256": "cc9c3b040e4c8dddd30aa5b0cc5b861df3fb7d85a89c783ec585b932ba88ff94"
+    },
+    {
+      "path": "src/AgentCore.Application/Triggers/TriggerScheduleAdmission.cs",
+      "sha256": "6eec4b498ab55c6ffd9c575996359d4eb96b5d95b91d75f6ddcfe260575170f2"
+    },
+    {
+      "path": "src/AgentCore.Application/Triggers/TriggerScheduleCommands.cs",
+      "sha256": "bbfc222420d0957a99ad86c9869672182957854926e281d0fe0152283927e3ee"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Http/AdminDtos.cs",
+      "sha256": "48d0aa33c1337136a3f8e9cf3c66f876c157aaa22424b6785b4947a62c66f051"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Http/AgentRunDtos.cs",
+      "sha256": "d24c2d0c9acb072c5a28906d5d7f1f8343cddddd30244b029c8d2e5440bd19f4"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Http/AutomationDtos.cs",
+      "sha256": "6aa1f269f1a27c981c7828742e39395923e43ec3d07cfca3f1f5f5a7e006c2dc"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Http/BrowserPrivacyDtos.cs",
+      "sha256": "816d2cba558b3fe05624a3bdcc3c46a35e46ff2770cb356264f536b8160b958b"
+    },
+    {
+      "path": "src/AgentCore.Domain/Events/BuiltInEventDefinitions.cs",
+      "sha256": "b30c6ca600782e3db4e1a7b266c802ded9ecdb20c94f3fbf325907037a11bb80"
+    },
+    {
+      "path": "src/AgentCore.Domain/Events/CoreEvents.cs",
+      "sha256": "b1e1dc56cf997219f2e3293716c92e2bd4bbfdab60a67667234a8a0075e74d44"
+    },
+    {
+      "path": "src/AgentCore.Domain/Events/EventSourceReference.cs",
+      "sha256": "4ccf7d4a8946a02162c3a17d5ebc2bd374da717dde2e024264cdf68cf2cdb82b"
+    },
+    {
+      "path": "src/AgentCore.Domain/Events/ExternalEvents.cs",
+      "sha256": "2d00229f5211d1e01228feaea06cc5aefc49f1ca2c19c9516ca44fe0c7690bb4"
+    },
+    {
+      "path": "src/AgentCore.Domain/Triggers/AutomationTrigger.cs",
+      "sha256": "81947848acc7479f8a3307cfedd07b6f76202e6fc940541248a3fcc31e1af2be"
+    },
+    {
+      "path": "src/AgentCore.Domain/Triggers/TriggerModels.cs",
+      "sha256": "71ad453c803a0ca170930e09cc0b942677bc2ae24bf0ec667405340276c12f94"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/BrowserOptions.cs",
+      "sha256": "7bee3caf81dbce197270c124ba9c6add11b5772bccd7bd19a3278888e74dbbb8"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/LoopbackBrowserFixtureHost.cs",
+      "sha256": "e0abf86fa6f60d9aaf2bfc1baca18721ef287a786db0cb09aea4b93277d63469"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/NativePlaywrightBrowser.Artifacts.cs",
+      "sha256": "c8cc3c901939c1320b6c31db610977d6db931269ce6377200252bcfb46bdd5f6"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/NativePlaywrightBrowser.Environment.cs",
+      "sha256": "d8a3b010548c97be465a3ac393df694b83ef3d342e34d71b65df2226368ea880"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/NativePlaywrightBrowser.cs",
+      "sha256": "3bd77358048561e29430ed7992591206515556edec163c372f8167fb8f6e5851"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+      "sha256": "8be58a2ca3a3e0d43f573157ce2c84671e9a4513c14e4bf0fa09dfe5ad74a66a"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/AgentCoreDbContext.cs",
+      "sha256": "c21493d3672c3dcd2877bcce25e32741e3b4142b3d2106a96f92269d8012f3c1"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/BrowserPrivacyStore.cs",
+      "sha256": "4faad62473283953b3aa679962c1747af3007f2d404dfc371e25a0bb46b1de7c"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/CoreEventPersistence.cs",
+      "sha256": "0f724ab9c8b7dab0e6a19edd87994cce96c122e99964e3dbec1c13007b858143"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/EventCoverage.cs",
+      "sha256": "96bf623aa8b0754c6e160635f68450bfad18e2bfb8078072fe9ec382b39bbddb"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/ExternalEventRecords.cs",
+      "sha256": "796d7668ccdd9ff12fe7753dfd2a626433438a22d0b300565edf01dda9d9a07d"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/InMemoryCoreEventStore.cs",
+      "sha256": "9263b92d2b80e71cf6df130613e6179a5b3f73b4a361218bd62b148141ee7453"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/InMemoryExternalEventStore.cs",
+      "sha256": "369e47efcf3b113f928a043b8d7c16081f5c406a34e5227e1dfcdb36e861dd29"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/InMemoryTriggerStore.cs",
+      "sha256": "cce65cfb38f171b00e309c335c1dff15376aeece1e936af27298e2164e04400b"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071329_BrowserPrivacyAdministration.Designer.cs",
+      "sha256": "7ebfe9e942dfeb5fccd27ad9ca6da99af0da620b7073c87ad1aeb03a542d23f2"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071329_BrowserPrivacyAdministration.cs",
+      "sha256": "31e2f480c974ed85fc1d8d648718df9cb4af28378dde694d774e00915ad6cfac"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071652_AutomationChildTriggers.Designer.cs",
+      "sha256": "1f676a2613d952a955f63b0591d83c6d6629315ff0b845120fe58430a168034b"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071652_AutomationChildTriggers.cs",
+      "sha256": "f6f1936a8df57f65e91209f4a76a476b26f9187b23703b4e09e302f53ebb6048"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/AgentCoreDbContextModelSnapshot.cs",
+      "sha256": "1a6871cd3ecb771d073111dd583cda7fbbed4f7d1d226f49c836f7a4e03a43d8"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/SqliteCoreEventStore.cs",
+      "sha256": "472292502054699705c9d58bb745f52c078f6fd48788f854f8d6667bf8ac6af3"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/SqliteExternalEventStore.cs",
+      "sha256": "72e01e7674e2e96a14c838563816ed00d6e7dfff240c26681c450f555d33a423"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/SqliteTriggerStore.cs",
+      "sha256": "cacd9447b90ff0e156b22576e0b2c027d4a3410627912a0148ad9282fb28b5ba"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/TriggerRecords.cs",
+      "sha256": "32c617cdcfe0812f7d04c6cefb9f7172dea35099d322f644c275ca3029a7ffce"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Tools/ToolConfigurationGate.cs",
+      "sha256": "96533684a11acf0da3f04077053417d516f95e7c0b37d68fbc2ea5e3d298d1b7"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/AutomationDestinationJourneyTests.cs",
+      "sha256": "7004519ae273a242493da3b2909ba1e6c41445163a8938a286dd91fcc52bb7db"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/AutomationFixtures.cs",
+      "sha256": "bd62ac168656c2f0f03659a3a83d217f68fc3c6664c82fbff104063596010c35"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/AutomationJourneyTests.cs",
+      "sha256": "787a7124f27e7366ee0ce255764f33d36f85fba819007d43f92efdb07ae45748"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/BrowserPrivacyApiTests.cs",
+      "sha256": "fa7dfe0a6144f1d962084eab4426e169cda09ceae4e1f1c31df4b618b6b8ca22"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/ContinuityBoundaryTests.cs",
+      "sha256": "ece42e24f97fa95a49a7f8f7c17f0c9f37b8745bb45d5b30fa737896031943a7"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/ContinuityReviewJourneyTests.cs",
+      "sha256": "21edf8cd52383dfe21c7b96d2187e75cc6cc1527370d381326c5c5787b67c1e2"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/CoreEventAutomationJourneyTests.cs",
+      "sha256": "296eda847b73c4e07dd2b556a824effba6ad7a60b19eba215f526648f3a4b310"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/CoreEventStabilizationTests.cs",
+      "sha256": "14ef46899c1434dae329319bf60ec350d4defe0e5a047f3c4af526dca7a881eb"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/MultiTriggerAutomationJourneyTests.cs",
+      "sha256": "d28a09a27fa8cc77725296422e10699f21a1fc6cfecb91d19eae8d3453b9af85"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/OrderPlacedWebhookApiTests.cs",
+      "sha256": "46e2ff41993ae060bd4f597dee2bb45e0e967a54d835d92582c99f26234f9686"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/SqliteHostRecoveryTests.cs",
+      "sha256": "eea1844b585994670b6c67131332ff4f2c16e117b90434430c4a62d7d7124793"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/UnifiedAutomationJourneyTests.cs",
+      "sha256": "78d738717453162af276a463da65d21b1f8796004950165d978ac9b267686a1e"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/AdminEventSummaryPolicyTests.cs",
+      "sha256": "31c37b689b664f3c4ca407410dd4da6d64d9c57c108ad51fb9b82a428e1e7dc0"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserCleanupIntentTests.cs",
+      "sha256": "59773018b68c400067a8f5a3bb3b8096fde8cc7833aa75c4f0a49844ea90f578"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserEvidenceProgressTests.cs",
+      "sha256": "5fa40b907011f4bdeb61f936ee01853fc3f2007b03b51d3716cf65bba4fbd51c"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserLogoutLiveTests.cs",
+      "sha256": "3d13123014f5b6c2f0ff1686c082ed47e0a5e0005365784e8f600c2f5176e13f"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserLogoutRecoveryTests.cs",
+      "sha256": "0c8255cd98f9cee52a58eaad0a867f394a1631c80fe83cf0413eb9d84c5ccb25"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserToolTests.cs",
+      "sha256": "fe6c59c6c77e84421619ef9f83552fb2f2bdbfbc96e9ba0d38d665c3ae95b199"
+    },
+    {
+      "path": "tests/AgentCore.Domain.Tests/AutomationChildTests.cs",
+      "sha256": "593cb4deeb1446a472ef8ea2d8ff382d73e19b832e1c207327a7f6582642c274"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/AutomationChildMigrationTests.cs",
+      "sha256": "ec5bf917c17b17bd4d600b2bbaa537cdcbb80f37ad7cd993af15ddd81fb51f28"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/BrowserPrivacyTests.cs",
+      "sha256": "7d549328434190afd98b35296d402340c4417448b887050ac188a7f59e24f0e8"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/MemoryStoreContractTests.cs",
+      "sha256": "d6e2d20abc35544bfb72734487796640e43b7de9fce6b548077cdc04bbed8570"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/SharedWebhookEventMigrationTests.cs",
+      "sha256": "6b5591055afcbe01e39eef8aeba38083bf5ec7366996fb7245e498940e978f26"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/TriggerStoreContractTests.cs",
+      "sha256": "ec279810202b7be2590a13325dfdf1084c62af69ec688273e0235b593a524cd4"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/UnifiedAutomationMigrationTests.cs",
+      "sha256": "374fb6b85ecef467d308cd964965aeeb218b1c7dcfa780c3eb18453a3a7021d3"
+    },
+    {
+      "path": "web/e2e/admin-polish.spec.ts",
+      "sha256": "c5a9d4c20a32ee61c0cd372544705822b775155bc107be423c5c5e543078984c"
+    },
+    {
+      "path": "web/e2e/admin-table-overflow.spec.ts",
+      "sha256": "e8d718a76072d7e3f3caa0de167ec0210cfd488b97c67aa3c3b63c51bf9ac388"
+    },
+    {
+      "path": "web/e2e/automation-destinations.spec.ts",
+      "sha256": "9fccf96b6c3da9f4defc0fbd6c759af8ddf2db91d5aa32a468abb79855eb9e8a"
+    },
+    {
+      "path": "web/e2e/automation-editor.spec.ts",
+      "sha256": "48d84bf9bf2d404a2633237a3014570af823540234eb3821bafb29293761b11f"
+    },
+    {
+      "path": "web/e2e/background-work.spec.ts",
+      "sha256": "05fe657f522c5e6918044304408cb2c514308f581446e286e276c53f646388fb"
+    },
+    {
+      "path": "web/e2e/browser-privacy.spec.ts",
+      "sha256": "9a22de01236f47307bb5808bfc4ad1598222b8a22fab4fc78accff68de43f9f2"
+    },
+    {
+      "path": "web/e2e/continuity-enhancements.spec.ts",
+      "sha256": "cb7528d64ec3a0ba21536ab000f260e7754f588c2d238af00686a799307cd5f1"
+    },
+    {
+      "path": "web/e2e/continuity-maintenance-cadence.spec.ts",
+      "sha256": "4a1ae4ba0de2b8d78fe810b4421c1d3aeb42062be67bb0035de3369ebc59007d"
+    },
+    {
+      "path": "web/e2e/core-event-presets.spec.ts",
+      "sha256": "343773f285b1fc60c6084354dd917c06a7e6c960f8aaf37f245b8c5d5d5deea8"
+    },
+    {
+      "path": "web/e2e/multi-trigger-automation.spec.ts",
+      "sha256": "afe360f4c341b8b2906d55de9a90210a0e54d672dd562997e4c930840a6055e3"
+    },
+    {
+      "path": "web/e2e/p910-continuity-maintenance.spec.ts",
+      "sha256": "5a2f44f50cd263f53c1823905818ef7cdc88ad9a2b0ecdd6e8d4604fab2b5850"
+    },
+    {
+      "path": "web/e2e/p96-admin-background-work.spec.ts",
+      "sha256": "9ea7b7b56c4d2e26a96bcf2ba92a89bec8ce4d433cc531e7abe6abe8b702cc3a"
+    },
+    {
+      "path": "web/e2e/p9899-continuity.spec.ts",
+      "sha256": "d477d4aee727f3623ae2b9977bc80fb945fc2b8018bae3cc0d5cac08ce9301ad"
+    },
+    {
+      "path": "web/e2e/secretary-demo.spec.ts",
+      "sha256": "66353969310c5d167da5de3a88bcc5af7d28efa203d3a6290c99d7c5d3597cb1"
+    },
+    {
+      "path": "web/e2e/shared-events.spec.ts",
+      "sha256": "0b13748c8c718070bcdb52ca9d93f9468e20f43c02a16311447d6821f015e92d"
+    },
+    {
+      "path": "web/e2e/unified-event-automation.spec.ts",
+      "sha256": "432aeb18657660a34478d7361bc5839e93ebdad7f4a37fb2d952683591c717ac"
+    },
+    {
+      "path": "web/playwright.browser-privacy.config.ts",
+      "sha256": "7cbb9ae60189459bbd547f418208619dcd70b5fe3c4adab9284076449f168cd8"
+    },
+    {
+      "path": "web/playwright.config.ts",
+      "sha256": "3bb9d63e501b2e0233986481ec14266d36dc3cb5590c302387cc24c009d4d93b"
+    },
+    {
+      "path": "web/playwright.unified-events.config.ts",
+      "sha256": "13ca4c8dd3556e95711178d739713c168aaecacef11b204d4b225530d9780947"
+    },
+    {
+      "path": "web/src/features/admin/AdminApp.test.tsx",
+      "sha256": "f104d8d90662e0e93e3cc46eef0b8cf2b1c962d8bf5a4e4daff192e3f2ed0954"
+    },
+    {
+      "path": "web/src/features/admin/AdminApp.tsx",
+      "sha256": "c58d33540f9e1738f303abf738110decbc784a21267bc2e7abe94dabaf836cd8"
+    },
+    {
+      "path": "web/src/features/admin/AutomationEventFilter.test.tsx",
+      "sha256": "40a520e1a0308ca76db79c8cf7064f8bf08bbfaa22ba9bc126e941933b08fad4"
+    },
+    {
+      "path": "web/src/features/admin/AutomationEventFilter.tsx",
+      "sha256": "abd2fba82284dbe0534745e889c4249d482bd9b6beb1bd1c82f4df413eff69e9"
+    },
+    {
+      "path": "web/src/features/admin/BrowserPrivacySection.test.tsx",
+      "sha256": "716f5255c7c75ef8cfeab8d7250484a0dcf4bb8db38b8cc6e740d76a628be633"
+    },
+    {
+      "path": "web/src/features/admin/BrowserPrivacySection.tsx",
+      "sha256": "1851d7fbb09746d151ba266bd16785e647f5f0da0bf0c5893cb146ff2ce44fe8"
+    },
+    {
+      "path": "web/src/features/admin/BuiltinEventSubscribers.tsx",
+      "sha256": "51d08794a7efe06a31b7557f4cacabbc50e0afb28f2da34fc6ef4e155bde834b"
+    },
+    {
+      "path": "web/src/features/admin/EventsSection.test.tsx",
+      "sha256": "ed6a0202a02bccf598cea7f0ac8bd1d31493d4dfb560c6e71f8c49eecb199a3f"
+    },
+    {
+      "path": "web/src/features/admin/EventsSection.tsx",
+      "sha256": "3f8ede14e1f98eddf62f04bece89e4b187601e2ca370e03b151fa9151a00fae3"
+    },
+    {
+      "path": "web/src/features/admin/InstanceAutomationsSection.test.tsx",
+      "sha256": "c047567459245fbbfcbe63eae2ef8ed594ee94a04343208449eac7a4522e7c96"
+    },
+    {
+      "path": "web/src/features/admin/InstanceAutomationsSection.tsx",
+      "sha256": "8e9ff24a2f32c937418523d0e596678898c88e185105976252e79f3f63bcf58e"
+    },
+    {
+      "path": "web/src/features/chat/AgentRunDetails.tsx",
+      "sha256": "2c2c87a3d3e910fc7f029fa95d1dbaba924295ffc017449cce827704e802aba3"
+    },
+    {
+      "path": "web/src/services/adminApi.ts",
+      "sha256": "12544e6702a3f31a9482caeb97832849c4f4191dcbd40d707138b6bd205f21e8"
+    },
+    {
+      "path": "web/src/services/api.ts",
+      "sha256": "b1cd0bcfcd809e50c9b3db7417e7f8092b66f9372ee11793f203cc496a6977bf"
+    }
+  ],
+  "manifest_entries_sha256": "11f7e3e443fb06a91a00f2332fc61d2167b2176b9a20c882131f8090edad8885",
+  "fingerprint_format": "SHA-256 of UTF-8 JSON files array with sorted object keys and compact separators"
+}

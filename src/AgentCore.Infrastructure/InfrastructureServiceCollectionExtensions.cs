@@ -361,6 +361,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<CoreEventDispatcher>();
         services.TryAddSingleton<AutomationPresetCatalog>();
         services.TryAddSingleton<WebhookEventService>();
+        services.TryAddSingleton<UnifiedEventCatalog>();
         services.TryAddSingleton<TriggerOccurrenceRouter>();
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
             provider.GetRequiredService<IAgentInstanceStore>(),

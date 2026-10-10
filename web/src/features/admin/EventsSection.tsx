@@ -1,27 +1,31 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Alert, App, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Form, Grid, Input, Modal, Spin, Table, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Form, Grid, Input, Modal, Select, Spin, Table, Tag, Typography, theme } from "antd";
 import { MoreOutlined, PlusOutlined } from "@ant-design/icons";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { confirmAction } from "../../app/confirmAction";
 import { adminHomePath, adminInstancePath, navigateToAppPath } from "../../app/appRoute";
-import { createWebhookEvent, getWebhookEvent, listWebhookEvents, renameWebhookEvent, revokeWebhookEvent, rotateWebhookEvent,
+import { createWebhookEvent, getWebhookEvent, listEventCatalog, eventSourceKey, type EventCatalogEntry, type EventSourceReference, renameWebhookEvent, revokeWebhookEvent, rotateWebhookEvent,
   type AdminWebhookEvent, type AdminWebhookEventDetails } from "../../services/adminApi";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminErrorNotice, AdminRetryAction } from "./adminFailure";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
+import { BuiltinEventSubscribers } from "./BuiltinEventSubscribers";
 import { WebhookRequestExample } from "./WebhookRequestExample";
 
 export const webhookUrl = (eventKey: string) => `${window.location.origin}/api/v1/hooks/${encodeURIComponent(eventKey)}`;
 const timestamp = (value: string | null) => value ? new Date(value).toLocaleString() : "Not received yet";
 export const validEventKey = (value: string) => /^[a-z](?:[a-z0-9._-]{0,62}[a-z0-9])?$/.test(value);
 
-export function EventsSection({ onChanged, onCreated, embedded = false }: {
-  onChanged?: (events: AdminWebhookEvent[]) => void; onCreated?: (eventId: string) => void; embedded?: boolean;
+export function EventsSection({ onChanged, onCreated, embedded = false, initialSource, instanceId }: {
+  onChanged?: (events: AdminWebhookEvent[]) => void; onCreated?: (eventId: string) => void; embedded?: boolean; initialSource?: EventSourceReference | null; instanceId?: string;
 } = {}) {
   const { token } = theme.useToken(); const { message, modal } = App.useApp();
   const compact = !Grid.useBreakpoint().md; const detailLayout = useAdminDetailLayout();
   const { search, setSearch, pagination } = useAdminCollectionSearch();
-  const [events, setEvents] = useState<AdminWebhookEvent[]>([]);
+  const [catalog, setCatalog] = useState<EventCatalogEntry[]>([]);
+  const [kind, setKind] = useState("all");
+  const [builtinKey, setBuiltinKey] = useState<string | null>(() => embedded ? null : new URLSearchParams(window.location.search).get("builtin"));
+  useEffect(() => { if (embedded && initialSource) { setBuiltinKey(initialSource.kind === "builtin" ? initialSource.key : null); setDetailId(initialSource.kind === "webhook" ? initialSource.eventId : null); } }, [embedded, initialSource]);
   const [tableVersion, setTableVersion] = useState(0);
   const [loading, setLoading] = useState(true); const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<AdminFailureNotice | null>(null); const [busy, setBusy] = useState(false);
@@ -34,11 +38,20 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
   const [detailLoading, setDetailLoading] = useState(false); const [detailRead, setDetailRead] = useState(0);
   const [credential, setCredential] = useState<string | null>(null); const [copyError, setCopyError] = useState<string | null>(null);
   const formId = useId(); const opener = useRef<HTMLElement | null>(null); const newButton = useRef<HTMLButtonElement>(null);
-  const nameInput = useRef<import("antd").InputRef>(null); const pendingCredential = useRef<string | null>(null);
+  const nameInput = useRef<import("antd").InputRef>(null);
   const generation = useRef(0); const changed = useRef(onChanged); changed.current = onChanged;
   const reload = useCallback(async () => {
     const version = ++generation.current; setLoading(true); setError(null);
-    try { const rows = await listWebhookEvents(); if (version === generation.current) { setEvents(rows); setLoaded(true); changed.current?.(rows); } }
+    try {
+      const results = await Promise.allSettled([listEventCatalog("builtin"), listEventCatalog("webhook")]);
+      if (version !== generation.current) return;
+      const [builtin, webhook] = results;
+      setCatalog(current => [...(builtin.status === "fulfilled" ? builtin.value : current.filter(e => e.source.kind === "builtin")), ...(webhook.status === "fulfilled" ? webhook.value : current.filter(e => e.source.kind === "webhook"))]);
+      setLoaded(results.some(r => r.status === "fulfilled"));
+      if (webhook.status === "fulfilled") changed.current?.(webhook.value.flatMap(e => e.webhook ? [e.webhook] : []));
+      const failed = results.find(r => r.status === "rejected");
+      if (failed?.status === "rejected") setError(describeAdminError(failed.reason, "Part of the catalog could not be refreshed. Available definitions remain browseable."));
+    }
     catch (reason) { if (version === generation.current) setError(describeAdminError(reason, "Events could not be loaded.")); }
     finally { if (version === generation.current) setLoading(false); }
   }, []);
@@ -52,7 +65,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
   }, [detailId, detailRead]);
   useEffect(() => {
     if (embedded) return;
-    const syncSelection = () => setDetailId(window.location.pathname === adminHomePath("events") ? new URLSearchParams(window.location.search).get("event") : null);
+    const syncSelection = () => { const params = new URLSearchParams(window.location.search); setDetailId(window.location.pathname === adminHomePath("events") ? params.get("event") : null); setBuiltinKey(window.location.pathname === adminHomePath("events") ? params.get("builtin") : null); };
     window.addEventListener("popstate", syncSelection);
     return () => window.removeEventListener("popstate", syncSelection);
   }, [embedded]);
@@ -61,8 +74,9 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
     if (!embedded) navigateToAppPath(`${adminHomePath("events")}?event=${id}`);
   };
   const closeDetails = () => {
+    setBuiltinKey(null);
     setDetailId(null);
-    if (!embedded && new URLSearchParams(window.location.search).has("event")) navigateToAppPath(adminHomePath("events"), true);
+    if (!embedded && new URLSearchParams(window.location.search).has("event") || !embedded && new URLSearchParams(window.location.search).has("builtin")) navigateToAppPath(adminHomePath("events"), true);
   };
   const restoreFocus = () => (opener.current?.isConnected ? opener.current : newButton.current)?.focus();
   async function copy(value: string) {
@@ -77,7 +91,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
     if (!editor || busy) return; setBusy(true); setEditorError(null);
     try {
       if (editor === "new") {
-        const saved = await createWebhookEvent(name.trim(), key); pendingCredential.current = saved.token; onCreated?.(saved.eventId); setSearch(""); setTableVersion(v => v + 1);
+        const saved = await createWebhookEvent(name.trim(), key); setCredential(saved.token); onCreated?.(saved.eventId); setSearch(""); setTableVersion(v => v + 1);
       } else { await renameWebhookEvent(editor.eventId, name.trim(), editor.revision); setDetailRead(v => v + 1); }
       setEditor(null); await reload();
     } catch (reason) { setEditorError(describeAdminError(reason, "Event could not be saved. Your input is retained.")); }
@@ -125,34 +139,44 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
   const nameError = /[\u0000-\u001f\u007f-\u009f]/.test(name) ? "Use a name without control characters." : null;
   return <section className="admin-definition-panel" aria-label="Events">
     <div className="admin-definition-panel-heading"><Typography.Title level={4}>Events</Typography.Title>
-      <Typography.Text type="secondary">Receive external signals through authenticated webhooks. Automations choose how each agent responds.</Typography.Text></div>
+      <Typography.Text type="secondary">Browse read-only Built-in definitions and manage authenticated Webhook Events. Automations choose how each agent responds.</Typography.Text></div>
     <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
       {loading ? <Spin aria-label="Loading Events" /> : null}
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} />} action={<AdminRetryAction onRetry={() => void reload()} />} /> : null}
       <Flex wrap gap={token.paddingSM} align="center" justify="space-between">
         <div style={{ flex: "1 1 18rem", minWidth: 0 }}><AdminCollectionToolbar label="events" value={search} onChange={setSearch} /></div>
-        <Flex gap={token.paddingXS}><Button ref={newButton} type="primary" icon={<PlusOutlined aria-hidden />} disabled={busy} onClick={() => openEditor("new")}>New Event</Button>
+        <Flex gap={token.paddingXS}><Button ref={newButton} type="primary" icon={<PlusOutlined aria-hidden />} disabled={busy} onClick={() => openEditor("new")}>New webhook Event</Button>
           <Button disabled={busy || loading} onClick={() => void reload()}>Refresh Events</Button></Flex>
       </Flex>
-      {loaded ? <Table<AdminWebhookEvent> key={tableVersion} aria-label="Events table" className="admin-collection-table" rowKey="eventId" size="small"
-        dataSource={events.filter(e => [e.displayName, e.eventKey, e.status].some(value => value.toLowerCase().includes(search.trim().toLowerCase())))}
-        pagination={pagination} scroll={{ x: 1040 }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search || events.length ? "No matches. Clear search or filters to see all results." : "No Events yet. Create an Event, then subscribe an Automation to it."} /> }} columns={[
-          { title: "Name", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a,b) => a.displayName.localeCompare(b.displayName), render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={item.displayName} onClick={e => { opener.current = e.currentTarget; openDetails(item.eventId); }}>{item.displayName}</Button> },
-          { title: "Key", dataIndex: "eventKey", width: 180, ellipsis: true },
-          { title: "Status", dataIndex: "status", width: 100, filters: ["Active","Revoked"].map(value => ({ text: value, value })), onFilter: (value,item) => item.status === value, render: value => <Tag color={value === "Active" ? "success" : "default"}>{value}</Tag> },
-          { title: "Active subscribers", dataIndex: "activeSubscriberCount", width: 110, align: "right", sorter: (a,b) => a.activeSubscriberCount - b.activeSubscriberCount },
-          { title: "Total subscriptions", dataIndex: "subscriberCount", width: 120, align: "right", sorter: (a,b) => a.subscriberCount - b.subscriberCount },
-          { title: "Last received", dataIndex: "lastReceivedAt", width: 180, render: timestamp },
-          { title: "Actions", width: 130, render: (_,item) => actions(item) }
+      <Select aria-label="Event type filter" value={kind} style={{ alignSelf: "flex-start", minWidth: 160 }} onChange={setKind}
+        options={[{ value: "all", label: "All Events" }, { value: "builtin", label: "Built-in" }, { value: "webhook", label: "Webhook" }]} />
+      {loaded ? <Table<EventCatalogEntry> key={tableVersion} aria-label="Events table" className="admin-collection-table" rowKey={e => eventSourceKey(e.source)} size="small"
+        dataSource={catalog.filter(e => (kind === "all" || e.source.kind === kind) && [e.name, e.key, e.description, e.state].some(value => value.toLowerCase().includes(search.trim().toLowerCase())))}
+        pagination={pagination} scroll={{ x: 950 }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search || kind !== "webhook" ? "No matches. Clear search or filters to see all results." : "No Webhook Events yet. Create one to receive external signals."} /> }} columns={[
+          { title: "Name", key: "name", width: 230, ellipsis: true, sorter: (a,b) => a.name.localeCompare(b.name), render: (_, e) => <Button type="link" size="small" className="admin-collection-name" title={e.name} onClick={event => { opener.current = event.currentTarget; if (e.source.kind === "webhook") openDetails(e.source.eventId); else { setBuiltinKey(e.source.key); if (!embedded) navigateToAppPath(`${adminHomePath("events")}?builtin=${encodeURIComponent(e.source.key)}`); } }}>{e.name}</Button> },
+          { title: "Type", width: 100, render: (_, e) => <Tag>{e.source.kind === "builtin" ? "Built-in" : "Webhook"}</Tag> },
+          { title: "Description / key", width: 310, render: (_, e) => <Flex vertical gap={token.paddingXS}><Typography.Text>{e.description}</Typography.Text><Typography.Text type="secondary">{e.key}</Typography.Text></Flex> },
+          { title: "State", width: 100, filters: [{ text: "Active", value: "Active" }, { text: "Revoked", value: "Revoked" }, { text: "Read-only", value: "Built-in" }], onFilter: (value, entry) => entry.state === value, render: (_, e) => e.source.kind === "builtin" ? "Read-only" : <Tag color={e.state === "Active" ? "success" : "default"}>{e.state}</Tag> },
+          { title: "Subscriptions", width: 120, render: (_, e) => e.webhook ? `${e.webhook.activeSubscriberCount} active / ${e.webhook.subscriberCount} total` : "Instance-scoped" },
+          { title: "Actions", width: 130, render: (_, e) => e.webhook ? actions(e.webhook) : <Button size="small" aria-label={`View details for ${e.name}`} onClick={event => { opener.current = event.currentTarget; setBuiltinKey(e.key); if (!embedded) navigateToAppPath(`${adminHomePath("events")}?builtin=${encodeURIComponent(e.key)}`); }}>View</Button> }
         ]} /> : null}
-      <Drawer open={!!editor} title={editor === "new" ? "New Event" : "Edit Event name"} size={compact ? "100%" : 480}
+      <Drawer open={!!builtinKey} aria-labelledby={`${formId}-builtin-title`} title={<span id={`${formId}-builtin-title`}>{builtinKey ?? "Built-in Event"}</span>} size={compact ? "100%" : 640} getContainer={false} rootStyle={{ position: "fixed" }} rootClassName="admin-automation-drawer"
+        styles={{ body: { padding: token.padding } }} onClose={closeDetails} afterOpenChange={open => { if (!open) restoreFocus(); }}>
+        {catalog.find(e => e.source.kind === "builtin" && e.key === builtinKey) ? (() => { const entry = catalog.find(e => e.source.kind === "builtin" && e.key === builtinKey)!; return <Flex vertical gap={token.padding}>
+          <Descriptions bordered column={1} size="small" {...detailLayout}><Descriptions.Item label="Type">Built-in · Read-only</Descriptions.Item><Descriptions.Item label="Key">{entry.key}</Descriptions.Item><Descriptions.Item label="Description">{entry.description}</Descriptions.Item><Descriptions.Item label="Schema version">{entry.schemaVersion}</Descriptions.Item></Descriptions>
+          <Typography.Paragraph style={{ margin: 0 }}>Subscriptions receive only committed signals from their own Agent Instance. This global definition contains illustrative data; private signals and delivery activity belong to the selected Instance.</Typography.Paragraph>
+          <Typography.Title level={5} style={{ margin: 0 }}>Field schema</Typography.Title><Input.TextArea readOnly aria-label="Built-in field schema" autoSize={{ minRows: 4, maxRows: 12 }} value={JSON.stringify(entry.fieldSchema, null, 2)} />
+          <Typography.Title level={5} style={{ margin: 0 }}>Example event</Typography.Title><Input.TextArea readOnly aria-label="Built-in example event" autoSize={{ minRows: 8, maxRows: 18 }} value={JSON.stringify(entry.example, null, 2)} />
+          <BuiltinEventSubscribers eventKey={entry.key} instanceId={instanceId} />
+        </Flex>; })() : <Alert type={error ? "error" : "info"} title={error ? "Built-in definition could not be loaded. Retry the catalog." : "Loading Built-in definition…"} action={<Button onClick={() => void reload()}>Retry catalog</Button>} />}
+      </Drawer>
+      <Drawer open={!!editor} aria-labelledby={`${formId}-editor-title`} title={<span id={`${formId}-editor-title`}>{editor === "new" ? "New webhook Event" : "Edit Event name"}</span>} size={compact ? "100%" : 480}
         getContainer={false} rootStyle={{ position: "fixed" }} rootClassName="admin-automation-drawer"
         styles={{ body: { padding: token.padding }, footer: { padding: token.padding } }}
         closable={!busy} maskClosable={!busy} keyboard={!busy} focusable={{ trap: !!editor, focusTriggerAfterClose: false }}
         onClose={() => setEditor(null)} afterOpenChange={open => {
           if (open) nameInput.current?.focus();
-          else if (pendingCredential.current) { setCredential(pendingCredential.current); pendingCredential.current = null; }
-          else restoreFocus();
+          else if (!credential) restoreFocus();
         }} footer={<Flex justify="flex-end" gap={token.paddingXS}><Button disabled={busy} onClick={() => setEditor(null)}>Cancel</Button>
           <Button type="primary" aria-label={editor === "new" ? "Create Event" : "Save name"} htmlType="submit" form={formId} loading={busy} aria-busy={busy} disabled={busy || !name.trim() || !!nameError || editor === "new" && !validEventKey(key)}>{editor === "new" ? "Create Event" : "Save name"}</Button></Flex>}>
         {editorError ? <Alert type="error" showIcon title={<AdminErrorNotice message={editorError.message} diagnosticId={editorError.diagnosticId} />} /> : null}
@@ -163,7 +187,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
             <Input aria-label="Event key" maxLength={64} placeholder="order.placed" value={key} disabled={busy || editor !== "new"} onChange={e => setKey(e.target.value)} /></Form.Item>
         </Form>
       </Drawer>
-      <Drawer open={!!detailId && !editor && !credential} title={details?.event.displayName ?? "Event details"} size={compact ? "100%" : 640}
+      <Drawer open={!!detailId && !editor && !credential} aria-labelledby={`${formId}-details-title`} title={<span id={`${formId}-details-title`}>{details?.event.displayName ?? "Event details"}</span>} size={compact ? "100%" : 640}
         getContainer={false} rootStyle={{ position: "fixed" }} rootClassName="admin-automation-drawer" styles={{ body: { padding: token.padding } }}
         closable={!busy} maskClosable={!busy} keyboard={!busy}
         onClose={closeDetails} afterOpenChange={open => { if (!open && !editor && !credential) restoreFocus(); }}>
@@ -202,9 +226,9 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
             <Flex component="section" vertical gap={token.paddingXS} aria-label="Automation deliveries">
             <Typography.Title level={5} style={{ margin: 0 }}>Automation deliveries</Typography.Title>
             <Typography.Text type="secondary">Per-subscriber admission for those signals. Admitted means durable work was created; execution results are available in the Automation’s Runs.</Typography.Text>
-            {details.deliveries.length ? <Table size="small" rowKey={d => `${d.receiptId}:${d.automationId}`} className="admin-collection-table" scroll={{ x: 600 }} pagination={{ pageSize: 10 }} dataSource={details.deliveries} columns={[
+            {details.deliveries.length ? <Table size="small" rowKey={d => `${d.receiptId}:${d.triggerId ?? d.automationId}`} className="admin-collection-table" scroll={{ x: 600 }} pagination={{ pageSize: 10 }} dataSource={details.deliveries} columns={[
               { title: "Delivery ID", dataIndex: "sourceEventId", ellipsis: true }, { title: "Received", dataIndex: "receivedAt", render: timestamp },
-              { title: "Status", dataIndex: "status" }, { title: "Automation", render: (_,d) => <Button type="link" size="small" onClick={() => navigateSubscription(d.agentInstanceId,d.automationId)}>View Automation</Button> }
+              { title: "Status", dataIndex: "status" }, { title: "Subscription", dataIndex: "triggerId" }, { title: "Automation", render: (_,d) => <Button type="link" size="small" onClick={() => navigateSubscription(d.agentInstanceId,d.automationId)}>View Automation</Button> }
             ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No Automation deliveries for recent signals. Only active subscriptions at receipt time can receive them." />}
             </Flex>
           </> : null}

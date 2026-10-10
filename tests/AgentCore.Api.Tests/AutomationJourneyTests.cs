@@ -37,10 +37,10 @@ public sealed class AutomationJourneyTests
         if (accepted)
         {
             var stored = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
-            Assert.Equal(seconds, stored.Trigger.Schedule!.Interval);
+            Assert.Equal(seconds, stored.Triggers!.Single().Schedule!.Interval);
             var review = await client.GetFromJsonAsync<JsonElement>(path);
             Assert.Equal(60, review.GetProperty("policy").GetProperty("minFixedIntervalSeconds").GetInt32());
-            Assert.Equal(seconds, review.GetProperty("items")[0].GetProperty("trigger").GetProperty("schedule").GetProperty("interval").GetInt32());
+            Assert.Equal(seconds, review.GetProperty("items")[0].GetProperty("triggers")[0].GetProperty("schedule").GetProperty("interval").GetInt32());
         }
     }
 

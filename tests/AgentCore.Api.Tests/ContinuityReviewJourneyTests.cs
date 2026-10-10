@@ -105,7 +105,7 @@ public sealed class ContinuityReviewJourneyTests
     }
 
     [Fact(Timeout = 90000)]
-    public async Task Owner_can_disable_unchanged_schedule_after_trigger_policy_is_removed_but_cannot_enable_or_reconfigure()
+    public async Task Owner_can_save_disabled_schedule_changes_after_policy_removal_but_cannot_enable()
     {
         OverrideDefinitions? definitions = null;
         await using var host = new ExperienceHost(Database(), configure: services =>
@@ -123,8 +123,11 @@ public sealed class ContinuityReviewJourneyTests
         Assert.Equal("Disabled", row.Status); Assert.Null(row.NextRunAt); Assert.Equal("AdminOwner", row.AuthorizationOrigin);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path + "/" + row.AutomationId,
             draft with { ExpectedRevision = row.Revision })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path + "/" + row.AutomationId,
-            disabledDraft with { ExpectedRevision = row.Revision, Schedule = draft.Schedule with { Interval = 2 } })).StatusCode);
+        var reconfigured = await client.PutAsJsonAsync(path + "/" + row.AutomationId,
+            disabledDraft with { ExpectedRevision = row.Revision, Schedule = draft.Schedule with { LocalTime = "10:00" } });
+        reconfigured.EnsureSuccessStatusCode();
+        row = (await reconfigured.Content.ReadFromJsonAsync<AutomationResponse>())!;
+        Assert.Equal("10:00", row.Triggers!.Single().Schedule!.LocalTime);
         var retained = Assert.Single((await client.GetFromJsonAsync<AutomationReview>(path))!.Items, item => item.AutomationId == row.AutomationId);
         Assert.Equal("Disabled", retained.Status); Assert.Equal(row.Revision, retained.Revision);
     }

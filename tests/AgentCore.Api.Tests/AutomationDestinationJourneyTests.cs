@@ -38,7 +38,7 @@ public sealed class AutomationDestinationJourneyTests
                 Status = SessionStatus.Paused, PauseReason = "disconnected" }, session.Revision);
             using var client = TestOwnerCapability.CreateOwnerClient(host);
             var saved = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{instanceId}/automations", new AutomationRequest(
-                0, true, "Greeting", "Say hello once in this conversation", new("schedule", new("oneShot", AtUtc: Now.AddSeconds(30).ToString("O"))),
+                0, true, "Greeting", "Say hello once in this conversation", new AutomationTriggerDto("schedule", new("oneShot", AtUtc: Now.AddSeconds(30).ToString("O"))),
                 ExecutionTarget: new("existingSession", sessionId.ToString("D")), CompletionDelivery: new("none")));
             saved.EnsureSuccessStatusCode();
             var automation = (await saved.Content.ReadFromJsonAsync<AutomationResponse>())!;
@@ -101,7 +101,7 @@ public sealed class AutomationDestinationJourneyTests
         Assert.Empty((await s.GetRequiredService<IMemoryStore>().ListBackgroundSessionsAsync(new(instance.InstanceId, LocalUserProfile.Id), null, 50, false)).Items);
         var current = (await s.GetRequiredService<ITriggerStore>().GetAsync(automation.Owner, automation.AutomationId))!;
         var disabled = await authoring.SaveAsync(instance.InstanceId, current.AutomationId, current.Revision, false,
-            current.Name, current.Instructions, current.Trigger, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort);
+            current.Name, current.Instructions, current.Triggers, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort);
         Assert.Equal(AutomationStatus.Disabled, disabled.Status);
         Assert.Equal(current.ExecutionTarget, disabled.ExecutionTarget);
     }
@@ -221,7 +221,7 @@ public sealed class AutomationDestinationJourneyTests
         if (disposition == "policy-revoked")
         {
             var current = (await s.GetRequiredService<ITriggerStore>().GetAsync(automation.Owner, automation.AutomationId))!;
-            await authoring.SaveAsync(instance.InstanceId, current.AutomationId, current.Revision, false, current.Name, current.Instructions, current.Trigger, null, null);
+            await authoring.SaveAsync(instance.InstanceId, current.AutomationId, current.Revision, false, current.Name, current.Instructions, current.Triggers, null, null);
         }
         await s.GetRequiredService<BackgroundCompletionReporter>().ReportPendingAsync(100);
         await s.ExecuteRunsAsync();
@@ -245,7 +245,7 @@ public sealed class AutomationDestinationJourneyTests
         var b = await admin.CreateManagedAsync("general-assistant", 21);
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(b.InstanceId, SessionMode.Text);
         using var client = TestOwnerCapability.CreateOwnerClient(host);
-        var draft = new AutomationRequest(0, true, "Greeting", "Say hello", new("schedule", new("oneShot", AtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("O"))),
+        var draft = new AutomationRequest(0, true, "Greeting", "Say hello", new AutomationTriggerDto("schedule", new("oneShot", AtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("O"))),
             ExecutionTarget: new("existingSession", session.SessionId.ToString("D")), CompletionDelivery: new("none"));
         var path = $"/api/v2/admin/agent-instances/{a.InstanceId}/automations";
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, draft)).StatusCode);

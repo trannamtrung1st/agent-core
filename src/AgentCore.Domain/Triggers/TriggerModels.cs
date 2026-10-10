@@ -5,6 +5,9 @@ namespace AgentCore.Domain.Triggers;
 public static class TriggerLimits
 {
     public const int MaxInstructionsCharacters = 2000;
+    // Bound fan-out and total serialized configuration independently of expression character counts.
+    public const int MaxEventSubscriptions = 32;
+    public const int MaxAutomationConfigurationBytes = 64 * 1024;
     public const int MaxTimeZoneCharacters = 64;
     public const int MaxSuspensionReasonCharacters = 200;
     public const int MaxDedupeKeyCharacters = 200;
@@ -547,6 +550,27 @@ public sealed class Automation
         string? name = null,
         AutomationExecutionTarget? executionTarget = null,
         AutomationCompletionDelivery? completionDelivery = null, bool requiresTools = false)
+ : this(automationId, owner, status, instructions, new[] { new AutomationTriggerRecord(automationId, trigger, revision: triggerRevision) }, nextOccurrenceAtUtc, expiresAtUtc, occurrenceCount, revision, triggerRevision, provenance, suspensionReason, modelOverrideCatalogKey, modelOverrideReasoningEffort, requiresVision, name, executionTarget, completionDelivery, requiresTools) { }
+
+    public Automation(
+        Guid automationId,
+        TriggerOwner owner,
+        AutomationStatus status,
+        string instructions,
+        IReadOnlyList<AutomationTriggerRecord> triggers,
+        DateTimeOffset? nextOccurrenceAtUtc,
+        DateTimeOffset? expiresAtUtc,
+        int occurrenceCount,
+        long revision,
+        long triggerRevision,
+        TriggerProvenance provenance,
+        string? suspensionReason,
+        string? modelOverrideCatalogKey = null,
+        string? modelOverrideReasoningEffort = null,
+        bool requiresVision = false,
+        string? name = null,
+        AutomationExecutionTarget? executionTarget = null,
+        AutomationCompletionDelivery? completionDelivery = null, bool requiresTools = false)
     {
         RequiresTools = requiresTools;
         if (automationId == Guid.Empty)
@@ -559,7 +583,11 @@ public sealed class Automation
             throw new ArgumentException("Registration status is not valid.", nameof(status));
         }
 
-        ArgumentNullException.ThrowIfNull(trigger);
+        ArgumentNullException.ThrowIfNull(triggers);
+        if (triggers.Count == 0 || triggers.Count > TriggerLimits.MaxEventSubscriptions || triggers.Select(t => t.TriggerId).Distinct().Count() != triggers.Count
+            || (triggers.Any(t => t.Configuration is ScheduleTrigger) && (triggers.Count != 1))
+            || triggers.Where(t => t.Source is not null).Select(t => t.Source).Distinct().Count() != triggers.Count(t => t.Source is not null))
+            throw new ArgumentException("Use one Schedule or distinct Event subscriptions within the evidence budget.");
 
         if (occurrenceCount < 0)
         {
@@ -578,14 +606,21 @@ public sealed class Automation
         Status = status;
         Instructions = AutomationText.RequireInstructions(instructions);
         Name = AutomationText.RequireName(name ?? Instructions[..Math.Min(Instructions.Length, 80)]);
-        Trigger = trigger;
-        if (trigger is EventTrigger && nextOccurrenceAtUtc is not null)
+        var configuration = System.Text.Json.JsonSerializer.Serialize(new { Name, Instructions, triggers = triggers.Select(t => new { t.TriggerId, t.Revision, t.Enabled, t.Source,
+            filterExpression = (t.Configuration as FilteredEventTrigger)?.FilterExpression,
+            dispatch = (t.Configuration as FilteredEventTrigger)?.Dispatch,
+            schedule = t.Configuration is ScheduleTrigger timing ? System.Text.Json.JsonSerializer.SerializeToElement(timing.Schedule, timing.Schedule.GetType()) : (System.Text.Json.JsonElement?)null }),
+            modelOverrideCatalogKey, modelOverrideReasoningEffort, executionTarget, completionDelivery });
+        if (System.Text.Encoding.UTF8.GetByteCount(configuration) > TriggerLimits.MaxAutomationConfigurationBytes)
+            throw new ArgumentException("Automation configuration exceeds the 64 KiB serialized budget.");
+        Triggers = Array.AsReadOnly(triggers.ToArray());
+        if (!IsSchedule && nextOccurrenceAtUtc is not null)
             throw new ArgumentException("Event Automations cannot have a scheduled occurrence.");
         NextOccurrenceAtUtc = nextOccurrenceAtUtc;
         ExpiresAtUtc = expiresAtUtc;
         OccurrenceCount = occurrenceCount;
         Revision = revision;
-        TriggerRevision = triggerRevision;
+        TriggerRevision = Triggers.Max(t => t.Revision);
         Provenance = provenance ?? throw new ArgumentException("Provenance is required.", nameof(provenance));
         SuspensionReason = TriggerText.OptionalReason(suspensionReason);
         ModelOverrideCatalogKey = OptionalModelToken(modelOverrideCatalogKey, AgentRunLimits.MaxModelFieldCharacters, "Model override");
@@ -610,7 +645,10 @@ public sealed class Automation
 
     public string Instructions { get; }
 
-    public AutomationTrigger Trigger { get; }
+    public IReadOnlyList<AutomationTriggerRecord> Triggers { get; }
+    public bool IsSchedule => Triggers.Count == 1 && Triggers[0].Configuration is ScheduleTrigger;
+    // Scheduling and single-trigger construction convenience; multi-Event consumers use Triggers.
+    public AutomationTrigger? Trigger => Triggers.Count == 1 ? Triggers[0].Configuration : null;
 
     // Timing is accessed only by the internal schedule machinery.
     public TriggerSchedule Schedule => Trigger is ScheduleTrigger scheduled
@@ -656,7 +694,7 @@ public sealed class Automation
             Owner,
             Status,
             instructions,
-            trigger,
+            new[] { new AutomationTriggerRecord(Triggers.Single().TriggerId, trigger, Triggers.Single().Enabled, triggerRevision) },
             nextOccurrenceAtUtc,
             expiresAtUtc,
             OccurrenceCount,
@@ -681,7 +719,7 @@ public sealed class Automation
             Owner,
             status,
             Instructions,
-            Trigger,
+            Triggers,
             nextOccurrenceAtUtc,
             ExpiresAtUtc,
             occurrenceCount,
@@ -700,7 +738,7 @@ public sealed class Automation
             Owner,
             AutomationStatus.Cancelled,
             Instructions,
-            Trigger,
+            Triggers,
             NextOccurrenceAtUtc,
             ExpiresAtUtc,
             OccurrenceCount,
@@ -723,7 +761,7 @@ public sealed class Automation
             Owner,
             Status,
             Instructions,
-            Trigger,
+            Triggers,
             NextOccurrenceAtUtc,
             ExpiresAtUtc,
             OccurrenceCount,
@@ -780,7 +818,7 @@ public sealed class TriggerOccurrence
         Guid? acceptedAgentRunId = null,
         Guid? liveSessionId = null,
         DateTimeOffset? liveEvaluationCompletedAtUtc = null,
-        AutomationExecutionTarget? executionTarget = null, AutomationCompletionDelivery? completionDelivery = null)
+        AutomationExecutionTarget? executionTarget = null, AutomationCompletionDelivery? completionDelivery = null, Guid? triggerId = null)
     {
         if (occurrenceId == Guid.Empty)
         {
@@ -849,6 +887,8 @@ public sealed class TriggerOccurrence
         ExecutionTarget = executionTarget ?? AutomationExecutionTarget.Background;
         CompletionDelivery = completionDelivery ?? AutomationCompletionDelivery.None;
         CompletionDelivery.ValidateFor(ExecutionTarget);
+        RequireOptionalId(triggerId, "Trigger");
+        TriggerId = triggerId;
         OccurrenceId = occurrenceId;
         DedupeKey = TriggerText.RequireDedupeKey(dedupeKey);
         AutomationId = automationId;
@@ -875,6 +915,7 @@ public sealed class TriggerOccurrence
 
     public AutomationExecutionTarget ExecutionTarget { get; }
     public AutomationCompletionDelivery CompletionDelivery { get; }
+    public Guid? TriggerId { get; }
     public Guid OccurrenceId { get; }
 
     public string DedupeKey { get; }
@@ -936,7 +977,7 @@ public sealed class TriggerOccurrence
                 RoutingUpdatedAtUtc,
                 ClaimId,
                 ClaimLeaseExpiresAtUtc,
-                pin, ExecutionSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc, ExecutionTarget, CompletionDelivery)
+                pin, ExecutionSessionId, AcceptedAgentRunId, LiveSessionId, LiveEvaluationCompletedAtUtc, ExecutionTarget, CompletionDelivery, TriggerId)
             : this;
 
     public TriggerOccurrence WithLiveSession(Guid sessionId, long expectedRevision, DateTimeOffset atUtc)
@@ -962,7 +1003,7 @@ public sealed class TriggerOccurrence
             RoutingRevision + 1, atUtc, disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimId : null,
             disposition == OccurrenceRoutingDisposition.LivePrepared ? ClaimLeaseExpiresAtUtc : null,
             modelPin: ModelPin, acceptedAgentRunId: runId, liveSessionId: sessionId,
-            liveEvaluationCompletedAtUtc: completedAt, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery);
+            liveEvaluationCompletedAtUtc: completedAt, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId);
 
     public TriggerOccurrence WithExecutionAcceptance(Guid sessionId, Guid agentRunId, long expectedRevision,
         DateTimeOffset acceptedAtUtc)
@@ -972,7 +1013,7 @@ public sealed class TriggerOccurrence
         return new TriggerOccurrence(OccurrenceId, DedupeKey, AutomationId, Owner, SourceKind, ScheduledAtUtc,
             ObservedAtUtc, AdmittedAtUtc, EvidenceJson, SourceEventId, TriggerRevision,
             OccurrenceRoutingDisposition.AcceptedDurable, null, RoutingRevision + 1, acceptedAtUtc, null, null,
-            ModelPin, sessionId, agentRunId, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery);
+            ModelPin, sessionId, agentRunId, executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId);
     }
 
     public TriggerOccurrence WithRouting(
@@ -1004,7 +1045,7 @@ public sealed class TriggerOccurrence
             acceptedAgentRunId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? AcceptedAgentRunId : null,
             liveSessionId: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveSessionId : null,
             liveEvaluationCompletedAtUtc: disposition == OccurrenceRoutingDisposition.AcceptedLive ? LiveEvaluationCompletedAtUtc : null,
-            executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery);
+            executionTarget: ExecutionTarget, completionDelivery: CompletionDelivery, triggerId: TriggerId);
 
     private static void RequireUtc(DateTimeOffset value, string name)
     {

@@ -23,7 +23,7 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
         if (row is null) return;
         var bucket = JsonSerializer.Deserialize<CoreEventBucket>(row.PayloadJson, CoreEventPersistence.Json)!;
         if (bucket.Subscription.Owner != owner) return;
-        var rows = await db.CoreEventBuckets.Where(b => b.AutomationId == row.AutomationId && EF.Functions.Like(b.PayloadJson, "%" + sourceId.ToString("D") + "%")).ToArrayAsync(ct);
+        var rows = await db.CoreEventBuckets.Where(b => b.TriggerId == row.TriggerId && EF.Functions.Like(b.PayloadJson, "%" + sourceId.ToString("D") + "%")).ToArrayAsync(ct);
         foreach (var prior in rows)
         {
             bucket = JsonSerializer.Deserialize<CoreEventBucket>(prior.PayloadJson, CoreEventPersistence.Json)!;
@@ -38,20 +38,20 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        var delivery = await db.CoreEventDeliveries.SingleOrDefaultAsync(d => d.EventId == source.EventId.ToString("D") && d.AutomationId == subscription.AutomationId.ToString("D"), ct);
+        var delivery = await db.CoreEventDeliveries.SingleOrDefaultAsync(d => d.EventId == source.EventId.ToString("D") && d.TriggerId == subscription.TriggerId.ToString("D"), ct);
         if (subscription.SourceKind == TriggerSourceKind.CoreEvent && delivery?.Status != (int)EventMatchStatus.Matched) return;
-        if (await db.CoreEventBuckets.AnyAsync(b => b.AutomationId == subscription.AutomationId.ToString("D") && EF.Functions.Like(b.PayloadJson, "%" + source.EventId.ToString("D") + "%"), ct)) return;
-        var rows = await db.CoreEventBuckets.Where(b => !b.Flushed && b.AutomationId == subscription.AutomationId.ToString("D") && b.TriggerRevision == subscription.TriggerRevision && b.DueAtUtc > source.ReceivedAtUtc.ToUnixTimeMilliseconds()).OrderBy(b => b.DueAtUtc).Take(32).ToArrayAsync(ct);
+        if (await db.CoreEventBuckets.AnyAsync(b => b.TriggerId == subscription.TriggerId.ToString("D") && EF.Functions.Like(b.PayloadJson, "%" + source.EventId.ToString("D") + "%"), ct)) return;
+        var rows = await db.CoreEventBuckets.Where(b => !b.Flushed && b.TriggerId == subscription.TriggerId.ToString("D") && b.TriggerRevision == subscription.TriggerRevision && b.DueAtUtc > source.ReceivedAtUtc.ToUnixTimeMilliseconds()).OrderBy(b => b.DueAtUtc).Take(32).ToArrayAsync(ct);
         var row = rows.FirstOrDefault(r => { var b = JsonSerializer.Deserialize<CoreEventBucket>(r.PayloadJson, CoreEventPersistence.Json)!; return EventBucketPacking.CanAppend(b.Sources, source); });
         CoreEventBucket bucket;
         if (row is null)
         {
-            bucket = new(CoreEventPersistence.Id($"bucket:{source.EventId:D}:{subscription.AutomationId:D}"), subscription, source.ReceivedAtUtc.AddSeconds(subscription.Dispatch.WindowSeconds!.Value), [source]);
+            bucket = new(CoreEventPersistence.Id($"bucket:{source.EventId:D}:{subscription.TriggerId:D}"), subscription, source.ReceivedAtUtc.AddSeconds(subscription.Dispatch.WindowSeconds!.Value), [source]);
             if (!EventBucketPacking.CanAppend([], source))
                 bucket = bucket with { Flushed = true, CompletionCode = "evidence-budget" };
-            else if (await db.CoreEventBuckets.CountAsync(b => !b.Flushed && b.AutomationId == subscription.AutomationId.ToString("D"), ct) >= 32)
+            else if (await db.CoreEventBuckets.CountAsync(b => !b.Flushed && b.TriggerId == subscription.TriggerId.ToString("D"), ct) >= 32)
                 bucket = bucket with { Flushed = true, CompletionCode = "bucket-capacity" };
-            row = new() { BucketId = bucket.BucketId.ToString("D"), AutomationId = subscription.AutomationId.ToString("D"), TriggerRevision = subscription.TriggerRevision, DueAtUtc = bucket.DueAtUtc.ToUnixTimeMilliseconds(), Flushed = bucket.Flushed };
+            row = new() { BucketId = bucket.BucketId.ToString("D"), AutomationId = subscription.AutomationId.ToString("D"), TriggerId = subscription.TriggerId.ToString("D"), TriggerRevision = subscription.TriggerRevision, DueAtUtc = bucket.DueAtUtc.ToUnixTimeMilliseconds(), Flushed = bucket.Flushed };
             db.CoreEventBuckets.Add(row);
         }
         else { bucket = JsonSerializer.Deserialize<CoreEventBucket>(row.PayloadJson, CoreEventPersistence.Json)!; bucket = bucket with { Sources = bucket.Sources.Append(source).ToArray() }; }
@@ -99,32 +99,32 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
         var r = await db.CoreEvents.SingleAsync(e => e.EventId == eventId.ToString("D"), ct);
         if (r.Snapshotted) return;
         foreach (var s in subscriptions.Where(s => s.Owner.AgentInstanceId.ToString("D") == r.AgentInstanceId && s.Owner.ProfileId.ToString("D") == r.ProfileId))
-            db.CoreEventDeliveries.Add(new() { EventId = r.EventId, AutomationId = s.AutomationId.ToString("D"), AgentInstanceId = r.AgentInstanceId, ProfileId = r.ProfileId, SnapshotJson = JsonSerializer.Serialize(s, CoreEventPersistence.Json) });
+            db.CoreEventDeliveries.Add(new() { EventId = r.EventId, AutomationId = s.AutomationId.ToString("D"), TriggerId = s.TriggerId.ToString("D"), AgentInstanceId = r.AgentInstanceId, ProfileId = r.ProfileId, SnapshotJson = JsonSerializer.Serialize(s, CoreEventPersistence.Json) });
         r.Snapshotted = true;
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
     }
     public async ValueTask<IReadOnlyList<CoreEventDelivery>> DeliveriesAsync(Guid eventId, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct); return (await db.CoreEventDeliveries.AsNoTracking().Where(d => d.EventId == eventId.ToString("D")).OrderBy(d => d.AutomationId).ToArrayAsync(ct)).Select(Read).ToArray(); }
-    public async ValueTask<EventFilterResult> DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null)
+    public async ValueTask<EventFilterResult> DecideAsync(Guid eventId, Guid triggerId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         // Legacy decision JSON omits the additive retry fields; compare its domain value,
         // then CAS against the original bytes so concurrent writers still have one winner.
-        var prior = await db.CoreEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D"), ct);
+        var prior = await db.CoreEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.TriggerId == triggerId.ToString("D"), ct);
         var expectedJson = expectedDecision?.Retryable == true && prior?.DecisionJson is { } json
             && JsonSerializer.Deserialize<EventFilterResult>(json, CoreEventPersistence.Json) == expectedDecision ? json : null;
-        await db.CoreEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && d.DecisionJson == expectedJson && (d.Status == (int)EventMatchStatus.Pending || expectedJson != null && d.Status == (int)EventMatchStatus.FilterError))
+        await db.CoreEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.TriggerId == triggerId.ToString("D") && d.DecisionJson == expectedJson && (d.Status == (int)EventMatchStatus.Pending || expectedJson != null && d.Status == (int)EventMatchStatus.FilterError))
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.DecisionJson, JsonSerializer.Serialize(decision, CoreEventPersistence.Json))
                 .SetProperty(d => d.Status, (int)(decision.Retryable ? EventMatchStatus.Pending : decision.Matched == true ? EventMatchStatus.Matched : decision.Matched == false ? EventMatchStatus.Filtered : EventMatchStatus.FilterError)).SetProperty(d => d.Code, decision.Code), ct);
-        var row = await db.CoreEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D"), ct);
+        var row = await db.CoreEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.TriggerId == triggerId.ToString("D"), ct);
         return row?.DecisionJson is not null && row.Status is not ((int)EventMatchStatus.PolicySkipped or (int)EventMatchStatus.LoopSkipped or (int)EventMatchStatus.BudgetSkipped)
             ? JsonSerializer.Deserialize<EventFilterResult>(row.DecisionJson, CoreEventPersistence.Json)!
             : new(null, "error", "delivery-unavailable");
     }
-    public async ValueTask FinishAsync(Guid eventId, Guid automationId, EventMatchStatus status, string? code = null, CancellationToken ct = default)
+    public async ValueTask FinishAsync(Guid eventId, Guid triggerId, EventMatchStatus status, string? code = null, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        await db.CoreEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && (d.Status == (int)EventMatchStatus.Pending || d.Status == (int)EventMatchStatus.Matched || d.Status == (int)EventMatchStatus.FilterError && (d.Code == "filter-worker-budget" || d.Code == "filter-timeout")))
+        await db.CoreEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.TriggerId == triggerId.ToString("D") && (d.Status == (int)EventMatchStatus.Pending || d.Status == (int)EventMatchStatus.Matched || d.Status == (int)EventMatchStatus.FilterError && (d.Code == "filter-worker-budget" || d.Code == "filter-timeout")))
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, (int)status).SetProperty(d => d.Code, code), ct);
     }
     public async ValueTask<IReadOnlyList<CoreEventDelivery>> ActivityAsync(TriggerOwner owner, CancellationToken ct = default)

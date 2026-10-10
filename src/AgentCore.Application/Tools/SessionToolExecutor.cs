@@ -369,7 +369,7 @@ public sealed partial class SessionToolExecutor(
                 if (call.Name == ToolCatalog.AutomationRun)
                     return TextResult(JsonSerializer.Serialize(new { occurrenceId = (await automationAuthoring.RunNowAsync(owner.AgentInstanceId, automationId, revision, cancellationToken)).OccurrenceId }));
                 return TextResult(TriggerScheduleCommands.RegistrationJson(await automationAuthoring.SaveAsync(owner.AgentInstanceId, automationId, revision, false,
-                    current.Name, current.Instructions, current.Trigger, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort, cancellationToken)));
+                    current.Name, current.Instructions, current.Triggers, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort, cancellationToken)));
             }
             if (call.Name == AgentCore.Application.Experience.ExperienceService.RecordTool)
             {

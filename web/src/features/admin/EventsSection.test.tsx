@@ -3,12 +3,14 @@ import { App as AntApp, ConfigProvider } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EventsSection } from "./EventsSection";
 
-vi.mock("../../services/adminApi", () => ({
-  listWebhookEvents: vi.fn(),
+vi.mock("../../services/adminApi", () => { const listWebhookEvents = vi.fn(); return ({
+  listWebhookEvents,
+  eventSourceKey: (s: { kind: string; key?: string; eventId?: string }) => `${s.kind}:${s.key ?? s.eventId}`,
+  listEventCatalog: async (kind: string) => kind === "builtin" ? [] : (await listWebhookEvents()).map((webhook: { eventId: string; displayName: string; eventKey: string; status: string }) => ({ source: { kind: "webhook", eventId: webhook.eventId }, name: webhook.displayName, key: webhook.eventKey, state: webhook.status, description: "External signal", webhook, example: {}, fieldSchema: {} })),
   createWebhookEvent: vi.fn(),
   rotateWebhookEvent: vi.fn(),
   revokeWebhookEvent: vi.fn(), getWebhookEvent: vi.fn(), renameWebhookEvent: vi.fn()
-}));
+}); });
 
 import {
   createWebhookEvent,
@@ -61,11 +63,11 @@ describe("EventsSection", () => {
       revision: 3
     });
     renderSection();
-    expect(await screen.findByText("No Events yet. Create an Event, then subscribe an Automation to it.")).toBeInTheDocument();
+    expect(await screen.findByText("No matches. Clear search or filters to see all results.")).toBeInTheDocument();
 
     vi.mocked(listWebhookEvents).mockResolvedValue([{ eventId, eventKey, displayName: "Demo Store", status: "Active", revision: 1,
       createdAt: "2026-10-08T00:00:00Z", updatedAt: "2026-10-08T00:00:00Z", subscriberCount: 2, activeSubscriberCount: 1, lastReceivedAt: null }]);
-    fireEvent.click(screen.getByRole("button", { name: "New Event" }));
+    fireEvent.click(screen.getByRole("button", { name: "New webhook Event" }));
     fireEvent.change(screen.getByLabelText("Event key"), { target: { value: eventKey } });
     fireEvent.change(screen.getByLabelText("Event name"), { target: { value: "Demo Store" } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Create Event" })); });
@@ -106,10 +108,10 @@ describe("EventsSection", () => {
     vi.mocked(listWebhookEvents).mockRejectedValueOnce(new Error("Sources unavailable")).mockResolvedValueOnce([]);
     renderSection();
     expect(await screen.findByText("Sources unavailable")).toBeVisible();
-    expect(screen.queryByText("No Events yet. Create an Event, then subscribe an Automation to it.")).not.toBeInTheDocument();
+    expect(screen.getByText("No matches. Clear search or filters to see all results.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText("No Events yet. Create an Event, then subscribe an Automation to it.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "New Event" })).toBeVisible();
+    expect(await screen.findByText("No matches. Clear search or filters to see all results.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "New webhook Event" })).toBeVisible();
   });
 
   it("names reactivation explicitly and cancellation leaves the Event revoked", async () => {
@@ -162,7 +164,7 @@ describe("EventsSection", () => {
     vi.mocked(createWebhookEvent).mockResolvedValue({ eventId, eventKey, token: "one-time-token", status: "Active" });
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("Denied")) } });
     renderSection();
-    fireEvent.click(await screen.findByRole("button", { name: "New Event" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New webhook Event" }));
     fireEvent.change(await screen.findByLabelText("Event key"), { target: { value: eventKey } });
     fireEvent.change(await screen.findByLabelText("Event name"), { target: { value: "Store" } });
     fireEvent.click(screen.getByRole("button", { name: "Create Event" }));
@@ -180,8 +182,8 @@ describe("EventsSection", () => {
     vi.mocked(createWebhookEvent).mockRejectedValueOnce(new Error("Temporary failure"))
       .mockResolvedValueOnce({ eventId, eventKey, token: "retry-token", status: "Active" });
     renderSection();
-    fireEvent.click(await screen.findByRole("button", { name: "New Event" }));
-    const drawer = await screen.findByRole("dialog", { name: "New Event" });
+    fireEvent.click(await screen.findByRole("button", { name: "New webhook Event" }));
+    const drawer = await screen.findByRole("dialog", { name: "New webhook Event" });
     expect(within(drawer).getByRole("button", { name: "Create Event" })).toBeDisabled();
     fireEvent.change(within(drawer).getByLabelText("Event key"), { target: { value: eventKey } });
     fireEvent.change(within(drawer).getByLabelText("Event name"), { target: { value: " Retry Store " } });
@@ -193,12 +195,12 @@ describe("EventsSection", () => {
     expect(createWebhookEvent).toHaveBeenLastCalledWith("Retry Store", eventKey);
     fireEvent.click(within(credential).getByRole("button", { name: "Done" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "New Event" }));
+    fireEvent.click(screen.getByRole("button", { name: "New webhook Event" }));
     fireEvent.change(screen.getByLabelText("Event key"), { target: { value: eventKey } });
     fireEvent.change(screen.getByLabelText("Event name"), { target: { value: "Discard me" } });
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "New Event" }));
+    fireEvent.click(screen.getByRole("button", { name: "New webhook Event" }));
     expect(screen.getByLabelText("Event name")).toHaveValue("");
   });
 

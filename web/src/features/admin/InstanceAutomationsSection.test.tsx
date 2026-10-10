@@ -2,22 +2,22 @@ import { App, ConfigProvider } from "antd";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InstanceAutomationsSection } from "./InstanceAutomationsSection";
-import { instanceContinuityRequest, listWebhookEvents, type Automation } from "../../services/adminApi";
+import { instanceContinuityRequest, listEventCatalog, type Automation } from "../../services/adminApi";
 import { listModels } from "../../services/api";
-vi.mock("../../services/adminApi", () => ({ instanceContinuityRequest: vi.fn(), listWebhookEvents: vi.fn(async () => []) }));
+vi.mock("../../services/adminApi", () => ({ instanceContinuityRequest: vi.fn(), listEventCatalog: vi.fn(async () => []), eventSourceKey: (s: { kind: string; key?: string; eventId?: string }) => `${s.kind}:${s.key ?? s.eventId}` }));
 vi.mock("../../services/api", () => ({ listModels: vi.fn() }));
 const request = vi.mocked(instanceContinuityRequest);
 const allowedPolicy = { allowOneShot: true, allowDaily: true, allowWeekly: true, allowFixedInterval: true, allowEvents: true,
   allowIndefiniteRecurrence: true, oneShotHorizonDays: 365, minRecurrenceDays: 1, minFixedIntervalSeconds: 60, maxActiveRegistrations: 32 };
 const row: Automation = { executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" }, automationId: "scheduled", revision: 2, name: "Review store orders", outcome: null, instructions: "Review store orders", enabled: true, status: "Active",
-  trigger: { kind: "schedule", schedule: { kind: "daily", interval: 1, localTime: "09:00", timeZone: "UTC" } }, authorizationOrigin: "CurrentUserTurn",
+  triggers: [{ triggerId: "child", revision: 1, enabled: true,  kind: "schedule", schedule: { kind: "daily", interval: 1, localTime: "09:00", timeZone: "UTC" } }], authorizationOrigin: "CurrentUserTurn",
   sourceSessionId: "source-session", sourceEventId: null, createdAt: "2026-10-05T00:00:00Z", nextRunAt: "2026-10-06T09:00:00Z",
   modelKey: null, reasoningEffort: null, effectiveModelKey: "scripted-alpha", lastAgentRunId: null, executionStatus: null };
-const view = () => <ConfigProvider><App><InstanceAutomationsSection instanceId="instance" onWork={vi.fn()} /></App></ConfigProvider>;
+const view = () => <ConfigProvider theme={{ token: { motion: false } }}><App><InstanceAutomationsSection instanceId="instance" onWork={vi.fn()} /></App></ConfigProvider>;
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 beforeEach(() => {
   vi.clearAllMocks(); vi.mocked(listModels).mockResolvedValue({ defaultKey: "scripted-alpha", models: [] });
-  vi.mocked(listWebhookEvents).mockResolvedValue([]);
+  vi.mocked(listEventCatalog).mockResolvedValue([]);
   request.mockResolvedValue({ items: [], policy: allowedPolicy });
 });
 describe("Owner schedule authoring", () => {
@@ -30,37 +30,37 @@ describe("Owner schedule authoring", () => {
     expect(summary.getByText("Keep results in Background work without a conversation report")).toBeVisible();
     fireEvent.change(screen.getByLabelText("Schedule local time"), { target: { value: "14:30" } });
     expect(summary.getByText(/14:30/)).toBeVisible();
-    fireEvent.click(screen.getByRole("switch", { name: "Enable automation" }));
+    expect(screen.getByRole("switch", { name: "Enable automation" })).not.toBeChecked();
     expect(summary.getByText("Saved disabled. Enable this Automation before it can run.")).toBeVisible();
     fireEvent.mouseDown(screen.getByLabelText("Automation completion report"));
     fireEvent.click(await screen.findByText("Selected conversation", { selector: ".ant-select-item-option-content" }));
     expect(summary.getByText("Choose a conversation for the completion report")).toBeVisible();
     expect(screen.getByRole("button", { name: "Create automation" })).toBeDisabled();
   });
-  it("blocks Schedule authoring when the Definition has no policy", async () => {
+  it("allows disabled Schedule authoring when the Definition has no policy", async () => {
     request.mockResolvedValue({ items: [], policy: null });
     render(view()); await screen.findByText(/No automations yet/);
     fireEvent.click(screen.getByRole("button", { name: "New automation" }));
     fireEvent.change(screen.getByLabelText("Automation name"), { target: { value: "Blocked schedule" } });
     fireEvent.change(screen.getByLabelText("Automation instructions"), { target: { value: "Do not admit this" } });
     expect(screen.getByText("This Definition does not permit Schedule Automations.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create automation" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create automation" })).toBeEnabled();
   });
   it("keeps Event load failures visible after an Automation refresh and retries the catalog", async () => {
-    vi.mocked(listWebhookEvents).mockRejectedValueOnce(new Error("Event catalog unavailable"));
+    vi.mocked(listEventCatalog).mockRejectedValueOnce(new Error("Event catalog unavailable"));
     render(view());
     const retry = await screen.findByRole("button", { name: "Reload Events and models" });
     await screen.findByText(/No automations yet/);
     fireEvent.click(retry);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Reload Events and models" })).not.toBeInTheDocument());
-    expect(listWebhookEvents).toHaveBeenCalledTimes(2);
+    expect(listEventCatalog).toHaveBeenCalledTimes(4);
   });
   it("explains a missing Event policy before saving an existing subscription", async () => {
-    request.mockResolvedValue({ items: [{ ...row, trigger: { kind: "event", eventId: "shared-event" } }], policy: null });
+    request.mockResolvedValue({ items: [{ ...row, triggers: [{ triggerId: "child", revision: 1, enabled: true,  kind: "event", source: { kind: "webhook", eventId: "shared-event" } }] }], policy: null });
     render(view());
     fireEvent.click(await screen.findByRole("button", { name: `View automation: ${row.name}` }));
     fireEvent.click(screen.getByRole("button", { name: "Edit automation" }));
-    expect(await screen.findByText("This Definition does not permit Event Automations.")).toBeVisible();
+    expect(await screen.findByText("Allow Webhook Events in the Definition and activate this Event to run this subscription.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Save automation" })).toBeDisabled();
   });
   it.each(["Completed", "Expired"])("deletes %s automations with the current revision", async status => {
@@ -93,7 +93,7 @@ describe("Owner schedule authoring", () => {
   it("refreshes a source created after the cached review when returning from Runs", async () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
     request.mockResolvedValue({ items: [] });
-    const ui = (selection?: { kind: "automation"; automationId: string; request: number }) => <ConfigProvider><App>
+    const ui = (selection?: { kind: "automation"; automationId: string; request: number }) => <ConfigProvider theme={{ token: { motion: false } }}><App>
       <InstanceAutomationsSection instanceId="instance" onWork={vi.fn()} selection={selection} /></App></ConfigProvider>;
     const mounted = render(ui());
     await screen.findByText(/No automations yet/);
@@ -137,8 +137,8 @@ describe("Owner schedule authoring", () => {
     fireEvent.click((await screen.findAllByText("Asia/Tokyo")).find(e => e.classList.contains("ant-select-item-option-content"))!);
     fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations", "POST", {
-      executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" }, expectedRevision: 0, enabled: true, name: "Review orders", instructions: "Review pending orders", modelKey: null, reasoningEffort: null,
-      trigger: { kind: "schedule", schedule: { kind: "daily", timeZone: "Asia/Tokyo", interval: 1, localTime: "09:00" } }
+      executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" }, expectedRevision: 0, enabled: false, name: "Review orders", instructions: "Review pending orders", modelKey: null, reasoningEffort: null,
+      triggers: [{ triggerId: expect.any(String), revision: 1, enabled: true,  kind: "schedule", schedule: { kind: "daily", timeZone: "Asia/Tokyo", interval: 1, localTime: "09:00" } }]
     }));
   });
   it("requires a finite bound under Definition policy and sends the selected occurrence limit", async () => {
@@ -148,6 +148,7 @@ describe("Owner schedule authoring", () => {
     fireEvent.click(screen.getByRole("button", { name: "New automation" }));
     fireEvent.change(screen.getByLabelText("Automation name"), { target: { value: "Audit" } });
     fireEvent.change(screen.getByLabelText("Automation instructions"), { target: { value: "Finite store audit" } });
+    fireEvent.click(screen.getByRole("switch", { name: "Enable automation" }));
     expect(screen.getByText(/This Definition requires an end date/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Create automation" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Schedule maximum occurrences"), { target: { value: "367" } });
@@ -155,7 +156,7 @@ describe("Owner schedule authoring", () => {
     fireEvent.change(screen.getByLabelText("Schedule maximum occurrences"), { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Create automation" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations", "POST", expect.objectContaining({
-      trigger: { kind: "schedule", schedule: expect.objectContaining({ maxOccurrences: 3 }) }
+      triggers: [{ triggerId: expect.any(String), revision: 1, enabled: true,  kind: "schedule", schedule: expect.objectContaining({ maxOccurrences: 3 }) }]
     })));
   });
   it("preserves chat provenance and keeps accepted run locked across stale status until a new execution", async () => {
@@ -186,7 +187,7 @@ describe("Owner schedule authoring", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Enable automation" }));
     fireEvent.click(screen.getByRole("button", { name: "Save automation" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations/scheduled", "PUT", {
-      executionTarget: row.executionTarget, completionDelivery: row.completionDelivery, requiresTools: undefined, requiresVision: undefined, expectedRevision: 2, enabled: false, name: row.name, instructions: "Future orders", trigger: row.trigger, modelKey: null, reasoningEffort: null
+      executionTarget: row.executionTarget, completionDelivery: row.completionDelivery, requiresTools: undefined, requiresVision: undefined, expectedRevision: 2, enabled: false, name: row.name, instructions: "Future orders", triggers: row.triggers, modelKey: null, reasoningEffort: null
     }));
   });
   it("opens the exact source beyond pagination without discarding an editor draft", async () => {
@@ -195,7 +196,7 @@ describe("Owner schedule authoring", () => {
       lastAgentRunId: index === 11 ? "run-11" : null }));
     request.mockResolvedValue({ items: rows });
     const onWork = vi.fn();
-    const ui = (selection?: { kind: "automation"; automationId: string; request: number }) => <ConfigProvider><App>
+    const ui = (selection?: { kind: "automation"; automationId: string; request: number }) => <ConfigProvider theme={{ token: { motion: false } }}><App>
       <InstanceAutomationsSection instanceId="instance" onWork={onWork} selection={selection} /></App></ConfigProvider>;
     const view = render(ui());
     const section = within(screen.getByRole("region", { name: "Automations", hidden: true }));
@@ -222,7 +223,7 @@ describe("Owner schedule authoring", () => {
 
   it("retains a hidden editor draft when another automation is disabled", async () => {
     request.mockResolvedValue({ items: [row] });
-    const ui = (active: boolean) => <ConfigProvider><App>
+    const ui = (active: boolean) => <ConfigProvider theme={{ token: { motion: false } }}><App>
       <InstanceAutomationsSection instanceId="instance" active={active} onWork={vi.fn()} /></App></ConfigProvider>;
     const mounted = render(ui(true));
     fireEvent.click(await screen.findByRole("button", { name: `View automation: ${row.name}` }));

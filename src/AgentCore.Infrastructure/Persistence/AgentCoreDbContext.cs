@@ -202,6 +202,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<CoreEventBucketRecord> CoreEventBuckets => Set<CoreEventBucketRecord>();
     public DbSet<CoreEventRecord> CoreEvents => Set<CoreEventRecord>();
     public DbSet<CoreEventDeliveryRecord> CoreEventDeliveries => Set<CoreEventDeliveryRecord>();
+    public DbSet<AutomationTriggerRecordEntity> AutomationTriggers => Set<AutomationTriggerRecordEntity>();
     public DbSet<AutomationRecord> Automations => Set<AutomationRecord>();
     public DbSet<WebhookEventRecord> WebhookEvents => Set<WebhookEventRecord>();
     public DbSet<ExternalEventRecord> ExternalEvents => Set<ExternalEventRecord>();
@@ -236,7 +237,12 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<AgentInstanceSkillRecord> AgentInstanceSkills => Set<AgentInstanceSkillRecord>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<BrowserPrivacyRecord>(e => { e.ToTable("BrowserPrivacy"); e.HasKey(r => r.Id); e.Property(r => r.Revision).IsConcurrencyToken(); e.Property(r => r.PolicyJson).IsRequired(); });
+        modelBuilder.Entity<BrowserPrivacyRecord>(e =>
+        {
+            e.ToTable("BrowserPrivacy"); e.HasKey(r => r.Id);
+            e.Property(r => r.Revision).IsConcurrencyToken();
+            e.Property(r => r.PolicyJson).IsRequired();
+        });
         modelBuilder.Entity<AgentDefinitionSkillStateRecord>(e => {
             e.ToTable("AgentDefinitionSkillStates"); e.HasKey(s => new { s.AgentInstanceId, s.DefinitionSkillId });
             e.Property(s => s.AgentInstanceId).HasMaxLength(36); e.Property(s => s.DefinitionSkillId).HasMaxLength(64);
@@ -451,35 +457,46 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<CoreEventDeliveryRecord>(entity =>
         {
-            entity.ToTable("CoreEventDeliveries"); entity.HasKey(r => new { r.EventId, r.AutomationId });
+            entity.ToTable("CoreEventDeliveries"); entity.HasKey(r => new { r.EventId, r.TriggerId });
             entity.HasIndex(r => new { r.AgentInstanceId, r.ProfileId, r.Status });
         });
         modelBuilder.Entity<AutomationRecord>(entity =>
         {
             entity.ToTable("Automations", table => {
+                table.HasCheckConstraint("CK_Automations_Mode", "TriggerMode IN (0,1)");
                 table.HasCheckConstraint("CK_Automations_Destination", "(ExecutionTargetKind = 0 AND TargetSessionId IS NULL) OR (ExecutionTargetKind = 1 AND TargetSessionId IS NOT NULL AND ReportToSessionId IS NULL)");
-                table.HasCheckConstraint("CK_Automations_Trigger", "(TriggerKind = 0 AND ScheduleJson IS NOT NULL AND EventId IS NULL AND CoreEventKey IS NULL AND FilterExpression IS NULL AND DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (TriggerKind = 1 AND ScheduleJson IS NULL AND EventId IS NOT NULL AND CoreEventKey IS NULL) OR (TriggerKind = 2 AND ScheduleJson IS NULL AND EventId IS NULL AND CoreEventKey IS NOT NULL)");
-                table.HasCheckConstraint("CK_Automations_Dispatch", "(DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (DispatchMode = 1 AND DispatchWindowSeconds BETWEEN 60 AND 3600)");
                 table.HasCheckConstraint("CK_Automations_Preset", "(PresetId IS NULL AND PresetVersion IS NULL) OR (PresetId IS NOT NULL AND PresetVersion >= 1)");
             });
-            entity.Property(row => row.DispatchMode).HasDefaultValue(0);
             entity.HasKey(row => row.AutomationId);
+            entity.HasMany(row => row.Triggers).WithOne().HasForeignKey(t => t.AutomationId).OnDelete(DeleteBehavior.Cascade);
+            entity.Navigation(row => row.Triggers).AutoInclude();
             entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
             entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
             entity.Property(row => row.Name).HasMaxLength(120).IsRequired();
             entity.Property(row => row.Instructions).HasMaxLength(2000).IsRequired();
             entity.Property(row => row.Revision).IsConcurrencyToken();
-            entity.Property(row => row.ScheduleJson).HasMaxLength(4000);
             entity.Property(row => row.SourceSessionId).HasMaxLength(36);
             entity.Property(row => row.SourceEventId).HasMaxLength(36);
             entity.Property(row => row.SuspensionReason).HasMaxLength(200);
             entity.Property(row => row.ModelOverrideCatalogKey).HasMaxLength(128);
             entity.Property(row => row.ModelOverrideReasoningEffort).HasMaxLength(64);
-            entity.Property(row => row.EventId).HasMaxLength(36);
-            entity.HasIndex(row => new { row.EventId, row.Status });
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Status });
             entity.HasIndex(row => new { row.Status, row.NextOccurrenceAtUtc, row.AutomationId });
+        });
+        modelBuilder.Entity<AutomationTriggerRecordEntity>(entity =>
+        {
+            entity.ToTable("AutomationTriggers", table => {
+                table.HasCheckConstraint("CK_AutomationTriggers_Identity", "length(TriggerId) = 36 AND TriggerId <> '00000000-0000-0000-0000-000000000000' AND Revision >= 1");
+                table.HasCheckConstraint("CK_AutomationTriggers_Source", "(Kind = 0 AND ScheduleJson IS NOT NULL AND EventId IS NULL AND CoreEventKey IS NULL AND FilterExpression IS NULL AND DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (Kind = 1 AND ScheduleJson IS NULL AND EventId IS NOT NULL AND CoreEventKey IS NULL) OR (Kind = 2 AND ScheduleJson IS NULL AND EventId IS NULL AND CoreEventKey IN ('run.completed','run.failed','session.completed','session.ended','instance.config_changed','harness.definition_adopted'))");
+                table.HasCheckConstraint("CK_AutomationTriggers_Dispatch", "(DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (DispatchMode = 1 AND DispatchWindowSeconds BETWEEN 60 AND 3600)");
+            });
+            entity.HasKey(t => t.TriggerId);
+            entity.Property(t => t.Revision).IsConcurrencyToken();
+            entity.HasIndex(t => new { t.AutomationId, t.EventId }).IsUnique().HasFilter("EventId IS NOT NULL");
+            entity.HasIndex(t => new { t.AutomationId, t.CoreEventKey }).IsUnique().HasFilter("CoreEventKey IS NOT NULL");
+            entity.HasIndex(t => new { t.EventId, t.Enabled });
+            entity.HasIndex(t => new { t.AutomationId, t.Kind }).IsUnique().HasFilter("Kind = 0");
         });
         modelBuilder.Entity<WebhookEventRecord>(entity =>
         {
@@ -505,12 +522,12 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<ExternalEventDeliveryRecord>(entity =>
         {
             entity.ToTable("ExternalEventDeliveries");
-            entity.HasKey(row => new { row.EventId, row.AutomationId });
+            entity.HasKey(row => new { row.EventId, row.TriggerId });
             entity.Property(row => row.EventId).HasMaxLength(36);
             entity.Property(row => row.AutomationId).HasMaxLength(36);
             entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
             entity.Property(row => row.ProfileId).HasMaxLength(36).IsRequired();
-            entity.HasIndex(row => new { row.Status, row.EventId, row.AutomationId });
+            entity.HasIndex(row => new { row.Status, row.EventId, row.TriggerId });
         });
         modelBuilder.Entity<TriggerOccurrenceRecord>(entity =>
         {

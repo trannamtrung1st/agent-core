@@ -97,7 +97,7 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
             _events[key] = candidate;
             foreach (var target in targets)
             {
-                var deliveryKey = (candidate.EventId, target.AutomationId);
+                var deliveryKey = (candidate.EventId, target.Snapshot?.TriggerId ?? target.AutomationId);
                 _deliveries[deliveryKey] = new ExternalEventDelivery(
                     candidate.EventId,
                     target.AutomationId,
@@ -120,39 +120,39 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
             var rows = _deliveries.Values
                 .Where(item => (item.Status == ExternalEventDeliveryStatus.Pending || item.Status == ExternalEventDeliveryStatus.FilterError && item.Decision?.Retryable == true)
                     && (eventId is null || item.EventId == eventId))
-                .Where(item => after == null || string.CompareOrdinal(item.EventId.ToString("D"), after.EventId.ToString("D")) > 0 || item.EventId == after.EventId && string.CompareOrdinal(item.AutomationId.ToString("D"), after.AutomationId.ToString("D")) > 0)
+                .Where(item => after == null || string.CompareOrdinal(item.EventId.ToString("D"), after.EventId.ToString("D")) > 0 || item.EventId == after.EventId && string.CompareOrdinal(item.TriggerId.ToString("D"), after.TriggerId.ToString("D")) > 0)
                 .OrderBy(item => item.EventId.ToString("D"), StringComparer.Ordinal)
-                .ThenBy(item => item.AutomationId.ToString("D"), StringComparer.Ordinal)
+                .ThenBy(item => item.TriggerId.ToString("D"), StringComparer.Ordinal)
                 .Take(Math.Clamp(limit, 1, 64))
                 .ToArray();
             return ValueTask.FromResult<IReadOnlyList<ExternalEventDelivery>>(rows);
         }
     }
 
-    public ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null)
+    public ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid triggerId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null)
     {
         lock (_gate)
         {
-            if (!_deliveries.TryGetValue((eventId, automationId), out var d) || d.Status == ExternalEventDeliveryStatus.Skipped)
+            if (!_deliveries.TryGetValue((eventId, triggerId), out var d) || d.Status == ExternalEventDeliveryStatus.Skipped)
                 return ValueTask.FromResult(new EventFilterResult(null, "error", "delivery-unavailable"));
             if (d.Decision is not null && (!d.Decision.Retryable || d.Decision != expectedDecision)) return ValueTask.FromResult(d.Decision);
-            _deliveries[(eventId, automationId)] = d with { Decision = decision, Status = d.Status == ExternalEventDeliveryStatus.FilterError && d.Decision?.Retryable == true ? ExternalEventDeliveryStatus.Pending : d.Status };
+            _deliveries[(eventId, triggerId)] = d with { Decision = decision, Status = d.Status == ExternalEventDeliveryStatus.FilterError && d.Decision?.Retryable == true ? ExternalEventDeliveryStatus.Pending : d.Status };
             return ValueTask.FromResult(decision);
         }
     }
 
     public ValueTask MarkDeliveryAsync(
         Guid eventId,
-        Guid automationId,
+        Guid triggerId,
         ExternalEventDeliveryStatus status,
         CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
-            if (_deliveries.TryGetValue((eventId, automationId), out var current)
+            if (_deliveries.TryGetValue((eventId, triggerId), out var current)
                 && (current.Status == ExternalEventDeliveryStatus.Pending || current.Status == ExternalEventDeliveryStatus.FilterError && current.Decision?.Retryable == true))
             {
-                _deliveries[(eventId, automationId)] = current with { Status = status };
+                _deliveries[(eventId, triggerId)] = current with { Status = status };
             }
 
             return ValueTask.CompletedTask;

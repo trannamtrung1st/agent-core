@@ -29,12 +29,12 @@ public sealed class UnifiedAutomationJourneyTests
             using var client = TestOwnerCapability.CreateOwnerClient(host);
             var path = $"/api/v2/admin/agent-instances/{instanceId}/automations";
             var draft = new AutomationRequest(0, true, "Quiet review", "Inspect current state; do nothing if no work needs action.",
-                new("schedule", new("fixedInterval", Interval: 3600, AnchorAtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("o"))), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
+                new AutomationTriggerDto("schedule", new("fixedInterval", Interval: 3600, AnchorAtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("o"))), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
             var create = await client.PostAsJsonAsync(path, draft); create.EnsureSuccessStatusCode();
             var schedule = (await create.Content.ReadFromJsonAsync<AutomationResponse>())!;
             scheduleId = schedule.AutomationId;
             Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync(path + "/" + scheduleId, draft)).StatusCode);
-            var mixed = draft with { Trigger = new("event", draft.Trigger.Schedule, Guid.NewGuid().ToString()) };
+            var mixed = draft with { Triggers = [new AutomationTriggerDto("event", draft.Triggers.Single().Schedule, Source: new("webhook", EventId: Guid.NewGuid().ToString()), TriggerId: Guid.NewGuid().ToString())] };
             Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, mixed)).StatusCode);
             var run = await client.PostAsJsonAsync(path + "/" + scheduleId + "/run", new ContinuityRevisionRequest(schedule.Revision));
             run.EnsureSuccessStatusCode();
@@ -50,11 +50,11 @@ public sealed class UnifiedAutomationJourneyTests
             Assert.False(manual.Result?.AttentionRequired ?? false);
             var sourceResponse = await client.PostAsJsonAsync("/api/v2/admin/connections/events", new { displayName = "Orders", eventKey = "order.placed" }); sourceResponse.EnsureSuccessStatusCode();
             var source = (await sourceResponse.Content.ReadFromJsonAsync<AdminWebhookEventCredentialResponse>())!;
-            var reaction = draft with { Name = "Review new order", Trigger = new("event", EventId: source.EventId) };
+            var reaction = draft with { Name = "Review new order", Triggers = [new AutomationTriggerDto("event", Source: new("webhook", EventId: source.EventId), TriggerId: Guid.NewGuid().ToString())] };
             var eventResponse = await client.PostAsJsonAsync(path, reaction); eventResponse.EnsureSuccessStatusCode();
             var eventAutomation = (await eventResponse.Content.ReadFromJsonAsync<AutomationResponse>())!;
             eventAutomationId = eventAutomation.AutomationId;
-            Assert.Null(eventAutomation.Trigger.Schedule);
+            Assert.Null(eventAutomation.Triggers!.Single().Schedule);
             var ingress = s.GetRequiredService<ExternalEventIngress>();
             var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-1", "1001"));
             Assert.Equal(ExternalEventIngressKind.Admitted, (await ingress.AdmitAsync(source.EventKey, source.Token, body)).Kind);
@@ -77,8 +77,8 @@ public sealed class UnifiedAutomationJourneyTests
             var review = (await client.GetFromJsonAsync<AutomationReview>(path))!;
             Assert.Equal(2, review.Items.Count);
             Assert.All(review.Items, item => Assert.Equal("NoAction", item.Outcome));
-            Assert.Equal("event", Assert.Single(review.Items, item => item.AutomationId == eventAutomationId).Trigger.Kind);
-            Assert.Equal("schedule", Assert.Single(review.Items, item => item.AutomationId == scheduleId).Trigger.Kind);
+            Assert.Equal("event", Assert.Single(review.Items, item => item.AutomationId == eventAutomationId).Triggers!.Single().Kind);
+            Assert.Equal("schedule", Assert.Single(review.Items, item => item.AutomationId == scheduleId).Triggers!.Single().Kind);
         }
     }
 
@@ -94,7 +94,7 @@ public sealed class UnifiedAutomationJourneyTests
         using var client = TestOwnerCapability.CreateOwnerClient(host);
         var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
         var request = new AutomationRequest(0, true, "Review completed Session", $"synthetic-automation-review-session: {source.SessionId}",
-            new("schedule", new("daily", LocalTime: "09:00", MaxOccurrences: 3)), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
+            new AutomationTriggerDto("schedule", new("daily", LocalTime: "09:00", MaxOccurrences: 3)), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
         var response = await client.PostAsJsonAsync(path, request); response.EnsureSuccessStatusCode();
         var automation = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
         (await client.PostAsJsonAsync(path + "/" + automation.AutomationId + "/run", new ContinuityRevisionRequest(automation.Revision))).EnsureSuccessStatusCode();

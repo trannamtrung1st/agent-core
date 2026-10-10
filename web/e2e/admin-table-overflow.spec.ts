@@ -27,7 +27,7 @@ test("collection links wrap without overlapping adjacent cells at desktop and mo
     executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" },
     expectedRevision: 0, enabled: true, name,
     instructions: "Review only. Do nothing when nothing needs action.",
-    trigger: { kind: "schedule", schedule: { kind: "oneShot", timeZone: "UTC", atUtc: new Date(Date.now() + 2000).toISOString() } }
+    triggers: [{ triggerId: crypto.randomUUID(), revision: 1, enabled: true,  kind: "schedule", schedule: { kind: "oneShot", timeZone: "UTC", atUtc: new Date(Date.now() + 2000).toISOString() }  }]
   } });
   expect(saved.ok(), await saved.text()).toBe(true);
   await expect.poll(async () => {

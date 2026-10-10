@@ -74,8 +74,13 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.route("**/api/v2/admin/connections/events**", async (route) => {
     const url = route.request().url();
     const method = route.request().method();
-    if (method === "GET") {
-      await route.fulfill({ json: { items: sources } });
+    if (method === "GET" && new URL(url).pathname.endsWith("/catalog")) {
+      if (new URL(url).searchParams.get("kind") === "builtin") { await route.continue(); return; }
+      await route.fulfill({ json: sources.map(item => ({
+        source: { kind: "webhook", eventId: item.eventId }, name: item.displayName, key: item.eventKey,
+        description: "Authenticated external signal.", state: item.status, schemaVersion: 1,
+        example: {}, fieldSchema: {}, webhook: { ...item, kind: "Webhook" }
+      })) });
       return;
     }
 
@@ -108,8 +113,11 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.getByRole("tab", { name: "Connections", exact: true }).click();
   await page.getByRole("tab", { name: "Events", exact: true }).click();
   const sourcesRegion = page.getByRole("region", { name: "Events" });
-  await expect(sourcesRegion.getByText("No Events yet. Create an Event, then subscribe an Automation to it.")).toBeVisible();
-  await sourcesRegion.getByRole("button", { name: "New Event" }).click();
+  await expect(sourcesRegion.getByRole("button", { name: "run.completed", exact: true })).toBeVisible();
+  await sourcesRegion.getByRole("combobox", { name: "Event type filter", exact: true }).click();
+  await page.locator(".ant-select-item-option").filter({ hasText: /^Webhook$/ }).click();
+  await expect(sourcesRegion.getByText("No Webhook Events yet. Create one to receive external signals.")).toBeVisible();
+  await sourcesRegion.getByRole("button", { name: "New webhook Event" }).click();
   await page.getByLabel("Event name").fill("Demo Store");
   await page.getByLabel("Event key").fill(eventKey);
   const create = page.getByRole("button", { name: "Create Event" });
@@ -130,7 +138,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   const confirm = page.getByRole("dialog", { name: "Revoke this Event?" });
   await confirm.getByRole("button", { name: "Revoke Event" }).click();
   await expect(sourcesRegion.getByText("Revoked", { exact: true })).toBeVisible();
-  await expect(sourcesRegion.getByRole("cell", { name: eventKey, exact: true })).toBeVisible();
+  await expect(sourcesRegion.getByRole("row").filter({ hasText: "Demo Store" }).getByText(eventKey, { exact: true })).toBeVisible();
   await expect(page.getByText("once-secret-credential")).toHaveCount(0);
 
   expect(consoleErrors.filter((line) => !line.includes("[antd: List]"))).toEqual([]);

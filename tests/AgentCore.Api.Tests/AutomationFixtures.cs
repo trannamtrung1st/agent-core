@@ -12,8 +12,8 @@ internal sealed record IntervalAutomationDraft(long ExpectedRevision, bool Enabl
     public AutomationExecutionTargetDto ExecutionTarget => new("backgroundSession");
     public AutomationCompletionDeliveryDto CompletionDelivery => new("none");
     public string Name => "Periodic review";
-    public AutomationTriggerDto Trigger => new("schedule", new("fixedInterval", Interval: IntervalSeconds,
-        AnchorAtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("O")));
+    public IReadOnlyList<AutomationTriggerDto> Triggers => [new AutomationTriggerDto("schedule", new("fixedInterval", Interval: IntervalSeconds,
+        AnchorAtUtc: DateTimeOffset.UtcNow.AddHours(1).ToString("O")), TriggerId: Guid.NewGuid().ToString())];
 }
 internal sealed record ScheduleAutomationDraft(long ExpectedRevision, bool Enabled, string Instructions,
     [property: JsonIgnore] AutomationTiming Schedule, string? ModelKey = null, string? ReasoningEffort = null)
@@ -21,7 +21,7 @@ internal sealed record ScheduleAutomationDraft(long ExpectedRevision, bool Enabl
     public AutomationExecutionTargetDto ExecutionTarget => new("backgroundSession");
     public AutomationCompletionDeliveryDto CompletionDelivery => new("none");
     public string Name => "Scheduled work";
-    public AutomationTriggerDto Trigger => new("schedule", Schedule);
+    public IReadOnlyList<AutomationTriggerDto> Triggers => [new AutomationTriggerDto("schedule", Schedule, TriggerId: Guid.NewGuid().ToString())];
 }
 internal static class AutomationFixtures
 {

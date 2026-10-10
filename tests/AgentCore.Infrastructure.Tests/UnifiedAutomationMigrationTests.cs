@@ -36,7 +36,7 @@ public sealed class UnifiedAutomationMigrationTests
                     await revision.ExecuteNonQueryAsync();
                     preserved[table] = await ReadRowAsync(connection, table, oldSchema: true);
                 }
-                await db.GetService<IMigrator>().MigrateAsync();
+                await db.GetService<IMigrator>().MigrateAsync("20261009190059_EventDispatchDefault");
                 await using (var defaults = connection.CreateCommand())
                 {
                     defaults.CommandText = "PRAGMA table_info('Automations');";
@@ -50,7 +50,7 @@ public sealed class UnifiedAutomationMigrationTests
                     Assert.Equal(preserved[table], await ReadRowAsync(connection, table, oldSchema: false));
             }
             await using var reopened = new AgentCoreDbContext(options);
-            await reopened.Database.MigrateAsync();
+            await reopened.GetService<IMigrator>().MigrateAsync("20261009190059_EventDispatchDefault");
             Assert.False(reopened.Database.HasPendingModelChanges());
             await reopened.Database.OpenConnectionAsync();
             foreach (var table in preserved.Keys)

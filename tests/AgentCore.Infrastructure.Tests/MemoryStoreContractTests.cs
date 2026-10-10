@@ -17,14 +17,15 @@ public sealed class MemoryStoreContractTests
     [Fact]
     public async Task Completion_time_migration_preserves_historical_entries_without_inventing_a_time()
     {
-        await using var sqlite = await SqliteAsync();
+        var path = Path.Combine(Path.GetTempPath(), $"entry-time-migration-{Guid.NewGuid():N}.db");
+        await using var sqlite = OpenSqlite(path, deleteOnDispose: true);
         var legacy = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Historical reply");
-        var snapshot = First() with { Entries = [legacy] };
+        var snapshot = First() with { Entries = [] };
+        await using (var db = await sqlite.Factory.CreateDbContextAsync())
+            await db.GetService<IMigrator>().MigrateAsync("20261008171951_ArtifactAgentRunOwnership");
         await sqlite.Store.SaveAsync(snapshot, 0);
         await using (var db = await sqlite.Factory.CreateDbContextAsync())
-        {
-            await db.GetService<IMigrator>().MigrateAsync("20261008171951_ArtifactAgentRunOwnership");
-        }
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ConversationEntries (EntryId,SessionId,EntrySequence,Role,Text,Status,DeliveryMode,HeardTextEndExclusive,ReceivedTextEndExclusive,CreatedAtUtc) VALUES ({legacy.EntryId.ToString()}, {snapshot.SessionId.ToString()}, {legacy.Sequence}, {legacy.Role.ToString()}, {legacy.Text}, {legacy.Status.ToString()}, {legacy.DeliveryMode.ToString()}, {legacy.HeardTextEndExclusive}, {legacy.ReceivedTextEndExclusive}, {legacy.CreatedAt.ToUnixTimeMilliseconds()})");
         await sqlite.Store.EnsureCreatedAsync();
         var restored = (await sqlite.Store.LoadAsync(snapshot.SessionId))!.Entries[0];
         Assert.Equal(legacy.Text, restored.Text);

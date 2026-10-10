@@ -89,6 +89,8 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await initiative.getByRole('button', { name: 'New automation', exact: true }).click();
   await initiative.getByLabel('Automation name', { exact: true }).fill('Review recent experience');
   await initiative.getByLabel('Automation instructions', { exact: true }).fill('synthetic-automation-improve: review recent experience and improve only when useful. Otherwise do nothing.');
+  await expect(initiative.getByRole('switch', { name: 'Enable automation', exact: true })).not.toBeChecked();
+  await initiative.getByRole('switch', { name: 'Enable automation', exact: true }).click();
   await initiative.getByRole('button', { name: 'Create automation', exact: true }).click();
   const automationSource = initiative.getByRole('button', { name: 'View automation: Review recent experience', exact: true });
   await expect(automationSource).toBeVisible();

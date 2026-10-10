@@ -32,7 +32,7 @@ internal static class EventCoverage
             {
                 if (covered.Contains(e.EventId) || id == after.Bucket && string.CompareOrdinal(e.EventId.ToString("D"), after.Source) <= 0) continue;
                 if (items.Count == Math.Clamp(limit, 1, 24)) return new(items, next);
-                items.Add(new(b.BucketId, e, b.CompletionCode)); next = id + ":" + e.EventId.ToString("D");
+                items.Add(new(b.BucketId, e, b.CompletionCode, b.Subscription.TriggerId)); next = id + ":" + e.EventId.ToString("D");
             }
             next = id + ":ffffffff-ffff-ffff-ffff-ffffffffffff";
         }

@@ -26,7 +26,7 @@ test('Core Event presets stay opt-in, test filters without work, and preserve re
   await drawer.getByRole('combobox', { name: 'Automation preset' }).click();
   await page.locator('.ant-select-item-option').filter({ hasText: /^Review recent work$/ }).click();
   await expect(drawer.getByRole('switch', { name: 'Enable automation' })).not.toBeChecked();
-  await expect(drawer.getByRole('combobox', { name: 'Core Event type' })).toBeVisible();
+  await expect(drawer.getByRole('region', { name: 'Event subscription 1' })).toBeVisible();
   const expression = drawer.getByRole('textbox', { name: 'Event filter expression' });
   const presetExpression = await expression.inputValue();
   await drawer.getByRole('button', { name: 'Test filter', exact: true }).click();
@@ -61,8 +61,8 @@ test('Core Event presets stay opt-in, test filters without work, and preserve re
   const saved = await response.json();
   expect(saved.enabled).toBe(false);
   expect(saved.presetId).toBe('review-recent-work');
-  expect(saved.trigger.kind).toBe('coreEvent');
-  expect(saved.trigger.dispatch).toEqual({ mode: 'coalesceLatest', windowSeconds: 900 });
+  expect(saved.triggers[0].source).toEqual(expect.objectContaining({ kind: 'builtin', key: 'run.completed' }));
+  expect(saved.triggers[0].dispatch).toEqual({ mode: 'coalesceLatest', windowSeconds: 900 });
   await expect(drawer).toBeHidden();
   await expect(page.getByRole('button', { name: 'View automation: Review recent work', exact: true })).toBeFocused();
   const token = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
@@ -95,10 +95,11 @@ test('Disabled Core Event drafts save before policy enablement and retain author
   const drawer = page.getByRole('dialog', { name: 'New automation', exact: true });
   await drawer.getByRole('textbox', { name: 'Automation name' }).fill('Prepared Core draft');
   await drawer.getByRole('textbox', { name: 'Automation instructions' }).fill('Inspect configuration and finish quietly.');
-  await drawer.getByRole('switch', { name: 'Enable automation' }).click();
   await drawer.getByRole('combobox', { name: 'Automation trigger' }).click();
-  await page.locator('.ant-select-item-option').filter({ hasText: /^Core Event$/ }).click();
-  await expect(drawer.getByText(/Disabled drafts can be saved/)).toBeVisible();
+  await page.locator('.ant-select-item-option').filter({ hasText: /^Events$/ }).click();
+  await drawer.getByRole('button', { name: 'Add Event', exact: true }).click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: /^run.completed · run.completed$/ }).click();
+  await expect(drawer.getByText(/Allow Built-in Events/)).toBeVisible();
   const save = drawer.getByRole('button', { name: 'Create automation', exact: true });
   await expect(save).toBeEnabled();
   await drawer.getByRole('switch', { name: 'Enable automation' }).click();
@@ -117,7 +118,7 @@ test('Disabled Core Event drafts save before policy enablement and retain author
   const updating = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes('/automations/'));
   await edit.getByRole('button', { name: 'Save automation', exact: true }).click();
   const updated = await updating; expect(updated.ok(), await updated.text()).toBe(true);
-  const current = await updated.json(); expect(current.trigger.filterExpression).toBe('false');
+  const current = await updated.json(); expect(current.triggers[0].filterExpression).toBe('false');
   const enable = await page.request.put(`/api/v2/admin/agent-instances/${instanceId}/automations/${saved.automationId}`, {
     headers, data: { ...current, expectedRevision: current.revision, enabled: true }
   });

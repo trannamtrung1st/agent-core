@@ -369,7 +369,7 @@ public static class TriggerScheduleAdmission
             0,
             null,
             null,
-            null, executionTarget: registration.ExecutionTarget, completionDelivery: registration.CompletionDelivery);
+            null, executionTarget: registration.ExecutionTarget, completionDelivery: registration.CompletionDelivery, triggerId: registration.Triggers.Single().TriggerId);
     }
 
     public static Automation Advance(
@@ -616,6 +616,6 @@ public static class TriggerScheduleAdmission
             skippedCount = admission.SkippedCount,
             skippedFromUtc = admission.SkippedFromUtc?.ToUnixTimeMilliseconds(),
             skippedToUtc = admission.SkippedToUtc?.ToUnixTimeMilliseconds()
-        });
+        }, registration.Triggers.Single());
     }
 }

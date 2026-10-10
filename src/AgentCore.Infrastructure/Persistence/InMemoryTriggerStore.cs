@@ -234,7 +234,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
             var items = _state.Registrations.Values
                 .Where(item =>
                     (!activeOnly || item.Status == AutomationStatus.Active)
-                    && item.Status != AutomationStatus.Cancelled && item.EventId == eventId)
+                    && item.Status != AutomationStatus.Cancelled && item.Triggers.Any(t => t.Configuration is EventTrigger e && e.EventId == eventId && (!activeOnly || t.Enabled)))
                 .ToArray();
             return ValueTask.FromResult<IReadOnlyList<Automation>>(items);
         }
@@ -319,6 +319,13 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 return ValueTask.FromResult(new TriggerOccurrenceAdmitResult(
                     TriggerOccurrenceAdmitKind.Duplicate,
                     _state.Occurrences[existingId]));
+            }
+
+            if (occurrence.TriggerId is Guid childId && occurrence.SourceKind is TriggerSourceKind.CoreEvent or TriggerSourceKind.ApplicationEvent)
+            {
+                var parent = occurrence.AutomationId is Guid parentId ? Find(occurrence.Owner, parentId) : null;
+                if (parent?.Status != AutomationStatus.Active || !parent.Triggers.Any(t => t.TriggerId == childId && t.Enabled))
+                    throw AgentCoreErrors.Conflict("Event trigger was removed or disabled before admission.");
             }
 
             if (_state.Occurrences.ContainsKey(occurrence.OccurrenceId))

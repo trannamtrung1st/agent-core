@@ -3,12 +3,12 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Form } from 'antd';
 import { describe, expect, it, vi } from 'vitest';
 import { AutomationEventFilter } from './AutomationEventFilter';
-import type { AutomationTrigger, FilterTestResult } from '../../services/adminApi';
+import type { AutomationChild, FilterTestResult } from '../../services/adminApi';
 const request = vi.hoisted(() => vi.fn());
 vi.mock('../../services/adminApi', () => ({ instanceContinuityRequest: request }));
 const sample = { schemaVersion: 1, data: { total: 150 } };
 function Editor() {
-  const [trigger, setTrigger] = useState<Exclude<AutomationTrigger, { kind: 'schedule' }>>({ kind: 'coreEvent', coreEventKey: 'run.completed' });
+  const [trigger, setTrigger] = useState<Exclude<AutomationChild, { kind: 'schedule' }>>({ kind: 'event', source: { kind: 'builtin', key: 'run.completed' }, triggerId: 'sample', enabled: true, revision: 1 });
   return <Form><AutomationEventFilter instanceId='owned-instance' trigger={trigger} example={sample} disabled={false} onChange={setTrigger} /></Form>;
 }
 describe('event filter testing', () => {

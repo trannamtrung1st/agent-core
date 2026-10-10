@@ -14,11 +14,11 @@ async function createInstance(page: import("@playwright/test").Page) {
 
 test("Admin read recovery and one-time clipboard guidance stay on the affected surface", async ({ page }) => {
   await page.goto("/admin/connections/events");
-  await expect(page.getByRole("button", { name: "New Event", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New webhook Event", exact: true })).toBeVisible();
   expect(await page.getByRole("button", { name: "New definition", exact: true }).count()).toBe(0);
   expect(await page.getByRole("button", { name: "New instance", exact: true }).count()).toBe(0);
   let fail = true;
-  await page.route("**/api/v2/admin/connections/events", route => fail
+  await page.route("**/api/v2/admin/connections/events/catalog?kind=webhook", route => fail
     ? route.fulfill({ status: 503, contentType: "application/problem+json", body: JSON.stringify({ title: "Sources unavailable", status: 503 }) })
     : route.continue());
   await page.reload();
@@ -26,9 +26,9 @@ test("Admin read recovery and one-time clipboard guidance stay on the affected s
   await expect(page.getByText("No event sources yet.", { exact: true })).toHaveCount(0);
   fail = false;
   await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(page.getByRole("button", { name: "New Event", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New webhook Event", exact: true })).toBeVisible();
   await page.unrouteAll({ behavior: "wait" });
-  await page.getByRole("button", { name: "New Event", exact: true }).click();
+  await page.getByRole("button", { name: "New webhook Event", exact: true }).click();
   await page.getByLabel("Event name", { exact: true }).fill(`Polish fixture ${Date.now()}`);
   await page.getByLabel("Event key", { exact: true }).fill(`polish.${Date.now()}`);
   await page.getByRole("button", { name: "Create Event", exact: true }).click();
@@ -47,13 +47,13 @@ test("Admin read recovery and one-time clipboard guidance stay on the affected s
 
 test("Event drawer retains failed drafts, locks saving and reveals created sources through filters", async ({ page }) => {
   await page.goto("/admin/connections/events");
-  const opener = page.getByRole("button", { name: "New Event", exact: true });
+  const opener = page.getByRole("button", { name: "New webhook Event", exact: true });
   await expect(opener).toBeVisible();
-  await page.getByRole("columnheader", { name: /Status/ }).getByRole("button").click();
+  await page.getByRole("columnheader", { name: /State/ }).getByRole("button").click();
   await page.getByRole("menuitem").filter({ hasText: "Revoked" }).getByRole("checkbox").check();
   await page.getByRole("button", { name: "OK", exact: true }).click();
   await opener.click();
-  const drawer = page.getByRole("dialog", { name: "New Event", exact: true });
+  const drawer = page.getByRole("dialog", { name: "New webhook Event", exact: true });
   const input = drawer.getByLabel("Event name", { exact: true });
   await input.fill("x".repeat(81));
   await expect(input).toHaveValue("x".repeat(80));
@@ -145,7 +145,7 @@ test("Hidden automation keeps drafts, stops polling and saves a local picker tim
   expect(submitted).toBe(0);
   const outgoing = page.waitForRequest(request => request.url().endsWith("/automations") && request.method() === "POST");
   await page.getByRole("button", { name: "Create automation", exact: true }).click();
-  expect((await outgoing).postDataJSON().trigger.schedule.atUtc).toBe(instant.toISOString());
+  expect((await outgoing).postDataJSON().triggers[0].schedule.atUtc).toBe(instant.toISOString());
   await expect(page.getByRole("button", { name: `View automation: ${task}`, exact: true })).toBeVisible();
   page.off("request", countPosts);
 });

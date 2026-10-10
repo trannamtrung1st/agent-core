@@ -21,6 +21,7 @@ public sealed class CoreEventRecord
 }
 public sealed class CoreEventDeliveryRecord
 {
+    public string TriggerId { get; set; } = "";
     public string EventId { get; set; } = "";
     public string AutomationId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
@@ -32,6 +33,7 @@ public sealed class CoreEventDeliveryRecord
 }
 public sealed class CoreEventBucketRecord
 {
+    public string TriggerId { get; set; } = "";
     public string CoverageJson { get; set; } = "[]";
     public string BucketId { get; set; } = "";
     public string AutomationId { get; set; } = "";

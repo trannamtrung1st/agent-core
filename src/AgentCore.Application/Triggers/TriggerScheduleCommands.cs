@@ -1,3 +1,4 @@
+using AgentCore.Domain.Events;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
@@ -233,6 +234,7 @@ public static class TriggerScheduleCommands
         var policyDefinition = definition;
         var existing = required == TriggerCommandAction.Update
             ? await registrations.GetAsync(owner, RequireId(effectiveArguments), cancellationToken) : null;
+        var collectionAuthoring = effectiveArguments.TryGetProperty("triggers", out _) || existing is { IsSchedule: false };
         var coreTrigger = effectiveArguments.TryGetProperty("coreEventKey", out _) || effectiveArguments.TryGetProperty("presetId", out var presetKey) && presetKey.GetString() == "review-recent-work" || existing?.Trigger is CoreEventTrigger && !HasScheduleFields(effectiveArguments);
         var eventTrigger = effectiveArguments.TryGetProperty("eventId", out _) || existing?.Trigger is EventTrigger && !HasScheduleFields(effectiveArguments);
         var sourceKind = coreTrigger ? TriggerSourceKind.CoreEvent : eventTrigger ? TriggerSourceKind.ApplicationEvent : TriggerSourceKind.Schedule;
@@ -252,18 +254,21 @@ public static class TriggerScheduleCommands
                     .ConfigureAwait(false);
                 if (!admission.Allowed)
                 {
-                    RuntimeTelemetry.RecordAutomation(operation, "policy");
-                    return Result(
-                        "policy",
-                        TriggerDurableSchedulingPolicy.PolicyMessage(admission.DenialReason!.Value),
-                        clearProposal: false);
+                    var configuration = collectionAuthoring && admission.DenialReason == UserSchedulingAdmissionDenialReason.SchedulingDisabled
+                        ? await TriggerDurableSchedulingPolicy.EvaluateScheduledOccurrenceEligibilityAsync(owner, instances!, definitions!, profiles!, cancellationToken)
+                        : null;
+                    if (configuration?.Allowed != true || configuration.Definition?.TriggerPolicy?.AllowUserScheduling != true)
+                    {
+                        RuntimeTelemetry.RecordAutomation(operation, "policy");
+                        return Result("policy", TriggerDurableSchedulingPolicy.PolicyMessage(admission.DenialReason!.Value), clearProposal: false);
+                    }
+                    policyDefinition = configuration.Definition;
                 }
-
-                policyDefinition = admission.Definition!;
+                else policyDefinition = admission.Definition!;
             }
         }
         else if (required is TriggerCommandAction.Create or TriggerCommandAction.Update
-                 && !(OccurrenceCompatibility.Allows(definition, sourceKind) && definition.TriggerPolicy is { Enabled: true, AllowUserScheduling: true }))
+                 && !collectionAuthoring && !(OccurrenceCompatibility.Allows(definition, sourceKind) && definition.TriggerPolicy is { Enabled: true, AllowUserScheduling: true }))
         {
             RuntimeTelemetry.RecordAutomation(operation, "policy");
             return Result(
@@ -276,6 +281,7 @@ public static class TriggerScheduleCommands
         {
             var json = effectiveName switch
             {
+                ToolCatalog.AutomationCreate when effectiveArguments.TryGetProperty("triggers", out _) => await CreateTriggerCollectionAsync(automationAuthoring, owner, context, effectiveArguments, cancellationToken),
                 ToolCatalog.AutomationCreate when effectiveArguments.TryGetProperty("coreEventKey", out _) || effectiveArguments.TryGetProperty("presetId", out _) => await CreateCoreOrPresetAsync(automationAuthoring, owner, context, effectiveArguments, cancellationToken),
                 ToolCatalog.AutomationCreate when effectiveArguments.TryGetProperty("eventId", out _) => automationAuthoring is null
                     ? Error("unavailable", "Automation authoring is unavailable.")
@@ -405,6 +411,61 @@ public static class TriggerScheduleCommands
         return RegistrationJson(created);
     }
 
+    private static IReadOnlyList<AutomationTriggerRecord> ReadTriggerCollection(JsonElement args)
+    {
+        var rows = args.GetProperty("triggers");
+        if (rows.ValueKind != JsonValueKind.Array) throw new ArgumentException("Triggers must be a collection.");
+        return rows.EnumerateArray().Select(t =>
+        {
+            AutomationTrigger config;
+            if (t.TryGetProperty("kind", out var kind) && kind.GetString() == "schedule")
+            {
+                if (t.TryGetProperty("source", out _) || t.TryGetProperty("filterExpression", out _) || t.TryGetProperty("dispatch", out _)) throw new ArgumentException("A Schedule has timing only.");
+                var timing = t.GetProperty("schedule");
+                string? Text(string key) => timing.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null ? value.GetString() : null;
+                int? Number(string key) => timing.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null ? value.GetInt32() : null;
+                DateOnly? Date(string key) => Text(key) is { } date ? DateOnly.ParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture) : null;
+                var zone = Text("timeZone") ?? "UTC";
+                var interval = Number("interval") ?? 1;
+                var limit = Number("maxOccurrences");
+                config = new ScheduleTrigger(Text("kind") switch
+                {
+                    "oneShot" => new OneShotSchedule(DateTimeOffset.Parse(Text("atUtc") ?? "", CultureInfo.InvariantCulture).ToUniversalTime(), zone),
+                    "fixedInterval" => new FixedIntervalSchedule(interval, DateTimeOffset.Parse(Text("anchorAtUtc") ?? "", CultureInfo.InvariantCulture).ToUniversalTime(), Text("endAtUtc") is { } end ? DateTimeOffset.Parse(end, CultureInfo.InvariantCulture).ToUniversalTime() : null, limit),
+                    "daily" => new DailySchedule(interval, TimeOnly.ParseExact(Text("localTime") ?? "", "HH:mm", CultureInfo.InvariantCulture), zone, Date("startDate"), Date("endDate"), limit),
+                    "weekly" => new WeeklySchedule(interval, timing.GetProperty("weekdays").EnumerateArray().Select(d => (DayOfWeek)d.GetInt32()).ToArray(), TimeOnly.ParseExact(Text("localTime") ?? "", "HH:mm", CultureInfo.InvariantCulture), zone, Date("startDate"), Date("endDate"), limit),
+                    _ => throw new ArgumentException("Schedule kind is invalid.")
+                });
+            }
+            else
+            {
+                if (kind.ValueKind != JsonValueKind.String || kind.GetString() != "event" || t.TryGetProperty("schedule", out _)) throw new ArgumentException("An Event requires a typed source.");
+            var s = t.GetProperty("source");
+            var source = EventSourceReference.Parse(s.GetProperty("kind").GetString() ?? "", s.TryGetProperty("key", out var k) ? k.GetString() : null,
+                s.TryGetProperty("eventId", out var e) ? Guid.Parse(e.GetString() ?? "") : null);
+            var filter = t.TryGetProperty("filterExpression", out var f) ? f.GetString() : null;
+            var dispatch = t.TryGetProperty("dispatch", out var d) ? d.GetProperty("mode").GetString() switch
+            { "everyMatch" => new EventDispatch(), "coalesceLatest" => new EventDispatch(EventDispatchMode.CoalesceLatest, d.GetProperty("windowSeconds").GetInt32()), _ => throw new ArgumentException("Dispatch is invalid.") } : new EventDispatch();
+                config = source.Kind == "builtin" ? new CoreEventTrigger(source.Key!, filter, dispatch) : new EventTrigger(source.EventId!.Value, filter, dispatch);
+            }
+            return new AutomationTriggerRecord(t.TryGetProperty("triggerId", out var id) ? Guid.Parse(id.GetString() ?? "") : Guid.NewGuid(), config,
+                !t.TryGetProperty("enabled", out var enabled) || enabled.GetBoolean(), t.TryGetProperty("revision", out var rev) ? rev.GetInt64() : 1);
+        }).ToArray();
+    }
+    private static async Task<string> CreateTriggerCollectionAsync(AdminAutomationAuthoringService? authoring, TriggerOwner owner,
+        TriggerCommandContext context, JsonElement args, CancellationToken ct)
+    {
+        if (authoring is null) return Error("unavailable", "Automation authoring is unavailable.");
+        if (HasScheduleFields(args) || args.TryGetProperty("eventId", out _) || args.TryGetProperty("coreEventKey", out _))
+            throw new ArgumentException("Use one Schedule or a typed Event collection.");
+        var instructions = RequireInstructions(args);
+        return RegistrationJson(await authoring.SaveAsync(owner.AgentInstanceId, null, 0,
+            args.TryGetProperty("enabled", out var enabled) && enabled.GetBoolean(),
+            TryString(args, "name", out var name) ? name : instructions[..Math.Min(80, instructions.Length)], instructions, ReadTriggerCollection(args),
+            TryString(args, "modelKey", out var model) ? model : null, TryString(args, "reasoningEffort", out var effort) ? effort : null, ct,
+            new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow),
+            executionTarget: ChatTarget(args, context), completionDelivery: ChatDelivery(args, context), requiresTools: OptionalRequirement(args, "requiresTools"), requiresVision: OptionalRequirement(args, "requiresVision")));
+    }
     private static async Task<string> CreateCoreOrPresetAsync(AdminAutomationAuthoringService? authoring, TriggerOwner owner,
         TriggerCommandContext context, JsonElement args, CancellationToken ct)
     {
@@ -472,7 +533,19 @@ public static class TriggerScheduleCommands
         var hasSchedule = HasScheduleFields(arguments);
         if (authoring is not null)
         {
-            var trigger = current.Trigger;
+            if (arguments.TryGetProperty("triggers", out _) || !current.IsSchedule && !hasSchedule && !arguments.TryGetProperty("coreEventKey", out _) && !arguments.TryGetProperty("eventId", out _))
+            {
+                return RegistrationJson(await authoring.SaveAsync(owner.AgentInstanceId, id, expected,
+                    arguments.TryGetProperty("enabled", out var enabled) ? enabled.GetBoolean() : current.Status == AutomationStatus.Active,
+                    TryString(arguments, "name", out var childName) ? childName : current.Name,
+                    hasIntent ? RequireInstructions(arguments) : current.Instructions,
+                    arguments.TryGetProperty("triggers", out _) ? ReadTriggerCollection(arguments) : current.Triggers,
+                    TryString(arguments, "modelKey", out var childModel) ? childModel : current.ModelOverrideCatalogKey,
+                    TryString(arguments, "reasoningEffort", out var childEffort) ? childEffort : current.ModelOverrideReasoningEffort, cancellationToken,
+                    executionTarget: ChatTarget(arguments, context, current), completionDelivery: ChatDelivery(arguments, context, current),
+                    requiresTools: OptionalRequirement(arguments, "requiresTools"), requiresVision: OptionalRequirement(arguments, "requiresVision")));
+            }
+            var trigger = current.Trigger ?? throw AgentCoreErrors.Validation("Use the trigger collection to edit a multi-Event Automation.");
             if (trigger is FilteredEventTrigger && (arguments.TryGetProperty("filterExpression", out _) || arguments.TryGetProperty("dispatchMode", out _)))
                 trigger = trigger is CoreEventTrigger c ? new CoreEventTrigger(c.CoreEventKey, arguments.TryGetProperty("filterExpression", out var f) ? f.GetString() : c.FilterExpression, ReadDispatch(arguments, c.Dispatch))
                     : new EventTrigger(((EventTrigger)trigger).EventId, arguments.TryGetProperty("filterExpression", out var f2) ? f2.GetString() : ((EventTrigger)trigger).FilterExpression, ReadDispatch(arguments, ((EventTrigger)trigger).Dispatch));
@@ -1169,15 +1242,15 @@ public static class TriggerScheduleCommands
             sourceSessionId = registration.Provenance.SourceSessionId, sourceEventId = registration.Provenance.SourceEventId,
             createdAt = registration.Provenance.CreatedAt, updatedAt = registration.Provenance.UpdatedAt,
             presetId = registration.Provenance.PresetId, presetVersion = registration.Provenance.PresetVersion },
-        trigger = registration.Trigger switch
+        triggers = registration.Triggers.Select(t => new
         {
-            CoreEventTrigger e => (object)new { kind = "coreEvent", coreEventKey = e.CoreEventKey, filterExpression = e.FilterExpression, dispatch = new { mode = e.Dispatch.Mode == EventDispatchMode.EveryMatch ? "everyMatch" : "coalesceLatest", windowSeconds = e.Dispatch.WindowSeconds } },
-            EventTrigger e => new { kind = "event", eventId = e.EventId, filterExpression = e.FilterExpression, dispatch = new { mode = e.Dispatch.Mode == EventDispatchMode.EveryMatch ? "everyMatch" : "coalesceLatest", windowSeconds = e.Dispatch.WindowSeconds } },
-            ScheduleTrigger t => new { kind = "schedule", schedule = InspectSchedule(t.Schedule) },
-            _ => throw new ArgumentException("Trigger unavailable.")
-        },
-        triggerKind = registration.Trigger.Kind.ToString(),
-        eventId = registration.EventId,
+            triggerId = t.TriggerId, revision = t.Revision, enabled = t.Enabled,
+            kind = t.Configuration is ScheduleTrigger ? "schedule" : "event",
+            source = t.Source, schedule = t.Configuration is ScheduleTrigger timing ? InspectSchedule(timing.Schedule) : null,
+            filterExpression = (t.Configuration as FilteredEventTrigger)?.FilterExpression,
+            dispatch = t.Configuration is FilteredEventTrigger e ? new { mode = e.Dispatch.Mode == EventDispatchMode.EveryMatch ? "everyMatch" : "coalesceLatest", windowSeconds = e.Dispatch.WindowSeconds } : null
+        }),
+        triggerKind = registration.IsSchedule ? "Schedule" : "Events",
         scheduleKind = registration.Trigger is ScheduleTrigger scheduled ? scheduled.Schedule.Kind.ToString() : null,
         timeZone = registration.Trigger is ScheduleTrigger timing ? TimeZoneOf(timing.Schedule) : null,
         nextOccurrenceAtUtc = registration.NextOccurrenceAtUtc,
