@@ -6,6 +6,8 @@ import { AdminApp } from "./AdminApp";
 import { DefinitionCandidateEditor } from "./definitionCandidateEditor";
 import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 
+import { exposedRoles } from "../../test/exposedRoles";
+
 vi.mock("../../services/adminApi", () => ({
   getExecutionBudgetLimits: vi.fn().mockResolvedValue({ maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 }),
   listAdminDefinitions: vi.fn(),
@@ -203,11 +205,11 @@ async function openDraft() {
   await act(async () => {
     render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
   });
-  fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
+  fireEvent.click(await exposedRoles().findByRole("tab", { name: "Drafts" }));
   await waitFor(() => {
-    expect(screen.getByRole("button", { name: /Draft rev 2/ })).toBeInTheDocument();
+    expect(exposedRoles().getByRole("button", { name: /Draft rev 2/ })).toBeInTheDocument();
   });
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Draft rev 2/ })); });
+  await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: /Draft rev 2/ })); });
   openSettings();
   await waitFor(() => {
     expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
@@ -240,11 +242,11 @@ async function renderCandidate(candidate: DefinitionCandidate = storedCandidate)
 }
 
 function openSettings(...sections: string[]) {
-  fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+  fireEvent.click(exposedRoles().getByRole("tab", { name: "Settings" }));
   const settings = document.querySelector<HTMLElement>(".admin-definition-settings > .ant-collapse")!;
   const names = sections.length ? sections : ["Operating instructions", "Model defaults"];
   for (const name of names) {
-    const header = within(settings).getByRole("button", { name });
+    const header = exposedRoles(settings).getByRole("button", { name });
     if (header.getAttribute("aria-expanded") === "false") fireEvent.click(header);
   }
 }
@@ -273,19 +275,19 @@ describe("definition candidate editor", () => {
     candidate.triggerPolicy.allowedSourceKinds = [kind];
     const changed = await renderCandidate(candidate);
     openSettings("Trigger restrictions");
-    expect(screen.getByRole("checkbox", { name: "Events" })).toHaveAttribute("aria-checked", "mixed");
-    fireEvent.click(screen.getByRole("tab", { name: "Profile" }));
+    expect(exposedRoles().getByRole("checkbox", { name: "Events" })).toHaveAttribute("aria-checked", "mixed");
+    fireEvent.click(exposedRoles().getByRole("tab", { name: "Profile" }));
     setText("Definition name", "Edited name");
     openSettings("Trigger restrictions");
     fireEvent.click(screen.getByText("Advanced JSON", { selector: ".ant-segmented-item-label" }));
-    const json = screen.getByRole("textbox", { name: "Advanced JSON" });
+    const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" });
     const value = JSON.parse((json as HTMLTextAreaElement).value);
     expect(value.triggerPolicy.allowedSourceKinds).toEqual([kind]);
     value.triggerPolicy.allowedSourceKinds = ["schedule", kind];
     fireEvent.change(json, { target: { value: JSON.stringify(value) } });
     fireEvent.click(screen.getByText("Form", { selector: ".ant-segmented-item-label" }));
-    expect(screen.getByRole("checkbox", { name: "Schedule" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Events" })).toHaveAttribute("aria-checked", "mixed");
+    expect(exposedRoles().getByRole("checkbox", { name: "Schedule" })).toBeChecked();
+    expect(exposedRoles().getByRole("checkbox", { name: "Events" })).toHaveAttribute("aria-checked", "mixed");
     expect(changed.mock.lastCall?.[0]).toMatchObject({ triggerPolicy: { allowedSourceKinds: ["schedule", kind] } });
   });
 
@@ -294,9 +296,9 @@ describe("definition candidate editor", () => {
     await openDraft();
     // These controls stay mounted across draft tabs. Reuse their accessible
     // handles instead of rescanning the entire AntD form after every change.
-    const save = screen.getByRole("button", { name: "Save draft" });
-    const capabilitiesTab = screen.getByRole("tab", { name: "Capabilities" });
-    const definitionTab = screen.getByRole("tab", { name: "Identity & version" });
+    const save = exposedRoles().getByRole("button", { name: "Save draft" });
+    const capabilitiesTab = exposedRoles().getByRole("tab", { name: "Capabilities" });
+    const definitionTab = exposedRoles().getByRole("tab", { name: "Identity & version" });
     openSettings("Trigger restrictions");
     setSpin("Minimum recurrence days", "0.5");
     expect(screen.getByLabelText("Minimum recurrence days")).toHaveAttribute("aria-invalid", "true");
@@ -340,11 +342,11 @@ describe("definition candidate editor", () => {
     await act(async () => { render(<ControlledSkills />); });
 
     expect(screen.getByText(/Required capabilities are requirements, not grants/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Details" }));
     expect(await screen.findByText("ORDER_PROCEDURE")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Close inspection" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add skill" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save Skill" }));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Close inspection" }));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Add skill" }));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Save Skill" }));
     expect(await screen.findByText("Please enter Skill name", {}, { timeout: 5000 })).toBeVisible();
     setText("Skill ID", "refund.handle");
     setText("Skill name", "Refund");
@@ -352,7 +354,7 @@ describe("definition candidate editor", () => {
     setText("Description", "refund, return");
     setText("Required capabilities", "workspace.read, chat.respond");
     setText("Resource paths", "notes/refund.md");
-    fireEvent.click(screen.getByRole("button", { name: "Save Skill" }));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Save Skill" }));
     await waitFor(() => expect(screen.getByText("Refund")).toBeInTheDocument());
     const saved = candidateForPersistence(changed.mock.lastCall![0]) as {
       skills: Array<{ id: string; procedure: string; requiredCapabilities: string[]; resourcePaths: string[] }>;
@@ -370,12 +372,12 @@ describe("definition candidate editor", () => {
       procedure: "REFUND_PROCEDURE", projection: "OnDemand", defaultEnabled: true,
       requiredCapabilities: ["workspace.read", "chat.respond"], resourcePaths: ["notes/refund.md"] };
     const changed = await renderCandidate({ ...storedCandidate, skills: [inherited, refund] });
-    fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
-    const json = screen.getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
+    fireEvent.click(exposedRoles().getByRole("radio", { name: "Advanced JSON" }));
+    const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
     expect(json.value).toContain("REFUND_PROCEDURE");
     expect(json.value).toContain("ORDER_PROCEDURE");
     fireEvent.change(json, { target: { value: json.value.replace("REFUND_PROCEDURE", "REFUND_PROCEDURE_EDITED") } });
-    fireEvent.click(screen.getByRole("radio", { name: "Form" }));
+    fireEvent.click(exposedRoles().getByRole("radio", { name: "Form" }));
     openSettings();
 
     const saved = candidateForPersistence(changed.mock.lastCall![0]) as { skills: unknown[] };
@@ -392,7 +394,7 @@ describe("definition candidate editor", () => {
     openSettings();
     await screen.findByTitle("Scripted Alpha");
     fireEvent.mouseDown(screen.getByLabelText("Reasoning"));
-    await screen.findByRole("listbox");
+    await exposedRoles().findByRole("listbox");
     expect([...document.querySelectorAll(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option-content")]
       .map(option => option.textContent)).toEqual(["Low", "Medium", "High"]);
     expect(changed).not.toHaveBeenCalled();
@@ -427,21 +429,21 @@ describe("definition candidate editor", () => {
     expect(screen.getByTitle("Scripted Alpha")).toBeInTheDocument();
     expect(screen.getByText(/Speech aliases are required when voice is on/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Profile" }));
+    fireEvent.click(exposedRoles().getByRole("tab", { name: "Profile" }));
     setText("Definition name", "Guide");
     setText("Definition role", "Coach");
     setText("Definition description", "Helps the operator.");
     setText("Definition tone", "Direct");
     setText("Goal 1", "Coach the operator");
-    fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Add goal" }));
     setText("Goal 2", "Keep answers short");
     openSettings();
     setText("System instructions", "Edited instructions");
-    fireEvent.click(screen.getByRole("tab", { name: "Skills & resources" }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(exposedRoles().getByRole("tab", { name: "Skills & resources" }));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Edit" }));
     setText("Procedure", "REFUND_PROCEDURE_EDITED");
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save Skill" })); });
-    fireEvent.click(screen.getByRole("tab", { name: "Identity & version" }));
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save Skill" })); });
+    fireEvent.click(exposedRoles().getByRole("tab", { name: "Identity & version" }));
     await chooseOption("Interruption style", "Answer the new turn");
     fireEvent.click(screen.getByLabelText("Acknowledge interruption"));
     fireEvent.click(screen.getByLabelText("Avoid unsupported claims"));
@@ -480,26 +482,26 @@ describe("definition candidate editor", () => {
     setSpin("One-shot horizon days", "14");
     setSpin("Minimum recurrence days", "2");
     setSpin("Minimum fixed interval seconds", "120");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Webhook Events" }));
+    fireEvent.click(exposedRoles().getByRole("checkbox", { name: "Webhook Events" }));
     setText("Metadata key 1", "team");
     setText("Metadata value 1", "platform");
 
-    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Capabilities" })); });
     const harness = screen.getByLabelText("Harness labels");
     fireEvent.mouseDown(harness);
     fireEvent.change(harness, { target: { value: "lab-harness" } });
     fireEvent.keyDown(harness, { key: "Enter", code: "Enter", keyCode: 13 });
     await chooseOption("Authorized capabilities", "workspace.read");
-    fireEvent.click(screen.getByRole("button", { name: "Add knowledge source" }));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Add knowledge source" }));
     setText("Knowledge identity 1", "refund-policy");
     setText("Knowledge title 1", "Refund Policy");
     setText("Knowledge citation 1", "refund-policy@v3");
     setText("Workspace template id", "examiner-default");
     fireEvent.click(screen.getByLabelText("Allow unread unsupported attachment types"));
 
-    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Identity & version" })); });
-    fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
-    const json = screen.getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Identity & version" })); });
+    fireEvent.click(exposedRoles().getByRole("radio", { name: "Advanced JSON" }));
+    const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
     const parsed = JSON.parse(json.value) as {
       identity: { name: string; role: string; description: string; tone: string };
       goals: string[];
@@ -616,7 +618,7 @@ describe("definition candidate editor", () => {
     expect(parsed.environment.attachments.allowUnreadUnsupportedTypes).toBe(true);
     expect(parsed.untouchedMarker).toEqual({ nested: "preserve-me" });
 
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
     await waitFor(() => {
       expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 2, expect.any(Object));
     });
@@ -669,7 +671,7 @@ describe("definition candidate editor", () => {
     expect(screen.queryByTitle("primary-stt")).not.toBeInTheDocument();
     expect(screen.queryByTitle("primary-tts")).not.toBeInTheDocument();
 
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
     await waitFor(() => expect(updateAdminDefinitionDraft).toHaveBeenCalled());
     const saved = vi.mocked(updateAdminDefinitionDraft).mock.calls.at(-1)?.[2] as {
       voice?: { enabled?: boolean };
@@ -686,10 +688,10 @@ describe("definition candidate editor", () => {
   it("round-trips form and JSON without dropping untouched fields", async () => {
     await renderCandidate();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Profile" }));
+    fireEvent.click(exposedRoles().getByRole("tab", { name: "Profile" }));
     setText("Definition name", "Guide");
-    fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
-    const json = screen.getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
+    fireEvent.click(exposedRoles().getByRole("radio", { name: "Advanced JSON" }));
+    const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
     const edited = JSON.parse(json.value) as {
       identity: { name: string; role: string; tone: string };
       voice: { voiceId: string };
@@ -701,7 +703,7 @@ describe("definition candidate editor", () => {
     expect(edited.metadata.owner).toBe("kept");
     edited.identity.role = "Coach";
     fireEvent.change(json, { target: { value: JSON.stringify(edited, null, 2) } });
-    fireEvent.click(screen.getByRole("radio", { name: "Form" }));
+    fireEvent.click(exposedRoles().getByRole("radio", { name: "Form" }));
     openSettings();
 
     expect(screen.getByLabelText("Definition name")).toHaveValue("Guide");
@@ -753,11 +755,11 @@ describe("definition candidate editor", () => {
 
     await act(async () => { fireEvent.click(capabilities); });
     expect(screen.getByText(/Fix Advanced JSON on Identity & version before changing capabilities/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add knowledge source" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Add knowledge source" }));
+    expect(exposedRoles().getByRole("button", { name: "Add knowledge source" })).toBeDisabled();
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Add knowledge source" }));
 
     await act(async () => { fireEvent.click(resources); });
-    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Resources" })); });
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Resources" })); });
     await act(async () => { fireEvent.click(identity); });
     expect(screen.getByLabelText("Advanced JSON", { selector: "textarea" })).toHaveValue("{ ");
     expect(save).toBeInTheDocument();
@@ -771,13 +773,13 @@ describe("definition candidate editor", () => {
     vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: tools, maxToolAllowlistEntries: null });
     await openDraft();
     setText("System instructions", "Keep this edit");
-    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Capabilities" })); });
     expect(await screen.findByText("Authorized: 33 · Always selected: 33")).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByLabelText("Authorized capabilities"));
     fireEvent.change(screen.getByLabelText("Authorized capabilities"), { target: { value: tools[33] } });
     await act(async () => { fireEvent.click(await screen.findByTitle(tools[33])); });
     expect(screen.getByText("Authorized: 34 · Always selected: 33")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled();
+    expect(exposedRoles().getByRole("button", { name: "Save draft" })).toBeEnabled();
   });
 
   it("preserves capability authorization and always projection through Form save", async () => {
@@ -787,12 +789,12 @@ describe("definition candidate editor", () => {
     vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read", "knowledge.retrieve", "browser.navigate"], maxToolAllowlistEntries: null });
     await openDraft();
     setText("System instructions", "Keep this edit");
-    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Capabilities" })); });
     expect(await screen.findByText("Authorized: 3 · Always selected: 1")).toBeInTheDocument();
     expect(screen.getByLabelText("Always projected capabilities")).toBeInTheDocument();
     expect(screen.getByText("Core also includes authorized, eligible Browser v2 bootstrap tools and active Skill requirements. These can appear without an Always selection; permission still comes from Authorized capabilities.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Other authorized capabilities" })).not.toBeInTheDocument();
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
     expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 2, expect.objectContaining({ environment: expect.objectContaining({
       capabilities: { mode: "Selected", resolvedCapabilities: ["workspace.read", "knowledge.retrieve", "browser.navigate"] },
       projection: { alwaysCapabilities: ["workspace.read"] }
@@ -802,12 +804,12 @@ describe("definition candidate editor", () => {
   it("saves from JSON using the same draft revision", async () => {
     mockDraft();
     await openDraft();
-    fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
-    const json = screen.getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
+    fireEvent.click(exposedRoles().getByRole("radio", { name: "Advanced JSON" }));
+    const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
     const edited = JSON.parse(json.value) as { systemInstructions: string; untouchedMarker: { nested: string } };
     edited.systemInstructions = "Saved from JSON";
     fireEvent.change(json, { target: { value: JSON.stringify(edited, null, 2) } });
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save draft" })); });
+    await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
     await waitFor(() => {
       expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
         draftId,
@@ -843,19 +845,19 @@ describe("authoring options failure", () => {
     vi.mocked(listAdminAuthoringOptions).mockRejectedValueOnce(failure);
 
     renderEditor();
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    fireEvent.click(exposedRoles().getByRole("tab", { name: "Settings" }));
 
     await waitFor(() => {
       expect(screen.getByText(/Authoring options could not be loaded/)).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: "Error details" })).toBeInTheDocument();
+    expect(exposedRoles().getByRole("button", { name: "Error details" })).toBeInTheDocument();
   });
 
   it("keeps the warning without error details when the failure has no id", async () => {
     vi.mocked(listAdminAuthoringOptions).mockRejectedValueOnce(new Error("offline"));
 
     renderEditor();
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    fireEvent.click(exposedRoles().getByRole("tab", { name: "Settings" }));
 
     await waitFor(() => {
       expect(screen.getByText(/Authoring options could not be loaded/)).toBeInTheDocument();
