@@ -1,6 +1,6 @@
 # Unified composer verification
 
-Implemented on `develop/branch-1` after the main sync at `db2afbbd`. Implementation revision is recorded below after the behavior commit; this report does not infer hosted acceptance from earlier milestones.
+Implemented on `develop/branch-1` after the main sync at `db2afbbd`. Implementation revision: `5d0412b0` (`Implement unified composer with explicit Skills and scoped references`); this report update changes documentation only. This report does not infer hosted acceptance from earlier milestones.
 
 The production composer uses Lexical 0.52.0 as headless input infrastructure and direct Ant Design v6 presentation. `/` selects effective Skill keys for one user-turn Run; `@` selects owned read-only evidence; Add content opens the same controllers and attachment picker. All six resource categories have native bounded resolvers. The existing Session mailbox, Run admission, SignalR transport, capability authority and background lifecycle remain owners of their behavior.
 
