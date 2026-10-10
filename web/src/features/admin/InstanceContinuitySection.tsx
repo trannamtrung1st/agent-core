@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState, type Key } from "react";
 import { Alert, App, Button, Descriptions, Empty, Flex, Form, Spin, Switch, Table, Tag, Typography, theme } from "antd";
@@ -53,10 +54,8 @@ export function IdentityMaintenanceSection({ instanceId }: { instanceId: string 
       if (generation === order.current.generation) setError(describeAdminError(reason, "Consolidation settings changed or could not be saved. Reload and try again."));
     } finally { order.current.mutating = false; if (generation === order.current.generation) setBusy(false); }
   }
-  return <section className="admin-definition-panel" aria-label="Identity maintenance">
-    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Identity maintenance</Typography.Title>
-      <Typography.Text type="secondary">Keep redundant learned state coherent while retaining its sources.</Typography.Text></div>
-    <div className="admin-definition-panel-body"><Flex vertical gap={token.paddingXS}>
+  return <AgentConfigurationPanel title="Identity maintenance" label="Identity maintenance"
+    description="Keep redundant learned state coherent while retaining its sources." bodyGap="compact">
       <Flex wrap align="center" gap={token.paddingXS}>
         <Switch aria-label="Allow agent consolidation" checked={settings?.allowAgentConsolidation ?? false} loading={busy} disabled={!settings || busy || !!error}
           onChange={value => void configure(value)} />
@@ -64,8 +63,7 @@ export function IdentityMaintenanceSection({ instanceId }: { instanceId: string 
       </Flex>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>Permits safe consolidation of repeated Experience and inferred identity memory through normal Automation Runs. It does not schedule runs, change memory scope, or permit silent forgetting. Protected changes require exact approval.</Typography.Paragraph>
       <Failure error={error} reload={() => void reload()} />
-    </Flex></div>
-  </section>;
+    </AgentConfigurationPanel>;
 }
 
 export type ExperienceSelection = { agentRunId: string; request: number };
@@ -131,10 +129,8 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
     catch (reason) { setError(describeAdminError(reason, "Experience update failed. Reload and try again.")); }
     finally { order.current.mutating = false; setBusy(false); }
   }
-  return <section className="admin-definition-panel" aria-label="Experience">
-    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Experience</Typography.Title>
-      <Typography.Text type="secondary">Derived observations about past work, kept separately from learned memory.</Typography.Text></div>
-    <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
+  return <AgentConfigurationPanel title="Experience" label="Experience"
+    description="Derived observations about past work, kept separately from learned memory." bodyGap="section">
       {loading ? <Spin aria-label="Loading experience" /> : null}
       {selection && !loading && !error && review && !review.items.some(item => item.generationAgentRunId === selection.agentRunId) ? <Alert type="info" showIcon title="This experience checkpoint is not available in the current records" description="It may have been deleted or be outside the bounded review. Its run remains available in Runs." /> : null}
       <Failure error={error} reload={() => void reload()} />
@@ -201,8 +197,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
           }} />
         </>}
       </> : null}
-    </Flex></div>
-  </section>;
+    </AgentConfigurationPanel>;
 }
 
 const experienceGoal = (item: ExperienceItem) => item.content?.goal ?? (item.status === "Failed" ? "Retrospection failed"

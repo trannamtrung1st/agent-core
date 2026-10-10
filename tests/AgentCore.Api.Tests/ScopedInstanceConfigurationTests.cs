@@ -26,6 +26,98 @@ public sealed class ScopedInstanceConfigurationTests
             foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IHostedService) && (d.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService) || d.ImplementationType == typeof(AgentCore.Api.BackgroundOccurrenceIntakeHostedService) || d.ImplementationType == typeof(AgentCore.Api.TriggerSchedulerHostedService))).ToArray())
                 services.Remove(descriptor);
         }));
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Settings_constraints_explain_rejected_toggles_and_permitted_changes_save_and_reset(bool sqlite)
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"settings-constraints-{Guid.NewGuid():N}.db");
+        await using var host = Host(sqlite, db);
+        using var client = host.CreateClient(); TestOwnerCapability.Apply(client, host.Services);
+        var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
+        var root = $"/api/v2/admin/agent-instances/{owner.InstanceId}/settings";
+        var sections = (await client.GetFromJsonAsync<InstanceSettingsSection[]>(root))!;
+        var initiative = sections.Single(s => s.Section == "initiativePolicy");
+        Assert.False(initiative.Constraints["enabled"].RequiredBoolean);
+        var rejected = await client.PatchAsJsonAsync(root + "/initiativePolicy", new { expectedInstanceRevision = owner.Revision, set = new { enabled = true }, clear = Array.Empty<string>() });
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Contains(initiative.Constraints["enabled"].Reason, await rejected.Content.ReadAsStringAsync());
+        Assert.Equal(owner.Revision, (await client.GetFromJsonAsync<InstanceSettingsSection>(root + "/voice"))!.InstanceRevision);
+        foreach (var (section, field) in new[] { ("voice", "enabled"), ("behaviorPolicy", "acknowledgeInterruption"), ("memoryPolicy", "sessionMemory") })
+        {
+            var current = (await client.GetFromJsonAsync<InstanceSettingsSection>(root + "/" + section))!;
+            Assert.False(current.Constraints.ContainsKey(field));
+            foreach (var value in new[] { false, true })
+            {
+                var changed = await client.PatchAsJsonAsync(root + "/" + section, new { expectedInstanceRevision = current.InstanceRevision, set = new Dictionary<string, bool> { [field] = value }, clear = Array.Empty<string>() });
+                changed.EnsureSuccessStatusCode();
+                current = (await client.GetFromJsonAsync<InstanceSettingsSection>(root + "/" + section))!;
+                Assert.Equal(value, ((JsonElement)current.Effective[field]!).GetBoolean());
+                Assert.Equal("instance", current.Sources[field]);
+            }
+            var reset = await client.PatchAsJsonAsync(root + "/" + section, new { expectedInstanceRevision = current.InstanceRevision, set = new { }, clear = new[] { field } });
+            reset.EnsureSuccessStatusCode();
+            current = (await client.GetFromJsonAsync<InstanceSettingsSection>(root + "/" + section))!;
+            Assert.Empty(current.Overrides); Assert.Equal("definition", current.Sources[field]);
+        }
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Common_resource_files_preserve_bytes_and_guard_sequential_deletion(bool sqlite)
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"resource-formats-{Guid.NewGuid():N}.db");
+        await using var host = Host(sqlite, db);
+        using var client = host.CreateClient(); TestOwnerCapability.Apply(client, host.Services);
+        var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
+        var root = $"/api/v2/admin/agent-instances/{owner.InstanceId}/resources";
+        var catalog = (await client.GetFromJsonAsync<InstanceResourceCatalog>(root))!;
+        foreach (var (path, media, kind) in new[] {
+            ("knowledge/table.csv", "text/csv", "Knowledge"),
+            ("references/sheet.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Reference") })
+        {
+            var bytes = Encoding.UTF8.GetBytes("name,value\nA,1");
+            using var form = new MultipartFormDataContent();
+            form.Add(new StringContent(catalog.InstanceRevision.ToString()), "expectedInstanceRevision");
+            form.Add(new StringContent(path), "logicalPath"); form.Add(new StringContent(kind), "kind");
+            var file = new ByteArrayContent(bytes); file.Headers.ContentType = new(media); form.Add(file, "file", Path.GetFileName(path));
+            var response = await client.PostAsync(root, form); response.EnsureSuccessStatusCode();
+            catalog = (await response.Content.ReadFromJsonAsync<InstanceResourceCatalog>())!;
+            var resource = catalog.Resources.Single(r => r.LogicalPath == path);
+            Assert.Equal(media, resource.MediaType);
+            Assert.Equal(bytes, await client.GetByteArrayAsync(root + "/" + Uri.EscapeDataString(resource.Key) + "/content"));
+        }
+        // A spoofed allowed MIME cannot make executable filenames or target paths valid.
+        foreach (var (fileName, path) in new[] { ("payload.exe", "safe.txt"), ("payload.EXE ", "safe.txt"), ("safe.txt", "payload.exe") })
+        {
+            using var form = new MultipartFormDataContent();
+            form.Add(new StringContent(catalog.InstanceRevision.ToString()), "expectedInstanceRevision");
+            form.Add(new StringContent(path), "logicalPath"); form.Add(new StringContent("Reference"), "kind");
+            var file = new ByteArrayContent("payload"u8.ToArray()); file.Headers.ContentType = new("text/plain"); form.Add(file, "file", fileName);
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync(root, form)).StatusCode);
+        }
+        using (var secretForm = new MultipartFormDataContent())
+        {
+            secretForm.Add(new StringContent(catalog.InstanceRevision.ToString()), "expectedInstanceRevision");
+            secretForm.Add(new StringContent("knowledge/private.csv"), "logicalPath"); secretForm.Add(new StringContent("Knowledge"), "kind");
+            var file = new ByteArrayContent("OPENAI_API_KEY=dummy"u8.ToArray()); file.Headers.ContentType = new("text/csv"); secretForm.Add(file, "file", "private.csv");
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsync(root, secretForm)).StatusCode);
+        }
+        var selected = catalog.Resources.Where(r => r.Origin == "Instance").ToArray();
+        var stale = catalog.InstanceRevision;
+        var first = selected[0];
+        var deleted = await client.DeleteAsync(root + $"/{Uri.EscapeDataString(first.Key)}?expectedInstanceRevision={stale}&expectedRevision={first.Revision}");
+        deleted.EnsureSuccessStatusCode();
+        catalog = (await deleted.Content.ReadFromJsonAsync<InstanceResourceCatalog>())!;
+        Assert.DoesNotContain(catalog.Resources, r => r.Key == first.Key);
+        var second = selected[1];
+        Assert.Equal(HttpStatusCode.Conflict, (await client.DeleteAsync(root + $"/{Uri.EscapeDataString(second.Key)}?expectedInstanceRevision={stale}&expectedRevision={second.Revision}")).StatusCode);
+        Assert.Contains((await client.GetFromJsonAsync<InstanceResourceCatalog>(root))!.Resources, r => r.Key == second.Key);
+        (await client.DeleteAsync(root + $"/{Uri.EscapeDataString(second.Key)}?expectedInstanceRevision={catalog.InstanceRevision}&expectedRevision={second.Revision}")).EnsureSuccessStatusCode();
+        Assert.DoesNotContain((await client.GetFromJsonAsync<InstanceResourceCatalog>(root))!.Resources, r => r.Origin == "Instance");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

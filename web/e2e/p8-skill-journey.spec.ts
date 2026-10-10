@@ -1,3 +1,4 @@
+import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
 import { execFileSync } from "node:child_process";
 import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
@@ -52,9 +53,13 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
 
   const editor = draftEditorSection(page);
+  await openDefinitionSettings(editor);
   await expect(editor.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
   await expect(editor.getByText("No skills yet. A definition without skills runs with an empty skill set.")).toBeVisible();
   await expect(editor.getByText(/Required capabilities are requirements, not grants/)).toBeVisible();
+
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
 
   await editor.getByRole("button", { name: "Add skill" }).click();
   const drawer = page.getByRole("dialog", { name: "New Definition Skill" });
@@ -77,6 +82,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
 
   await drawer.getByRole("button", { name: "Save Skill" }).click();
   await expect(drawer).toBeHidden();
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
   await editor.getByRole("button", { name: "Add skill" }).click();
   await drawer.getByLabel("Skill ID", { exact: true }).fill("order.lookup");
   await drawer.getByLabel("Skill name", { exact: true }).fill("Order lookup");
@@ -85,6 +91,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
 
   await drawer.getByRole("button", { name: "Save Skill" }).click();
   await expect(drawer).toBeHidden();
+  await editor.getByRole("tab", { name: "Identity & version", exact: true }).click();
   await editor.locator(".admin-draft-view-switch").getByText("Advanced JSON", { exact: true }).click();
   const json = editor.getByRole("textbox", { name: "Advanced JSON" });
   await expect(json).toHaveValue(/REFUND_PROCEDURE/);
@@ -95,7 +102,9 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await expect(editor.getByRole("button", { name: "Publish…" })).toBeDisabled();
   await json.fill(validJson);
   await expect(editor.getByRole("alert").filter({ hasText: "Advanced JSON is invalid" })).toHaveCount(0);
+  await editor.getByRole("tab", { name: "Identity & version", exact: true }).click();
   await editor.locator(".admin-draft-view-switch").getByText("Form", { exact: true }).click();
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
   const skills = editor.getByRole("region", { name: "Skills", exact: true });
   await skills.getByRole("row").filter({ hasText: "Refund" }).getByRole("button", { name: "Details", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("REFUND_PROCEDURE");
@@ -158,7 +167,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await page.getByRole("button", { name: "View v1 (durable)", exact: true }).click();
   const versionDetails = page.getByRole("region", { name: "Version details", exact: true });
   await expect(versionDetails.getByRole("region", { name: "Skills", exact: true })).toHaveCount(0);
-  await versionDetails.getByRole("tab", { name: "Skills", exact: true }).click();
+  await versionDetails.getByRole("tab", { name: "Skills & resources", exact: true }).click();
   const published = versionDetails.getByRole("region", { name: "Skills", exact: true });
   await expect(published).toBeVisible({ timeout: 15_000 });
   await expect(published).toContainText("Refund");

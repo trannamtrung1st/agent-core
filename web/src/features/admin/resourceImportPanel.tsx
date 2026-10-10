@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Alert, App, Button, Flex, Input, Select, Typography, Upload } from "antd";
-import { InboxOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Typography } from "antd";
+import { ResourceFilePicker, ResourceImportPreview } from "./ResourceImportFields";
 import {
   bindAdminDraftResources,
   uploadAdminDraftResourceContent,
@@ -9,14 +9,9 @@ import {
 import { describeAdminError } from "./adminErrors";
 import { showAdminFailure } from "./adminFailure";
 import {
-  RESOURCE_KINDS,
   createPreviewItem,
-  inferResourceKind,
-  readDroppedResourceFiles,
   resourceBatchLimitProblem,
-  resourceMediaType,
   resourcePreviewProblem,
-  type ResourceKindName,
   type ResourcePreviewItem
 } from "./resourcePreview";
 
@@ -27,6 +22,7 @@ export function ResourceImportPanel({
   existingCount,
   existingBytes,
   disabled,
+  onBusyChange,
   onBound,
   onError
 }: {
@@ -36,6 +32,7 @@ export function ResourceImportPanel({
   existingCount: number;
   existingBytes: number;
   disabled: boolean;
+  onBusyChange?: (busy: boolean) => void;
   onBound: () => Promise<void> | void;
   onError: (message: string | null, diagnosticId?: string | null) => void;
 }) {
@@ -59,15 +56,12 @@ export function ResourceImportPanel({
     setItems((current) => [...current, ...files.map(createPreviewItem)]);
   };
 
-  const updateItem = (key: string, patch: Partial<ResourcePreviewItem>) => {
-    setItems((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)));
-  };
-
   const bindResources = async () => {
-    if (blocked) {
+    if (disabled || binding || blocked) {
       return;
     }
     setBinding(true);
+    onBusyChange?.(true);
     onError(null);
     const next = [...items];
     let uploadFailed = false;
@@ -102,6 +96,7 @@ export function ResourceImportPanel({
         onError(uploadFailure.message, uploadFailure.diagnosticId);
       }
       setBinding(false);
+      onBusyChange?.(false);
       return;
     }
 
@@ -122,6 +117,7 @@ export function ResourceImportPanel({
       onError(notice.message, notice.diagnosticId ?? null);
     } finally {
       setBinding(false);
+      onBusyChange?.(false);
     }
   };
 
@@ -131,109 +127,9 @@ export function ResourceImportPanel({
       <Typography.Paragraph type="secondary">
         Preview the path, kind, and size, correct them, then bind the whole set in one draft revision.
       </Typography.Paragraph>
-      <Flex gap={8} wrap="wrap">
-        <Upload
-          multiple
-          showUploadList={false}
-          disabled={disabled || binding}
-          beforeUpload={(file) => {
-            addFiles([file]);
-            return false;
-          }}
-        >
-          <Button aria-label="Choose resource files" disabled={disabled || binding}>
-            Choose files
-          </Button>
-        </Upload>
-        <Upload
-          directory
-          multiple
-          showUploadList={false}
-          disabled={disabled || binding}
-          beforeUpload={(file) => {
-            addFiles([file]);
-            return false;
-          }}
-        >
-          <Button aria-label="Choose resource folder" disabled={disabled || binding}>
-            Choose folder
-          </Button>
-        </Upload>
-      </Flex>
-      <Typography.Text type="secondary" className="admin-draft-field-hint">
-        The selected folder is the package root. Kind comes from the top-level directory inside it, such as knowledge or templates.
-      </Typography.Text>
-      <div
-        className="admin-resource-drop"
-        aria-label="Drop resource files"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          if (disabled || binding) {
-            return;
-          }
-          void readDroppedResourceFiles(event.dataTransfer).then(addFiles);
-        }}
-      >
-        <InboxOutlined />
-        <Typography.Text>Drop files or a folder</Typography.Text>
-        <Typography.Text type="secondary">
-          Folder drop keeps relative paths when the browser exposes them.
-        </Typography.Text>
-      </div>
-      {items.length > 0 ? (
-        <div className="admin-resource-preview">
-          {items.map((item, index) => (
-            <div key={item.key} className="admin-resource-preview-row">
-              <label className="admin-draft-field">
-                <Typography.Text>Path</Typography.Text>
-                <Input
-                  aria-label={`Imported resource path ${index + 1}`}
-                  value={item.logicalPath}
-                  disabled={disabled || binding}
-                  onChange={(event) => {
-                    const logicalPath = event.target.value;
-                    updateItem(item.key, {
-                      logicalPath,
-                      kind: item.kind || inferResourceKind(logicalPath) || "",
-                      mediaType: resourceMediaType(item.file, logicalPath)
-                    });
-                  }}
-                />
-              </label>
-              <label className="admin-draft-field">
-                <Typography.Text>Kind</Typography.Text>
-                <Select
-                  aria-label={`Imported resource kind ${index + 1}`}
-                  value={RESOURCE_KINDS.find((kind) => kind === item.kind)}
-                  placeholder="Choose kind"
-                  disabled={disabled || binding}
-                  options={RESOURCE_KINDS.map((value) => ({ value, label: value }))}
-                  onChange={(kind: ResourceKindName) => updateItem(item.key, { kind })}
-                />
-              </label>
-              <div className="admin-resource-preview-meta">
-                <Typography.Text type="secondary">{item.byteLength.toLocaleString()} bytes</Typography.Text>
-                {itemProblems[index] ? (
-                  <Typography.Text type="danger">{itemProblems[index]}</Typography.Text>
-                ) : (
-                  <Typography.Text type="secondary">Ready</Typography.Text>
-                )}
-                <Button
-                  type="text"
-                  danger
-                  aria-label={`Remove imported resource ${index + 1}`}
-                  disabled={disabled || binding}
-                  onClick={() => setItems((current) => current.filter((candidate) => candidate.key !== item.key))}
-                >
-                  Remove
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {limitProblem ? <Alert type="error" showIcon title={limitProblem} /> : null}
+      <ResourceFilePicker disabled={disabled || binding} onFiles={addFiles} onError={onError} />
+      {items.length > 0 && <ResourceImportPreview items={items} existingPaths={existingPaths} disabled={disabled || binding} onChange={setItems} />}
+      {limitProblem ? <Alert type="warning" showIcon title={limitProblem} /> : null}
       <Button
         type="primary"
         aria-label="Bind imported resources"

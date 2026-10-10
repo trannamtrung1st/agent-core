@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { adminHomePath, navigateToAppPath } from "../../app/appRoute";
 import { AutomationEventFilter } from "./AutomationEventFilter";
 import type { CoreEventType, AutomationPreset } from "../../services/adminApi";
@@ -184,10 +185,8 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
     timing.kind === "fixedInterval" ? timing.endAtUtc ? `Ends ${date(timing.endAtUtc)}` : null : timing.endDate ? `Ends ${timing.endDate}` : null,
     timing.maxOccurrences ? `Up to ${timing.maxOccurrences} occurrences` : null
   ].filter(Boolean).join(" · ");
-  return <section className="admin-definition-panel" aria-label="Automations">
-    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Automations</Typography.Title>
-      <Typography.Text type="secondary">Choose when the agent follows your instructions. Each Run uses its authorized capabilities and normal approvals.</Typography.Text></div>
-    <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
+  return <AgentConfigurationPanel title="Automations" label="Automations"
+    description="Choose when the agent follows your instructions. Each Run uses its authorized capabilities and normal approvals." bodyGap="section">
       {loading ? <Spin aria-label="Loading automations" /> : null}
       {selection?.kind === "automation" && !loading && !error && review && !review.items.some(item => item.automationId === selection.automationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reload()}>Reload automations</Button>} /> : null}
@@ -422,8 +421,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             </Flex>
           }} />
         </> : null}
-    </Flex></div>
-  </section>;
+    </AgentConfigurationPanel>;
 }
 
 export function scheduleTimingLabel(timing: ScheduleTiming) {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   createPreviewItem,
+  resourceMediaType,
+  isTextualResource,
   inferResourceKind,
   packageLogicalPath,
   readDroppedResourceFiles,
@@ -75,5 +77,39 @@ describe("resourcePreview", () => {
     const item = createPreviewItem(file);
     expect(item.logicalPath).toBe("policy.md");
     expect(item.kind).toBe("");
+  });
+});
+
+describe("common resource formats", () => {
+  it.each([
+    ["table.csv", "text/csv"], ["table.tsv", "text/tab-separated-values"],
+    ["records.jsonl", "application/x-ndjson"], ["config.yaml", "application/yaml"],
+    ["notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    ["sheet.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+    ["sound.mp3", "audio/mpeg"], ["clip.mp4", "video/mp4"]
+  ])("recognizes %s without browser MIME metadata", (name, media) => {
+    const file = new File(["data"], name);
+    expect(resourceMediaType(file, name)).toBe(media);
+  });
+  it("accepts CSV Knowledge even with the browser Excel MIME alias", () => {
+    const file = new File(["name,value\nA,1"], "data.csv", { type: "application/vnd.ms-excel" });
+    const item = { ...createPreviewItem(file), logicalPath: "knowledge/data.csv", kind: "Knowledge" };
+    expect(item.mediaType).toBe("text/csv");
+    expect(resourcePreviewProblem(item, [item.logicalPath], [])).toBeNull();
+  });
+  it.each(["payload.exe", "script.js", "page.html", "image.svg", "macro.xlsm"])("rejects %s despite an allowed claimed MIME or renamed target", name => {
+    const file = new File(["payload"], name, { type: "text/plain" });
+    expect(resourceMediaType(file, "safe.txt")).toBeNull();
+    expect(resourceMediaType(new File(["data"], "safe.txt", { type: "text/plain" }), name)).toBeNull();
+  });
+  it("keeps binary office files out of Knowledge", () => {
+    const item = { ...createPreviewItem(new File(["data"], "sheet.xlsx")), kind: "Knowledge" };
+    expect(resourcePreviewProblem(item, [item.logicalPath], [])).toMatch(/Knowledge requires text/);
+  });
+  it("accepts extensionless content with a supported MIME without mistaking its name for an extension", () => {
+    expect(resourceMediaType(new File(["text"], "exe", { type: "text/plain" }), "exe")).toBe("text/plain");
+    expect(resourceMediaType(new File(["<root />"], "payload", { type: "text/xml" }), "data/payload")).toBe("text/xml");
+    expect(isTextualResource("TEXT/CSV")).toBe(true);
+    expect(resourceMediaType(new File(["text"], "notes.txt", { type: "text/plain" }), "payload.exe ")).toBeNull();
   });
 });

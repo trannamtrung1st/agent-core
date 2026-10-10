@@ -47,7 +47,7 @@ describe('execution budgets', () => {
     fireEvent.mouseDown(screen.getByLabelText('Interactive Browser profile'));
     fireEvent.click(await screen.findByText('Deep Workflow'));
     expect(screen.getByText(/Unsaved budget changes/)).toBeVisible();
-    fireEvent.click(screen.getByText('Save execution budgets'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save execution budgets' }));
     await waitFor(() => expect(api.setExecutionBudgets).toHaveBeenCalledWith('owner', 3, expect.objectContaining({ interactiveBrowser: expect.objectContaining({ maxSteps: 144 }) })));
     await screen.findByText('The Instance changed. Reload and review your changes before saving.');
     expect(screen.getByText(/144 steps · 15 minutes · 30s per tool · Instance override/)).toBeVisible();
@@ -56,7 +56,7 @@ describe('execution budgets', () => {
     await waitFor(() => expect(api.getExecutionBudgets).toHaveBeenCalledTimes(2));
     await screen.findByText(/144 steps · 15 minutes · 30s per tool · Instance override/);
     expect(screen.getByText(/Unsaved budget changes/)).toBeVisible();
-    fireEvent.click(screen.getByText('Discard changes'));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard execution budget changes' }));
     expect(screen.queryByText(/Unsaved budget changes/)).not.toBeInTheDocument();
     expect(screen.getByText(/24 steps · 3 minutes · 30s per tool · System default/)).toBeVisible();
   });
@@ -83,7 +83,14 @@ describe('execution budgets', () => {
     fireEvent.change(await screen.findByLabelText('Interactive Browser maxSteps'), { target: { value: '101' } });
     expect(screen.getByLabelText('Interactive Browser maxSteps')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('Enter a whole number from 8 to 100.')).toBeVisible();
-    expect(screen.getByText('Save execution budgets').closest('button')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save execution budgets' }).closest('button')).toBeDisabled();
+    const panel = screen.getByRole('button', { name: /^Execution budgets$/ });
+    fireEvent.click(panel);
+    expect(panel).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Needs attention')).toBeVisible();
+    fireEvent.click(panel);
+    expect(screen.getByLabelText('Interactive Browser maxSteps')).toHaveValue('101');
+    expect(screen.getByRole('button', { name: 'Save execution budgets' })).toBeDisabled();
     expect(api.setExecutionBudgets).not.toHaveBeenCalled();
   });
   it('fails closed on limit loading and restores the retained draft after retry', async () => {
@@ -91,7 +98,7 @@ describe('execution budgets', () => {
     vi.mocked(api.getExecutionBudgets).mockResolvedValue({ revision: 3, executionBudgets: { interactiveBrowser: profile }, definitionDefaults: null });
     render(<ConfigProvider><App><InstanceExecutionBudgets instanceId="retry-owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
     await screen.findByText(/Execution limits could not be loaded/);
-    expect(screen.getByText('Save execution budgets').closest('button')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save execution budgets' }).closest('button')).toBeDisabled();
     expect(screen.queryByLabelText('Interactive Browser profile')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Retry limits'));
     expect(await screen.findByText(/96 steps · 10 minutes · 30s per tool · Instance override/)).toBeVisible();
@@ -108,7 +115,7 @@ describe('execution budgets', () => {
     await screen.findByText(/96 steps · 10 minutes · 30s per tool · Instance override/);
     fireEvent.mouseDown(screen.getByLabelText('Interactive Browser profile'));
     fireEvent.click(await screen.findByText('Deep Workflow'));
-    fireEvent.click(screen.getByText('Save execution budgets'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save execution budgets' }));
     await waitFor(() => expect(complete).toBeTypeOf('function'));
     rerender(view('second'));
     await screen.findByText(/48 steps · 5 minutes · 30s per tool · System default/);

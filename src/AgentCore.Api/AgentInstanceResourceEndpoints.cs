@@ -39,6 +39,7 @@ internal static class AgentInstanceResourceEndpoints
         var form = await request.ReadFormAsync(ct);
         if (form.Files.Count != 1) throw AgentCoreErrors.Validation("Exactly one resource file is required.");
         var file = form.Files[0];
+        DefinitionResourcePolicies.ValidateFileName(file.FileName);
         DefinitionResourcePolicies.ValidateContentSize(file.Length);
         await using var input = file.OpenReadStream();
         using var buffer = new MemoryStream();

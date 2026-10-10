@@ -10,7 +10,8 @@ namespace AgentCore.Application.Admin;
 
 public sealed record InstanceSettingsSection(string Section, long InstanceRevision, string DefinitionId, int DefinitionVersion,
     IReadOnlyDictionary<string, object?> Overrides, IReadOnlyDictionary<string, object?> Effective,
-    IReadOnlyDictionary<string, string> Sources, string ConfigurationHash, IReadOnlyDictionary<string, object?> DefinitionDefaults);
+    IReadOnlyDictionary<string, string> Sources, string ConfigurationHash, IReadOnlyDictionary<string, object?> DefinitionDefaults,
+    IReadOnlyDictionary<string, InstanceSettingConstraint> Constraints);
 
 public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
     IIdGenerator ids, TimeProvider time, IModelCatalog? models = null, ProviderAliasSet? aliases = null,
@@ -65,7 +66,7 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
             InstanceSettingsResolver.Values(effective, section), InstanceSettingsResolver.Fields(section).ToDictionary(
                 f => f, f => overrides.ContainsKey(f) ? "instance" : "definition", StringComparer.Ordinal),
             Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { definition = effective, owner.Revision }, Json))).ToLowerInvariant(),
-            InstanceSettingsResolver.Values(definition, section));
+            InstanceSettingsResolver.Values(definition, section), InstanceSettingsResolver.Constraints(definition, section));
     }
     private async ValueTask<AgentInstance> RequireAsync(Guid id, CancellationToken ct) =>
         await instances.FindAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");

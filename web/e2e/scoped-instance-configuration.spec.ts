@@ -1,5 +1,46 @@
 import {test,expect} from '@playwright/test';
 
+test('settings disclose restrictions before editing and keep override provenance in tooltips', async ({page}) => {
+  await page.goto('/admin');
+  await expect(page.getByRole('heading', {name:'Agent inventory'})).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('agent-core.owner-capability'))).toEqual(expect.any(String));
+  const headers = {'X-AgentCore-Owner-Capability': (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!};
+  const created = await page.request.post('/api/v2/admin/agent-instances', {headers, data:{definitionId:'general-assistant',version:21}});
+  expect(created.ok()).toBe(true);
+  const owner = await created.json();
+  await page.goto(`/admin/instances/${owner.instanceId}/identity/settings`);
+  await page.getByRole('button', {name:'Initiative',exact:true}).click();
+  await page.getByRole('button', {name:'Customize Initiative',exact:true}).click();
+  const initiative = page.getByRole('group', {name:'Initiative settings',exact:true});
+  await expect(initiative.getByRole('switch', {name:'Enabled',exact:true})).toBeDisabled();
+  await initiative.getByRole('button', {name:'Enabled: Definition restriction',exact:true}).focus();
+  await expect(page.getByRole('tooltip')).toContainText('Initiative is disabled by the selected Definition.');
+  await page.getByRole('button', {name:'Behavior',exact:true}).click();
+  await page.getByRole('button', {name:'Customize Behavior',exact:true}).click();
+  const behavior = page.getByRole('group', {name:'Behavior settings',exact:true});
+  await expect(behavior.getByRole('switch', {name:'Avoid unsupported claims',exact:true})).toBeDisabled();
+  await behavior.getByRole('switch', {name:'Acknowledge interruption',exact:true}).click();
+  await page.getByRole('button', {name:'Save Behavior',exact:true}).click();
+  await expect(behavior.getByRole('button', {name:'Acknowledge interruption: Instance override',exact:true})).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', {name:/^Behavior/}).click();
+  await expect(behavior.getByRole('switch', {name:'Acknowledge interruption',exact:true})).not.toBeChecked();
+  const marker = behavior.getByRole('button', {name:'Acknowledge interruption: Instance override',exact:true});
+  await marker.focus();
+  await expect(page.getByRole('tooltip')).toHaveText('Instance override. Definition default: true.');
+  await expect(behavior.locator('.ant-form-item-extra')).toHaveCount(0);
+  await expect(page.getByText('Definition default', {exact:true})).toHaveCount(0);
+  for (const width of [1440,768,390]) {
+    await page.setViewportSize({width,height:900});
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await expect(marker).toBeVisible();
+  }
+  await behavior.getByRole('button', {name:'Reset Acknowledge interruption',exact:true}).click();
+  await page.getByRole('button', {name:'Save Behavior',exact:true}).click();
+  await expect(marker).toHaveCount(0);
+  await expect(behavior.getByRole('switch', {name:'Acknowledge interruption',exact:true})).toBeChecked();
+});
+
 test('saving settings refreshes dependent values and recovers a failed refresh without losing other drafts',async({page})=>{
   await page.goto('/admin');
   await expect(page.getByRole('heading',{name:'Agent inventory'})).toBeVisible();
@@ -9,13 +50,13 @@ test('saving settings refreshes dependent values and recovers a failed refresh w
   expect(created.ok()).toBe(true);const owner=await created.json();
   const root=`/api/v2/admin/agent-instances/${owner.instanceId}`;
   await page.goto(`/admin/instances/${owner.instanceId}/identity/settings`);
-  await page.getByRole('button',{name:'Provider preferences Definition default',exact:true}).click();
-  await expect(page.getByRole('textbox',{name:'SpeechRecognizer',exact:true})).toHaveValue('primary-stt');
-  await page.getByRole('button',{name:'Conversation Definition default',exact:true}).click();
-  await page.getByRole('radiogroup',{name:'Conversation source'}).getByText('Customize',{exact:true}).click();
+  await page.getByRole('button',{name:'Provider preferences',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'Speech recognizer',exact:true})).toHaveValue('primary-stt');
+  await page.getByRole('button',{name:'Conversation',exact:true}).click();
+  await page.getByRole('button',{name:'Customize Conversation',exact:true}).click();
   await page.getByRole('textbox',{name:'Language',exact:true}).fill('fr-FR');
-  await page.getByRole('button',{name:'Voice Definition default',exact:true}).click();
-  await page.getByRole('radiogroup',{name:'Voice source'}).getByText('Customize',{exact:true}).click();
+  await page.getByRole('button',{name:'Voice',exact:true}).click();
+  await page.getByRole('button',{name:'Customize Voice',exact:true}).click();
   await page.getByRole('switch',{name:'Enabled',exact:true}).click();
   let releaseRefresh!:()=>void;let refreshStarted!:()=>void;
   const refreshGate=new Promise<void>(resolve=>{releaseRefresh=resolve;});
@@ -26,7 +67,7 @@ test('saving settings refreshes dependent values and recovers a failed refresh w
   await page.getByRole('tab',{name:'Profile',exact:true}).click();
   await page.getByRole('tab',{name:'Settings',exact:true}).click();
   releaseRefresh();
-  await expect(page.getByRole('textbox',{name:'SpeechRecognizer',exact:true})).toHaveValue('');
+  await expect(page.getByRole('textbox',{name:'Speech recognizer',exact:true})).toHaveValue('');
   await expect(page.getByRole('button',{name:'Reload settings',exact:true})).toBeEnabled();
   await page.unroute(`**${root}/settings`);
   await expect(page.getByRole('textbox',{name:'Language',exact:true})).toHaveValue('fr-FR');
@@ -41,7 +82,7 @@ test('saving settings refreshes dependent values and recovers a failed refresh w
   await expect(page.getByRole('button',{name:'Save Voice',exact:true})).toHaveCount(0);
   await page.unroute(`**${root}/settings**`);
   await page.getByRole('button',{name:'Retry settings',exact:true}).click();
-  await expect(page.getByRole('textbox',{name:'SpeechRecognizer',exact:true})).toHaveValue('primary-stt');
+  await expect(page.getByRole('textbox',{name:'Speech recognizer',exact:true})).toHaveValue('primary-stt');
   await expect(page.getByRole('textbox',{name:'Language',exact:true})).toHaveValue('fr-FR');
   await expect(page.getByRole('button',{name:'Save Voice',exact:true})).toBeDisabled();
   expect(patches).toBe(1);
@@ -58,8 +99,8 @@ test('scoped settings save/reset, conflict recovery and resource inspection pres
   expect(created.ok()).toBe(true);const owner=await created.json();
   const root=`/api/v2/admin/agent-instances/${owner.instanceId}`;
   await page.goto(`/admin/instances/${owner.instanceId}/identity/settings`);
-  await page.getByRole('button',{name:'Conversation Definition default',exact:true}).click();
-  await page.getByText('Customize',{exact:true}).click();
+  await page.getByRole('button',{name:'Conversation',exact:true}).click();
+  await page.getByRole('button',{name:'Customize Conversation',exact:true}).click();
   const save=page.getByRole('button',{name:'Save Conversation',exact:true});await expect(save).toBeDisabled();
   await page.getByRole('spinbutton',{name:'Maximum output tokens'}).fill('2048');await save.click();await expect(page.getByRole('button',{name:'Reload settings',exact:true})).toBeEnabled();await expect(save).toBeDisabled();
   let sections=await(await page.request.get(root+'/settings',{headers})).json();
@@ -72,12 +113,14 @@ test('scoped settings save/reset, conflict recovery and resource inspection pres
   await page.getByRole('button',{name:'Reload settings',exact:true}).click();await expect(save).toBeEnabled();await save.click();await expect(page.getByRole('button',{name:'Reload settings',exact:true})).toBeEnabled();await expect(save).toBeDisabled();
   await page.getByRole('button',{name:'Reset Maximum output tokens',exact:true}).click();await save.click();await expect(page.getByRole('button',{name:'Reload settings',exact:true})).toBeEnabled();await expect(save).toBeDisabled();
   sections=await(await page.request.get(root+'/settings',{headers})).json();conversation=sections.find((s:{section:string})=>s.section==='conversationPolicy');expect(conversation.overrides).toEqual({language:'fr-FR'});
-  await page.getByRole('radiogroup',{name:'Conversation source'}).getByText('Inherit Definition',{exact:true}).click();await page.getByRole('button',{name:'Reset section',exact:true}).click();
+  await page.getByRole('button',{name:'Reset Conversation to Definition',exact:true}).click();await page.getByRole('button',{name:'Reset section',exact:true}).click();
   await expect(page.getByRole('spinbutton',{name:'Maximum output tokens'})).toBeDisabled();
   await page.getByRole('tab',{name:'Skills & resources',exact:true}).click();await page.getByRole('tab',{name:'Resources',exact:true}).click();
-  await page.getByRole('button',{name:'New Instance resource',exact:true}).click();await page.getByRole('textbox',{name:'Resource logical path'}).fill('verification/scoped.md');
-  await page.locator('input[type=file]').setInputFiles({name:'scoped.md',mimeType:'text/markdown',buffer:Buffer.from('Exact Synthetic resource bytes')});
-  await page.getByRole('button',{name:'Save resource',exact:true}).click();await expect(page.getByText('verification/scoped.md',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'New Instance resource',exact:true}).click();
+  await page.locator('input[type=file]:not([webkitdirectory])').setInputFiles({name:'scoped.md',mimeType:'text/markdown',buffer:Buffer.from('Exact Synthetic resource bytes')});
+  await page.getByLabel('Imported resource path 1').fill('knowledge/scoped.md');
+  await page.getByLabel('Imported resource path 1').fill('verification/scoped.md');
+  await page.getByRole('button',{name:'Add 1 resource',exact:true}).click();await expect(page.getByText('verification/scoped.md',{exact:true})).toBeVisible();
   await page.route(`**/api/v2/admin/agent-instances/${owner.instanceId}/resources`, route => route.request().method() === 'GET'
     ? route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({detail:'Resources temporarily unavailable.'})}) : route.continue());
   await page.reload();await expect(page.getByRole('alert').filter({hasText:'Resources temporarily unavailable.'})).toBeVisible();

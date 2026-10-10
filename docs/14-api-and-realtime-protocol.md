@@ -610,7 +610,7 @@ This is an internal model-tool contract; it adds no HTTP endpoint or SignalR eve
 
 ## Scoped Instance configuration HTTP
 
-All routes below require the existing trusted-local owner capability. Settings responses are an array of typed section projections: `section`, `definitionVersion`, `instanceRevision`, `definitionDefaults`, `overrides`, `effective`, `sources` and `configurationHash`. Fields have allowlisted section ownership; budgets use the existing execution-budgets contract.
+All routes below require the existing trusted-local owner capability. Settings responses are an array of typed section projections: `section`, `definitionVersion`, `instanceRevision`, `definitionDefaults`, `overrides`, `effective`, `sources`, `configurationHash` and `constraints`. The additive `constraints` dictionary maps restricted fields to `{ reason, requiredBoolean, minimum, maximum }`; unused bounds are null. These are the selected Definition’s restrictions, validated by the same resolver on every save, rather than extra editable settings. Fields have allowlisted section ownership; budgets use the existing execution-budgets contract.
 
 | Route under `/api/v2/admin/agent-instances/{id}` | Contract |
 | --- | --- |

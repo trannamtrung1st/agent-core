@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { AdminErrorNotice } from "./adminFailure";
 import { useEffect, useId, useRef, useState } from "react";
 import { InfoCircleOutlined } from "@ant-design/icons";
@@ -55,12 +56,8 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
   const enabled = review && !review.policy.frozen && review.policy.mode !== "Disabled";
   const changed = review && (mode !== review.policy.mode || JSON.stringify(scopes) !== JSON.stringify(review.policy.scopes));
   const testedRevision = prep?.publishedDraftRevision ?? review?.draftRevision;
-  return <section className="admin-definition-panel" aria-label="Harness management">
-    <div className="admin-definition-panel-heading">
-      <Typography.Title level={4}>Harness management</Typography.Title>
-      <Typography.Text type="secondary">Chat saves only to this Instance. Changes apply to the next new Run, including in existing conversations.</Typography.Text>
-    </div>
-    <div className="admin-definition-panel-body"><Flex vertical gap={token.padding} className="harness-management-content">
+  return <AgentConfigurationPanel title="Harness management" label="Harness management"
+    description="Chat saves only to this Instance. Changes apply to the next new Run, including in existing conversations." bodyGap="section" bodyClassName="harness-management-content">
       {loading ? <Spin aria-label="Loading harness management" /> : null}
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void reload()} disabled={busy}>Reload</Button>} /> : null}
       {review ? <>
@@ -131,8 +128,7 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
             <Flex wrap gap={token.paddingXS}><Button disabled={busy} onClick={() => confirmAction(modal, { title: "Discard unfinished candidate?", content: "Cancel its authoring grant and pending approvals. The active version stays unchanged.", okText: "Discard candidate", onOk: () => run("cancel", { expectedRevision: review.instanceRevision }) })}>Discard unfinished candidate</Button></Flex></> : null}
         </Flex> }]} /> : <Typography.Text type="secondary">No harness changes yet. Start by teaching reusable knowledge or a procedure in Chat.</Typography.Text>}
       </> : null}
-    </Flex></div>
-  </section>;
+    </AgentConfigurationPanel>;
 }
 
 export function HarnessPolicyModeScopes({ mode, scopes, busy, onMode, onScopes }: {

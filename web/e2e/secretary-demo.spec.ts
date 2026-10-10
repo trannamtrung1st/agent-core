@@ -1,3 +1,4 @@
+import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { expect, test, type Page } from '@playwright/test';
 import { completeDefinitionDraftPublishGate, publishDraftFromInstructions } from './admin-definition-gate-helpers';
 import { draftEditorSection } from './admin-draft-editor-helpers';
@@ -87,13 +88,15 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await modal.getByLabel('Definition ID', { exact: true }).fill(definitionId);
     await modal.getByRole('button', { name: 'Create draft', exact: true }).click();
     const editor = draftEditorSection(page);
-    await expect(editor.getByLabel('System instructions', { exact: true })).toBeVisible();
     for (const [label, value] of [
       ['Definition name', 'Executive Secretary'], ['Definition role', 'Executive Secretary'],
       ['Definition description', 'A dependable secretary who organizes follow-ups and checks prior context.'],
-      ['Definition tone', 'Concise, calm, practical'],
-      ['System instructions', 'You are Morgan. Organize Atlas follow-ups, use relevant Memory and Experience, put blockers first, and obey current policy and approvals.']
+      ['Definition tone', 'Concise, calm, practical']
     ]) await editor.getByLabel(label, { exact: true }).fill(value);
+    await openDefinitionSettings(editor);
+    await editor.getByLabel('System instructions', { exact: true }).fill('You are Morgan. Organize Atlas follow-ups, use relevant Memory and Experience, put blockers first, and obey current policy and approvals.');
+    await openDefinitionSettings(editor, 'Memory policy');
+    await openDefinitionSettings(editor, 'Trigger restrictions');
     for (const label of ['Session memory', 'Identity user promotion', 'Identity user retrieval', 'Automation enabled',
       'Allow user scheduling', 'Allow one-shot', 'Allow daily', 'Allow weekly', 'Allow fixed interval']) {
       await editor.getByRole('switch', { name: label, exact: true }).click();
@@ -132,6 +135,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await saveDraft(page);
     await page.reload();
     await expect(editor.getByLabel('Definition name', { exact: true })).toHaveValue('Executive Secretary');
+    await openDefinitionSettings(editor, 'Trigger restrictions');
     await expect(editor.getByLabel('Max active registrations', { exact: true })).toHaveValue('4');
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

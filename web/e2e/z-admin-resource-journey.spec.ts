@@ -64,7 +64,8 @@ test("admin resource publish managed chat exposes publication under agent", asyn
   await draftEditor.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
 
-  await draftEditor.getByRole("tab", { name: "Resources" }).click();
+  await draftEditor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await draftEditor.getByRole("tab", { name: "Resources", exact: true }).click();
   await draftEditor.getByLabel("Resource logical path").fill(resourcePath);
   await draftEditor.locator('section[aria-label="Add draft resource"] input[type="file"]').setInputFiles({
     name: "e2e.md",

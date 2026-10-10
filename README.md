@@ -83,6 +83,8 @@ Current Admin enhancement: global Connections contains shared Credentials and Ev
 - [Repository Structure](docs/11-repository-structure.md)
 - [Backend Implementation Specification](docs/12-backend-implementation-spec.md)
 - [Frontend Implementation Specification](docs/13-frontend-implementation-spec.md)
+- [Design system and presentation guidance](.agents/context/DESIGN.md)
+- [Shared Admin compositions](web/src/features/admin/README.md)
 - [Ant Design migration handoff](docs/reports/antd-migration-handoff.md)
 - [HTTP API and Realtime Protocol](docs/14-api-and-realtime-protocol.md)
 - [Persistence and Configuration](docs/15-persistence-and-configuration.md)

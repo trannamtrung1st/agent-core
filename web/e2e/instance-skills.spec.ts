@@ -91,6 +91,7 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   const dialog = page.getByRole('dialog', { name: 'New definition' });
   await dialog.getByLabel('Definition ID').fill(definitionId); await dialog.getByRole('button', { name: 'Create draft' }).click();
   let editor = draftEditorSection(page);
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
   await editor.getByRole('button', { name: 'Add skill' }).click();
   await page.getByRole('dialog').getByLabel('Skill ID', { exact: true }).fill('review'); await page.getByRole('dialog').getByLabel('Skill name', { exact: true }).fill('Review');
   await page.getByRole('dialog').getByLabel('Description', { exact: true }).fill('Reusable review'); await page.getByRole('dialog').getByLabel('Procedure', { exact: true }).fill('ORIGINAL_DEFINITION');
@@ -107,6 +108,7 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await page.getByLabel('Procedure', { exact: true }).fill('LOCAL_INDEPENDENT'); await page.getByRole('button', { name: 'Save Skill' }).click();
   await expect(page.getByRole('region', { name: 'Instance Skill editor' })).toBeHidden();
   await page.goto(`/admin/definitions/${definitionId}`); editor = await forkDurablePublicationDraft(page, 1);
+  await editor.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
   await editor.getByRole('region', { name: 'Skills', exact: true }).getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByRole('dialog').getByLabel('Procedure', { exact: true }).fill('UPGRADED_DEFINITION');
   await page.getByRole('dialog').getByRole('button', { name: 'Save Skill', exact: true }).click(); await editor.getByRole('button', { name: 'Save draft' }).click();

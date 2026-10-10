@@ -51,6 +51,25 @@ public sealed class InstanceSettingsResolverTests
         Assert.Throws<AgentCoreException>(() => InstanceSettingsResolver.Resolve(SampleDefinitions.Examiner, selected));
         Assert.Throws<AgentCoreException>(() => InstanceSettingsResolver.Resolve(SampleDefinitions.Examiner with { MemoryPolicy = null }, new(MemoryUserPromotion: new(true))));
     }
+    [Fact]
+    public void Published_constraints_reject_each_disallowed_value_with_the_disclosed_reason()
+    {
+        var baseline = SampleDefinitions.Examiner with {
+            InitiativePolicy = SampleDefinitions.Examiner.InitiativePolicy with { Enabled = false },
+            Voice = SampleDefinitions.Examiner.Voice with { Enabled = false },
+            ProviderPreferences = SampleDefinitions.Examiner.ProviderPreferences with { SpeechRecognizer = null, SpeechSynthesizer = null },
+            MemoryPolicy = MemoryPolicy.Disabled
+        };
+        foreach (var section in InstanceSettingsResolver.Sections)
+            foreach (var (field, constraint) in InstanceSettingsResolver.Constraints(baseline, section))
+            {
+                var invalid = constraint.RequiredBoolean is { } required ? Value(!required)
+                    : constraint.Minimum is { } min ? Value(min - 1) : Value(constraint.Maximum!.Value + 1);
+                var patch = InstanceSettingsResolver.Patch(new(), section, new Dictionary<string, JsonElement> { [field] = invalid }, []);
+                var rejected = Assert.Throws<AgentCoreException>(() => InstanceSettingsResolver.Resolve(baseline, patch));
+                Assert.Equal(constraint.Reason, rejected.Message);
+            }
+    }
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

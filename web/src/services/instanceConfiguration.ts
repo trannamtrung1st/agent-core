@@ -1,7 +1,8 @@
 import { ownerFetch } from './api';
 import { adminProblemMessage } from './adminApi';
 export type SettingValue = string | number | boolean | string[] | null;
-export type SettingsSection = { section: string; instanceRevision: number; definitionId: string; definitionVersion: number; overrides: Record<string, SettingValue>; effective: Record<string, SettingValue>; definitionDefaults: Record<string, SettingValue>; sources: Record<string, 'definition' | 'instance'>; configurationHash: string };
+export type SettingConstraint = { reason: string; requiredBoolean: boolean | null; minimum: number | null; maximum: number | null };
+export type SettingsSection = { section: string; instanceRevision: number; definitionId: string; definitionVersion: number; overrides: Record<string, SettingValue>; effective: Record<string, SettingValue>; definitionDefaults: Record<string, SettingValue>; sources: Record<string, 'definition' | 'instance'>; configurationHash: string; constraints?: Record<string, SettingConstraint> };
 export type InstanceResource = { key: string; origin: 'Definition' | 'Instance'; logicalPath: string; kind: number; mediaType: string; contentSha256: string; byteLength: number; enabled: boolean; enabledOverride: boolean | null; revision: number; virtualPath: string; dependencies: string[]; sourceDefinitionId: string | null; sourceDefinitionVersion: number | null };
 export type ResourceCatalog = { instanceRevision: number; definitionId: string; definitionVersion: number; resources: InstanceResource[] };
 const root = (id: string) => `/api/v2/admin/agent-instances/${encodeURIComponent(id)}`;

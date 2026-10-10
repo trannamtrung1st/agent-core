@@ -94,7 +94,7 @@ export async function completeDefinitionDraftPublishGate(
 }
 
 export async function publishDraftFromInstructions(page: Page, draftEditor: Locator) {
-  await draftEditor.getByRole("tab", { name: "Definition" }).click();
+  await draftEditor.getByRole("tab", { name: "Identity & version" }).click();
   await draftEditor.getByRole("button", { name: "Publish…" }).click();
   const modal = page.getByRole("dialog");
   await expect(modal).toBeVisible();

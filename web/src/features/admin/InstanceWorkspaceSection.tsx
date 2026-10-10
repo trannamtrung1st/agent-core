@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Empty, Flex, Spin, Table, Typography, theme } from "antd";
@@ -49,12 +50,8 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
     finally { if (generation === order.current) setBusy(null); }
   }
   const items = page?.items.filter(i => `${i.logicalPath} ${i.contentType}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())) ?? [];
-  return <section className="admin-definition-panel" aria-label="Agent Workspace">
-    <div className="admin-definition-panel-heading">
-      <Typography.Title level={4}>Agent Workspace</Typography.Title>
-      <Typography.Text type="secondary">/home · Durable across sessions.</Typography.Text>
-    </div>
-    <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
+  return <AgentConfigurationPanel title="Agent Workspace" label="Agent Workspace"
+    description="/home · Durable across sessions." bodyGap="section">
       {archived ? <Alert type="info" showIcon title="Archived workspace is read-only" description="Files remain available to download." /> : null}
       <Flex justify="space-between" align="center" wrap gap={token.paddingXS}>
         <Typography.Text type="secondary">{page ? `${artifactSize(page.usedBytes)} of ${artifactSize(page.maxInstanceBytes)} · ${page.totalItems} ${page.totalItems === 1 ? "item" : "items"}` : ""}</Typography.Text>
@@ -82,6 +79,5 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
           ]} />
         {page.nextPath ? <Button disabled={loading || !!busy} onClick={() => void reload(page.nextPath!)}>Load more items</Button> : null}
       </> : null}
-    </Flex></div>
-  </section>;
+    </AgentConfigurationPanel>;
 }

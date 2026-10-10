@@ -1,3 +1,4 @@
+import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { expect, test } from "@playwright/test";
 import { completeDefinitionDraftPublishGate } from "./admin-definition-gate-helpers";
@@ -268,6 +269,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await page.getByRole("textbox", { name: "Search versions", exact: true }).fill("Built-in");
   await page.getByRole("button", { name: "View v1 (builtIn)", exact: true }).click();
   const details = page.getByRole("region", { name: "Version details", exact: true });
+  await openDefinitionSettings(details);
   await expect(details.getByLabel("System instructions", { exact: true })).toHaveAttribute("readonly", "");
   const instructions = details.getByLabel("System instructions", { exact: true });
   await instructions.focus();
@@ -291,9 +293,12 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await dialog.getByLabel("Definition ID").fill(definitionId);
   await dialog.getByRole("button", { name: "Create draft", exact: true }).click();
   const editor = draftEditorSection(page);
+  await openDefinitionSettings(editor);
   await editor.getByLabel("System instructions", { exact: true }).fill("Follow the published inspection guide.");
   const longGoal = "Inspect the complete published configuration, including long identity values and goals, without truncation on a narrow screen. Keep the version immutable and preserve the current collection context.";
+  await editor.getByRole("tab", { name: "Profile", exact: true }).click();
   await editor.getByLabel("Goal 1", { exact: true }).fill(longGoal);
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
   await editor.getByRole("tab", { name: "Resources", exact: true }).click();
   await expect(editor.getByRole("button", { name: "Save draft", exact: true })).toBeEnabled();
   await editor.getByRole("button", { name: "Save draft", exact: true }).click();
@@ -314,8 +319,10 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await expect(publishedRow.getByRole("cell").nth(5)).toHaveText("0");
   expect((await publishedRow.boundingBox())!.height).toBeLessThan(60);
   await page.getByRole("button", { name: "View v1 (durable)", exact: true }).click();
+  await openDefinitionSettings(details);
   await expect(details.getByLabel("System instructions", { exact: true })).toHaveValue("Follow the published inspection guide.");
   await page.setViewportSize({ width: 390, height: 844 });
+  await details.getByRole("tab", { name: "Profile", exact: true }).click();
   const goal = details.getByLabel("Goal 1", { exact: true });
   await expect(goal).toHaveValue(longGoal);
   await expect.poll(() => goal.evaluate(element => element.clientHeight)).toBeGreaterThan(32);
@@ -374,6 +381,7 @@ test("Collection navigation and version drawer preserve context and keyboard foc
   const scroll = await page.evaluate(() => window.scrollY);
   await trigger.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Version details", exact: true });
+  await openDefinitionSettings(drawer);
   await expect(drawer.getByLabel("System instructions", { exact: true })).not.toBeDisabled();
   await expect(drawer.getByLabel("System instructions", { exact: true })).toHaveAttribute("readonly", "");
   expect(await page.evaluate(() => window.scrollY)).toBe(scroll);

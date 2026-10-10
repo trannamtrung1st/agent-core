@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Alert, App, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Form, Grid, Input, Modal, Spin, Table, Tag, Typography, theme } from "antd";
 import { MoreOutlined, PlusOutlined } from "@ant-design/icons";
@@ -123,10 +124,8 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
   </Flex>;
   const navigateSubscription = (instanceId: string, automationId: string) => navigateToAppPath(`${adminInstancePath(instanceId, "automation", "automations")}?automation=${automationId}`);
   const nameError = /[\u0000-\u001f\u007f-\u009f]/.test(name) ? "Use a name without control characters." : null;
-  return <section className="admin-definition-panel" aria-label="Events">
-    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Events</Typography.Title>
-      <Typography.Text type="secondary">Receive external signals through authenticated webhooks. Automations choose how each agent responds.</Typography.Text></div>
-    <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
+  return <AgentConfigurationPanel title="Events" label="Events"
+    description="Receive external signals through authenticated webhooks. Automations choose how each agent responds." bodyGap="section">
       {loading ? <Spin aria-label="Loading Events" /> : null}
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} />} action={<AdminRetryAction onRetry={() => void reload()} />} /> : null}
       <Flex wrap gap={token.paddingSM} align="center" justify="space-between">
@@ -217,6 +216,5 @@ export function EventsSection({ onChanged, onCreated, embedded = false }: {
           <Input.TextArea readOnly aria-label="Event credential" value={credential ?? ""} rows={3} /><Button onClick={() => void copy(credential ?? "")}>Copy credential</Button>
         </Flex>
       </Modal>
-    </Flex></div>
-  </section>;
+    </AgentConfigurationPanel>;
 }

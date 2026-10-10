@@ -4,6 +4,8 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Agents;
 
+public sealed record InstanceSettingConstraint(string Reason, bool? RequiredBoolean = null, int? Minimum = null, int? Maximum = null);
+
 public static class InstanceSettingsResolver
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict };
@@ -100,6 +102,49 @@ public static class InstanceSettingsResolver
     }
 
     private static TriggerPolicy TriggerOf(AgentDefinition d) => d.TriggerPolicy ?? new(false, false, false, false, false, false, 32, 30, 1, [], false, 60);
+
+    // The same published limits govern saves and the controls shown by Admin.
+    public static IReadOnlyDictionary<string, InstanceSettingConstraint> Constraints(AgentDefinition baseline, string section)
+    {
+        var result = new Dictionary<string, InstanceSettingConstraint>(StringComparer.Ordinal);
+        void CannotEnable(string field, string label, bool allowed)
+        {
+            if (!allowed) result[field] = new($"{label} is disabled by the selected Definition. Adopt a Definition that permits it before enabling it for this Instance.", RequiredBoolean: false);
+        }
+        switch (section)
+        {
+            case "behaviorPolicy":
+                if (baseline.BehaviorPolicy.AvoidUnsupportedClaims)
+                    result["avoidUnsupportedClaims"] = new("Avoid unsupported claims is required by the selected Definition and cannot be disabled for this Instance.", RequiredBoolean: true);
+                break;
+            case "initiativePolicy": CannotEnable("enabled", "Initiative", baseline.InitiativePolicy.Enabled); break;
+            case "voice": CannotEnable("enabled", "Voice", baseline.Voice.Enabled); break;
+            case "capabilities": CannotEnable("allowUnreadUnsupportedTypes", "Unread unsupported attachments", RoleEnvironments.Of(baseline).AttachmentPolicy.AllowUnreadUnsupportedTypes); break;
+            case "memoryPolicy":
+                var memory = baseline.MemoryPolicy ?? MemoryPolicy.Disabled;
+                CannotEnable("sessionMemory", "Session memory", memory.SessionMemory);
+                CannotEnable("identityUserPromotion", "Instance memory promotion", memory.IdentityUserPromotion);
+                CannotEnable("identityUserRetrieval", "Instance memory retrieval", memory.IdentityUserRetrieval);
+                CannotEnable("userPromotion", "User memory promotion", memory.UserPromotion);
+                CannotEnable("userRetrieval", "User memory retrieval", memory.UserRetrieval);
+                break;
+            case "triggerPolicy":
+                var trigger = TriggerOf(baseline);
+                CannotEnable("enabled", "Triggers", trigger.Enabled);
+                CannotEnable("allowUserScheduling", "User scheduling", trigger.AllowUserScheduling);
+                CannotEnable("allowOneShot", "One-shot schedules", trigger.AllowOneShot);
+                CannotEnable("allowDaily", "Daily schedules", trigger.AllowDaily);
+                CannotEnable("allowWeekly", "Weekly schedules", trigger.AllowWeekly);
+                CannotEnable("allowIndefiniteRecurrence", "Indefinite recurrence", trigger.AllowIndefiniteRecurrence);
+                CannotEnable("allowFixedInterval", "Fixed intervals", trigger.AllowFixedInterval);
+                result["maxActiveRegistrations"] = new($"Maximum active schedules cannot exceed the selected Definition’s limit of {trigger.MaxActiveRegistrations}.", Maximum: trigger.MaxActiveRegistrations);
+                result["oneShotHorizonDays"] = new($"One-shot horizon cannot exceed the selected Definition’s limit of {trigger.OneShotHorizonDays} days.", Maximum: trigger.OneShotHorizonDays);
+                result["minRecurrenceDays"] = new($"Minimum recurrence must be at least {trigger.MinRecurrenceDays} days, as required by the selected Definition.", Minimum: trigger.MinRecurrenceDays);
+                result["minFixedIntervalSeconds"] = new($"Minimum fixed interval must be at least {trigger.MinFixedIntervalSeconds} seconds, as required by the selected Definition.", Minimum: trigger.MinFixedIntervalSeconds);
+                break;
+        }
+        return result;
+    }
 
     public static AgentDefinition Resolve(AgentDefinition baseline, InstanceSettingsOverrides? overrides)
     {
@@ -198,28 +243,22 @@ public static class InstanceSettingsResolver
         }
         if (o.AllowUnreadUnsupportedTypes is { } unread)
         {
-            if (unread.Value && !environment.AttachmentPolicy.AllowUnreadUnsupportedTypes) throw AgentCoreErrors.Validation("Instance attachment policy cannot enlarge Definition policy.");
             d = d with { Environment = RoleEnvironments.Of(d) with { Attachments = new(unread.Value) } };
         }
-        if (!baseline.InitiativePolicy.Enabled && d.InitiativePolicy.Enabled
-            || d.InitiativePolicy.Triggers.Any(t => !baseline.InitiativePolicy.Triggers.Contains(t, StringComparer.Ordinal))
-            || !baseline.Voice.Enabled && d.Voice.Enabled
-            || baseline.BehaviorPolicy.AvoidUnsupportedClaims && !d.BehaviorPolicy.AvoidUnsupportedClaims)
-            throw AgentCoreErrors.Validation("Instance settings cannot enlarge Definition policy.");
+        foreach (var section in Sections)
+        {
+            var values = Values(d, section);
+            foreach (var (field, constraint) in Constraints(baseline, section))
+                if (constraint.RequiredBoolean is { } required && values[field] is bool boolean && boolean != required
+                    || constraint.Minimum is { } minimum && values[field] is int low && low < minimum
+                    || constraint.Maximum is { } maximum && values[field] is int high && high > maximum)
+                    throw AgentCoreErrors.Validation(constraint.Reason);
+        }
+        if (d.InitiativePolicy.Triggers.Any(t => !baseline.InitiativePolicy.Triggers.Contains(t, StringComparer.Ordinal)))
+            throw AgentCoreErrors.Validation("Initiative triggers must be permitted by the selected Definition.");
         var t = TriggerOf(d);
-        if (t.Enabled && !trigger.Enabled || t.AllowUserScheduling && !trigger.AllowUserScheduling
-            || t.AllowOneShot && !trigger.AllowOneShot || t.AllowDaily && !trigger.AllowDaily
-            || t.AllowWeekly && !trigger.AllowWeekly || t.AllowIndefiniteRecurrence && !trigger.AllowIndefiniteRecurrence
-            || t.AllowFixedInterval && !trigger.AllowFixedInterval || t.MaxActiveRegistrations > trigger.MaxActiveRegistrations
-            || t.OneShotHorizonDays > trigger.OneShotHorizonDays || t.MinRecurrenceDays < trigger.MinRecurrenceDays
-            || t.MinFixedIntervalSeconds < trigger.MinFixedIntervalSeconds
-            || t.AllowedSourceKinds.Any(k => !trigger.AllowedSourceKinds.Contains(k, StringComparer.Ordinal)))
-            throw AgentCoreErrors.Validation("Instance trigger settings must restrict published Definition policy.");
-        var b = baseline.MemoryPolicy ?? MemoryPolicy.Disabled;
-        var m = d.MemoryPolicy!;
-        if (m.SessionMemory && !b.SessionMemory || m.IdentityUserPromotion && !b.IdentityUserPromotion
-            || m.IdentityUserRetrieval && !b.IdentityUserRetrieval || m.UserPromotion && !b.UserPromotion || m.UserRetrieval && !b.UserRetrieval)
-            throw AgentCoreErrors.Validation("Instance memory settings cannot enlarge Definition policy.");
+        if (t.AllowedSourceKinds.Any(k => !trigger.AllowedSourceKinds.Contains(k, StringComparer.Ordinal)))
+            throw AgentCoreErrors.Validation("Trigger sources must be permitted by the selected Definition.");
         if (!d.Voice.Enabled) d = d with { ProviderPreferences = d.ProviderPreferences with { SpeechRecognizer = null, SpeechSynthesizer = null } };
         try { AgentDefinitionValidator.Validate(d); }
         catch (ArgumentException e) { throw AgentCoreErrors.Validation(e.Message); }

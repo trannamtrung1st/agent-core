@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useState } from "react";
 import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, Modal, Select, Spin, Table, Tag, Typography, theme } from "antd";
 import { MinusCircleOutlined, PlusOutlined } from "@ant-design/icons";
@@ -118,12 +119,9 @@ export function CredentialsSection() {
     setBusy(true); try { await deleteCredential(item); await load(); }
     catch (e) { setError(describeAdminError(e, "Credential could not be deleted.")); } finally { setBusy(false); }
   }
-  return <section className="admin-definition-panel" aria-label="System credentials">
-    <div className="admin-definition-panel-heading">
-    <Flex justify="space-between" align="center" wrap gap={token.paddingXS}><Typography.Title level={4}>System credentials</Typography.Title>
-      <Button type="primary" disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button></Flex>
-    <Typography.Text type="secondary">Reusable protected values. Agents receive access through explicit bindings; bindings do not grant tools.</Typography.Text>
-    </div><div className="admin-definition-panel-body"><Flex vertical gap={token.paddingSM}>
+  return <AgentConfigurationPanel title="System credentials" label="System credentials"
+    description="Reusable protected values. Agents receive access through explicit bindings; bindings do not grant tools."
+    extra={<Button type="primary" disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button>} bodyGap="default">
     {error && <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void load()}>Retry</Button>} />}
     {loading ? <Spin aria-label="Loading credentials" /> : loaded && <>
       <AdminCollectionToolbar label="credentials" value={search} onChange={setSearch} />
@@ -143,7 +141,6 @@ export function CredentialsSection() {
           </Flex> }
         ]} />
     </>}
-    </Flex></div>
     <Modal className="admin-credential-dialog" centered width={dialog?.kind === "replace" ? 520 : 640} open={!!dialog} title={dialog?.kind === "create" ? "Create credential" : dialog?.kind === "replace" ? "Replace protected value" : "Edit credential"}
       onCancel={close} onOk={() => void save().catch(() => {})} confirmLoading={busy} closable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }} okText="Save credential" okButtonProps={{ disabled: busy, "aria-label": "Save credential" }} mask={{ closable: false }} forceRender>
       <Flex vertical gap={token.padding}>
@@ -152,8 +149,7 @@ export function CredentialsSection() {
       <Form form={form} className="admin-config-form" layout="vertical" disabled={busy} autoComplete="off" initialValues={{ kind: "Password", status: "Active", metadata: [], origins: "" }}>
         {dialog?.kind === "replace" ? <ProtectedValueField /> : <CredentialFields create={dialog?.kind === "create"} />}
       </Form></Flex>
-    </Modal>
-  </section>;
+    </Modal></AgentConfigurationPanel>;
 }
 
 export function InstanceCredentialsSection({ instanceId, revision, archived }: { instanceId: string; revision: number; archived: boolean }) {
@@ -176,11 +172,8 @@ export function InstanceCredentialsSection({ instanceId, revision, archived }: {
     finally { setBusy(false); }
   }
   return <Flex vertical gap={token.padding}>
-    <section className="admin-definition-panel" aria-label="Credential bindings">
-    <div className="admin-definition-panel-heading">
-    <Flex justify="space-between" align="center" gap={token.paddingXS} wrap><Typography.Title level={4} style={{ margin: 0 }}>Credential bindings</Typography.Title>
-      <Flex gap={token.paddingXS} wrap><Button onClick={() => navigateToAppPath(adminHomePath("credentials"))}>Manage system credentials</Button><Button type="primary" disabled={archived || busy || loading || !loaded} onClick={() => { setBindingError(undefined); setOpen(true); }}>Bind credential</Button></Flex></Flex>
-    </div><div className="admin-definition-panel-body"><Flex vertical gap={token.paddingSM}>
+    <AgentConfigurationPanel title="Credential bindings" label="Credential bindings"
+      extra={<Flex gap={token.paddingXS} wrap><Button onClick={() => navigateToAppPath(adminHomePath("credentials"))}>Manage system credentials</Button><Button type="primary" disabled={archived || busy || loading || !loaded} onClick={() => { setBindingError(undefined); setOpen(true); }}>Bind credential</Button></Flex>} bodyGap="default">
     {archived && <Alert type="info" title="Archived instance bindings are read-only and cannot be used." />}
     {error && <Alert type="error" title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} showIcon action={<Button onClick={() => void load()}>Retry</Button>} />}
     {loading ? <Spin aria-label="Loading credential bindings" /> : loaded && <>
@@ -194,13 +187,11 @@ export function InstanceCredentialsSection({ instanceId, revision, archived }: {
       { title: "Metadata & origins", width: 320, render: (_, b) => <CredentialPolicySummary credential={b.credential} /> },
       { title: "Action", width: 130, render: (_, b) => <Button danger disabled={archived || busy} onClick={() => confirmAction(modal, { title: `Unbind ${b.reference}?`, content: "Removes only this agent's grant. Other bindings and browser sign-in remain.", okText: "Unbind", danger: true, onOk: () => mutate(() => unbindCredential(instanceId, b, revision)) })}>Unbind</Button> }
     ]} /></>}
-    </Flex></div></section>
-    <section className="admin-definition-panel" aria-label="Browser state">
-    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Browser state</Typography.Title>
-    <Typography.Text type="secondary">Persistent browser state may contain cookies and signed-in sessions. Reset closes the browser and removes only this agent's profile. Credentials and bindings remain.</Typography.Text>
-    </div><div className="admin-definition-panel-body">
+    </AgentConfigurationPanel>
+    <AgentConfigurationPanel title="Browser state" label="Browser state"
+      description="Persistent browser state may contain cookies and signed-in sessions. Reset closes the browser and removes only this agent's profile. Credentials and bindings remain.">
     <Flex><Button danger disabled={archived || busy} onClick={() => confirmAction(modal, { title: "Reset browser profile?", content: "This agent will need to sign in again.", okText: "Reset browser profile", danger: true, onOk: () => mutate(() => resetBrowserProfile(instanceId, revision)) })}>Reset browser profile</Button></Flex>
-    </div></section>
+    </AgentConfigurationPanel>
     <Modal className="admin-credential-dialog" centered open={open} title="Bind credential" onCancel={() => { setOpen(false); setBindingError(undefined); form.resetFields(); }} confirmLoading={busy}
       closable={!busy} keyboard={!busy} mask={{ closable: false }} cancelButtonProps={{ disabled: busy }} okText="Bind credential" okButtonProps={{ disabled: busy || available.length === 0, "aria-label": "Bind credential" }}
       onOk={() => void form.validateFields().then(v => mutate(() => bindCredential(instanceId, v.credentialId, v.reference, revision), true)).catch(() => {})} forceRender>

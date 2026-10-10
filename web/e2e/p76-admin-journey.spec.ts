@@ -1,3 +1,4 @@
+import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
 import { expect, test, type Locator, type Page } from "@playwright/test";
@@ -17,6 +18,7 @@ async function saveDraft(page: Page, editor: Locator) {
 }
 
 async function showAdvancedJson(editor: Locator) {
+  await editor.getByRole("tab", { name: "Identity & version", exact: true }).click();
   await editor.locator(".admin-draft-view-switch").getByText("Advanced JSON", { exact: true }).click();
 }
 
@@ -57,6 +59,7 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
 
   const editor = draftEditorSection(page);
+  await openDefinitionSettings(editor);
   await expect(editor.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
   await editor.getByLabel("System instructions").fill(instructions);
   await saveDraft(page, editor);
@@ -69,7 +72,8 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await json.fill(withTone);
   await saveDraft(page, editor);
 
-  await editor.getByRole("tab", { name: "Resources" }).click();
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await editor.getByRole("tab", { name: "Resources", exact: true }).click();
   const filePicker = editor.locator('section[aria-label="Import resources"] input[type="file"]').first();
   await filePicker.setInputFiles([
     { name: "policy.md", mimeType: "text/markdown", buffer: Buffer.from("# Refund policy\n", "utf8") },
@@ -104,7 +108,7 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await selectOption(page, editor.getByLabel("Knowledge resource 1"), "knowledge/policy.md");
   await saveDraft(page, editor);
 
-  await editor.getByRole("tab", { name: "Definition" }).click();
+  await editor.getByRole("tab", { name: "Identity & version" }).click();
   await showAdvancedJson(editor);
   const publishedJson = editor.getByRole("textbox", { name: "Advanced JSON" });
   const validJson = await publishedJson.inputValue();

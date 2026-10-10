@@ -1688,21 +1688,6 @@ body,
   text-transform: capitalize;
 }
 
-.admin-definition-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  gap: var(--ac-space-section);
-}
-
-
-
-
-
-
-
-
-
 .admin-definition-panel-heading .ant-typography-secondary {
   font-size: 12px;
 }
@@ -1715,7 +1700,11 @@ body,
   display: block;
 }
 
-.admin-definition-panel-body > * + .ant-typography-secondary {
+.admin-definition-panel-body-stack > .ant-typography {
+  margin-block: 0;
+}
+
+.admin-definition-panel-body:not(.admin-definition-panel-body-stack) > * + .ant-typography-secondary {
   margin-block-start: var(--ac-space-default);
 }
 
@@ -1748,7 +1737,7 @@ body,
 .admin-instance-persona-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--ac-space-default);
+  column-gap: var(--ac-space-section);
 }
 
 .admin-instance-persona-form .ant-form-item {
@@ -1867,26 +1856,23 @@ body,
 
 .admin-draft-focused {
   min-width: 0;
-  overflow: clip;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-section);
   scroll-margin-block-start: var(--ac-space-section);
-  border: 1px solid var(--ac-color-border);
-  border-radius: var(--ac-radius-surface);
-  background: var(--ac-color-container);
 }
 
 .admin-draft-focused-toolbar {
-  min-height: 56px;
-  padding: var(--ac-space-default) var(--ac-space-section);
-  border-block-end: 1px solid var(--ac-color-border);
+  min-width: 0;
 }
 
 .admin-draft-focused > .ant-alert {
-  margin: var(--ac-space-section) var(--ac-space-section) 0;
+  margin: 0;
 }
 
 .admin-draft-focused > .admin-draft-editor {
   margin: 0;
-  padding: var(--ac-space-section);
+  padding: 0;
   border: 0;
 }
 
@@ -1945,6 +1931,10 @@ body,
 .admin-draft-form-section:not(:first-child) {
   padding-block-start: var(--ac-space-section);
   border-block-start: 1px solid var(--ac-color-border);
+}
+
+.admin-draft-section-heading {
+  gap: var(--ac-space-compact);
 }
 
 .admin-draft-form-section > h5.ant-typography,
@@ -2125,28 +2115,9 @@ body,
   min-width: 0;
 }
 
-.admin-resource-preview {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-default);
-  min-width: 0;
-}
-
-.admin-resource-preview-row {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(10rem, 1fr) auto;
-  gap: var(--ac-space-compact);
-  align-items: start;
-  min-width: 0;
-}
-
-.admin-resource-preview-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--ac-space-compact);
-  min-width: 0;
-}
+/* Resource import uses AntD table cells for row spacing and aligned columns. */
+.admin-resource-preview { min-width: 0; }
+.admin-resource-preview .ant-table-cell { vertical-align: middle; }
 
 .admin-resource-list {
   padding-block-start: var(--ac-space-section);
@@ -2201,14 +2172,6 @@ body,
     font-size: 22px;
   }
 
-  .admin-definition-workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .admin-draft-focused > .admin-draft-editor {
-    padding: var(--ac-space-default);
-  }
-
   .admin-instance-control-grid,
   .admin-effective-config-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -2247,7 +2210,6 @@ body,
   }
 
   .admin-resource-form-grid,
-  .admin-resource-preview-row,
   .admin-eval-form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2320,6 +2282,39 @@ body,
 .admin-config-form .admin-form-row { margin-block-end: var(--ac-space-section); }
 .admin-config-form .admin-form-row > .ant-form-item { margin-block-end: 0; }
 .admin-config-form .ant-typography { max-width: 72ch; }
+/* Definition and Instance configuration share bounded fields and section rhythm. */
+.admin-configuration-sections,
+.admin-configuration-sections .ant-tabs-content-holder { min-width: 0; }
+.admin-settings-form { width: 100%; max-width: 48rem; min-width: 0; }
+.admin-definition-settings .admin-draft-form-section:not(:first-child) {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+.admin-settings-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ac-space-section);
+}
+.admin-definition-settings .admin-draft-field > .ant-input,
+.admin-definition-settings .admin-draft-field > .ant-select { max-width: 20rem; }
+.admin-definition-settings .admin-draft-field > .ant-select-multiple { max-width: none; }
+.admin-definition-settings .admin-draft-field > .ant-input-number { max-width: 12rem; }
+.admin-settings-switch-row .ant-switch { flex: 0 0 auto; }
+.admin-settings-switch-row .ant-typography { margin: 0; }
+.admin-settings-field-grid > .admin-settings-switch-row { align-self: end; }
+/* Settings owns field gaps; instructions, arrays and enablement span the form. */
+.instance-settings-form .ant-form-item { min-width: 0; margin-block-end: 0; }
+.instance-settings-field-wide { grid-column: 1 / -1; }
+.instance-settings-switch-field { align-self: end; }
+.instance-settings-switch-field .ant-switch { flex: 0 0 auto; }
+.instance-settings-switch-field.instance-settings-field-wide { max-width: 20rem; }
+.instance-settings-form .instance-settings-control { width: 100%; max-width: 20rem; }
+.instance-settings-field-wide .ant-select { max-width: none; }
+.instance-settings-form .ant-input-number,
+.instance-settings-form .instance-settings-short-control { max-width: 12rem; }
+@media (max-width: 767px) {
+  .admin-settings-field-grid { grid-template-columns: minmax(0, 1fr); }
+}
 /* Automation sections own vertical rhythm; field grids own sibling alignment. */
 .automation-editor-form .ant-form-item { margin-block-end: 0; min-width: 0; }
 .automation-editor-section + .automation-editor-section {
@@ -2511,6 +2506,22 @@ body,
 .admin-table-actions > .ant-btn,
 .admin-table-actions > .ant-tag {
   flex-shrink: 0;
+}
+
+/* Skill summaries stay bounded even when the table fills a wide viewport.
+   The fixed table layout owns column sizing; Typography owns ellipsis/tooltips. */
+.admin-skills-table .admin-skill-summary {
+  display: block;
+  width: 100%;
+  max-width: 20rem;
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .admin-skills-table .admin-table-actions .ant-btn {
+    width: 40px;
+    padding-inline: 0;
+  }
 }
 
 .admin-collection-name.ant-btn {
