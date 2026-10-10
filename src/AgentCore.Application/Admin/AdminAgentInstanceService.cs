@@ -19,7 +19,8 @@ public sealed class AdminAgentInstanceService(
     AdminLifecycleCoordinator? lifecycleGate = null,
     IModelCatalog? modelCatalog = null,
     IAgentDefinitionResourceAdminStore? resourcePublications = null,
-    InstanceAutomationPolicy? automationPolicy = null)
+    InstanceAutomationPolicy? automationPolicy = null,
+    Agents.InheritedDefinitionResourceCatalog? inheritedResources = null)
 {
     public async ValueTask<InstanceVersionPreview> PreviewVersionAsync(Guid instanceId, int version, CancellationToken ct = default)
     {
@@ -32,8 +33,8 @@ public sealed class AdminAgentInstanceService(
                 System.Text.Json.JsonSerializer.Serialize(field.Value) != System.Text.Json.JsonSerializer.Serialize(Agents.InstanceSettingsResolver.Values(target, section)[field.Key]))
             .Select(field => section + "." + field.Key))
             .Concat(Enum.GetValues<ExecutionBudgetClass>().Where(kind => baseline.ExecutionBudgets?.Get(kind) != target.ExecutionBudgets?.Get(kind)).Select(kind => "executionBudgets." + kind)).ToArray();
-        var oldResources = resourcePublications is null ? [] : await resourcePublications.ListPublicationResourcesAsync(baseline.Id, baseline.Version, ct);
-        var newResources = resourcePublications is null ? [] : await resourcePublications.ListPublicationResourcesAsync(target.Id, target.Version, ct);
+        var oldResources = inheritedResources is not null ? await inheritedResources.ListAsync(baseline, ct) : resourcePublications is null ? [] : await resourcePublications.ListPublicationResourcesAsync(baseline.Id, baseline.Version, ct);
+        var newResources = inheritedResources is not null ? await inheritedResources.ListAsync(target, ct) : resourcePublications is null ? [] : await resourcePublications.ListPublicationResourcesAsync(target.Id, target.Version, ct);
         return new(instance.Revision, baseline.Version, target.Version, differences,
             Agents.InstanceSettingsResolver.Sections.SelectMany(section => Agents.InstanceSettingsResolver.Overrides(instance.SettingsOverrides ?? new(), section).Keys.Select(field => section + "." + field))
                 .Concat(Enum.GetValues<ExecutionBudgetClass>().Where(kind => instance.ExecutionBudgets?.Get(kind) is not null).Select(kind => "executionBudgets." + kind)).ToArray(),
@@ -55,8 +56,8 @@ public sealed class AdminAgentInstanceService(
         var skills = new InstanceSkillSnapshot(current.DefinitionStates.Concat(target.SkillList.Where(s => !current.DefinitionStates.Any(state => state.DefinitionSkillId == s.Id))
             .Select(s => new AgentDefinitionSkillState(instance.InstanceId, s.Id, null, 1, time.GetUtcNow()))).ToArray(), current.InstanceSkills);
         _ = Agents.EffectiveSkillCatalogResolver.Resolve(effective, skills);
-        if (resourcePublications is not null)
-            _ = AgentInstanceResourceService.Resolve(effective, await resourcePublications.ListPublicationResourcesAsync(target.Id, target.Version, ct),
+        if (inheritedResources is not null || resourcePublications is not null)
+            _ = AgentInstanceResourceService.Resolve(effective, inheritedResources is not null ? await inheritedResources.ListAsync(target, ct) : await resourcePublications!.ListPublicationResourcesAsync(target.Id, target.Version, ct),
                 await instances.ReadResourcesAsync(instance.InstanceId, ct), skills);
         return effective;
     }

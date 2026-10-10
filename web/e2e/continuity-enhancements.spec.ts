@@ -25,6 +25,8 @@ test('Unified Automation authoring retains admitted instructions and source focu
   await automations.getByLabel('Schedule maximum occurrences', { exact: true }).fill('0');
   await expect(automations.getByRole('button', { name: 'Create automation', exact: true })).toBeDisabled();
   await automations.getByLabel('Schedule maximum occurrences', { exact: true }).fill('5');
+  await expect(automations.getByRole('switch', { name: 'Enable automation', exact: true })).not.toBeChecked();
+  await automations.getByRole('switch', { name: 'Enable automation', exact: true }).click();
   await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
   const source = automations.getByRole('button', { name: 'View automation: Review current orders', exact: true });
   await expect(source).toBeVisible();
@@ -35,7 +37,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
   const headers = { 'X-AgentCore-Owner-Capability': token };
   const path = `/api/v2/admin/agent-instances/${id}/automations`;
   const row = (await (await page.request.get(path, { headers })).json()).items[0];
-  expect(row.trigger.schedule.maxOccurrences).toBe(5); expect(row.authorizationOrigin).toBe('AdminOwner');
+  expect(row.triggers[0].schedule.maxOccurrences).toBe(5); expect(row.authorizationOrigin).toBe('AdminOwner');
   let calls = 0;
   await page.route(`**/agent-instances/${id}/automations/*/run`, async route => { calls++; await route.continue(); });
   const run = automations.getByRole('button', { name: 'Run automation now', exact: true });
@@ -51,7 +53,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
   await expect(runLink).toBeFocused(); await runLink.click();
   const updatedName = 'Updated order review';
   const update = await page.request.put(`${path}/${row.automationId}`, { headers, data: {
-    expectedRevision: row.revision, enabled: true, name: updatedName, instructions: 'Future review instructions', trigger: row.trigger,
+    expectedRevision: row.revision, enabled: true, name: updatedName, instructions: 'Future review instructions', triggers: row.triggers,
     modelKey: row.modelKey, reasoningEffort: row.reasoningEffort, executionTarget: row.executionTarget, completionDelivery: row.completionDelivery
   } });
   expect(update.ok()).toBe(true);

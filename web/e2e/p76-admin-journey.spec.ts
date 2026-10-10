@@ -166,10 +166,14 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await page.getByRole("tab", { name: "Effective configuration", exact: true }).click();
   const effective = page.getByRole("region", { name: "Effective configuration" });
   await expect(effective.getByText("Catalog key")).toBeVisible();
-  await expect(effective.getByRole("textbox")).toHaveCount(0);
-  await expect(effective.getByRole("button")).toHaveCount(0);
-  await expect(effective.getByRole("combobox")).toHaveCount(0);
-  await expect(effective.getByRole("switch")).toHaveCount(0);
+  const privacy = effective.getByRole("region", { name: "Screenshot privacy", exact: true });
+  await expect(privacy.getByRole("button", { name: "Save screenshot privacy", exact: true })).toBeVisible();
+  await expect(privacy.getByRole("combobox", { name: /Saved screenshot privacy mode/ })).toBeVisible();
+  for (const section of await effective.locator('.admin-effective-config-section:not([aria-label="Browser provider"])').all()) {
+    for (const role of ["textbox", "button", "combobox", "switch"] as const) {
+      await expect(section.getByRole(role)).toHaveCount(0);
+    }
+  }
 
   await page.getByRole("button", { name: "Back to inventory" }).click();
   const definitions = page.getByRole("region", { name: "Definitions", exact: true });

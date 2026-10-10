@@ -48,7 +48,9 @@ public sealed partial class NativePlaywrightBrowser
             if (extension is null || capture.Png is not { Length: > 0 }) return new("capture_invalid");
             return new(null, Bytes: capture.Png, ContentType: capture.ContentType, FileName: "screenshot." + extension,
                 RedactionCount: capture.RedactionCount, Width: capture.Width, Height: capture.Height,
-                Observation: capture.Observation, DataJson: JsonSerializer.Serialize(new { coordinateEvidence = capture.CoordinateEvidence, observationUnavailable = capture.Observation?.ObservationUnavailable == true }));
+                Observation: capture.Observation, DataJson: JsonSerializer.Serialize(new { coordinateEvidence = capture.CoordinateEvidence, observationUnavailable = capture.Observation?.ObservationUnavailable == true,
+                    coordinateEvidenceUnavailableReasons = capture.UnavailableReasons,
+                    captureDiagnostics = capture.Diagnostics }, JsonSerializerOptions.Web));
         }
         await using var interactive = await EnterInteractiveAsync(command.SessionId, cancellationToken).ConfigureAwait(false);
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);

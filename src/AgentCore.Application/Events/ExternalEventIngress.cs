@@ -78,7 +78,10 @@ public sealed class ExternalEventIngress(
         var subscribers = await triggers.ListEventSubscriptionsAsync(source.ResourceId, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         var targets = subscribers
-            .Select(item => new ExternalEventTarget(item.AutomationId, item.Owner.AgentInstanceId, item.Owner.ProfileId, new(item.AutomationId, item.Owner, item.TriggerRevision, ((EventTrigger)item.Trigger).FilterExpression, ((EventTrigger)item.Trigger).Dispatch, TriggerSourceKind.ApplicationEvent, source.ResourceId)))
+            .SelectMany(item => item.Triggers.Where(t => t.Enabled && t.Configuration is EventTrigger e && e.EventId == source.ResourceId)
+                .Select(t => new ExternalEventTarget(item.AutomationId, item.Owner.AgentInstanceId, item.Owner.ProfileId,
+                    new(item.AutomationId, item.Owner, t.Revision, ((EventTrigger)t.Configuration).FilterExpression,
+                        ((EventTrigger)t.Configuration).Dispatch, TriggerSourceKind.ApplicationEvent, source.ResourceId) { TriggerId = t.TriggerId })))
             .ToArray();
         var admitted = await events.AdmitAsync(candidate, targets, cancellationToken).ConfigureAwait(false);
         var created = await ResumeEventAsync(admitted.Event, now, cancellationToken).ConfigureAwait(false);
@@ -95,7 +98,7 @@ public sealed class ExternalEventIngress(
         var pending = await events.ListPendingDeliveriesAsync(null, 32, cancellationToken, recoveryCursor).ConfigureAwait(false);
         if (pending.Count == 0 && recoveryCursor is not null)
             pending = await events.ListPendingDeliveriesAsync(null, 32, cancellationToken).ConfigureAwait(false);
-        recoveryCursor = pending.Count == 0 ? null : new(pending[^1].EventId, pending[^1].AutomationId);
+        recoveryCursor = pending.Count == 0 ? null : new(pending[^1].EventId, pending[^1].TriggerId);
         var oldestAgeMs = 0d;
         var created = 0;
         if (pending.Count > 0) AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", "recovered");
@@ -153,17 +156,17 @@ public sealed class ExternalEventIngress(
         var owner = new TriggerOwner(delivery.AgentInstanceId, delivery.ProfileId);
         var registration = await triggers.GetAsync(owner, delivery.AutomationId, cancellationToken).ConfigureAwait(false);
         var source = await events.GetAsync(stored.ResourceId, cancellationToken).ConfigureAwait(false);
-        if (source?.Status != WebhookEventStatus.Active || registration is null || registration.Status != AutomationStatus.Active)
+        if (source?.Status != WebhookEventStatus.Active || registration is null || registration.Status != AutomationStatus.Active || registration.Triggers.All(t => t.TriggerId != delivery.TriggerId || !t.Enabled))
         {
-            await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, ExternalEventDeliveryStatus.Skipped, cancellationToken)
+            await events.MarkDeliveryAsync(stored.EventId, delivery.TriggerId, ExternalEventDeliveryStatus.Skipped, cancellationToken)
                 .ConfigureAwait(false);
             return false;
         }
 
         var snapshot = delivery.Snapshot;
         var payload = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(stored.EvidenceJson);
-        Guid? root = payload.TryGetProperty("rootAgentRunId", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.String && r.TryGetGuid(out var rg) ? rg : null;
-        var depth = payload.TryGetProperty("triggerDepth", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.Number && d.TryGetInt32(out var dg) ? dg : 0;
+        Guid? root = null;
+        const int depth = 0; // Authenticated external evidence cannot supply trusted lineage.
         var envelope = System.Text.Json.JsonSerializer.SerializeToElement(new
         {
             schemaVersion = 1,
@@ -181,7 +184,7 @@ public sealed class ExternalEventIngress(
             : string.IsNullOrWhiteSpace(snapshot?.FilterExpression) ? delivery.Decision ?? new EventFilterResult(true, "matched")
             : filters is not null ? EventFilterRecovery.Evaluate(filters, snapshot, delivery.Decision, envelope, now, cancellationToken)
             : new(null, "error", "filter-unavailable");
-        decision = await events.DecideDeliveryAsync(stored.EventId, delivery.AutomationId, decision, cancellationToken, delivery.Decision);
+        decision = await events.DecideDeliveryAsync(stored.EventId, delivery.TriggerId, decision, cancellationToken, delivery.Decision);
         if (decision.Retryable)
         {
             AgentCore.Application.Observability.RuntimeTelemetry.RecordEventFilter("webhook", decision.Status);
@@ -190,20 +193,18 @@ public sealed class ExternalEventIngress(
         }
         AgentCore.Application.Observability.RuntimeTelemetry.RecordEventFilter("webhook", decision.Status);
         AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", decision.Matched == true ? "matched" : decision.Matched == false ? "filtered" : "filter_error");
-        if (depth >= 4)
-        { await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, ExternalEventDeliveryStatus.Skipped, cancellationToken); return false; }
         if (decision.Matched != true)
         {
-            await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, decision.Matched == false ? ExternalEventDeliveryStatus.Filtered : ExternalEventDeliveryStatus.FilterError, cancellationToken);
+            await events.MarkDeliveryAsync(stored.EventId, delivery.TriggerId, decision.Matched == false ? ExternalEventDeliveryStatus.Filtered : ExternalEventDeliveryStatus.FilterError, cancellationToken);
             return false;
         }
         if (snapshot?.Dispatch.Mode == EventDispatchMode.CoalesceLatest)
         {
             var policy = await guard.EvaluateAsync(owner, TriggerSourceKind.ApplicationEvent, cancellationToken);
             if (buckets is null || policy.Kind != TriggerAdmissionDecisionKind.Allow || depth >= 4)
-            { await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, ExternalEventDeliveryStatus.Skipped, cancellationToken); return false; }
+            { await events.MarkDeliveryAsync(stored.EventId, delivery.TriggerId, ExternalEventDeliveryStatus.Skipped, cancellationToken); return false; }
             await buckets.CoalesceAsync(new(stored.EventId, owner, source.EventKey, stored.AdmittedAtUtc, payload.GetProperty("data").GetRawText(), root, depth), snapshot, cancellationToken);
-            await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, ExternalEventDeliveryStatus.Coalesced, cancellationToken);
+            await events.MarkDeliveryAsync(stored.EventId, delivery.TriggerId, ExternalEventDeliveryStatus.Coalesced, cancellationToken);
             AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", "coalesced");
             return false;
         }
@@ -214,8 +215,8 @@ public sealed class ExternalEventIngress(
             stored.EvidenceJson,
             stored.EventId,
             now,
-            cancellationToken, snapshot?.TriggerRevision).ConfigureAwait(false);
-        await events.MarkDeliveryAsync(stored.EventId, delivery.AutomationId, outcome.Status, cancellationToken)
+            cancellationToken, snapshot?.TriggerRevision, delivery.TriggerId).ConfigureAwait(false);
+        await events.MarkDeliveryAsync(stored.EventId, delivery.TriggerId, outcome.Status, cancellationToken)
             .ConfigureAwait(false);
         AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", outcome.Status == ExternalEventDeliveryStatus.Admitted ? outcome.Created ? "admitted" : "duplicate" : "policy_denied");
         return outcome.Created;
@@ -230,7 +231,7 @@ public sealed class ExternalEventIngress(
         string evidence,
         Guid eventId,
         DateTimeOffset now,
-        CancellationToken cancellationToken, long? triggerRevision = null)
+        CancellationToken cancellationToken, long? triggerRevision = null, Guid? triggerId = null)
     {
         var decision = await guard.EvaluateAsync(registration.Owner, TriggerSourceKind.ApplicationEvent, cancellationToken)
             .ConfigureAwait(false);
@@ -261,8 +262,8 @@ public sealed class ExternalEventIngress(
                 receiptId = eventId,
                 eventId = resourceId,
                 payload = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(evidence),
-                causation = WebhookCausation(evidence, registration.AutomationId)
-            });
+                causation = new { rootAgentRunId = (Guid?)null, triggerDepth = 1, visitedAutomationIds = new[] { registration.AutomationId } }
+            }, registration.Triggers.Single(t => t.TriggerId == triggerId));
         }
         catch (ArgumentException)
         {
@@ -271,7 +272,7 @@ public sealed class ExternalEventIngress(
         }
         var occurrence = new TriggerOccurrence(
             ids.NewId(),
-            OccurrenceDedupeKey(resourceId, sourceEventId) + ":" + registration.AutomationId.ToString("D"),
+            OccurrenceDedupeKey(resourceId, sourceEventId) + ":" + triggerId!.Value.ToString("D"),
             registration.AutomationId,
             registration.Owner,
             TriggerSourceKind.ApplicationEvent,
@@ -287,18 +288,9 @@ public sealed class ExternalEventIngress(
             null,
             null,
             null,
-            modelPin: pin?.Pin, executionTarget: registration.ExecutionTarget, completionDelivery: registration.CompletionDelivery);
+            modelPin: pin?.Pin, executionTarget: registration.ExecutionTarget, completionDelivery: registration.CompletionDelivery, triggerId: triggerId);
         var admitted = await triggers.AdmitOccurrenceAsync(occurrence, cancellationToken).ConfigureAwait(false);
         return new DeliveryOutcome(ExternalEventDeliveryStatus.Admitted, admitted.Kind == TriggerOccurrenceAdmitKind.Admitted);
-    }
-
-    private static object WebhookCausation(string evidence, Guid automationId)
-    {
-        using var doc = System.Text.Json.JsonDocument.Parse(evidence);
-        var payload = doc.RootElement;
-        Guid? root = payload.TryGetProperty("rootAgentRunId", out var r) && r.ValueKind == System.Text.Json.JsonValueKind.String && r.TryGetGuid(out var id) ? id : null;
-        var depth = payload.TryGetProperty("triggerDepth", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.Number && d.TryGetInt32(out var value) ? value : 0;
-        return new { rootAgentRunId = root, triggerDepth = depth + 1, visitedAutomationIds = new[] { automationId } };
     }
 
     private static bool Authorized(WebhookEvent? source, string presentedToken) =>

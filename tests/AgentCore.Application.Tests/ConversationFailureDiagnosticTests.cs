@@ -243,6 +243,8 @@ public sealed class ConversationFailureDiagnosticTests
             "second",
             Guid.Parse("019944af-00d7-7000-8000-000000000062"),
             behavior: UserTextBehavior.Interrupt));
+        // Admission is asynchronous; establish the interruption fence before releasing the old provider.
+        await runtime.WaitUntilMailboxDrainedAsync();
         gate.TrySetResult();
         await runtime.WaitUntilIdleAsync();
 

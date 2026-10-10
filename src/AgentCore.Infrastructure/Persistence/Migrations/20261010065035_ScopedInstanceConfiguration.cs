@@ -22,8 +22,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                 type: "INTEGER",
                 nullable: true);
 
-            // Every historical materialized boolean remains an explicit choice.
-            migrationBuilder.Sql("UPDATE AgentDefinitionSkillStates SET EnabledOverride = Enabled;");
+            // Revision 1 is untouched initialization; preserve modified or ambiguous historical records.
+            migrationBuilder.Sql("UPDATE AgentDefinitionSkillStates SET EnabledOverride = CASE WHEN Revision = 1 THEN NULL ELSE Enabled END;");
             migrationBuilder.DropColumn(name: "Enabled", table: "AgentDefinitionSkillStates");
 
             migrationBuilder.CreateTable(

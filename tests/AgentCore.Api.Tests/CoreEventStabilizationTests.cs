@@ -49,7 +49,7 @@ public sealed class CoreEventStabilizationTests
     private static string PathFor(Guid instance) => $"/api/v2/admin/agent-instances/{instance}/automations";
     private static AutomationRequest Request(string expression, bool enabled = true, string dispatch = "everyMatch") =>
         new(0, enabled, "Inspect configuration", "Inspect current configuration and finish quietly.",
-            new("coreEvent", CoreEventKey: "instance.config_changed", FilterExpression: expression,
+            new AutomationTriggerDto("coreEvent", CoreEventKey: "instance.config_changed", FilterExpression: expression,
                 Dispatch: new(dispatch, dispatch == "coalesceLatest" ? 60 : null)),
             ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
     private static async Task<AutomationResponse> Save(HttpClient client, string path, AutomationRequest request)
@@ -91,7 +91,7 @@ public sealed class CoreEventStabilizationTests
             Assert.Equal(0, await s.GetRequiredService<CoreEventDispatcher>().RunOnceAsync());
             Assert.Equal(1, filter.Calls); // backoff does not spend another evaluation
             var edit = await client.PutAsJsonAsync(PathFor(instance.InstanceId) + "/" + saved.AutomationId,
-                Request("false") with { ExpectedRevision = saved.Revision });
+                Request("false") with { ExpectedRevision = saved.Revision, Triggers = [saved.Triggers!.Single() with { FilterExpression = "false" }] });
             edit.EnsureSuccessStatusCode();
         }
         clock.Advance();
@@ -164,7 +164,7 @@ public sealed class CoreEventStabilizationTests
         var saved = await Save(client, path, Request("true", false));
         var edited = await client.PutAsJsonAsync(path + "/" + saved.AutomationId, Request("false", false) with { ExpectedRevision = saved.Revision });
         edited.EnsureSuccessStatusCode(); saved = (await edited.Content.ReadFromJsonAsync<AutomationResponse>())!;
-        var enable = await client.PutAsJsonAsync(path + "/" + saved.AutomationId, Request("false") with { ExpectedRevision = saved.Revision });
+        var enable = await client.PutAsJsonAsync(path + "/" + saved.AutomationId, Request("false") with { ExpectedRevision = saved.Revision, Triggers = [saved.Triggers!.Single() with { FilterExpression = "false" }] });
         Assert.Equal(HttpStatusCode.Forbidden, enable.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path + "/" + saved.AutomationId + "/run", new { expectedRevision = saved.Revision })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, Request("event.data.constructor", false))).StatusCode);
@@ -205,7 +205,7 @@ public sealed class CoreEventStabilizationTests
         var created = await client.PostAsJsonAsync("/api/v2/admin/connections/events", new { displayName = "Retry fixture", eventKey = "retry.fixture" });
         created.EnsureSuccessStatusCode(); var source = (await created.Content.ReadFromJsonAsync<AdminWebhookEventCredentialResponse>())!;
         foreach (var expression in new[] { "event.data.revision >= 2", "true" })
-            await Save(client, PathFor(instance.InstanceId), Request(expression) with { Trigger = new("event", EventId: source.EventId, FilterExpression: expression) });
+            await Save(client, PathFor(instance.InstanceId), Request(expression) with { Triggers = [new AutomationTriggerDto("event", Source: new("webhook", EventId: source.EventId), FilterExpression: expression, TriggerId: Guid.NewGuid().ToString())] });
         var ingress = s.GetRequiredService<ExternalEventIngress>();
         var result = await ingress.AdmitAsync(source.EventKey, source.Token, System.Text.Encoding.UTF8.GetBytes("{\"eventId\":\"retry-source\",\"data\":{\"revision\":3}}"));
         Assert.Equal(ExternalEventIngressKind.Admitted, result.Kind);
@@ -265,7 +265,7 @@ public sealed class CoreEventStabilizationTests
         var draft = Request("true", false) with { PresetId = "review-recent-work", PresetVersion = 1 };
         var saved = await Save(client, path, draft);
         var scheduled = Request("true") with { ExpectedRevision = saved.Revision,
-            Trigger = new("schedule", new("oneShot", AtUtc: clock.GetUtcNow().AddSeconds(30).ToString("O"))) };
+            Triggers = [new AutomationTriggerDto("schedule", new("oneShot", AtUtc: clock.GetUtcNow().AddSeconds(30).ToString("O")), TriggerId: Guid.NewGuid().ToString())] };
         var edited = await client.PutAsJsonAsync(path + "/" + saved.AutomationId, scheduled); edited.EnsureSuccessStatusCode();
         clock.Advance(); clock.Advance();
         var pass = await s.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.GetUtcNow());
@@ -302,17 +302,19 @@ public sealed class CoreEventStabilizationTests
             {
                 var change = await client.PutAsJsonAsync(PathFor(instance.InstanceId) + "/" + item.AutomationId,
                     Request(item == bad ? "event.data.revision >= 2" : "true") with
-                    { ExpectedRevision = item.Revision, Trigger = new("event", EventId: resource.Value.ToString("D"), FilterExpression: item == bad ? "event.data.revision >= 2" : "true") });
+                    { ExpectedRevision = item.Revision, Triggers = [new AutomationTriggerDto("event", Source: new("webhook", EventId: resource.Value.ToString("D")), FilterExpression: item == bad ? "event.data.revision >= 2" : "true", TriggerId: Guid.NewGuid().ToString())] });
                 change.EnsureSuccessStatusCode();
             }
         }
+        var currentBad = (await s.GetRequiredService<ITriggerStore>().GetAsync(owner, badId))!;
+        var currentGood = (await s.GetRequiredService<ITriggerStore>().GetAsync(owner, goodId))!;
         for (var i = 0; i < 33; i++)
         {
             var healthy = i == 32;
             var eventId = Guid.Parse($"00000000-0000-0000-0000-{i + 1:x12}");
             var subscription = new EventSubscriptionSnapshot(healthy ? goodId : badId, owner, i + 1,
                 healthy ? "true" : "event.data.revision >= 2", new(source == "bucket" ? EventDispatchMode.CoalesceLatest : EventDispatchMode.EveryMatch, source == "bucket" ? 60 : null),
-                source == "webhook" ? TriggerSourceKind.ApplicationEvent : TriggerSourceKind.CoreEvent, resource);
+                source == "webhook" ? TriggerSourceKind.ApplicationEvent : TriggerSourceKind.CoreEvent, resource) { TriggerId = (healthy ? currentGood : currentBad).Triggers.Single().TriggerId };
             if (source is "core" or "bucket")
             {
                 var occurrence = new CoreEventOccurrence(eventId, $"backlog:{eventId:D}", owner, "instance.config_changed", now.AddMilliseconds(i), "{\"revision\":2}");
@@ -321,7 +323,7 @@ public sealed class CoreEventStabilizationTests
                 await core.SnapshotAsync(eventId, [subscription]);
                 if (source == "bucket")
                 {
-                    await core.DecideAsync(eventId, subscription.AutomationId, new(true, "matched"));
+                    await core.DecideAsync(eventId, subscription.TriggerId, new(true, "matched"));
                     await core.CoalesceAsync(new(eventId, owner, "instance.config_changed", now.AddMilliseconds(i), healthy ? "{\"revision\":2}" : "{broken"), subscription);
                 }
             }

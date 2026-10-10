@@ -90,6 +90,8 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
     await automations.getByRole('button', { name: 'New automation', exact: true }).click();
     await automations.getByLabel('Automation name', { exact: true }).fill(marker);
     await automations.getByLabel('Automation instructions', { exact: true }).fill(marker);
+    await expect(automations.getByRole('switch', { name: 'Enable automation', exact: true })).not.toBeChecked();
+    await automations.getByRole('switch', { name: 'Enable automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
     const source = automations.getByRole('button', { name: `View automation: ${marker}`, exact: true });
     await expect(source).toBeVisible();

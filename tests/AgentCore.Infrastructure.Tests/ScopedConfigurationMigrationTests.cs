@@ -42,8 +42,8 @@ public sealed class ScopedConfigurationMigrationTests
             }
             await db.SaveChangesAsync();
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentInstances (InstanceId, DefinitionId, ActiveVersion, PersonaJson, Lifecycle, CreatedAtUtc, UpdatedAtUtc, Revision, PersonaRevision) VALUES ({owner.AgentInstanceId.ToString("D")}, {definition.Id}, 1, {JsonSerializer.Serialize(definition.Identity)}, 0, {now.ToUnixTimeMilliseconds()}, {now.ToUnixTimeMilliseconds()}, 1, 1)");
-            foreach (var enabled in new[] {true, false})
-                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentDefinitionSkillStates (AgentInstanceId, DefinitionSkillId, Enabled, Revision, UpdatedAtUtc) VALUES ({owner.AgentInstanceId.ToString("D")}, {Guid.NewGuid().ToString("D")}, {enabled}, 1, {now.ToUnixTimeMilliseconds()})");
+            foreach (var (enabled, revision) in new[] {(true, 1L), (false, 1L), (true, 2L), (false, 3L), (true, 0L), (false, -1L)})
+                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentDefinitionSkillStates (AgentInstanceId, DefinitionSkillId, Enabled, Revision, UpdatedAtUtc) VALUES ({owner.AgentInstanceId.ToString("D")}, {Guid.NewGuid().ToString("D")}, {enabled}, {revision}, {now.ToUnixTimeMilliseconds()})");
             await db.Database.MigrateAsync();
         }
         await using (var reopened = factory.CreateDbContext())
@@ -52,7 +52,13 @@ public sealed class ScopedConfigurationMigrationTests
             Assert.True(persistedSession.ModelHasExplicitReasoningEffort);
             Assert.Equal("high", persistedSession.ModelReasoningEffort);
             var states = await reopened.AgentDefinitionSkillStates.AsNoTracking().ToArrayAsync();
-            Assert.Equal(new bool?[] {false, true}, states.Select(s => s.EnabledOverride).OrderBy(v => v).ToArray());
+            Assert.Equal(2, states.Count(s => s.Revision == 1));
+            Assert.All(states.Where(s => s.Revision == 1), s => Assert.Null(s.EnabledOverride));
+            Assert.True(states.Single(s => s.Revision == 2).EnabledOverride);
+            Assert.False(states.Single(s => s.Revision == 3).EnabledOverride);
+            Assert.True(states.Single(s => s.Revision == 0).EnabledOverride);
+            Assert.False(states.Single(s => s.Revision == -1).EnabledOverride);
+            Assert.False(reopened.Database.HasPendingModelChanges());
             var restored = AgentRunStoreMapping.ToDomain(await reopened.AgentRuns.SingleAsync(r => r.AgentRunId == good.AgentRunId.ToString("D")));
             Assert.Equal("Original instructions", restored.Admission.Configuration!.Definition.SystemInstructions);
             Assert.Equal(AgentRunStatus.WaitingToRetry, restored.Status); Assert.Equal(7, restored.Checkpoint!.StepCount); Assert.Equal(100000, restored.Checkpoint.ActiveExecutionMs);
@@ -62,6 +68,34 @@ public sealed class ScopedConfigurationMigrationTests
             Assert.Equal(budget, rejected.Admission.ExecutionBudget); Assert.Null(rejected.Claim);
         }
     }
+    [Fact]
+    public async Task Already_applied_cutover_repairs_only_untouched_skill_states_and_preserves_integrated_schema()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"scoped-repair-{Guid.NewGuid():N}.db");
+        var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        await using (var db = factory.CreateDbContext())
+        {
+            await db.Database.MigrateAsync("20261010082055_SessionReasoningPreference");
+            var instance = Guid.NewGuid().ToString("D");
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentInstances (InstanceId, DefinitionId, ActiveVersion, PersonaJson, Lifecycle, CreatedAtUtc, UpdatedAtUtc, Revision, PersonaRevision) VALUES ({instance}, 'repair', 1, '{{}}', 'Active', 0, 0, 1, 1)");
+            foreach (var (enabled, revision) in new[] { (true, 1L), (false, 1L), (true, 2L), (false, 3L), (true, 0L), (false, -1L) })
+                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentDefinitionSkillStates (AgentInstanceId, DefinitionSkillId, EnabledOverride, Revision, UpdatedAtUtc) VALUES ({instance}, {Guid.NewGuid().ToString("D")}, {enabled}, {revision}, 0)");
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO BrowserPrivacy (Id, Revision, PolicyJson) VALUES (1, 7, {"{}"})");
+            await db.Database.MigrateAsync();
+        }
+        await using var reopened = factory.CreateDbContext();
+        Assert.False(reopened.Database.HasPendingModelChanges());
+        var states = await reopened.AgentDefinitionSkillStates.AsNoTracking().ToArrayAsync();
+        Assert.All(states.Where(s => s.Revision == 1), s => Assert.Null(s.EnabledOverride));
+        Assert.True(states.Single(s => s.Revision == 2).EnabledOverride);
+        Assert.False(states.Single(s => s.Revision == 3).EnabledOverride);
+        Assert.True(states.Single(s => s.Revision == 0).EnabledOverride);
+        Assert.False(states.Single(s => s.Revision == -1).EnabledOverride);
+        Assert.Equal(7, (await reopened.BrowserPrivacy.SingleAsync()).Revision);
+        Assert.Empty(await reopened.AutomationTriggers.ToArrayAsync());
+        Assert.Empty(await reopened.AgentInstanceResources.ToArrayAsync());
+    }
+
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(options); }
 }

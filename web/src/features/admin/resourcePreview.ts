@@ -147,7 +147,7 @@ export function resourcePreviewProblem(
   }
   return resourcePathProblem(item.logicalPath, siblingPaths, existingPaths, scope)
     ?? resourceFileProblem(item)
-    ?? resourceKindProblem(item);
+    ?? resourceKindProblem(item, scope);
 }
 
 export function resourcePathProblem(logicalPath: string, siblingPaths: string[], existingPaths: string[], scope = "draft"): string | null {
@@ -188,7 +188,8 @@ export function resourceFileProblem(item: Pick<ResourcePreviewItem, "logicalPath
   return null;
 }
 
-export function resourceKindProblem(item: Pick<ResourcePreviewItem, "kind" | "mediaType">): string | null {
+export function resourceKindProblem(item: Pick<ResourcePreviewItem, "kind" | "mediaType">, scope = "draft"): string | null {
+  if (scope === "Instance" && item.kind === "EvalFixture") return "Evaluation fixtures belong to Definitions. Choose an Instance resource kind.";
   if (!RESOURCE_KINDS.includes(item.kind as ResourceKindName)) {
     return "Choose a kind.";
   }

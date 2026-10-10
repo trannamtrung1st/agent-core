@@ -20,13 +20,13 @@ public sealed class InstanceAutomationPolicy(ITriggerStore triggers, IMemoryStor
         {
             var allowed = instance.Lifecycle == AgentInstanceLifecycle.Active
                 && await profiles.LoadProfileAsync(registration.Owner.ProfileId, ct) is not null
-                && OccurrenceCompatibility.Allows(definition, registration.Trigger.Kind switch {
+                && registration.Triggers.Where(t => t.Enabled).Any(t => OccurrenceCompatibility.Allows(definition, t.Configuration.Kind switch {
                     AutomationTriggerKind.Event => TriggerSourceKind.ApplicationEvent,
                     AutomationTriggerKind.CoreEvent => TriggerSourceKind.CoreEvent,
-                    _ => TriggerSourceKind.Schedule });
+                    _ => TriggerSourceKind.Schedule }));
             var status = allowed ? AutomationStatus.Active : AutomationStatus.SuspendedPolicy;
             var next = registration.NextOccurrenceAtUtc;
-            if (allowed && registration.Status == AutomationStatus.SuspendedPolicy && registration.Trigger is ScheduleTrigger schedule)
+            if (allowed && registration.Status == AutomationStatus.SuspendedPolicy && registration.Triggers.SingleOrDefault(t => t.Configuration.Kind == AutomationTriggerKind.Schedule)?.Configuration is ScheduleTrigger schedule)
                 next ??= TriggerScheduleCalculator.InitialNext(schedule.Schedule, now);
             result.Add(new(registration.AutomationId, registration.Revision, status, next,
                 allowed ? null : "Scheduling is disabled for this agent."));

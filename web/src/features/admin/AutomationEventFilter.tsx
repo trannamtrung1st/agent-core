@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Flex, Form, Input, InputNumber, Select, Typography, theme } from "antd";
-import { instanceContinuityRequest, type AutomationTrigger, type FilterTestResult } from "../../services/adminApi";
+import { instanceContinuityRequest, type AutomationChild, type FilterTestResult } from "../../services/adminApi";
 
 const failureText: Record<string, string> = {
   "filter-syntax-not-allowed": "Use a Boolean expression with static event paths, comparisons and logical operators.",
@@ -18,17 +18,19 @@ const failureText: Record<string, string> = {
   "filter-worker-budget": "The evaluator is busy. Retry this test.",
   "filter-evaluation-error": "Check missing fields and simplify the expression before retrying."
 };
-type Trigger = Exclude<AutomationTrigger, { kind: "schedule" }>;
-export function AutomationEventFilter({ instanceId, trigger, example, disabled, onChange }: {
-  instanceId: string; trigger: Trigger; example: Record<string, unknown>; disabled: boolean; onChange: (trigger: Trigger) => void;
+type Trigger = Exclude<AutomationChild, { kind: "schedule" }>;
+export function AutomationEventFilter({ instanceId, trigger, example, disabled, onChange, sampleValue, onSampleChange }: {
+  instanceId: string; trigger: Trigger; example: Record<string, unknown>; disabled: boolean; onChange: (trigger: Trigger) => void; sampleValue?: string; onSampleChange?: (sample: string) => void;
 }) {
   const { token } = theme.useToken();
-  const [sample, setSample] = useState(() => JSON.stringify(example, null, 2));
+  const [localSample, setLocalSample] = useState(() => JSON.stringify(example, null, 2));
+  const sample = sampleValue ?? localSample;
+  const setSample = (value: string) => { setLocalSample(value); onSampleChange?.(value); };
   const [result, setResult] = useState<FilterTestResult | null>(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
   useEffect(() => { generation.current++; setResult(null); setBusy(false); }, [trigger.filterExpression, sample, instanceId]);
-  useEffect(() => { setSample(JSON.stringify(example, null, 2)); }, [example]);
+  useEffect(() => { if (sampleValue === undefined) setLocalSample(JSON.stringify(example, null, 2)); }, [example, sampleValue]);
   useEffect(() => () => { generation.current++; }, []);
   async function test() {
     const version = ++generation.current;

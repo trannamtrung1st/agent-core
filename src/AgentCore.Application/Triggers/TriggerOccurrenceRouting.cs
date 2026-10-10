@@ -81,6 +81,7 @@ public static class OccurrenceCompatibility
 
     public static bool Allows(AgentDefinition definition, TriggerSourceKind sourceKind)
     {
+        if (sourceKind == TriggerSourceKind.ManualInvocation) return true;
         var policy = definition.TriggerPolicy;
         return policy is { Enabled: true }
             && policy.AllowedSourceKinds.Contains(SourceName(sourceKind), StringComparer.Ordinal);

@@ -20,6 +20,11 @@ function fileWithPath(name: string, relativePath: string, contents = "hello", ty
 }
 
 describe("resourcePreview", () => {
+  it("keeps evaluation fixtures in Definitions and rejects them for Instances", () => {
+    const item = { ...createPreviewItem(new File(["{}"], "case.json", { type: "application/json" })), kind: "EvalFixture" };
+    expect(resourcePreviewProblem(item, [item.logicalPath], [], "draft")).toBeNull();
+    expect(resourcePreviewProblem(item, [item.logicalPath], [], "Instance")).toMatch(/Evaluation fixtures belong to Definitions/);
+  });
   it("infers kind from a folder name and keeps other paths unset", () => {
     expect(inferResourceKind("knowledge/policy.md")).toBe("Knowledge");
     expect(packageLogicalPath("my-agent/knowledge/refund.md")).toBe("knowledge/refund.md");

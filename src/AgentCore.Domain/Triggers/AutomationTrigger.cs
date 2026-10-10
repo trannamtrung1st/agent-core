@@ -84,3 +84,24 @@ public static class AutomationText
         return value.Trim();
     }
 }
+
+/// <summary>A stable child subscription. Configuration never grants execution authority.</summary>
+public sealed record AutomationTriggerRecord
+{
+    public AutomationTriggerRecord(Guid triggerId, AutomationTrigger configuration, bool enabled = true, long revision = 1)
+    {
+        if (triggerId == Guid.Empty || revision < 1) throw new ArgumentException("Trigger identity and positive revision are required.");
+        TriggerId = triggerId; Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        Enabled = enabled; Revision = revision;
+    }
+    public Guid TriggerId { get; }
+    public AutomationTrigger Configuration { get; }
+    public bool Enabled { get; }
+    public long Revision { get; }
+    public Events.EventSourceReference? Source => Configuration switch
+    {
+        CoreEventTrigger e => Events.EventSourceReference.Builtin(e.CoreEventKey),
+        EventTrigger e => Events.EventSourceReference.Webhook(e.EventId),
+        _ => null
+    };
+}

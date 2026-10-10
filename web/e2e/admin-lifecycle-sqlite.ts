@@ -75,14 +75,20 @@ registration_id = str(uuid.uuid4())
 schedule_json = json.dumps({"kind": "oneShot", "atUtc": now + 86_400_000, "timeZoneId": "UTC"})
 con.execute(
     """INSERT INTO Automations (
-        AutomationId, AgentInstanceId, ProfileId, Status, Name, Instructions, TriggerKind, ScheduleJson,
-        TriggerRevision, NextOccurrenceAtUtc, OccurrenceCount, Revision, AuthorizationOrigin,
+        AutomationId, AgentInstanceId, ProfileId, Status, Name, Instructions, TriggerMode,
+        NextOccurrenceAtUtc, OccurrenceCount, Revision, AuthorizationOrigin,
         SourceSessionId, CreatedAtUtc, UpdatedAtUtc, RequiresVision, RequiresTools, ExecutionTargetKind
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
     (
-        registration_id, instance_id, profile_id, 0, intent, intent, 0, schedule_json,
-        1, now + 86_400_000, 0, 1, 0, session_id, now, now, 0, 0, 0,
+        registration_id, instance_id, profile_id, 0, intent, intent, 0,
+        now + 86_400_000, 0, 1, 0, session_id, now, now, 0, 0, 0,
     ),
+)
+con.execute(
+    """INSERT INTO AutomationTriggers (
+        TriggerId, AutomationId, Kind, Enabled, Revision, ScheduleJson, DispatchMode
+    ) VALUES (?,?,?,?,?,?,?)""",
+    (str(uuid.uuid4()), registration_id, 0, 1, 1, schedule_json, 0),
 )
 con.commit()
 con.close()

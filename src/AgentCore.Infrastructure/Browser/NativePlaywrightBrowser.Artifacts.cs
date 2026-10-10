@@ -21,14 +21,15 @@ public sealed partial class NativePlaywrightBrowser
         BrowserScreenshotRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (_options.ScreenshotPrivacy == "Disabled") return new("forbidden", null, 0);
+        var privacy = _capturePolicy;
+        if (privacy.Mode == BrowserScreenshotPrivacyMode.Disabled) return new("forbidden", null, 0);
         await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
         if (!IsAvailable || !_sessions.TryGetValue(request.SessionId, out var session))
         {
             return new BrowserScreenshotResult("provider_unavailable", null, 0);
         }
 
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, CaptureLifetime);
         deadline.CancelAfter(OperationTimeout);
         var ct = deadline.Token;
         var entered = false;
@@ -44,10 +45,13 @@ public sealed partial class NativePlaywrightBrowser
             if (session.Dialog is not null) return new("dialog_pending", null, 0);
             // Failed/partial captures cannot retain authority from an earlier image.
             session.VisualSnapshotId = null;
-            var settled = await BrowserPageSettle.WaitAsync(session.Page, _policy.Limits.AutomaticSettleMs, ct);
+            var settlement = await BrowserPageSettle.DiagnoseAsync(session.Page, _policy.Limits.AutomaticSettleMs, ct);
+            var settled = settlement.Settled;
             var generation = session.Generation;
             var page = session.Page;
-            var visualState = await ReadVisualStateAsync(page, ct);
+            var unmasked = privacy.IsUnmasked(page.Url);
+            var before = await ReadVisualDiagnosticsAsync(page, ct);
+            var visualState = before.State;
             // Fence the whole combined observation, including asynchronous semantic reads.
             var stage = Stopwatch.StartNew();
             BrowserSnapshot observation;
@@ -88,8 +92,26 @@ public sealed partial class NativePlaywrightBrowser
             {
                 foreach (var frame in session.Page.Frames)
                 {
+                    if (frame != session.Page.MainFrame)
+                    {
+                        // SDK locator masks pierce open shadow roots, but cannot reach closed roots.
+                        // Never publish child-frame pixels when their whole-frame mask is unreachable.
+                        await using var element = await frame.FrameElementAsync().WaitAsync(ct);
+                        var maskable = await element.EvaluateAsync<bool>("""
+                            element => {
+                              if (!['iframe', 'frame'].includes(element.localName)) return false;
+                              for (let root = element.getRootNode(); root instanceof ShadowRoot; root = root.host.getRootNode())
+                                if (root.mode !== 'open') return false;
+                              return true;
+                            }
+                            """).WaitAsync(ct);
+                        if (!maskable) return new("target_denied", null, 0);
+                    }
                     // Mask whole child frames: screenshots cannot prove that cross-origin pixels contain no secrets.
                     if (frame != session.Page.MainFrame && !Allows(session, frame.Url, true)) continue;
+                    // Child frames are always masked as complete regions, including same-origin frames.
+                    // A parent's unmasked exception never extends into another browsing context.
+                    if (unmasked && frame == session.Page.MainFrame) continue;
                     maskedFrames.Add(frame);
                     redactions += await frame.EvaluateAsync<int>(
                 """
@@ -123,8 +145,7 @@ public sealed partial class NativePlaywrightBrowser
                   }
                   return count;
                 }
-                """, new { values = secrets, trustedGraphics = Uri.TryCreate(frame.Url, UriKind.Absolute, out var frameUri)
-                    && _trustedVisualOrigins.Contains(frameUri.GetLeftPart(UriPartial.Authority)) }).WaitAsync(ct);
+                """, new { values = secrets, trustedGraphics = privacy.TrustsGraphics(frame.Url) }).WaitAsync(ct);
                     redactions += await frame.EvaluateAsync<int>(MaskSensitiveScript).WaitAsync(ct);
                     // Hide carets using a Core-owned removable stylesheet. SDK caret hiding
                     // temporarily changes input styles, which would invalidate our own evidence.
@@ -135,7 +156,7 @@ public sealed partial class NativePlaywrightBrowser
                           document.documentElement.appendChild(style); }
                         """).WaitAsync(ct);
                 }
-                var frameMasks = session.Page.Locator("iframe");
+                var frameMasks = session.Page.Locator("iframe, frame");
                 if (request.FullPage)
                 {
                     var dimensions = await session.Page.EvaluateAsync<int[]>("() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]").WaitAsync(ct);
@@ -153,7 +174,7 @@ public sealed partial class NativePlaywrightBrowser
                 else
                     png = await target.ScreenshotAsync(new LocatorScreenshotOptions
                     { Type = ScreenshotType.Png, Scale = ScreenshotScale.Css, Caret = ScreenshotCaret.Initial,
-                      Mask = [session.Page.Locator("input[type=password], input[type=hidden]"), frameMasks], Timeout = TimeoutMs() }).WaitAsync(ct);
+                      Mask = unmasked ? [frameMasks] : [session.Page.Locator("input[type=password], input[type=hidden]"), frameMasks], Timeout = TimeoutMs() }).WaitAsync(ct);
                 if (format != "png")
                 {
                     using var image = SKImage.FromEncodedData(png);
@@ -187,12 +208,18 @@ public sealed partial class NativePlaywrightBrowser
                 width = decoded.Width;
                 height = decoded.Height;
             }
-            var currentState = await ReadVisualStateAsync(page, ct);
-            var consistent = !page.IsClosed
-                && ReferenceEquals(page, session.Page) && generation == session.Generation
+            if (CaptureConsistencyProbe is { } probe) await probe(page).WaitAsync(ct);
+            var after = await ReadVisualDiagnosticsAsync(page, ct);
+            var currentState = after.State;
+            ct.ThrowIfCancellationRequested();
+            var pageChanged = page.IsClosed || !ReferenceEquals(page, session.Page) || generation != session.Generation;
+            var consistent = !pageChanged
                 && visualState is not null && visualState == currentState;
-            observation = observation with { Settled = settled && consistent };
-            var coordinateEvidence = !request.FullPage && request.Target is null && settled && consistent;
+            // Quiet reads can recover after a transient polling gap, but that gap
+            // cannot prove the whole capture's coordinate evidence was observable.
+            var captureSettled = settled && settlement.ObservationAvailable;
+            observation = observation with { Settled = captureSettled && consistent };
+            var coordinateEvidence = !request.FullPage && request.Target is null && captureSettled && consistent;
             if (coordinateEvidence)
             {
                 session.VisualSnapshotId = observation.SnapshotId;
@@ -202,9 +229,30 @@ public sealed partial class NativePlaywrightBrowser
                 session.VisualPageGeneration = generation;
             }
             return new BrowserScreenshotResult(null, png, redactions, width, height, "image/" + format,
-                observation, coordinateEvidence);
+                observation, coordinateEvidence, new CaptureDiagnostics(settlement, before.ObserverAvailable && after.ObserverAvailable,
+                    Math.Max(before.Inflight, after.Inflight), before.FontsLoading || after.FontsLoading,
+                    Math.Max(before.RunningAnimations, after.RunningAnimations), pageChanged,
+                    before.Viewport != after.Viewport, before.Fingerprint != after.Fingerprint),
+                UnavailableReasons());
+
+            string[] UnavailableReasons()
+            {
+                if (coordinateEvidence) return [];
+                var reasons = new List<string>();
+                if (request.FullPage || request.Target is not null) reasons.Add("context_only_capture");
+                if (!settled) reasons.Add("settle_deadline");
+                if (!settlement.ObservationAvailable || !before.ObserverAvailable || !after.ObserverAvailable) reasons.Add("state_observation_unavailable");
+                if (!settled && settlement.DomChangeSamples > 0) reasons.Add("dom_mutation_during_settle");
+                if (settlement.PeakInflight > 0 || before.Inflight > 0 || after.Inflight > 0) reasons.Add("network_inflight_observed");
+                if (before.FontsLoading || after.FontsLoading) reasons.Add("fonts_loading");
+                if (before.RunningAnimations > 0 || after.RunningAnimations > 0) reasons.Add("animation_running");
+                if (pageChanged) reasons.Add("page_changed_during_capture");
+                if (before.Viewport != after.Viewport) reasons.Add("viewport_changed_during_capture");
+                if (before.Fingerprint != after.Fingerprint) reasons.Add("visual_state_changed_during_capture");
+                return reasons.ToArray();
+            }
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && !CaptureLifetime.IsCancellationRequested)
         {
             return new("timeout", null, 0);
         }
@@ -521,14 +569,32 @@ public sealed partial class NativePlaywrightBrowser
     private sealed record BrowserScreenshotRequest(Guid SessionId, string Format = "png", bool FullPage = false, BrowserTarget? Target = null);
     private sealed record BrowserScreenshotResult(string? ErrorCode, byte[]? Png, int RedactionCount,
         int Width = 0, int Height = 0, string? ContentType = null,
-        BrowserSnapshot? Observation = null, bool CoordinateEvidence = false);
+        BrowserSnapshot? Observation = null, bool CoordinateEvidence = false,
+        CaptureDiagnostics? Diagnostics = null, string[]? UnavailableReasons = null);
 
-    // Reuse the settle observer for freshness. No page content or protected values leave this check.
-    private static Task<string?> ReadVisualStateAsync(IPage page, CancellationToken ct) =>
-        page.EvaluateAsync<string?>("""
-            () => window.__acSettle && window.__acSettle.inflight === 0 && document.fonts.status === 'loaded'
-              && !document.getAnimations().some(animation => animation.playState === 'running')
-              ? JSON.stringify([performance.timeOrigin, window.__acSettle.visualGeneration,
-                innerWidth, innerHeight, scrollX, scrollY]) : null
-            """).WaitAsync(ct);
+    // Only counters/booleans are projected; the private freshness fingerprint never leaves Infrastructure.
+    private sealed record CaptureDiagnostics(BrowserPageSettle.Diagnostics Settlement, bool ObserverAvailable,
+        int InflightAtCapture, bool FontsLoading, int RunningAnimations, bool PageChanged,
+        bool ViewportChanged, bool VisualStateChanged);
+    private sealed record VisualDiagnostics(string? State, string Fingerprint, string Viewport,
+        bool ObserverAvailable, int Inflight, bool FontsLoading, int RunningAnimations);
+
+    private static async Task<string?> ReadVisualStateAsync(IPage page, CancellationToken ct) =>
+        (await ReadVisualDiagnosticsAsync(page, ct)).State;
+
+    private static async Task<VisualDiagnostics> ReadVisualDiagnosticsAsync(IPage page, CancellationToken ct) =>
+        JsonSerializer.Deserialize<VisualDiagnostics>(await page.EvaluateAsync<string>("""
+            () => {
+              const observer = window.__acSettle;
+              const inflight = observer?.inflight ?? 0;
+              const fontsLoading = document.fonts.status !== 'loaded';
+              const runningAnimations = document.getAnimations().filter(a => a.playState === 'running').length;
+              const viewport = JSON.stringify([innerWidth, innerHeight, scrollX, scrollY]);
+              const fingerprint = JSON.stringify([performance.timeOrigin, observer?.visualGeneration,
+                innerWidth, innerHeight, scrollX, scrollY]);
+              return JSON.stringify({ State: observer && observer.inflight === 0 && !fontsLoading && runningAnimations === 0 ? fingerprint : null,
+                Fingerprint: fingerprint, Viewport: viewport, ObserverAvailable: !!observer,
+                Inflight: inflight, FontsLoading: fontsLoading, RunningAnimations: runningAnimations });
+            }
+            """).WaitAsync(ct))!;
 }

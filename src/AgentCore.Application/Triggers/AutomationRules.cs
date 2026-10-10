@@ -19,9 +19,16 @@ public static class AutomationRules
             || current.Provenance.CreatedAt != proposed.Provenance.CreatedAt
             || current.Provenance.PresetId != proposed.Provenance.PresetId || current.Provenance.PresetVersion != proposed.Provenance.PresetVersion))
             throw AgentCoreErrors.Forbidden("Automation provenance cannot change.");
+        foreach (var child in proposed.Triggers)
+        {
+            var prior = current?.Triggers.SingleOrDefault(t => t.TriggerId == child.TriggerId);
+            if (prior is null && child.Revision != 1 && current is not null || prior is not null && (prior.Source != child.Source
+                || child.Revision != prior.Revision + (prior.Configuration.SemanticEquals(child.Configuration) && prior.Enabled == child.Enabled ? 0 : 1)))
+                throw AgentCoreErrors.Conflict("Trigger identity or revision is stale; replace a source with a new trigger.");
+        }
     }
 
-    public static TriggerSourceKind Source(AutomationTrigger trigger) => trigger.Kind switch
+    public static TriggerSourceKind Source(AutomationTrigger? trigger) => trigger?.Kind switch
     { AutomationTriggerKind.CoreEvent => TriggerSourceKind.CoreEvent, AutomationTriggerKind.Event => TriggerSourceKind.ApplicationEvent, _ => TriggerSourceKind.Schedule };
 
     public static bool IsManual(TriggerOccurrence occurrence) => occurrence.SourceKind == TriggerSourceKind.ManualInvocation;
@@ -29,26 +36,29 @@ public static class AutomationRules
     public static TriggerSourceKind AdmissionSource(TriggerOccurrence occurrence)
     {
         if (!IsManual(occurrence)) return occurrence.SourceKind;
-        using var json = JsonDocument.Parse(occurrence.EvidenceJson);
-        return json.RootElement.TryGetProperty("triggerKind", out var kind) ? kind.GetString() switch
-        { "Event" => TriggerSourceKind.ApplicationEvent, "CoreEvent" => TriggerSourceKind.CoreEvent, _ => TriggerSourceKind.Schedule } : TriggerSourceKind.Schedule;
+        return TriggerSourceKind.ManualInvocation;
     }
 
-    public static string Evidence(Automation automation, object? triggerContext = null) =>
+    public static string Evidence(Automation automation, object? triggerContext = null, AutomationTriggerRecord? child = null) =>
         TriggerText.RequireEvidence(JsonSerializer.Serialize(new
         {
             automationId = automation.AutomationId,
             name = automation.Name,
             instructions = automation.Instructions,
             automationRevision = automation.Revision,
-            triggerKind = automation.Trigger.Kind.ToString(),
-            triggerSummary = Describe(automation.Trigger),
+            triggerId = child?.TriggerId,
+            source = child?.Source,
+            triggerKind = child?.Configuration.Kind.ToString() ?? (automation.IsSchedule ? "Schedule" : "Events"),
+            triggerSummary = child is null ? Describe(automation) : Describe(child.Configuration),
             triggerContext
         }));
 
+    public static string Describe(Automation automation) => automation.IsSchedule ? Describe(automation.Trigger!)
+        : string.Join(" OR ", automation.Triggers.Select(t => Describe(t.Configuration)));
+
     public static string Describe(AutomationTrigger trigger) => trigger switch
     {
-        CoreEventTrigger e => $"Core Event · {e.CoreEventKey}",
+        CoreEventTrigger e => $"Built-in · {e.CoreEventKey}",
         EventTrigger e => $"Event {e.EventId:D}",
         ScheduleTrigger { Schedule: OneShotSchedule s } => $"Once · {s.AtUtc:O}",
         ScheduleTrigger { Schedule: FixedIntervalSchedule s } => $"Every {s.IntervalSeconds} seconds",

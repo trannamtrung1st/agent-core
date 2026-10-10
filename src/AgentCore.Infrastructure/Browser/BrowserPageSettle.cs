@@ -81,13 +81,26 @@ internal static class BrowserPageSettle
         }
         """;
 
-    public static async Task<bool> WaitAsync(IPage page, int timeoutMs, CancellationToken cancellationToken)
+    public static async Task<bool> WaitAsync(IPage page, int timeoutMs, CancellationToken cancellationToken) =>
+        (await DiagnoseAsync(page, timeoutMs, cancellationToken).ConfigureAwait(false)).Settled;
+
+    // Settled describes the eventual quiet interval. ObservationAvailable covers
+    // every polling read in this wait; a later recovery does not erase an earlier gap.
+    internal sealed record Diagnostics(bool Settled, bool ObservationAvailable, int DomChangeSamples, int PeakInflight, int LastInflight);
+
+    internal static async Task<Diagnostics> DiagnoseAsync(IPage page, int timeoutMs, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var started = Environment.TickCount64;
         var deadline = started + Math.Max(0, timeoutMs);
         long? seen = null;
         long quietSince = 0;
+        var available = true;
+        var observed = false;
+        var domChangeSamples = 0;
+        var peakInflight = 0;
+        var lastInflight = 0;
+        Diagnostics Result(bool settled) => new(settled, available && observed, domChangeSamples, peakInflight, lastInflight);
 
         while (Environment.TickCount64 < deadline)
         {
@@ -95,11 +108,19 @@ internal static class BrowserPageSettle
             var now = Environment.TickCount64;
             var elapsed = now - started;
             var (generation, inflight) = await ReadAsync(page, deadline, cancellationToken).ConfigureAwait(false);
+            if (generation < 0) available = false;
+            else
+            {
+                observed = true;
+                if (seen is >= 0 && generation != seen.Value) domChangeSamples++;
+                peakInflight = Math.Max(peakInflight, inflight);
+                lastInflight = inflight;
+            }
             var observedAt = Environment.TickCount64;
             cancellationToken.ThrowIfCancellationRequested();
             if (observedAt >= deadline)
             {
-                return false;
+                return Result(false);
             }
             var unstable = inflight > 0 || seen is null || generation != seen.Value;
             seen = generation;
@@ -113,7 +134,7 @@ internal static class BrowserPageSettle
             }
             else if (observedAt - quietSince >= QuietIntervalMs)
             {
-                return true;
+                return Result(true);
             }
 
             var remaining = deadline - Environment.TickCount64;
@@ -125,7 +146,7 @@ internal static class BrowserPageSettle
             await Task.Delay((int)Math.Min(PollIntervalMs, remaining), cancellationToken).ConfigureAwait(false);
         }
 
-        return false;
+        return Result(false);
     }
 
     private static async Task<(long Generation, int Inflight)> ReadAsync(

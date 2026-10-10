@@ -31,6 +31,7 @@ public sealed record BrowserHostPolicy(
     BrowserProfileMode ProfileMode = BrowserProfileMode.EphemeralSession)
 {
     public bool ScreenshotAvailable { get; init; } = true;
+    public BrowserScreenshotPolicy ScreenshotPolicy { get; init; } = BrowserScreenshotPolicy.Protected;
     public BrowserOperationalLimits Limits { get; init; } = BrowserOperationalLimits.Default;
     public IReadOnlyList<string> TargetOrigins => NavigationOrigins;
 

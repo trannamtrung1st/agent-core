@@ -39,7 +39,7 @@ public sealed class SqliteHostRecoveryTests
             var source = (await sourceResponse.Content.ReadFromJsonAsync<AdminWebhookEventCredentialResponse>())!;
             var automationResponse = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{instanceId}/automations",
                 new AutomationRequest(0, true, "Review orders", "Inspect new orders",
-                    new("event", EventId: source.EventId), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")));
+                    new AutomationTriggerDto("event", EventId: source.EventId), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")));
             automationResponse.EnsureSuccessStatusCode();
             var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(instanceId, "text"));
             created.EnsureSuccessStatusCode();

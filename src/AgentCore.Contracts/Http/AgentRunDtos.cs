@@ -10,7 +10,7 @@ public sealed record AgentRunResponse(string AgentRunId, string SessionId, strin
     string Status, long Revision, int AttemptCount, int MaxAttempts, bool CancellationRequested, bool CancellationAvailable,
     string? Progress, string? NextRetryAt, string CreatedAt, string UpdatedAt, AgentRunApprovalResponse? Approval,
     AgentRunOutcomeResponse? Outcome, string? FailureCode, string? FailureSummary, string? DiagnosticId,
-    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null, AgentRunBudgetResponse? Budget = null, AgentRunConfigurationResponse? Configuration = null);
+    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null, AgentRunBudgetResponse? Budget = null, AgentRunConfigurationResponse? Configuration = null, AutomationTriggerOriginResponse? TriggerOrigin = null);
 public sealed record AgentRunConfigurationResponse(string DefinitionId, int DefinitionVersion, long InstanceRevision,
     long PersonaRevision, string ConfigurationHash, IReadOnlyList<AgentRunResourceResponse> Resources);
 public sealed record AgentRunResourceResponse(string Key, string VirtualPath, string ContentSha256, long ByteLength);
@@ -31,3 +31,5 @@ public sealed record InstanceActivitySessionPageResponse(IReadOnlyList<InstanceA
 public sealed record AgentRunBudgetResponse(string Class, string Source, int MaxSteps, int DurationSeconds, int PerToolSeconds,
     int StepsConsumed, int ActiveExecutionMs, string Phase, string? TerminationReason, string CleanupStatus, bool ClosureConfirmed, bool? ClosureRequested = null, bool? LogoutRequested = null,
     bool LogoutVerified = false, bool CleanupBlocked = false);
+
+public sealed record AutomationTriggerOriginResponse(string? TriggerId, string Kind, EventSourceReferenceDto? Source, string Summary, long? TriggerRevision = null);

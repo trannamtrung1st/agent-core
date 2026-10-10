@@ -44,7 +44,7 @@ test('background summary previews files and navigates to the exact source Automa
   const created = await page.request.post(`/api/v2/admin/agent-instances/${instanceId}/automations`, { headers, data: {
     executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" },
     expectedRevision: 0, enabled: true, name: 'Exact background source', instructions: 'Review only, then finish quietly.',
-    trigger: { kind: 'schedule', schedule: { kind: 'oneShot', timeZone: 'UTC', atUtc: new Date(Date.now() + 86400000).toISOString() } }
+    triggers: [{ triggerId: crypto.randomUUID(), revision: 1, enabled: true,  kind: 'schedule', schedule: { kind: 'oneShot', timeZone: 'UTC', atUtc: new Date(Date.now() + 86400000).toISOString() }  }]
   } });
   expect(created.ok(), await created.text()).toBe(true);
   const automationId = (await created.json()).automationId;

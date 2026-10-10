@@ -57,10 +57,11 @@ export function ResourceImportPreview({ items, existingPaths, scope = "draft", d
     setTouched(current => ({ ...current, [`${item.key}:${field}`]: true }));
   const updateItem = (key: string, patch: Partial<ResourcePreviewItem>) =>
     onChange(current => current.map(item => item.key === key ? { ...item, ...patch, uploadError: undefined } : item));
+  const allowedKinds = RESOURCE_KINDS.filter(value => scope !== "Instance" || value !== "EvalFixture");
   const siblingPaths = items.map(item => item.logicalPath);
   const state = (item: ResourcePreviewItem, index: number) => ({
     path: resourcePathProblem(item.logicalPath, siblingPaths, existingPaths, scope),
-    kind: resourceKindProblem(item),
+    kind: resourceKindProblem(item, scope),
     file: resourceFileProblem(item),
     pathTouched: !!touched[`${item.key}:path`],
     kindTouched: !!touched[`${item.key}:kind`],
@@ -85,10 +86,10 @@ export function ResourceImportPreview({ items, existingPaths, scope = "draft", d
     const issue = state(item, index);
     const error = issue.kindTouched ? issue.kind : null;
     return <Flex vertical gap={token.paddingXS} style={{ minWidth: 0 }}>
-      <Select aria-label={`Imported resource kind ${index + 1}`} value={RESOURCE_KINDS.find(kind => kind === item.kind)}
+      <Select aria-label={`Imported resource kind ${index + 1}`} value={allowedKinds.find(kind => kind === item.kind)}
         aria-invalid={!!error} aria-describedby={error ? issue.kindId : undefined} status={error ? "error" : undefined}
         placeholder="Choose kind" disabled={disabled} style={{ width: "100%" }} onBlur={() => touch(item, "kind")}
-        options={RESOURCE_KINDS.map(value => ({ value, label: value === "StaticAsset" ? "Static asset" : value === "EvalFixture" ? "Evaluation fixture" : value }))}
+        options={allowedKinds.map(value => ({ value, label: value === "StaticAsset" ? "Static asset" : value === "EvalFixture" ? "Evaluation fixture" : value }))}
         onChange={(kind: ResourceKindName) => { touch(item, "kind"); updateItem(item.key, { kind }); }} />
       {error && <Typography.Text id={issue.kindId} type="danger">{error}</Typography.Text>}
     </Flex>;

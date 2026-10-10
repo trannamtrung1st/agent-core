@@ -11,7 +11,7 @@ public sealed record ResolvedAgentRunConfiguration(AgentRunConfiguration Configu
     IReadOnlyList<EffectiveSkill> Skills, ExecutionBudgetPolicy? InstanceBudgets);
 
 public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
-    IAgentDefinitionResourceAdminStore resources)
+    IAgentDefinitionResourceAdminStore resources, InheritedDefinitionResourceCatalog? inheritedResources = null)
 {
     public async ValueTask<ResolvedAgentRunConfiguration> ResolveAsync(Guid id, CancellationToken ct = default, bool allowArchived = false)
     {
@@ -22,7 +22,7 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
             var baseline = await definitions.GetAsync(owner.DefinitionId, owner.ActiveVersion, ct) ?? throw AgentCoreErrors.Persistence("Selected Definition is unavailable.");
             var skillState = await instances.ReadSkillsAsync(id, ct);
             var resourceState = await instances.ReadResourcesAsync(id, ct);
-            var published = await resources.ListPublicationResourcesAsync(baseline.Id, baseline.Version, ct);
+            var published = inheritedResources is not null ? await inheritedResources.ListAsync(baseline, ct) : await resources.ListPublicationResourcesAsync(baseline.Id, baseline.Version, ct);
             var current = await instances.FindAsync(id, ct);
             if (current?.Revision != owner.Revision) continue;
             var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides);

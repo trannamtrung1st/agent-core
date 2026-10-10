@@ -29,7 +29,8 @@ public enum AdminEventOperationKind
     AutomationChanged,
     InstanceSkillsChanged,
     InstanceSettingsChanged,
-    InstanceResourcesChanged
+    InstanceResourcesChanged,
+    BrowserPrivacyChanged
 }
 
 public sealed record AdminEvent(

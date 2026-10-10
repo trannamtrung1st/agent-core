@@ -746,13 +746,16 @@ public sealed class BrowserToolTests
     [Theory]
     [InlineData("{}")]
     [InlineData(" { } ")]
-    public async Task Close_accepts_only_empty_objects(string arguments)
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task Close_accepts_empty_objects_and_absent_zero_parameter_payloads(string? arguments)
     {
         var fake = new FakeBrowser();
         var result = await Executor(fake).ExecuteAsync(
             BrowserDefinitionV12(),
             Guid.NewGuid(),
-            Call(ToolCatalog.BrowserClose, arguments),
+            Call(ToolCatalog.BrowserClose, arguments!),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         Assert.Equal(1, fake.CloseCalls);
@@ -760,9 +763,9 @@ public sealed class BrowserToolTests
     }
 
     [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
     [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{broken")]
     [InlineData("""{"arguments":"{}"}""")]
     [InlineData("""{"target":{}}""")]
     [InlineData("""{"parameters":{}}""")]
@@ -940,6 +943,20 @@ public sealed class BrowserToolTests
                 Directory.Delete(root, true);
             }
         }
+    }
+
+    [Fact]
+    public async Task Host_retirement_cancels_uncommitted_capture_storage_and_image_publication()
+    {
+        using var retirement = new CancellationTokenSource();
+        var browser = new RetiringCapturingBrowser(retirement.Token);
+        var store = new RecordingArtifacts { BeforeCreate = _ => { retirement.Cancel(); return ValueTask.CompletedTask; } };
+        var executor = new SessionToolExecutor(artifacts: store, browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
+        var definition = BrowserDefinition() with { Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.BrowserScreenshot]) };
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => executor.ExecuteAsync(definition, Guid.NewGuid(),
+            Call(ToolCatalog.BrowserScreenshot,"{}"), ToolLimits.MaxOutputBytes, admission: UserTurn() with { SupportsVision = true }));
+        Assert.Equal(1, browser.Captures);
+        Assert.Equal(0, store.Created);
     }
 
     [Fact]
@@ -1234,7 +1251,7 @@ public sealed class BrowserToolTests
         };
 }
 
-    private sealed class CapturingBrowser : FakeBrowser, IBrowser
+    private class CapturingBrowser : FakeBrowser, IBrowser
     {
         public int Captures { get; private set; }
 
@@ -1248,15 +1265,19 @@ public sealed class BrowserToolTests
         }
     }
 
+    private sealed class RetiringCapturingBrowser(CancellationToken lifetime) : CapturingBrowser, IBrowserCaptureLifetime
+    { public CancellationToken CaptureLifetime => lifetime; }
+
     private sealed class RecordingArtifacts : IArtifactStore
     {
         public ValueTask<ArtifactPage> ListPageAsync(Guid sessionId, Guid? before, int limit, CancellationToken ct = default, Guid? agentRunId = null) => new(new ArtifactPage([], null, false));
         public int Created { get; private set; }
         public Guid? LastAgentRunId { get; private set; }
+        public Func<CancellationToken, ValueTask>? BeforeCreate { get; init; }
 
         public bool Exists(Guid sessionId, Guid artifactId) => false;
 
-        public ValueTask<ArtifactRecord> CreateAsync(
+        public async ValueTask<ArtifactRecord> CreateAsync(
             Guid sessionId,
             string displayName,
             string contentType,
@@ -1265,9 +1286,11 @@ public sealed class BrowserToolTests
             string? workspaceLogicalPath,
             CancellationToken cancellationToken = default, Guid? agentRunId = null)
         {
+            if (BeforeCreate is not null) await BeforeCreate(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             Created++;
             LastAgentRunId = agentRunId;
-            return new(new ArtifactRecord(
+            return new ArtifactRecord(
                 Guid.CreateVersion7(),
                 sessionId,
                 displayName,
@@ -1276,7 +1299,7 @@ public sealed class BrowserToolTests
                 "abc",
                 sourceAttachmentId,
                 workspaceLogicalPath,
-                DateTimeOffset.UtcNow));
+                DateTimeOffset.UtcNow);
         }
 
         public ValueTask<ArtifactRecord?> GetAsync(Guid sessionId, Guid artifactId, CancellationToken cancellationToken = default) =>

@@ -2,12 +2,44 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 
 namespace AgentCore.Infrastructure.Tests;
 
 public sealed class ResponsesTransportTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" \t")]
+    [InlineData("{}")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{broken")]
+    [InlineData("{\"arguments\":{}}")]
+    public async Task Completed_close_preserves_argument_payload_and_identity_for_core_validation(string? arguments)
+    {
+        var item = new Dictionary<string, object> { ["type"] = "function_call", ["call_id"] = "close_1", ["name"] = "browser_close" };
+        if (arguments is not null) item["arguments"] = arguments;
+        var handler = new RecordingHandler(Event(new { type = "response.completed", response = new { status = "completed", output = new[] { item } } }));
+        var events = await Collect(Create(handler), new(Guid.NewGuid(), [], Tools: [ToolRegistry.Get(ToolCatalog.BrowserClose).ModelDefinition]));
+        Assert.Empty(events.OfType<ModelFailed>());
+        var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
+        Assert.Equal("browser.close", call.Name);
+        Assert.Equal("close_1", call.Id);
+        Assert.Equal(arguments ?? "", call.ArgumentsJson);
+    }
+
+    [Fact]
+    public async Task Explicit_null_close_payload_is_not_silently_treated_as_absent()
+    {
+        var handler = new RecordingHandler(Event(new { type = "response.completed", response = new { status = "completed",
+            output = new[] { new { type = "function_call", call_id = "close_1", name = "browser_close", arguments = (object?)null } } } }));
+        var events = await Collect(Create(handler), new(Guid.NewGuid(), [], Tools: [ToolRegistry.Get(ToolCatalog.BrowserClose).ModelDefinition]));
+        Assert.Equal("null", Assert.Single(events.OfType<ModelToolCallEvent>()).Call.ArgumentsJson);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -479,8 +479,12 @@ public sealed class HarnessManagementService(
                     break;
                 case "knowledge.remove":
                     var catalog = await localResources.ListAsync(instanceId, token);
-                    var item = catalog.Resources.SingleOrDefault(r => r.Key == operation.Id || r.Origin == "Instance" && r.LogicalPath == "knowledge/" + operation.Id)
-                        ?? throw AgentCoreErrors.NotFound("Knowledge resource was not found. Inspect its origin-qualified identity.");
+                    var source = RoleEnvironments.Of(active).KnowledgeList.SingleOrDefault(k => k.Identity == operation.Id);
+                    var item = catalog.Resources.SingleOrDefault(r => r.Key == operation.Id)
+                        ?? catalog.Resources.SingleOrDefault(r => r.Origin == "Instance" && r.LogicalPath == "knowledge/" + operation.Id)
+                        ?? (source is null ? null : catalog.Resources.SingleOrDefault(r => r.Origin == "Definition" && r.LogicalPath == KnowledgeSourcePaths.ResolveBackingPath(source)))
+                        ?? throw AgentCoreErrors.NotFound("Knowledge resource was not found. Inspect its trusted source identity or origin-qualified key.");
+                    if (item.Kind != AgentDefinitionResourceKind.Knowledge) throw AgentCoreErrors.Validation("Only Knowledge resources can be removed through knowledge.remove.");
                     if (item.Origin == "Instance") await localResources.DeleteAsync(instanceId, item.Key, instance.Revision, item.Revision, SkillAuthor.Agent, token, localState);
                     else await localResources.SetEnabledAsync(instanceId, item.Key, instance.Revision, item.Revision, false, SkillAuthor.Agent, token, localState);
                     break;

@@ -147,9 +147,10 @@ public sealed partial class OpenAICompatibleLanguageModel
                     if (item.GetProperty("type").GetString() != "function_call") continue;
                     if (!toolsOffered) throw new JsonException("Unsolicited tool call.");
                     var draft = new ToolCallDraft { Id = item.GetProperty("call_id").GetString() ?? "", Name = item.GetProperty("name").GetString() ?? "" };
-                    draft.Arguments.Append(item.GetProperty("arguments").GetString());
-                    using var arguments = JsonDocument.Parse(draft.Arguments.ToString());
-                    if (arguments.RootElement.ValueKind != JsonValueKind.Object) throw new JsonException("Invalid tool arguments.");
+                    if (item.TryGetProperty("arguments", out var arguments))
+                        draft.Arguments.Append(arguments.ValueKind == JsonValueKind.String ? arguments.GetString() : arguments.GetRawText());
+                    // As in Chat Completions, argument validation belongs to Core,
+                    // where the offered schema and bounded recovery are available.
                     drafts.Add(index++, draft);
                 }
                 if (continuation.Sum(item => item.GetRawText().Length) > MaxContinuationBytes) throw new JsonException("Continuation exceeds limit.");

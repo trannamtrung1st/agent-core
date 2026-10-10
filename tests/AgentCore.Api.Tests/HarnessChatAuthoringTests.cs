@@ -13,6 +13,38 @@ namespace AgentCore.Api.Tests;
 
 public sealed class HarnessChatAuthoringTests
 {
+    [Theory]
+    [InlineData("support-order-policy")]
+    [InlineData("compliance-retention")]
+    public async Task Knowledge_remove_uses_trusted_inherited_identity_and_only_disables_the_instance(string identity)
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var authoring = services.GetRequiredService<HarnessManagementService>();
+        var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
+        instance = await authoring.ConfigureAsync(instance.InstanceId, instance.Revision,
+            new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], [], []));
+        var resolver = services.GetRequiredService<AgentCore.Application.Execution.AgentRunConfigurationResolver>();
+        var original = (await resolver.ResolveAsync(instance.InstanceId)).Configuration;
+        var args = JsonSerializer.Serialize(new { expectedInstanceRevision = instance.Revision, expectedVersion = 21,
+            policyRevision = instance.HarnessManagement!.PolicyRevision, id = identity,
+            expected = "Future Runs omit this inherited knowledge.", observed = "Owner requests removal." });
+        using var json = JsonDocument.Parse(args);
+        var name = "harness.knowledge.remove";
+        var grant = new ToolApprovalGrant(Guid.NewGuid(), name, ToolActionHash.Compute(name, json.RootElement), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var result = await services.GetRequiredService<SessionToolExecutor>().ExecuteAsync(original.Definition, Guid.NewGuid(), new("remove", name, args),
+            100000, approvalGrant: grant, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId));
+        Assert.Contains("\"saved\":true", result.Text);
+        var next = (await resolver.ResolveAsync(instance.InstanceId)).Configuration;
+        Assert.DoesNotContain(RoleEnvironments.Of(next.Definition).KnowledgeList, k => k.Identity == identity);
+        Assert.Contains(RoleEnvironments.Of(original.Definition).KnowledgeList, k => k.Identity == identity);
+        var catalog = await services.GetRequiredService<AgentInstanceResourceService>().ListAsync(instance.InstanceId);
+        var inherited = catalog.Resources.Single(r => r.LogicalPath == "knowledge/" + identity);
+        Assert.False(inherited.EnabledOverride); Assert.False(inherited.Enabled);
+        Assert.Empty(await services.GetRequiredService<IAgentDefinitionResourceAdminStore>().ListPublicationResourcesAsync("general-assistant", 21));
+        Assert.Contains(RoleEnvironments.Of((await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!).KnowledgeList, k => k.Identity == identity);
+    }
+
     [Fact]
     public async Task Inspect_separates_instance_authoring_from_frozen_execution_authority()
     {

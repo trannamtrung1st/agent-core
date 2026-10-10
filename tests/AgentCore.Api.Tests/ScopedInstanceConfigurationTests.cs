@@ -30,6 +30,57 @@ public sealed class ScopedInstanceConfigurationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Built_in_knowledge_inspect_disable_reset_and_copy_preserve_admitted_configuration(bool sqlite)
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"builtin-resources-{Guid.NewGuid():N}.db");
+        await using var host = ControlledHost(sqlite, db);
+        using var client = host.CreateClient(); TestOwnerCapability.Apply(client, host.Services);
+        var services = host.Services;
+        var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
+        var other = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 22);
+        var resolver = services.GetRequiredService<AgentRunConfigurationResolver>();
+        var original = (await resolver.ResolveAsync(owner.InstanceId)).Configuration;
+        var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(owner.InstanceId, SessionMode.Text);
+        var runs = services.GetRequiredService<IAgentRunStore>();
+        var admitted = AgentRunAdmissionFactory.ForAdmittedSignal(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session,
+            new(Guid.NewGuid(), TriggerKind.LongSilence, "Inspect the policy"), DateTimeOffset.UtcNow,
+            (await resolver.ResolveAsync(owner.InstanceId)).Skills, configuration: original);
+        await runs.AdmitAsync(session with { Revision = session.Revision + 1 }, session.Revision, admitted);
+        var root = $"/api/v2/admin/agent-instances/{owner.InstanceId}/resources";
+        var catalog = (await client.GetFromJsonAsync<InstanceResourceCatalog>(root))!;
+        var inherited = catalog.Resources.Single(r => r.LogicalPath == "knowledge/support-order-policy");
+        Assert.Contains(catalog.Resources, r => r.LogicalPath == "knowledge/compliance-retention");
+        Assert.Null(inherited.EnabledOverride); Assert.True(inherited.Enabled);
+        var bytes = await client.GetByteArrayAsync(root + "/" + Uri.EscapeDataString(inherited.Key) + "/content");
+        var reader = services.GetRequiredService<IRoleKnowledgeContentResolver>();
+        Assert.Equal(Encoding.UTF8.GetString(bytes), await reader.ReadContentAsync(original.Definition, "support-order-policy"));
+        var historical = new AgentRunConfiguration(original.Definition, original.InstanceRevision, original.PersonaRevision, []);
+        var disabled = await client.PutAsJsonAsync(root + "/" + Uri.EscapeDataString(inherited.Key) + "/enabled", new { expectedInstanceRevision = catalog.InstanceRevision, expectedRevision = inherited.Revision, enabled = false });
+        disabled.EnsureSuccessStatusCode();
+        var next = (await resolver.ResolveAsync(owner.InstanceId)).Configuration;
+        Assert.DoesNotContain(RoleEnvironments.Of(next.Definition).KnowledgeList, k => k.Identity == "support-order-policy");
+        Assert.DoesNotContain(next.Resources, r => r.Key == inherited.Key);
+        Assert.Null(await reader.ReadContentAsync(next.Definition, "support-order-policy"));
+        var frozen = (await runs.GetAsync(admitted.Owner, admitted.AgentRunId))!.Admission.Configuration!;
+        Assert.Equal(original.ConfigurationHash, frozen.ConfigurationHash);
+        Assert.Equal(Encoding.UTF8.GetString(bytes), await reader.ReadContentAsync(frozen.Definition, "support-order-policy"));
+        Assert.Equal(Encoding.UTF8.GetString(bytes), await reader.ReadContentAsync(historical.Definition, "support-order-policy"));
+        Assert.Contains((await resolver.ResolveAsync(other.InstanceId)).Configuration.Resources, r => r.Key == inherited.Key);
+        catalog = (await client.GetFromJsonAsync<InstanceResourceCatalog>(root))!;
+        inherited = catalog.Resources.Single(r => r.Key == inherited.Key);
+        (await client.DeleteAsync(root + "/" + Uri.EscapeDataString(inherited.Key) + $"/enabled-override?expectedInstanceRevision={catalog.InstanceRevision}&expectedRevision={inherited.Revision}")).EnsureSuccessStatusCode();
+        Assert.Contains((await resolver.ResolveAsync(owner.InstanceId)).Configuration.Resources, r => r.Key == inherited.Key);
+        catalog = await services.GetRequiredService<AgentInstanceResourceService>().ListAsync(owner.InstanceId);
+        var copied = await services.GetRequiredService<AgentInstanceResourceService>().CopyAsync(owner.InstanceId, inherited.Key, catalog.InstanceRevision, "knowledge/local-policy.md");
+        var local = copied.Resources.Single(r => r.Origin == "Instance");
+        Assert.Equal(bytes, await services.GetRequiredService<AgentInstanceResourceService>().ReadAsync(owner.InstanceId, local.Key));
+        Assert.Equal(AgentInstanceResourceService.ParseKey(inherited.Key).Id, local.SourceDefinitionResourceId);
+        Assert.Empty(await services.GetRequiredService<IAgentDefinitionResourceAdminStore>().ListPublicationResourcesAsync("general-assistant", 21));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Settings_constraints_explain_rejected_toggles_and_permitted_changes_save_and_reset(bool sqlite)
     {
         var db = Path.Combine(Path.GetTempPath(), $"settings-constraints-{Guid.NewGuid():N}.db");
@@ -143,6 +194,7 @@ public sealed class ScopedInstanceConfigurationTests
             await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => resources.UpsertAsync(owner.InstanceId, section.InstanceRevision, null, null, path, kind, media, payload).AsTask());
             Assert.Empty((await host.Services.GetRequiredService<IAgentInstanceStore>().ReadResourcesAsync(owner.InstanceId)).InstanceResources);
         }
+        await InvalidResource("eval/case.json", "application/json", "{}"u8.ToArray(), AgentDefinitionResourceKind.EvalFixture);
         await InvalidResource("../escape.md", "text/markdown", [1]);
         await InvalidResource("unsafe.html", "text/html", [1]);
         await InvalidResource("secret.md", "text/markdown", Encoding.UTF8.GetBytes("Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456"));

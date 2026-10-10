@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Admin;
 
 namespace AgentCore.Infrastructure.Browser;
 
@@ -22,7 +23,21 @@ public sealed class BrowserOptions
     public string? Channel { get; set; }
 
     // DomMasking is best-effort. Strict visual confidentiality disables capture entirely.
-    public string ScreenshotPrivacy { get; set; } = "DomMasking";
+    public string ScreenshotPrivacy { get; set; } = "Protected";
+
+    // Deployment ceiling only. Admin must explicitly acknowledge and select exact origins.
+    public bool AllowUnmaskedCaptures { get; set; }
+    public string[] UnmaskedCaptureOrigins { get; set; } = [];
+
+    public BrowserPrivacyAuthority PrivacyAuthority()
+    {
+        if (ScreenshotPrivacy is not ("Protected" or "DomMasking" or "Disabled"))
+            throw new ArgumentException("Deployment screenshot privacy must be Protected or Disabled (legacy DomMasking means Protected).");
+        try { return new(ScreenshotPrivacy != "Disabled", AllowUnmaskedCaptures,
+            BrowserPrivacyService.ExactOrigins(UnmaskedCaptureOrigins ?? []),
+            BrowserPrivacyService.ExactOrigins(TrustedVisualCaptureOrigins ?? [])); }
+        catch (AgentCore.Application.Sessions.AgentCoreException ex) { throw new ArgumentException(ex.Message, ex); }
+    }
 
     // Exact host-approved origins whose Canvas/SVG pixels may be captured.
     // Ordinary sensitive DOM masking and whole-frame masking still apply.

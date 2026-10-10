@@ -147,8 +147,8 @@ public sealed partial class TerminalDisplayRepairTests
             Requests++;
             if (Requests == 5)
             {
-                Assert.Empty(request.Tools ?? []);
-                Assert.Contains(request.Messages, m => m.Text.Contains("ineffective tool strategy"));
+                Assert.Contains(request.Tools ?? [], t => t.Name == ToolCatalog.CapabilitiesLoad);
+                Assert.Contains(request.Messages, m => m.Text.Contains("Equivalent invalid or ineffective strategies remain blocked"));
                 yield return new ModelSemanticResponseReady(new("No eligible capability can teleport the browser. Discovery made no progress; this task is blocked.", new(ModelSpeechMode.Same, null), []));
                 yield return new ModelCompleted(ModelStopReason.Completed); yield break;
             }

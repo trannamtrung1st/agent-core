@@ -20,7 +20,7 @@ test('Completed Automation can be deleted while its quiet Run remains inspectabl
   const saved = await page.request.post(path + '/automations', { headers, data: {
     executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" },
     expectedRevision: 0, enabled: true, name, instructions,
-    trigger: { kind: 'schedule', schedule: { kind: 'oneShot', timeZone: 'UTC', atUtc: new Date(Date.now() + 4000).toISOString() } }
+    triggers: [{ triggerId: crypto.randomUUID(), revision: 1, enabled: true,  kind: 'schedule', schedule: { kind: 'oneShot', timeZone: 'UTC', atUtc: new Date(Date.now() + 4000).toISOString() }  }]
   } });
   expect(saved.ok()).toBe(true);
   const automationId = (await saved.json()).automationId;
@@ -69,7 +69,7 @@ test('Connections ingress activates configured Event instructions once and Runs 
   await page.getByRole('tab', { name: 'Events', exact: true }).click();
   const sources = page.getByRole('region', { name: 'Events', exact: true });
   const sourceName = `Orders ${Date.now()}`;
-  await sources.getByRole('button', { name: 'New Event', exact: true }).click();
+  await sources.getByRole('button', { name: 'New webhook Event', exact: true }).click();
   await page.getByLabel('Event name', { exact: true }).fill(sourceName);
   await page.getByLabel('Event key', { exact: true }).fill(`orders.${Date.now()}`);
   const issued = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/connections/events') && r.ok());
@@ -86,26 +86,25 @@ test('Connections ingress activates configured Event instructions once and Runs 
   await automations.getByLabel('Automation instructions', { exact: true }).fill(instructions);
   await automations.getByRole('combobox', { name: 'Automation trigger', exact: true }).click();
   await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
-  const eventPicker = automations.getByRole('combobox', { name: 'Automation Event', exact: true });
-  await eventPicker.click();
-  // Earlier journeys leave a larger Event inventory. Search through the supported
-  // control so the exact option is rendered inside the virtualized popup.
+  await automations.getByRole('button', { name: 'Add Event', exact: true }).click();
+  const eventPicker = automations.getByRole('combobox', { name: 'Add Event source', exact: true });
   await eventPicker.fill(sourceName);
-  await page.locator('.ant-select-item-option').filter({ hasText: `${sourceName} · ${credential.eventKey}` }).click();
+  await page.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: `${sourceName} · ${credential.eventKey}` }).click();
+  await automations.getByRole('switch', { name: 'Enable automation', exact: true }).click();
   await expect(automations.getByLabel('Schedule time zone', { exact: true })).toHaveCount(0);
   await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
   const source = automations.getByRole('button', { name: `View automation: ${name}`, exact: true });
   await expect(source).toBeVisible();
   if (await source.getAttribute('aria-expanded') !== 'true') await source.click();
   await expect(automations.getByRole('region', { name: 'Automation details', exact: true })).toContainText(`${sourceName} · ${credential.eventKey}`);
-  await expect(automations.getByText('On event', { exact: true })).toBeVisible();
+  await expect(automations.getByRole("region", { name: "Automation details", exact: true })).toContainText("Enabled");
   const owner = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
   const headers = { 'X-AgentCore-Owner-Capability': owner };
   const path = `/api/v2/admin/agent-instances/${instanceId}`;
   const listed = await page.request.get(path + '/automations', { headers });
   expect(listed.ok()).toBe(true);
   const row = (await listed.json()).items[0];
-  expect(row.trigger.kind).toBe('event'); expect(row.trigger.schedule).toBeNull();
+  expect(row.triggers[0].kind).toBe('event'); expect(row.triggers[0].source.kind).toBe('webhook');
   const envelope = { eventId: `order-${Date.now()}`, data: { orderReference: '1001' } };
   const hook = `/api/v1/hooks/${credential.eventKey}`;
   expect((await page.request.post(hook, { headers: { Authorization: `Bearer ${credential.token}` }, data: envelope })).status()).toBe(202);

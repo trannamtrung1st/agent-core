@@ -17,7 +17,7 @@ public sealed record DefinitionSkillMutationState(string Key, bool Enabled, long
 public sealed record InstanceSkillCustomization(InstanceSkillView InstanceSkill, DefinitionSkillMutationState DefinitionSkill);
 
 public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAgentDefinitionStore definitions, IIdGenerator ids, TimeProvider time,
-    IAgentDefinitionResourceAdminStore? publications = null)
+    IAgentDefinitionResourceAdminStore? publications = null, InheritedDefinitionResourceCatalog? inheritedResources = null)
 {
     public async ValueTask<IReadOnlyList<InstanceSkillView>> ListAsync(Guid instanceId, AgentDefinition? context = null, CancellationToken ct = default)
     {
@@ -123,8 +123,8 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         // while the trusted execution context continues to govern authorization/copy content.
         var futureDefinition = definition.Version == owner.ActiveVersion ? definition : await DefinitionAsync(owner, ct);
         _ = EffectiveSkillCatalogResolver.Resolve(futureDefinition, next);
-        if (publications is not null)
-            _ = AgentInstanceResourceService.Resolve(futureDefinition, await publications.ListPublicationResourcesAsync(futureDefinition.Id, futureDefinition.Version, ct),
+        if (inheritedResources is not null || publications is not null)
+            _ = AgentInstanceResourceService.Resolve(futureDefinition, inheritedResources is not null ? await inheritedResources.ListAsync(futureDefinition, ct) : await publications!.ListPublicationResourcesAsync(futureDefinition.Id, futureDefinition.Version, ct),
                 await instances.ReadResourcesAsync(id, ct), next);
         var history = actor == SkillAuthor.Admin ? new AdminEventAppend(ids.NewId(), now, AdminEventActorKind.LocalOwner,
             AdminEventOperationKind.InstanceSkillsChanged, "agent.instance", id.ToString("D"), owner.Revision + 1,

@@ -2641,7 +2641,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         string? continuationInstruction = null;
         var evidence = new BrowserEvidenceProgress(CheckpointSuffix());
         var invalidCalls = new InvalidToolCallRecovery(CheckpointSuffix());
-        var invalidRecoveryExhausted = invalidCalls.Exhausted;
         var executionRun = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun : null;
         var previousFacts = executionRun is null ? null : await PreviousExecutionFactsAsync(executionRun, cancellationToken).ConfigureAwait(false);
         var budgetTools = ExecutionDefinition.Environment?.Capabilities is null
@@ -2773,7 +2772,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (factsIndex < 0) factsIndex = prompt.Count;
                 prompt.Insert(factsIndex, new ModelMessage(ModelRole.System, RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, CheckpointSuffix())));
                 if (previousFacts is not null) prompt.Insert(factsIndex + 1, new ModelMessage(ModelRole.System, previousFacts));
-                if (invalidRecoveryExhausted) prompt.Add(new ModelMessage(ModelRole.System, "Repeated invalid or ineffective tool strategy remains blocked. Finish from existing evidence and report the blocker; do not request more tools."));
+                if (invalidCalls.HasBlockedStrategies) prompt.Add(new ModelMessage(ModelRole.System, "Equivalent invalid or ineffective strategies remain blocked. Corrected valid calls and unrelated offered tools, including independently requested cleanup, remain available within the remaining execution budget."));
                 if (evidence.DialogPending) prompt.Add(new ModelMessage(ModelRole.System, BrowserEvidenceProgress.DialogInstruction));
                 if (evidence.RepeatedDialogInstruction is { } repeatedDialogInstruction) prompt.Add(new ModelMessage(ModelRole.System, repeatedDialogInstruction));
                 if (budget.CleanupReserve > TimeSpan.Zero) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.BrowserLifecycleInstruction));
@@ -2800,7 +2799,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             model),
                         pageBlocked,
                         terminalBrowserContinuation, evidence.DialogPending);
-                if (invalidRecoveryExhausted) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (checkpointCapacityReached) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
                 if (cleanupPhase && finalizationReason is null && working.Tools is { } cleanupTools)
@@ -2821,6 +2819,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     working = working with { Messages = PromptContextBuilder.WithToolEnvironmentSystem(
                         working.Messages, projectionContext, working.Tools ?? [], _tools.ConfigurationGate, eligibleForGuide) };
                 }
+                var recoveryTools = projectionContext is null ? working.Tools ?? []
+                    : ProjectBrowserTools(working with { Tools = ToolCatalog.Eligible(_snapshot.Definition, projectionContext, _tools.ConfigurationGate) },
+                        pageBlocked, terminalBrowserContinuation, evidence.DialogPending).Tools ?? [];
+                if (cleanupPhase) recoveryTools = recoveryTools.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray();
+                if (finalizationReason is null && !inRepair && !checkpointCapacityReached
+                    && evidence.SemanticRecoveryInstruction(
+                        recoveryTools.Select(t => t.Name), model.Capabilities.Vision,
+                        (_browserLease as IBrowser)?.HostPolicy.ScreenshotAvailable ?? true,
+                        (_browserLease as IBrowser)?.HostPolicy.Limits.CapturesPerScope ?? BrowserOperationalLimits.Default.CapturesPerScope,
+                        working.Tools?.Select(t => t.Name) ?? []) is { } semanticRecovery)
+                    working = working with { Messages = working.Messages.Append(new ModelMessage(ModelRole.System, semanticRecovery)).ToArray() };
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
                     ? binding.PinnedModel.CatalogKey : ToolResources.IsOccurrence(trigger.Kind)
                         ? _activeOccurrencePin?.CatalogKey : _snapshot.ModelSelection?.CatalogKey;
@@ -2866,13 +2875,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 ProviderErrorCode.InvalidResponse, "Finalization cannot request tools.", FailureReason: "finalizationToolCall")), generateToken).ConfigureAwait(false);
                             return;
                         }
-                        if (invalidRecoveryExhausted)
-                        {
-                            await MailboxModelAsync(cause, request.ResponseId,
-                                new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest, "Repeated invalid tool strategy blocked.", FailureReason: "invalidToolStrategy")), generateToken).ConfigureAwait(false);
-                            return;
-                        }
-                        if (!inRepair && !terminalBrowserContinuation && !invalidRecoveryExhausted)
+                        if (!inRepair && !terminalBrowserContinuation)
                         {
                             pending.Add(tool.Call);
                         }
@@ -3216,43 +3219,45 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     string? effectHash = null;
                     try
                     {
+                        var payload = ToolArgumentPayload.Normalize(call.ArgumentsJson,
+                            working.Tools?.FirstOrDefault(tool => tool.Name == call.Name));
                         JsonElement args;
                         try
                         {
                             if (string.Equals(call.Name, ToolCatalog.BrowserClose, StringComparison.Ordinal))
                             {
-                                if (!BrowserToolArguments.TryValidateClose(call.ArgumentsJson, out var closeError))
+                                if (!BrowserToolArguments.TryValidateClose(payload, out var closeError))
                                 {
                                     executionResult = ToolExecutionResult.FromText(closeError);
                                     args = default;
                                 }
                                 else
                                 {
-                                    args = JsonSerializer.Deserialize<JsonElement>(call.ArgumentsJson);
+                                    args = JsonSerializer.Deserialize<JsonElement>(payload);
                                 }
                             }
                             else
                             {
-                            args = JsonSerializer.Deserialize<JsonElement>(
-                                string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson);
-                            if (args.ValueKind != JsonValueKind.Object)
-                            {
-                                if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
+                                args = JsonSerializer.Deserialize<JsonElement>(
+                                    payload);
+                                if (args.ValueKind != JsonValueKind.Object)
                                 {
-                                    RuntimeTelemetry.RecordSkillLoad("denied");
-                                }
+                                    if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal))
+                                    {
+                                        RuntimeTelemetry.RecordSkillLoad("denied");
+                                    }
 
-                                if (string.Equals(call.Name, ToolCatalog.AppMessageSend, StringComparison.Ordinal))
-                                {
-                                    RuntimeTelemetry.RecordApplicationMessage("denied");
-                                }
+                                    if (string.Equals(call.Name, ToolCatalog.AppMessageSend, StringComparison.Ordinal))
+                                    {
+                                        RuntimeTelemetry.RecordApplicationMessage("denied");
+                                    }
 
-                                executionResult = ToolExecutionResult.FromText(
-                                    call.Name == ToolCatalog.CapabilitiesLoad
-                                        ? CapabilityLoadResult.Failure("invalid", "load_invalid", "Use a JSON object with query and optional limit.")
-                                        : """{"error":"invalid","message":"Tool arguments must be a JSON object."}""");
-                                args = default;
-                            }
+                                    executionResult = ToolExecutionResult.FromText(
+                                        call.Name == ToolCatalog.CapabilitiesLoad
+                                            ? CapabilityLoadResult.Failure("invalid", "load_invalid", "Use a JSON object with query and optional limit.")
+                                            : """{"error":"invalid","message":"Tool arguments must be a JSON object."}""");
+                                    args = default;
+                                }
                             }
                         }
                         catch (JsonException)
@@ -3274,7 +3279,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             args = default;
                         }
 
-                        if (args.ValueKind != JsonValueKind.Object && invalidCalls.Refuse(call) is { } malformedRefusal)
+                        if (args.ValueKind != JsonValueKind.Object && invalidCalls.Refuse(call with { ArgumentsJson = payload }) is { } malformedRefusal)
                             executionResult = ToolExecutionResult.FromText(malformedRefusal);
                         if (args.ValueKind == JsonValueKind.Object)
                         {
@@ -3314,13 +3319,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         ? CapabilityLoadResult.Failure("forbidden", "load_unavailable", "Discovery is not permitted in this execution. Use offered tools or report the restriction.")
                                         : """{"error":"forbidden","message":"Tool is not permitted for this role."}""");
                             }
-                            else if (invalidCalls.Refuse(call) is { } invalidRefusal)
+                            else if (invalidCalls.Refuse(call with { ArgumentsJson = payload }) is { } invalidRefusal)
                             {
                                 executionResult = ToolExecutionResult.FromText(invalidRefusal);
                             }
-                            else if (evidence.Refuse(call, args) is { } dialogRefusal)
+                            else if (evidence.Refuse(call, args) is { } evidenceRefusal)
                             {
-                                executionResult = ToolExecutionResult.FromText(dialogRefusal);
+                                executionResult = ToolExecutionResult.FromText(evidenceRefusal);
                             }
                             else if (ToolCatalog.IsCompletionTool(call.Name))
                             {
@@ -3633,8 +3638,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
 
                     evidence.NoteResult(call, executionResult.Text);
-                    executionResult = executionResult with { Text = invalidCalls.Note(call, executionResult.Text, out var recoveryExhausted) };
-                    invalidRecoveryExhausted |= recoveryExhausted;
+                    executionResult = executionResult with { Text = invalidCalls.Note(call, executionResult.Text, out _) };
                     harnessSources.AddRange(HarnessChatTools.Sources(call, executionResult.Text));
                     executionResult = ToolResultAdmission.AdmitForModel(model, executionResult);
                     if (Encoding.UTF8.GetByteCount(executionResult.Text) > resultBudget)
@@ -3732,12 +3736,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
                         break;
-                    }
-                    if (invalidRecoveryExhausted && IsInitialBackgroundRun)
-                    {
-                        await MailboxModelAsync(cause, request.ResponseId,
-                            new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest, "Repeated invalid tool strategy blocked.", FailureReason: "invalidToolStrategy")), generateToken).ConfigureAwait(false);
-                        return;
                     }
                 }
 

@@ -12,7 +12,7 @@ public sealed record ExternalEventAdmit(ExternalEventAdmitKind Kind, ExternalEve
 
 public sealed record ExternalEventActivity(IReadOnlyList<ExternalEvent> Receipts, IReadOnlyList<ExternalEventDelivery> Deliveries);
 
-public sealed record ExternalEventRecoveryCursor(Guid EventId, Guid AutomationId);
+public sealed record ExternalEventRecoveryCursor(Guid EventId, Guid TriggerId);
 
 public interface IExternalEventStore
 {
@@ -48,11 +48,11 @@ public interface IExternalEventStore
         int limit,
         CancellationToken cancellationToken = default, ExternalEventRecoveryCursor? after = null);
 
-    ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null);
+    ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid triggerId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null);
 
     ValueTask MarkDeliveryAsync(
         Guid eventId,
-        Guid automationId,
+        Guid triggerId,
         ExternalEventDeliveryStatus status,
         CancellationToken cancellationToken = default);
 

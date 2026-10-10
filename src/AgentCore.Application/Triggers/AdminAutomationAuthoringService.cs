@@ -19,6 +19,17 @@ public sealed class AdminAutomationAuthoringService(ITriggerStore store, Experie
     public async ValueTask<Automation> SaveAsync(Guid instanceId, Guid? automationId, long expectedRevision,
         bool enabled, string name, string instructions, AutomationTrigger trigger, string? modelKey, string? effort, CancellationToken ct = default, TriggerProvenance? provenance = null, AutomationExecutionTarget? executionTarget = null, AutomationCompletionDelivery? completionDelivery = null, bool? requiresTools = null, bool? requiresVision = null, string? presetId = null, int? presetVersion = null)
     {
+        var current = automationId is { } id ? await store.GetAsync(new(instanceId, LocalUserProfile.Id), id, ct) : null;
+        var prior = current?.Triggers.SingleOrDefault();
+        var keepIdentity = prior is not null && prior.Source == new AutomationTriggerRecord(prior.TriggerId, trigger).Source;
+        return await SaveAsync(instanceId, automationId, expectedRevision, enabled, name, instructions,
+            new[] { new AutomationTriggerRecord(keepIdentity ? prior!.TriggerId : ids.NewId(), trigger, prior?.Enabled ?? true, keepIdentity ? prior!.Revision : 1) },
+            modelKey, effort, ct, provenance, executionTarget, completionDelivery, requiresTools, requiresVision, presetId, presetVersion);
+    }
+
+    public async ValueTask<Automation> SaveAsync(Guid instanceId, Guid? automationId, long expectedRevision,
+        bool enabled, string name, string instructions, IReadOnlyList<AutomationTriggerRecord> submitted, string? modelKey, string? effort, CancellationToken ct = default, TriggerProvenance? provenance = null, AutomationExecutionTarget? executionTarget = null, AutomationCompletionDelivery? completionDelivery = null, bool? requiresTools = null, bool? requiresVision = null, string? presetId = null, int? presetVersion = null)
+    {
         var instance = await experience.RequireInstanceAsync(instanceId, ct);
         await profiles.GetLocalProfileAsync(ct);
         var owner = new TriggerOwner(instanceId, LocalUserProfile.Id);
@@ -32,35 +43,50 @@ public sealed class AdminAutomationAuthoringService(ITriggerStore store, Experie
         var validateDestination = enabled || current is null || current.ExecutionTarget != target || current.CompletionDelivery != delivery;
         if (validateDestination && target.SessionId is { } targetId) targetSession = await AutomationDestinationPolicy.RequireAsync(memory ?? throw AgentCoreErrors.Validation("Target inspection is unavailable."), owner, targetId, ct);
         if (validateDestination && delivery.SessionId is { } reportId) await AutomationDestinationPolicy.RequireAsync(memory ?? throw AgentCoreErrors.Validation("Target inspection is unavailable."), owner, reportId, ct);
-        if (trigger is FilteredEventTrigger filtered && filters?.Validate(filtered.FilterExpression) is { } filterError)
-            throw AgentCoreErrors.Validation(filterError);
-        var sourceKind = AutomationRules.Source(trigger);
-        var decision = await guard.EvaluateAsync(owner, sourceKind, ct);
-        if (enabled && decision.Kind != TriggerAdmissionDecisionKind.Allow)
-            throw AgentCoreErrors.Forbidden(decision.Reason ?? "Automation is disabled by policy.");
-        var retainingDisabledModel = !enabled && current is not null && current.ModelOverrideCatalogKey == modelKey && current.ModelOverrideReasoningEffort == effort;
-        if (!retainingDisabledModel) ExecutionModelPolicy.RequireSelectable(catalog, modelKey, effort);
         var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
         var policy = definition.TriggerPolicy;
         var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
+        var children = new List<AutomationTriggerRecord>();
+        var eligible = 0;
         DateTimeOffset? next = null;
-        if (trigger is ScheduleTrigger scheduled)
+        foreach (var child in submitted)
         {
-            if (enabled || current is null || !current.Trigger.SemanticEquals(trigger))
+            var prior = current?.Triggers.SingleOrDefault(t => t.TriggerId == child.TriggerId);
+            if (prior is null && current is not null && child.Revision != 1 || prior is not null && child.Revision != prior.Revision)
+                throw AgentCoreErrors.Conflict("Trigger revision is stale.");
+            var trigger = child.Configuration;
+            if (trigger is FilteredEventTrigger filtered && filters?.Validate(filtered.FilterExpression) is { } filterError)
+                throw AgentCoreErrors.Validation(filterError);
+            var decision = await guard.EvaluateAsync(owner, AutomationRules.Source(trigger), ct);
+            var canExecute = decision.Kind == TriggerAdmissionDecisionKind.Allow;
+            if (trigger is ScheduleTrigger scheduled)
             {
-                if (policy is null) throw AgentCoreErrors.Forbidden("Scheduling is disabled.");
-                try { ScheduleDefinitionPolicy.Validate(scheduled.Schedule, policy, now, instructions); }
-                catch (Exception ex) when (ex is ArgumentException or TriggerScheduleCommandException)
-                { throw AgentCoreErrors.Validation(ex.Message); }
+                // Structural timing is validated by the Domain. Definition limits govern execution only.
+                if (enabled && child.Enabled && canExecute)
+                {
+                    if (policy is null) canExecute = false;
+                    else
+                    {
+                        try { ScheduleDefinitionPolicy.Validate(scheduled.Schedule, policy, now, instructions); }
+                        catch (Exception ex) when (ex is ArgumentException or TriggerScheduleCommandException)
+                        { throw AgentCoreErrors.Validation(ex.Message); }
+                        next = TriggerScheduleCalculator.InitialNext(scheduled.Schedule, now);
+                        if (next is null) throw AgentCoreErrors.Validation("Schedule has no future occurrence.");
+                    }
+                }
             }
-            next = enabled ? TriggerScheduleCalculator.InitialNext(scheduled.Schedule, now) : null;
-            if (enabled && next is null) throw AgentCoreErrors.Validation("Schedule has no future occurrence.");
+            else if (trigger is EventTrigger reaction)
+            {
+                var source = await events.GetAsync(reaction.EventId, ct) ?? throw AgentCoreErrors.NotFound("Event was not found.");
+                canExecute &= source.Status == WebhookEventStatus.Active;
+            }
+            if (child.Enabled && canExecute) eligible++;
+            var changedChild = prior is not null && (prior.Enabled != child.Enabled || !prior.Configuration.SemanticEquals(trigger));
+            children.Add(new(child.TriggerId, trigger, child.Enabled, prior is null ? 1 : prior.Revision + (changedChild ? 1 : 0)));
         }
-        else if (trigger is EventTrigger reaction && (enabled || current is null || !current.Trigger.SemanticEquals(trigger)))
-        {
-            var source = await events.GetAsync(reaction.EventId, ct) ?? throw AgentCoreErrors.NotFound("Event was not found.");
-            if (source.Status != WebhookEventStatus.Active) throw AgentCoreErrors.Validation("Event is revoked.");
-        }
+        if (enabled && eligible == 0) throw AgentCoreErrors.Forbidden("No enabled trigger is eligible. Repair the policy/source or save as disabled.");
+        var retainingDisabledModel = !enabled && current is not null && current.ModelOverrideCatalogKey == modelKey && current.ModelOverrideReasoningEffort == effort;
+        if (!retainingDisabledModel) ExecutionModelPolicy.RequireSelectable(catalog, modelKey, effort);
         if (current is null && presetId is not null)
         {
             var template = AutomationPresetCatalog.Templates.SingleOrDefault(p => p.PresetId == presetId && p.PresetVersion == presetVersion)
@@ -68,9 +94,9 @@ public sealed class AdminAutomationAuthoringService(ITriggerStore store, Experie
             provenance = new(provenance?.AuthorizationOrigin ?? TriggerAuthorizationOrigin.AdminOwner, provenance?.SourceSessionId,
                 provenance?.SourceEventId, now, now, template.PresetId, template.PresetVersion);
         }
-        var changed = current is null || !current.Trigger.SemanticEquals(trigger) || current.Status != (enabled ? AutomationStatus.Active : AutomationStatus.Disabled);
+        var changed = current is null || !current.Triggers.SequenceEqual(children) || current.Status != (enabled ? AutomationStatus.Active : AutomationStatus.Disabled);
         var proposed = new Automation(current?.AutomationId ?? ids.NewId(), owner,
-            enabled ? AutomationStatus.Active : AutomationStatus.Disabled, instructions, trigger,
+            enabled ? AutomationStatus.Active : AutomationStatus.Disabled, instructions, children,
             changed ? next : current!.NextOccurrenceAtUtc, current?.ExpiresAtUtc, current?.OccurrenceCount ?? 0, expectedRevision + 1,
             (current?.TriggerRevision ?? 0) + 1,
             current?.Provenance.WithUpdated(now) ?? provenance ?? new(TriggerAuthorizationOrigin.AdminOwner, null, null, now, now), null, modelKey, effort,
@@ -97,14 +123,8 @@ public sealed class AdminAutomationAuthoringService(ITriggerStore store, Experie
         var automation = await store.GetAsync(owner, automationId, ct) ?? throw AgentCoreErrors.NotFound("Automation was not found.");
         if (automation.Revision != revision) throw AgentCoreErrors.Conflict("Automation revision is stale.");
         if (automation.Status != AutomationStatus.Active) throw AgentCoreErrors.Validation("Enable Automation before running it.");
-        var source = AutomationRules.Source(automation.Trigger);
-        var decision = await guard.EvaluateAsync(owner, source, ct);
-        if (decision.Kind != TriggerAdmissionDecisionKind.Allow) throw AgentCoreErrors.Forbidden(decision.Reason ?? "Automation is disabled by policy.");
-        if (automation.Trigger is EventTrigger reaction)
-        {
-            var ingress = await events.GetAsync(reaction.EventId, ct) ?? throw AgentCoreErrors.NotFound("Event was not found.");
-            if (ingress.Status != WebhookEventStatus.Active) throw AgentCoreErrors.Validation("Event is revoked.");
-        }
+        var decision = await guard.EvaluateAsync(owner, TriggerSourceKind.ManualInvocation, ct);
+        if (decision.Kind != TriggerAdmissionDecisionKind.Allow) throw AgentCoreErrors.Forbidden(decision.Reason ?? "Manual Automation execution is disabled by policy.");
         var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
         var model = automation.ExecutionTarget.SessionId is { } targetId
             ? new ExecutionModelDecision(AutomationDestinationPolicy.Pin(await AutomationDestinationPolicy.RequireAsync(

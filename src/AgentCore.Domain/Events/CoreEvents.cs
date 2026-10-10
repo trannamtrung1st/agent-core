@@ -16,6 +16,7 @@ public enum EventMatchStatus { Pending, Matched, Filtered, FilterError, PolicySk
 public sealed record EventSubscriptionSnapshot(Guid AutomationId, TriggerOwner Owner, long TriggerRevision,
     string? FilterExpression, EventDispatch Dispatch, TriggerSourceKind SourceKind = TriggerSourceKind.CoreEvent, Guid? ResourceId = null)
 {
+    public Guid TriggerId { get; init; } = AutomationId;
     public string ExpressionVersion { get; init; } = "js-expression-v1";
     public string FilterHash => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(FilterExpression ?? ""))).ToLowerInvariant();
 }

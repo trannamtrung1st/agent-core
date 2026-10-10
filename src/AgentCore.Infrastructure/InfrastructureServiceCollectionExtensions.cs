@@ -143,6 +143,7 @@ public static class InfrastructureServiceCollectionExtensions
                 new SqliteDefinitionDraftEvaluationStore(
                     provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                     provider.GetRequiredService<IIdGenerator>()));
+            services.AddSingleton<IBrowserPrivacyStore, SqliteBrowserPrivacyStore>();
             services.AddSingleton<IAdminEventStore>(provider => new SqliteAdminEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>()));
@@ -207,6 +208,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<InMemoryAgentDefinitionResourceAdminStore>();
             services.TryAddSingleton<IAgentDefinitionResourceAdminStore>(provider =>
                 provider.GetRequiredService<InMemoryAgentDefinitionResourceAdminStore>());
+            services.TryAddSingleton<IBrowserPrivacyStore, InMemoryBrowserPrivacyStore>();
             services.TryAddSingleton<InMemoryAdminEventStore>();
             services.TryAddSingleton<IAdminEventStore>(provider =>
                 provider.GetRequiredService<InMemoryAdminEventStore>());
@@ -360,6 +362,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<CoreEventDispatcher>();
         services.TryAddSingleton<AutomationPresetCatalog>();
         services.TryAddSingleton<WebhookEventService>();
+        services.TryAddSingleton<UnifiedEventCatalog>();
         services.TryAddSingleton<TriggerOccurrenceRouter>();
         services.TryAddSingleton<IAgentInstanceService>(provider => new AgentInstanceService(
             provider.GetRequiredService<IAgentInstanceStore>(),
@@ -372,15 +375,19 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
         EmailProviderRegistration.AddEmail(services, profile);
+        services.TryAddSingleton(browser.PrivacyAuthority());
+        services.TryAddSingleton<BrowserPrivacyService>();
         services.TryAddSingleton(sp => new NativePlaywrightBrowser(
             sp.GetRequiredService<BrowserOptions>(),
-            sp.GetService<ILoggerFactory>(), timeProvider: sp.GetRequiredService<TimeProvider>()));
+            sp.GetService<ILoggerFactory>(), timeProvider: sp.GetRequiredService<TimeProvider>(),
+            privacy: sp.GetRequiredService<BrowserPrivacyService>()));
         services.TryAddSingleton<IBrowser>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.TryAddSingleton<IBrowserLease>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.AddHostedService(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.TryAddSingleton<AgentInstanceSkillService>();
         services.TryAddSingleton<InstanceAutomationPolicy>();
         services.TryAddSingleton<AgentInstanceSettingsService>();
+        services.TryAddSingleton<InheritedDefinitionResourceCatalog>();
         services.TryAddSingleton<AgentInstanceResourceService>();
         services.TryAddSingleton<AgentCore.Application.Execution.AgentRunConfigurationResolver>();
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
@@ -410,7 +417,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<CredentialService>(),
             provider.GetRequiredService<AdminAutomationAuthoringService>(),
             provider.GetRequiredService<AgentInstanceSkillService>(),
-            provider.GetRequiredService<ICoreEventStore>()));
+            provider.GetRequiredService<ICoreEventStore>(),
+            provider.GetRequiredService<InheritedDefinitionResourceCatalog>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

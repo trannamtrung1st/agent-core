@@ -70,6 +70,8 @@ test("Admin target and completion controls round-trip and reject a missing exact
   await expect(drawer.getByRole("button", { name: "Create automation", exact: true })).toBeDisabled();
   await drawer.getByRole("combobox", { name: "Destination conversation", exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: parent.slice(0, 8) }).click();
+  await expect(drawer.getByRole("switch", { name: "Enable automation", exact: true })).not.toBeChecked();
+  await drawer.getByRole("switch", { name: "Enable automation", exact: true }).click();
   await drawer.getByRole("button", { name: "Create automation", exact: true }).click();
   await expect(drawer).toBeHidden();
   const source = page.getByRole("button", { name: "View automation: Exact conversation greeting", exact: true });
@@ -95,6 +97,8 @@ test("Admin target and completion controls round-trip and reject a missing exact
   await expect(background.getByRole("button", { name: "Create automation", exact: true })).toBeDisabled();
   await background.getByRole("combobox", { name: "Report destination", exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: parent.slice(0, 8) }).click();
+  await expect(background.getByRole("switch", { name: "Enable automation", exact: true })).not.toBeChecked();
+  await background.getByRole("switch", { name: "Enable automation", exact: true }).click();
   await background.getByRole("button", { name: "Create automation", exact: true }).click();
   await expect(background).toBeHidden();
   const details = page.getByRole("region", { name: "Automation details", exact: true }).filter({ hasText: "synthetic-automation-attention" });

@@ -1,6 +1,7 @@
 import { backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
+import { draftEditorSection, openDefinitionSettings } from "./admin-draft-editor-helpers";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
@@ -31,7 +32,7 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
   await expect(page.getByTestId("diagnostic-id")).toHaveText(diagnosticId);
 });
 
-test("invalid tool strategy is bounded and its diagnostic survives reload", async ({ page }) => {
+test("repeated invalid tools are bounded and the finalization diagnostic survives reload", async ({ page }) => {
   await page.goto("/");
   await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
@@ -40,16 +41,16 @@ test("invalid tool strategy is bounded and its diagnostic survives reload", asyn
   const row = page.locator(".chat-message-assistant").last();
   await expect(row.getByText("Failed")).toBeVisible({ timeout: 15_000 });
   await row.getByRole("button", { name: "Failed — show error details" }).click();
-  await expect(page.getByTestId("diagnostic-reason")).toHaveText("invalidToolStrategy");
+  await expect(page.getByTestId("diagnostic-reason")).toHaveText("finalizationToolCall");
   const id = await page.getByTestId("diagnostic-id").innerText();
   await page.getByRole("button", { name: "Copy details" }).click();
   await expect(page.getByRole("status")).toHaveText("Copied");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Reason: invalidToolStrategy");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Reason: finalizationToolCall");
   await page.reload();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.locator(".chat-message-assistant").last().getByRole("button", { name: "Failed — show error details" }).click();
   await expect(page.getByTestId("diagnostic-id")).toHaveText(id);
-  await expect(page.getByTestId("diagnostic-reason")).toHaveText("invalidToolStrategy");
+  await expect(page.getByTestId("diagnostic-reason")).toHaveText("finalizationToolCall");
 });
 
 for (const replyFails of [false, true]) {
@@ -167,6 +168,7 @@ async function openNewDraftForm(page: import("@playwright/test").Page, definitio
   await page.getByRole("button", { name: "Create draft" }).click();
   await expect(page.getByRole("dialog", { name: "New definition" })).toBeHidden({ timeout: 15_000 });
   await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
+  await openDefinitionSettings(draftEditorSection(page), "Model defaults");
 }
 
 test("authoring options warning keeps a server diagnostic id", async ({ page }) => {
@@ -184,8 +186,8 @@ test("authoring options warning keeps a server diagnostic id", async ({ page }) 
     });
   });
   await openNewDraftForm(page, definitionId);
-  const form = page.locator("section[aria-label='Model and providers']");
-  await expect(form.getByText("Authoring options could not be loaded.")).toBeVisible({ timeout: 15_000 });
+  const form = draftEditorSection(page);
+  await expect(form.getByText(/^Authoring options could not be loaded\./)).toBeVisible({ timeout: 15_000 });
   await form.getByRole("button", { name: "Error details" }).click();
   await expect(page.getByTestId("diagnostic-id")).toHaveText("019944af-0008-7000-8000-0000000000e2");
 });
@@ -204,7 +206,7 @@ test("authoring options warning hides details when the response has no id", asyn
     });
   });
   await openNewDraftForm(page, definitionId);
-  const form = page.locator("section[aria-label='Model and providers']");
-  await expect(form.getByText("Authoring options could not be loaded.")).toBeVisible({ timeout: 15_000 });
+  const form = draftEditorSection(page);
+  await expect(form.getByText(/^Authoring options could not be loaded\./)).toBeVisible({ timeout: 15_000 });
   await expect(form.getByRole("button", { name: "Error details" })).toHaveCount(0);
 });

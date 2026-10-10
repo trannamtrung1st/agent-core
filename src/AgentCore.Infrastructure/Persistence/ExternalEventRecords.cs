@@ -25,6 +25,7 @@ public sealed class ExternalEventRecord
 
 public sealed class ExternalEventDeliveryRecord
 {
+    public string TriggerId { get; set; } = "";
     public string? SnapshotJson { get; set; }
     public string? DecisionJson { get; set; }
     public string EventId { get; set; } = "";

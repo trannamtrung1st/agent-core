@@ -963,6 +963,23 @@ export const unbindCredential = (id: string, b: CredentialBinding, instanceRevis
 export const resetBrowserProfile = (id: string, expectedInstanceRevision: number) =>
   credentialRequest<void>(`agent-instances/${id}/browser-profile/reset`, "POST", { expectedInstanceRevision, confirm: true });
 
+export type BrowserPrivacyMode = "Protected" | "Unmasked" | "Disabled";
+export type BrowserScreenshotPolicy = { mode: BrowserPrivacyMode; unmaskedOrigins: string[]; trustedGraphicsOrigins: string[]; revision: number };
+export type BrowserPrivacy = {
+  saved: BrowserScreenshotPolicy; effective: BrowserScreenshotPolicy;
+  deployment: { captureAllowed: boolean; unmaskedAllowed: boolean; unmaskedOriginCeiling: string[]; graphicsOriginCeiling: string[] };
+  restartRequired: boolean; activation: string; durable: boolean; constrainedByDeployment: boolean;
+};
+export const getBrowserPrivacy = (signal?: AbortSignal) => browserPrivacyRequest("GET", undefined, signal);
+export const saveBrowserPrivacy = (input: Omit<BrowserScreenshotPolicy, "revision"> & { expectedRevision: number; acknowledgeExposure: boolean }, signal?: AbortSignal) =>
+  browserPrivacyRequest("PUT", input, signal);
+async function browserPrivacyRequest(method: string, input?: unknown, signal?: AbortSignal): Promise<BrowserPrivacy> {
+  const response = await ownerFetch("/api/v2/admin/browser/privacy", { method, signal,
+    ...(input ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) } : {}) });
+  if (!response.ok) throw await adminProblemMessage(response, "Unable to manage browser screenshot privacy.");
+  return response.json() as Promise<BrowserPrivacy>;
+}
+
 export type AdminWebhookEvent = {
   eventId: string; displayName: string; eventKey: string; status: string; revision: number;
   createdAt: string; updatedAt: string; subscriberCount: number; activeSubscriberCount: number; lastReceivedAt: string | null;
@@ -972,7 +989,7 @@ export type AdminWebhookEventDetails = {
   event: AdminWebhookEvent;
   subscribers: { automationId: string; name: string; agentInstanceId: string; status: string }[];
   signals: { receiptId: string; sourceEventId: string; receivedAt: string }[];
-  deliveries: { receiptId: string; sourceEventId: string; receivedAt: string; automationId: string; agentInstanceId: string; status: string }[];
+  deliveries: { triggerId?: string; receiptId: string; sourceEventId: string; receivedAt: string; automationId: string; agentInstanceId: string; status: string }[];
 };
 const eventResourcePath = "connections/events";
 export async function listWebhookEvents(): Promise<AdminWebhookEvent[]> {
@@ -1064,13 +1081,23 @@ export type ScheduleTiming = {
 export type EventDispatch = { mode: "everyMatch" | "coalesceLatest"; windowSeconds?: number | null };
 export type EventFilter = { filterExpression?: string | null; dispatch?: EventDispatch | null };
 export type AutomationTrigger = { kind: "schedule"; schedule: ScheduleTiming } | ({ kind: "event"; eventId: string } & EventFilter) | ({ kind: "coreEvent"; coreEventKey: string } & EventFilter);
+export type EventSourceReference = { kind: "builtin"; key: string } | { kind: "webhook"; eventId: string };
+export type AutomationChild = ({ kind: "schedule"; schedule: ScheduleTiming; source?: never } | ({ kind: "event"; source: EventSourceReference } & EventFilter)) & { triggerId: string; enabled: boolean; revision: number; eligible?: boolean | null; eligibilityReason?: string | null };
+export type EventCatalogEntry = { source: EventSourceReference; name: string; key: string; description: string; state: string;
+  schemaVersion: number; example: Record<string, unknown>; fieldSchema: Record<string, unknown>; webhook?: AdminWebhookEvent | null };
+export async function listEventCatalog(kind?: "builtin" | "webhook"): Promise<EventCatalogEntry[]> {
+  const response = await ownerFetch(`/api/v2/admin/connections/events/catalog${kind ? `?kind=${kind}` : ""}`);
+  if (!response.ok) throw new Error("Event catalog could not be loaded. Retry to refresh it.");
+  return response.json() as Promise<EventCatalogEntry[]>;
+}
+export const eventSourceKey = (source: EventSourceReference) => source.kind === "builtin" ? `builtin:${source.key}` : `webhook:${source.eventId}`;
 export type CoreEventType = { key: string; eligible: boolean; reason: string | null; example: Record<string, unknown> };
 export type AutomationPreset = { presetId: string; presetVersion: number; name: string; description: string; instructions: string; trigger: AutomationTrigger; eligible: boolean; prerequisites: string[] };
 export type FilterTestResult = { matched: boolean | null; status: "matched" | "notMatched" | "error"; code?: string | null };
-export type AutomationDraft = { presetId?: string | null; presetVersion?: number | null; requiresTools?: boolean; requiresVision?: boolean; executionTarget: AutomationTarget; completionDelivery: AutomationDelivery; expectedRevision: number; enabled: boolean; name: string; instructions: string; trigger: AutomationTrigger;
+export type AutomationDraft = { presetId?: string | null; presetVersion?: number | null; requiresTools?: boolean; requiresVision?: boolean; executionTarget: AutomationTarget; completionDelivery: AutomationDelivery; expectedRevision: number; enabled: boolean; name: string; instructions: string; triggers: AutomationChild[];
   modelKey: string | null; reasoningEffort: string | null };
 export type Automation = { presetId?: string | null; presetVersion?: number | null; requiresTools?: boolean; requiresVision?: boolean; executionTarget: AutomationTarget; completionDelivery: AutomationDelivery; suspensionReason?: string | null; automationId: string; revision: number; name: string; instructions: string; enabled: boolean; status: string;
-  trigger: AutomationTrigger; authorizationOrigin: string; sourceSessionId: string | null; sourceEventId: string | null;
+  triggers: AutomationChild[]; authorizationOrigin: string; sourceSessionId: string | null; sourceEventId: string | null;
   createdAt: string; nextRunAt: string | null; modelKey: string | null; reasoningEffort: string | null;
   effectiveModelKey: string | null; lastAgentRunId: string | null; executionStatus: string | null; outcome: string | null };
 export type AutomationPolicy = { allowOneShot: boolean; allowDaily: boolean; allowWeekly: boolean; allowFixedInterval: boolean;

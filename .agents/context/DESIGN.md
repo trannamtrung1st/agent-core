@@ -370,18 +370,6 @@ Shared Event authoring retains the established Admin drawer/footer and one-time 
 
 Instance Settings offers a direct AntD Customize button for inherited sections, then compact Save/Discard/Reset actions with section-specific accessible names. Discard exits an unsaved customization; Reset confirms clearing saved overrides and local edits. The shared 48rem form bound owns the two-column field grid (stacked below 768px), with bounded short controls, horizontal switch rows, full-width instructions/multi-value fields and per-field source/reset. Section headers disclose unsaved changes; full-replacement instruction guidance uses quiet secondary copy. Scoped resource collections retain quiet stable identity and written enablement status alongside compact switches. Resource inspection uses the shared Admin detail-label owner (12rem at desktop, stacked mobile), token16px drawer insets and content-width actions. These extend the existing Operate system without token changes.
 
-### Model reasoning presentation
-
-Reuse the existing Chat Model dropdown and Admin ExecutionModelFields composition. Preserve token-owned shell/control insets and mobile wrapping. All reasoning controls present supported intensity in `none → minimal → low → medium → high → xhigh → max` order through the shared utility; unknown/adaptive modes use discrete choices outside the slider. Slider value text names the visible effort. Model switching preserves supported effort and selects the new configured default only when needed. Catalog names/capabilities come from backend descriptors; unavailable saved model keys remain explicit. No automatic routing controls or extra model-tier badges.
-
-
-### Core Event preset and filter authoring
-
-The existing Instance Triggers drawer owns Custom/preset selection, a third Core Event trigger, optional expression, dispatch/window and read-only sample testing. Presets fill disabled editable drafts and explain prerequisites. Core types are Instance-owned built-in signals; Shared Events remain webhook resources in global Connections. Preserve shared Ant Design v6 model/reasoning controls, 640px/full-mobile drawer, footer reachability, focus return and stale-result invalidation. Test status uses aria-live and a stable accessible button label. Delivery diagnostics show safe status/code/revision with independent retry. Product behavior is owned by docs/13 and docs/14; this is presentation context only.
-
-Browser operational budgets reuse the existing Admin Effective configuration Browser provider Descriptions, responsive detail labels and natural wrapping. Keep units and scope beside values, and the host-restart applicability in the same section. These are effective-value disclosures, with no separate settings layout or custom controls. Behavior and defaults remain owned by docs/13 and docs/15.
-
-## Do's and Don'ts
 
 ### Do:
 - **Do** import `antd` in feature files; ConfigProvider uses `darkAlgorithm`. Keep Sider `theme="light"` so chat surfaces stay black.
@@ -425,3 +413,16 @@ Browser operational budgets reuse the existing Admin Effective configuration Bro
 - **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
 - **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
 - **Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`.
+
+
+
+### Model reasoning presentation
+
+Reuse the existing Chat Model dropdown and Admin ExecutionModelFields composition. Preserve token-owned shell/control insets and mobile wrapping. All reasoning controls present supported intensity in `none → minimal → low → medium → high → xhigh → max` order through the shared utility; unknown/adaptive modes use discrete choices outside the slider. Slider value text names the visible effort. Model switching preserves supported effort and selects the new configured default only when needed. Catalog names/capabilities come from backend descriptors; unavailable saved model keys remain explicit. No automatic routing controls or extra model-tier badges.
+
+
+### Core Event preset and filter authoring
+
+The existing Instance Automation drawer owns disabled Custom/preset drafts with Schedule or Events mode. Independent collapsible Event rows use stable identities, source type/key, current eligibility, filter/sample tests and dispatch; one grouped searchable picker discovers Built-in and Webhook definitions. Global Events shows safe code-owned Built-in definitions read-only alongside managed Webhooks; private activity stays Instance owned. Preserve separate unsaved mode branches and per-row samples, nested creation into the initiating row, shared Ant Design v6 controls, 640px/full-mobile drawer, reachable footer and focus return. Partial catalog failures retain successful definitions and draft state with retry. Product behavior is owned by docs/13 and docs/14; this is presentation context only.
+
+Browser operational budgets reuse the existing Admin Effective configuration Browser provider Descriptions, responsive detail labels and natural wrapping. Keep units and scope beside values, and the host-restart applicability in the same section. These are effective-value disclosures, with no separate settings layout or custom controls. Behavior and defaults remain owned by docs/13 and docs/15.

@@ -178,7 +178,14 @@ public sealed class ContinuityBoundaryTests
         await s.ExecuteRunsAsync(100);
         var item = (await s.GetRequiredService<IAgentRunStore>().GetAsync(new(instance.InstanceId, LocalUserProfile.Id), record.GenerationAgentRunId))!;
         Assert.Equal(mode == "prose" ? AgentRunStatus.WaitingToRetry : AgentRunStatus.Failed, item.Status);
-        Assert.Equal(mode == "prose" ? "completion-required" : "invalid-tool-strategy", item.Failure!.Code);
+        Assert.Equal(mode == "prose" ? "completion-required" : "provider-invalidresponse", item.Failure!.Code);
+        if (mode != "prose")
+        {
+            // The strategy stays blocked; an uncorrected model eventually violates
+            // the existing tool-free finalization boundary instead of disabling all tools.
+            Assert.Contains("invalid_tool_strategy_blocked", item.Checkpoint!.PayloadJson);
+            Assert.Equal(item.Admission.ExecutionBudget!.Profile.MaxSteps, item.Checkpoint.StepCount);
+        }
         Assert.Null((await s.GetRequiredService<IExperienceStore>().GetAsync(instance.InstanceId, record.ExperienceId))!.Content);
         Assert.Empty(await s.GetRequiredService<IExperienceStore>().PendingAsync(100));
         Assert.Equal(before, JsonSerializer.Serialize(await history.LoadMetadataAsync(source.SessionId)));
@@ -252,7 +259,7 @@ public sealed class ContinuityBoundaryTests
         var harness = s.GetRequiredService<HarnessManagementService>();
         instance = await harness.ConfigureAsync(id, instance.Revision, new(HarnessManagementMode.Assisted, [HarnessManagementScope.KnowledgeResources], [], []));
         var response = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{id}/automations", new {
-            expectedRevision = 0, enabled = true, name = "Review", instructions = "synthetic-automation-improve", executionTarget = new { kind = "backgroundSession" }, completionDelivery = new { kind = "none" }, trigger = new { kind = "schedule", schedule = new { kind = "fixedInterval", interval = 3600, anchorAtUtc = DateTimeOffset.UtcNow.AddHours(1).ToString("o") } }, origin = "UserTurn", ownerId = Guid.NewGuid() });
+            expectedRevision = 0, enabled = true, name = "Review", instructions = "synthetic-automation-improve", executionTarget = new { kind = "backgroundSession" }, completionDelivery = new { kind = "none" }, triggers = new[] { new { triggerId = Guid.NewGuid().ToString(), revision = 1, enabled = true, kind = "schedule", schedule = new { kind = "fixedInterval", interval = 3600, anchorAtUtc = DateTimeOffset.UtcNow.AddHours(1).ToString("o") } } }, origin = "UserTurn", ownerId = Guid.NewGuid() });
         response.EnsureSuccessStatusCode();
         var reg = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
         var automations = s.GetRequiredService<AdminAutomationAuthoringService>();

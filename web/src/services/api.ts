@@ -66,6 +66,7 @@ export type SessionResponse = {
 
 export type AgentRun = {
   configuration?: { definitionId: string; definitionVersion: number; instanceRevision: number; personaRevision: number; configurationHash: string; resources: { key: string; logicalPath: string; virtualPath: string; contentSha256: string; byteLength: number }[] } | null;
+  triggerOrigin?: { triggerRevision?: number | null; triggerId: string | null; kind: string; source: { kind: string; key?: string | null; eventId?: string | null } | null; summary: string } | null;
   budget?: { class: string; source: string; maxSteps: number; durationSeconds: number; perToolSeconds: number; stepsConsumed: number; activeExecutionMs: number; phase: string; terminationReason: string | null; cleanupStatus: string; closureConfirmed: boolean; closureRequested?: boolean | null; logoutRequested?: boolean | null; logoutVerified?: boolean; cleanupBlocked?: boolean } | null;
   agentRunId: string; sessionId: string; activationId: string; activationKind: string;
   status: string; revision: number; attemptCount: number; maxAttempts: number;

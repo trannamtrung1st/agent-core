@@ -16,6 +16,36 @@ internal sealed class BrowserEvidenceProgress
     private readonly HashSet<string> _searchEvidence = new(StringComparer.Ordinal);
 
     private readonly Dictionary<string, int> _blockedFailures = new(StringComparer.Ordinal);
+    private int _semanticMisses;
+    private bool _captureUnavailable;
+    private int _captures;
+    private string? _semanticPage;
+    private readonly HashSet<string> _unusableSnapshots = new(StringComparer.Ordinal);
+    private bool _coordinateUnavailable;
+    private int _unavailableCaptures;
+    private const string CoordinateInstruction = "The latest screenshot has coordinateEvidence=false. Do not call browser.mouse with that snapshotId. Use an already-authorized semantic observation/action or a bounded wait justified by the safe capture diagnostics. Avoid repeating ineffective captures without evidence of change. If independently requested, browser.close remains actionable even when logout fails; report logout verification and browser closure separately.";
+
+    internal string? SemanticRecoveryInstruction(IEnumerable<string> eligibleTools, bool vision, bool screenshotAvailable, int captureAllowance,
+        IEnumerable<string>? projectedTools = null)
+    {
+        if (DialogPending) return null;
+        if (_coordinateUnavailable) return CoordinateInstruction + (_unavailableCaptures >= 2
+            ? " Multiple captures have lacked coordinate authority; stop the equivalent visual recovery strategy and report a truthful partial result if no supported alternative can progress." : "");
+        if (_semanticMisses < 2) return null;
+        var tools = eligibleTools.ToHashSet(StringComparer.Ordinal);
+        var visual = vision && screenshotAvailable && !_captureUnavailable && _captures < captureAllowance
+            && tools.Contains(ToolCatalog.BrowserScreenshot);
+        var projected = projectedTools?.ToHashSet(StringComparer.Ordinal);
+        if (projected is not null && !projected.Contains(ToolCatalog.BrowserScreenshot) && !projected.Contains(ToolCatalog.CapabilitiesLoad))
+            visual = false;
+        return "Semantic targeting has not located this control. Avoid more equivalent guesses. "
+            + (visual ? (projected is not null && !projected.Contains(ToolCatalog.BrowserScreenshot)
+                ? "Use capabilities.load to load the already-authorized screenshot capability before visual inspection. " : "")
+                + "Inspect the rendered layout with an authorized screenshot, then prefer a freshly identified semantic target. "
+                + (tools.Contains(ToolCatalog.BrowserVisionMouse) ? "If necessary use fresh screenshot-bound coordinates. " : "Coordinate actions are unavailable. ")
+                : "Visual recovery is unavailable for the current model, authority or remaining capture allowance. Use different justified semantic evidence or report a truthful partial result. ")
+            + "target_missing is not evidence of a native dialog; use browser.dialog only after dialog_pending. Verify application outcomes independently.";
+    }
     internal bool DialogPending { get; private set; }
     internal bool DialogRecoveryExhausted => _blockedFailures.Values.Any(count => count >= 3);
     internal string? RepeatedDialogInstruction => _blockedFailures.Values.Any(count => count >= 2)
@@ -38,6 +68,13 @@ internal sealed class BrowserEvidenceProgress
 
     internal string? Refuse(ModelToolCall call, JsonElement args)
     {
+        // Explicitly context-only images cannot acquire authority by retrying mouse.
+        // Unknown IDs still go through native freshness validation; malformed calls keep normal validation.
+        if (call.Name == ToolCatalog.BrowserVisionMouse && args.ValueKind == JsonValueKind.Object
+            && _unusableSnapshots.Contains(Read(args, "snapshotId"))
+            && BrowserToolArguments.TryRequest(Guid.Empty, call.Name, args, out _, out _))
+            return JsonSerializer.Serialize(new { error = "coordinate_evidence_unavailable", message = CoordinateInstruction,
+                strategySuppressed = true, effectAttempted = false });
         // Malformed calls retain their existing validation/recovery path.
         if (!DialogPending || !call.Name.StartsWith("browser.", StringComparison.Ordinal)
             || !BrowserToolArguments.TryRequest(Guid.Empty, call.Name, args, out _, out _)) return null;
@@ -60,6 +97,28 @@ internal sealed class BrowserEvidenceProgress
             var root = receipt.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return;
             var error = Read(root, "error");
+            if (error == "target_missing" || call.Name == ToolCatalog.BrowserFind && error == "not_found" || call.Name == ToolCatalog.BrowserFind && error.Length == 0
+                && root.TryGetProperty("matches", out var matches) && matches.ValueKind == JsonValueKind.Array && matches.GetArrayLength() == 0)
+                _semanticMisses = Math.Min(3, _semanticMisses + 1);
+            else if (error.Length == 0)
+            {
+                if (call.Name is ToolCatalog.BrowserScreenshot)
+                {
+                    _captures++; _semanticMisses = 0;
+                    if (root.TryGetProperty("coordinateEvidence", out var coordinate) && coordinate.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                    {
+                        _coordinateUnavailable = !coordinate.GetBoolean();
+                        _unavailableCaptures = _coordinateUnavailable ? _unavailableCaptures + 1 : 0;
+                        if (_coordinateUnavailable && Read(root, "snapshotId") is { Length: > 0 } id) _unusableSnapshots.Add(id);
+                    }
+                }
+                else if (call.Name == ToolCatalog.BrowserFind || call.Name == ToolCatalog.BrowserNavigate || BrowserToolCatalog.IsInteraction(call.Name))
+                { _semanticMisses = 0; _coordinateUnavailable = false; _unavailableCaptures = 0; }
+                else if (TryFingerprint(json, out var page))
+                { if (_semanticPage is not null && _semanticPage != page) _semanticMisses = 0; _semanticPage = page; }
+            }
+            if (call.Name == ToolCatalog.BrowserScreenshot && error is "capture_limit" or "forbidden" or "unsupported_operation" or "provider_unavailable")
+                _captureUnavailable = true;
             using var arguments = JsonDocument.Parse(string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson);
             var operation = arguments.RootElement.ValueKind == JsonValueKind.Object ? Read(arguments.RootElement, "operation") : "";
             if (error == "dialog_pending")

@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace AgentCore.Contracts.Http;
 
-public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion);
+public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion, string? BuildVersion = null);
 
 public sealed record CreateSessionRequest(
     Guid? AgentInstanceId,

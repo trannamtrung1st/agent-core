@@ -99,6 +99,7 @@ internal static class AdminEndpoints
     {
         var group = app.MapGroup("/api/v2/admin").AddEndpointFilter<OwnerCapabilityFilter>();
         group.MapCredentials();
+        group.MapBrowserPrivacy();
         HarnessManagementEndpoints.Map(group);
         AgentInstanceSkillEndpoints.Map(group);
         AgentInstanceSettingsEndpoints.Map(group);

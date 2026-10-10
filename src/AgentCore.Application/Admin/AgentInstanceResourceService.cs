@@ -13,7 +13,7 @@ public sealed record InstanceResourceView(string Key, string Origin, string Logi
 public sealed record InstanceResourceCatalog(long InstanceRevision, string DefinitionId, int DefinitionVersion, IReadOnlyList<InstanceResourceView> Resources);
 
 public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
-    IAgentDefinitionResourceAdminStore publications, IDefinitionResourceContentStore content, IIdGenerator ids, TimeProvider time)
+    InheritedDefinitionResourceCatalog inheritedResources, IDefinitionResourceContentStore content, IIdGenerator ids, TimeProvider time)
 {
     public async ValueTask<InstanceResourceCatalog> ListAsync(Guid id, CancellationToken ct = default)
     {
@@ -21,7 +21,7 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
         var definition = await DefinitionAsync(owner, ct);
         var local = await instances.ReadResourcesAsync(id, ct);
         var skills = await instances.ReadSkillsAsync(id, ct);
-        var published = await publications.ListPublicationResourcesAsync(definition.Id, definition.Version, ct);
+        var published = await inheritedResources.ListAsync(definition, ct);
         if ((await RequireAsync(id, ct)).Revision != owner.Revision) throw AgentCoreErrors.Conflict("Instance changed during the read. Reload resources.");
         return new(owner.Revision, definition.Id, definition.Version, Views(definition, published, local, skills));
     }
@@ -43,7 +43,8 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
         var old = resourceId is Guid existing ? snapshot.InstanceResources.SingleOrDefault(r => r.ResourceId == existing)
             ?? throw AgentCoreErrors.NotFound("Instance resource was not found.") : null;
         if (old?.Revision != expectedResourceRevision) throw AgentCoreErrors.Conflict("Resource revision is stale.");
-        if (!Enum.IsDefined(kind)) throw AgentCoreErrors.Validation("Resource kind is invalid.");
+        if (!Enum.IsDefined(kind) || kind == AgentDefinitionResourceKind.EvalFixture)
+            throw AgentCoreErrors.Validation("Instance resources support Knowledge, Reference, Template and StaticAsset; evaluation fixtures belong to Definitions.");
         path = DefinitionResourcePolicies.NormalizeLogicalPath(path);
         mediaType = DefinitionResourcePolicies.NormalizeMediaType(mediaType);
         DefinitionResourcePolicies.ValidateContentSize(bytes.LongLength);
@@ -66,7 +67,7 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
         var owner = await WritableAsync(id, expectedInstanceRevision, ct);
         var parsed = ParseKey(key);
         if (parsed.Origin != "definition") throw AgentCoreErrors.Validation("Copy requires a Definition resource.");
-        var resource = (await publications.ListPublicationResourcesAsync(owner.DefinitionId, owner.ActiveVersion, ct))
+        var resource = (await inheritedResources.ListAsync(await DefinitionAsync(owner, ct), ct))
             .SingleOrDefault(r => r.ResourceId == parsed.Id) ?? throw AgentCoreErrors.NotFound("Source resource was not found.");
         var bytes = await content.ReadAsync(resource.ContentSha256, ct) ?? throw AgentCoreErrors.Persistence("Source bytes are unavailable.");
         Verify(resource.ContentSha256, resource.ByteLength, bytes);

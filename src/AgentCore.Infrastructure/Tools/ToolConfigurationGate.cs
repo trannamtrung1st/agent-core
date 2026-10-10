@@ -31,6 +31,8 @@ public sealed class ToolConfigurationGate(
                 && browserSession is { IsAvailable: true }
                 && BrowserToolCatalog.TryGet(toolName, out var metadata)
                 && browserSession.Provider.Supports(metadata.Feature)
+                && (toolName is not (ToolCatalog.BrowserScreenshot or ToolCatalog.BrowserVisionMouse)
+                    || browserSession.HostPolicy.ScreenshotAvailable)
                 && browserSession is IBrowserRuntimeReadiness { IsRuntimeReady: true },
             _ => true
         };

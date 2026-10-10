@@ -37,7 +37,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
     AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
     AgentCore.Application.Credentials.CredentialService? credentials = null,
-    AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null)
+    AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -84,7 +84,7 @@ public sealed partial class SessionToolExecutor(
     public async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct)
     {
         if (_agentInstances is not null && _agentDefinitions is not null && definitionResources is not null)
-            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources).ResolveAsync(session.AgentInstanceId, ct);
+            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources).ResolveAsync(session.AgentInstanceId, ct);
         // Isolated fixtures can supply their immutable Definition directly. Production wires all stores.
         var owner = _agentInstances is null ? null : await _agentInstances.FindAsync(session.AgentInstanceId, ct);
         return new(new(session.Definition, 0, session.PinnedPersonaRevision ?? 0, []), session.PinnedPersona ?? session.Definition.Identity,
@@ -228,22 +228,24 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("approval_required", "Tool execution requires explicit approval."));
         }
 
+        var payload = ToolArgumentPayload.Normalize(call.ArgumentsJson,
+            ToolRegistry.TryGet(call.Name, out var descriptor) ? descriptor.ModelDefinition : null);
         JsonElement args;
         try
         {
             if (string.Equals(call.Name, ToolCatalog.BrowserClose, StringComparison.Ordinal))
             {
-                if (!BrowserToolArguments.TryValidateClose(call.ArgumentsJson, out var closeError))
+                if (!BrowserToolArguments.TryValidateClose(payload, out var closeError))
                 {
                     return TextResult(closeError);
                 }
 
-                args = JsonSerializer.Deserialize<JsonElement>(call.ArgumentsJson, JsonOptions);
+                args = JsonSerializer.Deserialize<JsonElement>(payload, JsonOptions);
             }
             else
             {
                 args = JsonSerializer.Deserialize<JsonElement>(
-                    string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson,
+                    payload,
                     JsonOptions);
                 if (args.ValueKind != JsonValueKind.Object)
                 {
@@ -375,7 +377,7 @@ public sealed partial class SessionToolExecutor(
                 if (call.Name == ToolCatalog.AutomationRun)
                     return TextResult(JsonSerializer.Serialize(new { occurrenceId = (await automationAuthoring.RunNowAsync(owner.AgentInstanceId, automationId, revision, cancellationToken)).OccurrenceId }));
                 return TextResult(TriggerScheduleCommands.RegistrationJson(await automationAuthoring.SaveAsync(owner.AgentInstanceId, automationId, revision, false,
-                    current.Name, current.Instructions, current.Trigger, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort, cancellationToken)));
+                    current.Name, current.Instructions, current.Triggers, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort, cancellationToken)));
             }
             if (call.Name == AgentCore.Application.Experience.ExperienceService.RecordTool)
             {

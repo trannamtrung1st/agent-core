@@ -25,7 +25,7 @@ internal sealed class InvalidToolCallRecovery
         }
     }
 
-    internal bool Exhausted => _attempts.Values.Any(count => count >= 4);
+    internal bool HasBlockedStrategies => _attempts.Values.Any(count => count >= 2);
 
     internal string? Refuse(ModelToolCall call)
     {

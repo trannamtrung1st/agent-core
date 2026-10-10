@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { applyCandidateJson, candidateForPersistence, candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -691,11 +691,22 @@ describe("definition candidate editor", () => {
   it("keeps dirty edits across views and does not save invalid JSON", async () => {
     mockDraft();
     await openDraft();
+    // Cache the visible action/nav controls rather than rescanning retained form trees.
+    const editor = document.querySelector(".admin-draft-editor")!;
+    const actions = within(editor.querySelector(".admin-draft-actions")! as HTMLElement);
+    const views = within(editor.querySelector(".admin-draft-view-switch")! as HTMLElement);
+    const tabs = within(editor.querySelector(".admin-draft-tabs > .ant-tabs-nav")! as HTMLElement);
+    const jsonView = views.getByRole("radio", { name: "Advanced JSON" });
+    const formView = views.getByRole("radio", { name: "Form" });
+    const save = actions.getByRole("button", { name: "Save draft" });
+    const publish = actions.getByRole("button", { name: "Publish…" });
+    const capabilities = tabs.getByRole("tab", { name: "Capabilities" });
+    const resources = tabs.getByRole("tab", { name: "Skills & resources" });
+    const identity = tabs.getByRole("tab", { name: "Identity & version" });
 
     setText("System instructions", "Unsaved instruction edit");
-    fireEvent.click(screen.getByRole("radio", { name: "Advanced JSON" }));
+    fireEvent.click(jsonView);
     const json = screen.getByLabelText("Advanced JSON", { selector: "textarea" }) as HTMLTextAreaElement;
-    const save = screen.getByRole("button", { name: "Save draft" });
     expect(screen.getByText("Unsaved changes — save before using Test & Publish.")).toBeInTheDocument();
     expect(json.value).toContain(
       "Unsaved instruction edit"
@@ -705,25 +716,25 @@ describe("definition candidate editor", () => {
     expect(screen.getByText("Advanced JSON is invalid")).toBeInTheDocument();
     expect(save).toBeDisabled();
     await act(async () => { fireEvent.click(save); });
-    fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
+    fireEvent.click(publish);
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
     expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("radio", { name: "Form" }));
+    fireEvent.click(formView);
     expect(screen.getByLabelText("Advanced JSON", { selector: "textarea" })).toBeInTheDocument();
     // Visited tab content can remain mounted. Check the labeled field's visibility
     // directly instead of scanning every cached control's accessible role.
     const instructions = screen.queryByLabelText("System instructions", { selector: "textarea" });
     if (instructions) expect(instructions).not.toBeVisible();
 
-    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Capabilities" })); });
+    await act(async () => { fireEvent.click(capabilities); });
     expect(screen.getByText(/Fix Advanced JSON on Identity & version before changing capabilities/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add knowledge source" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Add knowledge source" }));
 
-    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Skills & resources" })); });
+    await act(async () => { fireEvent.click(resources); });
     await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Resources" })); });
-    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: "Identity & version" })); });
+    await act(async () => { fireEvent.click(identity); });
     expect(screen.getByLabelText("Advanced JSON", { selector: "textarea" })).toHaveValue("{ ");
     expect(save).toBeInTheDocument();
     expect(save).toBeDisabled();

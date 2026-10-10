@@ -92,7 +92,7 @@ public sealed class ContinuationCapabilityProviderTests
     }
 
     [Fact]
-    public async Task Malformed_or_replayed_arguments_stay_normalized_and_are_rejected()
+    public async Task Malformed_and_replayed_arguments_are_rejected_while_explicit_object_arguments_are_preserved()
     {
         var body =
             "data: {\"choices\":[{\"delta\":{\"tool_calls\":[" +
@@ -133,7 +133,11 @@ public sealed class ContinuationCapabilityProviderTests
         Assert.True(ApplicationMessageAdmission.TryCreateEffectKey(executionId, calls[2].Id, out var replayKey));
         Assert.Equal(firstKey, replayKey);
 
-        Assert.Equal(string.Empty, calls.Single(call => call.Id == "obj-1").ArgumentsJson);
+        var objectArguments = calls.Single(call => call.Id == "obj-1").ArgumentsJson;
+        Assert.Equal("""{"ids":["order.lookup"]}""", objectArguments);
+        using var preserved = JsonDocument.Parse(objectArguments);
+        Assert.True(SkillLoadAdmission.TryParseIds(preserved.RootElement, out var objectIds, out _));
+        Assert.Equal(new[] { "order.lookup" }, objectIds);
         Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(events[^1]).Reason);
     }
 

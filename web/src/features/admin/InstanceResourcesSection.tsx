@@ -10,7 +10,7 @@ import { ResourceFilePicker, ResourceImportPreview } from './ResourceImportField
 import { isTextualResource, RESOURCE_FILE_HELP, RESOURCE_KINDS, createPreviewItem, resourceBatchLimitProblem, resourceMediaType, resourcePreviewProblem, type ResourcePreviewItem } from './resourcePreview';
 import { describeAdminError } from './adminErrors';
 import { listInstanceResources, copyInstanceResource, uploadInstanceResource, toggleInstanceResource, deleteInstanceResource, downloadInstanceResource, readInstanceResourceFile, type InstanceResource, type ResourceCatalog } from '../../services/instanceConfiguration';
-const kinds = [{ value: 1, label: 'Knowledge' }, { value: 2, label: 'Reference' }, { value: 3, label: 'Template' }, { value: 4, label: 'Static asset' }, { value: 5, label: 'Evaluation fixture' }];
+const kinds = [{ value: 1, label: 'Knowledge' }, { value: 2, label: 'Reference' }, { value: 3, label: 'Template' }, { value: 4, label: 'Static asset' }];
 type Editor = { resource: InstanceResource | null; logicalPath: string; kind: number; enabled: boolean; file: File | null; items: ResourcePreviewItem[]; readOnly: boolean };
 export function InstanceResourcesSection({ instanceId, archived, active = true, onUpdated }: { instanceId: string; archived: boolean; active?: boolean; onUpdated: () => void }) {
   const detailLayout = useAdminDetailLayout(); const { token } = theme.useToken(); const { modal } = App.useApp(); const compact = !Grid.useBreakpoint().md;

@@ -93,6 +93,7 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
         { key: "closure", label: "Browser closure", children: `${run.budget.closureRequested == null ? 'Request not recorded' : run.budget.closureRequested ? 'Requested' : 'Not requested'} · ${run.budget.closureConfirmed ? 'Confirmed' : 'Unverified'}` },
         { key: "cleanupBlocked", label: "Cleanup blocker", children: run.budget.cleanupBlocked ? 'Unresolved browser failure; see result evidence.' : 'None recorded' }
       ] : []),
+      ...(run.triggerOrigin ? [{ key: "trigger", label: "Trigger", children: <Flex vertical gap={token.paddingXS}><Typography.Text>{run.triggerOrigin.summary}</Typography.Text>{run.triggerOrigin.source ? <Typography.Link href={`/admin/connections/events?${run.triggerOrigin.source.kind === "builtin" ? `builtin=${encodeURIComponent(run.triggerOrigin.source.key ?? "")}` : `event=${run.triggerOrigin.source.eventId}`}`}>View Event definition</Typography.Link> : null}{run.triggerOrigin.triggerId ? <Typography.Text type="secondary">Subscription {run.triggerOrigin.triggerId}{run.triggerOrigin.triggerRevision ? ` · revision ${run.triggerOrigin.triggerRevision}` : ""}</Typography.Text> : null}</Flex> }] : []),
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },
       { key: "updated", label: "Updated", children: <time dateTime={run.updatedAt}>{formatChatTime(run.updatedAt) ?? "Unknown time"}</time> }
     ]} />

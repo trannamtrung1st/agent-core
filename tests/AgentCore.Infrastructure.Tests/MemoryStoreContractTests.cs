@@ -17,12 +17,11 @@ public sealed class MemoryStoreContractTests
     [Fact]
     public async Task Completion_time_migration_preserves_historical_entries_without_inventing_a_time()
     {
-        await using var sqlite = await SqliteAsync();
         var legacy = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Historical reply");
         var snapshot = First() with { Entries = [legacy] };
         // Seed the historical schema directly: scoped owned data deliberately forbids destructive downgrade.
-        var path = Path.Combine(Path.GetTempPath(), $"completion-migration-{Guid.NewGuid():N}.db");
-        var factory = new HistoricalFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        var historicalPath = Path.Combine(Path.GetTempPath(), $"completion-migration-{Guid.NewGuid():N}.db");
+        var factory = new HistoricalFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={historicalPath}").Options);
         await MigrationSessionSeed.CopyPersistedSessionAsync(factory, snapshot, "20261008171951_ArtifactAgentRunOwnership");
         var store = new SqliteMemoryStore(factory, TimeProvider.System);
         await store.EnsureCreatedAsync();

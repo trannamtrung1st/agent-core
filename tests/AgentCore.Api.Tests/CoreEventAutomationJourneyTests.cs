@@ -33,7 +33,7 @@ public sealed class CoreEventAutomationJourneyTests
             var template = AutomationPresetCatalog.Templates.Single(p => p.PresetId == "review-recent-work");
             var path = $"/api/v2/admin/agent-instances/{instanceId}/automations";
             var response = await client.PostAsJsonAsync(path, new AutomationRequest(0, true, template.Name, template.Instructions,
-                new("coreEvent", CoreEventKey: template.CoreEventKey, FilterExpression: template.FilterExpression, Dispatch: new("coalesceLatest", 60)),
+                new AutomationTriggerDto("coreEvent", CoreEventKey: template.CoreEventKey, FilterExpression: template.FilterExpression, Dispatch: new("coalesceLatest", 60)),
                 ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"), RequiresTools: true, PresetId: template.PresetId, PresetVersion: 1));
             response.EnsureSuccessStatusCode();
             var automation = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
@@ -104,7 +104,7 @@ public sealed class CoreEventAutomationJourneyTests
         var source = (await create.Content.ReadFromJsonAsync<AdminWebhookEventCredentialResponse>())!;
         var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
         foreach (var (name, filter, dispatch) in new[] { ("Match", "event.data.total >= 100", "everyMatch"), ("Skip", "event.data.total < 100", "everyMatch"), ("Batch", "true", "coalesceLatest") })
-            (await client.PostAsJsonAsync(path, new AutomationRequest(0, true, name, "Inspect the order", new("event", EventId: source.EventId, FilterExpression: filter, Dispatch: new(dispatch, dispatch == "coalesceLatest" ? 60 : null)), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")))).EnsureSuccessStatusCode();
+            (await client.PostAsJsonAsync(path, new AutomationRequest(0, true, name, "Inspect the order", new AutomationTriggerDto("event", EventId: source.EventId, FilterExpression: filter, Dispatch: new(dispatch, dispatch == "coalesceLatest" ? 60 : null)), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")))).EnsureSuccessStatusCode();
         var ingress = services.GetRequiredService<ExternalEventIngress>();
         var payload = System.Text.Encoding.UTF8.GetBytes("{\"eventId\":\"order-1\",\"data\":{\"total\":150,\"agentInstanceId\":\"spoof\"}}");
         Assert.Equal(ExternalEventIngressKind.Admitted, (await ingress.AdmitAsync(source.EventKey, source.Token, payload)).Kind);
@@ -140,7 +140,7 @@ public sealed class CoreEventAutomationJourneyTests
             using var client = TestOwnerCapability.CreateOwnerClient(host);
             string PathFor(Guid id) => $"/api/v2/admin/agent-instances/{id}/automations";
             AutomationRequest Draft(string name, string filter) => new(0, true, name, "Inspect state; NoAction if no useful work.",
-                new("coreEvent", CoreEventKey: "instance.config_changed", FilterExpression: filter), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
+                new AutomationTriggerDto("coreEvent", CoreEventKey: "instance.config_changed", FilterExpression: filter), ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
             var yesResponse = await client.PostAsJsonAsync(PathFor(a.InstanceId), Draft("Match", "event.data.revision >= 2")); yesResponse.EnsureSuccessStatusCode();
             var yes = (await yesResponse.Content.ReadFromJsonAsync<AutomationResponse>())!;
             (await client.PostAsJsonAsync(PathFor(a.InstanceId), Draft("Skip", "false"))).EnsureSuccessStatusCode();
@@ -156,8 +156,8 @@ public sealed class CoreEventAutomationJourneyTests
             // Pin before an edit; the saved false expression must apply only to future snapshots.
             var triggers = s.GetRequiredService<ITriggerStore>();
             var registrations = await triggers.ListAsync(receipt.Event.Owner, null);
-            await events.SnapshotAsync(receipt.Event.EventId, registrations.Select(r => new AgentCore.Domain.Events.EventSubscriptionSnapshot(r.AutomationId, r.Owner, r.TriggerRevision, ((AgentCore.Domain.Triggers.CoreEventTrigger)r.Trigger).FilterExpression, new())).ToArray());
-            var edit = Draft("Match", "false") with { ExpectedRevision = yes.Revision };
+            await events.SnapshotAsync(receipt.Event.EventId, registrations.Select(r => new AgentCore.Domain.Events.EventSubscriptionSnapshot(r.AutomationId, r.Owner, r.TriggerRevision, ((AgentCore.Domain.Triggers.CoreEventTrigger)r.Triggers.Single().Configuration).FilterExpression, new()) { TriggerId = r.Triggers.Single().TriggerId }).ToArray());
+            var edit = Draft("Match", "false") with { ExpectedRevision = yes.Revision, Triggers = yes.Triggers!.Select(t => t with { FilterExpression = "false" }).ToArray() };
             (await client.PutAsJsonAsync(PathFor(a.InstanceId) + "/" + yes.AutomationId, edit)).EnsureSuccessStatusCode();
             Assert.Equal(1, await s.GetRequiredService<CoreEventDispatcher>().RunOnceAsync());
             var deliveries = await events.DeliveriesAsync(receipt.Event.EventId);
@@ -195,7 +195,7 @@ public sealed class CoreEventAutomationJourneyTests
         using var client = TestOwnerCapability.CreateOwnerClient(host);
         var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
         var response = await client.PostAsJsonAsync(path, new AutomationRequest(0, true, "Chain",
-            "Inspect safely", new("coreEvent", CoreEventKey: "run.completed", FilterExpression: "true"),
+            "Inspect safely", new AutomationTriggerDto("coreEvent", CoreEventKey: "run.completed", FilterExpression: "true"),
             ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")));
         response.EnsureSuccessStatusCode();
         var automation = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
@@ -215,7 +215,7 @@ public sealed class CoreEventAutomationJourneyTests
                 ReceivedAtUtc = source.OccurredAtUtc.ToUnixTimeMilliseconds(), PayloadJson = JsonSerializer.Serialize(source) });
             await db.SaveChangesAsync();
             await events.SnapshotAsync(id, [new AgentCore.Domain.Events.EventSubscriptionSnapshot(automationId, owner, 1, "true", new())
-                { ExpressionVersion = i == 2 ? "js-expression-future" : "js-expression-v1" }]);
+                { TriggerId = Guid.Parse(automation.Triggers!.Single().TriggerId!), ExpressionVersion = i == 2 ? "js-expression-future" : "js-expression-v1" }]);
         }
         Assert.Equal(0, await services.GetRequiredService<CoreEventDispatcher>().RunOnceAsync());
         Assert.Empty(await services.GetRequiredService<ITriggerStore>().ListByDispositionAsync(AgentCore.Domain.Triggers.OccurrenceRoutingDisposition.Pending, 20));
@@ -233,7 +233,7 @@ public sealed class CoreEventAutomationJourneyTests
         using var client = TestOwnerCapability.CreateOwnerClient(host);
         var path = $"/api/v2/admin/agent-instances/{instance.InstanceId}/automations";
         var response = await client.PostAsJsonAsync(path, new AutomationRequest(0, true, "Manual",
-            "Inspect current state", new("coreEvent", CoreEventKey: "run.completed", FilterExpression: "false"),
+            "Inspect current state", new AutomationTriggerDto("coreEvent", CoreEventKey: "run.completed", FilterExpression: "false"),
             ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none")));
         response.EnsureSuccessStatusCode();
         var automation = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;

@@ -75,6 +75,13 @@ const sampleEffective: AdminEffectiveConfiguration = {
 };
 
 vi.mock("../../services/adminApi", () => ({
+  getBrowserPrivacy: vi.fn().mockResolvedValue({
+    saved: { mode: "Protected", revision: 0, unmaskedOrigins: [], trustedGraphicsOrigins: [] },
+    effective: { mode: "Protected", revision: 0, unmaskedOrigins: [], trustedGraphicsOrigins: [] },
+    deployment: { captureAllowed: true, unmaskedAllowed: false, unmaskedOriginCeiling: [], graphicsOriginCeiling: [] },
+    restartRequired: false, activation: "Saved changes activate after host restart.", durable: true, constrainedByDeployment: false
+  }),
+  saveBrowserPrivacy: vi.fn(),
   getExecutionBudgetLimits: vi.fn().mockResolvedValue({ maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 }),
   getExecutionBudgets: vi.fn().mockResolvedValue({ revision: 1, executionBudgets: null, definitionDefaults: null }),
   setExecutionBudgets: vi.fn(),
@@ -480,14 +487,14 @@ describe("AdminApp", () => {
     });
   });
 
-  it("renders effective configuration fields", () => {
-    render(<EffectiveConfigView config={{ ...sampleEffective, browser: {
+  it("renders effective configuration with global privacy authoring and other sections read-only", async () => {
+    await act(async () => { render(<EffectiveConfigView config={{ ...sampleEffective, browser: {
       providerId: "subset", displayName: "Test browser", engine: "chromium", enabled: true, ready: false,
       profileMode: "EphemeralSession", policyMode: "Restricted", supportedFeatures: ["Navigate", "Snapshot", "Click"],
       maxSnapshotBytes: 512, maxCaptureBytes: 1500000, maxDownloadBytes: 5242880,
       limits: { operationTimeoutMs: 25000, capturesPerScope: 3, downloadsPerScope: 1, findMatches: 10,
         waitTimeoutMs: 2500, textInputLength: 200, automaticSettleMs: 1600 }
-    } }} />);
+    } }} />); });
     const browser = screen.getByRole("region", { name: "Browser provider" });
     expect(within(browser).getByText("chromium")).toBeInTheDocument();
     expect(within(browser).getByText("Unavailable")).toBeInTheDocument();
@@ -506,10 +513,16 @@ describe("AdminApp", () => {
     expect(screen.getByText(/max registrations 4/)).toBeInTheDocument();
     const config = screen.getByText("Runtime model").closest(".admin-effective-config-grid");
     expect(config).toBeTruthy();
-    expect(within(config as HTMLElement).queryByRole("button")).not.toBeInTheDocument();
-    expect(within(config as HTMLElement).queryByRole("textbox")).not.toBeInTheDocument();
-    expect(within(config as HTMLElement).queryByRole("combobox")).not.toBeInTheDocument();
-    expect(within(config as HTMLElement).queryByRole("switch")).not.toBeInTheDocument();
+    for (const section of (config as HTMLElement).querySelectorAll(".admin-effective-config-section")) {
+      if (section === browser) continue;
+      expect(within(section as HTMLElement).queryByRole("button")).not.toBeInTheDocument();
+      expect(within(section as HTMLElement).queryByRole("textbox")).not.toBeInTheDocument();
+      expect(within(section as HTMLElement).queryByRole("combobox")).not.toBeInTheDocument();
+      expect(within(section as HTMLElement).queryByRole("switch")).not.toBeInTheDocument();
+    }
+    const privacy = within(browser).getByRole("region", { name: "Screenshot privacy" });
+    expect(within(privacy).getByLabelText("Saved screenshot privacy mode")).toBeInTheDocument();
+    expect(within(privacy).getByRole("button", { name: "Save screenshot privacy" })).toBeInTheDocument();
   });
 
   it("saves visible instructions before publishing a draft", async () => {
@@ -598,6 +611,12 @@ describe("AdminApp", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Draft rev 2/ }));
     await screen.findByRole("tab", { name: "Settings" });
+    const draftTabs = within(document.querySelector(".admin-draft-tabs > .ant-tabs-nav")! as HTMLElement);
+    const identityTab = draftTabs.getByRole("tab", { name: "Identity & version" });
+    const publishTab = draftTabs.getByRole("tab", { name: "Test & Publish" });
+    const actions = within(document.querySelector(".admin-draft-actions")! as HTMLElement);
+    const save = actions.getByRole("button", { name: "Save draft" });
+    const publish = actions.getByRole("button", { name: "Publish…" });
     fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Operating instructions" }));
     fireEvent.click(screen.getByRole("button", { name: "Provider preferences" }));
@@ -608,7 +627,7 @@ describe("AdminApp", () => {
     fireEvent.change(screen.getByLabelText("System instructions"), {
       target: { value: "Visible publish body" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    fireEvent.click(save);
     await waitFor(() => {
       expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
         draftId,
@@ -626,7 +645,7 @@ describe("AdminApp", () => {
       updatedAt: "2026-01-02T00:00:00Z",
       candidate: { systemInstructions: "Visible publish body", definitionId: "examiner", environment: { harness: [], knowledgeSources: [], workspace: {}, attachments: { allowUnreadUnsupportedTypes: false }, capabilities: { mode: "Selected", resolvedCapabilities: [] }, projection: { alwaysCapabilities: [] } } }
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Test & Publish" }));
+    fireEvent.click(publishTab);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Run validation" })).not.toBeDisabled();
     });
@@ -635,16 +654,16 @@ describe("AdminApp", () => {
       expect(validateAdminDefinitionDraft).toHaveBeenCalledWith(draftId);
       expect(screen.getByText("Draft is ready for final publish.")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Identity & version" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Test & Publish" }));
+    fireEvent.click(identityTab);
+    fireEvent.click(publishTab);
     expect(screen.getByText("Validation snapshot")).toBeInTheDocument();
     expect(screen.getByText("Draft is ready for final publish.")).toBeInTheDocument();
     expect(validateAdminDefinitionDraft).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("tab", { name: "Identity & version" }));
+    fireEvent.click(identityTab);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Publish…" })).not.toBeDisabled();
+      expect(publish).not.toBeDisabled();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
+    fireEvent.click(publish);
     await waitFor(() => {
       expect(publishAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 3);
     });
@@ -717,26 +736,28 @@ describe("AdminApp", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
     await screen.findByRole("tab", { name: "Settings" });
+    const draftTabs = within(document.querySelector(".admin-draft-tabs > .ant-tabs-nav")! as HTMLElement);
+    const identityTab = draftTabs.getByRole("tab", { name: "Identity & version" });
+    const resourcesTab = draftTabs.getByRole("tab", { name: "Skills & resources" });
     fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Operating instructions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Provider preferences" }));
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
     });
     fireEvent.change(screen.getByLabelText("System instructions"), {
       target: { value: "Unsaved instruction edit" }
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Skills & resources" }));
+    fireEvent.click(resourcesTab);
     fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const resources = within(document.querySelector('[aria-label="Draft resources"]')! as HTMLElement);
+    const remove = await resources.findByRole("button", { name: "Remove" });
+    expect(remove).toBeInTheDocument();
+    fireEvent.click(remove);
     fireEvent.click(await screen.findByRole("button", { name: "Delete resources" }));
     await waitFor(() => {
       expect(removeAdminDraftResource).toHaveBeenCalled();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Identity & version" }));
+    fireEvent.click(identityTab);
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toHaveValue("Unsaved instruction edit");
     });
@@ -1151,6 +1172,7 @@ describe("AdminApp", () => {
 
   it.each(["success", "failure"])("ignores a late effective configuration %s after instance navigation", async outcome => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
     vi.mocked(listAdminInstances).mockResolvedValue([]);
     let resolve!: (value: AdminEffectiveConfiguration) => void;
     let reject!: (error: Error) => void;

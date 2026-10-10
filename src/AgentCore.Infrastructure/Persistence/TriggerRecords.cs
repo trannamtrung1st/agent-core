@@ -2,12 +2,10 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class AutomationRecord
 {
+    public int TriggerMode { get; set; }
+    public List<AutomationTriggerRecordEntity> Triggers { get; set; } = [];
     public string? PresetId { get; set; }
     public int? PresetVersion { get; set; }
-    public string? CoreEventKey { get; set; }
-    public string? FilterExpression { get; set; }
-    public int DispatchMode { get; set; }
-    public int? DispatchWindowSeconds { get; set; }
     public int ExecutionTargetKind { get; set; }
     public string? TargetSessionId { get; set; }
     public string? ReportToSessionId { get; set; }
@@ -17,13 +15,10 @@ public sealed class AutomationRecord
     public int Status { get; set; }
     public string Instructions { get; set; } = "";
     public string Name { get; set; } = "";
-    public int TriggerKind { get; set; }
-    public string? ScheduleJson { get; set; }
     public long? NextOccurrenceAtUtc { get; set; }
     public long? ExpiresAtUtc { get; set; }
     public int OccurrenceCount { get; set; }
     public long Revision { get; set; }
-    public long TriggerRevision { get; set; }
     public int AuthorizationOrigin { get; set; }
     public string? SourceSessionId { get; set; }
     public string? SourceEventId { get; set; }
@@ -34,11 +29,11 @@ public sealed class AutomationRecord
     public string? ModelOverrideReasoningEffort { get; set; }
     public bool RequiresVision { get; set; }
     public bool RequiresTools { get; set; }
-    public string? EventId { get; set; }
 }
 
 public sealed class TriggerOccurrenceRecord
 {
+    public string? TriggerId { get; set; }
     public int ExecutionTargetKind { get; set; }
     public string? TargetSessionId { get; set; }
     public string? ReportToSessionId { get; set; }
@@ -69,4 +64,19 @@ public sealed class TriggerOccurrenceRecord
     public string? ModelId { get; set; }
     public string? ModelReasoningEffort { get; set; }
     public int? ModelSource { get; set; }
+}
+
+public sealed class AutomationTriggerRecordEntity
+{
+    public string TriggerId { get; set; } = "";
+    public string AutomationId { get; set; } = "";
+    public int Kind { get; set; }
+    public bool Enabled { get; set; }
+    public long Revision { get; set; }
+    public string? ScheduleJson { get; set; }
+    public string? EventId { get; set; }
+    public string? CoreEventKey { get; set; }
+    public string? FilterExpression { get; set; }
+    public int DispatchMode { get; set; }
+    public int? DispatchWindowSeconds { get; set; }
 }

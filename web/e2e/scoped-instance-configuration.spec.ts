@@ -127,7 +127,7 @@ test('scoped settings save/reset, conflict recovery and resource inspection pres
   await expect(page.getByRole('button',{name:'New Instance resource',exact:true})).toBeDisabled();
   await page.unroute(`**/api/v2/admin/agent-instances/${owner.instanceId}/resources`);
   await page.getByRole('button',{name:'Retry resources',exact:true}).click();await expect(page.getByText('verification/scoped.md',{exact:true})).toBeVisible();
-  const inspect=page.getByRole('button',{name:'Inspect',exact:true});await inspect.click();await page.getByRole('button',{name:'Preview content',exact:true}).click();await expect(page.getByText('Exact Synthetic resource bytes',{exact:true})).toBeVisible();
+  const inspect=page.getByRole('row').filter({hasText:'verification/scoped.md'}).getByRole('button',{name:'Inspect',exact:true});await inspect.click();await page.getByRole('button',{name:'Preview content',exact:true}).click();await expect(page.getByText('Exact Synthetic resource bytes',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Close',exact:true}).click();await expect(inspect).toBeFocused();
   await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
   await inspect.click();await expect(page.getByRole('button',{name:'Close',exact:true})).toBeVisible();await page.getByRole('button',{name:'Close',exact:true}).click();

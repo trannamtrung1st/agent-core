@@ -268,6 +268,9 @@ public sealed partial class SessionToolExecutor
         int remainingOutputBytes,
         CancellationToken cancellationToken)
     {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
+            browser is IBrowserCaptureLifetime retiring ? retiring.CaptureLifetime : CancellationToken.None);
+        cancellationToken = lifetime.Token;
         var started = Stopwatch.GetTimestamp();
         var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
         if (denied is not null)
@@ -321,6 +324,8 @@ public sealed partial class SessionToolExecutor
                 return FitResult(remainingOutputBytes, FinishBrowser(ToolCatalog.BrowserScreenshot, started, stored.Error));
             }
 
+            var captureData = captured.DataJson is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(captured.DataJson);
+            JsonElement? CaptureField(string name) => captureData is { ValueKind: JsonValueKind.Object } data && data.TryGetProperty(name, out var value) ? value : null;
             var text = JsonSerializer.Serialize(new
             {
                 contentType = captured.ContentType,
@@ -328,19 +333,24 @@ public sealed partial class SessionToolExecutor
                 width = captured.Width,
                 height = captured.Height,
                 redactions = captured.RedactionCount,
+                privacyMode = browser.HostPolicy.ScreenshotPolicy.Mode.ToString(),
+                privacyRevision = browser.HostPolicy.ScreenshotPolicy.Revision,
                 artifactId = stored.ArtifactId,
                 imageDelivered = admission?.SupportsVision == true,
                 observationUnavailable = captured.Observation?.ObservationUnavailable == true,
                 snapshotId = captured.Observation?.SnapshotId,
                 tabRef = captured.Observation?.TabRef,
                 observation = captured.Observation is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(SerializeBrowserSnapshot(captured.Observation, captured)),
-                coordinateEvidence = admission?.SupportsVision == true && captured.DataJson is not null && JsonSerializer.Deserialize<JsonElement>(captured.DataJson).TryGetProperty("coordinateEvidence", out var coordinate) && coordinate.ValueKind == JsonValueKind.True,
+                coordinateEvidence = admission?.SupportsVision == true && CaptureField("coordinateEvidence") is { ValueKind: JsonValueKind.True },
+                coordinateEvidenceUnavailableReasons = CaptureField("coordinateEvidenceUnavailableReasons"),
+                captureDiagnostics = CaptureField("captureDiagnostics"),
                 guidance = admission?.SupportsVision == true
-                    ? (captured.Observation?.ObservationUnavailable == true ? "Semantic observation is unavailable; use this image as visual context and independently refresh semantics. " : "Combine this image with its semantic observation. ") + "Prefer semantic actions. coordinateEvidence identifies fresh viewport pixels; mouse still requires vision, capability and interaction authority. Reobserve and independently verify outcomes."
+                    ? (captured.Observation?.ObservationUnavailable == true ? "Semantic observation is unavailable; use this image as visual context and independently refresh semantics. " : "Combine this image with its semantic observation. ") + "Prefer semantic actions. If coordinateEvidence=false, do not call browser.mouse with this snapshotId. Inspect the safe diagnostic reasons; use an authorized semantic observation/action or bounded wait when justified. Avoid repeating captures without evidence of change. Requested browser.close remains actionable independently of failed logout; report logout and closure separately. Mouse still requires fresh coordinateEvidence, vision, capability and interaction authority. Independently verify outcomes."
                     : "Artifact only: this model did not receive image content. Continue with semantic observation; do not claim visual understanding."
             });
             text = BrowserCaptureProjection.Fit(remainingOutputBytes, text);
             var delivered = admission?.SupportsVision == true && text.Length > 0 && JsonSerializer.Deserialize<JsonElement>(text).TryGetProperty("artifactId", out _);
+            cancellationToken.ThrowIfCancellationRequested();
             return new ToolExecutionResult(
                 FinishBrowser(ToolCatalog.BrowserScreenshot, started, text),
                 delivered ? [new ModelImageContent(captured.ContentType ?? "image/png", captured.Bytes, "screenshot")] : []);
@@ -694,7 +704,7 @@ public sealed partial class SessionToolExecutor
             "stale_visual_evidence" => "Coordinate evidence is missing or stale. Use a semantic target or obtain a fresh viewport screenshot and its snapshotId for the active tab; reobserve and verify the outcome.",
             "stale_frame" => "This frame is no longer current. Observe the current permitted frame inventory.",
             "action_not_confirmed" => "The page changed during the operation. Observe current state; do not replay an uncertain effect.",
-            "target_missing" => "No current rendered target matches. Observe the page, narrow the semantics or render virtualized content before acting.",
+            "target_missing" => "No current rendered target matches. Observe the page, narrow the semantics or render virtualized content before acting. Change evidence after a small number of justified alternatives; avoid equivalent guesses. This does not indicate a native dialog.",
             "ambiguous_target" => "The target is ambiguous. Narrow role/name or use within with a unique row/group and literal hasText.",
             "not_found" => "No rendered target matches. Change the query or scroll the region to reveal virtualized content.",
             "non_actionable_target" => "The target has no actions. Search for its actionable descendant with browser.find.",

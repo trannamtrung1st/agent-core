@@ -217,6 +217,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await automations.getByLabel('Automation name', { exact: true }).fill('Atlas follow-up review');
     await automations.getByLabel('Automation instructions', { exact: true }).fill('Review Atlas follow-up obligations; do nothing when nothing needs action.');
     await automations.getByLabel('Schedule maximum occurrences', { exact: true }).fill('5');
+    await expect(automations.getByRole('switch', { name: 'Enable automation', exact: true })).not.toBeChecked();
+    await automations.getByRole('switch', { name: 'Enable automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Create automation', exact: true }).click();
     const source = automations.getByRole('button', { name: 'View automation: Atlas follow-up review', exact: true });
     await expect(source).toBeVisible();
@@ -262,7 +264,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     const rows = (await (await page.request.get(`/api/v2/admin/agent-instances/${instanceId}/automations`, { headers: ownerHeaders })).json()).items;
     expect(rows[0].authorizationOrigin).toBe('AdminOwner'); expect(rows[0].status).toBe('Disabled');
-    expect(rows[0].trigger.schedule.maxOccurrences).toBe(5); expect(rows[0].lastAgentRunId).toBeTruthy();
+    expect(rows[0].triggers[0].schedule.maxOccurrences).toBe(5); expect(rows[0].lastAgentRunId).toBeTruthy();
   });
 
   test('uses the configured browser for observed record lookup and keeps progress separate from the answer', async ({ page }) => {

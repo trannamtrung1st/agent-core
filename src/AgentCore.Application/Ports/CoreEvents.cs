@@ -10,7 +10,7 @@ public sealed record CoreEventDelivery(Guid EventId, EventSubscriptionSnapshot S
 
 public sealed record CoreEventBucket(Guid BucketId, EventSubscriptionSnapshot Subscription, DateTimeOffset DueAtUtc, IReadOnlyList<EventBucketSource> Sources, bool Flushed = false, string? CompletionCode = null);
 
-public sealed record EventSourceCoverage(Guid BucketId, EventBucketSource Source, string? CompletionCode = null);
+public sealed record EventSourceCoverage(Guid BucketId, EventBucketSource Source, string? CompletionCode = null, Guid? TriggerId = null);
 public sealed record EventCoveragePage(IReadOnlyList<EventSourceCoverage> Items, string? NextCursor);
 
 public interface ICoreEventStore

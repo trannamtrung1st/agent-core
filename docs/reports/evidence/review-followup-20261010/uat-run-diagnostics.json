@@ -1,0 +1,231 @@
+{
+  "runId": "01a125ab-fdf4-753c-a0e7-b9249930f376",
+  "sessionId": "aefcba51-216b-49db-9a43-cc0ca181aa78",
+  "modelCatalogKey": "gpt-6-luna",
+  "stepCount": 25,
+  "activeExecutionMs": 96269,
+  "remainingOverallBudgetMs": 203725,
+  "browserContractVersion": 1,
+  "source": "Read-only saved AgentRun checkpoint; no new UAT actions or provider requests",
+  "steps": [
+    {
+      "step": 1,
+      "tool": "browser.navigate",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": true,
+      "effectConfirmedBySdk": true,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 2,
+      "tool": "browser.snapshot",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 3,
+      "tool": "capabilities.load",
+      "status": null,
+      "error": null
+    },
+    {
+      "step": 4,
+      "tool": "credentials.list",
+      "status": null,
+      "error": null
+    },
+    {
+      "step": 5,
+      "tool": "browser.snapshot",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 6,
+      "tool": "browser.fill_form",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": true,
+      "effectConfirmedBySdk": true,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 7,
+      "tool": "browser.fill_credential",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": true,
+      "effectConfirmedBySdk": true,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 8,
+      "tool": "browser.click",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": true,
+      "effectConfirmedBySdk": true,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 9,
+      "tool": "browser.wait_for",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 10,
+      "tool": "browser.find",
+      "status": null,
+      "error": "not_found",
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 11,
+      "tool": "browser.click",
+      "status": null,
+      "error": "target_missing",
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 12,
+      "tool": "browser.snapshot",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 13,
+      "tool": "capabilities.load",
+      "status": null,
+      "error": null
+    },
+    {
+      "step": 14,
+      "tool": "browser.screenshot",
+      "status": null,
+      "error": null,
+      "imageDelivered": true,
+      "observationUnavailable": false,
+      "coordinateEvidence": false,
+      "redactions": 20,
+      "settled": false
+    },
+    {
+      "step": 15,
+      "tool": "browser.click",
+      "status": null,
+      "error": "target_missing",
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 16,
+      "tool": "capabilities.load",
+      "status": null,
+      "error": null
+    },
+    {
+      "step": 17,
+      "tool": "browser.click",
+      "status": null,
+      "error": "target_missing",
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 18,
+      "tool": "capabilities.load",
+      "status": null,
+      "error": null
+    },
+    {
+      "step": 19,
+      "tool": "browser.screenshot",
+      "status": null,
+      "error": null,
+      "imageDelivered": true,
+      "observationUnavailable": false,
+      "coordinateEvidence": false,
+      "redactions": 20,
+      "settled": false
+    },
+    {
+      "step": 20,
+      "tool": "browser.mouse",
+      "status": null,
+      "error": "stale_visual_evidence",
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false,
+      "matchesPreviousScreenshotId": true
+    },
+    {
+      "step": 21,
+      "tool": "browser.snapshot",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 22,
+      "tool": "browser.screenshot",
+      "status": null,
+      "error": null,
+      "imageDelivered": true,
+      "observationUnavailable": false,
+      "coordinateEvidence": false,
+      "redactions": 20,
+      "settled": false
+    },
+    {
+      "step": 23,
+      "tool": "browser.mouse",
+      "status": null,
+      "error": "stale_visual_evidence",
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false,
+      "matchesPreviousScreenshotId": true
+    },
+    {
+      "step": 24,
+      "tool": "browser.dialog",
+      "status": null,
+      "error": "dialog_missing",
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false
+    },
+    {
+      "step": 25,
+      "tool": "browser.snapshot",
+      "status": "ok",
+      "error": null,
+      "effectAttempted": false,
+      "effectConfirmedBySdk": false,
+      "applicationOutcomeVerified": false,
+      "observationUnavailable": false
+    }
+  ]
+}
