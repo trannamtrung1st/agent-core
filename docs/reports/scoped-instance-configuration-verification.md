@@ -2,7 +2,7 @@
 
 Date: 2026-10-10. Baseline: `38a610071a7a472506d98ab466ee45503f7a9466` on `main`.
 
-Status: implemented candidate; final acceptance is pending the full regression and exact-commit hosted Synthetic gates. Historical milestone reports are unchanged and do not certify this slice. This report will record the verified behavior commit and hosted results after those gates complete.
+Status: accepted on behavior commit [`042fbde814498eade2da99ee199327e03068e712`](https://github.com/trannamtrung1st/agent-core/commit/042fbde814498eade2da99ee199327e03068e712), with [all seven hosted Synthetic jobs green](https://github.com/trannamtrung1st/agent-core/actions/runs/38038632462). The final report/README commit changes documentation only and is additionally checked on its own exact HEAD. Historical milestone reports remain unchanged and do not certify this slice.
 
 ## Implemented contract
 
@@ -42,18 +42,22 @@ Local checks use Synthetic and disposable SQLite files/roots under `/private/tmp
 
 | Check | Observed result |
 | --- | --- |
-| Full Domain | 185 passed on the committed candidate. |
-| Full Application | 1589 passed, 6 live opt-in skipped after the preference correction; focused model refresh: 7 passed. |
-| Full Infrastructure | 1080 passed, 9 live opt-in skipped before the final preference column; populated scoped migration passed. The subsequent full run exposed four deliberately old-schema tests using the current EF shape. Historical projections/seeding now use only available columns; the five-case populated/rejection migration group passes. Final full gate pending. |
-| Full API initial candidate | 422 passed, 2 live opt-in skipped, 5 failures: two promotion assertions omitted retained baseline resources; three recovery/timing cases. Corrected promotion checks passed; isolated recovery/approval rerun: 31 passed. Final full gate pending. |
+| Full Domain | 185 passed on behavior commit `042fbde8`. |
+| Full Application | 1589 passed, 6 live opt-in skipped; focused model refresh: 7 passed. |
+| Full Infrastructure | 1080 passed, 9 live opt-in skipped on the final behavior commit. The five-case populated/rejection migration group passes, including preserved reasoning preference and Run budget/cleanup evidence. |
+| Full API | 435 passed, 2 live opt-in skipped. Isolated recovery/approval rerun: 31 passed. |
 | Order Events | 4 passed. |
 | Scoped API journeys | 14 passed across InMemory/SQLite, including generation race, resource rejection, dependent Skill disable refusal, reviewed promotion and atomic Automation policy cases, and fresh occurrence admission into both an existing conversation and a new background Session. |
-| Frontend | Build passed with the existing large-chunk warning. Full unit run had 826 passed and 11 failures; follow-up isolated files had timeout failures on the busy local machine. Final hosted/full gate pending; no failed check is marked accepted. |
-| Synthetic Playwright | Initial broad run: 134 passed, 10 failures. Corrected rerun: 25 passed, 2 failures, subsequently corrected (retained settings disclosure and persisted reasoning preference). Final focused scoped journey: 1 passed; Session model/effort journeys: 2 passed. Final hosted/full gate pending. |
-| Compose | Isolated `scoped-verification` image built and host started. A 2048 sparse token override and owner revision survived container restart on its persistent volume. Final exact-commit packaging gate pending. |
+| Frontend | Local full rerun: 105 files and 837 tests passed. Hosted shards: 487 + 350 tests passed; both builds passed. Local build passed with the existing large-chunk warning. |
+| Synthetic Playwright | Hosted core: 72 + 71 passed across Synthetic, Browser STT and Browser/Browser fake-device projects. Acceptance: 16 passed across Manual-A, Admin lifecycle, P7.6, Harness, continuity, maintenance and Secretary. Focused local scoped journey: 1 passed; Session model/effort journeys: 2 passed. |
+| Compose | Isolated `scoped-verification` image built and host started. A 2048 sparse token override and owner revision survived container restart on its persistent volume. Hosted exact-commit Compose smoke passed, including owner capability, SQLite volume recreation, Skills/provenance, home/scratch/artifacts and protected credential retention. |
 | Markdown sync | 15 changed Markdown files, 515 local links and 13 complete JSON examples checked; no link/fence/JSON errors. |
 
-Commands: `dotnet test AgentCore.sln --no-restore --nologo --disable-build-servers -m:1 -p:UseSharedCompilation=false`; focused project filters for scoped configuration, historical migrations, model binding, Harness approval and recovery; `pnpm --dir web exec vitest run --maxWorkers=1 --minWorkers=1`; `pnpm --dir web build`; isolated `CI=1` Playwright core/Admin/Harness projects; isolated Docker Compose build/start/restart. Detailed local command logs are `/private/tmp/scoped-*.log`; these disposable logs are not portable hosted acceptance artifacts.
+The local full backend result is 3293 passed and 17 live opt-in skips, including the four Order Events example tests. Hosted backend is 3283 passed and 23 skipped: the same live opt-ins plus six Docker sandbox tests that require an available sandbox image; all six passed locally. The separate hosted Compose job passed. No paid providers or physical microphone/speaker checks were required; fake-device audio establishes capture/playback/duplex behavior, not audible quality.
+
+The correction loop addressed sparse CAS draft retention, stable Save labeling, canceled draft reads during publish, persisted explicit reasoning intent, historical-schema fixture seeding, and old-conversation Automation preference retention. Every required final gate passed after those corrections. No acceptance blocker remains. Native verification hosts and the disposable Compose containers were stopped; user data was not removed.
+
+Commands: `dotnet test AgentCore.sln --no-restore --nologo --disable-build-servers -m:1 -p:UseSharedCompilation=false --blame-hang --blame-hang-timeout 3m --logger 'console;verbosity=normal'`; focused project filters for scoped configuration, historical migrations, model binding, Harness approval and recovery; `pnpm --dir web exec vitest run --maxWorkers=1 --minWorkers=1`; `pnpm --dir web build`; isolated `CI=1` Playwright core/Admin/Harness projects; isolated Docker Compose build/start/restart. Detailed local command logs are `/private/tmp/scoped-*.log`; these disposable logs are not portable hosted acceptance artifacts.
 
 ## Exercised user journeys
 
