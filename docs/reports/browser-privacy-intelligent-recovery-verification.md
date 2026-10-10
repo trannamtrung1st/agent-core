@@ -82,3 +82,9 @@ The full shared frontend run is not a green acceptance gate. Its current-tree fa
 ## Remaining gates
 
 Genuine-model autonomous visual recovery and approved enterprise logout/closure are pending. Hosted CI remains unobserved; commit/push delivery does not imply hosted acceptance. No scripted success, historical workflow, screenshot alone, health response, or build is represented as evidence for those gates. The scoped implementation and local review checks are verified; full-suite and live acceptance claims must retain these boundaries.
+
+## Review stabilization (2026-10-10)
+
+The focused follow-up to review baseline `a44254ff` is recorded in [the combined stabilization report](review-followup-20261010.md). It repairs canonical child-trigger consumers and dependency-specific editor saving, distinguishes deployment-constrained privacy from pending restart, and records paid-model/local runtime evidence separately from hosted CI. Historical results above remain unchanged; no external CI wait or hosted acceptance is claimed.
+
+Implementation revision: `7ad91103678bf0421dde2e64774340aa54cf8298`. Full backend and 145 core browser cases passed; all 847 frontend cases passed across the full run and an isolated default-timeout retry. The genuine Luna localhost logout test passed. AHI UAT Luna logout remained unverified; separate browser closure and temporary credential-binding removal succeeded. The user stopped further model attempts. Full enterprise acceptance remains open.
