@@ -231,7 +231,10 @@ public sealed class SpeechIngressTests
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.Equal(InputActivity.UserSpeaking, runtime.Input);
 
-        await runtime.SubmitUserTextAsync("typed in voice");
+        // Submission only enqueues the turn; wait for its durable admission before
+        // inspecting the speech state changed by that turn.
+        Assert.True(await runtime.SubmitPersistedUserTextAsync(
+            "typed in voice", Guid.Parse("019944af-0000-7000-8000-0000000000af")));
         await runtime.WaitUntilMailboxDrainedAsync();
         Assert.Equal(InputActivity.Listening, runtime.Input);
         Assert.Null(runtime.Candidate);
