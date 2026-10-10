@@ -269,8 +269,11 @@ describe("definition candidate editor", () => {
     const candidate = structuredClone(storedCandidate);
     candidate.triggerPolicy.allowedSourceKinds = [kind];
     const changed = await renderCandidate(candidate);
+    openSettings("Trigger restrictions");
     expect(screen.getByRole("checkbox", { name: "Events" })).toHaveAttribute("aria-checked", "mixed");
+    fireEvent.click(screen.getByRole("tab", { name: "Profile" }));
     setText("Definition name", "Edited name");
+    openSettings("Trigger restrictions");
     fireEvent.click(screen.getByText("Advanced JSON", { selector: ".ant-segmented-item-label" }));
     const json = screen.getByRole("textbox", { name: "Advanced JSON" });
     const value = JSON.parse((json as HTMLTextAreaElement).value);
