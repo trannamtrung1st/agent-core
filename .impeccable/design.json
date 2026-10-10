@@ -440,7 +440,8 @@
       "Background Work lists Sessions; shared Run details serve both Chat history and Admin inspection. Operational drawers use quiet headers, open rows, filled icon-and-text status chips, bounded reading regions and inline recovery. Automations retain their elevated schedule inset.",
       "Admin collections use compact tables with local horizontal scrolling; Experience and Automations expand one record at a time. Read-only details share aligned labels on wider screens and stacked labels on mobile.",
       "Admin uses contextual creation, sticky draft actions, shared conversation source selection, explicit time-zone previews and inline recovery on the same Ant Design baseline.",
-      "Definition and Instance configuration reuse shared panel shells and Identity / Skills & resources navigation; forms retain a bounded reading width within full-width panels."
+      "Definition and Instance configuration reuse shared panel shells and Identity / Skills & resources navigation; forms retain a bounded reading width within full-width panels.",
+      "Definition Automation permissions use Schedule and Events with nested Built-in/Webhook checkboxes, mixed parent state, token-owned nesting and explicit inactive configuration. Published views and diffs preserve exact independent grants; canonical backend source kinds remain unchanged."
     ],
     "rules": [
       {

@@ -137,7 +137,7 @@ public sealed class AgentDefinitionDraftDiffService(
             FormatMemoryPolicy(current.MemoryPolicy));
         yield return TextSection(
             "triggerPolicy",
-            "Trigger policy",
+            "Automation trigger permissions",
             FormatTriggerPolicy(baseline.TriggerPolicy),
             FormatTriggerPolicy(current.TriggerPolicy));
         yield return TextSection(
@@ -159,7 +159,7 @@ public sealed class AgentDefinitionDraftDiffService(
         yield return AddedSection("modelDefaults", "Model defaults", FormatModelDefaults(current.ModelDefaults));
         yield return AddedSection("capabilities", "Capabilities", FormatEnvironment(current.Environment));
         yield return AddedSection("memoryPolicy", "Memory policy", FormatMemoryPolicy(current.MemoryPolicy));
-        yield return AddedSection("triggerPolicy", "Trigger policy", FormatTriggerPolicy(current.TriggerPolicy));
+        yield return AddedSection("triggerPolicy", "Automation trigger permissions", FormatTriggerPolicy(current.TriggerPolicy));
         yield return AddedSection("skills", "Skills", FormatSkills(current.Skills));
     }
 
@@ -242,11 +242,14 @@ public sealed class AgentDefinitionDraftDiffService(
             return "(default)";
         }
 
-        var allowed = policy.AllowedSourceKinds.Count == 0
-            ? "(none)"
-            : string.Join(", ", policy.AllowedSourceKinds);
+        var allowed = string.Join("; ", new[]
+        {
+            $"Schedule: {(policy.AllowedSourceKinds.Contains("schedule") ? "Allowed" : "Not allowed")}",
+            $"Built-in Events: {(policy.AllowedSourceKinds.Contains("coreEvent") ? "Allowed" : "Not allowed")}",
+            $"Webhook Events: {(policy.AllowedSourceKinds.Contains("applicationEvent") ? "Allowed" : "Not allowed")}"
+        });
         return
-            $"enabled={policy.Enabled}; allowUserScheduling={policy.AllowUserScheduling}; allowOneShot={policy.AllowOneShot}; allowDaily={policy.AllowDaily}; allowWeekly={policy.AllowWeekly}; allowIndefiniteRecurrence={policy.AllowIndefiniteRecurrence}; maxActiveRegistrations={policy.MaxActiveRegistrations}; oneShotHorizonDays={policy.OneShotHorizonDays}; minRecurrenceDays={policy.MinRecurrenceDays}; allowedSourceKinds=[{allowed}]; allowFixedInterval={policy.AllowFixedInterval}; minFixedIntervalSeconds={policy.MinFixedIntervalSeconds}";
+            $"Automation: {(policy.Enabled ? "Enabled" : "Disabled (configured permissions inactive)")}; permissions=[{allowed}]; allowUserScheduling={policy.AllowUserScheduling}; allowOneShot={policy.AllowOneShot}; allowDaily={policy.AllowDaily}; allowWeekly={policy.AllowWeekly}; allowIndefiniteRecurrence={policy.AllowIndefiniteRecurrence}; maxActiveRegistrations={policy.MaxActiveRegistrations}; oneShotHorizonDays={policy.OneShotHorizonDays}; minRecurrenceDays={policy.MinRecurrenceDays}; allowFixedInterval={policy.AllowFixedInterval}; minFixedIntervalSeconds={policy.MinFixedIntervalSeconds}";
     }
 
     private static string FormatProviderPreferences(ProviderPreferences preferences) =>

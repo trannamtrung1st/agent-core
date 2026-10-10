@@ -35,6 +35,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const screens = Grid.useBreakpoint();
   const formId = useId();
+  const editorTitleId = useId();
   const editorOpener = useRef<HTMLElement | null>(null);
   const savedFocus = useRef<string | null>(null);
   const restoreEditorFocus = useRef(false);
@@ -220,6 +221,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
     timing.kind === "fixedInterval" ? timing.endAtUtc ? `Ends ${date(timing.endAtUtc)}` : null : timing.endDate ? `Ends ${timing.endDate}` : null,
     timing.maxOccurrences ? `Up to ${timing.maxOccurrences} occurrences` : null
   ].filter(Boolean).join(" · ");
+  const editorTitle = editor === "new" ? "New automation" : "Edit automation";
   return <AgentConfigurationPanel title="Automations" label="Automations"
     description="Choose when the agent follows your instructions. Each Run uses its authorized capabilities and normal approvals." bodyGap="section">
       {loading ? <Spin aria-label="Loading automations" /> : null}
@@ -228,7 +230,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       {resourcesError ? <Alert type="error" showIcon title={<AdminErrorNotice message={resourcesError.message} diagnosticId={resourcesError.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reloadResources()}>Reload Events and models</Button>} /> : null}
       <Flex wrap gap={token.paddingXS}><Button type="primary" ref={newButton} disabled={busy} onClick={() => { editorOpener.current = newButton.current; setEditorError(null); resetDraft(blank()); setEditor("new"); setEditorOpen(true); }}>New automation</Button>
         <Button disabled={busy} onClick={() => void reload()}>Refresh automations</Button><Button onClick={() => onWork()}>View runs</Button></Flex>
-      <Drawer open={editorOpen && active} title={editor === "new" ? "New automation" : "Edit automation"}
+      <Drawer open={editorOpen && active} title={<Typography.Text strong id={editorTitleId}>{editorTitle}</Typography.Text>} aria-labelledby={editorTitleId}
         size={screens.md ? 640 : "100%"} getContainer={false} rootStyle={{ position: "fixed" }}
         rootClassName="admin-automation-drawer" styles={{ body: { padding: token.padding }, footer: { padding: token.padding } }}
         focusable={{ trap: editorOpen && active && !managingEvents, focusTriggerAfterClose: false }}

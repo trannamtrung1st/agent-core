@@ -265,6 +265,24 @@ describe("definition candidate editor", () => {
     vi.clearAllMocks();
   });
 
+  it.each(["coreEvent", "applicationEvent"])("preserves restricted %s authority through unrelated editing and JSON round trips", async kind => {
+    const candidate = structuredClone(storedCandidate);
+    candidate.triggerPolicy.allowedSourceKinds = [kind];
+    const changed = await renderCandidate(candidate);
+    expect(screen.getByRole("checkbox", { name: "Events" })).toHaveAttribute("aria-checked", "mixed");
+    setText("Definition name", "Edited name");
+    fireEvent.click(screen.getByText("Advanced JSON", { selector: ".ant-segmented-item-label" }));
+    const json = screen.getByRole("textbox", { name: "Advanced JSON" });
+    const value = JSON.parse((json as HTMLTextAreaElement).value);
+    expect(value.triggerPolicy.allowedSourceKinds).toEqual([kind]);
+    value.triggerPolicy.allowedSourceKinds = ["schedule", kind];
+    fireEvent.change(json, { target: { value: JSON.stringify(value) } });
+    fireEvent.click(screen.getByText("Form", { selector: ".ant-segmented-item-label" }));
+    expect(screen.getByRole("checkbox", { name: "Schedule" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Events" })).toHaveAttribute("aria-checked", "mixed");
+    expect(changed.mock.lastCall?.[0]).toMatchObject({ triggerPolicy: { allowedSourceKinds: ["schedule", kind] } });
+  });
+
   it("blocks fractional recurrence with an inline error and saves after correction", async () => {
     mockDraft();
     await openDraft();
@@ -456,7 +474,7 @@ describe("definition candidate editor", () => {
     setSpin("One-shot horizon days", "14");
     setSpin("Minimum recurrence days", "2");
     setSpin("Minimum fixed interval seconds", "120");
-    await chooseOption("Allowed source kinds", "Shared Event (webhook)");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Webhook Events" }));
     setText("Metadata key 1", "team");
     setText("Metadata value 1", "platform");
 

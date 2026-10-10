@@ -4,6 +4,16 @@ namespace AgentCore.Domain.Tests;
 
 public sealed class AgentDefinitionValidatorTests
 {
+    [Theory]
+    [InlineData("events")]
+    [InlineData("coreEvent", "coreEvent")]
+    [InlineData("applicationEvent", "applicationEvent")]
+    public void Trigger_permissions_reject_unknown_parent_values_and_duplicates(params string[] kinds)
+    {
+        var definition = Valid(null) with { TriggerPolicy = new(false, false, false, false, false, false, 1, 1, 1, kinds) };
+        Assert.Contains("source kinds", Assert.Throws<ArgumentException>(() => AgentDefinitionValidator.Validate(definition)).Message);
+    }
+
     [Fact]
     public void Generated_skill_ids_use_the_same_ascii_rules_as_browser_authoring()
     {

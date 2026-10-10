@@ -1,5 +1,6 @@
 import { AgentConfigurationPanel, AgentIdentitySections, AgentSkillsResourcesSections } from "./AgentConfigurationLayout";
 import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
+import { automationTriggerPermissionSummary } from "./AutomationTriggerPermissions";
 import { ExecutionBudgetLimitsProvider, useExecutionBudgetLimits } from "./executionBudgetLimits";
 import { validExecutionBudgets } from "./ExecutionBudgetsSection";
 import { groupedCapabilityOptions, reconcileAlwaysCapabilities } from "./capabilityOptions";
@@ -3200,8 +3201,9 @@ export function EffectiveConfigView({
         <Descriptions {...detailLayout} bordered size="small" column={1}>
           <Descriptions.Item label="Trigger enabled">{trigger?.enabled ? "Yes" : "No"}</Descriptions.Item>
           <Descriptions.Item label="User scheduling">{trigger?.allowUserScheduling ? "Yes" : "No"}</Descriptions.Item>
-          <Descriptions.Item label="Allowed source kinds">
-            {trigger?.allowedSourceKinds.join(", ") || "None"}
+          <Descriptions.Item label="Automation trigger permissions">
+            {automationTriggerPermissionSummary(trigger?.allowedSourceKinds)}
+            {!trigger?.enabled && <Typography.Paragraph type="secondary">Configured permissions are inactive while Automation is disabled.</Typography.Paragraph>}
           </Descriptions.Item>
           <Descriptions.Item label="One-shot / daily / weekly">
             {trigger
