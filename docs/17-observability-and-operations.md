@@ -408,12 +408,30 @@ Attach as the same OS user with diagnostics enabled. Select the actual deployed 
 | Instrument | Meaning | Bounded labels |
 | --- | --- | --- |
 | `automation_event_filter_evaluations` | Completed evaluations through durable filter recovery, including transient failures and exhaustion. Cached decisions and backoff polling do not add samples. | `source`: core/webhook; `outcome`: matched/filtered/retry_pending/retry_exhausted/permanent_error/other; `cause`: worker_budget/timeout/none/other. |
+| `automation_event_filter_allocated_bytes` | Managed bytes allocated on the synchronous evaluator thread for each admitted nonempty filter, from worker admission through engine disposal. Includes engine setup and failures; excludes preceding grammar/envelope checks and rejected worker admission. | None. |
+| `automation_event_filter_duration_ms` | Elapsed duration over the same admitted engine scope, including setup and disposal; count gives actual engine-attempt rate, including read-only filter previews. | None. |
 | `automation_event_recovery_page_size` | Selected unfinished items per scan, including zero for an empty lane; maximum 32. | `lane`: core/webhook/bucket/other. |
 | `automation_event_recovery_oldest_age_ms` | Oldest selected receipt age, or due-bucket lateness, per nonempty page; clamped nonnegative. | Same lane labels. |
 
 These metrics contain no IDs, expressions, resource keys or event data. Evaluation counts measure attempts, not distinct events or durable commits; competing evaluations can each contribute an attempt. Unfiltered webhook deliveries bypass the evaluator. Page samples are **not** total backlog or global-oldest gauges: values vary as the scan advances and wraps. Failure logs and owner-checked delivery diagnostics remain the source of safe per-item investigation.
 
 During representative peak traffic, chart completed evaluation rates by source/outcome/cause, exhaustion relative to completed evaluations, full-page frequency, and upper-percentile selected age/lateness over several scan cycles. Establish a baseline before choosing alert thresholds. Investigate sustained exhaustion or increasing age with consistently full pages: correlate scheduler/dependency failures, worker/timeout pressure and current admission policy. A nonempty page alone is normal; empty-page size samples indicate an idle lane. Repeated backoff observations must not be mistaken for fresh evaluations.
+
+For sustained allocation pressure, collect `AgentCore.Runtime` together with `System.Runtime`. Compare the allocation histogram sum divided by the collection interval (bytes/second), histogram mean/upper percentiles, engine-attempt rate, runtime GC heap size and GC pause/time counters. Allocated bytes are reclaimable traffic, not retained bytes; the per-thread instrument excludes allocations performed by timer/background threads and is not whole-process memory. Whole-process counters include other subsystems. Record storage provider, traffic duration and sampling interval before drawing conclusions. Keep fresh-engine isolation and current limits; optimization or a bounded expression cache requires measured evidence first.
+
+### Observing event history growth
+
+From the repository root, take an aggregate snapshot of the configured existing SQLite database:
+
+```bash
+python3 scripts/event-storage-snapshot.py /absolute/path/to/agent-core.db >> event-storage-history.jsonl
+```
+
+Run at an operator-chosen low frequency (for example daily and around a traffic experiment), since aggregate counts/JSON-byte sums scan retained tables. The command opens SQLite in read-only/query-only mode with a five-second lock timeout and one read transaction. It reports receipt/delivery/bucket row counts, aggregate UTF-8 JSON bytes, bucket source/reviewed/unreviewed reference counts, pending buckets, allocated/free database pages and main/WAL/SHM file sizes. It exports no IDs, credentials, expressions or event contents and fails on missing databases/schema rather than creating a database or reporting false zero counts. File sizes are sampled after the transaction and can change during traffic; page/file totals cover the whole database, while JSON-byte totals exclude indexes and row overhead. Source references can represent the same source in multiple buckets; they are not distinct event counts.
+
+Compare successive snapshots to estimate daily history growth and disk runway, correlating unreviewed references with coverage/recovery pressure. WAL growth can reflect long-running readers or checkpoint behavior rather than retained event rows. For InMemory storage, use runtime GC heap/process-memory trends over comparable traffic/idle periods and current Instance counts; the SQLite snapshot command does not inspect that provider or give its exact row counts. InMemory history is process-local and is lost on restart; switching providers or restarting is not a compaction policy.
+
+Instance-lifetime history remains the explicit current retention policy. No pruning/checkpoint/vacuum or recurring monitoring task is started by this command. Any future compaction policy must separately define owner scope, an audit horizon, preservation of unreviewed coverage and pending retries, and durable dedupe/tombstone semantics before deleting receipts. See [the durable retention contract](15-persistence-and-configuration.md#core-event-outbox-and-filter-snapshots). Never remove history simply because a filter matched or a bucket flushed.
 
 For an exact local backlog snapshot, open the existing SQLite database read-only and count unfinished rows; do not select payload/decision JSON into logs. For example, using the configured database path with `sqlite3 -readonly PATH`:
 

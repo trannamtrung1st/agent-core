@@ -1,7 +1,9 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Observability;
 using AgentCore.Domain.Events;
 using Jint;
 using Acornima.Ast;
@@ -12,6 +14,10 @@ namespace AgentCore.Infrastructure.Events;
 public sealed class RestrictedEventFilter : IEventFilterEvaluator
 {
     private static readonly SemaphoreSlim Workers = new(4);
+    private readonly Action<Options>? configureEngine;
+    public RestrictedEventFilter() { }
+    // Internal per-evaluator hook for deterministic tests of Jint's real constraints.
+    internal RestrictedEventFilter(Action<Options> configureEngine) => this.configureEngine = configureEngine;
     public string? Validate(string? expression)
     {
         if (string.IsNullOrWhiteSpace(expression)) return null;
@@ -35,12 +41,18 @@ public sealed class RestrictedEventFilter : IEventFilterEvaluator
         if (!UniqueProperties(envelope)) return new(null, "error", "filter-envelope-ambiguous");
         if (!SafeNumbers(envelope)) return new(null, "error", "filter-unsafe-number");
         if (!Workers.Wait(0, cancellationToken)) return new(null, "error", "filter-worker-budget");
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        var started = Stopwatch.GetTimestamp();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using var engine = new Engine(options => options.Strict().LimitMemory(4 * 1024 * 1024)
-                .MaxStatements(256).TimeoutInterval(TimeSpan.FromMilliseconds(100)).CancellationToken(deadline.Token));
+            using var engine = new Engine(options =>
+            {
+                options.Strict().LimitMemory(4 * 1024 * 1024).MaxStatements(256)
+                    .TimeoutInterval(TimeSpan.FromMilliseconds(100)).CancellationToken(deadline.Token);
+                configureEngine?.Invoke(options);
+            });
             // Jint JSON parsing creates engine-owned values; no CLR object or delegate is projected.
             engine.SetValue("event", new Jint.Native.Json.JsonParser(engine).Parse(envelope.GetRawText()));
             // Cold CLR/Jint initialization and bounded parsing are not JavaScript execution.
@@ -60,7 +72,12 @@ public sealed class RestrictedEventFilter : IEventFilterEvaluator
                     "StatementsCountOverflowException" => "filter-statement-budget", _ => "filter-evaluation-error" };
             return new(null, "error", code);
         }
-        finally { Workers.Release(); }
+        finally
+        {
+            Workers.Release();
+            RuntimeTelemetry.RecordEventFilterResources(GC.GetAllocatedBytesForCurrentThread() - allocatedBefore,
+                Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        }
     }
 
     private static Prepared<Script> Prepare(string expression)

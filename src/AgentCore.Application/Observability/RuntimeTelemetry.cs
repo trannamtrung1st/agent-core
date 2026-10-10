@@ -21,6 +21,13 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
     private static readonly Counter<long> EventFilters = Meter.CreateCounter<long>("automation_event_filters");
     private static readonly Counter<long> EventFilterEvaluations = Meter.CreateCounter<long>("automation_event_filter_evaluations");
+    private static readonly Histogram<long> EventFilterAllocatedBytes = Meter.CreateHistogram<long>("automation_event_filter_allocated_bytes", "By");
+    private static readonly Histogram<double> EventFilterDurationMs = Meter.CreateHistogram<double>("automation_event_filter_duration_ms", "ms");
+    public static void RecordEventFilterResources(long allocatedBytes, double durationMs)
+    {
+        EventFilterAllocatedBytes.Record(Math.Max(0, allocatedBytes));
+        EventFilterDurationMs.Record(Math.Max(0, durationMs));
+    }
     private static readonly Histogram<long> EventRecoveryPageSize = Meter.CreateHistogram<long>("automation_event_recovery_page_size");
     private static readonly Histogram<double> EventRecoveryOldestAgeMs = Meter.CreateHistogram<double>("automation_event_recovery_oldest_age_ms");
     public static void RecordEventFilterEvaluation(string source, string outcome, string cause) => EventFilterEvaluations.Add(1,

@@ -53,6 +53,9 @@ jobs:
       - name: Backend Domain tests
         run: dotnet test tests/AgentCore.Domain.Tests/AgentCore.Domain.Tests.csproj --nologo
 
+      - name: Event storage monitoring tests
+        run: python3 -m unittest discover -s scripts/tests -p test_event_storage_snapshot.py -v
+
       - name: Build Infrastructure tests
         run: dotnet build tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --nologo
 
