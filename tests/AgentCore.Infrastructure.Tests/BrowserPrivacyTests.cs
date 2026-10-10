@@ -106,7 +106,9 @@ public sealed class BrowserPrivacyTests
                       frame.onload = resolve; frame.src = '/adaptive-browser.html'; root.appendChild(frame); })
                     """);
                 var child = Assert.Single(page.Frames, frame => frame != page.MainFrame);
-                await child.WaitForLoadStateAsync();
+                // The iframe onload above establishes readiness. Closed shadow roots can
+                // hide Playwright lifecycle notifications; observe the child DOM directly.
+                await child.WaitForFunctionAsync("() => document.readyState === 'complete' && document.body !== null");
                 await child.EvaluateAsync("() => document.body.innerHTML = '<div style=\"background:red;width:300px;height:100px\">private-frame-secret</div>'");
                 var capture = await guarded.ExecuteAsync(new(id, new BrowserScreenshot()));
                 Assert.Equal("target_denied", capture.ErrorCode);
