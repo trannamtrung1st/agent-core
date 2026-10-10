@@ -277,3 +277,40 @@ test("typed queued steering keeps chip identity and a newer draft", async ({page
  await expect(page.locator(".chat-message-user").last().locator(".composer-chip")).toHaveCount(1);
  await expect(editor).toHaveText("Newer draft");
 });
+
+test("pasting an existing Skill keeps one chip and one canonical activation", async ({ page }) => {
+  const { instanceId, sessionId, h } = await setup(page);
+  const editor = page.getByLabel("Message", { exact: true });
+  await skill(page, "review");
+  await editor.pressSequentially("Inspect this");
+  async function paste() {
+    await editor.evaluate((el, instanceId) => {
+      const data = new DataTransfer();
+      data.setData("text/plain", "/Review copied");
+      data.setData("application/x-agent-core-parts", JSON.stringify({
+        instanceId,
+        parts: [
+          { kind: "invocation", invocationKind: "skill", skillKey: "instance:review", label: "Review" },
+          { kind: "text", text: " copied" },
+        ],
+      }));
+      el.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: data }));
+    }, instanceId);
+  }
+  await paste();
+  await expect(editor.locator('[data-skill-key="instance:review"]')).toHaveCount(1);
+  await expect(editor).toHaveText("/Review Inspect this copied");
+  // Replacing the selected chip must still allow that Skill to be pasted.
+  await editor.press("ControlOrMeta+a");
+  await paste();
+  await expect(editor.locator('[data-skill-key="instance:review"]')).toHaveCount(1);
+  await expect(editor).toHaveText("/Review copied");
+  await editor.press("Enter");
+  await expect(page.locator(".chat-message-user").last().locator(".composer-chip")).toHaveCount(1);
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/v2/sessions/${sessionId}/agent-runs`, { headers: h });
+    return (await response.json()).items.find((r: { composerInput?: { explicitSkillKeys: string[] } }) =>
+      r.composerInput?.explicitSkillKeys.includes("instance:review"),
+    )?.composerInput.explicitSkillKeys;
+  }).toEqual(["instance:review"]);
+});

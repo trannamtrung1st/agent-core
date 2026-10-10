@@ -234,6 +234,9 @@ async function run() {
       if(mismatch.accepted) throw new Error("Mismatched fallback accepted");
       const onlySkill = await connection.invoke("SendText",command(session.sessionId,7,"user.text",{text:"/instance:composer.review",parts:[parts[0]]},{attachmentId:ready.attachmentId}));
       if(onlySkill.accepted) throw new Error("Skill-only turn accepted");
+      const revisionParts = [{kind:"reference",reference:{kind:"skill",agentInstanceId:instanceId,skillKey:"instance:composer.review",selectedRevision:1}}];
+      const revision = await connection.invoke("SendText",command(session.sessionId,8,"user.text",{text:`@skill:${instanceId}/instance:composer.review`,parts:revisionParts},{attachmentId:ready.attachmentId}));
+      if(revision.accepted || revision.error?.code!=="ValidationError") throw new Error(`Skill revision was accepted: ${JSON.stringify(revision)}`);
       await connection.stop(); break;
     }
     case "text-roundtrip": {

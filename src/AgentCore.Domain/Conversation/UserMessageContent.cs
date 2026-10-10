@@ -30,7 +30,7 @@ public sealed record UserResourceReference(string Kind, Guid? AgentInstanceId = 
             "session" or "backgroundSession" => Id(SessionId) && AgentInstanceId is null && ItemId is null && ArtifactId is null && AgentRunId is null && SkillKey is null,
             "artifact" => Id(SessionId) && Id(ArtifactId) && AgentInstanceId is null && ItemId is null && AgentRunId is null && SkillKey is null && SelectedRevision is null,
             "agentRun" => Id(SessionId) && Id(AgentRunId) && AgentInstanceId is null && ItemId is null && ArtifactId is null && SkillKey is null,
-            "skill" => Id(AgentInstanceId) && SkillKeys.IsValid(SkillKey) && SessionId is null && ItemId is null && ArtifactId is null && AgentRunId is null,
+            "skill" => Id(AgentInstanceId) && SkillKeys.IsValid(SkillKey) && SessionId is null && ItemId is null && ArtifactId is null && AgentRunId is null && SelectedRevision is null,
             _ => false
         };
         if (!valid || SelectedRevision is <= 0) throw new ArgumentException("Reference requires its exact typed locator fields and a positive optional revision.");

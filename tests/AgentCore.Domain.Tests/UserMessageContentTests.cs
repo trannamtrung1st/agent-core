@@ -22,6 +22,13 @@ public sealed class UserMessageContentTests
         Assert.True(UserMessageContent.HasTask([new("reference",Reference:new("session",SessionId:Guid.NewGuid()))]));
     }
     [Fact]
+    public void Skill_references_cannot_select_a_revision()
+    {
+        var reference = new UserResourceReference("skill", AgentInstanceId: Guid.NewGuid(), SkillKey: "instance:review", SelectedRevision: 1);
+        Assert.Throws<ArgumentException>(() => UserMessageContent.Normalize([new("reference", Reference: reference)]));
+        Assert.NotNull(UserMessageContent.Normalize([new("reference", Reference: reference with { SelectedRevision = null })]));
+    }
+    [Fact]
     public void Utf16_and_part_count_bounds_are_identical_for_plain_and_structured_unicode()
     {
         Assert.NotNull(UserMessageContent.Normalize([new("text",Text:new string('語',8000))]));

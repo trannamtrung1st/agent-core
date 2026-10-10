@@ -573,13 +573,27 @@ function Controller(props: Props) {
         }
         dismissed.current = "paste";
         setPicker(null);
-        selection.insertNodes(
-          parts.map((p) =>
-            p.kind === "text"
-              ? $createTextNode(p.text)
-              : new ComposerChipNode(p),
+        // Remove the replacement range before deduplicating against retained chips.
+        selection.removeText();
+        const retainedSkills = new Set(
+          $getRoot().getAllTextNodes().flatMap((node) =>
+            node instanceof ComposerChipNode && node.__part.kind === "invocation"
+              ? [node.__part.skillKey]
+              : [],
           ),
         );
+        parts = parts.filter((part) =>
+          part.kind !== "invocation" || !retainedSkills.has(part.skillKey),
+        );
+        if (parts.length) {
+          selection.insertNodes(
+            parts.map((p) =>
+              p.kind === "text"
+                ? $createTextNode(p.text)
+                : new ComposerChipNode(p),
+            ),
+          );
+        }
         const current = $getSelection();
         if ($isRangeSelection(current))
           dismissed.current = current.anchor

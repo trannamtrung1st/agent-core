@@ -42,3 +42,22 @@ Local disposable captures are `.impeccable/review/desktop.png`, `user-768.png`, 
 ## Verification boundaries
 
 Hosted CI, Docker Compose deployment/restart, paid-provider behavior, physical microphone/headset quality, native Vietnamese input-method operation, browser UI zoom and spoken screen-reader output were not run for this initiative. Deterministic Synthetic, real MessagePack, actual Chromium interactions, programmatic composition guards, accessible roles and temporary SQLite reopen establish the local feature behavior. Existing unrelated milestone freezes and hosted claims remain historical; P10/P11 are unopened.
+
+## Consistency review follow-up (2026-10-11)
+
+Review of `develop/branch-1` after `2c3af5f8` found and corrected three behavior gaps:
+
+- Internal paste deduplicated its payload but not existing editor chips, leaving two visible Skill chips for one canonical activation. The Chromium regression reproduced two chips before the fix. Paste now deduplicates against retained chips after removing the replacement selection; selecting and replacing the same Skill remains supported.
+- Reconnect reconciliation compared only fallback text and could erase a newer draft with the same reference locator but a different selected revision. It now also compares label-free structured parts before clearing the restored draft. A lost-ACK regression verifies the newer revision survives without retransmission.
+- Client validation accepted empty UUIDs and empty UUID Skill keys. Core accepted a selected revision on a Skill reference despite the protocol's immutable Skill locator rule. Client/Core validation now follows the existing protocol; unit tests and the real MessagePack scenario reject these invalid inputs.
+
+Executed locally with Node 22 and disposable Synthetic SQLite roots:
+
+- Full Domain suite: 195 passed.
+- Focused frontend parts/queue regressions: 33 passed. Broader frontend services, Composer and ChatApp suites: 20 files / 197 tests passed.
+- API ComposerReferenceTests and SignalRMessagePackTests: 38 passed. Final wire rerun after adding the Skill revision rejection: 37 passed.
+- Full composer Chromium file: 8 passed. Final duplicate/replacement paste regression rerun: 1 passed, including one visible history chip and one admitted Skill activation.
+- Playwright MCP: selected Review, pasted the existing chip, confirmed one visible chip, replaced the entire draft with that same Skill plus new text, sent it and observed a completed Synthetic reply and exactly one explicit Skill key in Run inspection. Reload retained the chip and reply. Product requests succeeded; an exploratory request used an incorrect `/runs` path and returned 404 before being corrected to the documented `/agent-runs` route. Reloaded console had no errors.
+- Frontend build passed, retaining Vite's existing large-chunk advisory. `git diff --check` passed.
+
+This follow-up verifies the affected local behavior; the hosted/manual verification boundaries above still apply.

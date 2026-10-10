@@ -68,6 +68,9 @@ export function hasTask(
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const skill =
   /^(?:definition:[a-z][a-z0-9._-]{0,63}|instance:(?:[a-z][a-z0-9._-]{0,63}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/;
+const emptyGuid = "00000000-0000-0000-0000-000000000000";
+const validGuid = (value: string) => guid.test(value) && value !== emptyGuid;
+const validSkill = (value: string) => skill.test(value) && value !== `instance:${emptyGuid}`;
 export function normalizeParts(raw: unknown): MessagePart[] {
   if (!Array.isArray(raw) || raw.length > 128)
     throw new Error("Use at most 128 message parts.");
@@ -96,7 +99,7 @@ export function normalizeParts(raw: unknown): MessagePart[] {
       p.kind === "invocation" &&
       p.invocationKind === "skill" &&
       typeof p.skillKey === "string" &&
-      skill.test(p.skillKey)
+      validSkill(p.skillKey)
     ) {
       if (!skills.has(p.skillKey)) {
         skills.add(p.skillKey);
@@ -147,13 +150,13 @@ export function normalizeParts(raw: unknown): MessagePart[] {
             ![
               "kind",
               ...required,
-              ...(r.kind === "artifact" ? [] : ["selectedRevision"]),
+              ...(r.kind === "artifact" || r.kind === "skill" ? [] : ["selectedRevision"]),
             ].includes(k),
         ) ||
         required.some(
           (k) =>
             typeof r[k as keyof ResourceReference] !== "string" ||
-            !(k === "skillKey" ? skill : guid).test(
+            !(k === "skillKey" ? validSkill : validGuid)(
               r[k as keyof ResourceReference] as string,
             ),
         ) ||

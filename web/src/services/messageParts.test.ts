@@ -76,6 +76,16 @@ describe("canonical composer input", () => {
       ]),
     ).toThrow();
   });
+  it("rejects empty identities and revisions on immutable Skill references", () => {
+    const id = "11111111-1111-1111-1111-111111111111";
+    const empty = "00000000-0000-0000-0000-000000000000";
+    for (const reference of [
+      { kind: "session", sessionId: empty },
+      { kind: "skill", agentInstanceId: id, skillKey: `instance:${empty}` },
+      { kind: "skill", agentInstanceId: id, skillKey: "instance:review", selectedRevision: 1 },
+    ]) expect(() => normalizeParts([{ kind: "reference", reference }])).toThrow();
+    expect(() => normalizeParts([{ kind: "invocation", invocationKind: "skill", skillKey: `instance:${empty}` }])).toThrow();
+  });
   it("keeps Unicode bounds and task eligibility", () => {
     expect(
       normalizeParts([{ kind: "text", text: "語".repeat(8000) }]),

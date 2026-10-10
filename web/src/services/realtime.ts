@@ -3320,11 +3320,12 @@ function reconcilePendingUserText(entries: { sourceEventId: string | null; role:
 
   if (historyHasUserEvent(entries, pendingUserText.eventId)) {
     const text = pendingUserText.text;
+    const parts = pendingUserText.parts;
     const restored = pendingUserText.pendingAttachments;
     pendingUserText = null;
     const latest = useSessionStore.getState();
     const patch: { draft?: string; draftParts?: MessagePart[] | null; pendingAttachments?: PendingAttachment[] } = {};
-    if (latest.draft === text) {
+    if (latest.draft === text && JSON.stringify(wireParts(latest.draftParts ?? [])) === JSON.stringify(wireParts(parts ?? []))) {
       patch.draft = "";
       patch.draftParts = null;
     }

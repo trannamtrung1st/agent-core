@@ -52,6 +52,20 @@ describe("Codex-style pending send queue", () => {
     expect(useSessionStore.getState().draftParts).toEqual(newer);
   });
 
+  it("preserves a newer reference revision when history confirms a lost ACK", async () => {
+    const original: MessagePart[] = [{ kind: "reference", reference: { kind: "session", sessionId: "11111111-1111-1111-1111-111111111111", selectedRevision: 1 } }];
+    const newer: MessagePart[] = [{ kind: "reference", reference: { kind: "session", sessionId: "11111111-1111-1111-1111-111111111111", selectedRevision: 2 } }];
+    const invoke = vi.fn().mockRejectedValue(new Error("lost ACK"));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", draft: messageText(original), draftParts: original });
+    await sendDraft("interrupt");
+    const eventId = invoke.mock.calls[0][1].eventId;
+    useSessionStore.setState({ connection: "ready", draft: messageText(newer), draftParts: newer });
+    hooks.handleEvent({ protocolVersion: 1, sessionId: "s1", attachmentId: "a2", eventId: "ready", sequence: 1, timestamp: new Date().toISOString(), correlationId: "ready", causationId: null, responseId: null, type: "session.ready", payload: { history: [{ entryId: "entry-1", sequence: 1, sourceEventId: eventId, role: "user", text: messageText(original), parts: original, status: "completed", createdAt: new Date().toISOString() }], mode: "text", status: "attached", outputState: "idle", activeResponseId: null } });
+    expect(useSessionStore.getState().draftParts).toEqual(newer);
+    expect(useSessionStore.getState().draft).toBe(messageText(newer));
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
   it("omits empty editor parts for attachment-only sends", async () => {
     const invoke=vi.fn().mockResolvedValue({accepted:true}); hooks.setConnection({invoke,send:vi.fn()} as never);
     const file={localId:"file1",displayName:"notes.txt",contentType:"text/plain",byteSize:4,status:"ready" as const,progress:100,attachmentId:"att1",error:null};
