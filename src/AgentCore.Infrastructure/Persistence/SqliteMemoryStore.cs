@@ -43,10 +43,13 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         {
             var migrations = db.Database.GetMigrations().ToArray();
             var applied = (await db.Database.GetAppliedMigrationsAsync(cancellationToken).ConfigureAwait(false)).ToArray();
-            // Only a complete, known post-cutover history can advance through forward migrations.
+            // The cutover baseline must be complete. Later known migrations can have gaps when
+            // parallel branches merge; EF applies those pending migrations before current-schema validation.
             // Legacy/untracked fixtures still require the exact current schema before stamping.
-            var trackedCanonicalSchema = applied.Contains("20261008063000_RetireLegacyExecution", StringComparer.Ordinal)
-                && applied.SequenceEqual(migrations.Take(applied.Length), StringComparer.Ordinal);
+            var cutoverIndex = Array.IndexOf(migrations, "20261008063000_RetireLegacyExecution");
+            var trackedCanonicalSchema = cutoverIndex >= 0
+                && applied.Take(cutoverIndex + 1).SequenceEqual(migrations.Take(cutoverIndex + 1), StringComparer.Ordinal)
+                && applied.All(migration => migrations.Contains(migration, StringComparer.Ordinal));
             if (!trackedCanonicalSchema)
             {
                 await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);

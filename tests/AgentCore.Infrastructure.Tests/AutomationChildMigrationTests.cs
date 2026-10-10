@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
 using AgentCore.Domain.Events;
 using AgentCore.Domain.Triggers;
 using AgentCore.Infrastructure.Persistence;
@@ -12,8 +13,10 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class AutomationChildMigrationTests
 {
-    [Fact]
-    public async Task Populated_upgrade_preserves_children_frozen_receipts_buckets_history_and_reopens()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Populated_upgrade_preserves_children_frozen_receipts_buckets_history_and_reopens(bool mergedBranchHistory)
     {
         var path = Path.Combine(Path.GetTempPath(), $"child-upgrade-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
@@ -45,12 +48,20 @@ public sealed class AutomationChildMigrationTests
                 await InsertAsync(connection, "CoreEventBuckets", new() { ["BucketId"] = bucketId.ToString(), ["AutomationId"] = ids[2].ToString(), ["PayloadJson"] = LegacyJson(bucket) });
                 await InsertAsync(connection, "TriggerOccurrences", new() { ["OccurrenceId"] = Guid.NewGuid().ToString(), ["DedupeKey"] = $"core:{receipt}:{ids[2]}", ["AutomationId"] = ids[2].ToString(), ["SourceKind"] = (int)TriggerSourceKind.CoreEvent, ["AgentInstanceId"] = owner.AgentInstanceId.ToString(), ["ProfileId"] = owner.ProfileId.ToString(), ["TriggerRevision"] = 7, ["EvidenceJson"] = JsonSerializer.Serialize(new { automationId = ids[2], instructions = "Historical instructions", triggerKind = "CoreEvent", triggerSummary = "Core Event · run.failed", triggerContext = new { eventId = receipt } }) });
                 await InsertAsync(connection, "TriggerOccurrences", new() { ["OccurrenceId"] = boundedId.ToString(), ["DedupeKey"] = "historical-budget-limit", ["AutomationId"] = ids[2].ToString(), ["SourceKind"] = (int)TriggerSourceKind.CoreEvent, ["AgentInstanceId"] = owner.AgentInstanceId.ToString(), ["ProfileId"] = owner.ProfileId.ToString(), ["TriggerRevision"] = 7, ["EvidenceJson"] = boundedEvidence });
-                await db.Database.MigrateAsync();
+                if (mergedBranchHistory)
+                {
+                    await db.Database.MigrateAsync("20261010065035_ScopedInstanceConfiguration");
+                    // This branch applied these before the BrowserPrivacy/ChildTriggers migrations arrived from main.
+                    await ApplyBranchMigrationAsync(db, "20261010072141_DefinitionResourceIdentityScope");
+                    await ApplyBranchMigrationAsync(db, "20261010082055_SessionReasoningPreference");
+                }
+                await new SqliteMemoryStore(new Factory(options), TimeProvider.System).EnsureCreatedAsync();
                 Assert.False(db.Database.HasPendingModelChanges());
                 Assert.Equal(3, await db.AutomationTriggers.CountAsync());
                 Assert.All(await db.Automations.ToArrayAsync(), a => { Assert.Equal(11, a.Revision); Assert.Equal("review-recent-work", a.PresetId); Assert.Equal(a.AutomationId, Assert.Single(a.Triggers).TriggerId); Assert.Equal(7, a.Triggers.Single().Revision); });
             }
-            await using var reopened = new AgentCoreDbContext(options); await reopened.Database.MigrateAsync();
+            await new SqliteMemoryStore(new Factory(options), TimeProvider.System).EnsureCreatedAsync();
+            await using var reopened = new AgentCoreDbContext(options);
             Assert.Equal(new[] { 0, 4, 5 }, (await reopened.Automations.Select(a => a.Status).ToArrayAsync()).Order());
             var source = await reopened.WebhookEvents.SingleAsync(); Assert.Equal((int)WebhookEventStatus.Revoked, source.Status); Assert.Equal(9, source.Revision);
             Assert.IsType<DailySchedule>(TriggerScheduleCodec.Deserialize((await reopened.AutomationTriggers.SingleAsync(t => t.Kind == 0)).ScheduleJson!));
@@ -73,6 +84,49 @@ public sealed class AutomationChildMigrationTests
             Assert.Equal("Historical instructions", evidence.RootElement.GetProperty("instructions").GetString());
         }
         finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Incomplete_baseline_or_unknown_history_does_not_apply_merged_migrations(bool unknownHistory)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"child-untrusted-history-{Guid.NewGuid():N}.db");
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
+        try
+        {
+            await using (var db = new AgentCoreDbContext(options))
+            {
+                await db.Database.MigrateAsync("20261010065035_ScopedInstanceConfiguration");
+                await ApplyBranchMigrationAsync(db, "20261010082055_SessionReasoningPreference");
+                if (unknownHistory)
+                    await db.Database.ExecuteSqlRawAsync("INSERT INTO __EFMigrationsHistory VALUES ('20261010070000_UnknownBranchMigration', '10.0.12');");
+                else
+                    await db.Database.ExecuteSqlRawAsync("DELETE FROM __EFMigrationsHistory WHERE MigrationId = '20260925071140_P7DefinitionLifecycle';");
+            }
+            await Assert.ThrowsAsync<AgentCoreException>(() =>
+                new SqliteMemoryStore(new Factory(options), TimeProvider.System).EnsureCreatedAsync().AsTask());
+            await using var verify = new AgentCoreDbContext(options);
+            Assert.DoesNotContain("20261010071652_AutomationChildTriggers", await verify.Database.GetAppliedMigrationsAsync());
+            Assert.DoesNotContain("20261010071329_BrowserPrivacyAdministration", await verify.Database.GetAppliedMigrationsAsync());
+        }
+        finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
+    }
+
+    private static async Task ApplyBranchMigrationAsync(AgentCoreDbContext db, string id)
+    {
+        var assembly = db.GetService<IMigrationsAssembly>();
+        var migration = assembly.CreateMigration(assembly.Migrations[id], db.Database.ProviderName!);
+        var model = db.GetService<IModelRuntimeInitializer>().Initialize(migration.TargetModel, designTime: true);
+        foreach (var command in db.GetService<IMigrationsSqlGenerator>().Generate(migration.UpOperations, model))
+            await db.Database.ExecuteSqlRawAsync(command.CommandText);
+        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO __EFMigrationsHistory VALUES ({id}, {"10.0.12"});");
+    }
+
+    private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
+    {
+        public AgentCoreDbContext CreateDbContext() => new(options);
+        public ValueTask<AgentCoreDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(CreateDbContext());
     }
 
     private static async Task InsertAsync(SqliteConnection connection, string table, Dictionary<string, object?> values)
