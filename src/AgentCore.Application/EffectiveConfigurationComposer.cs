@@ -27,6 +27,7 @@ internal static class EffectiveConfigurationComposer
         string definitionSource,
         string definitionStatus)
     {
+        definition = Agents.InstanceSettingsResolver.Resolve(definition, instance.SettingsOverrides);
         var environment = RoleEnvironments.Of(definition);
         var trigger = definition.TriggerPolicy;
         var instanceActive = instance.Lifecycle == AgentInstanceLifecycle.Active;

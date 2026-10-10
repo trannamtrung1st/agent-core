@@ -81,15 +81,21 @@ public sealed partial class SessionToolExecutor(
         return new(state.Policy, state.PolicyRevision, instance.ActiveVersion);
     }
 
+    public async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct)
+    {
+        if (_agentInstances is not null && _agentDefinitions is not null && definitionResources is not null)
+            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources).ResolveAsync(session.AgentInstanceId, ct);
+        // Isolated fixtures can supply their immutable Definition directly. Production wires all stores.
+        var owner = _agentInstances is null ? null : await _agentInstances.FindAsync(session.AgentInstanceId, ct);
+        return new(new(session.Definition, 0, session.PinnedPersonaRevision ?? 0, []), session.PinnedPersona ?? session.Definition.Identity,
+            await ResolveSkillCatalogAsync(session.AgentInstanceId, session.Definition, ct), owner?.ExecutionBudgets);
+    }
+
     public async ValueTask<EffectiveExecutionBudget> ResolveExecutionBudgetAsync(Guid owner, AgentDefinition definition,
         bool interactive, CancellationToken ct)
     {
         var instance = _agentInstances is null ? null : await _agentInstances.FindAsync(owner, ct).ConfigureAwait(false);
-        // Session behavior stays pinned, while resource defaults apply to the next Run.
-        var current = instance is not null && _agentDefinitions is not null
-            ? await _agentDefinitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct).ConfigureAwait(false) : null;
-        return AgentCore.Application.Execution.ExecutionBudgetResolver.Resolve(
-            definition with { ExecutionBudgets = current is null ? definition.ExecutionBudgets : current.ExecutionBudgets }, instance?.ExecutionBudgets, interactive);
+        return AgentCore.Application.Execution.ExecutionBudgetResolver.Resolve(definition, instance?.ExecutionBudgets, interactive);
     }
 
     public ValueTask<IReadOnlyList<EffectiveSkill>> ResolveSkillCatalogAsync(Guid? owner, AgentDefinition definition, CancellationToken ct) =>

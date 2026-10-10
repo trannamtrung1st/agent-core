@@ -880,6 +880,8 @@ internal sealed class GatedUserTurnSqliteFactory(string dbPath) : WebApplication
                 services.Remove(store);
             }
 
+            services.RemoveAll<IAgentInstanceStore>();
+            services.AddSingleton<IAgentInstanceStore>(provider => new SqliteAgentInstanceStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetRequiredService<IIdGenerator>()));
             services.AddSingleton<IMemoryStore>(provider =>
             {
                 var sqlite = new SqliteMemoryStore(

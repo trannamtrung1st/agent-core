@@ -316,6 +316,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentDefinitionDraftResourceRecord", b =>
                 {
+                    b.Property<string>("DraftId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ResourceId")
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
@@ -326,11 +330,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("ContentSha256")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DraftId")
-                        .IsRequired()
-                        .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Kind")
@@ -349,7 +348,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("UpdatedAtUtc")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("ResourceId");
+                    b.HasKey("DraftId", "ResourceId");
 
                     b.HasIndex("DraftId");
 
@@ -432,6 +431,31 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("AgentDefinitionPublicationResources", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentDefinitionResourceStateRecord", b =>
+                {
+                    b.Property<string>("InstanceId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResourceId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool?>("EnabledOverride")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("UpdatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("InstanceId", "ResourceId");
+
+                    b.ToTable("AgentDefinitionResourceStates", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentDefinitionSkillStateRecord", b =>
                 {
                     b.Property<string>("AgentInstanceId")
@@ -442,7 +466,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("Enabled")
+                    b.Property<bool?>("EnabledOverride")
                         .HasColumnType("INTEGER");
 
                     b.Property<long>("Revision")
@@ -498,6 +522,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SettingsOverridesJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("UnattendedModelCatalogKey")
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
@@ -514,6 +541,37 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("DefinitionId");
 
                     b.ToTable("AgentInstances", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentInstanceResourceRecord", b =>
+                {
+                    b.Property<string>("InstanceId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResourceId")
+                        .HasMaxLength(36)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LogicalPath")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("InstanceId", "ResourceId");
+
+                    b.HasIndex("InstanceId", "LogicalPath")
+                        .IsUnique();
+
+                    b.ToTable("AgentInstanceResources", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentInstanceSkillRecord", b =>
@@ -1581,6 +1639,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("ModelCatalogKey")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("ModelHasExplicitReasoningEffort")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ModelId")
                         .HasColumnType("TEXT");
 
@@ -1987,11 +2048,29 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentDefinitionResourceStateRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("InstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentDefinitionSkillStateRecord", b =>
                 {
                     b.HasOne("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", null)
                         .WithMany()
                         .HasForeignKey("AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentInstanceResourceRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("InstanceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -238,13 +238,13 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   await page.goto(`/admin/instances/${instance.instanceId}`);
   await page.getByLabel("Target definition version").click();
   await page.getByText(new RegExp(`v${versionTwo}\\b`)).first().click();
-  await page.getByRole("button", { name: `Upgrade to v${versionTwo}` }).click();
-  await expect(page.getByText(`Active version set to v${versionTwo}.`)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: `Upgrade to v${versionTwo}` }).click(); await page.getByRole("button", {name:"Adopt version",exact:true}).click();
+  await expect(page.getByText(`Instance adopted v${versionTwo}.`)).toBeVisible({ timeout: 15_000 });
 
   await page.getByLabel("Target definition version").click();
   await page.getByText(new RegExp(`v${versionOne}\\b`)).first().click();
-  await page.getByRole("button", { name: `Rollback to v${versionOne}` }).click();
-  await expect(page.getByText(`Active version set to v${versionOne}.`)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: `Rollback to v${versionOne}` }).click(); await page.getByRole("button", {name:"Adopt version",exact:true}).click();
+  await expect(page.getByText(`Instance adopted v${versionOne}.`)).toBeVisible({ timeout: 15_000 });
 
   await page.goto("/admin/definitions/examiner");
   await page.getByRole("button", { name: `Deprecate publication v${versionTwo}` }).click();

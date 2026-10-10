@@ -58,7 +58,7 @@ public sealed class BackgroundSessionJourneyTests
         var first = (await client.GetFromJsonAsync<AgentRunPageResponse>(path + "?limit=1"))!;
         var afterDeleted = (await client.GetFromJsonAsync<AgentRunPageResponse>(path + $"?limit=1&before={initial.NextCursor}"))!;
         Assert.Equal(admitted[1].AgentRunId.ToString(), Assert.Single(first.Items).AgentRunId);
-        Assert.Equal(first.Items, afterDeleted.Items);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(first.Items), System.Text.Json.JsonSerializer.Serialize(afterDeleted.Items));
         Assert.True(first.HasMore);
         var last = (await client.GetFromJsonAsync<AgentRunPageResponse>(path + $"?limit=1&before={first.NextCursor}"))!;
         Assert.Equal(admitted[0].AgentRunId.ToString(), Assert.Single(last.Items).AgentRunId);
@@ -219,13 +219,13 @@ public sealed class BackgroundSessionJourneyTests
             Assert.Equal(original.AgentRunId.ToString(), wire.RootElement.GetProperty("initialRun").GetProperty("agentRunId").GetString());
             Assert.False(wire.RootElement.TryGetProperty("latestRun", out _));
             var after = (await checkClient.GetFromJsonAsync<BackgroundSessionResponse>(path + "/background"))!;
-            Assert.Equal(before.InitialRun, after.InitialRun);
+            Assert.Equal(System.Text.Json.JsonSerializer.Serialize(before.InitialRun), System.Text.Json.JsonSerializer.Serialize(after.InitialRun));
             Assert.Equal("Original title", after.OriginalTitle);
             Assert.Equal(before.Origin, after.Origin);
             Assert.Contains("ChatList", after.Surfaces);
             Assert.Equal(1, after.ArtifactCount); Assert.False(after.ArtifactCountHasMore);
             var list = (await checkClient.GetFromJsonAsync<BackgroundSessionPageResponse>($"/api/v2/agent-instances/{instanceId}/background-sessions"))!;
-            Assert.Equal(after.InitialRun, Assert.Single(list.Items).InitialRun);
+            Assert.Equal(System.Text.Json.JsonSerializer.Serialize(after.InitialRun), System.Text.Json.JsonSerializer.Serialize(Assert.Single(list.Items).InitialRun));
             var page = (await checkClient.GetFromJsonAsync<ArtifactPageResponse>(path + $"/artifacts/page?agentRunId={original.AgentRunId}"))!;
             Assert.Equal(fileA.ArtifactId.ToString(), Assert.Single(page.Items).ArtifactId);
             Assert.Equal(4, (await checkClient.GetFromJsonAsync<ArtifactPageResponse>(path + "/artifacts/page"))!.Items.Count);

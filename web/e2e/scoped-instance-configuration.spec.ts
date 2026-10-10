@@ -1,0 +1,46 @@
+import {test,expect} from '@playwright/test';
+
+test('scoped settings save/reset, conflict recovery and resource inspection preserve ownership',async({page})=>{
+  test.setTimeout(90_000);
+  await page.goto('/admin');
+  await expect(page.getByRole('heading',{name:'Agent inventory'})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'))).toEqual(expect.any(String));
+  const token=await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'));
+  const headers={'X-AgentCore-Owner-Capability':token!};
+  const created=await page.request.post('/api/v2/admin/agent-instances',{headers,data:{definitionId:'general-assistant',version:21}});
+  expect(created.ok()).toBe(true);const owner=await created.json();
+  const root=`/api/v2/admin/agent-instances/${owner.instanceId}`;
+  await page.goto(`/admin/instances/${owner.instanceId}/identity/settings`);
+  await page.getByRole('button',{name:'Conversation Definition default',exact:true}).click();
+  await page.getByText('Customize',{exact:true}).click();
+  const save=page.getByRole('button',{name:'Save Conversation',exact:true});await expect(save).toBeDisabled();
+  await page.getByRole('spinbutton',{name:'Maximum output tokens'}).fill('2048');await save.click();await expect(page.getByRole('button',{name:'Reload settings',exact:true})).toBeEnabled();await expect(save).toBeDisabled();
+  let sections=await(await page.request.get(root+'/settings',{headers})).json();
+  let conversation=sections.find((s:{section:string})=>s.section==='conversationPolicy');
+  expect(conversation.overrides).toEqual({maxOutputTokens:2048});
+  await page.getByRole('textbox',{name:'Language',exact:true}).fill('fr-FR');
+  expect((await page.request.patch(root+'/settings/behaviorPolicy',{headers,data:{expectedInstanceRevision:conversation.instanceRevision,set:{acknowledgeInterruption:false},clear:[]}})).ok()).toBe(true);
+  await save.click();await expect(page.getByRole('alert').filter({hasText:'stale'}).first()).toBeVisible();
+  await expect(page.getByRole('textbox',{name:'Language',exact:true})).toHaveValue('fr-FR');
+  await page.getByRole('button',{name:'Reload settings',exact:true}).click();await expect(save).toBeEnabled();await save.click();await expect(page.getByRole('button',{name:'Reload settings',exact:true})).toBeEnabled();await expect(save).toBeDisabled();
+  await page.getByRole('button',{name:'Reset Maximum output tokens',exact:true}).click();await save.click();await expect(page.getByRole('button',{name:'Reload settings',exact:true})).toBeEnabled();await expect(save).toBeDisabled();
+  sections=await(await page.request.get(root+'/settings',{headers})).json();conversation=sections.find((s:{section:string})=>s.section==='conversationPolicy');expect(conversation.overrides).toEqual({language:'fr-FR'});
+  await page.getByRole('radiogroup',{name:'Conversation source'}).getByText('Inherit Definition',{exact:true}).click();await page.getByRole('button',{name:'Reset section',exact:true}).click();
+  await expect(page.getByRole('spinbutton',{name:'Maximum output tokens'})).toBeDisabled();
+  await page.getByRole('tab',{name:'Skills & resources',exact:true}).click();await page.getByRole('tab',{name:'Resources',exact:true}).click();
+  await page.getByRole('button',{name:'New Instance resource',exact:true}).click();await page.getByRole('textbox',{name:'Resource logical path'}).fill('verification/scoped.md');
+  await page.locator('input[type=file]').setInputFiles({name:'scoped.md',mimeType:'text/markdown',buffer:Buffer.from('Exact Synthetic resource bytes')});
+  await page.getByRole('button',{name:'Save resource',exact:true}).click();await expect(page.getByText('verification/scoped.md',{exact:true})).toBeVisible();
+  await page.route(`**/api/v2/admin/agent-instances/${owner.instanceId}/resources`, route => route.request().method() === 'GET'
+    ? route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({detail:'Resources temporarily unavailable.'})}) : route.continue());
+  await page.reload();await expect(page.getByRole('alert').filter({hasText:'Resources temporarily unavailable.'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'New Instance resource',exact:true})).toBeDisabled();
+  await page.unroute(`**/api/v2/admin/agent-instances/${owner.instanceId}/resources`);
+  await page.getByRole('button',{name:'Retry resources',exact:true}).click();await expect(page.getByText('verification/scoped.md',{exact:true})).toBeVisible();
+  const inspect=page.getByRole('button',{name:'Inspect',exact:true});await inspect.click();await page.getByRole('button',{name:'Preview content',exact:true}).click();await expect(page.getByText('Exact Synthetic resource bytes',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Close',exact:true}).click();await expect(inspect).toBeFocused();
+  await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+  await inspect.click();await expect(page.getByRole('button',{name:'Close',exact:true})).toBeVisible();await page.getByRole('button',{name:'Close',exact:true}).click();
+  await page.getByRole('button',{name:'Delete',exact:true}).click();await page.getByRole('button',{name:'Delete resource',exact:true}).click();await expect(page.getByText('No instance resources',{exact:true})).toBeVisible();
+  await page.goBack();await expect(page.getByRole('tab',{name:'Skills',exact:true})).toHaveAttribute('aria-selected','true');
+});

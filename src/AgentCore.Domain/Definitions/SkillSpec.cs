@@ -23,7 +23,7 @@ public sealed record SkillSpec(
     IReadOnlyList<string> RequiredCapabilities, IReadOnlyList<string> ResourcePaths);
 
 public sealed record AgentDefinitionSkillState(Guid AgentInstanceId, string DefinitionSkillId,
-    bool Enabled, long Revision, DateTimeOffset UpdatedAt);
+    bool? EnabledOverride, long Revision, DateTimeOffset UpdatedAt);
 
 public sealed record AgentInstanceSkill(string SkillId, Guid AgentInstanceId,
     string Name, string Description, string Procedure, SkillProjection Projection, bool Enabled,

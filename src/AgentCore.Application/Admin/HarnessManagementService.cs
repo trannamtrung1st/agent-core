@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using AgentCore.Application.Observability;
 using System.Text;
 using System.Text.Json;
@@ -32,8 +31,8 @@ public sealed class HarnessManagementService(
     IToolConfigurationGate toolConfiguration,
     IIdGenerator ids,
     TimeProvider time,
-    IDiagnosticIdSource diagnostics,
-    ILogger<HarnessManagementService> logger)
+ AgentInstanceSettingsService localSettings, AgentInstanceResourceService localResources,
+    AgentCore.Application.Execution.AgentRunConfigurationResolver runConfigurations)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static string Bound(string value, int max) => value.Length <= max ? value : value[..max];
@@ -101,6 +100,58 @@ public sealed class HarnessManagementService(
             return await StartCoreAsync(instance, purpose, token);
         }, ct);
 
+    public ValueTask<AgentInstance> ProposeSharedAsync(Guid instanceId, long expectedRevision, string purpose,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> selectedFields, IReadOnlyList<string> resourceKeys, CancellationToken ct = default) =>
+        gates.WithInstanceAsync(instanceId, async token =>
+        {
+            var instance = await RequireInstanceAsync(instanceId, token);
+            RequireRevision(instance, expectedRevision);
+            var baseline = await RequireDefinitionAsync(instance, token);
+            var patch = new InstanceSettingsOverrides();
+            foreach (var section in selectedFields)
+            {
+                var available = InstanceSettingsResolver.Overrides(instance.SettingsOverrides ?? new(), section.Key);
+                if (section.Value.Distinct(StringComparer.Ordinal).Count() != section.Value.Count || section.Value.Any(field => !available.ContainsKey(field)))
+                    throw AgentCoreErrors.Validation("Select only existing Instance overrides for shared promotion.");
+                patch = InstanceSettingsResolver.Patch(patch, section.Key,
+                    section.Value.ToDictionary(field => field, field => JsonSerializer.SerializeToElement(available[field])), []);
+            }
+            if (resourceKeys.Distinct(StringComparer.Ordinal).Count() != resourceKeys.Count || resourceKeys.Count > AgentResourceLimits.MaxItemsPerDraft)
+                throw AgentCoreErrors.Validation("Selected resources are duplicated or exceed the quota.");
+            var local = await localResources.ListAsync(instanceId, token);
+            var selected = resourceKeys.Select(key => local.Resources.SingleOrDefault(r => r.Key == key && r.Origin == "Instance")
+                ?? throw AgentCoreErrors.Validation("Shared promotion requires explicitly selected Instance-owned resources.")).ToArray();
+            if (!selectedFields.Any(section => section.Value.Count > 0) && selected.Length == 0)
+                throw AgentCoreErrors.Validation("Select at least one local override or resource.");
+            var effective = InstanceSettingsResolver.Resolve(baseline, patch);
+            instance = await StartCoreAsync(instance, purpose, token);
+            var prep = instance.HarnessManagement!.Preparation!;
+            var draft = await lifecycle.GetDraftAsync(prep.DraftId, token);
+            var candidate = AgentDefinitionCandidate.FromDefinition(effective);
+            // Keep the fork's already copied immutable resources. Only selected local content is added.
+            foreach (var resource in selected)
+            {
+                var bytes = await localResources.ReadAsync(instanceId, resource.Key, token);
+                if (DefinitionResourceContentHasher.ComputeSha256Hex(bytes) != resource.ContentSha256) throw AgentCoreErrors.Conflict("Selected resource changed. Review it again.");
+                var stored = await resources.StoreDraftContentAsync(draft.DraftId, resource.MediaType, bytes, token);
+                var path = "instance-promoted/" + resource.LogicalPath;
+                await resources.UpsertDraftResourceAsync(draft.DraftId, draft.Revision, null, path, resource.Kind,
+                    stored.MediaType, stored.ContentSha256, stored.ByteLength, token);
+                draft = await lifecycle.GetDraftAsync(draft.DraftId, token);
+                if (resource.Kind == AgentDefinitionResourceKind.Knowledge)
+                    candidate = candidate with { Environment = RoleEnvironments.Of(candidate.ToPublished(1)) with { KnowledgeSources = [
+                        .. RoleEnvironments.Of(candidate.ToPublished(1)).KnowledgeList,
+                        new("promoted-" + AgentInstanceResourceService.ParseKey(resource.Key).Id.ToString("N"), resource.LogicalPath, path, path)] } };
+            }
+            draft = await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate, token);
+            var state = instance.HarnessManagement!;
+            var evidence = new HarnessVerificationEvidence("Owner", draft.Revision, "Selected Instance promotion proposal", HarnessEvidenceStatus.PartiallyVerified,
+                "Only explicitly selected local settings and resources enter a reusable draft.",
+                $"Source Instance revision {expectedRevision}; {selectedFields.Sum(s => s.Value.Count)} fields and {selected.Length} resources selected.",
+                "Review the diff and run candidate verification before explicitly publishing. External production effects are unverified.");
+            return await SaveAsync(instance, state with { Preparation = prep with { Evidence = [evidence] } }, "sharedProposal", "Preparing", false, token);
+        }, ct);
+
     private async ValueTask<AgentInstance> StartCoreAsync(AgentInstance instance, string purpose, CancellationToken ct)
     {
             var state = RequireEnabled(instance);
@@ -111,17 +162,7 @@ public sealed class HarnessManagementService(
             var draft = await lifecycle.ForkDraftAsync(instance.DefinitionId, instance.ActiveVersion,
                 effectiveSource.Kind, ct);
             var active = effectiveSource.Definition;
-            if (effectiveSource.Kind == DefinitionDraftSourceKind.ForkDurable)
-            {
-                var inherited = await resources.ListPublicationResourcesAsync(instance.DefinitionId, instance.ActiveVersion, ct);
-                if (inherited.Count > 0)
-                {
-                    var bound = await resources.BindDraftResourcesAsync(draft.DraftId, draft.Revision,
-                        inherited.Select(r => new AgentDefinitionDraftResourceBatchItem(null, r.LogicalPath, r.Kind, r.MediaType, r.ContentSha256, r.ByteLength)).ToArray(), ct);
-                    draft = await lifecycle.GetDraftAsync(draft.DraftId, ct);
-                }
-            }
-            else
+            if (effectiveSource.Kind == DefinitionDraftSourceKind.ForkBuiltIn)
             {
                 // Built-in knowledge becomes ordinary Definition resources in the fork; publication never falls back to host files.
                 foreach (var source in RoleEnvironments.Of(active).KnowledgeList)
@@ -268,7 +309,7 @@ public sealed class HarnessManagementService(
                     ? string.Join("; ", checks.Findings.Select(f => f.Message)) : "Validation passed."));
             evidence.Add(new("Core", draft.Revision, "Authoring authority", HarnessEvidenceStatus.Verified,
                 "Policy, instance, preparation and candidate revision match.", agent
-                    ? "Current grant and active base version match; Managed Chat may promote knowledge after verification."
+                    ? "Current grant and selected base version match; shared publication requires the explicit promotion gate."
                     : "Current grant and active base version match; Admin controls this preparation."));
             evidence.Add(new("Core", draft.Revision, "Tool approvals", prep.Approvals.Any(a => a.Status is "Pending" or "Consumed")
                 ? HarnessEvidenceStatus.RequiresExternalEvidence : HarnessEvidenceStatus.Verified,
@@ -281,7 +322,7 @@ public sealed class HarnessManagementService(
             }
             var status = checks.HasBlockingFindings || evidence.Any(e => e.DraftRevision == draft.Revision && e.Status == HarnessEvidenceStatus.Failed)
                 ? HarnessPreparationStatus.Failed : prep.Approvals.Any(a => a.Status is "Pending" or "Consumed")
-                    ? HarnessPreparationStatus.AwaitingApproval : evidence.Any(e => e.Actor == "Agent" && e.DraftRevision == draft.Revision)
+                    ? HarnessPreparationStatus.AwaitingApproval : evidence.Any(e => (e.Actor == "Agent" || !agent && e.Actor == "Owner" && e.Check == "Selected Instance promotion proposal") && e.DraftRevision == draft.Revision)
                         ? HarnessPreparationStatus.Ready : HarnessPreparationStatus.Preparing;
             return await SaveAsync(instance, state with { Preparation = prep with { Evidence = evidence.TakeLast(64).ToArray(), Status = status } },
                 "verify", status.ToString(), agent, ct);
@@ -302,7 +343,7 @@ public sealed class HarnessManagementService(
             if (prep.Status != HarnessPreparationStatus.Ready
                 || prep.Evidence.Any(e => e.DraftRevision == draftRevision && e.Status == HarnessEvidenceStatus.Failed)
                 || prep.Approvals.Any(a => a.Status is "Pending" or "Consumed")
-                || !(prep.Evidence.Any(e => e.Actor == "Agent" && e.DraftRevision == draftRevision)
+                || !(prep.Evidence.Any(e => (e.Actor == "Agent" || !agent && e.Actor == "Owner" && e.Check == "Selected Instance promotion proposal") && e.DraftRevision == draftRevision)
                     || agent && prep.Evidence.Any(e => e.Actor == "Core" && e.DraftRevision == draftRevision
                         && e.Check == "Candidate knowledge readback" && e.Status == HarnessEvidenceStatus.Verified))
                 || !prep.Evidence.Any(e => e.Actor == "Core" && e.DraftRevision == draftRevision && e.Check == "Structure and resource policy" && e.Status == HarnessEvidenceStatus.Verified))
@@ -330,22 +371,22 @@ public sealed class HarnessManagementService(
         return new(state.Policy, state.PolicyRevision, instance.ActiveVersion);
     }
 
-    public async ValueTask<object> InspectChatAsync(Guid instanceId, int currentSessionPinnedDefinitionVersion, CancellationToken ct)
+    public async ValueTask<object> InspectChatAsync(Guid instanceId, int currentRunDefinitionVersion, CancellationToken ct)
     {
         var instance = await RequireInstanceAsync(instanceId, ct);
         var state = RequireEnabled(instance);
-        var active = await RequireDefinitionAsync(instance, ct);
+        var active = (await runConfigurations.ResolveAsync(instanceId, ct)).Configuration.Definition;
         return new
         {
             activeDefinitionVersion = instance.ActiveVersion, policyRevision = state.PolicyRevision,
-            currentSessionPinnedDefinitionVersion, changesApplyToFutureSessions = true,
+            currentRunDefinitionVersion = currentRunDefinitionVersion, instanceRevision = instance.Revision, changesApplyToNextRun = true,
             mode = state.Policy.Mode.ToString(), scopes = state.Policy.Scopes.Select(s => s.ToString()),
             authoringEligibleTools = state.Policy.EligibleTools.Where(t => toolConfiguration.IsConfigured(t)),
             instructions = ToolJsonResults.ClipUtf8Prefix(active.SystemInstructions, 1024),
             instructionsTruncated = System.Text.Encoding.UTF8.GetByteCount(active.SystemInstructions) > 1024,
             knowledge = RoleEnvironments.Of(active).KnowledgeList,
             skills = active.SkillList, activeDefinitionAuthorizedCapabilities = RoleEnvironments.Of(active).ToolList,
-            activation = "authoringEligibleTools is for changing future Definitions only. It is not the current Session tool set. The current Session remains pinned to currentSessionPinnedDefinitionVersion.",
+            activation = "Changes customize this Instance only and apply to the next new AgentRun, including existing Sessions. Current Runs remain unchanged. Shared Definition promotion requires separate owner review.",
             authoringGuide = "Inspect, read relevant external source material using authorized ordinary tools, then call the offered operation. Correct named validation errors. Reinspect on conflicts. Report saved only after a successful tool result."
 
         };
@@ -359,6 +400,8 @@ public sealed class HarnessManagementService(
             var state = RequireEnabled(instance);
             var context = new HarnessChatContext(state.Policy, state.PolicyRevision, instance.ActiveVersion);
             if (!HarnessChatTools.Allows(toolName, context)) throw AgentCoreErrors.Validation("This harness area is not granted.");
+            if (!args.TryGetProperty("expectedInstanceRevision", out var instanceRevision) || !instanceRevision.TryGetInt64(out var expectedInstanceRevision) || expectedInstanceRevision != instance.Revision)
+                throw AgentCoreErrors.Conflict("Instance revision changed; inspect and request a fresh operation.");
             if (!args.TryGetProperty("expectedVersion", out var version) || !version.TryGetInt32(out var expectedVersion)
                 || !args.TryGetProperty("policyRevision", out var revision) || !revision.TryGetInt64(out var policyRevision)
                 || expectedVersion != instance.ActiveVersion || policyRevision != state.PolicyRevision)
@@ -402,90 +445,52 @@ public sealed class HarnessManagementService(
             if (!sourceRead) throw AgentCoreErrors.Validation("Read the source with an authorized ordinary tool in this turn before retaining it; owner-provided material uses conversation:user.");
             if (operation.Kind is "tool.select" or "tool.configure" && (operation.Id is null || !toolConfiguration.IsConfigured(operation.Id)))
                 throw AgentCoreErrors.Validation("The proposed tool is not currently configured.");
-            // Pure policy/shape checks run before the durable fork. Invalid model payloads leave no failed draft.
+            // Validate before any Instance mutation. Shared publications are outside ordinary Chat authority.
             ValidateOperation(state.Policy, AgentDefinitionCandidate.FromDefinition(active), operation, sourceRead);
-            if (operation.Kind == "knowledge.upsert"
-                && RoleEnvironments.Of(active).KnowledgeList.FirstOrDefault(existing => existing.Identity == operation.Id) is { } existingKnowledge
-                && existingKnowledge.Title == operation.Id && existingKnowledge.Citation == operation.Source
-                && KnowledgeSourcePaths.ResolveBackingPath(existingKnowledge) == KnowledgeSourcePaths.ResolveBackingPath(operation.Id!, null)
-                && await roleKnowledge.ReadContentAsync(active, existingKnowledge.Identity, token) == operation.Content)
-                return new { saved = true, changed = false, activeVersion = instance.ActiveVersion,
-                    appliesTo = "future conversations", currentSessionUnchanged = true };
-            if (operation.Kind == "instructions.update" && active.SystemInstructions == operation.Content)
-                return new { saved = true, changed = false, activeVersion = instance.ActiveVersion,
-                    appliesTo = "future conversations", currentSessionUnchanged = true };
-            if (operation.Kind == "tool.select" && RoleEnvironments.Of(active).ToolList.Contains(operation.Id!, StringComparer.Ordinal) == operation.Enabled!.Value)
-                return new { saved = true, changed = false, activeVersion = instance.ActiveVersion,
-                    appliesTo = "future conversations", currentSessionUnchanged = true };
-            if (operation.Kind == "tool.configure" && RoleEnvironments.Of(active).AttachmentPolicy.AllowUnreadUnsupportedTypes == operation.AllowUnreadUnsupportedTypes!.Value)
-                return new { saved = true, changed = false, activeVersion = instance.ActiveVersion,
-                    appliesTo = "future conversations", currentSessionUnchanged = true };
-            instance = await StartCoreAsync(instance, "Conversational harness improvement", token);
-            state = instance.HarnessManagement!;
-            var prep = state.Preparation!;
-            try
+            var receipt = new HarnessInstanceChange(ids.NewId(), operation.Kind, instance.Revision + 1,
+                instance.ActiveVersion, state.PolicyRevision, approval?.ApprovalId, ToolActionHash.Compute(toolName, args), operation.Source,
+                time.GetUtcNow(), new("Agent", instance.Revision + 1, "Instance self-management", HarnessEvidenceStatus.PartiallyVerified,
+                    expected ?? "Typed operation succeeds.", observed ?? "Instance content saved.", limitation));
+            var localState = state with { InstanceChanges = [.. (state.InstanceChanges ?? []).TakeLast(63), receipt] };
+            switch (operation.Kind)
             {
-                var draft = await lifecycle.GetDraftAsync(prep.DraftId, token);
-                operation = operation with { DraftRevision = draft.Revision };
-                ValidateOperation(state.Policy, draft.Candidate, operation, sourceRead);
-                await ApplyAsync(instance, draft, operation, token);
-                draft = await lifecycle.GetDraftAsync(prep.DraftId, token);
-                var evidence = new List<HarnessVerificationEvidence>();
-                if (expected is not null && observed is not null)
-                    evidence.Add(new("Agent", draft.Revision, "Conversational change assessment", HarnessEvidenceStatus.PartiallyVerified,
-                        expected, observed, limitation));
-                if (operation.Kind == "knowledge.upsert")
-                {
-                    var source = draft.Candidate.Environment!.KnowledgeList.Single(k => k.Identity == operation.Id);
-                    var resource = (await resources.ListDraftResourcesAsync(draft.DraftId, token)).Single(r => r.LogicalPath == KnowledgeSourcePaths.ResolveBackingPath(source));
-                    var content = await resources.ReadDraftResourceContentAsync(draft.DraftId, resource.ResourceId, token);
-                    var matched = content is not null && Encoding.UTF8.GetString(content) == operation.Content;
-                    evidence.Add(new("Core", draft.Revision, "Candidate knowledge readback", matched ? HarnessEvidenceStatus.Verified : HarnessEvidenceStatus.Failed,
-                        "Retained content matches the candidate binding and provenance.", matched ? $"Readback matched; provenance: {operation.Source}." : "Readback failed."));
-                }
+                case "instructions.update":
+                    await localSettings.PatchAsync(instanceId, "instructions", instance.Revision,
+                        new Dictionary<string, JsonElement> { ["systemInstructions"] = JsonSerializer.SerializeToElement(operation.Content!) }, [], token, AdminEventActorKind.Agent, localState);
+                    break;
+                case "tool.select":
+                    var effective = InstanceSettingsResolver.Resolve(active, instance.SettingsOverrides);
+                    var selected = RoleEnvironments.Of(effective).ToolList;
+                    var next = operation.Enabled == true ? selected.Append(operation.Id!).Distinct(StringComparer.Ordinal).ToArray()
+                        : selected.Where(t => t != operation.Id).ToArray();
+                    await localSettings.PatchAsync(instanceId, "capabilities", instance.Revision,
+                        new Dictionary<string, JsonElement> { ["selected"] = JsonSerializer.SerializeToElement(next) }, [], token, AdminEventActorKind.Agent, localState);
+                    break;
+                case "tool.configure":
+                    await localSettings.PatchAsync(instanceId, "capabilities", instance.Revision,
+                        new Dictionary<string, JsonElement> { ["allowUnreadUnsupportedTypes"] = JsonSerializer.SerializeToElement(operation.AllowUnreadUnsupportedTypes!.Value) }, [], token, AdminEventActorKind.Agent, localState);
+                    break;
+                case "knowledge.upsert":
+                    var collection = await localResources.ListAsync(instanceId, token);
+                    var existing = collection.Resources.SingleOrDefault(r => r.Origin == "Instance" && r.LogicalPath == "knowledge/" + operation.Id);
+                    await localResources.UpsertAsync(instanceId, instance.Revision, existing is null ? null : AgentInstanceResourceService.ParseKey(existing.Key).Id,
+                        existing?.Revision, "knowledge/" + operation.Id, AgentDefinitionResourceKind.Knowledge, "text/markdown",
+                        Encoding.UTF8.GetBytes(operation.Content!), true, SkillAuthor.Agent, token, harnessManagement: localState);
+                    break;
+                case "knowledge.remove":
+                    var catalog = await localResources.ListAsync(instanceId, token);
+                    var item = catalog.Resources.SingleOrDefault(r => r.Key == operation.Id || r.Origin == "Instance" && r.LogicalPath == "knowledge/" + operation.Id)
+                        ?? throw AgentCoreErrors.NotFound("Knowledge resource was not found. Inspect its origin-qualified identity.");
+                    if (item.Origin == "Instance") await localResources.DeleteAsync(instanceId, item.Key, instance.Revision, item.Revision, SkillAuthor.Agent, token, localState);
+                    else await localResources.SetEnabledAsync(instanceId, item.Key, instance.Revision, item.Revision, false, SkillAuthor.Agent, token, localState);
+                    break;
+                default: throw AgentCoreErrors.Validation("Use the ordinary skills tools for Instance Skill changes.");
+            }
+            var updated = await RequireInstanceAsync(instanceId, token);
+            return new { saved = true, changed = updated.Revision != instance.Revision, instanceRevision = updated.Revision,
+                activeVersion = updated.ActiveVersion, owner = "instance", appliesTo = "next new AgentRun, including existing Sessions",
+                currentRunUnchanged = true, verification = "Typed policy/content validation passed; Agent assessment is partial.", limitation };
 
-                prep = prep with { Evidence = evidence, Approvals = approval is null ? []
-                    : [new(approval.ApprovalId, approval.ActionHash, operation, "Approved")] };
-                instance = await SaveAsync(instance, state with { Preparation = prep }, operation.Kind, "ChatCandidateCommitted", true, token);
-                instance = await VerifyCoreAsync(instance, prep.PreparationId, token, agent: true);
-                if (instance.HarnessManagement!.Preparation!.Status != HarnessPreparationStatus.Ready)
-                {
-                    var failed = instance.HarnessManagement.Preparation;
-                    var checks = await validation.ValidateDraftAsync(failed.DraftId, token);
-                    var failures = checks.Findings.Where(f => f.Severity == DefinitionValidationSeverity.Blocking)
-                        .Take(8).Select(f => new { check = "Structure and resource policy", field = f.Field,
-                            code = f.Code, message = Bound(f.Message, 300) }).ToList();
-                    var evidenceFailures = failed.Evidence.Where(e => e.DraftRevision == draft.Revision
-                            && e.Status is (HarnessEvidenceStatus.Failed or HarnessEvidenceStatus.RequiresExternalEvidence)
-                            && (e.Check != "Structure and resource policy" || failures.Count == 0))
-                        .Take(8 - failures.Count).Select(e => new { check = e.Check, field = "candidate",
-                            code = "verification_failed", message = Bound(e.Observed, 300) });
-                    failures.AddRange(evidenceFailures);
-                    if (failures.Count == 0)
-                        failures.Add(new { check = "Core verification", field = "candidate", code = "not_ready",
-                            message = "The candidate was not ready for promotion; inspect the retained failed preparation." });
-                    return new { saved = false, changed = false, error = "verification_failed", failures,
-                        activeVersionUnchanged = true, retryable = true };
-                }
-                instance = await PromoteCoreAsync(instance, draft.Revision, token, agent: true);
-                return new { saved = true, changed = true, activeVersion = instance.ActiveVersion, appliesTo = "future conversations",
-                    currentSessionUnchanged = true, verification = "Core validation/readback passed; Agent assessment is partial.", limitation };
-            }
-            catch (Exception exception)
-            {
-                var diagnosticId = exception is AgentCoreException known ? known.DiagnosticId : diagnostics.NewId();
-                if (exception is not AgentCoreException and not OperationCanceledException)
-                    DiagnosticLog.Warning(logger, exception, diagnosticId!.Value, "Conversational harness authoring failed.",
-                        new DiagnosticContext(AgentInstanceId: instanceId, ErrorCategory: "authoring", ErrorCode: "HarnessAuthoringFailed"));
-                var current = await RequireInstanceAsync(instanceId, CancellationToken.None);
-                if (current.HarnessManagement?.Preparation?.PreparationId == prep.PreparationId
-                    && current.HarnessManagement.Preparation.Status != HarnessPreparationStatus.Published)
-                    await SaveAsync(current, current.HarnessManagement with { Preparation = current.HarnessManagement.Preparation with
-                    { Status = HarnessPreparationStatus.Failed, DiagnosticId = diagnosticId } }, operation.Kind, "ChatAuthoringFailed", true, CancellationToken.None);
-                if (exception is not AgentCoreException and not OperationCanceledException)
-                    throw new AgentCoreException("HarnessAuthoringFailed", "The harness change could not be saved. The active version is unchanged; request a fresh change.", 500) { DiagnosticId = diagnosticId };
-                throw;
-            }
         }, ct);
 
     public async ValueTask<object> InspectAsync(Guid instanceId, Guid preparationId, CancellationToken ct = default)
@@ -610,7 +615,8 @@ public sealed class HarnessManagementService(
         if (op.Kind is "knowledge.upsert" or "knowledge.remove")
         {
             ValidateText(op.Id, 80, "knowledge identity");
-            if (op.Id!.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_'))
+            if (op.Kind == "knowledge.remove" && op.Id!.Contains(':')) _ = AgentInstanceResourceService.ParseKey(op.Id);
+            else if (op.Id!.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_'))
                 throw AgentCoreErrors.Validation("Knowledge identity must be a simple name.");
         }
         if (op.Kind == "knowledge.upsert")

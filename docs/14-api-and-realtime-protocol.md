@@ -357,7 +357,7 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Histo
 | GET /api/v2/profile | Owner capability; returns local profile revision and allowlisted typed values with provenance (`source`) and per-field `updatedAt` |
 | PATCH /api/v2/profile | Owner capability; optimistic `expectedRevision`; allowlisted keys only; null/whitespace removes a field; server stamps `UserSet` (browser cannot set source) |
 | POST /api/v2/sessions/{id}/model | Catalog-level session model mutation (`key` Default or a catalog key, optional `reasoningEffort`). Server resolves and persists concrete `SessionModelSelection`. Rejects `SessionBusy` while generating. Terminal sessions are read-only |
-| GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if the pinned role does not allow `knowledge.retrieve` or the identity |
+| GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if current Instance authority does not allow `knowledge.retrieve` or the identity |
 | GET /api/v2/sessions/{id}/workspace | Execution-view listing (`prefix` query; omitted or `/` resolves `/home`); owner capability |
 | GET /api/v2/sessions/{id}/workspace/content?path= | Read authorized `/home` or `/working` content and read-only `/agent` or `/attachments`; relative HTTP paths resolve from `/home`; host paths are never returned |
 | PUT /api/v2/sessions/{id}/workspace/content?path= | Writes use `/working` or direct `/home` with durable replacement CAS; 250 MiB scope quotas; read-only overlays/secrets/escaping paths/symlinks remain forbidden |
@@ -503,7 +503,7 @@ Scratch delete/batch approval binds exact paths and recursive intent, but not th
 
 ### Harness inspection identity fields
 
-`harness.inspect` returns `activeDefinitionVersion`, `authoringEligibleTools`, `activeDefinitionAuthorizedCapabilities`, `currentSessionPinnedDefinitionVersion` and `changesApplyToFutureSessions:true`. `policyRevision` remains the authoring CAS token; writes use `expectedVersion` equal to inspected `activeDefinitionVersion`. Instruction text is bounded and explicitly marks `instructionsTruncated`. Authoring eligibility never grants the current Session authority; live pins remain unchanged.
+`harness.inspect` returns `activeDefinitionVersion`, `authoringEligibleTools`, `activeDefinitionAuthorizedCapabilities`, `currentRunDefinitionVersion`, `instanceRevision` and `changesApplyToNextRun:true`. `policyRevision` remains the authoring CAS token; writes use `expectedVersion` equal to inspected `activeDefinitionVersion`. Instruction text is bounded and explicitly marks `instructionsTruncated`. Authoring eligibility never grants the current Session authority; live pins remain unchanged.
 
 ## Credential tool boundary
 
@@ -607,3 +607,27 @@ Browser effective-configuration projection adds optional `limits` with `operatio
 ### Adaptive browser tool receipts
 
 This is an internal model-tool contract; it adds no HTTP endpoint or SignalR event. `browser.screenshot` returns existing artifact/MIME/size/redaction metadata plus `imageDelivered`, `snapshotId`, `tabRef`, `observation` and `coordinateEvidence`. `observationTruncated=true` indicates that the output budget clipped/omitted semantic context. Image bytes use existing model image parts and never appear as base64 in tool JSON. `browser.mouse` now requires `snapshotId` matching `^snap_[a-f0-9]{32}$` from a fresh viewport screenshot of the owning Session's active page. Existing operation/coordinate parameters remain unchanged. Semantic snapshot IDs, foreign IDs and stale IDs return `stale_visual_evidence` with no effect. Target/full-page screenshots return `coordinateEvidence=false`. The token grants neither capability nor approval. Text-only screenshots explicitly return `imageDelivered=false`; coordinate tools remain vision-gated.
+
+## Scoped Instance configuration HTTP
+
+All routes below require the existing trusted-local owner capability. Settings responses are an array of typed section projections: `section`, `definitionVersion`, `instanceRevision`, `definitionDefaults`, `overrides`, `effective`, `sources` and `configurationHash`. Fields have allowlisted section ownership; budgets use the existing execution-budgets contract.
+
+| Route under `/api/v2/admin/agent-instances/{id}` | Contract |
+| --- | --- |
+| `GET /settings` or `/settings/{section}` | Read coherent effective values, sparse overrides and provenance. |
+| `PATCH /settings/{section}` | `{ "expectedInstanceRevision": 4, "set": { "maxOutputTokens": 2048 }, "clear": [] }`; set/clear are disjoint, unknown fields fail. |
+| `GET /resources` or `/resources/{key}` | Bounded origin-qualified resource metadata and dependencies. |
+| `GET /resources/{key}/content` | Authorized exact immutable bytes with matching media/path metadata. |
+| `POST /resources`, `PATCH /resources/{key}` | Multipart one file, logicalPath, kind, enabled, expectedInstanceRevision and existing expectedRevision. |
+| `PUT /resources/{key}/enabled` | Expected Instance/item revision and boolean enabled. |
+| `DELETE /resources/{key}/enabled-override` | Reset inherited state with expected Instance/state revisions. |
+| `POST /resources/{key}/copy` | Definition key, expectedInstanceRevision and target logicalPath; independent local copy. |
+| `DELETE /resources/{key}` | Local only; expected Instance/item revisions. |
+| `GET /active-version/preview?version=N` | Validated adoption diff, preserved overrides and inherited identity changes; blocking dependencies reject adoption. |
+| `POST /harness/propose-shared` | Expected revision, purpose, selectedFields map and explicit local resourceKeys; produces a reviewed draft, not a publication. |
+
+Invalid shape/policy/media is 400, missing capability 401/403, missing/foreign resource 404, stale revision or dependency conflict 409. Archive permits inspection and blocks mutation. Downloads are separate from catalogs. Run JSON adds optional `configuration` containing Definition ID/version, Instance/persona revisions, SHA-256 and resource key/path/hash/length metadata. Terminal historical Runs may have no reconstructable configuration. Session descriptors continue to expose creation provenance; fresh Activations use current Instance configuration.
+
+`harness.inspect` reports `currentRunDefinitionVersion`, `instanceRevision`, `policyRevision`, `activeDefinitionVersion` and `changesApplyToNextRun:true`. Local tools require expectedInstanceRevision and preserve exact source/approval evidence. A successful local receipt reports Current Run unchanged and Next Run scope, never a shared publication.
+
+Version preview also returns `changedInheritedItems` for stable-ID Skill/resource changes, and includes Definition budget-class changes and retained Instance class overrides in its field lists. Explicit Session reasoning effort survives a default-derived model refresh; user/host model choices remain authoritative.

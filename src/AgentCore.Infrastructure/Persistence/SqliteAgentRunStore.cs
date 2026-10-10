@@ -110,6 +110,13 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
             AgentRunStoreMapping.ObserveAdmission(snapshot, AgentRunStoreMapping.ToDomain(existing), false);
             return new AgentRunAdmissionResult(false, AgentRunStoreMapping.ToDomain(existing));
         }
+        if (run.Admission.Configuration is { InstanceRevision: > 0 } config)
+        {
+            var instance = await db.AgentInstances.AsNoTracking().SingleOrDefaultAsync(r => r.InstanceId == run.AgentInstanceId.ToString("D"), cancellationToken).ConfigureAwait(false);
+            if (instance is null || instance.Lifecycle != "Active" || instance.Revision != config.InstanceRevision
+                || instance.ActiveVersion != run.DefinitionVersion || instance.DefinitionId != run.DefinitionId)
+                throw AgentCoreErrors.Conflict("Instance configuration changed before Run admission. Retry the new activation.");
+        }
         if (expectedRoutingRevision is null && occurrence?.AcceptedAgentRunId is not null)
             throw AgentCoreErrors.Persistence("Live receipt has no matching admitted Run.");
         if (run.Admission.Activation.Kind == ActivationKind.ImmediateBackground)

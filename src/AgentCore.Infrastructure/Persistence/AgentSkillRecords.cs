@@ -3,7 +3,7 @@ public sealed class AgentDefinitionSkillStateRecord
 {
     public string AgentInstanceId { get; set; } = "";
     public string DefinitionSkillId { get; set; } = "";
-    public bool Enabled { get; set; }
+    public bool? EnabledOverride { get; set; }
     public long Revision { get; set; }
     public long UpdatedAtUtc { get; set; }
 }

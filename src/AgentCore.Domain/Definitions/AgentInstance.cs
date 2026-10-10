@@ -19,4 +19,4 @@ public sealed record AgentInstance(
     string? UnattendedModelCatalogKey = null,
     string? UnattendedReasoningEffort = null,
     HarnessManagementState? HarnessManagement = null,
-    ExecutionBudgetPolicy? ExecutionBudgets = null);
+    ExecutionBudgetPolicy? ExecutionBudgets = null, InstanceSettingsOverrides? SettingsOverrides = null);

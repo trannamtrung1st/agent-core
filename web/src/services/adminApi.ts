@@ -721,8 +721,8 @@ export async function updateAdminAgentInstanceActiveVersion(
   return (await response.json()) as AdminAgentInstance;
 }
 
-export async function listAdminDraftResources(draftId: string): Promise<AdminDefinitionDraftResource[]> {
-  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/resources`);
+export async function listAdminDraftResources(draftId: string, signal?: AbortSignal): Promise<AdminDefinitionDraftResource[]> {
+  const response = await ownerFetch(`/api/v2/admin/definition-drafts/${draftId}/resources`, { signal });
   if (!response.ok) {
     throw await adminProblemMessage(response, `Admin draft resources failed (${response.status})`);
   }
@@ -1018,6 +1018,7 @@ export type HarnessReview = {
   draftRevision: number | null; instructions: string | null; skills: HarnessSkill[];
   knowledge: { identity: string; title: string; citation: string; resourcePath: string | null }[]; selectedTools: string[];
   diff: AdminDefinitionDraftDiff | null; resources: AdminDefinitionDraftResource[];
+  instanceChanges?: { operationId: string; operation: string; instanceRevision: number; definitionVersion: number; policyRevision: number; approvalId: string | null; actionHash: string; source: string | null; savedAt: string; evidence: HarnessEvidence }[];
 };
 
 export async function getHarnessReview(instanceId: string): Promise<HarnessReview> {

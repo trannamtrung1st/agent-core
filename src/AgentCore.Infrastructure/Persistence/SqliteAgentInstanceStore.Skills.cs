@@ -12,12 +12,12 @@ public sealed partial class SqliteAgentInstanceStore
         var owner = id.ToString("D");
         var states = await db.AgentDefinitionSkillStates.Where(s => s.AgentInstanceId == owner).ToArrayAsync(ct);
         var locals = await db.AgentInstanceSkills.Where(s => s.AgentInstanceId == owner).ToArrayAsync(ct);
-        try { SkillPolicy.ValidateAlwaysBudget(skills.Select(s => (s.Projection, states.SingleOrDefault(x => x.DefinitionSkillId == s.Id)?.Enabled ?? s.DefaultEnabled, s.Procedure))
+        try { SkillPolicy.ValidateAlwaysBudget(skills.Select(s => (s.Projection, states.SingleOrDefault(x => x.DefinitionSkillId == s.Id)?.EnabledOverride ?? s.DefaultEnabled, s.Procedure))
             .Concat(locals.Select(s => ((SkillProjection)s.Projection, s.Enabled, s.Procedure)))); }
         catch (ArgumentException e) { throw AgentCoreErrors.Validation(e.Message); }
         var known = states.Select(s => s.DefinitionSkillId).ToArray();
         foreach (var s in skills.Where(s => !known.Contains(s.Id))) db.AgentDefinitionSkillStates.Add(new()
-            { AgentInstanceId = owner, DefinitionSkillId = s.Id, Enabled = s.DefaultEnabled, Revision = 1, UpdatedAtUtc = at.ToUnixTimeMilliseconds() });
+            { AgentInstanceId = owner, DefinitionSkillId = s.Id, EnabledOverride = null, Revision = 1, UpdatedAtUtc = at.ToUnixTimeMilliseconds() });
     }
     public async ValueTask<InstanceSkillSnapshot> ReadSkillsAsync(Guid instanceId, CancellationToken ct = default)
     {
@@ -25,7 +25,7 @@ public sealed partial class SqliteAgentInstanceStore
         var id = instanceId.ToString("D");
         var states = await db.AgentDefinitionSkillStates.AsNoTracking().Where(s => s.AgentInstanceId == id).ToArrayAsync(ct);
         var skills = await db.AgentInstanceSkills.AsNoTracking().Where(s => s.AgentInstanceId == id).ToArrayAsync(ct);
-        return new(states.Select(s => new AgentDefinitionSkillState(instanceId, s.DefinitionSkillId, s.Enabled, s.Revision, DateTimeOffset.FromUnixTimeMilliseconds(s.UpdatedAtUtc))).ToArray(),
+        return new(states.Select(s => new AgentDefinitionSkillState(instanceId, s.DefinitionSkillId, s.EnabledOverride, s.Revision, DateTimeOffset.FromUnixTimeMilliseconds(s.UpdatedAtUtc))).ToArray(),
             skills.Select(s => new AgentInstanceSkill(s.SkillId, instanceId, s.Name, s.Description, s.Procedure,
                 (SkillProjection)s.Projection, s.Enabled, JsonSerializer.Deserialize<string[]>(s.RequiredCapabilitiesJson, Json) ?? throw AgentCoreErrors.Persistence("Invalid stored Skill requirements."),
                 s.Revision, DateTimeOffset.FromUnixTimeMilliseconds(s.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(s.UpdatedAtUtc),
@@ -44,7 +44,7 @@ public sealed partial class SqliteAgentInstanceStore
             var row = await db.AgentDefinitionSkillStates.SingleOrDefaultAsync(s => s.AgentInstanceId == ownerId && s.DefinitionSkillId == state.DefinitionSkillId, ct);
             if (row?.Revision != m.ExpectedStateRevision) throw AgentCoreErrors.Conflict("Definition Skill state revision is stale.");
             if (row is null) throw AgentCoreErrors.Persistence("Definition Skill state is missing.");
-            row.Enabled = state.Enabled; row.Revision = state.Revision; row.UpdatedAtUtc = state.UpdatedAt.ToUnixTimeMilliseconds();
+            row.EnabledOverride = state.EnabledOverride; row.Revision = state.Revision; row.UpdatedAtUtc = state.UpdatedAt.ToUnixTimeMilliseconds();
         }
         var skillId = m.DeleteSkillId ?? m.InstanceSkill?.SkillId;
         if (skillId is string id)

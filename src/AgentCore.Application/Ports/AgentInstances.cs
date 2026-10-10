@@ -5,6 +5,8 @@ namespace AgentCore.Application.Ports;
 
 public interface IAgentInstanceStore
 {
+    ValueTask<InstanceResourceSnapshot> ReadResourcesAsync(Guid instanceId, CancellationToken ct = default) => throw new NotSupportedException();
+    ValueTask MutateResourcesAsync(InstanceResourceMutation mutation, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<InstanceSkillSnapshot> ReadSkillsAsync(Guid instanceId, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask MutateSkillsAsync(SkillMutation mutation, CancellationToken ct = default) => throw new NotSupportedException();
 
@@ -67,7 +69,9 @@ public sealed record AgentInstanceRevisionUpdate(
     string? UnattendedReasoningEffort = null,
     HarnessManagementState? HarnessManagement = null,
     AdminEventAppend? History = null, IReadOnlyList<SkillSpec>? DefinitionSkills = null,
-    bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null);
+    bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
+    bool SetSettingsOverrides = false, InstanceSettingsOverrides? SettingsOverrides = null,
+    IReadOnlyList<Triggers.InstanceAutomationPolicyChange>? AutomationPolicyChanges = null);
 
 public interface IAgentInstanceService
 {
@@ -108,3 +112,10 @@ public sealed record SkillMutation(Guid InstanceId, long ExpectedInstanceRevisio
     AgentDefinitionSkillState? DefinitionState = null, AgentInstanceSkill? InstanceSkill = null,
     string? DeleteSkillId = null, long? ExpectedSkillRevision = null, long? ExpectedStateRevision = null,
     AdminEventAppend? History = null);
+
+public sealed record InstanceResourceSnapshot(IReadOnlyList<AgentDefinitionResourceState> DefinitionStates,
+    IReadOnlyList<AgentInstanceResource> InstanceResources);
+public sealed record InstanceResourceMutation(Guid InstanceId, long ExpectedInstanceRevision,
+    AgentInstanceResource? Resource = null, AgentDefinitionResourceState? DefinitionState = null,
+    Guid? DeleteResourceId = null, long? ExpectedResourceRevision = null, long? ExpectedStateRevision = null,
+    AdminEventAppend? History = null, HarnessManagementState? HarnessManagement = null);

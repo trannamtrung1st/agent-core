@@ -3,6 +3,9 @@ version: 1
 slug: "web-src-features-admin-adminapp-tsx"
 primary_target: "web/src/features/admin/AdminApp.tsx"
 related_targets:
+  - web/src/features/admin/InstanceSettingsSection.tsx
+  - web/src/features/admin/InstanceResourcesSection.tsx
+  - web/src/features/admin/ExecutionBudgetsSection.tsx
   - web/src/features/admin/HarnessManagementSection.tsx
   - web/src/features/admin/DefinitionVersionsTable.tsx
   - web/src/features/admin/InstanceContinuitySection.tsx
@@ -35,7 +38,7 @@ THESIS: Make configuration, authority and continuity easy to inspect with compac
 
 OWN-WORLD: Existing Admin panel insets, direct Ant Design controls, token spacing and shared confirmation; `/docs` owns behavior.
 
-STORY: Browse Definitions, Instances and global Connections → Credentials / Events. Instance tabs are Identity & version, Skills, Continuity, Automation, Activity, Credentials and Effective configuration. Identity & version contains Profile; Skills separates Definition and Instance ownership; Continuity contains Memory and Experience; Automation contains Triggers and Policies & models; Activity contains Sessions (default) and independent Runs. Labels preserve existing URL-backed keys. Teaching happens in Chat; Admin retains governance, inspection and explicit owner changes.
+STORY: Browse Definitions, Instances and global Connections → Credentials / Events. Instance tabs are Identity & version, Skills & resources, Continuity, Automation, Activity, Credentials and Effective configuration. Identity & version contains Profile, Settings and Workspace; Skills & resources has Skills and Resources, each separating Definition and Instance ownership; Continuity contains Memory and Experience; Automation contains Triggers and Policies & models; Activity contains Sessions (default) and independent Runs. Labels preserve existing URL-backed keys. Teaching happens in Chat; Admin retains governance, inspection and explicit owner changes.
 
 FIRST VIEWPORT: Shared inventory/search/pagination and instance panel insets. Automations summarizes Name, Destination, When, Status, Next run, Last run, Model and Origin. Activity Sessions uses meaningful titles and secondary copyable IDs, origin, lifecycle and last activity. The independent Runs collection shows readable activation, secondary Run/Session IDs, Created, Status and Updated; it opens the exact AgentRun in shared Run details rather than showing the old Automation/Instructions columns.
 
@@ -56,3 +59,9 @@ WAIT: Shared AgentRunDetails displays typed Waiting separately from approval/ret
 ### Core Event preset and filter authoring
 
 The existing Instance Triggers drawer owns Custom/preset selection, a third Core Event trigger, optional expression, dispatch/window and read-only sample testing. Presets fill disabled editable drafts and explain prerequisites. Core types are Instance-owned built-in signals; Shared Events remain webhook resources in global Connections. Preserve shared Ant Design v6 model/reasoning controls, 640px/full-mobile drawer, footer reachability, focus return and stale-result invalidation. Test status uses aria-live and a stable accessible button label. Delivery diagnostics show safe status/code/revision with independent retry. Product behavior is owned by docs/13 and docs/14; this is presentation context only.
+
+## Scoped Instance extension (2026-10-10)
+
+Identity & version owns Settings sections and the existing Execution budgets form. Skills & resources keeps Skills as default and adds Resources. The two resource panels reuse collection toolbar/table/quiet metadata and source labels. Settings use Inherit/Customize and per-field provenance/reset, with semantic section save; operating instructions have full-replacement copy. Panels own outer inset, stacks own token gaps and controls own internal padding. Drawer width is 640px desktop and full mobile; tables scroll locally; filters/actions wrap without page overflow. Current Run unchanged and next Run copy is precise. No theme palette/token changes.
+
+Initial rendered evidence: `local/verification/scoped-resources/{resources,settings,skills,drawer}-{1440,768,390}.png`, from the running disposable Synthetic app. Settings shows saved 2048 token override; resource catalog and inspection show a real Synthetic uploaded text file and exact preview. Budgets remain class-based beneath Settings. Review disposition and functional regression closure belong to the new scoped configuration report; these captures do not establish full milestone acceptance.

@@ -877,6 +877,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.ModelId = selection?.ModelId;
         row.ModelSelectionSource = selection?.SelectionSource.ToString();
         row.ModelReasoningEffort = selection?.ReasoningEffort;
+        row.ModelHasExplicitReasoningEffort = selection?.HasExplicitReasoningEffort ?? false;
     }
 
     private static SessionModelSelection? ReadModelSelection(SnapshotRecord row)
@@ -894,7 +895,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             row.ModelProviderAlias,
             row.ModelId,
             Enum.Parse<ModelSelectionSource>(row.ModelSelectionSource),
-            row.ModelReasoningEffort);
+            row.ModelReasoningEffort, row.ModelHasExplicitReasoningEffort);
     }
 
     private static ModelGenerationProvenance? ReadSummaryModel(SnapshotRecord row)

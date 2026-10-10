@@ -1,6 +1,9 @@
 import { ExecutionBudgetLimitsProvider, useExecutionBudgetLimits } from "./executionBudgetLimits";
-import { InstanceExecutionBudgets, validExecutionBudgets } from "./ExecutionBudgetsSection";
+import { validExecutionBudgets } from "./ExecutionBudgetsSection";
 import { groupedCapabilityOptions, reconcileAlwaysCapabilities } from "./capabilityOptions";
+import { previewInstanceVersion } from "../../services/instanceConfiguration";
+import { InstanceSettingsSection } from "./InstanceSettingsSection";
+import { InstanceResourcesSection } from "./InstanceResourcesSection";
 import { InstanceSkillsSection } from "./InstanceSkillsSection";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { updateHarness } from "../../services/adminApi";
@@ -1731,22 +1734,26 @@ function DraftEditor({
     setPublishEligible(false);
   }, [activeDraft.draftId, activeDraft.revision]);
 
-  const reloadResources = useCallback(async () => {
+  const reloadResources = useCallback(async (signal?: AbortSignal) => {
     setResourcesLoading(true);
     onError(null);
     try {
-      const items = await listAdminDraftResources(activeDraft.draftId);
+      const items = await listAdminDraftResources(activeDraft.draftId, signal);
+      if (signal?.aborted) return;
       setResources(items);
     } catch (error) {
-      reportAdminError(onError, error, "Failed to load resources.");
+      if (!signal?.aborted) reportAdminError(onError, error, "Failed to load resources.");
     } finally {
       setResourcesLoading(false);
     }
   }, [activeDraft.draftId, onError]);
 
   useEffect(() => {
-    void reloadResources();
-  }, [reloadResources, activeDraft.revision]);
+    if (busy) return;
+    const controller = new AbortController();
+    void reloadResources(controller.signal);
+    return () => controller.abort();
+  }, [reloadResources, activeDraft.revision, busy]);
 
   const reloadToolRegistry = useCallback(async () => {
     setToolRegistryLoading(true);
@@ -2426,6 +2433,7 @@ export function InstanceDetail({
   const [activityTab, setActivityTab] = useState("sessions");
   const [continuityTab, setContinuityTab] = useState("memory");
   const [automationTab, setAutomationTab] = useState("automations");
+  const [resourceTab, setResourceTab] = useState("skills");
   const [identityTab, setIdentityTab] = useState("profile");
   const [sourceSelection, setSourceSelection] = useState<AutomationSelection>();
   const [experienceSelection, setExperienceSelection] = useState<ExperienceSelection>();
@@ -2438,6 +2446,7 @@ export function InstanceDetail({
     if (tab === "activity") setActivityTab(section ?? "sessions");
     if (tab === "continuity") setContinuityTab(section ?? "memory");
     if (tab === "automation") setAutomationTab(section ?? "automations");
+    if (tab === "skills") setResourceTab(section ?? "skills");
     if (tab === "identity") setIdentityTab(section ?? "profile");
   }, [instanceId, tab, section]);
   useEffect(() => {
@@ -2459,11 +2468,12 @@ export function InstanceDetail({
     navigateToAppPath(`${window.location.pathname}${params.size ? `?${params}` : ""}`, true);
   };
   const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
-    const nextSection = selectedSection ?? (next === "activity" ? activityTab : next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : undefined);
+    const nextSection = selectedSection ?? (next === "activity" ? activityTab : next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "skills" ? resourceTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : undefined);
     updateActiveTab(next);
     if (next === "activity") setActivityTab(nextSection ?? "sessions");
     if (next === "continuity" && nextSection) setContinuityTab(nextSection);
     if (next === "automation" && nextSection) setAutomationTab(nextSection);
+    if (next === "skills") setResourceTab(nextSection ?? "skills");
     if (next === "identity") setIdentityTab(nextSection ?? "profile");
     navigateToAppPath(adminInstancePath(instanceId, next, nextSection as AdminInstanceSection | undefined));
   };
@@ -2551,12 +2561,16 @@ export function InstanceDetail({
                 key: "identity",
                 label: "Identity & version",
                 children: <Tabs activeKey={identityTab} onChange={key => setActiveTab("identity", key as AdminInstanceSection)} aria-label="Identity sections" items={[
-                  { key: "profile", label: "Profile", children: <Flex vertical gap={token.padding}><InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} /><InstanceExecutionBudgets key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} onUpdated={onInstanceChanged} /></Flex> },
+                  { key: "profile", label: "Profile", children: <Flex vertical gap={token.padding}><InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} /></Flex> },
+                  { key: "settings", label: "Settings", children: <InstanceSettingsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "identity" && identityTab === "settings"} onUpdated={onInstanceChanged} /> },
                   { key: "workspace", label: "Workspace", children: <InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} /> }
                 ]} />
               }]),
               ...([{
-                key: "skills", label: "Skills", children: <InstanceSkillsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "skills"} onUpdated={onInstanceChanged} />
+                key: "skills", label: "Skills & resources", children: <Tabs activeKey={resourceTab} onChange={key => setActiveTab("skills", key as AdminInstanceSection)} aria-label="Skills and resources sections" items={[
+                  { key: "skills", label: "Skills", children: <InstanceSkillsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "skills" && resourceTab === "skills"} onUpdated={onInstanceChanged} /> },
+                  { key: "resources", label: "Resources", children: <InstanceResourcesSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "skills" && resourceTab === "resources"} onUpdated={onInstanceChanged} /> }
+                ]} />
               },
               {
                 key: "continuity", label: "Continuity",
@@ -2765,13 +2779,24 @@ export function InstanceManagedControls({
     }
     setBusy(true);
     try {
-      await updateAdminAgentInstanceActiveVersion(
-        config.instanceId,
-        config.instanceRevision,
-        targetVersion
-      );
-      message.success(`Active version set to v${targetVersion}.`);
-      onUpdated();
+      const ownerId = config.instanceId; const version = targetVersion;
+      const preview = await previewInstanceVersion(ownerId, version);
+      if (preview.instanceRevision !== config.instanceRevision) throw new Error("Instance changed. Reload and preview again.");
+      confirmAction(modal, {
+        title: `Adopt Definition v${version}?`,
+        content: <Flex vertical gap={8}>
+          <Typography.Paragraph>{preview.activationNotice}</Typography.Paragraph>
+          <Typography.Text>Changed defaults: {preview.changedDefinitionFields.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>Preserved Instance overrides: {preview.preservedInstanceOverrides.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>New inherited items: {preview.newInheritedItems.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>Changed inherited items: {preview.changedInheritedItems?.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>Removed inherited items: {preview.removedInheritedItems.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>Compatible Skill enablement choices, local resources and class budget overrides are retained.</Typography.Text>
+        </Flex>, okText: 'Adopt version', onOk: async () => {
+          await updateAdminAgentInstanceActiveVersion(ownerId, preview.instanceRevision, version);
+          message.success(`Instance adopted v${version}.`); onUpdated();
+        }
+      });
     } catch (error) {
       handleMutationError(error);
     } finally {
@@ -2891,7 +2916,7 @@ export function InstanceManagedControls({
           <section aria-label="Active version">
             <Typography.Title level={5}>Active version</Typography.Title>
             <Typography.Paragraph type="secondary">
-              Choose the immutable definition version used by new sessions.
+              Choose the immutable Definition version used by the next new Run, including in existing conversations.
             </Typography.Paragraph>
             {inventoryError ? (
               <Alert

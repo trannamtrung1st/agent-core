@@ -6,6 +6,8 @@ public sealed record HarnessStartRequest(long ExpectedRevision, string Purpose);
 public sealed record HarnessRunRequest(string PreparationId);
 public sealed record HarnessRevisionRequest(long ExpectedRevision);
 public sealed record HarnessPromotionRequest(long ExpectedRevision, long DraftRevision);
+public sealed record HarnessSharedProposalRequest(long ExpectedRevision, string Purpose,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> SelectedFields, IReadOnlyList<string> ResourceKeys);
 public sealed record HarnessApprovalRequest(long ExpectedRevision, string ActionHash, bool Approve);
 public sealed record HarnessPolicyResponse(string Mode, IReadOnlyList<string> Scopes, IReadOnlyList<string> Sources,
     IReadOnlyList<string> EligibleTools, bool Frozen);
@@ -24,4 +26,8 @@ public sealed record HarnessReviewResponse(string InstanceId, long InstanceRevis
     HarnessPolicyResponse Policy, long PolicyRevision, HarnessPreparationResponse? Preparation,
     long? DraftRevision, string? Instructions, IReadOnlyList<HarnessSkillResponse> Skills,
     IReadOnlyList<HarnessKnowledgeResponse> Knowledge, IReadOnlyList<string> SelectedTools,
-    AdminDefinitionDraftDiffResponse? Diff, IReadOnlyList<AdminDefinitionDraftResourceResponse> Resources);
+    AdminDefinitionDraftDiffResponse? Diff, IReadOnlyList<AdminDefinitionDraftResourceResponse> Resources,
+    IReadOnlyList<HarnessInstanceChangeResponse>? InstanceChanges = null);
+public sealed record HarnessInstanceChangeResponse(string OperationId, string Operation, long InstanceRevision,
+    int DefinitionVersion, long PolicyRevision, string? ApprovalId, string ActionHash, string? Source,
+    DateTimeOffset SavedAt, HarnessEvidenceResponse Evidence);

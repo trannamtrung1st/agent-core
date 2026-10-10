@@ -35,6 +35,7 @@ public sealed class SessionManager
     private readonly AdminLifecycleCoordinator? _lifecycleGate;
     private readonly IBrowserLease? _browserLease;
     private readonly ExperienceService? _experience;
+    private readonly Execution.AgentRunConfigurationResolver? _configurations;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -54,7 +55,7 @@ public sealed class SessionManager
         AdminLifecycleCoordinator? lifecycleGate = null,
         IBrowserLease? browserLease = null,
         ExperienceService? experience = null,
-        AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null)
+        AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null, Execution.AgentRunConfigurationResolver? configurations = null)
     {
         _definitions = definitions;
         _store = store;
@@ -74,6 +75,7 @@ public sealed class SessionManager
         _lifecycleGate = lifecycleGate;
         _browserLease = browserLease;
         _experience = experience;
+        _configurations = configurations;
     }
 
     public Task<SessionSnapshot> CreateForInstanceAsync(
@@ -146,6 +148,7 @@ public sealed class SessionManager
             .ConfigureAwait(false)
             ?? throw AgentCoreErrors.NotFound(
                 $"Agent '{instance.DefinitionId}' version {instance.ActiveVersion} was not found.");
+        definition = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(definition, instance.SettingsOverrides);
         return await CreateCoreAsync(
             definition,
             instance.InstanceId,
@@ -618,12 +621,14 @@ public sealed class SessionManager
             throw AgentCoreErrors.Validation("Model catalog is not configured.");
         }
 
+        var currentDefinition = _configurations is null ? snapshot.Definition
+            : (await _configurations.ResolveAsync(snapshot.AgentInstanceId, cancellationToken)).Configuration.Definition;
         var selection = SessionModelBinder.Bind(
             _models,
             modelKey,
             reasoningEffort,
             source,
-            snapshot.Definition.ModelDefaults);
+            currentDefinition.ModelDefaults);
         if (snapshot.ModelSelection == selection)
         {
             return snapshot;
@@ -750,7 +755,8 @@ public sealed class SessionManager
         }
 
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        return await _knowledge.RetrieveAsync(snapshot.Definition, identity, cancellationToken).ConfigureAwait(false);
+        var definition = _configurations is null ? snapshot.Definition : (await _configurations.ResolveAsync(snapshot.AgentInstanceId, cancellationToken)).Configuration.Definition;
+        return await _knowledge.RetrieveAsync(definition, identity, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<WorkspaceNode>> ListWorkspaceAsync(
@@ -767,8 +773,9 @@ public sealed class SessionManager
             var writable = await _agentWorkspace.SessionWritableAsync(sessionId, cancellationToken);
             return writable ? homeNodes.Select(n => n with { Writable = true }).ToArray() : homeNodes;
         }
-        await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
-        var nodes = await workspace.ListAsync(sessionId, snapshot.Definition, resolvedPrefix, cancellationToken).ConfigureAwait(false);
+        var definition = _configurations is null ? snapshot.Definition : (await _configurations.ResolveAsync(snapshot.AgentInstanceId, cancellationToken, allowArchived: true)).Configuration.Definition;
+        await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
+        var nodes = await workspace.ListAsync(sessionId, definition, resolvedPrefix, cancellationToken).ConfigureAwait(false);
         return nodes.Select(n => n with { LogicalPath = AgentWorkspacePaths.Public(n.LogicalPath) }).ToArray();
     }
 
@@ -785,8 +792,9 @@ public sealed class SessionManager
             var home = await _agentWorkspace.ReadAsync(await _agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), path: resolvedPath, cancellationToken: cancellationToken);
             return new WorkspaceContent(home.Item.LogicalPath, home.Item.ContentType, home.Bytes);
         }
-        await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
-        return await workspace.ReadAsync(sessionId, snapshot.Definition, resolvedPath, cancellationToken)
+        var definition = _configurations is null ? snapshot.Definition : (await _configurations.ResolveAsync(snapshot.AgentInstanceId, cancellationToken, allowArchived: true)).Configuration.Definition;
+        await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
+        return await workspace.ReadAsync(sessionId, definition, resolvedPath, cancellationToken)
             .ConfigureAwait(false);
     }
 

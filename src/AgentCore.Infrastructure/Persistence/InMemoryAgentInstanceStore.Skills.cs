@@ -10,7 +10,7 @@ public sealed partial class InMemoryAgentInstanceStore
     {
         if (skills is null) return;
         var states = _definitionSkillStates.GetValueOrDefault(id);
-        try { SkillPolicy.ValidateAlwaysBudget(skills.Select(s => (s.Projection, states?.GetValueOrDefault(s.Id)?.Enabled ?? s.DefaultEnabled, s.Procedure))
+        try { SkillPolicy.ValidateAlwaysBudget(skills.Select(s => (s.Projection, states?.GetValueOrDefault(s.Id)?.EnabledOverride ?? s.DefaultEnabled, s.Procedure))
             .Concat(((IEnumerable<AgentInstanceSkill>?)_instanceSkills.GetValueOrDefault(id)?.Values ?? []).Select(s => (s.Projection, s.Enabled, s.Procedure)))); }
         catch (ArgumentException e) { throw AgentCoreErrors.Validation(e.Message); }
     }
@@ -18,11 +18,11 @@ public sealed partial class InMemoryAgentInstanceStore
     {
         if (skills is null) return;
         if (!_definitionSkillStates.TryGetValue(id, out var states)) _definitionSkillStates[id] = states = [];
-        foreach (var s in skills) states.TryAdd(s.Id, new(id, s.Id, s.DefaultEnabled, 1, at));
+        foreach (var s in skills) states.TryAdd(s.Id, new(id, s.Id, null, 1, at));
     }
     internal void PurgeSkills(Guid instanceId)
     {
-        lock (_gate) { _definitionSkillStates.Remove(instanceId); _instanceSkills.Remove(instanceId); }
+        lock (_gate) { _definitionSkillStates.Remove(instanceId); _instanceSkills.Remove(instanceId); _resources.Remove(instanceId); _resourceStates.Remove(instanceId); }
     }
     public ValueTask<InstanceSkillSnapshot> ReadSkillsAsync(Guid instanceId, CancellationToken ct = default)
     {

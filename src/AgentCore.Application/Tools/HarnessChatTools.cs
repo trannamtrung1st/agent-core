@@ -34,7 +34,7 @@ public static class HarnessChatTools
         foreach (var (name, operation) in Operations)
         {
             yield return new(new(name,
-                $"Author {operation.Kind} for future conversations only. {OperationHelp(operation.Kind)} Inspect for expectedVersion/policyRevision. Retain enduring role knowledge or repeatable procedures, never credentials. Core verifies changes before adopting a new immutable version; an identical write returns changed=false. The current Session pin is unchanged. Assisted edits, instructions and every tool change require exact approval.",
+                $"Customize this Instance with {operation.Kind} for its next new AgentRun, including existing Sessions. {OperationHelp(operation.Kind)} Inspect for expectedVersion/policyRevision. Retain enduring role knowledge or repeatable procedures, never credentials. Core validates the local change without publishing a Definition; an identical write returns changed=false. Current Runs remain unchanged. Assisted edits, instructions and every tool change require exact approval.",
                 AuthoringSchema(operation.Kind)), ToolEffect.Write, ToolOfferRule.HarnessAuthority, ToolResourceScope.Session, ToolReplaySafety.NonReplayable);
         }
     }
@@ -61,18 +61,19 @@ public static class HarnessChatTools
         var fields = new JsonObject
         {
             ["expectedVersion"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["description"] = "Use harness.inspect activeDefinitionVersion as expectedVersion." },
+            ["expectedInstanceRevision"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["description"] = "Use the latest harness.inspect instanceRevision." },
             ["policyRevision"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["description"] = "Use the latest harness.inspect policyRevision." },
             ["expected"] = Text(2000, "Intended reusable behavior or validation outcome."),
             ["observed"] = Text(2000, "What was actually read or checked; do not claim unperformed checks."),
             ["limitation"] = Text(2000, "Optional honest verification limits.")
         };
-        var required = new JsonArray("expectedVersion", "policyRevision", "expected", "observed");
+        var required = new JsonArray("expectedVersion", "policyRevision", "expectedInstanceRevision", "expected", "observed");
         void Add(string key, JsonObject field) { fields[key] = field; required.Add(key); }
         switch (kind)
         {
             case "knowledge.upsert":
             case "knowledge.remove":
-                Add("id", Text(80, "Knowledge identity.", "^[a-zA-Z0-9_-]+$"));
+                Add("id", Text(80, "Knowledge identity: simple upload name, or exact origin-qualified key for removal."));
                 if (kind == "knowledge.upsert")
                 {
                     Add("content", Text(32000, "Enduring knowledge to retain."));

@@ -186,6 +186,7 @@ public sealed partial class SqliteAgentInstanceStore(
         AdminEventPersistence.StageAppend(db, historyAppend, ids.NewId());
         await InitializeSkillsAsync(db, update.InstanceId, update.DefinitionSkills, updatedAt, cancellationToken);
         foreach (var e in CoreEventPersistence.Instance(current, Map(row))) CoreEventPersistence.Stage(db, e);
+        await StageAutomationPolicyAsync(db, update, updatedAt, cancellationToken);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -522,6 +523,8 @@ public sealed partial class SqliteAgentInstanceStore(
             row.ActiveVersion = activeVersion;
         }
 
+        if (update.SetSettingsOverrides)
+            row.SettingsOverridesJson = update.SettingsOverrides is null ? null : JsonSerializer.Serialize(update.SettingsOverrides, Json);
         if (update.SetExecutionBudgets)
             row.ExecutionBudgetsJson = update.ExecutionBudgets is null ? null : JsonSerializer.Serialize(update.ExecutionBudgets, Json);
         if (update.SetUnattendedModel)
@@ -548,6 +551,7 @@ public sealed partial class SqliteAgentInstanceStore(
             AdminEventPersistence.StageAppend(db, update.History, ids.NewId());
         await InitializeSkillsAsync(db, update.InstanceId, update.DefinitionSkills, updatedAt, cancellationToken);
         foreach (var e in CoreEventPersistence.Instance(current, Map(row))) CoreEventPersistence.Stage(db, e);
+        await StageAutomationPolicyAsync(db, update, updatedAt, cancellationToken);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -558,6 +562,28 @@ public sealed partial class SqliteAgentInstanceStore(
         }
 
         return Map(row);
+    }
+
+    private static async Task StageAutomationPolicyAsync(AgentCoreDbContext db, AgentInstanceRevisionUpdate update,
+        DateTimeOffset now, CancellationToken ct)
+    {
+        if (update.AutomationPolicyChanges is not { } changes) return;
+        var id = update.InstanceId.ToString("D");
+        var relevant = await db.Automations.Where(r => r.AgentInstanceId == id).ToArrayAsync(ct);
+        var rows = relevant.Where(r => r.Status == (int)AgentCore.Domain.Triggers.AutomationStatus.Active
+            || r.Status == (int)AgentCore.Domain.Triggers.AutomationStatus.SuspendedPolicy).ToArray();
+        if (rows.Length != changes.Count || rows.Any(r => !changes.Any(c => c.AutomationId.ToString("D") == r.AutomationId && c.ExpectedRevision == r.Revision)))
+            throw AgentCoreErrors.Conflict("Automation changed during configuration adoption. Reload and retry.");
+        foreach (var row in rows)
+        {
+            var change = changes.Single(c => c.AutomationId.ToString("D") == row.AutomationId);
+            if (row.Status == (int)change.Status) continue;
+            row.Status = (int)change.Status;
+            row.NextOccurrenceAtUtc = change.NextOccurrenceAtUtc?.ToUnixTimeMilliseconds();
+            row.SuspensionReason = change.SuspensionReason;
+            row.UpdatedAtUtc = now.ToUnixTimeMilliseconds();
+            row.Revision++;
+        }
     }
 
     private static AgentInstance Map(AgentInstanceRecord row) =>
@@ -575,7 +601,8 @@ public sealed partial class SqliteAgentInstanceStore(
             row.UnattendedModelCatalogKey,
             row.UnattendedReasoningEffort,
             row.HarnessManagementJson is null ? null : JsonSerializer.Deserialize<HarnessManagementState>(row.HarnessManagementJson, Json),
-            row.ExecutionBudgetsJson is null ? null : JsonSerializer.Deserialize<ExecutionBudgetPolicy>(row.ExecutionBudgetsJson, Json));
+            row.ExecutionBudgetsJson is null ? null : JsonSerializer.Deserialize<ExecutionBudgetPolicy>(row.ExecutionBudgetsJson, Json),
+            row.SettingsOverridesJson is null ? null : JsonSerializer.Deserialize<InstanceSettingsOverrides>(row.SettingsOverridesJson, Json));
 
     private static AgentInstanceRecord Map(AgentInstance instance) =>
         new()
@@ -591,6 +618,7 @@ public sealed partial class SqliteAgentInstanceStore(
             PersonaRevision = instance.PersonaRevision,
             UnattendedModelCatalogKey = instance.UnattendedModelCatalogKey,
             UnattendedReasoningEffort = instance.UnattendedReasoningEffort,
+            SettingsOverridesJson = instance.SettingsOverrides is null ? null : JsonSerializer.Serialize(instance.SettingsOverrides, Json),
             ExecutionBudgetsJson = instance.ExecutionBudgets is null ? null : JsonSerializer.Serialize(instance.ExecutionBudgets, Json),
             HarnessManagementJson = instance.HarnessManagement is null ? null : JsonSerializer.Serialize(instance.HarnessManagement, Json)
         };

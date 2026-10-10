@@ -19,13 +19,14 @@ internal static class AgentInstanceSkillEndpoints
         g.MapPost("", (Guid instanceId, JsonElement body, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "create", input: InstanceSkillTools.ReadInput(body), ct: ct))));
         g.MapPatch("/{key}", (Guid instanceId, string key, JsonElement body, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "update", key, Revision(body), InstanceSkillTools.ReadInput(body), ct: ct))));
         g.MapPut("/{key}/enabled", (Guid instanceId, string key, JsonElement body, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "set_enabled", key, Revision(body), enabled: body.GetProperty("enabled").GetBoolean(), ct: ct))));
+        g.MapDelete("/{key}/enabled-override", (Guid instanceId, string key, long expectedRevision, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "reset_enabled", key, expectedRevision, ct: ct))));
         g.MapDelete("/{key}", (Guid instanceId, string key, long expectedRevision, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "delete", key, expectedRevision, ct: ct))));
         g.MapPost("/{key}/customize", (Guid instanceId, string key, JsonElement body, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Customize(s.CustomizeAsync(instanceId, key, Revision(body), ct: ct))));
     }
     private static AgentInstanceSkillResponse Wire(InstanceSkillView v) => new(v.Key, v.Origin.ToString(), v.Name, v.Description,
         v.Procedure, v.Projection.ToString(), v.Enabled, v.RequiredCapabilities, v.Revision, v.DefinitionVersion,
         v.SourceDefinitionId, v.SourceDefinitionVersion, v.SourceDefinitionSkillId, v.MissingCapabilities,
-        v.CreatedBy?.ToString(), v.CreatedAt, v.UpdatedAt);
+        v.CreatedBy?.ToString(), v.CreatedAt, v.UpdatedAt, v.EnabledOverride);
     private static async ValueTask<AgentInstanceSkillResponse> Read(ValueTask<InstanceSkillView> action) => Wire(await action);
     private static async ValueTask<AgentInstanceSkillResponse> Write(ValueTask<InstanceSkillView> action) => Wire(await action);
     private static async ValueTask<AgentInstanceSkillCustomizeResponse> Customize(ValueTask<InstanceSkillCustomization> action)

@@ -15,7 +15,7 @@ public sealed class AgentDefinitionLifecycleService(
     TimeProvider time,
     IIdGenerator ids,
     IAdminLifecycleDeletion? deletion = null,
-    AdminLifecycleCoordinator? lifecycleGate = null)
+    AdminLifecycleCoordinator? lifecycleGate = null, IAgentDefinitionResourceAdminStore? resources = null)
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _newDefinitionGates = new(StringComparer.Ordinal);
     public ValueTask<IReadOnlyList<AgentDefinitionDraftSummary>> ListDraftsAsync(
@@ -144,6 +144,15 @@ public sealed class AgentDefinitionLifecycleService(
                 now,
                 ids.NewId()),
             cancellationToken).ConfigureAwait(false);
+        if (sourceKind == DefinitionDraftSourceKind.ForkDurable && resources is not null)
+        {
+            var inherited = await resources.ListPublicationResourcesAsync(definitionId, sourceVersion, cancellationToken);
+            if (inherited.Count > 0)
+            {
+                await resources.BindDraftResourcesAsync(new(draft.DraftId, draft.Revision, inherited.Select(r => new AgentDefinitionDraftResourceBatchItem(r.ResourceId, r.LogicalPath, r.Kind, r.MediaType, r.ContentSha256, r.ByteLength)).ToArray(), now), cancellationToken);
+                draft = await GetDraftAsync(draft.DraftId, cancellationToken);
+            }
+        }
         OperationalDiagnostics.RecordAdmin(
             "draftFork", "completed", "completed", started, draft.DefinitionId, sourceVersion, null, "none");
         return draft;

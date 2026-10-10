@@ -154,7 +154,9 @@ public static class BackgroundSessionEndpoints
         run.Admission.Activation.DedupeKey.StartsWith("experience:", StringComparison.Ordinal) ? run.AgentRunId.ToString("D") : null,
         run.Admission.Activation.TriggerOccurrenceId?.ToString("D"),
         run.Admission.Activation.Kind == ActivationKind.BackgroundCompleted ? run.Admission.Activation.SourceSessionId?.ToString("D") : null,
-        run.Wait is { } wait ? new(wait.Mode.ToString(), wait.Until.ToString(), wait.BackgroundSessionIds.Select(id => id.ToString("D")).ToArray(), HttpMapping.Format(wait.DeadlineUtc)) : null, ToBudget(run));
+        run.Wait is { } wait ? new(wait.Mode.ToString(), wait.Until.ToString(), wait.BackgroundSessionIds.Select(id => id.ToString("D")).ToArray(), HttpMapping.Format(wait.DeadlineUtc)) : null, ToBudget(run),
+        run.Admission.Configuration is { } config ? new(config.Definition.Id, config.Definition.Version, config.InstanceRevision,
+            config.PersonaRevision, config.ConfigurationHash, config.Resources.Select(r => new AgentRunResourceResponse(r.Key, r.VirtualPath, r.ContentSha256, r.ByteLength)).ToArray()) : null);
 
     private static AgentRunBudgetResponse? ToBudget(AgentRun run)
     {

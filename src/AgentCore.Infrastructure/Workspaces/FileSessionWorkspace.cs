@@ -371,6 +371,9 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         string path,
         CancellationToken cancellationToken)
     {
+        if (definition.ExecutionResources is { } manifest && (path == "/agent/instance" || path == "/agent/instance/resources" || path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal)
+            || path == "/agent/resources" || path.StartsWith("/agent/resources/", StringComparison.Ordinal)))
+            return ListPinnedResources(manifest, path);
         if (path.StartsWith("/agent/resources", StringComparison.Ordinal))
         {
             return await ListAgentPublicationResourcesAsync(definition, path, cancellationToken).ConfigureAwait(false);
@@ -380,6 +383,8 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         if (path is "/agent")
         {
             var nodes = new List<WorkspaceNode> { new("/agent/definition.json", false, 0, false) };
+            if (definition.ExecutionResources?.Any(r => r.Key.StartsWith("instance:", StringComparison.Ordinal)) == true)
+                nodes.Add(new("/agent/instance", true, 0, false));
             if (env.HarnessList.Count > 0)
             {
                 nodes.Add(new WorkspaceNode("/agent/harness", true, 0, false));
@@ -394,7 +399,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
             {
                 var published = await _publicationResources.ListAsync(definition.Id, definition.Version, cancellationToken)
                     .ConfigureAwait(false);
-                if (published.Count > 0)
+                if (definition.ExecutionResources is { } resolved ? resolved.Any(r => r.Key.StartsWith("definition:", StringComparison.Ordinal)) : published.Count > 0)
                 {
                     nodes.Add(new WorkspaceNode("/agent/resources", true, 0, false));
                 }
@@ -432,6 +437,14 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         string path,
         CancellationToken cancellationToken)
     {
+        if (definition.ExecutionResources is { } manifest && (path.StartsWith("/agent/resources/", StringComparison.Ordinal)
+            || path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal)))
+        {
+            var resource = manifest.SingleOrDefault(r => r.VirtualPath == path) ?? throw AgentCoreErrors.NotFound("Pinned resource path was not found.");
+            var bytes = _publicationResources is null ? throw AgentCoreErrors.Persistence("Pinned content reader is unavailable.")
+                : await _publicationResources.ReadPinnedAsync(resource, cancellationToken);
+            return new(path, resource.MediaType, bytes);
+        }
         if (path.StartsWith("/agent/resources", StringComparison.Ordinal))
         {
             return await ReadAgentPublicationResourceAsync(definition, path, cancellationToken).ConfigureAwait(false);
@@ -475,6 +488,20 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         }
 
         throw AgentCoreErrors.NotFound("Agent path was not found.");
+    }
+
+    private static IReadOnlyList<WorkspaceNode> ListPinnedResources(IReadOnlyList<EffectiveAgentResource> resources, string path)
+    {
+        var nodes = new Dictionary<string, WorkspaceNode>(StringComparer.Ordinal);
+        var prefix = path.TrimEnd('/') + "/";
+        foreach (var resource in resources.Where(r => r.VirtualPath.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            var remainder = resource.VirtualPath[prefix.Length..];
+            var segment = remainder.Split('/')[0];
+            var directory = remainder.Contains('/');
+            nodes[prefix + segment] = new(prefix + segment, directory, directory ? 0 : resource.ByteLength, false);
+        }
+        return nodes.Values.OrderBy(n => n.LogicalPath, StringComparer.Ordinal).ToArray();
     }
 
     private async ValueTask<IReadOnlyList<WorkspaceNode>> ListAgentPublicationResourcesAsync(

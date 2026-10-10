@@ -166,7 +166,7 @@ Timers use TimeProvider generations. User activity, pending upload, parsing/tool
 
 ## P7 managed session pinning (observed)
 
-Managed chat create uses `agentInstanceId`; Session Runtime pins the active definition version and persona revision into `SessionSnapshot` for that session’s lifetime. Admin persona edits, active-version reassociation, archive, and publication deprecation change future eligibility and new sessions only—they do not rewrite pinned snapshots, transcript history, or supersession rules on sessions already created. Turn-taking, interruption, and full-duplex behavior are unchanged. See [Architecture](03-system-architecture.md#p7dp7g-admin-lifecycle-completion-observed) and [P7D report](reports/p7d-managed-instance-identity.md).
+Managed chat create uses `agentInstanceId`; `SessionSnapshot` retains creation Definition/persona provenance. Each new AgentRun resolves the current exact Instance-selected Definition, persona, sparse settings and scoped resources and freezes that configuration alongside model, Skills and execution budgets. Admin edits and adoption apply to the next new Run even in an existing Session. An admitted Run retains its original snapshot through retry, approval and wait/resume, subject to current authorization. History and supersession rules remain Session-owned. Turn-taking, interruption, and full-duplex behavior are unchanged. See [Architecture](03-system-architecture.md#p7dp7g-admin-lifecycle-completion-observed) and [P7D report](reports/p7d-managed-instance-identity.md).
 
 ## P6 detached work (observed)
 

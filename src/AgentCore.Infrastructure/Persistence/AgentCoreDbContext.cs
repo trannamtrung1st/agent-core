@@ -58,6 +58,7 @@ public sealed class SnapshotRecord
     public string? ModelProviderAlias { get; set; }
     public string? ModelId { get; set; }
     public string? ModelSelectionSource { get; set; }
+    public bool ModelHasExplicitReasoningEffort { get; set; }
     public string? ModelReasoningEffort { get; set; }
     public int SummaryFormatVersion { get; set; }
     public long? SummaryGeneratedAtUtc { get; set; }
@@ -233,8 +234,23 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
 
     public DbSet<AgentDefinitionSkillStateRecord> AgentDefinitionSkillStates => Set<AgentDefinitionSkillStateRecord>();
     public DbSet<AgentInstanceSkillRecord> AgentInstanceSkills => Set<AgentInstanceSkillRecord>();
+    public DbSet<AgentInstanceResourceRecord> AgentInstanceResources => Set<AgentInstanceResourceRecord>();
+    public DbSet<AgentDefinitionResourceStateRecord> AgentDefinitionResourceStates => Set<AgentDefinitionResourceStateRecord>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<AgentInstanceResourceRecord>(e => {
+            e.ToTable("AgentInstanceResources"); e.HasKey(r => new { r.InstanceId, r.ResourceId });
+            e.Property(r => r.InstanceId).HasMaxLength(36); e.Property(r => r.ResourceId).HasMaxLength(36);
+            e.Property(r => r.LogicalPath).HasMaxLength(240); e.Property(r => r.Revision).IsConcurrencyToken();
+            e.HasIndex(r => new { r.InstanceId, r.LogicalPath }).IsUnique();
+            e.HasOne<AgentInstanceRecord>().WithMany().HasForeignKey(r => r.InstanceId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AgentDefinitionResourceStateRecord>(e => {
+            e.ToTable("AgentDefinitionResourceStates"); e.HasKey(r => new { r.InstanceId, r.ResourceId });
+            e.Property(r => r.InstanceId).HasMaxLength(36); e.Property(r => r.ResourceId).HasMaxLength(36);
+            e.Property(r => r.Revision).IsConcurrencyToken();
+            e.HasOne<AgentInstanceRecord>().WithMany().HasForeignKey(r => r.InstanceId).OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<AgentDefinitionSkillStateRecord>(e => {
             e.ToTable("AgentDefinitionSkillStates"); e.HasKey(s => new { s.AgentInstanceId, s.DefinitionSkillId });
             e.Property(s => s.AgentInstanceId).HasMaxLength(36); e.Property(s => s.DefinitionSkillId).HasMaxLength(64);
@@ -585,7 +601,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<AgentDefinitionDraftResourceRecord>(entity =>
         {
             entity.ToTable("AgentDefinitionDraftResources");
-            entity.HasKey(row => row.ResourceId);
+            entity.HasKey(row => new { row.DraftId, row.ResourceId });
             entity.Property(row => row.ResourceId).HasMaxLength(36);
             entity.Property(row => row.DraftId).HasMaxLength(36).IsRequired();
             entity.Property(row => row.LogicalPath).HasMaxLength(240).IsRequired();

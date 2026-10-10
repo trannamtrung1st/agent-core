@@ -182,6 +182,7 @@ public static class InfrastructureServiceCollectionExtensions
             {
                 var instances = provider.GetRequiredService<InMemoryAgentInstanceStore>();
                 instances.CoreEvents = provider.GetRequiredService<InMemoryCoreEventStore>();
+                instances.TriggerStore = provider.GetRequiredService<InMemoryTriggerStore>();
                 instances.EventStore = provider.GetRequiredService<InMemoryAdminEventStore>();
                 return instances;
             });
@@ -192,7 +193,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<ITriggerStore>(provider => provider.GetRequiredService<InMemoryTriggerStore>());
             services.TryAddSingleton<IAgentRunStore>(provider => new InMemoryAgentRunStore(
                 provider.GetRequiredService<InMemoryMemoryStore>(),
-                provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<InMemoryTriggerStore>()));
+                provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<InMemoryTriggerStore>(), provider.GetRequiredService<InMemoryAgentInstanceStore>()));
             services.TryAddSingleton<InMemoryCredentialStore>();
             services.TryAddSingleton<ICredentialStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
             services.TryAddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
@@ -378,6 +379,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IBrowserLease>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.AddHostedService(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.TryAddSingleton<AgentInstanceSkillService>();
+        services.TryAddSingleton<InstanceAutomationPolicy>();
+        services.TryAddSingleton<AgentInstanceSettingsService>();
+        services.TryAddSingleton<AgentInstanceResourceService>();
+        services.TryAddSingleton<AgentCore.Application.Execution.AgentRunConfigurationResolver>();
         services.TryAddSingleton<SessionToolExecutor>(provider => new SessionToolExecutor(
             provider.GetService<RoleKnowledgeService>(),
             provider.GetService<IAttachmentStore>(),

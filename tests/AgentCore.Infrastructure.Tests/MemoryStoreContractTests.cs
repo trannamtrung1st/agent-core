@@ -20,13 +20,13 @@ public sealed class MemoryStoreContractTests
         await using var sqlite = await SqliteAsync();
         var legacy = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Historical reply");
         var snapshot = First() with { Entries = [legacy] };
-        await sqlite.Store.SaveAsync(snapshot, 0);
-        await using (var db = await sqlite.Factory.CreateDbContextAsync())
-        {
-            await db.GetService<IMigrator>().MigrateAsync("20261008171951_ArtifactAgentRunOwnership");
-        }
-        await sqlite.Store.EnsureCreatedAsync();
-        var restored = (await sqlite.Store.LoadAsync(snapshot.SessionId))!.Entries[0];
+        // Seed the historical schema directly: scoped owned data deliberately forbids destructive downgrade.
+        var path = Path.Combine(Path.GetTempPath(), $"completion-migration-{Guid.NewGuid():N}.db");
+        var factory = new HistoricalFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        await MigrationSessionSeed.CopyPersistedSessionAsync(factory, snapshot, "20261008171951_ArtifactAgentRunOwnership");
+        var store = new SqliteMemoryStore(factory, TimeProvider.System);
+        await store.EnsureCreatedAsync();
+        var restored = (await store.LoadAsync(snapshot.SessionId))!.Entries[0];
         Assert.Equal(legacy.Text, restored.Text);
         Assert.Equal(legacy.Sequence, restored.Sequence);
         Assert.Equal(legacy.CreatedAt, restored.CreatedAt);
@@ -1213,4 +1213,6 @@ public sealed class MemoryStoreContractTests
             return ValueTask.CompletedTask;
         }
     }
+    private sealed class HistoricalFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
+    { public AgentCoreDbContext CreateDbContext() => new(options); }
 }

@@ -350,6 +350,9 @@ Reuse CompletionDeliveryStatus and AgentRunDetails in Chat/Admin. Ready and In u
 
 Shared Event authoring retains the established Admin drawer/footer and one-time credential dialog. Event details use the existing responsive descriptions layout and genuine subscriber/delivery tables; detail action groups wrap while the collection keeps View and More actions inline. Automation’s existing drawer separates General, Trigger, Execution and applicable Completion; Advanced collapses model/effort and tool/vision requirements. Nested Event management preserves the Automation draft and returns focus to its initiating control. Searchable catalog and timezone selectors use direct Ant Design grouping/filtering, with the same category order for Authorized and Always available capabilities.
 
+
+Instance Settings uses direct AntD Segmented Inherit/Customize controls, the shared 48rem form bound, per-field source/reset and a named section reset. Scoped resource collections retain quiet stable identity and written enablement status alongside compact switches. Resource inspection uses the shared Admin detail-label owner (12rem at desktop, stacked mobile), token16px drawer insets and content-width actions. These extend the existing Operate system without token changes.
+
 ## Do's and Don'ts
 
 ### Do:

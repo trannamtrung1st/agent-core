@@ -17,7 +17,7 @@ public sealed class EffectiveSkillCatalogResolver(IAgentInstanceStore instances)
         {
             var enabled = state.DefinitionStates.SingleOrDefault(x => x.DefinitionSkillId == s.Id)
                 ?? throw AgentCoreErrors.Persistence($"Definition Skill state '{s.Id}' was not initialized.");
-            if (enabled.Enabled) entries.Add(new("definition:" + s.Id, SkillOrigin.Definition, s.Id, s.Name,
+            if (enabled.EnabledOverride ?? s.DefaultEnabled) entries.Add(new("definition:" + s.Id, SkillOrigin.Definition, s.Id, s.Name,
                 s.Description, s.Procedure, s.Projection, s.RequiredCapabilities.ToArray(), s.ResourcePaths.ToArray()));
         }
         entries.AddRange(state.InstanceSkills.Where(s => s.Enabled).OrderBy(s => s.SkillId).Select(s =>

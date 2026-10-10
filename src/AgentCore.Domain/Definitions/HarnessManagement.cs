@@ -61,6 +61,11 @@ public sealed record HarnessPreparation(
 public sealed record HarnessManagementState(
     HarnessManagementPolicy Policy,
     long PolicyRevision = 1,
-    HarnessPreparation? Preparation = null);
+    HarnessPreparation? Preparation = null,
+    IReadOnlyList<HarnessInstanceChange>? InstanceChanges = null);
+
+public sealed record HarnessInstanceChange(Guid OperationId, string Operation, long InstanceRevision,
+    int DefinitionVersion, long PolicyRevision, Guid? ApprovalId, string ActionHash, string? Source,
+    DateTimeOffset SavedAt, HarnessVerificationEvidence Evidence);
 
 public sealed record HarnessPublishedChange(string SectionId, string Label, string ChangeKind, string? BeforeSummary, string? AfterSummary);

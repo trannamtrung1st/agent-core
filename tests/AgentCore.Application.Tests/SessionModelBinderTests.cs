@@ -10,6 +10,18 @@ namespace AgentCore.Application.Tests;
 public sealed class SessionModelBinderTests
 {
     [Fact]
+    public void Default_refresh_preserves_explicit_reasoning_effort_but_inherits_unspecified_effort()
+    {
+        var catalog = TestModelCatalogs.Synthetic();
+        var explicitEffort = SessionModelBinder.Bind(catalog, null, "high", ModelSelectionSource.User);
+        Assert.True(explicitEffort.HasExplicitReasoningEffort);
+        Assert.Equal("high", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = new("scripted-alpha", "low") }, explicitEffort).ReasoningEffort);
+        var inherited = SessionModelBinder.PinDefault(catalog);
+        Assert.False(inherited.HasExplicitReasoningEffort);
+        Assert.Equal("low", SessionModelBinder.RefreshDefault(catalog, SampleDefinitions.Examiner with { ModelDefaults = new("scripted-alpha", "low") }, inherited).ReasoningEffort);
+    }
+
+    [Fact]
     public void Default_resolves_system_catalog_default()
     {
         var catalog = TestModelCatalogs.Synthetic();

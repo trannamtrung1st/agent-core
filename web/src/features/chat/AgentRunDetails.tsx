@@ -78,6 +78,11 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
     {run.progress ? <Typography.Paragraph className="background-work-progress" style={{ marginBottom: 0 }}>{run.progress}</Typography.Paragraph> : null}
     <Descriptions size="small" column={1} items={[
       { key: "model", label: "Model", children: <Typography.Text className="background-work-progress">{run.modelCatalogKey}</Typography.Text> },
+      ...(run.configuration ? [
+        { key: "configuration", label: "Run configuration", children: `Published Definition v${run.configuration.definitionVersion} · Instance revision ${run.configuration.instanceRevision} · Persona revision ${run.configuration.personaRevision}` },
+        { key: "configurationHash", label: "Configuration SHA-256", children: <Typography.Text copyable style={{ overflowWrap: "anywhere" }}>{run.configuration.configurationHash}</Typography.Text> },
+        { key: "resources", label: "Pinned resources", children: <Flex vertical gap={token.paddingXS}>{run.configuration.resources.length ? run.configuration.resources.map(resource => <Typography.Text key={resource.key} style={{ overflowWrap: "anywhere" }}>{resource.virtualPath} · {resource.byteLength.toLocaleString()} bytes · SHA-256 {resource.contentSha256}</Typography.Text>) : "None"}</Flex> }
+      ] : []),
       ...(run.budget ? [
         { key: "budget", label: "Execution budget", children: `${runBudgetLabel(run.budget.class)} · ${runBudgetLabel(run.budget.source)} · ${run.budget.maxSteps} steps · ${run.budget.durationSeconds / 60} minutes` },
         { key: "consumed", label: "Consumed", children: `${run.budget.stepsConsumed} / ${run.budget.maxSteps} steps · ${(run.budget.activeExecutionMs / 1000).toFixed(1)}s active` },

@@ -285,7 +285,7 @@ public sealed partial class SessionRuntime
 
     private async Task HandleSetModeAsync(SetModeReceived input, CancellationToken cancellationToken)
     {
-        if (input.Mode == SessionMode.Voice && !_voice.IsAvailable(_snapshot.Definition, SpeechLocale.Resolve(_snapshot).Effective))
+        if (input.Mode == SessionMode.Voice && !_voice.IsAvailable(ExecutionDefinition, SpeechLocale.Resolve(_snapshot).Effective))
         {
             await PublishAsync(
                     new SessionOutput(
@@ -697,6 +697,9 @@ public sealed partial class SessionRuntime
                 return;
             }
 
+            if (_boundAgentRun is null || _boundAgentRun.IsTerminal)
+                await ResolveNewRunAsync(cancellationToken).ConfigureAwait(false);
+
             if (CanEvaluateIdle())
             {
                 if (InactivityExceeded())
@@ -706,7 +709,7 @@ public sealed partial class SessionRuntime
                     return;
                 }
 
-                if (_silentEvaluations >= _snapshot.Definition.InitiativePolicy.SilentEvaluationCap)
+                if (_silentEvaluations >= ExecutionDefinition.InitiativePolicy.SilentEvaluationCap)
                 {
                     await ApplyDeactivateAsync(input.Context, cancellationToken, pauseReason: "silentEvaluation")
                         .ConfigureAwait(false);

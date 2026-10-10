@@ -21,6 +21,25 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
+    internal void CommitConfigurationPolicy(Guid id, IReadOnlyList<InstanceAutomationPolicyChange>? changes,
+        DateTimeOffset now, Action commitOwner)
+    {
+        lock (_state.Gate)
+        {
+            if (changes is null) { commitOwner(); return; }
+            var current = _state.Registrations.Values.Where(r => r.Owner.AgentInstanceId == id
+                && r.Status is AutomationStatus.Active or AutomationStatus.SuspendedPolicy).ToArray();
+            if (current.Length != changes.Count || current.Any(r => !changes.Any(c => c.AutomationId == r.AutomationId && c.ExpectedRevision == r.Revision)))
+                throw AgentCoreErrors.Conflict("Automation changed during configuration adoption. Reload and retry.");
+            var next = current.Select(r => {
+                var c = changes.Single(c => c.AutomationId == r.AutomationId);
+                return c.Status == r.Status ? r : r.WithScheduleAdvance(c.Status, c.NextOccurrenceAtUtc, r.OccurrenceCount, r.Revision + 1, now, c.SuspensionReason);
+            }).ToArray();
+            commitOwner();
+            foreach (var r in next) _state.Registrations[r.AutomationId] = r;
+        }
+    }
+
     internal object AdmissionGate => _state.Gate;
     internal TriggerOccurrence? FindAdmissionOccurrence(Guid occurrenceId) =>
         _state.Occurrences.GetValueOrDefault(occurrenceId);

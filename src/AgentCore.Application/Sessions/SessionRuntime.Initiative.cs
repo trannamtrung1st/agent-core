@@ -25,6 +25,8 @@ public sealed partial class SessionRuntime
         {
             return;
         }
+        if (_boundAgentRun is null || _boundAgentRun.IsTerminal)
+            await ResolveNewRunAsync(cancellationToken).ConfigureAwait(false);
 
         if (!TryAcceptEnvironment(input.Event, out var kind, out var text, out var topic))
         {
@@ -143,7 +145,7 @@ public sealed partial class SessionRuntime
         };
 
         var effective = SpeechLocale.Resolve(_snapshot).Effective;
-        if (_snapshot.Mode == SessionMode.Voice && !_voice.IsAvailable(_snapshot.Definition, effective))
+        if (_snapshot.Mode == SessionMode.Voice && !_voice.IsAvailable(ExecutionDefinition, effective))
         {
             _snapshot = _snapshot with
             {
@@ -182,7 +184,7 @@ public sealed partial class SessionRuntime
 
         _snapshot = _snapshot with
         {
-            ModelSelection = SessionModelBinder.PinDefault(_catalog, _snapshot.Definition),
+            ModelSelection = SessionModelBinder.RefreshDefault(_catalog, ExecutionDefinition, _snapshot.ModelSelection),
             UpdatedAt = _time.GetUtcNow()
         };
     }
@@ -215,7 +217,7 @@ public sealed partial class SessionRuntime
                 input.ModelKey,
                 input.ReasoningEffort,
                 input.Source,
-                _snapshot.Definition.ModelDefaults);
+                ExecutionDefinition.ModelDefaults);
         }
         catch (AgentCoreException ex)
         {
@@ -508,7 +510,7 @@ public sealed partial class SessionRuntime
             return true;
         }
 
-        var policy = _snapshot.Definition.InitiativePolicy;
+        var policy = ExecutionDefinition.InitiativePolicy;
         return !_initiativeHeld
             && !_pendingUploadHold
             && !HasPendingUserBatch()
@@ -519,12 +521,12 @@ public sealed partial class SessionRuntime
 
     private bool InactivityExceeded() =>
         (_time.GetUtcNow() - _lastMeaningfulActivityAt).TotalMilliseconds
-        > _snapshot.Definition.InitiativePolicy.InactivityLimitMs;
+        > ExecutionDefinition.InitiativePolicy.InactivityLimitMs;
 
     private bool NeedsTerminalDeactivate() =>
         !_deactivated
         && !HasPendingUserBatch()
-        && (_silentEvaluations >= _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
+        && (_silentEvaluations >= ExecutionDefinition.InitiativePolicy.SilentEvaluationCap
             || InactivityExceeded());
 
     private void ScheduleIdleTimer(TimeSpan delay)
@@ -590,12 +592,12 @@ public sealed partial class SessionRuntime
         !_deactivated
         && _snapshot.Status == SessionStatus.Attached
         && !SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus)
-        && _snapshot.Definition.InitiativePolicy.Enabled
+        && ExecutionDefinition.InitiativePolicy.Enabled
         && HasTrigger("longSilence")
         && !_initiativeHeld
         && !_pendingUploadHold
         && !HasPendingUserBatch()
-        && (_silentEvaluations < _snapshot.Definition.InitiativePolicy.SilentEvaluationCap
+        && (_silentEvaluations < ExecutionDefinition.InitiativePolicy.SilentEvaluationCap
             || NeedsTerminalDeactivate());
 
     private bool IsStaleProactiveDecision(AgentTrigger trigger) =>
@@ -619,7 +621,7 @@ public sealed partial class SessionRuntime
         return trigger.Kind switch
         {
             TriggerKind.LongSilence => HasTrigger("longSilence")
-                && _snapshot.Definition.InitiativePolicy.Enabled
+                && ExecutionDefinition.InitiativePolicy.Enabled
                 && !_initiativeHeld
                 && !_pendingUploadHold
                 && !HasPendingUserBatch(),
@@ -640,11 +642,11 @@ public sealed partial class SessionRuntime
         && !_proactiveBrainInFlight;
 
     private bool HasTrigger(string trigger) =>
-        _snapshot.Definition.InitiativePolicy.Triggers.Contains(trigger, StringComparer.Ordinal);
+        ExecutionDefinition.InitiativePolicy.Triggers.Contains(trigger, StringComparer.Ordinal);
 
     private TimeSpan SilenceThreshold()
     {
-        var policy = _snapshot.Definition.InitiativePolicy;
+        var policy = ExecutionDefinition.InitiativePolicy;
         var ms = policy.SilenceThresholdMs;
         if (_snapshot.Mode == SessionMode.Text)
         {
@@ -656,7 +658,7 @@ public sealed partial class SessionRuntime
 
     private TimeSpan Cooldown()
     {
-        var policy = _snapshot.Definition.InitiativePolicy;
+        var policy = ExecutionDefinition.InitiativePolicy;
         var ms = policy.CooldownMs;
         if (_snapshot.Mode == SessionMode.Text)
         {

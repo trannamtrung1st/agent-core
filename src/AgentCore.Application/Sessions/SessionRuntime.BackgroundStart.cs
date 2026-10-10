@@ -31,9 +31,9 @@ public sealed partial class SessionRuntime
                 || !await OwnsWorkerAsync(input.Context, input.ResponseId, ct).ConfigureAwait(false))
             { input.Completed.TrySetResult(SkillLoadAdmission.Error("stale", "The background request is no longer owned by this turn.")); return; }
             var source = _boundAgentRun!;
-            var current = _runAuthority is null ? _snapshot.Definition : await _runAuthority.CurrentDefinitionAsync(source, ct).ConfigureAwait(false);
+            var current = _runAuthority is null ? ExecutionDefinition : await _runAuthority.CurrentDefinitionAsync(source, ct).ConfigureAwait(false);
             if (current is null || !AgentCore.Application.Agents.RolePermissions.AllowsTool(current, ToolCatalog.BackgroundStart)
-                || !AgentCore.Application.Agents.RolePermissions.AllowsTool(_snapshot.Definition, ToolCatalog.BackgroundStart))
+                || !AgentCore.Application.Agents.RolePermissions.AllowsTool(ExecutionDefinition, ToolCatalog.BackgroundStart))
             { input.Completed.TrySetResult(SkillLoadAdmission.Error("forbidden", "This Agent cannot start background work.")); return; }
             using var document = JsonDocument.Parse(input.Call.ArgumentsJson);
             var args = document.RootElement;
@@ -44,11 +44,16 @@ public sealed partial class SessionRuntime
                 || args.TryGetProperty("title", out var title) && (title.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(title.GetString()) || title.GetString()!.Length > 80)
                 || args.TryGetProperty("reportCompletion", out var report) && report.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
             { input.Completed.TrySetResult(SkillLoadAdmission.Error("invalid", "Provide a bounded objective, optional title and completion preference.")); return; }
+            var resolved = await _tools.ResolveRunConfigurationAsync(_snapshot, ct).ConfigureAwait(false);
+            var selection = _snapshot.ModelSelection;
+            if (_catalog is not null && selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host))
+                selection = AgentCore.Application.Models.SessionModelBinder.RefreshDefault(_catalog, resolved.Configuration.Definition, selection);
+            var childModel = selection is null ? source.PinnedModel : new AgentRunModelPin(selection.CatalogKey, selection.ProviderAlias, selection.ModelId, selection.ReasoningEffort);
             var proposal = BackgroundSessionAdmissionFactory.ForImmediate(_ids.NewSessionId(), _ids.NewId(), _ids.NewId(),
                 _ids.NewId(), _ids.NewId(), _snapshot, source, input.Call.Id, objective.GetString()!.Trim(),
                 title.ValueKind == JsonValueKind.String ? title.GetString() : null,
                 report.ValueKind != JsonValueKind.False, _time.GetUtcNow(),
-                await _tools.ResolveExecutionBudgetAsync(_snapshot.AgentInstanceId, _snapshot.Definition, false, ct));
+                ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved, childModel);
             var result = await _agentRuns.AdmitImmediateAsync(proposal.Session, proposal.Run, input.Context.AgentRunGeneration!.Value, ct).ConfigureAwait(false);
             input.Completed.TrySetResult(JsonSerializer.Serialize(new { started = true, backgroundSessionId = result.Run.SessionId,
                 agentRunId = result.Run.AgentRunId, alreadyStarted = !result.Created }));

@@ -20,12 +20,14 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
     private readonly InMemoryMemoryStore sessions;
     private readonly IDiagnosticIdSource diagnostics;
     private readonly InMemoryTriggerStore? triggers;
+    private readonly InMemoryAgentInstanceStore? instances;
 
-    public InMemoryAgentRunStore(InMemoryMemoryStore sessions, IDiagnosticIdSource diagnostics, InMemoryTriggerStore? triggers = null)
+    public InMemoryAgentRunStore(InMemoryMemoryStore sessions, IDiagnosticIdSource diagnostics, InMemoryTriggerStore? triggers = null, InMemoryAgentInstanceStore? instances = null)
     {
         this.sessions = sessions;
         this.diagnostics = diagnostics;
         this.triggers = triggers;
+        this.instances = instances;
         triggers?.BindAgentRuns(sessions);
     }
 
@@ -137,6 +139,8 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             && snapshot.Origin.InitialBackgroundAgentRunId == run.AgentRunId)
             throw AgentCoreErrors.Validation("Background occurrence admission must commit its receipt atomically.");
         var activation = AgentRunStoreMapping.ToActivationRecord(snapshot, run);
+        using var generation = run.Admission.Configuration is { InstanceRevision: > 0 } config
+            ? instances?.HoldConfigurationGeneration(run.AgentInstanceId, config.InstanceRevision) : null;
         lock (sessions.AdmissionGate)
         {
             Guid existingId;

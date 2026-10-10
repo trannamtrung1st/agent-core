@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, App, Button, Empty, Flex, Grid, Spin, Switch, Table, Tag, Typography, theme } from 'antd';
 import { SkillDrawer, type SkillDrawerValue } from './SkillDrawer';
 import { confirmAction } from '../../app/confirmAction';
-import { listInstanceSkills, inspectInstanceSkill, createInstanceSkill, updateInstanceSkill, toggleInstanceSkill, customizeInstanceSkill, deleteInstanceSkill, type InstanceSkill, type SkillInput } from '../../services/instanceSkills';
+import { listInstanceSkills, inspectInstanceSkill, createInstanceSkill, updateInstanceSkill, toggleInstanceSkill, resetInstanceSkill, customizeInstanceSkill, deleteInstanceSkill, type InstanceSkill, type SkillInput } from '../../services/instanceSkills';
 import { describeAdminError, type AdminFailureNotice } from './adminErrors';
 import { AdminErrorNotice } from './adminFailure';
 import { AdminCollectionToolbar, useAdminCollectionSearch } from './AdminCollectionToolbar';
@@ -38,7 +38,7 @@ export function InstanceSkillsSection({ instanceId, archived, active = true, onU
     const current = () => generation.current === request && owner.current === instanceId;
     setLoading(true); setError(null);
     try { const result = await listInstanceSkills(instanceId); if (current()) setSkills(result); }
-    catch (e) { if (current()) setError(describeAdminError(e, 'Unable to load Skills. Retry to reload.')); }
+    catch (e) { if (current()) { setSkills(null); setError(describeAdminError(e, 'Unable to load Skills. Retry to reload.')); } }
     finally { if (current()) setLoading(false); }
   }, [instanceId]);
   useEffect(() => { if (active) void reload(); }, [reload, active]);
@@ -94,7 +94,7 @@ export function InstanceSkillsSection({ instanceId, archived, active = true, onU
           { title: 'Activation', width: 120, responsive: ['md'], render: (_, s) => <Tag>{s.projection === 'Always' ? 'Always' : 'On demand'}</Tag> },
           { title: definition ? 'Version' : 'Provenance', width: 160, responsive: ['md'], onCell: () => ({ style: { whiteSpace: 'normal' } }), render: (_, s) => <Typography.Text type="secondary" ellipsis title={definition ? `Version ${s.definitionVersion}` : s.sourceDefinitionId ? `Copied from ${s.sourceDefinitionId} v${s.sourceDefinitionVersion} · ${s.sourceDefinitionSkillId}` : 'Created in this instance'}>{definition ? `Version ${s.definitionVersion}` : s.sourceDefinitionId ? `Copied from ${s.sourceDefinitionId} v${s.sourceDefinitionVersion} · ${s.sourceDefinitionSkillId}` : 'Created in this instance'}</Typography.Text> },
           { title: 'Requires', width: 170, responsive: ['md'], onCell: () => ({ style: { whiteSpace: 'normal' } }), render: (_, s) => <Flex vertical gap={token.paddingXS}><Typography.Text ellipsis title={s.requiredCapabilities.join(', ') || 'No capabilities'}>{s.requiredCapabilities.join(', ') || 'No capabilities'}</Typography.Text>{s.missingCapabilities.length ? <Typography.Text type="warning" style={{ overflowWrap: 'anywhere' }}>Missing authority: {s.missingCapabilities.join(', ')}</Typography.Text> : null}</Flex> },
-          { title: 'Enabled', width: 90, render: (_, s) => <Switch aria-label={`Enable ${origin} Skill ${s.name}`} checked={s.enabled} disabled={archived || busy || loading} onChange={enabled => void mutate(() => toggleInstanceSkill(instanceId, s, enabled))} /> },
+          { title: 'Enabled', width: 90, render: (_, s) => <Flex vertical gap={token.paddingXS}><Switch aria-label={`Enable ${origin} Skill ${s.name}`} checked={s.enabled} disabled={archived || busy || loading} onChange={enabled => void mutate(() => toggleInstanceSkill(instanceId, s, enabled))} />{definition && <Typography.Text type="secondary">{s.enabledOverride == null ? 'Inherit Definition' : 'Local choice'}</Typography.Text>}{definition && s.enabledOverride != null && <Button size="small" disabled={archived || busy || loading} onClick={() => void mutate(() => resetInstanceSkill(instanceId, s))}>Reset to default</Button>}</Flex> },
           { title: 'Actions', width: 240, render: (_, s) => <Flex className="admin-table-actions" gap={token.paddingXS}><Button disabled={busy} aria-expanded={definition || archived ? inspected?.key === s.key : undefined} onClick={() => void open(s)}>{definition || archived ? 'Inspect' : 'Edit'}</Button>{definition ? <Button disabled={archived || busy} onClick={() => confirmAction(modal, { title: 'Customize Definition Skill?', content: 'Creates an independent Instance Skill and disables this Definition Skill. Future Definition changes will not update the copy.', okText: 'Customize', onOk: () => mutate(() => customizeInstanceSkill(instanceId, s)) })}>Customize</Button> : <Button danger disabled={archived || busy} onClick={() => confirmAction(modal, { title: 'Delete Instance Skill?', content: `Delete ${s.name}? This removes the local procedure for future executions.`, okText: 'Delete Skill', danger: true, onOk: () => mutate(() => deleteInstanceSkill(instanceId, s)) })}>Delete</Button>}</Flex> }
         ]} /></div>
     </section>;

@@ -61,7 +61,7 @@ describe("Harness governance", () => {
       preparation:{...candidate.preparation!,status:"Published",publishedVersion:13,publishedDraftRevision:3}}); mount();
     expect(await screen.findByText("Frozen")).toBeVisible();
     fireEvent.click(screen.getByText("Recent harness change & verification"));
-    expect(await screen.findByText("Saved for future conversations · version 13")).toBeVisible();
+    expect(await screen.findByText("Published shared Definition · version 13")).toBeVisible();
     expect(screen.queryByText("Stale · revision 3")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", {name:"Discard unfinished candidate"})).not.toBeInTheDocument();
   });

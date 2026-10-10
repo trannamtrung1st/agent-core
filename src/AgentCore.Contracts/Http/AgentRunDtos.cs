@@ -10,7 +10,10 @@ public sealed record AgentRunResponse(string AgentRunId, string SessionId, strin
     string Status, long Revision, int AttemptCount, int MaxAttempts, bool CancellationRequested, bool CancellationAvailable,
     string? Progress, string? NextRetryAt, string CreatedAt, string UpdatedAt, AgentRunApprovalResponse? Approval,
     AgentRunOutcomeResponse? Outcome, string? FailureCode, string? FailureSummary, string? DiagnosticId,
-    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null, AgentRunBudgetResponse? Budget = null);
+    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null, AgentRunBudgetResponse? Budget = null, AgentRunConfigurationResponse? Configuration = null);
+public sealed record AgentRunConfigurationResponse(string DefinitionId, int DefinitionVersion, long InstanceRevision,
+    long PersonaRevision, string ConfigurationHash, IReadOnlyList<AgentRunResourceResponse> Resources);
+public sealed record AgentRunResourceResponse(string Key, string VirtualPath, string ContentSha256, long ByteLength);
 public sealed record AgentRunPageResponse(IReadOnlyList<AgentRunResponse> Items, string? NextCursor, bool HasMore);
 public sealed record BackgroundSessionOriginResponse(string Kind, string InitialAgentRunId, string? ParentSessionId,
     string? ParentAgentRunId, string? AutomationId, string? OccurrenceId, bool ReportCompletion);

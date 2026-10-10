@@ -200,6 +200,25 @@ public static class AdminEventSummaryPolicy
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be a JSON object.");
             }
 
+            if (append.Operation == AdminEventOperationKind.InstanceResourcesChanged)
+            {
+                foreach (var property in document.RootElement.EnumerateObject())
+                    if (property.Name is not ("resourceId" or "operation")) throw AgentCoreErrors.Validation("Unsupported resource history metadata.");
+                RequireString(document.RootElement, "operation");
+                if (!Guid.TryParse(document.RootElement.GetProperty("resourceId").GetString(), out var resourceId) || resourceId == Guid.Empty)
+                    throw AgentCoreErrors.Validation("Resource history identity is invalid.");
+                return;
+            }
+            if (append.Operation == AdminEventOperationKind.InstanceSettingsChanged)
+            {
+                foreach (var property in document.RootElement.EnumerateObject())
+                    if (property.Name is not ("section" or "set" or "clear")) throw AgentCoreErrors.Validation("Unsupported settings history metadata.");
+                var section = document.RootElement.GetProperty("section").GetString()!;
+                var fields = AgentCore.Application.Agents.InstanceSettingsResolver.Fields(section);
+                foreach (var field in document.RootElement.GetProperty("set").EnumerateArray().Concat(document.RootElement.GetProperty("clear").EnumerateArray()))
+                    if (!fields.Contains(field.GetString(), StringComparer.Ordinal)) throw AgentCoreErrors.Validation("Unsupported settings history field.");
+                return;
+            }
             if (append.Operation == AdminEventOperationKind.InstanceSkillsChanged)
             {
                 var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "operation", "skillKey" };

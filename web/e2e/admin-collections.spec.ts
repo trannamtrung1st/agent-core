@@ -204,8 +204,8 @@ test("Lifecycle and version changes preserve unsaved persona edits", async ({ pa
   await page.getByLabel("Persona name", { exact: true }).fill("Retained unsaved persona");
   await page.getByLabel("Target definition version", { exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: "v2" }).click();
-  await page.getByRole("button", { name: "Upgrade to v2", exact: true }).click();
-  await expect(page.getByText("Active version set to v2.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Upgrade to v2", exact: true }).click(); await page.getByRole("button", {name:"Adopt version",exact:true}).click();
+  await expect(page.getByText("Instance adopted v2.", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Retained unsaved persona");
   await page.getByRole("tab", { name: "JSON", exact: true }).click();
   await page.getByLabel("Persona JSON", { exact: true }).fill("{invalid json");

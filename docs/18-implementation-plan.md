@@ -529,3 +529,9 @@ This user-requested follow-up extends the existing native browser capability wit
 ### Browser implementation review follow-up
 
 The targeted post-review correction retains conservative Canvas/SVG masking by default and adds host-controlled exact-origin visual trust, semantic-independent masked screenshot fallback, successful-settlement coordinate authority and effective capture guidance. Dense-page stage benchmarks determine whether traversal optimization is warranted. This does not reopen historical browser freezes or start P10/P11. Local and live-model results, enterprise-dashboard limitations and CI status are recorded in the [verification report](reports/browser-review-follow-up-verification.md). Hosted CI need not be awaited for the user-authorized commit/push; it remains distinct from local acceptance.
+
+## Post-MVP slice: scoped Instance resources and configuration
+
+The approved scoped-configuration slice follows the previously frozen execution-budget delivery. Its order is typed contracts/resolver truth → sparse/resource persistence and services → fresh Activation cutover and immutable Run recovery → Instance-only self-management and selected shared promotion → Admin settings/resources/adoption → canonical/design sync and runtime verification.
+
+Completion requires isolation and store parity, populated migration, old Session/new Run refresh, retry/wait/restart byte/configuration/budget preservation, authority/approval/race/dependency checks, atomic Automation adoption, selected promotion, responsive functional Admin review, affected/full backend/frontend/Synthetic Playwright, Compose restart and hosted Synthetic on the final behavior SHA. Prior milestone freezes and reports remain historical. Implementation presence alone does not close these gates; current results belong to the scoped Instance configuration verification report.

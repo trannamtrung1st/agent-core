@@ -12,6 +12,10 @@ import {
 } from "./AdminApp";
 import type { AdminDefinitionPublicationResource, AdminEffectiveConfiguration } from "../../services/adminApi";
 
+vi.mock("../../services/instanceConfiguration", () => ({
+  previewInstanceVersion: vi.fn(async (_id: string, version: number) => ({instanceRevision:1,currentVersion:1,targetVersion:version,changedDefinitionFields:[],preservedInstanceOverrides:[],newInheritedItems:[],removedInheritedItems:[],activationNotice:"Applies to the next Run."})),
+  listInstanceSettings: vi.fn(async () => []), listInstanceResources: vi.fn(async () => ({instanceRevision:1,definitionId:"examiner",definitionVersion:1,resources:[]}))
+}));
 const sampleEffective: AdminEffectiveConfiguration = {
   definitionSource: "builtIn",
   definitionId: "examiner",
@@ -1583,6 +1587,7 @@ describe("AdminApp", () => {
     });
     fireEvent.click(screen.getByText("v2 (builtIn · published)"));
     fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Adopt version" }));
 
     expect(screen.queryByRole("button", { name: "Apply anyway" })).not.toBeInTheDocument();
 
