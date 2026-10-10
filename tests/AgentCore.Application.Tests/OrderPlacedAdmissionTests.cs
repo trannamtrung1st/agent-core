@@ -205,7 +205,7 @@ public sealed class OrderPlacedAdmissionTests
         await secretary.SubscribeAsync(secretary.InstanceId, issued.ResourceId);
         await monitor.SubscribeAsync(monitor.InstanceId, issued.ResourceId);
         var body = Encoding.UTF8.GetBytes(ExternalEventEnvelope.Build("order-106-created", "106"));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => secretary.Ingress.AdmitAsync(issued.EventKey, issued.Token, body).AsTask());
+        Assert.Equal(ExternalEventIngressKind.Admitted, (await secretary.Ingress.AdmitAsync(issued.EventKey, issued.Token, body)).Kind);
         Assert.NotNull(await secretary.Events.GetEventAsync(issued.ResourceId, "order-106-created"));
         Assert.Single(await secretary.Triggers.ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 10));
 

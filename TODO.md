@@ -1445,3 +1445,6 @@ This closure changes documentation only. Original completion-inbox/Automation fr
 - [x] Complete integrated local/hosted acceptance on `743429ebb9a1e8b5989744a704f89e09bc25ff21`: 3,122 local backend tests (16 opt-in skips), 832 frontend tests/build, 11 local browser journeys, Compose survival and all five [hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/37982193102).
 
 [Verification](docs/reports/core-events-automation-presets-verification.md) owns current results. Historical closure records and P10/P11 remain unchanged.
+
+- [x] Follow up the `b7a9329e` review: isolate filter execution timing, recover transient filter failures from frozen snapshots, isolate subscribers and scheduler phases, make preset provenance historical, and permit valid disabled Core drafts.
+- [ ] Establish fresh exact-commit hosted acceptance for this stabilization. Commit/push proceeds without waiting for CI as requested; the verification report records local results and any unresolved local failures.

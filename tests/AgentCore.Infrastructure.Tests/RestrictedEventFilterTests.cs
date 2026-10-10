@@ -3,7 +3,7 @@ using AgentCore.Infrastructure.Events;
 
 namespace AgentCore.Infrastructure.Tests;
 
-public sealed class RestrictedEventFilterTests
+public sealed class RestrictedEventFilterTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     private readonly RestrictedEventFilter filters = new();
     private static JsonElement Envelope => JsonSerializer.SerializeToElement(new { data = new { total = 125, status = "paid", activationKind = "UserTurn" } });
@@ -50,5 +50,36 @@ public sealed class RestrictedEventFilterTests
         Assert.Equal("filter-unsafe-number", filters.Evaluate("event.data.total > 1", JsonSerializer.SerializeToElement(new { data = new { total = 9007199254740993L } })).Code);
         Assert.Equal("filter-source-budget", filters.Validate(new string('x', 1025)));
         Assert.Equal("filter-ast-budget", filters.Validate(new string('(', 20) + "true" + new string(')', 20)));
+    }
+
+    [Fact]
+    public async Task Concurrent_cold_evaluations_match_or_request_recovery_and_report_timings()
+    {
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tasks = Enumerable.Range(0, 64).Select(_ => Task.Run(async () =>
+        {
+            await start.Task;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var result = new RestrictedEventFilter().Evaluate("event.data['status'] === 'paid'", Envelope);
+            return (Result: result, Milliseconds: watch.Elapsed.TotalMilliseconds);
+        })).ToArray();
+        start.SetResult();
+        var samples = await Task.WhenAll(tasks);
+        Assert.All(samples, sample => Assert.True(sample.Result.Matched == true || sample.Result.Retryable, sample.Result.Code));
+        // After contention clears, every source still receives its Boolean decision.
+        foreach (var sample in samples.Where(s => s.Result.Retryable))
+        {
+            var retry = filters.Evaluate("event.data['status'] === 'paid'", Envelope);
+            Assert.True(retry.Matched, retry.Code);
+        }
+        var durations = samples.Select(s => s.Milliseconds).Order().ToArray();
+        output.WriteLine($"64 concurrent evaluations: matched={samples.Count(s => s.Result.Matched == true)}, retryable={samples.Count(s => s.Result.Retryable)}, p50={durations[32]:F2}ms, p95={durations[60]:F2}ms, max={durations[63]:F2}ms; recovery matched all.");
+    }
+
+    [Fact]
+    public void Caller_cancellation_propagates_instead_of_becoming_a_filter_error()
+    {
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        Assert.Throws<OperationCanceledException>(() => filters.Evaluate("true", Envelope, cancelled.Token));
     }
 }

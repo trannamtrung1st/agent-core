@@ -25,7 +25,7 @@ public static class RuntimeTelemetry
     public static void RecordEventDelivery(string source, string outcome) => EventDeliveries.Add(1,
         new KeyValuePair<string, object?>("source", source == "core" ? "core" : "webhook"),
         new KeyValuePair<string, object?>("outcome", outcome switch
-        { "emitted" or "matched" or "filtered" or "filter_error" or "coalesced" or "duplicate" or "policy_denied" or "loop_skipped" or "budget_skipped" or "admitted" or "recovered" => outcome, _ => "other" }));
+        { "retry_pending" or "emitted" or "matched" or "filtered" or "filter_error" or "coalesced" or "duplicate" or "policy_denied" or "loop_skipped" or "budget_skipped" or "admitted" or "recovered" => outcome, _ => "other" }));
     private static readonly Counter<long> AutomationEvents = Meter.CreateCounter<long>("trigger_registration_events");
     private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
     private static readonly Counter<long> ResponseRepairs = Meter.CreateCounter<long>("llm.response.repair");

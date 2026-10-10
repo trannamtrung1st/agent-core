@@ -73,7 +73,7 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
     public async ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        var rows = await db.CoreEvents.AsNoTracking().Where(e => !e.Snapshotted || db.CoreEventDeliveries.Any(d => d.EventId == e.EventId && (d.Status == (int)EventMatchStatus.Pending || d.Status == (int)EventMatchStatus.Matched))).OrderBy(e => e.ReceivedAtUtc).ThenBy(e => e.EventId).Take(32).ToArrayAsync(ct);
+        var rows = await db.CoreEvents.AsNoTracking().Where(e => !e.Snapshotted || db.CoreEventDeliveries.Any(d => d.EventId == e.EventId && (d.Status == (int)EventMatchStatus.Pending || d.Status == (int)EventMatchStatus.Matched || d.Status == (int)EventMatchStatus.FilterError && (d.Code == "filter-worker-budget" || d.Code == "filter-timeout")))).OrderBy(e => e.ReceivedAtUtc).ThenBy(e => e.EventId).Take(32).ToArrayAsync(ct);
         return rows.Select(r => new CoreEventReceipt(JsonSerializer.Deserialize<CoreEventOccurrence>(r.PayloadJson, CoreEventPersistence.Json)!, DateTimeOffset.FromUnixTimeMilliseconds(r.ReceivedAtUtc), r.Snapshotted)).ToArray();
     }
     public async ValueTask SnapshotAsync(Guid eventId, IReadOnlyList<EventSubscriptionSnapshot> subscriptions, CancellationToken ct = default)
@@ -89,12 +89,17 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
     }
     public async ValueTask<IReadOnlyList<CoreEventDelivery>> DeliveriesAsync(Guid eventId, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct); return (await db.CoreEventDeliveries.AsNoTracking().Where(d => d.EventId == eventId.ToString("D")).OrderBy(d => d.AutomationId).ToArrayAsync(ct)).Select(Read).ToArray(); }
-    public async ValueTask<EventFilterResult> DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
+    public async ValueTask<EventFilterResult> DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        await db.CoreEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && d.DecisionJson == null && d.Status == (int)EventMatchStatus.Pending)
+        // Legacy decision JSON omits the additive retry fields; compare its domain value,
+        // then CAS against the original bytes so concurrent writers still have one winner.
+        var prior = await db.CoreEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D"), ct);
+        var expectedJson = expectedDecision?.Retryable == true && prior?.DecisionJson is { } json
+            && JsonSerializer.Deserialize<EventFilterResult>(json, CoreEventPersistence.Json) == expectedDecision ? json : null;
+        await db.CoreEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && d.DecisionJson == expectedJson && (d.Status == (int)EventMatchStatus.Pending || expectedJson != null && d.Status == (int)EventMatchStatus.FilterError))
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.DecisionJson, JsonSerializer.Serialize(decision, CoreEventPersistence.Json))
-                .SetProperty(d => d.Status, (int)(decision.Matched == true ? EventMatchStatus.Matched : decision.Matched == false ? EventMatchStatus.Filtered : EventMatchStatus.FilterError)).SetProperty(d => d.Code, decision.Code), ct);
+                .SetProperty(d => d.Status, (int)(decision.Retryable ? EventMatchStatus.Pending : decision.Matched == true ? EventMatchStatus.Matched : decision.Matched == false ? EventMatchStatus.Filtered : EventMatchStatus.FilterError)).SetProperty(d => d.Code, decision.Code), ct);
         var row = await db.CoreEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D"), ct);
         return row?.DecisionJson is not null && row.Status is not ((int)EventMatchStatus.PolicySkipped or (int)EventMatchStatus.LoopSkipped or (int)EventMatchStatus.BudgetSkipped)
             ? JsonSerializer.Deserialize<EventFilterResult>(row.DecisionJson, CoreEventPersistence.Json)!
@@ -103,7 +108,7 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
     public async ValueTask FinishAsync(Guid eventId, Guid automationId, EventMatchStatus status, string? code = null, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        await db.CoreEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && (d.Status == (int)EventMatchStatus.Pending || d.Status == (int)EventMatchStatus.Matched))
+        await db.CoreEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && (d.Status == (int)EventMatchStatus.Pending || d.Status == (int)EventMatchStatus.Matched || d.Status == (int)EventMatchStatus.FilterError && (d.Code == "filter-worker-budget" || d.Code == "filter-timeout")))
             .ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, (int)status).SetProperty(d => d.Code, code), ct);
     }
     public async ValueTask<IReadOnlyList<CoreEventDelivery>> ActivityAsync(TriggerOwner owner, CancellationToken ct = default)
