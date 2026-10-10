@@ -38,8 +38,20 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
         }
         return ValueTask.CompletedTask;
     }
-    public ValueTask<IReadOnlyList<CoreEventBucket>> DueBucketsAsync(DateTimeOffset now, CancellationToken ct = default)
-    { lock (gate) return ValueTask.FromResult<IReadOnlyList<CoreEventBucket>>(buckets.Values.Where(b => !b.Flushed && b.DueAtUtc <= now).OrderBy(b => b.DueAtUtc).Take(32).ToArray()); }
+    public ValueTask<IReadOnlyList<CoreEventBucket>> DueBucketsAsync(DateTimeOffset now, CancellationToken ct = default, EventRecoveryCursor? after = null)
+    {
+        lock (gate)
+        {
+            var afterMs = after?.AtUtc.ToUnixTimeMilliseconds() ?? 0;
+            var afterId = after?.Id.ToString("D");
+            var page = buckets.Values.Where(b => !b.Flushed && b.DueAtUtc <= now)
+                .Where(b => after is null || b.DueAtUtc.ToUnixTimeMilliseconds() > afterMs
+                    || b.DueAtUtc.ToUnixTimeMilliseconds() == afterMs && string.CompareOrdinal(b.BucketId.ToString("D"), afterId) > 0)
+                .OrderBy(b => b.DueAtUtc.ToUnixTimeMilliseconds()).ThenBy(b => b.BucketId.ToString("D"), StringComparer.Ordinal)
+                .Take(32).ToArray();
+            return ValueTask.FromResult<IReadOnlyList<CoreEventBucket>>(page);
+        }
+    }
     public ValueTask CompleteBucketAsync(Guid bucketId, CancellationToken ct = default, string? code = null)
     { lock (gate) { if (buckets.TryGetValue(bucketId, out var b) && !b.Flushed) buckets[bucketId] = b with { Flushed = true, CompletionCode = code }; } return ValueTask.CompletedTask; }
     internal void Purge(Guid instanceId)
@@ -54,8 +66,21 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
     }
     internal void Append(CoreEventOccurrence? e)
     { if (e is null) return; lock (gate) receipts.TryAdd(e.EventId, new(e, e.OccurredAtUtc, false)); }
-    public ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default)
-    { lock (gate) return ValueTask.FromResult<IReadOnlyList<CoreEventReceipt>>(receipts.Values.Where(e => !e.Snapshotted || deliveries.Values.Any(d => d.EventId == e.Event.EventId && (d.Status is EventMatchStatus.Pending or EventMatchStatus.Matched || d.Status == EventMatchStatus.FilterError && d.Decision?.Retryable == true))).OrderBy(e => e.ReceivedAtUtc).ThenBy(e => e.Event.EventId).Take(32).ToArray()); }
+    public ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default, EventRecoveryCursor? after = null)
+    {
+        lock (gate)
+        {
+            var afterMs = after?.AtUtc.ToUnixTimeMilliseconds() ?? 0;
+            var afterId = after?.Id.ToString("D");
+            var page = receipts.Values.Where(e => !e.Snapshotted || deliveries.Values.Any(d => d.EventId == e.Event.EventId
+                    && (d.Status is EventMatchStatus.Pending or EventMatchStatus.Matched || d.Status == EventMatchStatus.FilterError && d.Decision?.Retryable == true)))
+                .Where(e => after is null || e.ReceivedAtUtc.ToUnixTimeMilliseconds() > afterMs
+                    || e.ReceivedAtUtc.ToUnixTimeMilliseconds() == afterMs && string.CompareOrdinal(e.Event.EventId.ToString("D"), afterId) > 0)
+                .OrderBy(e => e.ReceivedAtUtc.ToUnixTimeMilliseconds()).ThenBy(e => e.Event.EventId.ToString("D"), StringComparer.Ordinal)
+                .Take(32).ToArray();
+            return ValueTask.FromResult<IReadOnlyList<CoreEventReceipt>>(page);
+        }
+    }
     public ValueTask SnapshotAsync(Guid eventId, IReadOnlyList<EventSubscriptionSnapshot> subscriptions, CancellationToken ct = default)
     { lock (gate) { if (!receipts.TryGetValue(eventId, out var r) || r.Snapshotted) return ValueTask.CompletedTask;
         foreach (var s in subscriptions.Where(s => s.Owner == r.Event.Owner)) deliveries.TryAdd((eventId, s.AutomationId), new(eventId, s, EventMatchStatus.Pending));

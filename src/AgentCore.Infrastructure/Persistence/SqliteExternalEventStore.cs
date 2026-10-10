@@ -132,7 +132,7 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
     public async ValueTask<IReadOnlyList<ExternalEventDelivery>> ListPendingDeliveriesAsync(
         Guid? eventId,
         int limit,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, ExternalEventRecoveryCursor? after = null)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var query = db.ExternalEventDeliveries.AsNoTracking()
@@ -145,6 +145,11 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
             query = query.Where(item => item.EventId == eventKey);
         }
 
+        if (after is not null)
+        {
+            var eventKey = after.EventId.ToString("D"); var automationKey = after.AutomationId.ToString("D");
+            query = query.Where(item => string.Compare(item.EventId, eventKey) > 0 || item.EventId == eventKey && string.Compare(item.AutomationId, automationKey) > 0);
+        }
         var rows = await query
             .OrderBy(item => item.EventId)
             .ThenBy(item => item.AutomationId)

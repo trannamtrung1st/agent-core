@@ -12,10 +12,18 @@ public sealed class CoreEventDispatcher(ICoreEventStore events, ITriggerStore tr
     ITriggerAdmissionGuard guard, IAgentInstanceStore instances, IAgentDefinitionStore definitions, IModelCatalog catalog,
     IIdGenerator ids, TimeProvider time, IExternalEventStore externalEvents, ILogger<CoreEventDispatcher>? logger = null)
 {
+    private EventRecoveryCursor? receiptCursor;
+    private EventRecoveryCursor? bucketCursor;
+
     public async ValueTask<int> RunOnceAsync(CancellationToken ct = default)
     {
         var admittedCount = 0;
-        foreach (var receipt in await events.PendingAsync(ct))
+        var pending = await events.PendingAsync(ct, receiptCursor);
+        if (pending.Count == 0 && receiptCursor is not null) pending = await events.PendingAsync(ct);
+        receiptCursor = pending.Count == 0 ? null : new(pending[^1].ReceivedAtUtc, pending[^1].Event.EventId);
+        Observability.RuntimeTelemetry.RecordEventRecoveryPage("core", pending.Count,
+            pending.Count == 0 ? 0 : (time.GetUtcNow() - pending.Min(r => r.ReceivedAtUtc)).TotalMilliseconds);
+        foreach (var receipt in pending)
         {
             try
             {
@@ -80,7 +88,13 @@ public sealed class CoreEventDispatcher(ICoreEventStore events, ITriggerStore tr
                 logger?.LogWarning(ex, "Core event {EventId} fan-out will retry.", receipt.Event.EventId);
             }
         }
-        foreach (var bucket in await events.DueBucketsAsync(time.GetUtcNow(), ct))
+        var recoveryNow = time.GetUtcNow();
+        var due = await events.DueBucketsAsync(recoveryNow, ct, bucketCursor);
+        if (due.Count == 0 && bucketCursor is not null) due = await events.DueBucketsAsync(recoveryNow, ct);
+        bucketCursor = due.Count == 0 ? null : new(due[^1].DueAtUtc, due[^1].BucketId);
+        Observability.RuntimeTelemetry.RecordEventRecoveryPage("bucket", due.Count,
+            due.Count == 0 ? 0 : (recoveryNow - due.Min(b => b.DueAtUtc)).TotalMilliseconds);
+        foreach (var bucket in due)
         {
             try
             {

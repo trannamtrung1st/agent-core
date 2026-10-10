@@ -59,8 +59,18 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
         if (delivery is not null) { delivery.Status = (int)(bucket.CompletionCode is null ? EventMatchStatus.Coalesced : EventMatchStatus.BudgetSkipped); delivery.Code = bucket.CompletionCode; }
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
     }
-    public async ValueTask<IReadOnlyList<CoreEventBucket>> DueBucketsAsync(DateTimeOffset now, CancellationToken ct = default)
-    { await using var db = await contexts.CreateDbContextAsync(ct); return (await db.CoreEventBuckets.AsNoTracking().Where(b => !b.Flushed && b.DueAtUtc <= now.ToUnixTimeMilliseconds()).OrderBy(b => b.DueAtUtc).Take(32).ToArrayAsync(ct)).Select(r => JsonSerializer.Deserialize<CoreEventBucket>(r.PayloadJson, CoreEventPersistence.Json)!).ToArray(); }
+    public async ValueTask<IReadOnlyList<CoreEventBucket>> DueBucketsAsync(DateTimeOffset now, CancellationToken ct = default, EventRecoveryCursor? after = null)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct);
+        var query = db.CoreEventBuckets.AsNoTracking().Where(b => !b.Flushed && b.DueAtUtc <= now.ToUnixTimeMilliseconds());
+        if (after is not null)
+        {
+            var timestamp = after.AtUtc.ToUnixTimeMilliseconds(); var id = after.Id.ToString("D");
+            query = query.Where(b => b.DueAtUtc > timestamp || b.DueAtUtc == timestamp && string.Compare(b.BucketId, id) > 0);
+        }
+        return (await query.OrderBy(b => b.DueAtUtc).ThenBy(b => b.BucketId).Take(32).ToArrayAsync(ct))
+            .Select(r => JsonSerializer.Deserialize<CoreEventBucket>(r.PayloadJson, CoreEventPersistence.Json)!).ToArray();
+    }
     public async ValueTask CompleteBucketAsync(Guid bucketId, CancellationToken ct = default, string? code = null)
     { await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -70,10 +80,16 @@ public sealed class SqliteCoreEventStore(IDbContextFactory<AgentCoreDbContext> c
         row.Flushed = true; row.PayloadJson = JsonSerializer.Serialize(bucket with { Flushed = true, CompletionCode = code }, CoreEventPersistence.Json);
         await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
     }
-    public async ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default)
+    public async ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default, EventRecoveryCursor? after = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        var rows = await db.CoreEvents.AsNoTracking().Where(e => !e.Snapshotted || db.CoreEventDeliveries.Any(d => d.EventId == e.EventId && (d.Status == (int)EventMatchStatus.Pending || d.Status == (int)EventMatchStatus.Matched || d.Status == (int)EventMatchStatus.FilterError && (d.Code == "filter-worker-budget" || d.Code == "filter-timeout")))).OrderBy(e => e.ReceivedAtUtc).ThenBy(e => e.EventId).Take(32).ToArrayAsync(ct);
+        var query = db.CoreEvents.AsNoTracking().Where(e => !e.Snapshotted || db.CoreEventDeliveries.Any(d => d.EventId == e.EventId && (d.Status == (int)EventMatchStatus.Pending || d.Status == (int)EventMatchStatus.Matched || d.Status == (int)EventMatchStatus.FilterError && (d.Code == "filter-worker-budget" || d.Code == "filter-timeout"))));
+        if (after is not null)
+        {
+            var timestamp = after.AtUtc.ToUnixTimeMilliseconds(); var id = after.Id.ToString("D");
+            query = query.Where(e => e.ReceivedAtUtc > timestamp || e.ReceivedAtUtc == timestamp && string.Compare(e.EventId, id) > 0);
+        }
+        var rows = await query.OrderBy(e => e.ReceivedAtUtc).ThenBy(e => e.EventId).Take(32).ToArrayAsync(ct);
         return rows.Select(r => new CoreEventReceipt(JsonSerializer.Deserialize<CoreEventOccurrence>(r.PayloadJson, CoreEventPersistence.Json)!, DateTimeOffset.FromUnixTimeMilliseconds(r.ReceivedAtUtc), r.Snapshotted)).ToArray();
     }
     public async ValueTask SnapshotAsync(Guid eventId, IReadOnlyList<EventSubscriptionSnapshot> subscriptions, CancellationToken ct = default)

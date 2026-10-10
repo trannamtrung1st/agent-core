@@ -31,6 +31,8 @@ public sealed class ExternalEventIngress(
     IModelCatalog catalog,
     ILogger<ExternalEventIngress>? logger = null, IEventFilterEvaluator? filters = null, ICoreEventStore? buckets = null)
 {
+    private ExternalEventRecoveryCursor? recoveryCursor;
+
     public async ValueTask<bool> CredentialsMatchAsync(
         string eventKey,
         string presentedToken,
@@ -90,21 +92,27 @@ public sealed class ExternalEventIngress(
 
     public async ValueTask<int> ResumePendingAsync(CancellationToken cancellationToken = default)
     {
-        var pending = await events.ListPendingDeliveriesAsync(null, 32, cancellationToken).ConfigureAwait(false);
+        var pending = await events.ListPendingDeliveriesAsync(null, 32, cancellationToken, recoveryCursor).ConfigureAwait(false);
+        if (pending.Count == 0 && recoveryCursor is not null)
+            pending = await events.ListPendingDeliveriesAsync(null, 32, cancellationToken).ConfigureAwait(false);
+        recoveryCursor = pending.Count == 0 ? null : new(pending[^1].EventId, pending[^1].AutomationId);
+        var oldestAgeMs = 0d;
         var created = 0;
         if (pending.Count > 0) AgentCore.Application.Observability.RuntimeTelemetry.RecordEventDelivery("webhook", "recovered");
         var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
-        foreach (var eventId in pending.Select(item => item.EventId).Distinct())
+        foreach (var group in pending.GroupBy(item => item.EventId))
         {
-            var stored = await events.GetByEventIdAsync(eventId, cancellationToken).ConfigureAwait(false);
+            var stored = await events.GetByEventIdAsync(group.Key, cancellationToken).ConfigureAwait(false);
             if (stored is null)
             {
                 continue;
             }
 
-            created += await ResumeEventAsync(stored, now, cancellationToken).ConfigureAwait(false);
+            oldestAgeMs = Math.Max(oldestAgeMs, (now - stored.AdmittedAtUtc).TotalMilliseconds);
+            created += await ResumeEventAsync(stored, now, cancellationToken, group.ToArray()).ConfigureAwait(false);
         }
 
+        Observability.RuntimeTelemetry.RecordEventRecoveryPage("webhook", pending.Count, oldestAgeMs);
         return created;
     }
 
@@ -114,9 +122,9 @@ public sealed class ExternalEventIngress(
     private async ValueTask<int> ResumeEventAsync(
         ExternalEvent stored,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, IReadOnlyList<ExternalEventDelivery>? selectedDeliveries = null)
     {
-        var pending = await events.ListPendingDeliveriesAsync(stored.EventId, 32, cancellationToken).ConfigureAwait(false);
+        var pending = selectedDeliveries ?? await events.ListPendingDeliveriesAsync(stored.EventId, 32, cancellationToken).ConfigureAwait(false);
         var created = 0;
         foreach (var delivery in pending)
         {

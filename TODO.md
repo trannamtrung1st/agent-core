@@ -1448,3 +1448,11 @@ This closure changes documentation only. Original completion-inbox/Automation fr
 
 - [x] Follow up the `b7a9329e` review: isolate filter execution timing, recover transient filter failures from frozen snapshots, isolate subscribers and scheduler phases, make preset provenance historical, and permit valid disabled Core drafts.
 - [ ] Establish fresh exact-commit hosted acceptance for this stabilization. Commit/push proceeds without waiting for CI as requested; the verification report records local results and any unresolved local failures.
+
+## Event recovery operational follow-up (2026-10-10)
+
+- [x] Add bounded completed-evaluation/exhaustion and recovery-page age/size measurements with an operator runbook.
+- [x] Reproduce fixed-page starvation and verify advancing scans across failing Core/webhook/bucket pages and same-receipt subscriber continuations.
+- [ ] Observe deployed workload exhaustion/backlog trends and establish alert baselines. Synthetic evidence is not a production rate measurement.
+
+This is a bounded follow-up to the stabilization, not a feature or architecture expansion. Current local evidence is recorded in [verification](docs/reports/core-events-automation-presets-verification.md); commit/push does not wait for CI, as requested. Historical acceptance remains unchanged.

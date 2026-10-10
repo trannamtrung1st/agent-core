@@ -273,4 +273,75 @@ public sealed class CoreEventStabilizationTests
         await s.GetRequiredService<TriggerOccurrenceRouter>().RouteOnceAsync();
         Assert.Equal(1, (await s.GetRequiredService<BackgroundOccurrenceIntake>().AcceptAwaitingAsync()).Accepted);
     }
+    [Theory(Timeout = 60000)]
+    [InlineData("core")]
+    [InlineData("webhook")]
+    [InlineData("bucket")]
+    public async Task Healthy_work_beyond_a_full_failing_recovery_page_makes_progress(string source)
+    {
+        var clock = new Clock(); var filter = new ControlledFilter { Throws = true };
+        await using var host = new ExperienceHost(Database(), clock: clock, configure: services =>
+        { services.RemoveAll<IEventFilterEvaluator>(); services.AddSingleton<IEventFilterEvaluator>(filter); });
+        var s = host.Services;
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 22);
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var bad = await Save(client, PathFor(instance.InstanceId), Request("event.data.revision >= 2"));
+        var good = await Save(client, PathFor(instance.InstanceId), Request("true"));
+        var owner = new TriggerOwner(instance.InstanceId, LocalUserProfile.Id);
+        var badId = Guid.Parse(bad.AutomationId); var goodId = Guid.Parse(good.AutomationId);
+        var core = s.GetRequiredService<ICoreEventStore>();
+        var external = s.GetRequiredService<IExternalEventStore>();
+        var now = clock.GetUtcNow();
+        Guid? resource = null;
+        if (source == "webhook")
+        {
+            var response = await client.PostAsJsonAsync("/api/v2/admin/connections/events", new { displayName = "Backlog fixture", eventKey = "backlog.fixture" });
+            response.EnsureSuccessStatusCode();
+            resource = Guid.Parse((await response.Content.ReadFromJsonAsync<AdminWebhookEventCredentialResponse>())!.EventId);
+            foreach (var item in new[] { bad, good })
+            {
+                var change = await client.PutAsJsonAsync(PathFor(instance.InstanceId) + "/" + item.AutomationId,
+                    Request(item == bad ? "event.data.revision >= 2" : "true") with
+                    { ExpectedRevision = item.Revision, Trigger = new("event", EventId: resource.Value.ToString("D"), FilterExpression: item == bad ? "event.data.revision >= 2" : "true") });
+                change.EnsureSuccessStatusCode();
+            }
+        }
+        for (var i = 0; i < 33; i++)
+        {
+            var healthy = i == 32;
+            var eventId = Guid.Parse($"00000000-0000-0000-0000-{i + 1:x12}");
+            var subscription = new EventSubscriptionSnapshot(healthy ? goodId : badId, owner, i + 1,
+                healthy ? "true" : "event.data.revision >= 2", new(source == "bucket" ? EventDispatchMode.CoalesceLatest : EventDispatchMode.EveryMatch, source == "bucket" ? 60 : null),
+                source == "webhook" ? TriggerSourceKind.ApplicationEvent : TriggerSourceKind.CoreEvent, resource);
+            if (source is "core" or "bucket")
+            {
+                var occurrence = new CoreEventOccurrence(eventId, $"backlog:{eventId:D}", owner, "instance.config_changed", now.AddMilliseconds(i), "{\"revision\":2}");
+                await using var db = await s.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync();
+                CoreEventPersistence.Stage(db, occurrence); await db.SaveChangesAsync();
+                await core.SnapshotAsync(eventId, [subscription]);
+                if (source == "bucket")
+                {
+                    await core.DecideAsync(eventId, subscription.AutomationId, new(true, "matched"));
+                    await core.CoalesceAsync(new(eventId, owner, "instance.config_changed", now.AddMilliseconds(i), healthy ? "{\"revision\":2}" : "{broken"), subscription);
+                }
+            }
+            else if (source == "webhook")
+                await external.AdmitAsync(new(eventId, resource!.Value, eventId.ToString("D"), now, now, "{\"data\":{\"revision\":2}}"),
+                    [new(subscription.AutomationId, owner.AgentInstanceId, owner.ProfileId, subscription)]);
+
+        }
+        if (source == "bucket") for (var i = 0; i < 4; i++) clock.Advance();
+        async Task<int> Pass() => source == "webhook"
+            ? await s.GetRequiredService<ExternalEventIngress>().ResumePendingAsync()
+            : await s.GetRequiredService<CoreEventDispatcher>().RunOnceAsync();
+        Assert.Equal(0, await Pass());
+        Assert.Equal(1, await Pass()); // fixed first pages previously kept selecting only the failures
+        Assert.Equal(goodId, Assert.Single(await s.GetRequiredService<ITriggerStore>().ListByDispositionAsync(OccurrenceRoutingDisposition.Pending, 64)).AutomationId);
+        Assert.Equal(0, await Pass()); // wrapping rechecks failures without duplicating the healthy work
+        await s.GetRequiredService<TriggerOccurrenceRouter>().RouteOnceAsync();
+        Assert.Equal(1, (await s.GetRequiredService<BackgroundOccurrenceIntake>().AcceptAwaitingAsync()).Accepted);
+        await UnifiedAutomationJourneyTests.Drain(s);
+        Assert.Equal(AgentRunStatus.Completed, Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListAsync(new(owner.AgentInstanceId, owner.ProfileId), 64)).Status);
+    }
+
 }

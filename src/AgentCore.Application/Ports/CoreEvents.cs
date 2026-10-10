@@ -4,6 +4,7 @@ using AgentCore.Domain.Triggers;
 namespace AgentCore.Application.Ports;
 
 public sealed record CoreEventReceipt(CoreEventOccurrence Event, DateTimeOffset ReceivedAtUtc, bool Snapshotted);
+public sealed record EventRecoveryCursor(DateTimeOffset AtUtc, Guid Id);
 public sealed record CoreEventDelivery(Guid EventId, EventSubscriptionSnapshot Subscription, EventMatchStatus Status,
     EventFilterResult? Decision = null, string? Code = null);
 
@@ -17,9 +18,9 @@ public interface ICoreEventStore
     ValueTask<EventCoveragePage> CoveragePageAsync(TriggerOwner owner, Guid automationId, string? cursor, int limit, CancellationToken ct = default);
     ValueTask MarkSourceInspectedAsync(TriggerOwner owner, Guid bucketId, Guid sourceId, CancellationToken ct = default);
     ValueTask CoalesceAsync(EventBucketSource source, EventSubscriptionSnapshot subscription, CancellationToken ct = default);
-    ValueTask<IReadOnlyList<CoreEventBucket>> DueBucketsAsync(DateTimeOffset now, CancellationToken ct = default);
+    ValueTask<IReadOnlyList<CoreEventBucket>> DueBucketsAsync(DateTimeOffset now, CancellationToken ct = default, EventRecoveryCursor? after = null);
     ValueTask CompleteBucketAsync(Guid bucketId, CancellationToken ct = default, string? code = null);
-    ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default);
+    ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default, EventRecoveryCursor? after = null);
     ValueTask SnapshotAsync(Guid eventId, IReadOnlyList<EventSubscriptionSnapshot> subscriptions, CancellationToken ct = default);
     ValueTask<IReadOnlyList<CoreEventDelivery>> DeliveriesAsync(Guid eventId, CancellationToken ct = default);
     ValueTask<EventFilterResult> DecideAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null);

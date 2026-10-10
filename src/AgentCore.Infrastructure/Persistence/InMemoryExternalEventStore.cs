@@ -113,16 +113,17 @@ public sealed class InMemoryExternalEventStore : IExternalEventStore
     public ValueTask<IReadOnlyList<ExternalEventDelivery>> ListPendingDeliveriesAsync(
         Guid? eventId,
         int limit,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, ExternalEventRecoveryCursor? after = null)
     {
         lock (_gate)
         {
             var rows = _deliveries.Values
                 .Where(item => (item.Status == ExternalEventDeliveryStatus.Pending || item.Status == ExternalEventDeliveryStatus.FilterError && item.Decision?.Retryable == true)
                     && (eventId is null || item.EventId == eventId))
-                .OrderBy(item => item.EventId)
-                .ThenBy(item => item.AutomationId)
-                .Take(Math.Max(1, limit))
+                .Where(item => after == null || string.CompareOrdinal(item.EventId.ToString("D"), after.EventId.ToString("D")) > 0 || item.EventId == after.EventId && string.CompareOrdinal(item.AutomationId.ToString("D"), after.AutomationId.ToString("D")) > 0)
+                .OrderBy(item => item.EventId.ToString("D"), StringComparer.Ordinal)
+                .ThenBy(item => item.AutomationId.ToString("D"), StringComparer.Ordinal)
+                .Take(Math.Clamp(limit, 1, 64))
                 .ToArray();
             return ValueTask.FromResult<IReadOnlyList<ExternalEventDelivery>>(rows);
         }
