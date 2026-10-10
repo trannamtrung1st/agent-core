@@ -395,7 +395,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       </Drawer>
       <Collapse onChange={keys => { if (keys.length) void loadDeliveries(); }} items={[{ key: "deliveries", label: "Built-in Event deliveries", children: <Flex vertical gap={token.paddingSM}>
         {deliveryError ? <Alert type="error" showIcon title="Event deliveries could not be loaded" action={<Button onClick={() => void loadDeliveries()}>Retry deliveries</Button>} /> : null}
-        <Table rowKey={row => `${row.eventId}:${row.triggerId}`} size="small" scroll={{ x: 650 }} dataSource={deliveries}
+        <Table aria-label="Built-in Event deliveries" className="admin-collection-table" rowKey={row => `${row.eventId}:${row.triggerId}`} size="small" scroll={{ x: 650 }} dataSource={deliveries}
           columns={[{ title: "Automation", dataIndex: "automationId" }, { title: "Subscription", dataIndex: "triggerId" }, { title: "Revision", dataIndex: "triggerRevision" }, { title: "Outcome", dataIndex: "status" }, { title: "Reason", dataIndex: "code" }]}
           locale={{ emptyText: "No Built-in Event deliveries yet" }} />
       </Flex> }]} />
