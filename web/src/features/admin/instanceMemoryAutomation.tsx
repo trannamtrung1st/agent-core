@@ -1,3 +1,4 @@
+import { automationTriggerPermissionSummary } from "./AutomationTriggerPermissions";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Descriptions, Flex, Select, Table, Tabs, Tag, Typography, theme } from "antd";
@@ -138,10 +139,7 @@ function memoryPolicySummary(config: AdminEffectiveConfiguration): string {
 
 function triggerPolicySummary(config: AdminEffectiveConfiguration): string {
   const p = config.triggerPolicy;
-  if (!p?.enabled) {
-    return "disabled";
-  }
-  return `enabled · ${p.allowedSourceKinds.join(", ")}`;
+  return `${p?.enabled ? "Enabled" : "Disabled (configured permissions are inactive)"} · ${automationTriggerPermissionSummary(p?.allowedSourceKinds)}`;
 }
 
 export function InstanceMemoryAutomationPanel({ config, section }: { config: AdminEffectiveConfiguration; section?: "memory" | "automation" }) {

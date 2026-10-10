@@ -3,6 +3,8 @@ version: 1
 slug: "web-src-features-admin-adminapp-tsx"
 primary_target: "web/src/features/admin/AdminApp.tsx"
 related_targets:
+  - web/src/features/admin/AutomationTriggerPermissions.tsx
+  - web/src/features/admin/definitionCandidateEditor.tsx
   - web/src/features/admin/HarnessManagementSection.tsx
   - web/src/features/admin/DefinitionVersionsTable.tsx
   - web/src/features/admin/InstanceContinuitySection.tsx
@@ -28,6 +30,8 @@ related_targets:
 ---
 
 # Admin configuration and continuity
+
+Definition Automation permissions use two primary checkboxes, Schedule and Events, with Built-in/Webhook children indented by Ant Design paddingLG. Checked/mixed/unchecked state derives from canonical child values. Concise descriptions explain explicit both-family enable and local restricted pause/resume; overall-disabled configuration is visible with inactive-authority guidance. Published inspection uses the same disabled controls. Keep ordinary text wrapping, shared section spacing and keyboard focus; no extra boxes or new tokens. Effective/Instance summaries and publish diffs name exact family grants. `/docs/13` owns behavior and canonical mappings.
 
 Mode: Operate. Preserve shipped dark Ant Design v6 Admin panels.
 

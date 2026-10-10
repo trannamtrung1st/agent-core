@@ -64,11 +64,12 @@ describe("Owner schedule authoring", () => {
     render(view());
     fireEvent.click(await screen.findByRole("button", { name: `View automation: ${row.name}` }));
     fireEvent.click(screen.getByRole("button", { name: "Edit automation" }));
+    const editor = within(await screen.findByRole("dialog", { name: "Edit automation" }));
     request.mockImplementation(async (_instance, _path, method) => { if (!method) throw new Error("Collection refresh failed"); return row; });
     fireEvent.click(screen.getByRole("button", { name: "Refresh automations" }));
     await screen.findByText(/Collection refresh failed/);
-    expect(screen.getByRole("button", { name: "Save automation" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Save as disabled" }));
+    expect(editor.getByRole("button", { name: "Save automation" })).toBeDisabled();
+    fireEvent.click(editor.getByRole("button", { name: "Save as disabled" }));
     await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations/scheduled", "PUT", expect.objectContaining({ enabled: false, triggers: [expect.objectContaining({ source: { kind: "webhook", eventId: "known-event" } })] })));
   });
   it("updates the save summary for schedule, background reporting and disabled state", async () => {

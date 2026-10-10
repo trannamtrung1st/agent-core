@@ -24,6 +24,25 @@ public sealed class TriggerDurablePolicyTests
     private static readonly DateTimeOffset Now = new(2026, 9, 23, 8, 0, 0, TimeSpan.Zero);
     private static readonly Guid ProfileId = Guid.Parse("019944af-00d1-7000-8000-0000000000b1");
 
+    [Theory]
+    [InlineData(true, "", false, false, false)]
+    [InlineData(true, "schedule", true, false, false)]
+    [InlineData(true, "coreEvent", false, true, false)]
+    [InlineData(true, "applicationEvent", false, false, true)]
+    [InlineData(true, "schedule,coreEvent,applicationEvent", true, true, true)]
+    [InlineData(false, "schedule,coreEvent,applicationEvent", false, false, false)]
+    public void Configured_source_permissions_remain_independent_and_require_enabled_policy(
+        bool enabled, string kinds, bool schedule, bool builtin, bool webhook)
+    {
+        var definition = SampleDefinitions.Examiner with
+        { TriggerPolicy = new(enabled, false, false, false, false, false, 1, 1, 1,
+            kinds.Split(',', StringSplitOptions.RemoveEmptyEntries)) };
+        Assert.Equal(schedule, OccurrenceCompatibility.Allows(definition, TriggerSourceKind.Schedule));
+        Assert.Equal(builtin, OccurrenceCompatibility.Allows(definition, TriggerSourceKind.CoreEvent));
+        Assert.Equal(webhook, OccurrenceCompatibility.Allows(definition, TriggerSourceKind.ApplicationEvent));
+        Assert.True(OccurrenceCompatibility.Allows(definition, TriggerSourceKind.ManualInvocation));
+    }
+
     [Fact]
     public async Task Schedule_create_uses_durable_active_version_not_session_definition()
     {

@@ -1,3 +1,4 @@
+import { AutomationTriggerPermissions } from "./AutomationTriggerPermissions";
 import { orderedReasoningEfforts, retainedReasoningEffort } from "../models/reasoningEfforts";
 import { DefinitionExecutionBudgets } from "./ExecutionBudgetsSection";
 import { DefinitionSkillsSection } from './DefinitionSkillsSection';
@@ -41,12 +42,6 @@ const INITIATIVE_TRIGGERS = [
   { value: "longSilence", label: "Long silence" },
   { value: "environmentUpdate", label: "Environment update" },
   { value: "unfinishedInteraction", label: "Unfinished interaction" }
-];
-
-const TRIGGER_SOURCE_KINDS = [
-  { value: "schedule", label: "Schedule" },
-  { value: "applicationEvent", label: "Shared Event (webhook)" },
-  { value: "coreEvent", label: "Core Event" }
 ];
 
 export function DefinitionCandidateEditor({
@@ -684,17 +679,11 @@ function DefinitionCandidateForm({
             }
           />
         </div>
-        <SelectField
-          label="Allowed source kinds"
-          mode="multiple"
-          value={readCandidateStringList(candidate, ["triggerPolicy", "allowedSourceKinds"])}
-          options={TRIGGER_SOURCE_KINDS}
+        <AutomationTriggerPermissions
+          values={readCandidateStringList(candidate, ["triggerPolicy", "allowedSourceKinds"])}
+          enabled={readBoolean(candidate, ["triggerPolicy", "enabled"])}
           disabled={busy || readOnly}
-          onChange={(value) =>
-            onCandidateChange(
-              patchRecord(candidate, ["triggerPolicy"], { allowedSourceKinds: value }, triggerPolicyDefaults)
-            )
-          }
+          onChange={allowedSourceKinds => onCandidateChange(patchRecord(candidate, ["triggerPolicy"], { allowedSourceKinds }, triggerPolicyDefaults))}
         />
       </section>
 
