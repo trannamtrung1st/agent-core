@@ -133,7 +133,11 @@ public sealed class ContinuationCapabilityProviderTests
         Assert.True(ApplicationMessageAdmission.TryCreateEffectKey(executionId, calls[2].Id, out var replayKey));
         Assert.Equal(firstKey, replayKey);
 
-        Assert.Equal(string.Empty, calls.Single(call => call.Id == "obj-1").ArgumentsJson);
+        var malformed = calls.Single(call => call.Id == "obj-1");
+        Assert.Equal(ToolCatalog.SkillsLoad, malformed.Name);
+        Assert.False(string.IsNullOrWhiteSpace(malformed.ArgumentsJson));
+        Assert.ThrowsAny<JsonException>(() => JsonDocument.Parse(malformed.ArgumentsJson));
+        Assert.DoesNotContain("order.lookup", malformed.ArgumentsJson, StringComparison.Ordinal);
         Assert.Equal(ModelStopReason.ToolCalls, Assert.IsType<ModelCompleted>(events[^1]).Reason);
     }
 

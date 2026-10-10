@@ -521,7 +521,12 @@ public sealed class OpenAICompatibleLanguageModelTests
         var events = await CollectAsync(Create(handler, tools: true), new(Guid.NewGuid(), [], Tools: [ToolRegistry.Get(ToolCatalog.BrowserClose).ModelDefinition]));
         var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
         Assert.Equal("close_1", call.Id);
-        Assert.Equal(explicitNull ? "null" : "", call.ArgumentsJson);
+        if (explicitNull)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(call.ArgumentsJson));
+            Assert.ThrowsAny<JsonException>(() => JsonDocument.Parse(call.ArgumentsJson));
+        }
+        else Assert.Equal("", call.ArgumentsJson);
     }
 
     [Theory]

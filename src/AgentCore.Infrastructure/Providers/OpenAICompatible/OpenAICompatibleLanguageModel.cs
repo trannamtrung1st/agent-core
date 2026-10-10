@@ -342,7 +342,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                     yield return new ModelToolCallEvent(new ModelToolCall(
                         draft.Id,
                         OpenAiCompatibleToolNames.ToCanonicalName(draft.Name, request.Tools),
-                        draft.Arguments.ToString(),
+                        draft.ArgumentPayload,
                         firstDraft ? continuationToken : null));
                     firstDraft = false;
                 }
@@ -829,9 +829,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
 
                 if (function.TryGetProperty("arguments", out var arguments))
                 {
-                    // Keep explicit invalid values for Core validation; a missing
-                    // field alone means there was no argument payload.
-                    draft.Arguments.Append(arguments.ValueKind == JsonValueKind.String ? arguments.GetString() : arguments.GetRawText());
+                    draft.AppendArguments(arguments);
                 }
             }
         }
@@ -1046,7 +1044,17 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
     {
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
-        public StringBuilder Arguments { get; } = new();
+        private readonly StringBuilder _arguments = new();
+        private bool _invalidArgumentType;
+        public string ArgumentPayload => _invalidArgumentType ? "!invalid_provider_argument_type" : _arguments.ToString();
+
+        public void AppendArguments(JsonElement arguments)
+        {
+            // A transport type error is sticky: placing a marker inside a quoted
+            // string fragment must never turn malformed transport into valid JSON.
+            if (arguments.ValueKind != JsonValueKind.String) _invalidArgumentType = true;
+            else _arguments.Append(arguments.GetString());
+        }
     }
 }
 
