@@ -10,6 +10,33 @@ namespace AgentCore.Application.Tests;
 public sealed class InvalidToolCallRecoveryTests
 {
     [Theory]
+    [InlineData("{\"unexpected\":true}")]
+    [InlineData("{broken")]
+    public void Checkpoint_restores_blocked_strategy_without_disabling_valid_close_or_unrelated_calls(string arguments)
+    {
+        var recovery = new InvalidToolCallRecovery([]);
+        var call = new ModelToolCall("invalid-close", ToolCatalog.BrowserClose, arguments, "opaque-continuation");
+        var messages = new List<ModelMessage>();
+        for (var i = 0; i < 4; i++)
+        {
+            var attempt = call with { Id = "invalid-close-" + i };
+            messages.Add(new(ModelRole.Assistant, "", ToolCalls: [attempt]));
+            var receipt = recovery.Note(attempt, recovery.Refuse(attempt) ?? "{\"error\":\"invalid\"}", out _);
+            messages.Add(new(ModelRole.Tool, receipt, ToolCallId: attempt.Id, Name: attempt.Name));
+        }
+        var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write(messages), 4, 0, 1000);
+        Assert.True(AgentRunToolCallCheckpoint.TryRead(checkpoint, out var restored));
+        recovery = new(restored!);
+        Assert.True(recovery.HasBlockedStrategies);
+        Assert.NotNull(recovery.Refuse(call));
+        Assert.Null(recovery.Refuse(call with { Id = "corrected-close", ArgumentsJson = "{}" }));
+        Assert.Null(recovery.Refuse(new("inspect", ToolCatalog.BrowserSnapshot, "{}")));
+        Assert.Empty(AgentRunToolCallCheckpoint.PendingCalls(restored!));
+        Assert.Equal(4, AgentRunToolCallCheckpoint.NormalizeResumedStepCount(checkpoint.StepCount, restored!));
+        Assert.All(restored!.SelectMany(m => m.ToolCalls ?? []), c => Assert.Equal("opaque-continuation", c.ContinuationToken));
+    }
+
+    [Theory]
     [InlineData("{}")]
     [InlineData("{\"cursor\":null,\"limit\":null}")]
     [InlineData("{\"cursor\":\"  \"}")]
@@ -72,7 +99,7 @@ public sealed class InvalidToolCallRecoveryTests
             "{\"invalidCallRecovery\":{\"strategy\":42,\"attempt\":\"not a count\"}}" }
             .Select(text => new ModelMessage(ModelRole.Tool, text));
         var recovery = new InvalidToolCallRecovery(receipts);
-        Assert.False(recovery.Exhausted);
+        Assert.False(recovery.HasBlockedStrategies);
         Assert.Null(recovery.Refuse(new("fresh", ToolCatalog.BrowserFind, "{}")));
     }
 

@@ -827,9 +827,11 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                     draft.Name = name.GetString() ?? draft.Name;
                 }
 
-                if (function.TryGetProperty("arguments", out var arguments) && arguments.ValueKind == JsonValueKind.String)
+                if (function.TryGetProperty("arguments", out var arguments))
                 {
-                    draft.Arguments.Append(arguments.GetString());
+                    // Keep explicit invalid values for Core validation; a missing
+                    // field alone means there was no argument payload.
+                    draft.Arguments.Append(arguments.ValueKind == JsonValueKind.String ? arguments.GetString() : arguments.GetRawText());
                 }
             }
         }

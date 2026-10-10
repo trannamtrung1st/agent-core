@@ -746,13 +746,16 @@ public sealed class BrowserToolTests
     [Theory]
     [InlineData("{}")]
     [InlineData(" { } ")]
-    public async Task Close_accepts_only_empty_objects(string arguments)
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task Close_accepts_empty_objects_and_absent_zero_parameter_payloads(string? arguments)
     {
         var fake = new FakeBrowser();
         var result = await Executor(fake).ExecuteAsync(
             BrowserDefinitionV12(),
             Guid.NewGuid(),
-            Call(ToolCatalog.BrowserClose, arguments),
+            Call(ToolCatalog.BrowserClose, arguments!),
             ToolLimits.MaxOutputBytes,
             admission: UserTurn());
         Assert.Equal(1, fake.CloseCalls);
@@ -760,9 +763,9 @@ public sealed class BrowserToolTests
     }
 
     [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
     [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("{broken")]
     [InlineData("""{"arguments":"{}"}""")]
     [InlineData("""{"target":{}}""")]
     [InlineData("""{"parameters":{}}""")]

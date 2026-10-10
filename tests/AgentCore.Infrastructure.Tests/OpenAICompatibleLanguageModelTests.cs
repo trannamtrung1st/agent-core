@@ -494,6 +494,9 @@ public sealed class OpenAICompatibleLanguageModelTests
     [InlineData("{}")]
     [InlineData("null")]
     [InlineData("{\"arguments\":{}}")]
+    [InlineData("")]
+    [InlineData(" \t")]
+    [InlineData("{broken")]
     public async Task Provider_preserves_close_argument_bytes_for_core_validation(string arguments)
     {
         var chunk = JsonSerializer.Serialize(new { choices = new[] { new { delta = new { tool_calls = new[] { new { index = 0, id = "close_1", type = "function", function = new { name = "browser_close", arguments } } } }, finish_reason = "tool_calls" } } });
@@ -502,7 +505,23 @@ public sealed class OpenAICompatibleLanguageModelTests
         var events = await CollectAsync(model, new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Close the browser")], Tools: [ToolRegistry.Get("browser.close").ModelDefinition]));
         var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
         Assert.Equal("browser.close", call.Name);
+        Assert.Equal("close_1", call.Id);
         Assert.Equal(arguments, call.ArgumentsJson);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Provider_distinguishes_absent_arguments_from_explicit_null(bool explicitNull)
+    {
+        var function = new Dictionary<string, object?> { ["name"] = "browser_close" };
+        if (explicitNull) function["arguments"] = null;
+        var chunk = JsonSerializer.Serialize(new { choices = new[] { new { delta = new { tool_calls = new[] { new { index = 0, id = "close_1", type = "function", function } } }, finish_reason = "tool_calls" } } });
+        var handler = new ScriptedHandler([Encoding.UTF8.GetBytes("data: " + chunk + "\n\ndata: [DONE]\n\n")]);
+        var events = await CollectAsync(Create(handler, tools: true), new(Guid.NewGuid(), [], Tools: [ToolRegistry.Get(ToolCatalog.BrowserClose).ModelDefinition]));
+        var call = Assert.Single(events.OfType<ModelToolCallEvent>()).Call;
+        Assert.Equal("close_1", call.Id);
+        Assert.Equal(explicitNull ? "null" : "", call.ArgumentsJson);
     }
 
     [Theory]

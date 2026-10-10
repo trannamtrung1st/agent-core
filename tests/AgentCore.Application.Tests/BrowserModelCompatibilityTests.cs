@@ -65,7 +65,8 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
         Assert.Equal(4, result.MalformedCalls); Assert.Equal(2, result.BlockedCalls);
         Assert.Equal(3, result.RepeatedFailures); Assert.Equal(6, result.ModelRequests);
         Assert.False(result.DomVerified); Assert.Equal(0, fixture.AcceptedLogins);
-        Assert.DoesNotContain(model.Requests.Last().Tools ?? [], tool => tool.Name.StartsWith("browser."));
+        Assert.Contains(model.Requests.Last().Tools ?? [], tool => tool.Name == ToolCatalog.BrowserNavigate);
+        Assert.True(result.ReplyCompleted);
     }
 
     [Fact]
@@ -345,7 +346,8 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             }
             if (blockedForever && step == 5)
             {
-                Assert.DoesNotContain(request.Tools ?? [], tool => tool.Name.StartsWith("browser."));
+                Assert.Contains(request.Tools ?? [], tool => tool.Name == ToolCatalog.BrowserNavigate);
+                Assert.Contains("invalid_tool_strategy_blocked", request.Messages.Last(m => m.Role == ModelRole.Tool).Text);
                 yield return new ModelSemanticResponseReady(new("The repeated discovery strategy was blocked after invalid arguments; login was not completed.", new(ModelSpeechMode.Same, null), []));
                 yield return new ModelCompleted(ModelStopReason.Completed); yield break;
             }

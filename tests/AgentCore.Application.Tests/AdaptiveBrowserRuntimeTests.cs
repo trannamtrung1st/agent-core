@@ -19,7 +19,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class AdaptiveBrowserRuntimeTests
+public sealed class AdaptiveBrowserRuntimeTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     [Theory]
     [InlineData("accessible", false)]
@@ -130,11 +130,13 @@ public sealed class AdaptiveBrowserRuntimeTests
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    [InlineData(false, true)]
-    public async Task Masked_capture_failure_budget_and_text_only_recovery(bool vision, bool unavailable)
+    [InlineData(true, false, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, true)]
+    public async Task Masked_capture_failure_budget_and_text_only_recovery(bool vision, bool unavailable, bool changed)
     {
         var options = new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
             FixturePort = 0, InteractionMode = "InteractiveDemo", Limits = new(CapturesPerScope: 1),
@@ -156,12 +158,34 @@ public sealed class AdaptiveBrowserRuntimeTests
             var failure = await Run(ToolCatalog.BrowserScreenshot, new { target = new { by = "role", value = "button", name = "Missing" } });
             Assert.Contains("target_missing", failure.Text); Assert.Contains("semantic observation", failure.Text); Assert.Empty(failure.Parts ?? []);
             if (unavailable) browser.CaptureProbe = () => new TimeoutException("semantic unavailable");
+            if (changed) browser.CaptureConsistencyProbe = p => p.EvaluateAsync("() => document.body.append(document.createElement('p'))");
             var capture = await Run(ToolCatalog.BrowserScreenshot, new { });
             browser.CaptureProbe = null;
+            browser.CaptureConsistencyProbe = null;
             using var metadata = JsonDocument.Parse(capture.Text);
             Assert.Equal(unavailable, metadata.RootElement.GetProperty("observationUnavailable").GetBoolean());
             Assert.Equal(vision, metadata.RootElement.GetProperty("imageDelivered").GetBoolean());
-            Assert.Equal(vision, metadata.RootElement.GetProperty("coordinateEvidence").GetBoolean());
+            var root = metadata.RootElement;
+            var coordinates = root.GetProperty("coordinateEvidence").GetBoolean();
+            var diagnostics = root.GetProperty("captureDiagnostics");
+            var reasons = root.GetProperty("coordinateEvidenceUnavailableReasons");
+            // Output only Core's bounded flags/counts and reason codes, never page content.
+            output.WriteLine("vision={0}, observationUnavailable={1}, coordinateEvidence={2}, diagnostics={3}, unavailableReasons={4}",
+                vision, unavailable, coordinates, diagnostics.GetRawText(), reasons.GetRawText());
+            if (changed)
+            {
+                Assert.False(coordinates);
+                Assert.Contains("visual_state_changed_during_capture", reasons.EnumerateArray().Select(v => v.GetString()));
+            }
+            if (!vision) Assert.False(coordinates);
+            if (coordinates)
+            {
+                Assert.True(vision);
+                Assert.True(diagnostics.GetProperty("settlement").GetProperty("settled").GetBoolean());
+                Assert.True(diagnostics.GetProperty("settlement").GetProperty("observationAvailable").GetBoolean());
+                Assert.Empty(reasons.EnumerateArray());
+            }
+            else if (vision) Assert.NotEmpty(reasons.EnumerateArray());
             Assert.DoesNotContain("protected-visible-value", capture.Text);
             Assert.True(metadata.RootElement.GetProperty("redactions").GetInt32() > 0);
             var artifact = metadata.RootElement.GetProperty("artifactId").GetGuid();
@@ -177,6 +201,20 @@ public sealed class AdaptiveBrowserRuntimeTests
             Assert.DoesNotContain("error", (await Run(ToolCatalog.BrowserSnapshot, new { })).Text);
             var pixelArgs = new { operation = "click", x = 680, y = 165, snapshotId = metadata.RootElement.GetProperty("snapshotId").GetString() };
             if (!vision) Assert.Contains("forbidden", (await Run(ToolCatalog.BrowserVisionMouse, pixelArgs)).Text);
+            else if (!coordinates)
+            {
+                var rejected = await Run(ToolCatalog.BrowserVisionMouse, pixelArgs);
+                Assert.Contains("stale_visual_evidence", rejected.Text);
+                Assert.Contains("\"effectAttempted\":false", rejected.Text);
+            }
+            else
+            {
+                var button = page.GetByRole(AriaRole.Button, new() { Name = "Save notes", Exact = true });
+                var box = (await button.BoundingBoxAsync())!;
+                var clicked = await Run(ToolCatalog.BrowserVisionMouse, new { operation = "click", x = box.X + box.Width / 2, y = box.Y + box.Height / 2, snapshotId = root.GetProperty("snapshotId").GetString() });
+                Assert.DoesNotContain("\"error\"", clicked.Text);
+                Assert.Contains("Notes saved", await page.GetByRole(AriaRole.Status).InnerTextAsync());
+            }
             admission = admission with { CaptureScope = "new-scope" };
             var bounded = await Run(ToolCatalog.BrowserScreenshot, new { }, 512);
             Assert.InRange(Encoding.UTF8.GetByteCount(bounded.Text), 1, 512);

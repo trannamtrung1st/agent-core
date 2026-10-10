@@ -222,22 +222,24 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("approval_required", "Tool execution requires explicit approval."));
         }
 
+        var payload = ToolArgumentPayload.Normalize(call.ArgumentsJson,
+            ToolRegistry.TryGet(call.Name, out var descriptor) ? descriptor.ModelDefinition : null);
         JsonElement args;
         try
         {
             if (string.Equals(call.Name, ToolCatalog.BrowserClose, StringComparison.Ordinal))
             {
-                if (!BrowserToolArguments.TryValidateClose(call.ArgumentsJson, out var closeError))
+                if (!BrowserToolArguments.TryValidateClose(payload, out var closeError))
                 {
                     return TextResult(closeError);
                 }
 
-                args = JsonSerializer.Deserialize<JsonElement>(call.ArgumentsJson, JsonOptions);
+                args = JsonSerializer.Deserialize<JsonElement>(payload, JsonOptions);
             }
             else
             {
                 args = JsonSerializer.Deserialize<JsonElement>(
-                    string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson,
+                    payload,
                     JsonOptions);
                 if (args.ValueKind != JsonValueKind.Object)
                 {
