@@ -30,4 +30,10 @@ The example illustrates composition; the actual Workspace feature owns these ele
 
 Reuse `AgentIdentitySections` and `AgentSkillsResourcesSections` for the corresponding Definition/Instance navigation. Reuse `AdminCollectionToolbar` and `useAdminCollectionSearch` for collection search/pagination, `useAdminDetailLayout` for responsive detail labels, `SkillDrawer` for procedure authoring/inspection, and `ResourceSelectionToolbar` for bulk resource selection/deletion.
 
+Configuration forms use the shared `admin-config-form` layout in `app.css`: available width up to 48rem, 16px between fields, full-column Selects and supporting Typography capped at 72ch. The enclosing panel owns the outer inset; form action rows use content-width buttons and wrapping token gaps. Screenshot privacy consumes this layout inside the existing Browser provider section while effective/saved Descriptions retain the full section width.
+
+Use `admin-collection-table` for compact collection and diagnostic tables, including Built-in Event subscribers and deliveries. The shared style owns wrapping ordinary cells and tabular numerals; the feature owns column widths and table-local scrolling. Bounded name links use `admin-collection-name`, full accessible text and a full-name title. Built-in subscribers share the 8px section rhythm and 640px/full-mobile Event drawer; the existing 40px mobile action policy applies.
+
 [shared-configuration-layout.spec.ts](../../../e2e/shared-configuration-layout.spec.ts) checks representative panels at 1440, 768, 767 and 390px, aligned heading/body edges, consistent insets, local overflow and working Workspace reload. Feature suites cover saved drafts, read-only inspection, validation, conflicts and recovery. The canonical frontend behavior remains in [Frontend Implementation](../../../../docs/13-frontend-implementation-spec.md).
+
+The [main UI consistency report](../../../../docs/reports/main-ui-style-consistency-verification.md) records the latest bounded Synthetic privacy/subscriber/delivery checks on source `9145e66e`. Documentation synchronization reuses that evidence and does not establish a new acceptance gate.
