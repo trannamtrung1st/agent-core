@@ -27,6 +27,8 @@ public sealed class HealthAndSessionLifecycleTests : IClassFixture<AgentCoreApiF
         Assert.Equal("healthy", body!.Status);
         Assert.Equal("Synthetic", body.Profile);
         Assert.Equal(1, body.ProtocolVersion);
+        Assert.Equal(typeof(Program).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .Cast<System.Reflection.AssemblyInformationalVersionAttribute>().Single().InformationalVersion, body.BuildVersion);
         Assert.Equal(0, _factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
 

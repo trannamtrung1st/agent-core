@@ -20,11 +20,18 @@ internal sealed class BrowserEvidenceProgress
     private bool _captureUnavailable;
     private int _captures;
     private string? _semanticPage;
+    private readonly HashSet<string> _unusableSnapshots = new(StringComparer.Ordinal);
+    private bool _coordinateUnavailable;
+    private int _unavailableCaptures;
+    private const string CoordinateInstruction = "The latest screenshot has coordinateEvidence=false. Do not call browser.mouse with that snapshotId. Use an already-authorized semantic observation/action or a bounded wait justified by the safe capture diagnostics. Avoid repeating ineffective captures without evidence of change. If independently requested, browser.close remains actionable even when logout fails; report logout verification and browser closure separately.";
 
     internal string? SemanticRecoveryInstruction(IEnumerable<string> eligibleTools, bool vision, bool screenshotAvailable, int captureAllowance,
         IEnumerable<string>? projectedTools = null)
     {
-        if (_semanticMisses < 2 || DialogPending) return null;
+        if (DialogPending) return null;
+        if (_coordinateUnavailable) return CoordinateInstruction + (_unavailableCaptures >= 2
+            ? " Multiple captures have lacked coordinate authority; stop the equivalent visual recovery strategy and report a truthful partial result if no supported alternative can progress." : "");
+        if (_semanticMisses < 2) return null;
         var tools = eligibleTools.ToHashSet(StringComparer.Ordinal);
         var visual = vision && screenshotAvailable && !_captureUnavailable && _captures < captureAllowance
             && tools.Contains(ToolCatalog.BrowserScreenshot);
@@ -61,6 +68,13 @@ internal sealed class BrowserEvidenceProgress
 
     internal string? Refuse(ModelToolCall call, JsonElement args)
     {
+        // Explicitly context-only images cannot acquire authority by retrying mouse.
+        // Unknown IDs still go through native freshness validation; malformed calls keep normal validation.
+        if (call.Name == ToolCatalog.BrowserVisionMouse && args.ValueKind == JsonValueKind.Object
+            && _unusableSnapshots.Contains(Read(args, "snapshotId"))
+            && BrowserToolArguments.TryRequest(Guid.Empty, call.Name, args, out _, out _))
+            return JsonSerializer.Serialize(new { error = "coordinate_evidence_unavailable", message = CoordinateInstruction,
+                strategySuppressed = true, effectAttempted = false });
         // Malformed calls retain their existing validation/recovery path.
         if (!DialogPending || !call.Name.StartsWith("browser.", StringComparison.Ordinal)
             || !BrowserToolArguments.TryRequest(Guid.Empty, call.Name, args, out _, out _)) return null;
@@ -89,9 +103,17 @@ internal sealed class BrowserEvidenceProgress
             else if (error.Length == 0)
             {
                 if (call.Name is ToolCatalog.BrowserScreenshot)
-                { _captures++; _semanticMisses = 0; }
+                {
+                    _captures++; _semanticMisses = 0;
+                    if (root.TryGetProperty("coordinateEvidence", out var coordinate) && coordinate.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                    {
+                        _coordinateUnavailable = !coordinate.GetBoolean();
+                        _unavailableCaptures = _coordinateUnavailable ? _unavailableCaptures + 1 : 0;
+                        if (_coordinateUnavailable && Read(root, "snapshotId") is { Length: > 0 } id) _unusableSnapshots.Add(id);
+                    }
+                }
                 else if (call.Name == ToolCatalog.BrowserFind || call.Name == ToolCatalog.BrowserNavigate || BrowserToolCatalog.IsInteraction(call.Name))
-                    _semanticMisses = 0;
+                { _semanticMisses = 0; _coordinateUnavailable = false; _unavailableCaptures = 0; }
                 else if (TryFingerprint(json, out var page))
                 { if (_semanticPage is not null && _semanticPage != page) _semanticMisses = 0; _semanticPage = page; }
             }

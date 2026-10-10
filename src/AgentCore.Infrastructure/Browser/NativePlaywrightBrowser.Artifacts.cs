@@ -45,11 +45,13 @@ public sealed partial class NativePlaywrightBrowser
             if (session.Dialog is not null) return new("dialog_pending", null, 0);
             // Failed/partial captures cannot retain authority from an earlier image.
             session.VisualSnapshotId = null;
-            var settled = await BrowserPageSettle.WaitAsync(session.Page, _policy.Limits.AutomaticSettleMs, ct);
+            var settlement = await BrowserPageSettle.DiagnoseAsync(session.Page, _policy.Limits.AutomaticSettleMs, ct);
+            var settled = settlement.Settled;
             var generation = session.Generation;
             var page = session.Page;
             var unmasked = privacy.IsUnmasked(page.Url);
-            var visualState = await ReadVisualStateAsync(page, ct);
+            var before = await ReadVisualDiagnosticsAsync(page, ct);
+            var visualState = before.State;
             // Fence the whole combined observation, including asynchronous semantic reads.
             var stage = Stopwatch.StartNew();
             BrowserSnapshot observation;
@@ -206,10 +208,12 @@ public sealed partial class NativePlaywrightBrowser
                 width = decoded.Width;
                 height = decoded.Height;
             }
-            var currentState = await ReadVisualStateAsync(page, ct);
+            if (CaptureConsistencyProbe is { } probe) await probe(page).WaitAsync(ct);
+            var after = await ReadVisualDiagnosticsAsync(page, ct);
+            var currentState = after.State;
             ct.ThrowIfCancellationRequested();
-            var consistent = !page.IsClosed
-                && ReferenceEquals(page, session.Page) && generation == session.Generation
+            var pageChanged = page.IsClosed || !ReferenceEquals(page, session.Page) || generation != session.Generation;
+            var consistent = !pageChanged
                 && visualState is not null && visualState == currentState;
             observation = observation with { Settled = settled && consistent };
             var coordinateEvidence = !request.FullPage && request.Target is null && settled && consistent;
@@ -222,7 +226,28 @@ public sealed partial class NativePlaywrightBrowser
                 session.VisualPageGeneration = generation;
             }
             return new BrowserScreenshotResult(null, png, redactions, width, height, "image/" + format,
-                observation, coordinateEvidence);
+                observation, coordinateEvidence, new CaptureDiagnostics(settlement, before.ObserverAvailable && after.ObserverAvailable,
+                    Math.Max(before.Inflight, after.Inflight), before.FontsLoading || after.FontsLoading,
+                    Math.Max(before.RunningAnimations, after.RunningAnimations), pageChanged,
+                    before.Viewport != after.Viewport, before.Fingerprint != after.Fingerprint),
+                UnavailableReasons());
+
+            string[] UnavailableReasons()
+            {
+                if (coordinateEvidence) return [];
+                var reasons = new List<string>();
+                if (request.FullPage || request.Target is not null) reasons.Add("context_only_capture");
+                if (!settled) reasons.Add("settle_deadline");
+                if (!settlement.ObservationAvailable || !before.ObserverAvailable || !after.ObserverAvailable) reasons.Add("state_observation_unavailable");
+                if (!settled && settlement.DomChangeSamples > 0) reasons.Add("dom_mutation_during_settle");
+                if (settlement.PeakInflight > 0 || before.Inflight > 0 || after.Inflight > 0) reasons.Add("network_inflight_observed");
+                if (before.FontsLoading || after.FontsLoading) reasons.Add("fonts_loading");
+                if (before.RunningAnimations > 0 || after.RunningAnimations > 0) reasons.Add("animation_running");
+                if (pageChanged) reasons.Add("page_changed_during_capture");
+                if (before.Viewport != after.Viewport) reasons.Add("viewport_changed_during_capture");
+                if (before.Fingerprint != after.Fingerprint) reasons.Add("visual_state_changed_during_capture");
+                return reasons.ToArray();
+            }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && !CaptureLifetime.IsCancellationRequested)
         {
@@ -541,14 +566,32 @@ public sealed partial class NativePlaywrightBrowser
     private sealed record BrowserScreenshotRequest(Guid SessionId, string Format = "png", bool FullPage = false, BrowserTarget? Target = null);
     private sealed record BrowserScreenshotResult(string? ErrorCode, byte[]? Png, int RedactionCount,
         int Width = 0, int Height = 0, string? ContentType = null,
-        BrowserSnapshot? Observation = null, bool CoordinateEvidence = false);
+        BrowserSnapshot? Observation = null, bool CoordinateEvidence = false,
+        CaptureDiagnostics? Diagnostics = null, string[]? UnavailableReasons = null);
 
-    // Reuse the settle observer for freshness. No page content or protected values leave this check.
-    private static Task<string?> ReadVisualStateAsync(IPage page, CancellationToken ct) =>
-        page.EvaluateAsync<string?>("""
-            () => window.__acSettle && window.__acSettle.inflight === 0 && document.fonts.status === 'loaded'
-              && !document.getAnimations().some(animation => animation.playState === 'running')
-              ? JSON.stringify([performance.timeOrigin, window.__acSettle.visualGeneration,
-                innerWidth, innerHeight, scrollX, scrollY]) : null
-            """).WaitAsync(ct);
+    // Only counters/booleans are projected; the private freshness fingerprint never leaves Infrastructure.
+    private sealed record CaptureDiagnostics(BrowserPageSettle.Diagnostics Settlement, bool ObserverAvailable,
+        int InflightAtCapture, bool FontsLoading, int RunningAnimations, bool PageChanged,
+        bool ViewportChanged, bool VisualStateChanged);
+    private sealed record VisualDiagnostics(string? State, string Fingerprint, string Viewport,
+        bool ObserverAvailable, int Inflight, bool FontsLoading, int RunningAnimations);
+
+    private static async Task<string?> ReadVisualStateAsync(IPage page, CancellationToken ct) =>
+        (await ReadVisualDiagnosticsAsync(page, ct)).State;
+
+    private static async Task<VisualDiagnostics> ReadVisualDiagnosticsAsync(IPage page, CancellationToken ct) =>
+        JsonSerializer.Deserialize<VisualDiagnostics>(await page.EvaluateAsync<string>("""
+            () => {
+              const observer = window.__acSettle;
+              const inflight = observer?.inflight ?? 0;
+              const fontsLoading = document.fonts.status !== 'loaded';
+              const runningAnimations = document.getAnimations().filter(a => a.playState === 'running').length;
+              const viewport = JSON.stringify([innerWidth, innerHeight, scrollX, scrollY]);
+              const fingerprint = JSON.stringify([performance.timeOrigin, observer?.visualGeneration,
+                innerWidth, innerHeight, scrollX, scrollY]);
+              return JSON.stringify({ State: observer && observer.inflight === 0 && !fontsLoading && runningAnimations === 0 ? fingerprint : null,
+                Fingerprint: fingerprint, Viewport: viewport, ObserverAvailable: !!observer,
+                Inflight: inflight, FontsLoading: fontsLoading, RunningAnimations: runningAnimations });
+            }
+            """).WaitAsync(ct))!;
 }

@@ -5,6 +5,48 @@ namespace AgentCore.Application.Tests;
 public sealed class BrowserEvidenceProgressTests
 {
     [Fact]
+    public void Compact_capture_preserves_unavailable_coordinate_identity_and_reason()
+    {
+        var id = "snap_" + new string('a', 32);
+        var receipt = System.Text.Json.JsonSerializer.Serialize(new {
+            snapshotId = id, artifactId = "artifact", coordinateEvidence = false,
+            coordinateEvidenceUnavailableReasons = new[] { "dom_mutation_during_settle" },
+            captureDiagnostics = new { settlement = new { domChangeSamples = 20 } },
+            observation = new { url = "http://fixture.test/", content = new string('x', 20000) },
+            guidance = new string('x', 1000) });
+        var fitted = BrowserCaptureProjection.Fit(400, receipt);
+        using var json = System.Text.Json.JsonDocument.Parse(fitted);
+        Assert.Equal(id, json.RootElement.GetProperty("snapshotId").GetString());
+        Assert.False(json.RootElement.GetProperty("coordinateEvidence").GetBoolean());
+        Assert.Contains("dom_mutation_during_settle", json.RootElement.GetProperty("coordinateEvidenceUnavailableReasons").EnumerateArray().Select(v => v.GetString()));
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(fitted) <= 400);
+    }
+
+    [Fact]
+    public void Unusable_coordinate_evidence_survives_checkpoint_and_preserves_independent_close()
+    {
+        var id = "snap_" + new string('a', 32);
+        var call = new AgentCore.Application.Ports.ModelToolCall("capture", ToolCatalog.BrowserScreenshot, "{}");
+        var progress = new BrowserEvidenceProgress([
+            new(AgentCore.Application.Ports.ModelRole.Assistant, "", ToolCalls: [call]),
+            new(AgentCore.Application.Ports.ModelRole.Tool, System.Text.Json.JsonSerializer.Serialize(new { snapshotId = id, coordinateEvidence = false }), ToolCallId: call.Id)]);
+        string Args(string snapshotId) => System.Text.Json.JsonSerializer.Serialize(new { operation = "click", x = 10, y = 20, snapshotId });
+        using var args = System.Text.Json.JsonDocument.Parse(Args(id));
+        Assert.Contains("coordinate_evidence_unavailable", progress.Refuse(new("mouse", ToolCatalog.BrowserVisionMouse, Args(id)), args.RootElement));
+        Assert.Contains("browser.close remains actionable", progress.SemanticRecoveryInstruction([], true, true, 4));
+        using var empty = System.Text.Json.JsonDocument.Parse("{}");
+        Assert.Null(progress.Refuse(new("close", ToolCatalog.BrowserClose, "{}"), empty.RootElement));
+        progress.NoteResult(call, System.Text.Json.JsonSerializer.Serialize(new { snapshotId = id, coordinateEvidence = false }));
+        Assert.Contains("stop the equivalent visual recovery strategy", progress.SemanticRecoveryInstruction([], true, true, 4));
+        var fresh = "snap_" + new string('b', 32);
+        progress.NoteResult(call, System.Text.Json.JsonSerializer.Serialize(new { snapshotId = fresh, coordinateEvidence = true }));
+        Assert.Null(progress.SemanticRecoveryInstruction([], true, true, 4));
+        using var good = System.Text.Json.JsonDocument.Parse(Args(fresh));
+        Assert.Null(progress.Refuse(new("fresh", ToolCatalog.BrowserVisionMouse, Args(fresh)), good.RootElement));
+        Assert.NotNull(progress.Refuse(new("old", ToolCatalog.BrowserVisionMouse, Args(id)), args.RootElement));
+    }
+
+    [Fact]
     public void Authorized_unloaded_capture_is_discovered_without_inventing_projection()
     {
         var progress = new BrowserEvidenceProgress();

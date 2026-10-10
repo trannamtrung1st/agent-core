@@ -324,6 +324,8 @@ public sealed partial class SessionToolExecutor
                 return FitResult(remainingOutputBytes, FinishBrowser(ToolCatalog.BrowserScreenshot, started, stored.Error));
             }
 
+            var captureData = captured.DataJson is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(captured.DataJson);
+            JsonElement? CaptureField(string name) => captureData is { ValueKind: JsonValueKind.Object } data && data.TryGetProperty(name, out var value) ? value : null;
             var text = JsonSerializer.Serialize(new
             {
                 contentType = captured.ContentType,
@@ -339,9 +341,11 @@ public sealed partial class SessionToolExecutor
                 snapshotId = captured.Observation?.SnapshotId,
                 tabRef = captured.Observation?.TabRef,
                 observation = captured.Observation is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(SerializeBrowserSnapshot(captured.Observation, captured)),
-                coordinateEvidence = admission?.SupportsVision == true && captured.DataJson is not null && JsonSerializer.Deserialize<JsonElement>(captured.DataJson).TryGetProperty("coordinateEvidence", out var coordinate) && coordinate.ValueKind == JsonValueKind.True,
+                coordinateEvidence = admission?.SupportsVision == true && CaptureField("coordinateEvidence") is { ValueKind: JsonValueKind.True },
+                coordinateEvidenceUnavailableReasons = CaptureField("coordinateEvidenceUnavailableReasons"),
+                captureDiagnostics = CaptureField("captureDiagnostics"),
                 guidance = admission?.SupportsVision == true
-                    ? (captured.Observation?.ObservationUnavailable == true ? "Semantic observation is unavailable; use this image as visual context and independently refresh semantics. " : "Combine this image with its semantic observation. ") + "Prefer semantic actions. coordinateEvidence identifies fresh viewport pixels; mouse still requires vision, capability and interaction authority. Reobserve and independently verify outcomes."
+                    ? (captured.Observation?.ObservationUnavailable == true ? "Semantic observation is unavailable; use this image as visual context and independently refresh semantics. " : "Combine this image with its semantic observation. ") + "Prefer semantic actions. If coordinateEvidence=false, do not call browser.mouse with this snapshotId. Inspect the safe diagnostic reasons; use an authorized semantic observation/action or bounded wait when justified. Avoid repeating captures without evidence of change. Requested browser.close remains actionable independently of failed logout; report logout and closure separately. Mouse still requires fresh coordinateEvidence, vision, capability and interaction authority. Independently verify outcomes."
                     : "Artifact only: this model did not receive image content. Continue with semantic observation; do not claim visual understanding."
             });
             text = BrowserCaptureProjection.Fit(remainingOutputBytes, text);

@@ -3313,9 +3313,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             {
                                 executionResult = ToolExecutionResult.FromText(invalidRefusal);
                             }
-                            else if (evidence.Refuse(call, args) is { } dialogRefusal)
+                            else if (evidence.Refuse(call, args) is { } evidenceRefusal)
                             {
-                                executionResult = ToolExecutionResult.FromText(dialogRefusal);
+                                executionResult = ToolExecutionResult.FromText(evidenceRefusal);
                             }
                             else if (ToolCatalog.IsCompletionTool(call.Name))
                             {

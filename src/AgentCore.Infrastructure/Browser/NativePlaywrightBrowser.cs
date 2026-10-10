@@ -46,6 +46,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
     internal Func<string, IBrowserContext, Task>? InitializationProbe { get; set; }
     internal Func<Exception?>? CaptureProbe { get; set; }
+    internal Func<IPage, Task>? CaptureConsistencyProbe { get; set; }
     internal Func<IPage, int, int, Task>? ResizeProbe { get; set; }
     internal Func<IPage, Task>? ActivateTabProbe { get; set; }
     internal Func<IDialog, Task>? DialogResolutionProbe { get; set; }

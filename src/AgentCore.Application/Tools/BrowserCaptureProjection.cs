@@ -17,6 +17,7 @@ internal static class BrowserCaptureProjection
             var fitted = BrowserResultProjection.Fit(headroom, observation.ToJsonString());
             if (fitted is not null) root["observation"] = JsonNode.Parse(fitted);
         }
+        if (Encoding.UTF8.GetByteCount(root.ToJsonString()) > budget) root.Remove("captureDiagnostics");
         if (Encoding.UTF8.GetByteCount(root.ToJsonString()) > budget) root.Remove("guidance");
         if (Encoding.UTF8.GetByteCount(root.ToJsonString()) > budget) root.Remove("observation");
         return ToolJsonResults.FitToBudget(budget, root.ToJsonString());

@@ -134,11 +134,15 @@ WorkspaceEndpoints.Map(app);
 AgentWorkspaceEndpoints.Map(app);
 ArtifactEndpoints.Map(app);
 
+// Read the loaded API assembly, never a mutable checkout or DLL on disk.
+var buildVersion = typeof(Program).Assembly
+    .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+    .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().SingleOrDefault()?.InformationalVersion;
 app.MapGet("/health", (IConfiguration configuration) =>
         Results.Json(new HealthResponse(
             "healthy",
             configuration["AgentCore:Profile"] ?? "Synthetic",
-            HttpMapping.ProtocolVersion)))
+            HttpMapping.ProtocolVersion, buildVersion)))
     .WithName("Health");
 
 app.MapGet("/api/v1/agents", async (SessionManager sessions, CancellationToken cancellationToken) =>
