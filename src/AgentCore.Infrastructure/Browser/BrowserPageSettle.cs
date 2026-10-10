@@ -84,6 +84,8 @@ internal static class BrowserPageSettle
     public static async Task<bool> WaitAsync(IPage page, int timeoutMs, CancellationToken cancellationToken) =>
         (await DiagnoseAsync(page, timeoutMs, cancellationToken).ConfigureAwait(false)).Settled;
 
+    // Settled describes the eventual quiet interval. ObservationAvailable covers
+    // every polling read in this wait; a later recovery does not erase an earlier gap.
     internal sealed record Diagnostics(bool Settled, bool ObservationAvailable, int DomChangeSamples, int PeakInflight, int LastInflight);
 
     internal static async Task<Diagnostics> DiagnoseAsync(IPage page, int timeoutMs, CancellationToken cancellationToken)

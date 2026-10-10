@@ -215,8 +215,11 @@ public sealed partial class NativePlaywrightBrowser
             var pageChanged = page.IsClosed || !ReferenceEquals(page, session.Page) || generation != session.Generation;
             var consistent = !pageChanged
                 && visualState is not null && visualState == currentState;
-            observation = observation with { Settled = settled && consistent };
-            var coordinateEvidence = !request.FullPage && request.Target is null && settled && consistent;
+            // Quiet reads can recover after a transient polling gap, but that gap
+            // cannot prove the whole capture's coordinate evidence was observable.
+            var captureSettled = settled && settlement.ObservationAvailable;
+            observation = observation with { Settled = captureSettled && consistent };
+            var coordinateEvidence = !request.FullPage && request.Target is null && captureSettled && consistent;
             if (coordinateEvidence)
             {
                 session.VisualSnapshotId = observation.SnapshotId;

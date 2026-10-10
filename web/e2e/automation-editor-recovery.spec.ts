@@ -49,14 +49,29 @@ test('an unavailable disabled Webhook sibling does not block the healthy Built-i
     contentType: 'application/problem+json', body: JSON.stringify({ title: 'Webhook catalog unavailable' }) }));
   const { saved, drawer } = await openEditor(page, 'event', true);
   await expect(page.getByRole('button', { name: 'Reload Events and models', exact: true })).toBeVisible();
+  // API children are identified by triggerId, without a positional order guarantee.
+  // Preserve the real PUT response but deliberately return the children in reverse
+  // of their original order so this regression exercises order-independent comparison.
+  const originalIds = saved.triggers.map((t: { triggerId: string }) => t.triggerId);
+  await page.route('**/automations/*', async request => {
+    if (request.request().method() !== 'PUT') return request.continue();
+    const response = await request.fetch();
+    const body = await response.json();
+    body.triggers.sort((a: { triggerId: string }, b: { triggerId: string }) =>
+      originalIds.indexOf(b.triggerId) - originalIds.indexOf(a.triggerId));
+    await request.fulfill({ response, json: body });
+  });
   await drawer.getByLabel('Automation instructions').fill('Keep the healthy subscription enabled and retain the disabled sibling.');
   await expect(drawer.getByRole('button', { name: 'Save automation', exact: true })).toBeEnabled();
   const write = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes('/automations/'));
   await drawer.getByRole('button', { name: 'Save automation', exact: true }).click();
   const result = await (await write).json();
   expect(result.enabled).toBe(true);
-  expect(result.triggers.map((t: { triggerId: string; enabled: boolean; source: unknown }) => ({ triggerId: t.triggerId, enabled: t.enabled, source: t.source })))
-    .toEqual(saved.triggers.map((t: { triggerId: string; enabled: boolean; source: unknown }) => ({ triggerId: t.triggerId, enabled: t.enabled, source: t.source })));
+  const childrenById = (triggers: { triggerId: string; enabled: boolean; source: unknown }[]) =>
+    triggers.map(t => ({ triggerId: t.triggerId, enabled: t.enabled, source: t.source }))
+      .sort((a, b) => a.triggerId.localeCompare(b.triggerId));
+  expect(result.triggers.map((t: { triggerId: string }) => t.triggerId)).toEqual([...originalIds].reverse());
+  expect(childrenById(result.triggers)).toEqual(childrenById(saved.triggers));
   await expect(drawer).toBeHidden();
 });
 

@@ -8,6 +8,57 @@ namespace AgentCore.Infrastructure.Tests;
 [Collection(BrowserChromiumCollection.Name)]
 public sealed class BrowserCaptureDiagnosticsTests
 {
+    [Fact]
+    public async Task Recovered_settle_read_keeps_image_context_but_requires_a_new_capture_for_coordinates()
+    {
+        var browser = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixturePort = 0 }, null);
+        await browser.StartAsync(default); var id = Guid.NewGuid();
+        try
+        {
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/")))).ErrorCode);
+            var page = browser.ContextFor(id)!.Pages[0];
+            await page.EvaluateAsync("html => { document.body.innerHTML = html; }", "<button onclick=\"this.textContent='Done'\">Stable control</button>");
+            var initial = await browser.ExecuteAsync(new(id, new BrowserScreenshot()));
+            Assert.Null(initial.ErrorCode);
+            await page.EvaluateAsync("""
+                () => {
+                  const state = window.__acSettle;
+                  let reads = 0;
+                  Object.defineProperty(window, '__acSettle', { configurable: true, get() {
+                    if (++reads === 1) throw new Error('fixture transient polling failure');
+                    return state;
+                  }});
+                }
+                """);
+            var recovered = await browser.ExecuteAsync(new(id, new BrowserScreenshot()));
+            Assert.Null(recovered.ErrorCode); Assert.NotEmpty(recovered.Bytes!);
+            using var receipt = JsonDocument.Parse(recovered.DataJson!);
+            var root = receipt.RootElement;
+            var settlement = root.GetProperty("captureDiagnostics").GetProperty("settlement");
+            Assert.True(settlement.GetProperty("settled").GetBoolean()); // Later quiet reads recovered.
+            Assert.False(settlement.GetProperty("observationAvailable").GetBoolean()); // Earlier gap is retained.
+            Assert.False(root.GetProperty("coordinateEvidence").GetBoolean());
+            Assert.False(recovered.Observation!.Settled);
+            Assert.Contains("state_observation_unavailable", root.GetProperty("coordinateEvidenceUnavailableReasons").EnumerateArray().Select(v => v.GetString()));
+            Assert.DoesNotContain("settle_deadline", root.GetProperty("coordinateEvidenceUnavailableReasons").EnumerateArray().Select(v => v.GetString()));
+            foreach (var snapshotId in new[] { initial.Observation!.SnapshotId, recovered.Observation.SnapshotId })
+            {
+                var rejected = await browser.ExecuteAsync(new(id, new BrowserMouse("click", 20, 20, SnapshotId: snapshotId)));
+                Assert.Equal("stale_visual_evidence", rejected.ErrorCode); Assert.False(rejected.EffectAttempted);
+            }
+            Assert.Equal("Stable control", await page.GetByRole(AriaRole.Button).InnerTextAsync());
+            var fresh = await browser.ExecuteAsync(new(id, new BrowserScreenshot()));
+            Assert.Null(fresh.ErrorCode);
+            using var freshReceipt = JsonDocument.Parse(fresh.DataJson!);
+            Assert.True(freshReceipt.RootElement.GetProperty("coordinateEvidence").GetBoolean());
+            var box = (await page.GetByRole(AriaRole.Button).BoundingBoxAsync())!;
+            var clicked = await browser.ExecuteAsync(new(id, new BrowserMouse("click", box.X + box.Width / 2, box.Y + box.Height / 2, SnapshotId: fresh.Observation!.SnapshotId)));
+            Assert.Null(clicked.ErrorCode);
+            Assert.Equal("Done", await page.GetByRole(AriaRole.Button).InnerTextAsync());
+        }
+        finally { await browser.StopAsync(default); }
+    }
+
     [Theory]
     [InlineData("dom", "dom_mutation_during_settle")]
     [InlineData("network", "network_inflight_observed")]
