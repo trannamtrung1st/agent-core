@@ -257,6 +257,31 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             }
             yield break;
         }
+        if (diagnosticUser.Contains("synthetic-invalid-tool-recover", StringComparison.Ordinal))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var results = request.Messages.Skip(request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User) + 1)
+                .Where(m => m.Role == ModelRole.Tool).ToArray();
+            if (results.Length < 5)
+            {
+                var tool = results.Length == 3 ? ToolCatalog.BrowserSnapshot : ToolCatalog.BrowserClose;
+                yield return new ModelToolCallEvent(new("recover-" + results.Length, tool,
+                    results.Length < 3 ? "{\"unexpected\":true}" : "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else
+            {
+                var outcomes = results.Select(result =>
+                {
+                    using var json = JsonDocument.Parse(result.Text);
+                    return json.RootElement.TryGetProperty("error", out var error) ? error.GetString()
+                        : json.RootElement.TryGetProperty("status", out var status) ? status.GetString() : "observed";
+                });
+                yield return new ModelSemanticResponseReady(new("Recovery receipts: " + string.Join(", ", outcomes), new(ModelSpeechMode.Same, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            yield break;
+        }
         if (diagnosticUser.Contains("synthetic-invalid-tool-turn", StringComparison.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();

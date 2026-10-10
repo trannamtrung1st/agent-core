@@ -103,9 +103,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     }
     await editor.getByLabel('Max active registrations', { exact: true }).fill('4');
     await editor.getByLabel('One-shot horizon days', { exact: true }).fill('30');
-    await editor.getByRole('combobox', { name: 'Allowed source kinds', exact: true }).click();
-    await page.locator('.ant-select-item-option').filter({ hasText: 'Schedule' }).last().click();
-    await page.keyboard.press('Escape');
+    await editor.getByRole('checkbox', { name: 'Schedule', exact: true }).check();
+    await expect(editor.getByRole('checkbox', { name: 'Events', exact: true })).not.toBeChecked();
     await saveDraft(page);
 
     // The trusted allowlist picker must not advertise context-owned capabilities

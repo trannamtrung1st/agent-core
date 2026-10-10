@@ -148,7 +148,7 @@ public sealed partial class OpenAICompatibleLanguageModel
                     if (!toolsOffered) throw new JsonException("Unsolicited tool call.");
                     var draft = new ToolCallDraft { Id = item.GetProperty("call_id").GetString() ?? "", Name = item.GetProperty("name").GetString() ?? "" };
                     if (item.TryGetProperty("arguments", out var arguments))
-                        draft.Arguments.Append(arguments.ValueKind == JsonValueKind.String ? arguments.GetString() : arguments.GetRawText());
+                        draft.AppendArguments(arguments);
                     // As in Chat Completions, argument validation belongs to Core,
                     // where the offered schema and bounded recovery are available.
                     drafts.Add(index++, draft);

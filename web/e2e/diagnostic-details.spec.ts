@@ -32,7 +32,7 @@ test("failed assistant details copy and survive reload", async ({ page }) => {
   await expect(page.getByTestId("diagnostic-id")).toHaveText(diagnosticId);
 });
 
-test("repeated invalid tools are bounded and the finalization diagnostic survives reload", async ({ page }) => {
+test("repeated blocked strategies remain bounded and terminal finalization diagnostics survive reload", async ({ page }) => {
   await page.goto("/");
   await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
@@ -46,12 +46,47 @@ test("repeated invalid tools are bounded and the finalization diagnostic survive
   await page.getByRole("button", { name: "Copy details" }).click();
   await expect(page.getByRole("status")).toHaveText("Copied");
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Reason: finalizationToolCall");
+  const run = await latestRun(page);
+  expect(run.budget.stepsConsumed).toBeGreaterThan(2);
+  expect(run.budget.stepsConsumed).toBeLessThanOrEqual(run.budget.maxSteps);
+  expect(run.budget.terminationReason).toBe("stepLimit");
   await page.reload();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.locator(".chat-message-assistant").last().getByRole("button", { name: "Failed — show error details" }).click();
   await expect(page.getByTestId("diagnostic-id")).toHaveText(id);
   await expect(page.getByTestId("diagnostic-reason")).toHaveText("finalizationToolCall");
 });
+
+test("blocked malformed close permits an unrelated observation and corrected close", async ({ page }) => {
+  await page.goto("/");
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 21 });
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await page.getByLabel("Message").fill("synthetic-invalid-tool-recover");
+  await page.getByRole("button", { name: "Send" }).click();
+  const row = page.locator(".chat-message-assistant").last();
+  await expect(row).toContainText("Recovery receipts: invalid, invalid, invalid_tool_strategy_blocked", { timeout: 15_000 });
+  await expect(row.getByText("✓ Browser closed", { exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Failed — show error details" })).toHaveCount(0);
+  const run = await latestRun(page);
+  expect(run.status).toBe("completed");
+  expect(run.budget.stepsConsumed).toBe(5);
+  expect(run.budget.closureConfirmed).toBe(true);
+  expect(run.budget.stepsConsumed).toBeLessThanOrEqual(run.budget.maxSteps);
+  const text = await row.innerText();
+  expect(text.match(/invalid_tool_strategy_blocked/g)).toHaveLength(1);
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
+  await expect(page.locator(".chat-message-assistant").last()).toContainText("Recovery receipts: invalid, invalid, invalid_tool_strategy_blocked");
+  await expect(page.locator(".chat-message-assistant").last().getByText("✓ Browser closed", { exact: true })).toBeVisible();
+});
+
+async function latestRun(page: import("@playwright/test").Page) {
+  const sessionId = new URL(page.url()).pathname.split('/').at(-1)!;
+  const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
+  const response = await page.request.get(`/api/v2/sessions/${sessionId}/agent-runs`, { headers: { "X-AgentCore-Owner-Capability": token! } });
+  expect(response.ok()).toBe(true);
+  return (await response.json()).items[0];
+}
 
 for (const replyFails of [false, true]) {
   test(`browser actions survive ${replyFails ? "failed" : "recovered"} finalization`, async ({ page }) => {

@@ -37,7 +37,9 @@ public sealed class ResponsesTransportTests
         var handler = new RecordingHandler(Event(new { type = "response.completed", response = new { status = "completed",
             output = new[] { new { type = "function_call", call_id = "close_1", name = "browser_close", arguments = (object?)null } } } }));
         var events = await Collect(Create(handler), new(Guid.NewGuid(), [], Tools: [ToolRegistry.Get(ToolCatalog.BrowserClose).ModelDefinition]));
-        Assert.Equal("null", Assert.Single(events.OfType<ModelToolCallEvent>()).Call.ArgumentsJson);
+        var payload = Assert.Single(events.OfType<ModelToolCallEvent>()).Call.ArgumentsJson;
+        Assert.False(string.IsNullOrWhiteSpace(payload));
+        Assert.ThrowsAny<JsonException>(() => JsonDocument.Parse(payload));
     }
 
     [Theory]
