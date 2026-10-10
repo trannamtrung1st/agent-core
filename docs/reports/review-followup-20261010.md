@@ -50,3 +50,43 @@ After explicit temporary-binding approval, Luna ran the same natural login/accou
 An additional GPT-6.1 Sol attempt was rejected by automatic approval review because the earlier provider approval did not explicitly cover that model switch. The user chose **Stop after Luna and clean up**; no Sol attempt ran. Luna's separate cleanup Run `01a125af-6176-7f87-a7f8-3a2389c22f72` completed in one step / 8.2 seconds with `closureConfirmed=true`, `cleanupStatus=completed`, and `logoutVerified=false`. The temporary binding was removed with HTTP 204; a subsequent read confirmed Tommy again has zero bindings. The existing UAT credential and its original binding were retained. Browser profile data was not reset, and the existing Real host was not restarted. These live attempts used that existing Real host; its loaded source revision was not independently established. All temporary Synthetic verification hosts/Compose data were isolated from it.
 
 Hosted CI was not awaited. The local implementation checks, Compose and 145 core browser cases passed; all 847 frontend cases passed across the full run and isolated retry, with the initial default-suite timeout explicitly retained above. Genuine-model localhost recovery passed. Enterprise logout remains unverified after the unsuccessful Luna attempt and the user's instruction to stop further model testing; full feature acceptance is not claimed.
+
+## Remaining review follow-up — disabled siblings and saved UAT diagnosis
+
+Baseline `97ab9c66`; focused implementation revision `1cd35c97416135f3d242831576daf0fe23810c0d`. Catalog readiness now validates only enabled Event children. A healthy enabled Built-in subscription can keep an Automation enabled while a disabled Webhook sibling's catalog is unavailable. The disabled child still needs a structurally valid source and retains its ID, revision, enabled state and source. Current authority, at least one eligible enabled child, and catalog validation for enabled children remain required. No layout or browser authorization change was introduced.
+
+| Check | Observed outcome | Evidence |
+| --- | --- | --- |
+| New React regression before correction | **1 failed / 1 passed**: disabled Webhook incorrectly blocked Save & enable; enabled unavailable Webhook remained blocked. | `/tmp/disabled-sibling-before.log` |
+| `pnpm --dir web exec vitest run src/features/admin/InstanceAutomationsSection.test.tsx --maxWorkers=1` | **26 passed**, including both new mixed-child boundary cases and all existing editor recovery checks, at unchanged default timeouts. | `/tmp/disabled-sibling-vitest.log` |
+| `pnpm --dir web run build` | **Passed**; existing bundle-size advisory. | `/tmp/disabled-sibling-build.log` |
+| Isolated Synthetic `automation-editor-recovery.spec.ts`, `--project=synthetic` | **3 passed**: unrelated catalog/Schedule recovery; mixed enabled/disabled Event saving; failed source/collection reads with disabled saving. The mixed case preserves both child identities, source references and enabled states through actual HTTP save. | `/tmp/disabled-sibling-e2e.log` |
+| Playwright MCP on Synthetic `5480` / Vite `5473` | With Webhook catalog HTTP 503, enabled Built-in `run.completed` plus disabled Webhook saved HTTP 200, retained both children, and kept the retry notice. Toggling the Webhook child on blocked Save & enable while Save as disabled remained available; Cancel discarded that unsaved toggle. Console errors were exactly the two injected 503s; all relevant Automation writes/reads succeeded. | Interactive browser and network observations |
+
+Only disposable databases/roots and task-owned hosts were used for the new UI checks; those hosts were stopped and injected routes removed. Existing Real hosts, credential bindings and browser profiles were unchanged. The previous broad-suite results remain historical; this small frontend correction reran the affected suite, production build and three integrated recovery scenarios. Hosted CI confirmation/waiting and new live-model attempts were not performed, as directed. Definition/Instance resource work is outside this bounded correction; no subsequent milestone or feature closure is claimed.
+
+### Read-only diagnosis of the existing Luna UAT Run
+
+The saved checkpoint for Run `01a125ab-fdf4-753c-a0e7-b9249930f376` contains all 25 tool calls and receipts. A [portable diagnostic extract](evidence/review-followup-20261010/uat-run-diagnostics.json) retains only tool names, step numbers and whitelisted receipt/budget flags. It excludes call arguments, page content, credentials and images. The original SQLite store was read in `mode=ro`; no provider request or UAT action was issued.
+
+| Step(s) | Tool(s) and outcome |
+| --- | --- |
+| 1–2 | `browser.navigate`, `browser.snapshot`: successful observations. |
+| 3–5 | `capabilities.load`, `credentials.list`, `browser.snapshot`: access discovery and observation. |
+| 6–9 | `browser.fill_form`, `browser.fill_credential`, `browser.click`, `browser.wait_for`: SDK confirmed field fill and submission; each receipt still has `applicationOutcomeVerified=false`. Login was model-reported, not independently established by `browser.verify`. |
+| 10–12 | `browser.find` returned `not_found`; `browser.click` returned `target_missing`; semantic snapshot succeeded. |
+| 13–15 | Capability load; screenshot; semantic click again returned `target_missing`. |
+| 16–18 | Capability load; another semantic click returned `target_missing`; capability load. |
+| 19–20 | Screenshot followed by `browser.mouse`: `stale_visual_evidence`, with no attempted or confirmed click effect. |
+| 21–23 | Semantic snapshot, fresh screenshot, another `browser.mouse`: same rejection, again with no click effect. |
+| 24–25 | `browser.dialog` returned `dialog_missing`; final semantic snapshot succeeded. No native dialog was available. |
+
+All three screenshot receipts (14, 19, 22) report `imageDelivered=true`, `observationUnavailable=false`, 1280×720 pixels, 20 redactions, `settled=false` and `coordinateEvidence=false`. These are saved receipt assertions; the historical provider request bytes were not independently captured. Both mouse calls supplied the immediately preceding screenshot's exact ID, so the trace does **not** support blaming a wrong snapshot ID or omitted visual recovery. The first exact visual-action blockage is step 20: screenshot 19 did not establish coordinate authority. The same happened at step 23 after screenshot 22. Semantic account-menu targeting had already failed at steps 10/11/15/17.
+
+Current native capture requires a viewport screenshot, a quiet page and consistent visual state before assigning coordinate evidence. The state guard includes in-flight requests, font loading, running animations and observed visual generations. The checkpoint's combined `settled=false` does not record which condition failed or whether the capture changed during observation. Dynamic page activity, capture consistency and application-specific rendering remain hypotheses; no specific native defect is demonstrated by this trace. The correct fresh-ID submissions still lacked coordinate evidence, so weakening stale-coordinate protection would be unsupported.
+
+The Run ended after 25 of 48 available steps and 96,269 ms active execution, with 203,725 ms overall budget remaining. Budget exhaustion is not the recorded cause. It made **no** `browser.close` or `browser.verify` call and finished with logout/closure unverified. Separate cleanup Run `01a125af-6176-7f87-a7f8-3a2389c22f72` confirmed native closure, as recorded above. Model recovery/finalization remained incomplete even though image acquisition was attempted. No broader browser code change is justified from the available evidence alone.
+
+### Existing Real host source evidence
+
+Read-only process inspection identifies PID 73036, listening on `5080`, launched from the sibling `agent-core-1/src/AgentCore.Api` checkout at **17:59:41 Asia/Ho_Chi_Minh on 2026-10-10**. That checkout currently points to diverged `2804bde904d0b55b31c8f4469d8e391879b6ce4f`, with unrelated uncommitted resource work. Its API and Infrastructure generated assembly informational versions contain `1.0.0+2804bde904d0b55b31c8f4469d8e391879b6ce4f`; the checkout lacks the newer `BrowserPrivacyService` source. Its API DLL was modified at **18:37:18**, after process startup. The running process was not restarted and disk metadata cannot prove the exact previously loaded assembly revision. Therefore the failed UAT attempt still cannot establish acceptance of `97ab9c66` or this correction. No foreign checkout changes were copied, reverted or committed.
