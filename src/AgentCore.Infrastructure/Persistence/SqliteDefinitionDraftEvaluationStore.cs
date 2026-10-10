@@ -2,13 +2,18 @@ using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
 
 namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SqliteDefinitionDraftEvaluationStore(
     IDbContextFactory<AgentCoreDbContext> contexts,
-    IIdGenerator ids) : IDefinitionDraftEvaluationStore
+    IIdGenerator ids,
+    int busyTimeoutMs = 5000) : IDefinitionDraftEvaluationStore
 {
+    private readonly SemaphoreSlim _revisionWrites = new(1, 1);
+    private readonly TimeSpan _writeAdmissionTimeout = TimeSpan.FromMilliseconds(Math.Max(1, busyTimeoutMs));
+
     public async ValueTask<IReadOnlyList<DefinitionEvaluationScenario>> ListScenariosAsync(
         Guid draftId,
         CancellationToken cancellationToken = default)
@@ -22,13 +27,23 @@ public sealed class SqliteDefinitionDraftEvaluationStore(
         return rows.Select(DefinitionDraftEvaluationPersistence.MapScenario).ToArray();
     }
 
-    public async ValueTask<DefinitionEvaluationScenario> UpsertScenarioWithRevisionBumpAsync(
+    public ValueTask<DefinitionEvaluationScenario> UpsertScenarioWithRevisionBumpAsync(
+        Guid draftId,
+        long expectedRevision,
+        DefinitionEvaluationScenarioUpsert upsert,
+        CancellationToken cancellationToken = default) =>
+        ExecuteRevisionWriteAsync(
+            () => UpsertScenarioCoreAsync(draftId, expectedRevision, upsert, cancellationToken),
+            cancellationToken);
+
+    private async Task<DefinitionEvaluationScenario> UpsertScenarioCoreAsync(
         Guid draftId,
         long expectedRevision,
         DefinitionEvaluationScenarioUpsert upsert,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        BoundWriteTimeout(db);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var draftKey = draftId.ToString("D");
         var draftRow = await db.AgentDefinitionDrafts
@@ -92,9 +107,21 @@ public sealed class SqliteDefinitionDraftEvaluationStore(
         Guid draftId,
         long expectedRevision,
         string scenarioId,
+        CancellationToken cancellationToken = default) =>
+        await ExecuteRevisionWriteAsync(async () =>
+        {
+            await RemoveScenarioCoreAsync(draftId, expectedRevision, scenarioId, cancellationToken).ConfigureAwait(false);
+            return true;
+        }, cancellationToken).ConfigureAwait(false);
+
+    private async Task RemoveScenarioCoreAsync(
+        Guid draftId,
+        long expectedRevision,
+        string scenarioId,
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        BoundWriteTimeout(db);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var draftKey = draftId.ToString("D");
         var scenarioRow = await db.AgentDefinitionDraftEvaluationScenarios
@@ -125,6 +152,41 @@ public sealed class SqliteDefinitionDraftEvaluationStore(
         catch (DbUpdateConcurrencyException)
         {
             throw AgentCoreErrors.Conflict("Draft revision is stale.");
+        }
+    }
+
+    private void BoundWriteTimeout(AgentCoreDbContext db)
+    {
+        var connection = (SqliteConnection)db.Database.GetDbConnection();
+        var seconds = (int)Math.Ceiling(_writeAdmissionTimeout.TotalSeconds);
+        connection.DefaultTimeout = connection.DefaultTimeout == 0 ? seconds : Math.Min(connection.DefaultTimeout, seconds);
+        db.Database.SetCommandTimeout(connection.DefaultTimeout);
+    }
+
+    private async ValueTask<T> ExecuteRevisionWriteAsync<T>(Func<Task<T>> write, CancellationToken cancellationToken)
+    {
+        // SQLite has one writer. Admit revision/scenario transactions before opening
+        // a context so competing requests cannot overlap transaction startup here.
+        if (!await _revisionWrites.WaitAsync(_writeAdmissionTimeout, cancellationToken).ConfigureAwait(false))
+        {
+            throw AgentCoreErrors.Conflict("Draft evaluation write is busy. Reload the draft before retrying.");
+        }
+
+        try
+        {
+            return await write().ConfigureAwait(false);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
+        {
+            throw AgentCoreErrors.Conflict("Draft evaluation write is busy. Reload the draft before retrying.");
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 5 or 6 })
+        {
+            throw AgentCoreErrors.Conflict("Draft evaluation write is busy. Reload the draft before retrying.");
+        }
+        finally
+        {
+            _revisionWrites.Release();
         }
     }
 

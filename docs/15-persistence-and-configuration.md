@@ -112,7 +112,7 @@ AgentInstances persist Lifecycle (`Active`/`Archived`), monotonic Revision, Pers
 
 ## P7F draft evaluation evidence (observed)
 
-Draft evaluation rows bind Synthetic scenario results to draft revision, configuration fingerprint, and scenario version; stale configuration fingerprint, scenario version, or draft revision reject publish. SQLite and InMemory stores share parity for evaluation persistence and reopen.
+Draft evaluation rows bind Synthetic scenario results to draft revision, configuration fingerprint, and scenario version; stale configuration fingerprint, scenario version, or draft revision reject publish. SQLite and InMemory stores share parity for evaluation persistence and reopen. SQLite scenario upsert/removal keeps its expected-revision check, revision increment and scenario mutation in one transaction. The singleton evaluation store admits one such write at a time before creating the per-operation context, with cancellation and `Persistence:BusyTimeoutMs` bounding admission. SQLite transaction/command waits are bounded to that configured interval (rounded up to whole seconds). Admission timeout and SQLite busy/locked contention return Conflict without partial writes; stale revisions remain Conflict. Unexpected SQLite errors are not converted into success or retried. Concurrent ordinary draft edits also map SQLite busy/locked SaveChanges failures to Conflict without changing the candidate or revision.
 
 ## P7G Admin events (observed)
 
