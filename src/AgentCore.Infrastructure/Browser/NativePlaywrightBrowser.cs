@@ -17,6 +17,7 @@ namespace AgentCore.Infrastructure.Browser;
 public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Ports.IBrowser, IBrowserPasswordSink, IBrowserLease, IBrowserProfileBinding, IBrowserContextUse, IBrowserRuntimeReadiness, IBrowserProfileReset, IHostedService
 {
     private readonly BrowserOptions _options;
+    private readonly HashSet<string> _trustedVisualOrigins = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger _logger;
     private readonly LoopbackBrowserFixtureHost _fixture;
     private readonly Func<CancellationToken, Task<bool>>? _chromiumProbe;
@@ -56,6 +57,13 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
     {
         options.Limits.Validate();
         if (options.ScreenshotPrivacy is not ("DomMasking" or "Disabled")) throw new ArgumentException("Invalid browser screenshot privacy policy.");
+        foreach (var origin in options.TrustedVisualCaptureOrigins ?? [])
+        {
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")
+                || uri.UserInfo.Length > 0 || uri.AbsolutePath != "/" || uri.Query.Length > 0 || uri.Fragment.Length > 0)
+                throw new ArgumentException("Trusted visual capture requires exact HTTP(S) origins.");
+            _trustedVisualOrigins.Add(uri.GetLeftPart(UriPartial.Authority));
+        }
         _options = options;
         OperationTimeout = TimeSpan.FromMilliseconds(options.Limits.OperationTimeoutMs);
         _time = timeProvider ?? TimeProvider.System;

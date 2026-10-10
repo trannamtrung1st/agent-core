@@ -24,6 +24,10 @@ public sealed class BrowserOptions
     // DomMasking is best-effort. Strict visual confidentiality disables capture entirely.
     public string ScreenshotPrivacy { get; set; } = "DomMasking";
 
+    // Exact host-approved origins whose Canvas/SVG pixels may be captured.
+    // Ordinary sensitive DOM masking and whole-frame masking still apply.
+    public string[] TrustedVisualCaptureOrigins { get; set; } = [];
+
     public BrowserOperationalLimits Limits { get; set; } = new();
 
     public BrowserEnvironmentOptions Environment { get; set; } = new();
@@ -49,7 +53,7 @@ public sealed class BrowserOptions
             ResolveInteraction(ResolveNavigation()),
             ResourceOrigins ?? [],
             ResolvePolicy(),
-            ResolveProfile()) { Limits = Limits };
+            ResolveProfile()) { Limits = Limits, ScreenshotAvailable = ScreenshotPrivacy != "Disabled" };
 
     public BrowserProfileMode ResolveProfile() =>
         string.Equals(ProfileMode, nameof(BrowserProfileMode.PersistentAgent), StringComparison.OrdinalIgnoreCase)

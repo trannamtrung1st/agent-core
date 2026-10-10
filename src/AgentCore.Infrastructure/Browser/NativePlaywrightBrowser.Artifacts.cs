@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -48,7 +49,23 @@ public sealed partial class NativePlaywrightBrowser
             var page = session.Page;
             var visualState = await ReadVisualStateAsync(page, ct);
             // Fence the whole combined observation, including asynchronous semantic reads.
-            var observation = (await CaptureAsync(session, request.SessionId, ct)) with { Settled = settled };
+            var stage = Stopwatch.StartNew();
+            BrowserSnapshot observation;
+            using (var semanticDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            {
+                // Optional semantic reads cannot consume the entire capture deadline.
+                semanticDeadline.CancelAfter(TimeSpan.FromMilliseconds(Math.Min(1000, OperationTimeout.TotalMilliseconds / 4)));
+                try { observation = (await CaptureAsync(session, request.SessionId, semanticDeadline.Token)) with { Settled = settled }; }
+                catch (Exception ex) when (!ct.IsCancellationRequested && ex is PlaywrightException or TimeoutException or OperationCanceledException)
+                {
+                    // No unverified URL, title or semantic text is projected. Privacy inspection
+                    // below remains mandatory and uses the original operation deadline.
+                    observation = new("", "", "", false, [], Settled: settled,
+                        SnapshotId: "snap_" + Guid.NewGuid().ToString("N"), TabRef: FindPageId(session), ObservationUnavailable: true);
+                }
+            }
+            var semanticMs = stage.Elapsed.TotalMilliseconds;
+            stage.Restart();
             var format = request.Format;
             if (format is not ("png" or "jpeg" or "webp")) return new("invalid", null, 0);
             ILocator? target = null;
@@ -59,11 +76,14 @@ public sealed partial class NativePlaywrightBrowser
                 catch (BrowserTargetDeniedException) { return new("target_denied", null, 0); }
             }
             var secrets = await CollectSecretsAsync(session, ct);
+            if (!ReferenceEquals(page, session.Page) || generation != session.Generation || !IsAllowed(session, page.Url))
+                return new("target_denied", null, 0);
             var redactions = 0;
             var width = session.Page.ViewportSize?.Width ?? BrowserToolLimits.MaxCaptureWidth;
             var height = session.Page.ViewportSize?.Height ?? BrowserToolLimits.MaxCaptureHeight;
             byte[] png;
             var maskedFrames = new List<IFrame>();
+            double maskingMs = 0, encodingMs = 0;
             try
             {
                 foreach (var frame in session.Page.Frames)
@@ -73,7 +93,8 @@ public sealed partial class NativePlaywrightBrowser
                     maskedFrames.Add(frame);
                     redactions += await frame.EvaluateAsync<int>(
                 """
-                values => {
+                policy => {
+                  const values = policy.values;
                   let count = 0;
                   const matches = text => values.some(value => value && text.includes(value));
                   const mask = rect => {
@@ -92,7 +113,8 @@ public sealed partial class NativePlaywrightBrowser
                   }
                   for (const input of document.querySelectorAll('input, textarea, select'))
                     if (matches(input.value || '')) mask(input.getBoundingClientRect());
-                  for (const element of document.querySelectorAll('canvas, svg')) mask(element.getBoundingClientRect());
+                  if (!policy.trustedGraphics)
+                    for (const element of document.querySelectorAll('canvas, svg')) mask(element.getBoundingClientRect());
                   for (const element of document.querySelectorAll('*')) {
                     for (const pseudo of ['::before', '::after']) {
                       const content = getComputedStyle(element, pseudo).content || '';
@@ -101,7 +123,8 @@ public sealed partial class NativePlaywrightBrowser
                   }
                   return count;
                 }
-                """, secrets).WaitAsync(ct);
+                """, new { values = secrets, trustedGraphics = Uri.TryCreate(frame.Url, UriKind.Absolute, out var frameUri)
+                    && _trustedVisualOrigins.Contains(frameUri.GetLeftPart(UriPartial.Authority)) }).WaitAsync(ct);
                     redactions += await frame.EvaluateAsync<int>(MaskSensitiveScript).WaitAsync(ct);
                     // Hide carets using a Core-owned removable stylesheet. SDK caret hiding
                     // temporarily changes input styles, which would invalidate our own evidence.
@@ -119,6 +142,8 @@ public sealed partial class NativePlaywrightBrowser
                     width = dimensions[0]; height = dimensions[1];
                     if (width > 1920 || height > 12000) return new("capture_too_large", null, redactions, width, height);
                 }
+                maskingMs = stage.Elapsed.TotalMilliseconds;
+                stage.Restart();
                 if (target is null)
                     png = await session.Page.ScreenshotAsync(new PageScreenshotOptions
                     {
@@ -135,6 +160,7 @@ public sealed partial class NativePlaywrightBrowser
                     using var output = image.Encode(format == "jpeg" ? SKEncodedImageFormat.Jpeg : SKEncodedImageFormat.Webp, 85);
                     png = output.ToArray();
                 }
+                encodingMs = stage.Elapsed.TotalMilliseconds;
             }
             finally
             {
@@ -143,6 +169,8 @@ public sealed partial class NativePlaywrightBrowser
                     catch (Exception ex) when (ex is PlaywrightException or TimeoutException) { await CloseQuietlyAsync(session.Context); ForgetClosed(session); }
             }
 
+            _logger.LogInformation("browser.screenshot.stages semantic_ms={SemanticMs} masking_ms={MaskingMs} encoding_ms={EncodingMs}",
+                semanticMs, maskingMs, encodingMs);
             _logger.LogInformation(
                 "browser.screenshot redactions={RedactionCount} bytes={ByteSize} width={Width} height={Height}",
                 redactions,
@@ -164,7 +192,7 @@ public sealed partial class NativePlaywrightBrowser
                 && ReferenceEquals(page, session.Page) && generation == session.Generation
                 && visualState is not null && visualState == currentState;
             observation = observation with { Settled = settled && consistent };
-            var coordinateEvidence = !request.FullPage && request.Target is null && consistent;
+            var coordinateEvidence = !request.FullPage && request.Target is null && settled && consistent;
             if (coordinateEvidence)
             {
                 session.VisualSnapshotId = observation.SnapshotId;

@@ -88,6 +88,8 @@ public sealed partial class NativePlaywrightBrowser
                 navigationOriginCount = _policy.NavigationOrigins.Count,
                 interactionOriginCount = _policy.EffectiveInteractionOrigins.Count, resourceOriginCount = _policy.EffectiveResourceOrigins.Count,
                 screenshotPrivacy = _options.ScreenshotPrivacy,
+                screenshotAvailable = _policy.ScreenshotAvailable,
+                trustedVisualCaptureOriginCount = _trustedVisualOrigins.Count,
                 screenshotPrivacyLimitations = "DOM masking cannot guarantee arbitrary raster, CSS background, shadow DOM or dynamic visual secrets. Strict confidentiality requires Disabled.",
                 originRestrictionsApply = true, permissions = "Geolocation requires exact-origin approval. Initial/same-origin set preserves overrides; clear or origin change resets all permission overrides (Playwright limitation).",
                 contextSettings = "Device, locale, timezone and touch settings apply at context creation; active contexts are retained."

@@ -3,10 +3,11 @@ namespace AgentCore.Application.Tools;
 /// <summary>One contextual browser strategy, derived from eligible authority rather than global instructions.</summary>
 public static class BrowserObservationGuidance
 {
-    public static string Render(IEnumerable<string> eligibleTools, bool vision)
+    public static string Render(IEnumerable<string> eligibleTools, bool vision, bool screenshotAvailable = true)
     {
         var tools = eligibleTools.ToHashSet(StringComparer.Ordinal);
         if (!tools.Any(name => name.StartsWith("browser.", StringComparison.Ordinal))) return "";
+        if (!screenshotAvailable) { tools.Remove(ToolCatalog.BrowserScreenshot); tools.Remove(ToolCatalog.BrowserVisionMouse); }
         var visual = vision && tools.Contains(ToolCatalog.BrowserScreenshot)
             ? " For unfamiliar complex dashboards, hierarchy/layout relationships, icon-only controls, charts or unexpected overlays, inspect an authorized screenshot proactively when it adds useful context; do not wait for repeated failures. Combine its snapshotId/tabRef and image with semantic evidence, then prefer a direct semantic target. Reuse a recent valid image for understanding unchanged state; do not capture after every action or alternate observations indefinitely. Capture failures/limits call for semantic recovery, not an unrestricted retry loop."
             : " Use semantic observation for this execution. Without authorized image delivery and model vision, screenshots are artifacts only; never claim visual understanding.";
@@ -15,7 +16,7 @@ public static class BrowserObservationGuidance
             : " Use semantic interaction; visual coordinates are unavailable.";
         return "Browser workflow: semantic-first observation and native semantic targeting suffice for labeled forms, navigation and tables. "
             + BrowserToolArguments.TargetGuidance + " Focused find is optional for deep/ambiguous content; within scopes repeated controls. Render virtualized content before targeting it."
-            + visual + mouse
+            + (screenshotAvailable ? "" : " Host policy disables screenshots; use semantic observation and do not request captures.") + visual + mouse
             + " Act once, reobserve and verify the application outcome independently with browser.verify or fresh state; SDK success alone is insufficient. Stop on policy/provider denial, do not replay uncertain effects. Discover missing eligible tools with capabilities.load. Justify dialog decisions; close proves context closure only. Finish the direct user reply with chat.respond.";
     }
 }

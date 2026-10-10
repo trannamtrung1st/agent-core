@@ -30,6 +30,7 @@ public sealed record BrowserHostPolicy(
     BrowserPolicyMode PolicyMode = BrowserPolicyMode.Restricted,
     BrowserProfileMode ProfileMode = BrowserProfileMode.EphemeralSession)
 {
+    public bool ScreenshotAvailable { get; init; } = true;
     public BrowserOperationalLimits Limits { get; init; } = BrowserOperationalLimits.Default;
     public IReadOnlyList<string> TargetOrigins => NavigationOrigins;
 
@@ -66,7 +67,7 @@ public sealed record BrowserSnapshot(
     string? TabRef = null,
     IReadOnlyList<BrowserTargetBox>? Boxes = null,
     BrowserTarget? Scope = null,
-    IReadOnlyList<BrowserFrameInfo>? Frames = null, bool HasPasswordField = false, string? FrameRef = null);
+    IReadOnlyList<BrowserFrameInfo>? Frames = null, bool HasPasswordField = false, string? FrameRef = null, bool ObservationUnavailable = false);
 
 public sealed record BrowserPageInfo(string PageId, string Url, bool Active);
 

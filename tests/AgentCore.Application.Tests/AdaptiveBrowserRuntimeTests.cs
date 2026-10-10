@@ -116,10 +116,25 @@ public sealed class AdaptiveBrowserRuntimeTests
         }
     }
 
+    [Fact]
+    public async Task Host_disabled_capture_is_not_recommended_to_a_vision_model()
+    {
+        var browser = new NativePlaywrightBrowser(new() { ScreenshotPrivacy = "Disabled" }, null);
+        var definition = await CapabilityProjectionTests.Definition([ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserScreenshot, ToolCatalog.BrowserVisionMouse]);
+        var context = CapabilityProjectionTests.Context(definition) with { ModelSupportsTools = true, ModelSupportsVision = true };
+        var request = new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser).Build(context, Guid.NewGuid());
+        var text = Assert.Single(request.Messages, m => m.Text.StartsWith("Browser workflow:")).Text;
+        Assert.Contains("Host policy disables screenshots", text);
+        Assert.DoesNotContain("proactively", text);
+        Assert.Contains("visual coordinates are unavailable", text);
+    }
+
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Masked_capture_failure_budget_and_text_only_recovery(bool vision)
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public async Task Masked_capture_failure_budget_and_text_only_recovery(bool vision, bool unavailable)
     {
         var options = new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
             FixturePort = 0, InteractionMode = "InteractiveDemo", Limits = new(CapturesPerScope: 1),
@@ -140,8 +155,11 @@ public sealed class AdaptiveBrowserRuntimeTests
                 await executor.ExecuteAsync(definition, id, new(Guid.NewGuid().ToString(), name, JsonSerializer.Serialize(args)), budget, admission: admission);
             var failure = await Run(ToolCatalog.BrowserScreenshot, new { target = new { by = "role", value = "button", name = "Missing" } });
             Assert.Contains("target_missing", failure.Text); Assert.Contains("semantic observation", failure.Text); Assert.Empty(failure.Parts ?? []);
+            if (unavailable) browser.CaptureProbe = () => new TimeoutException("semantic unavailable");
             var capture = await Run(ToolCatalog.BrowserScreenshot, new { });
+            browser.CaptureProbe = null;
             using var metadata = JsonDocument.Parse(capture.Text);
+            Assert.Equal(unavailable, metadata.RootElement.GetProperty("observationUnavailable").GetBoolean());
             Assert.Equal(vision, metadata.RootElement.GetProperty("imageDelivered").GetBoolean());
             Assert.Equal(vision, metadata.RootElement.GetProperty("coordinateEvidence").GetBoolean());
             Assert.DoesNotContain("protected-visible-value", capture.Text);

@@ -104,7 +104,7 @@ public sealed class PromptContextBuilder(
         if (context.ModelSupportsTools)
             messages.Add(new(ModelRole.System, CapabilityUsageGuidance.OperatingInstructions));
         var browserGuidance = BrowserObservationGuidance.Render(
-            ToolCatalog.Eligible(context.Definition, context, _configurationGate).Select(t => t.Name), context.ModelSupportsVision);
+            ToolCatalog.Eligible(context.Definition, context, _configurationGate).Select(t => t.Name), context.ModelSupportsVision, browser?.HostPolicy.ScreenshotAvailable != false);
         if (browserGuidance.Length > 0)
             messages.Add(new(ModelRole.System, browserGuidance));
         if (context.AgentWorkspaceAvailable && context.ModelSupportsTools)

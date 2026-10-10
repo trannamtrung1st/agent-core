@@ -330,12 +330,13 @@ public sealed partial class SessionToolExecutor
                 redactions = captured.RedactionCount,
                 artifactId = stored.ArtifactId,
                 imageDelivered = admission?.SupportsVision == true,
+                observationUnavailable = captured.Observation?.ObservationUnavailable == true,
                 snapshotId = captured.Observation?.SnapshotId,
                 tabRef = captured.Observation?.TabRef,
                 observation = captured.Observation is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(SerializeBrowserSnapshot(captured.Observation, captured)),
                 coordinateEvidence = admission?.SupportsVision == true && captured.DataJson is not null && JsonSerializer.Deserialize<JsonElement>(captured.DataJson).TryGetProperty("coordinateEvidence", out var coordinate) && coordinate.ValueKind == JsonValueKind.True,
                 guidance = admission?.SupportsVision == true
-                    ? "Combine this image with its semantic observation. Prefer semantic actions. coordinateEvidence identifies fresh viewport pixels; mouse still requires vision, capability and interaction authority. Reobserve and independently verify outcomes."
+                    ? (captured.Observation?.ObservationUnavailable == true ? "Semantic observation is unavailable; use this image as visual context and independently refresh semantics. " : "Combine this image with its semantic observation. ") + "Prefer semantic actions. coordinateEvidence identifies fresh viewport pixels; mouse still requires vision, capability and interaction authority. Reobserve and independently verify outcomes."
                     : "Artifact only: this model did not receive image content. Continue with semantic observation; do not claim visual understanding."
             });
             text = BrowserCaptureProjection.Fit(remainingOutputBytes, text);
@@ -625,6 +626,7 @@ public sealed partial class SessionToolExecutor
         targets = observation.Targets.Select(e => new { target = e.Target, role = e.Role, name = ClipBrowser(e.Name, BrowserToolLimits.MaxAccessibleNameLength), actions = e.Actions, state = ControlState(e.State) }),
         truncated = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > browser!.HostPolicy.Limits.SnapshotBytes,
         hasMore = observation.ContentTruncated || Encoding.UTF8.GetByteCount(observation.Content) > browser!.HostPolicy.Limits.SnapshotBytes,
+        observationUnavailable = observation.ObservationUnavailable,
         settled = observation.Settled, scope = observation.Scope, frameRef = observation.FrameRef, frames = observation.Frames, boxes = observation.Boxes,
         guidance = BrowserToolArguments.TargetGuidance
     }, DownloadJson);

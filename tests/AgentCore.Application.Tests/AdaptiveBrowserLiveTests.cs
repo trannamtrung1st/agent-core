@@ -17,7 +17,7 @@ using Microsoft.Playwright;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class AdaptiveBrowserLiveTests
+public sealed class AdaptiveBrowserLiveTests(Xunit.Abstractions.ITestOutputHelper evidence)
 {
     [AdaptiveBrowserLiveTheory]
     [InlineData("dashboard")]
@@ -36,7 +36,7 @@ public sealed class AdaptiveBrowserLiveTests
                 Adapter = "OpenAICompatible", BaseUrl = "https://openrouter.ai/api/v1/", ApiKey = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY"),
                 DefaultModel = modelId, Transport = descriptor.Transport, Vision = descriptor.Vision, Tools = descriptor.Tools,
                 StructuredOutput = descriptor.StructuredOutput, ReasoningEffort = descriptor.DefaultReasoningEffort, ReasoningObjectWire = true
-            })));
+            }), preferResponseFunction: descriptor.PreferResponseFunction));
             var names = new[] { ToolCatalog.BrowserNavigate, ToolCatalog.BrowserSnapshot, ToolCatalog.BrowserFind,
                 ToolCatalog.BrowserClick, ToolCatalog.BrowserScreenshot, ToolCatalog.BrowserVisionMouse, "browser.verify" };
             var definition = await CapabilityProjectionTests.Definition(names);
@@ -57,10 +57,15 @@ public sealed class AdaptiveBrowserLiveTests
                 browserLease: browser, agentRuns: runs);
             await runtime.AttachAsync();
             var url = browser.HostPolicy.NavigationOrigins.Single() + "/adaptive-browser.html?mode=" + mode;
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
             Assert.True(await runtime.SubmitUserTextAsync($"Explore the unfamiliar application at {url}. Start with semantic evidence, then inspect its rendered layout using an authorized screenshot. Open Cooling project and inspect PUMP-1042. Prefer semantic targets; if only visual controls exist, use the blue arrow with fresh screenshot evidence. Independently verify the selected record and report its pressure. Stay within this fixture; do not use other websites."));
             await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromMinutes(5));
             Assert.DoesNotContain(output.Items, item => item.Payload is ErrorOutput);
-            var page = browser.ContextFor(id)!.Pages.Single();
+            evidence.WriteLine($"mode={mode} model={modelId} elapsed_ms={elapsed.Elapsed.TotalMilliseconds:F1} requests={model.Requests.Count} captures={model.Calls.Count(c => c.Name == ToolCatalog.BrowserScreenshot)} calls={string.Join(",", model.Calls.Select(c => c.Name))}");
+            evidence.WriteLine($"assistant_status={runtime.Snapshot.Entries.LastOrDefault(e => e.Role == ConversationRole.Assistant)?.Status} answer={runtime.Snapshot.Entries.LastOrDefault(e => e.Role == ConversationRole.Assistant)?.Text}");
+            var context = browser.ContextFor(id);
+            Assert.NotNull(context);
+            var page = context.Pages.Single();
             Assert.Equal("Selected PUMP-1042", await page.GetByRole(AriaRole.Status).InnerTextAsync());
             Assert.Contains("4.2 bar", await page.GetByRole(AriaRole.Complementary, new() { Name = "Asset detail" }).InnerTextAsync());
             Assert.Contains(model.Requests.SelectMany(r => r.Messages), m => m.Name == ToolCatalog.BrowserScreenshot && m.Parts?.OfType<ModelImageContent>().Any() == true);
