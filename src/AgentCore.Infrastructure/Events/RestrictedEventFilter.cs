@@ -39,7 +39,7 @@ public sealed class RestrictedEventFilter : IEventFilterEvaluator
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var engine = new Engine(options => options.Strict().LimitMemory(4 * 1024 * 1024)
+            using var engine = new Engine(options => options.Strict().LimitMemory(4 * 1024 * 1024)
                 .MaxStatements(256).TimeoutInterval(TimeSpan.FromMilliseconds(100)).CancellationToken(deadline.Token));
             // Jint JSON parsing creates engine-owned values; no CLR object or delegate is projected.
             engine.SetValue("event", new Jint.Native.Json.JsonParser(engine).Parse(envelope.GetRawText()));
