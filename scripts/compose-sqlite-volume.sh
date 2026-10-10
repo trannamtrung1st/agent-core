@@ -249,11 +249,12 @@ profile = json.loads(profile_body)
 request(f"http://127.0.0.1:{port}/api/v2/profile", method="PATCH", headers=owner_headers,
     data=json.dumps({"expectedRevision": profile["revision"], "values": {"timeZone": "UTC"}}).encode())
 from datetime import datetime, timedelta, timezone
+import uuid
 status, automation_body = request(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{v2_owner}/automations",
     method="POST", headers=owner_headers, data=json.dumps({"expectedRevision": 0, "enabled": True, "executionTarget": {"kind": "backgroundSession"}, "completionDelivery": {"kind": "none"},
         "name": "Review completed work", "instructions": "Review observable completed work; do nothing when no change is useful.",
-        "trigger": {"kind": "schedule", "schedule": {"kind": "fixedInterval", "interval": 3600,
-            "anchorAtUtc": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()}}}).encode())
+        "triggers": [{"triggerId": str(uuid.uuid4()), "enabled": True, "revision": 1, "kind": "schedule", "schedule": {"kind": "fixedInterval", "interval": 3600,
+            "anchorAtUtc": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()}}]}).encode())
 assert status == 200, status
 json.dump({"instanceId": v2_owner, "automation": json.loads(automation_body)}, open("/tmp/agent-core-unified-automation.json", "w"))
 
@@ -491,8 +492,15 @@ status, automations_json = get(f"http://127.0.0.1:{port}/api/v2/admin/agent-inst
 rows = json.loads(automations_json)["items"]
 saved = automation_seed["automation"]
 reopened = next(row for row in rows if row["automationId"] == saved["automationId"])
-for key in ("revision", "name", "instructions", "enabled", "status", "trigger", "authorizationOrigin", "sourceSessionId", "sourceEventId", "createdAt", "nextRunAt", "modelKey", "reasoningEffort", "executionTarget", "completionDelivery", "requiresTools", "requiresVision"):
+for key in ("revision", "name", "instructions", "enabled", "status", "authorizationOrigin", "sourceSessionId", "sourceEventId", "createdAt", "nextRunAt", "modelKey", "reasoningEffort", "executionTarget", "completionDelivery", "requiresTools", "requiresVision"):
     assert reopened[key] == saved[key], (key, reopened[key], saved[key])
+# Eligibility is a current read projection, absent on the write response. Compare
+# every persisted child field, including identity and configuration revision.
+def configured_triggers(row):
+    return sorted(({key: value for key, value in child.items() if key not in ("eligible", "eligibilityReason")}
+        for child in row["triggers"]), key=lambda child: child["triggerId"])
+assert configured_triggers(reopened) == configured_triggers(saved), (reopened["triggers"], saved["triggers"])
+assert all(child["eligible"] for child in reopened["triggers"]), reopened["triggers"]
 assert reopened["effectiveModelKey"] == "scripted-alpha", reopened
 print("automation survived", reopened["automationId"])
 

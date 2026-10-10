@@ -968,7 +968,7 @@ export type BrowserScreenshotPolicy = { mode: BrowserPrivacyMode; unmaskedOrigin
 export type BrowserPrivacy = {
   saved: BrowserScreenshotPolicy; effective: BrowserScreenshotPolicy;
   deployment: { captureAllowed: boolean; unmaskedAllowed: boolean; unmaskedOriginCeiling: string[]; graphicsOriginCeiling: string[] };
-  restartRequired: boolean; activation: string; durable: boolean;
+  restartRequired: boolean; activation: string; durable: boolean; constrainedByDeployment: boolean;
 };
 export const getBrowserPrivacy = (signal?: AbortSignal) => browserPrivacyRequest("GET", undefined, signal);
 export const saveBrowserPrivacy = (input: Omit<BrowserScreenshotPolicy, "revision"> & { expectedRevision: number; acknowledgeExposure: boolean }, signal?: AbortSignal) =>

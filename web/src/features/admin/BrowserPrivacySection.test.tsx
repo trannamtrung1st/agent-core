@@ -8,7 +8,7 @@ vi.mock("../../services/adminApi", () => ({ getBrowserPrivacy: vi.fn(), saveBrow
 const policy: BrowserPrivacy = { saved: { mode: "Protected", revision: 0, unmaskedOrigins: [], trustedGraphicsOrigins: [] },
   effective: { mode: "Protected", revision: 0, unmaskedOrigins: [], trustedGraphicsOrigins: [] },
   deployment: { captureAllowed: true, unmaskedAllowed: true, unmaskedOriginCeiling: ["https://example.test"], graphicsOriginCeiling: ["https://example.test"] },
-  restartRequired: false, activation: "Saved changes activate after host restart.", durable: true };
+  restartRequired: false, activation: "Saved changes activate after host restart.", durable: true, constrainedByDeployment: false };
 function mount() { return render(<ConfigProvider theme={{ token: { motion: false } }}><AntApp><BrowserPrivacySection /></AntApp></ConfigProvider>); }
 async function choose(label: string, option: string) {
   fireEvent.mouseDown(screen.getByRole("combobox", { name: label }));
@@ -16,9 +16,19 @@ async function choose(label: string, option: string) {
 }
 describe("BrowserPrivacySection", () => {
   beforeEach(() => { vi.mocked(getBrowserPrivacy).mockReset().mockResolvedValue(structuredClone(policy)); vi.mocked(saveBrowserPrivacy).mockReset(); });
+  it("reports same-revision deployment constraints without calling the saved policy active or asking for restart", async () => {
+    vi.mocked(getBrowserPrivacy).mockResolvedValue({ ...policy, saved: { ...policy.saved, mode: "Unmasked", revision: 3 },
+      effective: { ...policy.effective, revision: 3 }, constrainedByDeployment: true,
+      activation: "The saved policy is constrained by deployment restrictions. Restarting alone cannot remove those restrictions." });
+    mount();
+    expect(await screen.findByText("Unmasked · revision 3 · constrained by deployment")).toBeVisible();
+    expect(screen.queryByText(/revision 3 · active/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/revision 3 · restart required/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Restarting alone cannot remove/)).toBeVisible();
+  });
   it("saves Disabled and keeps saved/effective revisions distinct", async () => {
     vi.mocked(saveBrowserPrivacy).mockResolvedValue({ ...policy, saved: { ...policy.saved, mode: "Disabled", revision: 1 }, restartRequired: true });
-    mount(); await screen.findByText("Protected · revision 0 · active");
+    mount(); await screen.findByText("Protected · revision 0 · active as saved");
     await choose("Saved screenshot privacy mode", "Disabled — no screenshots");
     fireEvent.click(screen.getByRole("button", { name: "Save screenshot privacy" }));
     await screen.findByText("Disabled · revision 1 · restart required");
@@ -27,7 +37,7 @@ describe("BrowserPrivacySection", () => {
   });
   it("requires an exact origin and explicit modal acknowledgement for every Unmasked save", async () => {
     vi.mocked(saveBrowserPrivacy).mockResolvedValue({ ...policy, saved: { ...policy.saved, mode: "Unmasked", unmaskedOrigins: ["https://example.test"], revision: 1 }, restartRequired: true });
-    mount(); await screen.findByText("Protected · revision 0 · active");
+    mount(); await screen.findByText("Protected · revision 0 · active as saved");
     await choose("Saved screenshot privacy mode", "Unmasked — explicit confidentiality exception");
     fireEvent.click(screen.getByRole("button", { name: "Save screenshot privacy" }));
     await waitFor(() => expect(screen.getByText("Select at least one deployment-approved exact origin.")).toBeVisible());
@@ -48,7 +58,7 @@ describe("BrowserPrivacySection", () => {
   });
   it("retains failed edits and reloads the current revision before a conflict retry", async () => {
     vi.mocked(saveBrowserPrivacy).mockRejectedValueOnce(new Error("Browser privacy changed. Reload the saved policy before retrying."));
-    mount(); await screen.findByText("Protected · revision 0 · active");
+    mount(); await screen.findByText("Protected · revision 0 · active as saved");
     await choose("Saved screenshot privacy mode", "Disabled — no screenshots");
     fireEvent.click(screen.getByRole("button", { name: "Save screenshot privacy" }));
     await screen.findByText(/Browser privacy changed/);
@@ -66,7 +76,7 @@ describe("BrowserPrivacySection", () => {
     vi.mocked(getBrowserPrivacy).mockRejectedValueOnce(new Error("Temporary failure"));
     const view = mount(); await screen.findByText("Temporary failure");
     fireEvent.click(screen.getByRole("button", { name: "Reload saved privacy policy" }));
-    await screen.findByText("Protected · revision 0 · active");
+    await screen.findByText("Protected · revision 0 · active as saved");
     view.unmount(); expect(vi.mocked(getBrowserPrivacy).mock.calls.at(-1)?.[0]?.aborted).toBe(true);
   });
 });

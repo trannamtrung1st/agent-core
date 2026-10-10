@@ -76,13 +76,16 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const [editorOpen, setEditorOpen] = useState(false);
   const [error, setError] = useState<AdminFailureNotice | null>(null);
   const [resourcesError, setResourcesError] = useState<AdminFailureNotice | null>(null);
+  const [catalogReady, setCatalogReady] = useState({ builtin: false, webhook: false });
   const resourcesGeneration = useRef(0);
   const reloadResources = useCallback(async () => {
     const generation = ++resourcesGeneration.current;
+    setCatalogReady({ builtin: false, webhook: false });
     try {
       const results = await Promise.allSettled([listEventCatalog("builtin"), listEventCatalog("webhook"), listModels()]);
       if (generation !== resourcesGeneration.current) return;
       const builtin = results[0], webhook = results[1], models = results[2];
+      setCatalogReady({ builtin: builtin.status === "fulfilled", webhook: webhook.status === "fulfilled" });
       setCatalog(current => [...(builtin.status === "fulfilled" ? builtin.value : current.filter(e => e.source.kind === "builtin")), ...(webhook.status === "fulfilled" ? webhook.value : current.filter(e => e.source.kind === "webhook"))]);
       if (webhook.status === "fulfilled") setSources(webhook.value.flatMap(e => e.webhook ? [e.webhook] : []));
       if (models.status === "fulfilled") setModels(models.value.models.filter(m => m.tools));
@@ -185,7 +188,11 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
     && (isSchedule ? scheduleValid : draft.triggers.length > 0 && draft.triggers.every(t => !!t.source));
   const eligible = isSchedule ? schedulesAllowed && kindAllowed && (timing.kind === "oneShot" || policy?.allowIndefiniteRecurrence !== false || hasEnd)
     : draft.triggers.some(t => t.enabled && t.source && (t.source.kind === "builtin" ? coreAllowed : eventsAllowed && sources.some(e => e.eventId === (t.source?.kind === "webhook" ? t.source.eventId : "") && e.status === "Active")));
-  const canSave = valid && (!draft.enabled || eligible) && !resourcesError && !error;
+  const authorityReady = !!review && !error && !loading;
+  const sourcesReady = isSchedule || draft.triggers.every(t => t.source && catalogReady[t.source.kind]
+    && catalog.some(e => eventSourceKey(e.source) === eventSourceKey(t.source!)));
+  const canEnable = eligible && authorityReady && sourcesReady;
+  const canSave = valid && (!draft.enabled || canEnable);
   function setTiming(change: Partial<ScheduleTiming>) { setDraft({ ...draft, triggers: [{ triggerId: draft.triggers[0]!.triggerId, enabled: draft.triggers[0]!.enabled, revision: draft.triggers[0]!.revision, kind: "schedule", schedule: { ...timing, ...change } }] }); }
   function resetDraft(next: AutomationDraft) { setSamples({}); setDraft(next); setSavedSchedule(next.triggers[0]?.kind === "schedule" ? next.triggers : blank().triggers); setSavedEvents(next.triggers[0]?.kind === "schedule" ? [] : next.triggers); setExpandedEvents(next.triggers[0]?.kind === "schedule" ? [] : next.triggers.slice(0, 1).map(t => t.triggerId)); }
   function switchMode(kind: string) {
@@ -202,7 +209,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
     setExpandedEvents([triggerId]); setEventPickerOpen(false);
   }
   async function saveDraft(enabled = draft.enabled) {
-    if (!editorOpen || !valid || busy || (enabled && !eligible)) return;
+    if (!editorOpen || !valid || busy || (enabled && !canEnable)) return;
     const triggers = draft.triggers.map(t => t.kind === "schedule" ? { ...t, schedule: timing.kind === "fixedInterval" && !timing.anchorAtUtc ? { ...timing, anchorAtUtc: new Date(Date.now() + timing.interval * 1000).toISOString() } : timing }
       : { triggerId: t.triggerId, enabled: t.enabled, revision: t.revision, kind: "event", source: t.source, filterExpression: t.filterExpression, dispatch: t.dispatch });
     void mutate(editor === "new" ? "automations" : `automations/${editor}`, { ...draft, enabled, triggers }, editor === "new" ? "POST" : "PUT", true);
@@ -247,12 +254,12 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             <Typography.Text>{summaryTrigger}{summaryBounds ? ` · ${summaryBounds}` : ""}</Typography.Text>
             <Typography.Text>{draft.executionTarget.kind === "backgroundSession" ? "Run this agent in a background Session" : draft.executionTarget.sessionId ? `Run in conversation ${draft.executionTarget.sessionId}` : "Choose the conversation to run in"}</Typography.Text>
             <Typography.Text type="secondary">{draft.executionTarget.kind === "existingSession" ? "Reply directly in that conversation using its pinned model" : draft.completionDelivery.kind === "toSession" ? draft.completionDelivery.sessionId ? `Request a completion report to conversation ${draft.completionDelivery.sessionId}` : "Choose a conversation for the completion report" : "Keep results in Background work without a conversation report"}</Typography.Text>
-            {draft.enabled && !eligible ? <Typography.Text type="warning">No enabled subscription is currently eligible. Repair the source policy or save as disabled.</Typography.Text> : null}
+            {draft.enabled && !canEnable ? <Typography.Text type="warning">{!eligible ? "No enabled subscription is currently eligible. Repair the source policy or save as disabled." : "Current authorization or Event sources could not be validated. Retry the failed read or save as disabled."}</Typography.Text> : null}
             {!draft.enabled ? <Typography.Text type="warning">Saved disabled. Enable this Automation before it can run.</Typography.Text> : null}
           </Flex>
           <Flex wrap justify="flex-end" gap={token.paddingXS}>
           <Button aria-label="Cancel automation edit" disabled={!editorOpen || busy} onClick={() => setEditorOpen(false)}>Cancel</Button>
-          {draft.enabled && !eligible ? <Button disabled={!valid || busy || !!resourcesError} onClick={() => void saveDraft(false)}>Save as disabled</Button> : null}
+          {draft.enabled && !canEnable ? <Button disabled={!valid || busy} onClick={() => void saveDraft(false)}>Save as disabled</Button> : null}
           <Button type="primary" aria-label={editor === "new" ? "Create automation" : "Save automation"} htmlType="submit" form={formId} disabled={!editorOpen || !canSave || busy} loading={busy}>{draft.enabled ? "Save & enable" : "Save"}</Button>
           </Flex>
         </Flex>}>

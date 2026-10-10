@@ -20,7 +20,7 @@ internal static class AdminBrowserPrivacyEndpoints
     { try { return await action(); } catch (AgentCoreException ex) { return ProblemResults.From(ex); } }
     private static AdminBrowserPrivacyResponse Map(BrowserPrivacyView value) => new(
         Policy(value.Saved), Policy(value.Effective), new(value.Deployment.CaptureAllowed, value.Deployment.UnmaskedAllowed,
-            value.Deployment.UnmaskedOriginCeiling, value.Deployment.GraphicsOriginCeiling), value.RestartRequired, value.Activation, value.Durable);
+            value.Deployment.UnmaskedOriginCeiling, value.Deployment.GraphicsOriginCeiling), value.RestartRequired, value.Activation, value.Durable, value.ConstrainedByDeployment);
     private static AdminBrowserScreenshotPolicy Policy(BrowserScreenshotPolicy value) =>
         new(value.Mode.ToString(), value.UnmaskedOrigins, value.TrustedGraphicsOrigins, value.Revision);
 }

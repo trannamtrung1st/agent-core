@@ -185,6 +185,42 @@ public sealed class BrowserPrivacyTests
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); File.Delete(path); }
     }
 
+    [Theory]
+    [InlineData("unmasked", BrowserScreenshotPrivacyMode.Protected)]
+    [InlineData("origins", BrowserScreenshotPrivacyMode.Unmasked)]
+    [InlineData("graphics", BrowserScreenshotPrivacyMode.Unmasked)]
+    [InlineData("capture", BrowserScreenshotPrivacyMode.Disabled)]
+    [InlineData("unchanged", BrowserScreenshotPrivacyMode.Unmasked)]
+    public async Task Sqlite_startup_distinguishes_deployment_constraints_from_pending_restart(string restriction, BrowserScreenshotPrivacyMode expectedMode)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"privacy-ceiling-{Guid.NewGuid():N}.db");
+        var contexts = new Contexts(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + path).Options);
+        var ids = new SystemIdGenerator(TimeProvider.System);
+        string[] origins = ["https://first.test", "https://second.test"];
+        try
+        {
+            await new SqliteMemoryStore(contexts, TimeProvider.System).EnsureCreatedAsync();
+            var initial = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts, ids), new(true, true, origins, origins), TimeProvider.System, ids);
+            var pending = await initial.SaveAsync(0, "Unmasked", origins, origins, true);
+            Assert.True(pending.RestartRequired);
+            Assert.False(pending.ConstrainedByDeployment);
+            var authority = new BrowserPrivacyAuthority(restriction != "capture", restriction != "unmasked",
+                restriction == "origins" ? [origins[0]] : origins, restriction == "graphics" ? [origins[0]] : origins);
+            var reopened = new BrowserPrivacyService(new SqliteBrowserPrivacyStore(contexts, ids), authority, TimeProvider.System, ids);
+            await reopened.ActivateAtStartupAsync();
+            var view = await reopened.ReadAsync();
+            Assert.Equal(expectedMode, view.Effective.Mode);
+            Assert.Equal(view.Saved.Revision, view.Effective.Revision);
+            Assert.False(view.RestartRequired);
+            Assert.Equal(restriction != "unchanged", view.ConstrainedByDeployment);
+            Assert.Equal(origins, view.Saved.UnmaskedOrigins);
+            Assert.Equal(restriction == "origins" ? [origins[0]] : origins, view.Effective.UnmaskedOrigins);
+            Assert.Equal(restriction == "graphics" ? [origins[0]] : origins, view.Effective.TrustedGraphicsOrigins);
+            if (view.ConstrainedByDeployment) Assert.Contains("Restarting alone cannot remove", view.Activation);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); File.Delete(path); }
+    }
+
     private static BrowserPrivacyService NewPrivacy(BrowserPrivacyAuthority authority)
     { var ids = new SystemIdGenerator(TimeProvider.System); return new(new InMemoryBrowserPrivacyStore(new InMemoryAdminEventStore(ids)), authority, TimeProvider.System, ids); }
     private sealed class Contexts(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>

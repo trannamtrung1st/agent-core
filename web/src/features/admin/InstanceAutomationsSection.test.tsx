@@ -21,6 +21,30 @@ beforeEach(() => {
   request.mockResolvedValue({ items: [], policy: allowedPolicy });
 });
 describe("Owner schedule authoring", () => {
+  it("saves an enabled Schedule despite an unrelated Webhook catalog failure", async () => {
+    vi.mocked(listEventCatalog).mockImplementation(async kind => { if (kind === "webhook") throw new Error("Webhook unavailable"); return []; });
+    request.mockResolvedValue({ items: [row], policy: allowedPolicy });
+    render(view());
+    fireEvent.click(await screen.findByRole("button", { name: `View automation: ${row.name}` }));
+    await screen.findByRole("button", { name: "Reload Events and models" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit automation" }));
+    expect(screen.getByRole("button", { name: "Save automation" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save automation" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations/scheduled", "PUT", expect.objectContaining({ enabled: true })));
+  });
+  it("keeps a known Event draft saveable as disabled after catalog and collection refresh failures", async () => {
+    vi.mocked(listEventCatalog).mockRejectedValue(new Error("Catalog unavailable"));
+    request.mockResolvedValue({ items: [{ ...row, triggers: [{ triggerId: "known", revision: 1, enabled: true, kind: "event", source: { kind: "webhook", eventId: "known-event" } }] }], policy: allowedPolicy });
+    render(view());
+    fireEvent.click(await screen.findByRole("button", { name: `View automation: ${row.name}` }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit automation" }));
+    request.mockImplementation(async (_instance, _path, method) => { if (!method) throw new Error("Collection refresh failed"); return row; });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh automations" }));
+    await screen.findByText(/Collection refresh failed/);
+    expect(screen.getByRole("button", { name: "Save automation" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save as disabled" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations/scheduled", "PUT", expect.objectContaining({ enabled: false, triggers: [expect.objectContaining({ source: { kind: "webhook", eventId: "known-event" } })] })));
+  });
   it("updates the save summary for schedule, background reporting and disabled state", async () => {
     render(view()); await screen.findByText(/No automations yet/);
     fireEvent.click(screen.getByRole("button", { name: "New automation" }));
@@ -176,7 +200,7 @@ describe("Owner schedule authoring", () => {
     request.mockImplementation(async (_id, path) => { if (path.endsWith("/run")) throw new Error("Schedule revision is stale."); return { items: [row] }; });
     render(view()); fireEvent.click(await screen.findByText(row.name));
     fireEvent.click(screen.getByRole("button", { name: "Run automation now" }));
-    expect(await screen.findByText("Schedule revision is stale.")).toBeVisible();
+    await waitFor(() => expect(screen.getByText("Schedule revision is stale.")).toBeVisible());
     expect(screen.getByRole("button", { name: "Run automation now" })).toBeEnabled();
     expect(request.mock.calls.filter(c => c[1].endsWith("/run"))).toHaveLength(1);
   });

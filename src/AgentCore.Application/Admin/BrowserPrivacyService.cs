@@ -5,7 +5,7 @@ using AgentCore.Application.Sessions;
 namespace AgentCore.Application.Admin;
 
 public sealed record BrowserPrivacyView(BrowserScreenshotPolicy Saved, BrowserScreenshotPolicy Effective,
-    BrowserPrivacyAuthority Deployment, bool RestartRequired, string Activation, bool Durable);
+    BrowserPrivacyAuthority Deployment, bool RestartRequired, string Activation, bool Durable, bool ConstrainedByDeployment);
 
 /// <summary>Owner-only host policy administration. Effective revision is pinned for the host lifetime.</summary>
 public sealed class BrowserPrivacyService(IBrowserPrivacyStore store, BrowserPrivacyAuthority authority, TimeProvider time, IIdGenerator ids)
@@ -20,25 +20,36 @@ public sealed class BrowserPrivacyService(IBrowserPrivacyStore store, BrowserPri
     public async ValueTask ActivateAtStartupAsync(CancellationToken ct = default)
     {
         var saved = await store.ReadAsync(ct) ?? DefaultPolicy(authority);
+        Volatile.Write(ref _effective, Constrain(saved));
+    }
+
+    private BrowserScreenshotPolicy Constrain(BrowserScreenshotPolicy saved)
+    {
         var mode = !authority.CaptureAllowed ? BrowserScreenshotPrivacyMode.Disabled
             : saved.Mode == BrowserScreenshotPrivacyMode.Unmasked && !authority.UnmaskedAllowed
                 ? BrowserScreenshotPrivacyMode.Protected : saved.Mode;
-        Volatile.Write(ref _effective, saved with
+        return saved with
         {
             Mode = mode,
             UnmaskedOrigins = Array.AsReadOnly(saved.UnmaskedOrigins.Intersect(authority.UnmaskedOriginCeiling, StringComparer.OrdinalIgnoreCase).ToArray()),
             TrustedGraphicsOrigins = Array.AsReadOnly(saved.TrustedGraphicsOrigins.Intersect(authority.GraphicsOriginCeiling, StringComparer.OrdinalIgnoreCase).ToArray())
-        });
+        };
     }
 
     public async ValueTask<BrowserPrivacyView> ReadAsync(CancellationToken ct = default)
     {
         var saved = await store.ReadAsync(ct) ?? DefaultPolicy(authority);
-        return new(saved, Effective, authority, saved.Revision != Effective.Revision,
-            store.IsDurable
+        var effective = Effective;
+        var constrained = Constrain(saved);
+        var constrainedByDeployment = saved.Mode != constrained.Mode
+            || !new HashSet<string>(saved.UnmaskedOrigins, StringComparer.OrdinalIgnoreCase).SetEquals(constrained.UnmaskedOrigins)
+            || !new HashSet<string>(saved.TrustedGraphicsOrigins, StringComparer.OrdinalIgnoreCase).SetEquals(constrained.TrustedGraphicsOrigins);
+        var activation = store.IsDurable
                 ? "Saved changes activate after host restart. Until then the effective revision remains authoritative. Previously published Session artifacts remain available."
-                : "This host uses InMemory persistence: saved edits are ephemeral and cannot survive a full host restart. Use SQLite persistence for durable privacy activation. The effective startup revision remains authoritative.",
-            store.IsDurable);
+                : "This host uses InMemory persistence: saved edits are ephemeral and cannot survive a full host restart. Use SQLite persistence for durable privacy activation. The effective startup revision remains authoritative.";
+        if (constrainedByDeployment)
+            activation += " The saved policy is constrained by deployment restrictions. Restarting alone cannot remove those restrictions; change deployment authorization or save a permitted policy.";
+        return new(saved, effective, authority, saved.Revision != effective.Revision, activation, store.IsDurable, constrainedByDeployment);
     }
 
     public async ValueTask<BrowserPrivacyView> SaveAsync(long expectedRevision, string mode,

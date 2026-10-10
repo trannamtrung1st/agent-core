@@ -75,7 +75,8 @@ export function BrowserPrivacySection() {
         <Descriptions.Item label="Effective unmasked origins">{policy.effective.unmaskedOrigins.join(", ") || "None"}</Descriptions.Item>
         <Descriptions.Item label="Effective graphics origins">{policy.effective.trustedGraphicsOrigins.join(", ") || "None"}</Descriptions.Item>
         <Descriptions.Item label="Saved privacy">{policy.saved.mode} · revision {policy.saved.revision}{policy.restartRequired
-          ? policy.durable ? " · restart required" : " · ephemeral, not active" : " · active"}</Descriptions.Item>
+          ? policy.durable ? " · restart required" : " · ephemeral, not active" : policy.constrainedByDeployment ? "" : " · active as saved"}
+          {policy.constrainedByDeployment ? " · constrained by deployment" : ""}</Descriptions.Item>
         <Descriptions.Item label="Persistence">{policy.durable ? "Durable SQLite policy" : "InMemory — edits do not survive host restart"}</Descriptions.Item>
         <Descriptions.Item label="Deployment restrictions">{!policy.deployment.captureAllowed ? "Screenshots prohibited" : policy.deployment.unmaskedAllowed ? "Unmasked capture limited to deployment-approved exact origins" : "Unmasked capture prohibited"}</Descriptions.Item>
         <Descriptions.Item label="Activation">{policy.activation}</Descriptions.Item>

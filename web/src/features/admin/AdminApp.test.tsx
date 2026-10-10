@@ -75,7 +75,7 @@ vi.mock("../../services/adminApi", () => ({
     saved: { mode: "Protected", revision: 0, unmaskedOrigins: [], trustedGraphicsOrigins: [] },
     effective: { mode: "Protected", revision: 0, unmaskedOrigins: [], trustedGraphicsOrigins: [] },
     deployment: { captureAllowed: true, unmaskedAllowed: false, unmaskedOriginCeiling: [], graphicsOriginCeiling: [] },
-    restartRequired: false, activation: "Saved changes activate after host restart.", durable: true
+    restartRequired: false, activation: "Saved changes activate after host restart.", durable: true, constrainedByDeployment: false
   }),
   saveBrowserPrivacy: vi.fn(),
   getExecutionBudgetLimits: vi.fn().mockResolvedValue({ maxSteps: 144, durationSeconds: 900, perToolSeconds: 30 }),

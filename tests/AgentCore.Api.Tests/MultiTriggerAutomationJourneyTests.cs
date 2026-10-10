@@ -18,6 +18,63 @@ namespace AgentCore.Api.Tests;
 public sealed class MultiTriggerAutomationJourneyTests
 {
     [Fact(Timeout = 60000)]
+    public async Task Persisted_schedule_events_schedule_switches_survive_each_sqlite_reopen()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"trigger-mode-{Guid.NewGuid():N}.db");
+        Guid instanceId; string automationId; string scheduleId; string eventId;
+        var timing = new AutomationTiming("daily", LocalTime: "14:30");
+        string Route(Guid id) => $"/api/v2/admin/agent-instances/{id}/automations";
+        await using (var host = new ExperienceHost(path))
+        {
+            instanceId = (await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 22)).InstanceId;
+            using var client = TestOwnerCapability.CreateOwnerClient(host);
+            var request = new AutomationRequest(0, false, "Switch modes", "Review each signal", [new("schedule", Schedule: timing, TriggerId: Guid.NewGuid().ToString())],
+                ExecutionTarget: new("backgroundSession"), CompletionDelivery: new("none"));
+            var response = await client.PostAsJsonAsync(Route(instanceId), request);
+            Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+            var saved = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
+            automationId = saved.AutomationId; scheduleId = Assert.Single(saved.Triggers!).TriggerId!;
+        }
+        await using (var host = new ExperienceHost(path))
+        {
+            using var client = TestOwnerCapability.CreateOwnerClient(host);
+            var saved = Assert.Single((await client.GetFromJsonAsync<AutomationReview>(Route(instanceId)))!.Items);
+            Assert.Equal(scheduleId, Assert.Single(saved.Triggers!).TriggerId);
+            var request = new AutomationRequest(saved.Revision, false, saved.Name, saved.Instructions,
+                [new("event", Source: new("builtin", "run.failed"), FilterExpression: "true", TriggerId: Guid.NewGuid().ToString()),
+                 new("event", Source: new("builtin", "session.ended"), FilterExpression: "false", TriggerId: Guid.NewGuid().ToString())],
+                ExecutionTarget: saved.ExecutionTarget, CompletionDelivery: saved.CompletionDelivery);
+            var response = await client.PutAsJsonAsync(Route(instanceId) + "/" + automationId, request); response.EnsureSuccessStatusCode();
+            var changed = (await response.Content.ReadFromJsonAsync<AutomationResponse>())!;
+            Assert.Equal(2, changed.Triggers!.Count);
+            Assert.DoesNotContain(changed.Triggers, t => t.TriggerId == scheduleId);
+            eventId = changed.Triggers[0].TriggerId!;
+        }
+        await using (var host = new ExperienceHost(path))
+        {
+            using var client = TestOwnerCapability.CreateOwnerClient(host);
+            var saved = Assert.Single((await client.GetFromJsonAsync<AutomationReview>(Route(instanceId)))!.Items);
+            Assert.Equal(2, saved.Triggers!.Count); Assert.Contains(saved.Triggers, t => t.TriggerId == eventId);
+            Assert.All(saved.Triggers, t => Assert.Equal("event", t.Kind));
+            var request = new AutomationRequest(saved.Revision, false, saved.Name, saved.Instructions, [new("schedule", Schedule: timing, TriggerId: Guid.NewGuid().ToString())],
+                ExecutionTarget: saved.ExecutionTarget, CompletionDelivery: saved.CompletionDelivery);
+            var response = await client.PutAsJsonAsync(Route(instanceId) + "/" + automationId, request); response.EnsureSuccessStatusCode();
+            scheduleId = Assert.Single((await response.Content.ReadFromJsonAsync<AutomationResponse>())!.Triggers!).TriggerId!;
+        }
+        await using (var host = new ExperienceHost(path))
+        {
+            using var client = TestOwnerCapability.CreateOwnerClient(host);
+            var saved = Assert.Single((await client.GetFromJsonAsync<AutomationReview>(Route(instanceId)))!.Items);
+            Assert.Equal(automationId, saved.AutomationId);
+            var child = Assert.Single(saved.Triggers!);
+            Assert.Equal(scheduleId, child.TriggerId); Assert.Equal("schedule", child.Kind);
+            Assert.Equal("14:30", child.Schedule!.LocalTime);
+            await using var db = await host.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync();
+            Assert.Single(await db.AutomationTriggers.ToListAsync());
+        }
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Mixed_sources_freeze_child_filters_preserve_identity_and_recover_without_replay()
     {
         var path = Path.Combine(Path.GetTempPath(), $"multi-trigger-{Guid.NewGuid():N}.db");
