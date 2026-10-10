@@ -13,7 +13,7 @@ test("Chat copies and renames an exact four-file project, edits with CAS, and pr
     const message = `synthetic-agent-workspace-v2:${command}`;
     await expect(async () => {
       await page.getByLabel("Message").fill(message);
-      await expect(page.getByLabel("Message")).toHaveValue(message);
+      await expect(page.getByLabel("Message")).toHaveText(message);
       await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
     }).toPass();
     await page.getByRole("button", { name: "Send", exact: true }).click();
