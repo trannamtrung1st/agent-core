@@ -133,6 +133,7 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await expect(work.getByRole('button', { name: 'Approve Automation · Manual', exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('automation-instance-skill-desktop.png'), fullPage: true });
   await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('button', { name: 'View Automation', exact: true }).click();
+  await page.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
   await page.getByRole('tab', { name: 'Skills', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Instance Skills', exact: true })).toContainText('Experience review');
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();

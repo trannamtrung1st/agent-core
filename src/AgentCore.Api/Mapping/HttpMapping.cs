@@ -177,7 +177,7 @@ public static partial class HttpMapping
                 item.Scopes,
                 item.Presentation,
                 item.Label)).ToArray(),
-            projected.CompletedAt is { } completedAt ? Format(completedAt) : null);
+            projected.CompletedAt is { } completedAt ? Format(completedAt) : null, UserMessageMapping.ToWire(projected.Parts));
     }
 
     private static AgentIdentity PublicIdentity(SessionSnapshot snapshot) =>

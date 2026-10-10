@@ -102,6 +102,8 @@ internal static class AdminEndpoints
         group.MapBrowserPrivacy();
         HarnessManagementEndpoints.Map(group);
         AgentInstanceSkillEndpoints.Map(group);
+        AgentInstanceSettingsEndpoints.Map(group);
+        AgentInstanceResourceEndpoints.Map(group);
         ContinuityEndpoints.Map(group);
         AdminWebhookEventEndpoints.Map(group);
 
@@ -362,6 +364,12 @@ internal static class AdminEndpoints
             }
         });
 
+        group.MapGet("/agent-instances/{instanceId:guid}/active-version/preview", async (Guid instanceId, int version,
+            AdminAgentInstanceService instances, CancellationToken ct) =>
+        {
+            try { return Results.Ok(await instances.PreviewVersionAsync(instanceId, version, ct)); }
+            catch (AgentCoreException ex) { return ProblemResults.From(ex); }
+        });
         group.MapPatch("/agent-instances/{instanceId:guid}/active-version", async (
             Guid instanceId,
             AdminReassociateAgentInstanceVersionRequest? request,

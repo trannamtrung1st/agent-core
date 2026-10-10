@@ -1,5 +1,5 @@
-import { useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from "react";
-import { Button, Flex, Input, Tooltip, Alert, theme } from "antd";
+import { useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Button, Flex, Dropdown, Tooltip, Alert, theme } from "antd";
 import {
   AudioOutlined,
   AudioFilled,
@@ -7,6 +7,7 @@ import {
   DeleteOutlined,
   DownOutlined,
   PaperClipOutlined,
+  PlusOutlined,
   PhoneFilled,
   PhoneOutlined,
   RightOutlined,
@@ -14,7 +15,8 @@ import {
   StopOutlined,
   UnorderedListOutlined
 } from "@ant-design/icons";
-import type { InputRef } from "antd";
+import { StructuredMessageEditor, type PickerRequest } from "./StructuredMessageEditor";
+import { displayPart, type MessagePart } from "../../services/messageParts";
 import {
   composerSteerEnabled,
   queueComposerFiles,
@@ -194,7 +196,7 @@ function MicrophoneControl({
 }
 
 export function Composer({
-  draft,
+  draft, parts, instanceId, onPartsChange,
   canSend,
   canStop,
   sendLabel,
@@ -225,6 +227,9 @@ export function Composer({
   imageIncompatibilityMessage
 }: {
   draft: string;
+  parts?: MessagePart[] | null;
+  instanceId?: string | null;
+  onPartsChange?: (parts: MessagePart[]) => void;
   canSend: boolean;
   canStop: boolean;
   sendLabel: string;
@@ -256,11 +261,12 @@ export function Composer({
 }) {
   const { token } = theme.useToken();
   const fileInput = useRef<HTMLInputElement>(null);
-  const messageRef = useRef<InputRef>(null);
+  const [pickerRequest, setPickerRequest] = useState<PickerRequest>(null);
+  const [editorValid, setEditorValid] = useState(true);
   const [queueExpanded, setQueueExpanded] = useState(false);
 
   function focusMessage() {
-    messageRef.current?.focus();
+    document.querySelector<HTMLElement>('[aria-label="Message"]')?.focus();
   }
 
   function takeFiles(list: FileList | File[] | null) {
@@ -279,14 +285,6 @@ export function Composer({
   function onDrop(event: DragEvent<HTMLFormElement>) {
     event.preventDefault();
     takeFiles(event.dataTransfer.files);
-  }
-
-  function onPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const files = event.clipboardData.files;
-    if (files.length > 0) {
-      event.preventDefault();
-      takeFiles(files);
-    }
   }
 
   const queueNeedsScroll = pendingSendQueue.length > QUEUE_EXPANDED_MAX;
@@ -335,7 +333,7 @@ export function Composer({
                   <UnorderedListOutlined className="pending-send-queue-icon" aria-hidden="true" />
                   <div className="pending-send-queue-body">
                     <span className="pending-send-queue-text" title={queuePreview(item)}>
-                      {queuePreview(item)}
+                      {item.parts ? item.parts.map((part,i) => part.kind === "text" ? part.text : <span key={i} className={`composer-chip composer-chip-${part.kind}`}>{displayPart(part)}</span>) : queuePreview(item)}
                     </span>
                     {item.attachments.length > 0 ? (
                       <span className="pending-send-queue-attachments">
@@ -385,7 +383,7 @@ export function Composer({
         className="composer composer-shell"
         onSubmit={(event) => {
           event.preventDefault();
-          onSend();
+          if(editorValid) onSend();
         }}
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}
@@ -402,39 +400,7 @@ export function Composer({
             ))}
           </ul>
         ) : null}
-        <Input.TextArea
-          ref={messageRef}
-          className="message-field"
-          value={draft}
-          onChange={(event) => onDraftChange(event.target.value)}
-          onPaste={onPaste}
-          onKeyDown={(event) => {
-            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
-              return;
-            }
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              if (!ready || !canSend || event.repeat) return;
-              if (event.metaKey || event.ctrlKey) {
-                onSend("interrupt");
-              } else {
-                onSend();
-              }
-            }
-          }}
-          disabled={!ready}
-          autoSize={{ minRows: 1, maxRows: 8 }}
-          placeholder={placeholder}
-          aria-label="Message"
-          aria-description="Enter to send or queue. Command+Enter on macOS or Ctrl+Enter on Windows to steer immediately. Shift+Enter for a new line."
-          aria-keyshortcuts="Enter Meta+Enter Control+Enter Shift+Enter"
-          styles={{
-            textarea: {
-              paddingInline: token.paddingXS,
-              paddingBlock: token.paddingXS
-            }
-          }}
-        />
+        <StructuredMessageEditor draft={draft} parts={parts} instanceId={instanceId} ready={ready} placeholder={placeholder} canSend={canSend && editorValid} onValidationChange={setEditorValid} onChange={onDraftChange} onPartsChange={onPartsChange} onSend={onSend} onFiles={takeFiles} pickerRequest={pickerRequest}/>
         <input
           ref={fileInput}
           className="attach-input"
@@ -450,16 +416,9 @@ export function Composer({
         <Flex justify="space-between" align="center" gap={token.paddingXS} wrap="wrap" className="composer-toolbar">
           <Flex gap={token.paddingXS} align="center" wrap="wrap" className="composer-toolbar-start">
             {modelControls}
-            <Tooltip title="Attach">
-              <Button
-                type="text"
-                className="composer-icon"
-                aria-label="Attach"
-                disabled={!ready}
-                icon={<PaperClipOutlined />}
-                onClick={() => fileInput.current?.click()}
-              />
-            </Tooltip>
+            <Dropdown trigger={["click"]} menu={{items:[{key:"attach",label:"Attach file",icon:<PaperClipOutlined/>},{key:"invocation",label:"Use Skill"},{key:"homeFile",label:"Reference resource"}],onClick:({key})=>{if(key==="attach") fileInput.current?.click();else setPickerRequest({category:key as "invocation"|"homeFile",nonce:Date.now()});}}}>
+              <Button type="text" className="composer-icon" aria-label="Add content" disabled={!ready} icon={<PlusOutlined/>}/>
+            </Dropdown>
             {voiceAvailable ? (
               <>
                 <VoiceModeControl
@@ -524,7 +483,7 @@ export function Composer({
                   htmlType="submit"
                   className="composer-icon composer-send"
                   aria-label={sendLabel}
-                  disabled={!canSend}
+                  disabled={!canSend || !editorValid}
                   icon={<SendOutlined />}
                 />
               </Tooltip>

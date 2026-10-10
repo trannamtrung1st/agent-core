@@ -215,12 +215,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IDiagnosticIdSource? diagnostics = null,
         IBrowserLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null,
-        ITriggerStore? triggerOccurrences = null)
+        ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
         _runAuthority = runAuthority;
         _triggerOccurrences = triggerOccurrences;
+        _composer = composer;
         _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
         _catalog = catalog;
         _brain = brain;
@@ -314,15 +315,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Guid? sourceEventId = null,
         CancellationToken cancellationToken = default,
         IReadOnlyList<Guid>? attachmentIds = null,
-        UserTextBehavior behavior = UserTextBehavior.Interrupt)
+        UserTextBehavior behavior = UserTextBehavior.Interrupt, IReadOnlyList<UserMessagePart>? parts = null)
     {
         ValidateUserTurn(text, attachmentIds);
+        parts = NormalizeUserParts(text, parts, attachmentIds);
         _ = cancellationToken;
         var eventId = sourceEventId ?? _ids.NewId();
         var context = new EventContext(eventId, SessionId, _epoch, _time.GetUtcNow(), eventId, null);
         BeginWork();
         return Task.FromResult(Enqueue(
-            new UserTextReceived(context, text, AttachmentIds: attachmentIds, Behavior: behavior),
+            new UserTextReceived(context, text, AttachmentIds: attachmentIds, Behavior: behavior, Parts: parts),
             urgent: false));
     }
 
@@ -331,13 +333,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Guid sourceEventId,
         CancellationToken cancellationToken = default,
         IReadOnlyList<Guid>? attachmentIds = null,
-        UserTextBehavior behavior = UserTextBehavior.Interrupt)
+        UserTextBehavior behavior = UserTextBehavior.Interrupt, IReadOnlyList<UserMessagePart>? parts = null)
     {
         ValidateUserTurn(text, attachmentIds);
+        parts = NormalizeUserParts(text, parts, attachmentIds);
         var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = new EventContext(sourceEventId, SessionId, _epoch, _time.GetUtcNow(), sourceEventId, null);
         BeginWork();
-        if (!Enqueue(new UserTextReceived(context, text, persisted, attachmentIds, behavior), urgent: false))
+        if (!Enqueue(new UserTextReceived(context, text, persisted, attachmentIds, behavior, parts), urgent: false))
         {
             persisted.TrySetResult(false);
             PersistenceFailureDiagnosticId = null;
@@ -353,6 +356,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var context = NewContext();
         BeginWork();
         return Task.FromResult(Enqueue(new AttachmentsStagedReceived(context, attachmentIds), urgent: true));
+    }
+
+    private static IReadOnlyList<UserMessagePart>? NormalizeUserParts(string text, IReadOnlyList<UserMessagePart>? parts, IReadOnlyList<Guid>? attachments)
+    {
+        try
+        {
+            var normalized = UserMessageContent.Normalize(parts, input: true);
+            if (normalized is not null && (UserMessageContent.DisplayText(normalized) != text || !UserMessageContent.HasTask(normalized) && attachments is not { Count: > 0 }))
+                throw new ArgumentException("Structured text must match parts and Skill selection requires a task, reference or attachment.");
+            return normalized;
+        }
+        catch (ArgumentException exception) { throw AgentCoreErrors.Validation(exception.Message); }
     }
 
     private void ValidateUserTurn(string text, IReadOnlyList<Guid>? attachmentIds)
@@ -732,7 +747,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus)
             || _snapshot.AgentInstanceId != delivery.Owner.AgentInstanceId
             || _snapshot.ProfileId != delivery.Owner.ProfileId
-            || !OccurrenceCompatibility.Allows(_snapshot.Definition, delivery.SourceKind))
+            || !OccurrenceCompatibility.Allows(ExecutionDefinition, delivery.SourceKind))
         {
             input.Accepted.TrySetResult(OccurrenceAccept.Unavailable);
             return;
@@ -1435,7 +1450,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var started = Stopwatch.GetTimestamp();
         _recordedLlm = false;
         var attachmentIds = NormalizeAttachmentIds(input.AttachmentIds);
-        var fingerprint = UserTextAdmission.Fingerprint(null, input.Text ?? "", attachmentIds, input.Behavior);
+        var fingerprint = UserTextAdmission.Fingerprint(null, input.Text ?? "", attachmentIds, input.Behavior, input.Parts);
         if (_snapshot.Entries.FirstOrDefault(entry =>
                 entry.SourceEventId == input.Context.EventId && entry.Role == ConversationRole.User)
             is { } existingByEvent)
@@ -1525,6 +1540,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
+        IReadOnlyList<UserMessagePart>? admittedParts = input.Parts;
+        if (input.Parts is not null)
+        {
+            try
+            {
+                if (_composer is not null) admittedParts = await _composer.ValidateInputAsync(_snapshot, input.Parts, cancellationToken);
+                else if (input.Parts.Any(p => p.Kind == "reference")) throw AgentCoreErrors.Validation("Resource references are unavailable.");
+                var (_, configuration) = await ResolveNewRunAsync(cancellationToken);
+                AgentCore.Application.Composer.ComposerReferenceService.ActiveSkills(configuration.Configuration.Definition, configuration.Skills,
+                    PendingUserBatch().SelectMany(u => UserMessageContent.ExplicitSkills(u.Parts)).Concat(UserMessageContent.ExplicitSkills(input.Parts)));
+            }
+            catch (AgentCoreException exception) { input.Persisted?.TrySetException(exception); return; }
+        }
         var attachmentRefs = await BuildAttachmentRefsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
         var userEntry = new ConversationEntry(
             input.Context.EventId,
@@ -1539,7 +1567,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             text.Length,
             now,
             Attachments: attachmentRefs.Count == 0 ? null : attachmentRefs,
-            SourceAdmissionFingerprint: fingerprint);
+            SourceAdmissionFingerprint: fingerprint, Parts: admittedParts);
 
         _undurableUserEntryIds.Add(userEntry.EntryId);
 
@@ -1807,11 +1835,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (_boundAgentRun?.ResponseId != input.ResponseId)
         {
             if (_agentRunAdmissionPending || HasPendingUserBatch()) return;
-            PinModelSelectionIfMissing();
+            var resolved = input.Configuration ?? throw AgentCoreErrors.Persistence("Initiative configuration was not frozen during evaluation.");
+            var projection = _snapshot with { Definition = resolved.Configuration.Definition, PinnedPersona = resolved.Persona,
+                PinnedPersonaRevision = resolved.Configuration.PersonaRevision, ModelSelection = input.Model };
+            _idleConfiguration = resolved;
             var run = AgentCore.Application.Execution.AgentRunAdmissionFactory.ForAdmittedSignal(
-                _ids.NewId(), _ids.NewId(), input.ResponseId, _snapshot, input.Trigger, _time.GetUtcNow(),
+                _ids.NewId(), _ids.NewId(), input.ResponseId, projection, input.Trigger, _time.GetUtcNow(),
                 input.SkillCatalog ?? [], ToolResources.IsOccurrence(input.Trigger.Kind) ? _activeOccurrencePin : null,
-                await _tools.ResolveExecutionBudgetAsync(_snapshot.AgentInstanceId, _snapshot.Definition, false, cancellationToken));
+                AgentCore.Application.Execution.ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration);
             _agentRunAdmissionPending = true;
             RequestPersist(_snapshot, admittedRun: run, onAdmitted: committed => run = committed, then: async ct =>
             {
@@ -2322,7 +2353,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (trigger.Kind == TriggerKind.UserTurn)
         {
-            RefreshScheduleDraftForUserTurn(trigger.Text, _snapshot.Definition.ConversationPolicy.Language);
+            RefreshScheduleDraftForUserTurn(trigger.Text, ExecutionDefinition.ConversationPolicy.Language);
         }
 
         var proactive = trigger.Kind != TriggerKind.UserTurn;
@@ -2349,25 +2380,38 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             PinModelSelectionIfMissing();
         }
 
-        var model = ResolveTurnModel(trigger.Kind);
+        var capturedSnapshot = _snapshot;
+        var capturedRun = _boundAgentRun;
+        var occurrencePin = _activeOccurrencePin;
+        var boundDefinition = capturedRun is null ? null : ExecutionDefinition;
+        var boundPersona = capturedRun?.PinnedPersona;
 
         _ = Task.Run(async () =>
         {
             try
             {
+                var resolved = capturedRun is null ? await _tools.ResolveRunConfigurationAsync(capturedSnapshot, evaluationToken).ConfigureAwait(false) : null;
+                var executionDefinition = boundDefinition ?? resolved!.Configuration.Definition;
+                var persona = boundPersona ?? resolved!.Persona;
+                var selection = capturedSnapshot.ModelSelection;
+                if (capturedRun is not null) selection = new(capturedRun.PinnedModel.CatalogKey, capturedRun.PinnedModel.ProviderAlias, capturedRun.PinnedModel.ModelId, ModelSelectionSource.Host, capturedRun.PinnedModel.ReasoningEffort);
+                else if (occurrencePin is not null && ToolResources.IsOccurrence(trigger.Kind)) selection = new(occurrencePin.CatalogKey, occurrencePin.ProviderAlias, occurrencePin.ModelId, ModelSelectionSource.Host, occurrencePin.ReasoningEffort);
+                else if (_catalog is not null && selection?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host)) selection = AgentCore.Application.Models.SessionModelBinder.RefreshDefault(_catalog, executionDefinition, selection);
+                var model = selection is null ? ResolveTurnModel(trigger.Kind) : _models.Resolve(selection, capturedRun is not null || occurrencePin is not null && ToolResources.IsOccurrence(trigger.Kind) || trigger.Kind == TriggerKind.UserTurn ? ModelPurpose.Conversation : ModelPurpose.Initiative);
+                model = TestDecorateLanguageModel?.Invoke(model) ?? model;
                 var sessionAttachments = await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
                 var learned = await SessionMemoryPrompt.LoadAsync(
                     _structuredMemory,
                     _snapshot.SessionId,
-                    _snapshot.Definition,
+                    executionDefinition,
                     _profile,
                     _snapshot.Entries,
                     evaluationToken,
                     _snapshot.AgentInstanceId).ConfigureAwait(false);
-                var skillCatalog = _boundAgentRun is { } execution && execution.ResponseId == responseId
-                    ? execution.PinnedSkillCatalog : await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, evaluationToken);
+                var skillCatalog = capturedRun is { } execution && execution.ResponseId == responseId
+                    ? execution.PinnedSkillCatalog : resolved!.Skills;
                 var context = new AgentContext(
-                    _snapshot.Definition,
+                    executionDefinition,
                     _snapshot.Entries,
                     _snapshot.Summary,
                     Profile: _profile,
@@ -2388,18 +2432,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     UtcNow: _time.GetUtcNow(),
                     LastUserActivityAt: _snapshot.LastUserActivityAt,
                     LanguageModel: model,
-                    ReasoningEffort: ReasoningEffortFor(trigger.Kind),
+                    ReasoningEffort: selection?.ReasoningEffort,
                     SummarizedThroughEntrySequence: _snapshot.SummarizedThroughEntrySequence,
                     LastEntrySequence: _snapshot.DurableLastEntrySequence,
                     LearnedMemories: learned,
-                    Persona: _snapshot.PinnedPersona,
+                    Persona: persona,
                     ScheduleConversation: _scheduleConversationContext,
                     ScheduleDraft: _scheduleDraftContext,
                     DetachedExecution: IsInitialBackgroundRun,
                     OutputContract: _boundAgentRun?.Admission.OutputContract ?? AgentRunOutputContract.ConversationResponse,
                     AuthoredAutomation: _boundAgentRun?.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal) == true,
                     OwnedSessionId: SessionId,
-                    ActiveSkillKeys: skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
+                    ActiveSkillKeys: capturedRun?.ActiveSkillKeys ?? skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
+                    ComposerInput: capturedRun?.Admission.ComposerInput,
                     PinnedSkillCatalog: skillCatalog,
                     AgentInstanceId: _snapshot.AgentInstanceId,
                     CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
@@ -2407,14 +2452,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, evaluationToken),
                     AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),
                     ExperienceContext: await RunExperienceContextAsync(evaluationToken),
-                    ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, _snapshot.Definition, evaluationToken));
+                    ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, executionDefinition, evaluationToken));
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
                 AgentDecision? decision = null;
                 BrainFailed? failure = null;
                 try
                 {
-                    decision = await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
+                    decision = capturedRun?.Admission.ComposerInput?.Error is not null
+                        ? new Speak(new ModelRequest(responseId, []))
+                        : await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (evaluationToken.IsCancellationRequested)
                 {
@@ -2495,7 +2542,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     return;
                 }
 
-                if (!TryMailbox(new BrainReturned(inbound, turn, responseId, trigger, decision, processed, skillCatalog)))
+                if (!TryMailbox(new BrainReturned(inbound, turn, responseId, trigger, decision, processed, skillCatalog, resolved, selection)))
                 {
                     EndWork();
                     return;
@@ -2563,7 +2610,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             authorizedTools,
             _intermediateMessagingAllowed,
             ApplicationMessageBudgetFor(request.ResponseId),
-            _snapshot.Definition,
+            ExecutionDefinition,
             trigger,
             _tools.ConfigurationGate,
             model.Capabilities.Tools);
@@ -2593,6 +2640,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IReadOnlyList<string> activeSkillKeys,
         CancellationToken cancellationToken)
     {
+        if (_boundAgentRun?.Admission.ComposerInput?.Error is { } inputError)
+        {
+            await PublishAsync(new SessionOutput(cause, null, new ErrorOutput("Validation", "ComposerInputUnavailable", inputError, false, null)), cancellationToken);
+            await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidResponse, inputError)), CancellationToken.None);
+            return;
+        }
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
         var checkpoint = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.Checkpoint : null;
@@ -2627,9 +2680,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var invalidCalls = new InvalidToolCallRecovery(CheckpointSuffix());
         var executionRun = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun : null;
         var previousFacts = executionRun is null ? null : await PreviousExecutionFactsAsync(executionRun, cancellationToken).ConfigureAwait(false);
-        var budgetTools = _snapshot.Definition.Environment?.Capabilities is null
+        var budgetTools = ExecutionDefinition.Environment?.Capabilities is null
             ? WithOfferedTools(request, authorizedTools, trigger, model).Tools
-            : ToolCatalog.Eligible(_snapshot.Definition,
+            : ToolCatalog.Eligible(ExecutionDefinition,
                 await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, cancellationToken), _tools.ConfigurationGate);
         await using var backgroundBrowser = IsInitialBackgroundRun
             ? await _tools.OpenOccurrenceBrowserAsync(SessionId, _snapshot.AgentInstanceId, cancellationToken).ConfigureAwait(false) : null;
@@ -2721,10 +2774,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 BrowserSnapshotCompaction.Compact(messages);
                 messages = PromptContextBuilder.WithActiveSkillSystem(messages, pinnedCatalog, pinnedSkills).ToList();
                 AgentContext? projectionContext = null;
-                if (_snapshot.Definition.Environment?.Capabilities is not null || RolePermissions.AllowsTool(_snapshot.Definition, ToolCatalog.BackgroundAcknowledge))
+                if (ExecutionDefinition.Environment?.Capabilities is not null || RolePermissions.AllowsTool(ExecutionDefinition, ToolCatalog.BackgroundAcknowledge))
                 {
                     projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken);
-                    authorizedTools = _tools.ProjectTools(_snapshot.Definition, projectionContext);
+                    authorizedTools = _tools.ProjectTools(ExecutionDefinition, projectionContext);
                 }
                 var pageBlocked = browserPageOrigin is not null && blockedBrowserOrigins.Contains(browserPageOrigin);
                 var prompt = messages;
@@ -2796,7 +2849,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     {
                         // Use the same phase filter as executable schemas, including tools not yet loaded.
                         eligibleForGuide = ProjectBrowserTools(working with
-                        { Tools = ToolCatalog.Eligible(_snapshot.Definition, projectionContext, _tools.ConfigurationGate) },
+                        { Tools = ToolCatalog.Eligible(ExecutionDefinition, projectionContext, _tools.ConfigurationGate) },
                             pageBlocked, terminalBrowserContinuation, evidence.DialogPending).Tools ?? [];
                         if (cleanupPhase) eligibleForGuide = eligibleForGuide.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray();
                     }
@@ -2817,7 +2870,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
                     ? binding.PinnedModel.CatalogKey : ToolResources.IsOccurrence(trigger.Kind)
                         ? _activeOccurrencePin?.CatalogKey : _snapshot.ModelSelection?.CatalogKey;
-                CapabilityProjectionTelemetry.Record(_snapshot.Definition, projectionContext, _tools.ConfigurationGate, working.Tools, projectionModel, CapabilityLoadCountFor(request.ResponseId));
+                CapabilityProjectionTelemetry.Record(ExecutionDefinition, projectionContext, _tools.ConfigurationGate, working.Tools, projectionModel, CapabilityLoadCountFor(request.ResponseId));
                 try
                 {
                 if (!resumingBatch)
@@ -3268,7 +3321,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         if (args.ValueKind == JsonValueKind.Object)
                         {
                             var policy = await _tools.EvaluateExecutionPolicyAsync(
-                                _snapshot.Definition,
+                                ExecutionDefinition,
                                 _snapshot.SessionId, call, args,
                                 admission: new ToolExecutionAdmission(
                                     Detached: IsInitialBackgroundRun,
@@ -3378,7 +3431,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             call,
                                             args,
                                             overallCts.Token,
-                                            _snapshot.Definition, SessionId,
+                                            ExecutionDefinition, SessionId,
                                             new ToolExecutionAdmission(IsInitialBackgroundRun, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills))
                                         .ConfigureAwait(false);
                                     if (prepared.Preparation is null)
@@ -3525,7 +3578,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     using var toolCts = CancellationTokenSource.CreateLinkedTokenSource(overallCts.Token);
                                     using var toolTimer = ScheduleCancel(_time, toolCts, ToolLimits.PerTool);
                                     executionResult = await _tools.ExecuteAsync(
-                                            _snapshot.Definition,
+                                            ExecutionDefinition,
                                             SessionId,
                                             call,
                                             resultBudget,
@@ -3705,7 +3758,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (effectFenced)
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                     if (call.Name.StartsWith("browser.", StringComparison.Ordinal) && BrowserDialogPending(executionResult.Text)
-                        && _snapshot.Definition.Environment?.Capabilities is not null)
+                        && ExecutionDefinition.Environment?.Capabilities is not null)
                     {
                         var recoveryContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken).ConfigureAwait(false);
                         var recovery = await RequestCapabilityLoadAsync(cause, request.ResponseId, "{}", recoveryContext, generateToken, dialogRecovery: true).ConfigureAwait(false);
@@ -4102,7 +4155,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         var authorizer = _tools.TriggerCommandAuthorizer;
-        var language = _snapshot.Definition.ConversationPolicy.Language;
+        var language = ExecutionDefinition.ConversationPolicy.Language;
         var singleConfirmation = texts.Count == 1
             && TriggerAuthorization.IsConfirmationTurn(texts[0], hasPendingProposal: true, authorizer, language);
         if (!singleConfirmation)
@@ -4114,7 +4167,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private TriggerCommandContext TriggerCommand(AgentTrigger trigger)
     {
         var authorizer = _tools.TriggerCommandAuthorizer;
-        var language = _snapshot.Definition.ConversationPolicy.Language;
+        var language = ExecutionDefinition.ConversationPolicy.Language;
         var confirming = TriggerAuthorization.IsConfirmationTurn(
             trigger.Text,
             _pendingTriggerProposal is not null,
@@ -4481,7 +4534,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
     private (TimeSpan Applied, string Clamp) ClampInitiativeWaitWithReason(TimeSpan requested)
     {
-        var policy = _snapshot.Definition.InitiativePolicy;
+        var policy = ExecutionDefinition.InitiativePolicy;
         var min = _snapshot.Mode == SessionMode.Text
             ? TimeSpan.FromSeconds(30)
             : TimeSpan.FromSeconds(5);
@@ -5758,7 +5811,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             title = string.IsNullOrWhiteSpace(entry.Text) && attachments is { Names.Count: > 0 }
                 ? SessionTitles.FromAttachments(attachments.Names, attachments.ImageOnly)
-                : SessionTitles.FromUserText(entry.Text);
+                : SessionTitles.FromUserText(entry.Parts is null ? entry.Text : string.Concat(entry.Parts.Where(p => p.Kind != "invocation").Select(p => p.Kind == "text" ? p.Text : "@" + (p.Label ?? p.Reference!.Kind))));
         }
 
         return _snapshot with
@@ -6051,6 +6104,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             if (input.Error is not null)
             {
                 if (job.AdmittedRun is not null) _agentRunAdmissionPending = false;
+                if (job.AdmittedRun?.Admission.Activation.Kind == ActivationKind.UserTurn
+                    && input.Error is AgentCoreException { Code: "Conflict" } conflict
+                    && conflict.Message == "Instance configuration changed before Run admission. Retry the new activation.")
+                {
+                    await TryStartPendingUserBatchAsync(input.Context, cancellationToken).ConfigureAwait(false);
+                    job.Ended?.TrySetResult(false);
+                    return;
+                }
                 var diagnosticId = _diagnostics.NewId();
                 LogConversationFailure(
                     input.Context,

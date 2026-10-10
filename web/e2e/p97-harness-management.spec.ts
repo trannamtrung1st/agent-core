@@ -48,9 +48,9 @@ const learn='Learn this order policy for future conversations: https://example.t
 test('Managed Chat reads authorized public material, saves knowledge and retrieves it in a new Session',async({page})=>{
   const id=await create(page,'Managed learning');
   await send(page,learn);
-  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible({timeout:30000});
-  const saved=await review(page,id);expect(saved.activeVersion).toBeGreaterThan(21);
-  expect(saved.policy.sources).toEqual([]);expect(saved.knowledge.some((k:{identity:string})=>k.identity==='learned-orders')).toBe(true);
+  await expect(page.getByText(/Saved for this Instance’s next Run/).last()).toBeVisible({timeout:30000});
+  const saved=await review(page,id);expect(saved.activeVersion).toBe(21);
+  expect(saved.policy.sources).toEqual([]);expect(saved.instanceChanges.some((c:{operation:string})=>c.operation==='knowledge.upsert')).toBe(true);
   const sessionId=page.url().split('/').at(-1)!;
   const owner=await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'));
   const currentResponse=await page.request.get(`/api/v2/sessions/${sessionId}`,{headers:{'X-AgentCore-Owner-Capability':owner!}});
@@ -66,7 +66,7 @@ test('Assisted Chat rejects once then approves a fresh exact knowledge change',a
   await approval.getByRole('button',{name:'Reject',exact:true}).click();
   await expect(page.getByText(/Nothing was saved/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBe(21);
   await send(page,learn);await expect(approval).toBeVisible();await approval.getByRole('button',{name:'Approve',exact:true}).click();
-  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBeGreaterThan(21);
+  await expect(page.getByText(/Saved for this Instance’s next Run/).last()).toBeVisible();expect((await review(page,id)).activeVersion).toBe(21);
 });
 
 test('Managed tool and instruction proposals require exact Chat approval',async({page})=>{
@@ -75,11 +75,11 @@ test('Managed tool and instruction proposals require exact Chat approval',async(
   await send(page,'Propose disabling http.request for future conversations.');
   const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toContainText('http.request');
   expect((await review(page,id)).activeVersion).toBe(21);await approval.getByRole('button',{name:'Approve',exact:true}).click();
-  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible();expect((await review(page,id)).selectedTools).not.toContain('http.request');
+  await expect(page.getByText(/Saved for this Instance’s next Run/).last()).toBeVisible();expect((await review(page,id)).selectedTools).not.toContain('http.request');
   await send(page,'Try a sensitive HTTP action now.');
-  // A new AgentRun rechecks current tool authority even in this pinned Session.
+  // A new AgentRun rechecks current tool authority even in this existing Session.
   await expect(page.getByRole('dialog',{name:'Approve sensitive action'})).toHaveCount(0);
-  await expect(page.getByText('The sensitive action was not executed.',{exact:true})).toBeVisible({timeout:30_000});
+  await expect(page.getByText('The sensitive HTTP action is unavailable in this Session.',{exact:true})).toBeVisible({timeout:30_000});
   await expect(page.getByTestId('connection')).toHaveText('Ready',{timeout:20_000});
 });
 
@@ -133,6 +133,6 @@ test('A stale Chat approval cannot adopt and a fresh operation recovers', async 
   await expect(policyRevision).toHaveText(`Policy revision: ${refreshed.policyRevision}`);
   await approval.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(approval).toBeHidden({ timeout: 20_000 });
-  await expect(page.getByText(/Saved that for future conversations/).last()).toBeVisible({ timeout: 30_000 });
-  expect((await review(page, id)).activeVersion).toBeGreaterThan(21);
+  await expect(page.getByText(/Saved for this Instance’s next Run/).last()).toBeVisible({ timeout: 30_000 });
+  expect((await review(page, id)).activeVersion).toBe(21);
 });

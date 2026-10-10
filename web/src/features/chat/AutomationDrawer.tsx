@@ -95,7 +95,7 @@ export function AutomationDrawer({
     return (
       <List.Item className="schedule-item">
         <Flex vertical gap={token.paddingSM} className="schedule-item-content">
-          <Flex align="flex-start" justify="space-between" gap={token.paddingSM}>
+          <Flex align="baseline" wrap gap={token.paddingXS}>
             <Typography.Text strong className="schedule-intent">
               {item.instructions}
             </Typography.Text>

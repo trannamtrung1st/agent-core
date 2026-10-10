@@ -43,10 +43,13 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         {
             var migrations = db.Database.GetMigrations().ToArray();
             var applied = (await db.Database.GetAppliedMigrationsAsync(cancellationToken).ConfigureAwait(false)).ToArray();
-            // Only a complete, known post-cutover history can advance through forward migrations.
+            // The cutover baseline must be complete. Later known migrations can have gaps when
+            // parallel branches merge; EF applies those pending migrations before current-schema validation.
             // Legacy/untracked fixtures still require the exact current schema before stamping.
-            var trackedCanonicalSchema = applied.Contains("20261008063000_RetireLegacyExecution", StringComparer.Ordinal)
-                && applied.SequenceEqual(migrations.Take(applied.Length), StringComparer.Ordinal);
+            var cutoverIndex = Array.IndexOf(migrations, "20261008063000_RetireLegacyExecution");
+            var trackedCanonicalSchema = cutoverIndex >= 0
+                && applied.Take(cutoverIndex + 1).SequenceEqual(migrations.Take(cutoverIndex + 1), StringComparer.Ordinal)
+                && applied.All(migration => migrations.Contains(migration, StringComparer.Ordinal));
             if (!trackedCanonicalSchema)
             {
                 await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
@@ -642,6 +645,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.ReceivedTextEndExclusive == entry.ReceivedTextEndExclusive
         && EnvelopeUnchanged(row.EnvelopeJson, entry.Envelope)
         && row.AttachmentRefsJson == SerializeAttachmentRefs(entry.Attachments)
+        && row.UserPartsJson == SerializeUserParts(entry.Parts)
         && row.SourceAdmissionFingerprint == entry.SourceAdmissionFingerprint
         && row.FinishReason == entry.FinishReason
         && row.InterruptReason == entry.InterruptReason
@@ -744,6 +748,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.EnvelopeJson = SerializeEnvelope(entry.Envelope);
         row.AttachmentRefsJson = SerializeAttachmentRefs(entry.Attachments);
         row.SourceAdmissionFingerprint = entry.SourceAdmissionFingerprint;
+        row.UserPartsJson = SerializeUserParts(entry.Parts);
         row.ApplicationMessageEffectKey = entry.ApplicationMessageEffectKey;
         row.FinishReason = entry.FinishReason;
         row.InterruptReason = entry.InterruptReason;
@@ -824,7 +829,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             ReadModelProvenance(row),
             FailureReferenceJson.Deserialize(row.FailureReferenceJson),
             row.ApplicationMessageEffectKey,
-            row.CompletedAtUtc is { } completedAt ? FromUnix(completedAt) : null);
+            row.CompletedAtUtc is { } completedAt ? FromUnix(completedAt) : null,
+            row.UserPartsJson is null ? null : JsonSerializer.Deserialize<UserMessagePart[]>(row.UserPartsJson, UserMessageContent.Json));
+
+    private static string? SerializeUserParts(IReadOnlyList<UserMessagePart>? parts) => parts is null ? null : JsonSerializer.Serialize(parts, UserMessageContent.Json);
 
     private static string? SerializeAttachmentRefs(IReadOnlyList<ConversationAttachmentRef>? attachments) =>
         attachments is not { Count: > 0 }
@@ -877,6 +885,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.ModelId = selection?.ModelId;
         row.ModelSelectionSource = selection?.SelectionSource.ToString();
         row.ModelReasoningEffort = selection?.ReasoningEffort;
+        row.ModelHasExplicitReasoningEffort = selection?.HasExplicitReasoningEffort ?? false;
     }
 
     private static SessionModelSelection? ReadModelSelection(SnapshotRecord row)
@@ -894,7 +903,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             row.ModelProviderAlias,
             row.ModelId,
             Enum.Parse<ModelSelectionSource>(row.ModelSelectionSource),
-            row.ModelReasoningEffort);
+            row.ModelReasoningEffort, row.ModelHasExplicitReasoningEffort);
     }
 
     private static ModelGenerationProvenance? ReadSummaryModel(SnapshotRecord row)

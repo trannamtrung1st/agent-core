@@ -1426,6 +1426,36 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     }
 
     [Fact]
+    public async Task Draft_csv_knowledge_and_common_document_uploads_support_revision_guarded_deletes()
+    {
+        var client = OwnerClient();
+        var draft = await CreateIsolatedDraftAsync(client, "common-resource-formats");
+        var revision = draft.Revision;
+        var bound = new List<AdminDefinitionDraftResourceResponse>();
+        foreach (var (path, media, kind) in new[] {
+            ("knowledge/data.csv", "text/csv", "Knowledge"),
+            ("references/guide.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Reference") })
+        {
+            using var upload = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/content") { Content = new ByteArrayContent("name,value\nA,1"u8.ToArray()) };
+            upload.Content.Headers.ContentType = new(media);
+            var response = await client.SendAsync(upload); response.EnsureSuccessStatusCode();
+            var stored = (await response.Content.ReadFromJsonAsync<AdminDefinitionResourceContentStoredResponse>())!;
+            var bind = await client.PutAsJsonAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}/resources", new AdminUpsertDefinitionDraftResourceRequest(revision, null, path, kind, media, stored.ContentSha256, stored.ByteLength));
+            bind.EnsureSuccessStatusCode(); bound.Add((await bind.Content.ReadFromJsonAsync<AdminDefinitionDraftResourceResponse>())!); revision++;
+        }
+        using var secretUpload = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/content") { Content = new ByteArrayContent("OPENAI_API_KEY=dummy"u8.ToArray()) };
+        secretUpload.Content.Headers.ContentType = new("application/yaml");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.SendAsync(secretUpload)).StatusCode);
+        var badPath = await client.PutAsJsonAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}/resources", new AdminUpsertDefinitionDraftResourceRequest(revision, null, "payload.exe", "Reference", "text/csv", bound[0].ContentSha256, bound[0].ByteLength));
+        Assert.Equal(HttpStatusCode.BadRequest, badPath.StatusCode);
+        var stale = revision;
+        (await client.DeleteAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/{bound[0].ResourceId}?expectedRevision={revision}")).EnsureSuccessStatusCode(); revision++;
+        Assert.Equal(HttpStatusCode.Conflict, (await client.DeleteAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/{bound[1].ResourceId}?expectedRevision={stale}")).StatusCode);
+        (await client.DeleteAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/{bound[1].ResourceId}?expectedRevision={revision}")).EnsureSuccessStatusCode();
+        Assert.Empty((await client.GetFromJsonAsync<AdminDefinitionDraftResourceListResponse>($"/api/v2/admin/definition-drafts/{draft.DraftId}/resources"))!.Items);
+    }
+
+    [Fact]
     public async Task Admin_definition_draft_resource_upload_bind_and_publish_snapshot()
     {
         var client = OwnerClient();

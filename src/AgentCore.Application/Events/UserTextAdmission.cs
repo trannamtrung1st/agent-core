@@ -13,7 +13,7 @@ public static class UserTextAdmission
         string? responseId,
         string text,
         IReadOnlyList<Guid> attachmentIds,
-        UserTextBehavior behavior)
+        UserTextBehavior behavior, IReadOnlyList<UserMessagePart>? parts = null)
     {
         var payload = new WirePayload
         {
@@ -21,7 +21,8 @@ public static class UserTextAdmission
             AttachmentIds = attachmentIds.Count == 0
                 ? null
                 : attachmentIds.Select(id => id.ToString("D")).ToArray(),
-            Behavior = UserTextBehaviors.WireName(behavior)
+            Behavior = UserTextBehaviors.WireName(behavior),
+            Parts = UserMessageContent.WithoutLabels(UserMessageContent.Normalize(parts))
         };
         var json = JsonSerializer.Serialize(payload);
         return $"user.text|{responseId}|{json}";
@@ -30,7 +31,7 @@ public static class UserTextAdmission
     public static string FingerprintFromStoredEntry(ConversationEntry entry)
     {
         var attachmentIds = entry.Attachments?.Select(item => item.AttachmentId).ToArray() ?? [];
-        return Fingerprint(null, entry.Text, attachmentIds, UserTextBehavior.Interrupt);
+        return Fingerprint(null, entry.Text, attachmentIds, UserTextBehavior.Interrupt, entry.Parts);
     }
 
     public static void ValidatePendingBatch(IReadOnlyList<ConversationEntry> entries, string additionalText)
@@ -56,5 +57,7 @@ public static class UserTextAdmission
         public string Text { get; set; } = "";
         public string[]? AttachmentIds { get; set; }
         public string? Behavior { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<UserMessagePart>? Parts { get; set; }
     }
 }

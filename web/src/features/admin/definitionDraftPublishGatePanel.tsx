@@ -1,4 +1,5 @@
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
+import { AgentConfigurationPanel } from "./AgentConfigurationLayout";
 import { Alert, Button, Descriptions, Flex, Input, List, Select, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState, useImperativeHandle, type Ref } from "react";
 import type { AdminDefinitionDraft } from "../../services/adminApi";
@@ -280,13 +281,8 @@ export function DefinitionDraftPublishGatePanel({
   };
 
   return (
-    <Flex vertical gap={16} aria-label="Test validate and publish gate" className="admin-publish-gate">
-      <div className="admin-draft-tab-intro">
-        <Typography.Title level={5}>Test &amp; Publish</Typography.Title>
-        <Typography.Paragraph type="secondary">
-          Validate this exact revision, run every required Synthetic check, and review the safe diff before publishing.
-        </Typography.Paragraph>
-      </div>
+    <AgentConfigurationPanel title="Test & Publish" label="Test validate and publish gate" className="admin-publish-gate"
+      description="Validate this exact revision, run every required Synthetic check, and review the safe diff before publishing." bodyClassName="admin-draft-tab">
       {loading ? <Spin size="small" /> : null}
       {!eligibility.eligible ? (
         <Alert
@@ -413,9 +409,9 @@ export function DefinitionDraftPublishGatePanel({
         </Button>
       </section>
       <section aria-label="Saved evaluation scenarios">
-        <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-section-heading">
+        <Flex align="baseline" className="admin-draft-section-heading">
           <Typography.Title level={5}>Saved scenarios</Typography.Title>
-          <Typography.Text type="secondary">{scenarios.length}</Typography.Text>
+          <Typography.Text type="secondary" aria-label={`${scenarios.length} saved scenarios`}>({scenarios.length})</Typography.Text>
         </Flex>
         {scenarios.length > 0 ? (
           <List
@@ -479,6 +475,6 @@ export function DefinitionDraftPublishGatePanel({
           )}
         />
       ) : null}
-    </Flex>
+    </AgentConfigurationPanel>
   );
 }

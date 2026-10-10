@@ -41,7 +41,7 @@ public sealed class UnifiedWorkspaceMigrationTests
             var error = await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync());
             Assert.Contains("Legacy data reset required", error.Message, StringComparison.Ordinal);
             Assert.Equal(1, await db.Sessions.CountAsync());
-            Assert.Equal("sentinel", (await db.Set<SnapshotRecord>().SingleAsync()).Summary);
+            Assert.Equal("sentinel", await db.Set<SnapshotRecord>().Select(row => row.Summary).SingleAsync());
             Assert.DoesNotContain("20261007014134_UnifiedAgentWorkspace", await db.Database.GetAppliedMigrationsAsync());
         }
         finally

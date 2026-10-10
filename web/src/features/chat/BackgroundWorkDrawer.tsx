@@ -14,8 +14,8 @@ import { formatChatTime } from "./chatTime";
 import { SessionArtifacts } from "./SessionArtifacts";
 import { adminInstancePath, navigateToAppPath } from "../../app/appRoute";
 
-export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialSessionId, onOpenConversation, afterClose }: {
-  instanceId: string; open: boolean; wide: boolean; onClose: () => void; initialSessionId?: string; onOpenConversation?: (sessionId: string) => void; afterClose?: () => void;
+export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialSessionId, onOpenConversation, afterClose, onAddReference }: {
+  instanceId: string; open: boolean; wide: boolean; onClose: () => void; initialSessionId?: string; onOpenConversation?: (sessionId: string) => void; afterClose?: () => void; onAddReference?: (sessionId:string,label:string)=>void;
 }) {
   const { token } = theme.useToken();
   const page = useCursorPages(instanceId, open && !initialSessionId, listBackgroundSessions);
@@ -164,6 +164,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
           <Typography.Text type="secondary">{runOriginLabel(active.origin.kind)}</Typography.Text>
           {active.completionDelivery ? <CompletionDeliveryStatus delivery={active.completionDelivery} onInspect={id => void inspectHandlingRun(id)} /> : null}
         </Flex>
+        {onAddReference ? <Button disabled={active.session.archived || active.session.lifecycleStatus === "Deleted"} onClick={() => { onAddReference(active.session.sessionId, active.originalTitle ?? "Background task"); onClose(); }}>Add to chat</Button> : null}
         <Button type="primary" icon={<MessageOutlined aria-hidden />} loading={busy} disabled={busy || !active.canContinueInChat} onClick={() => void openChat(active)}>{active.surfaces.includes("ChatList") ? "Open chat" : "Continue in chat"}</Button>
         {!active.canContinueInChat ? <Typography.Text type="secondary">This Session or its Agent Instance is unavailable for continuation. Its run history remains available here.</Typography.Text> : null}
         {active.surfaces.includes("ChatList") ? <Typography.Text type="secondary">Continued in chat</Typography.Text> : null}
@@ -188,7 +189,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
         <ul ref={list} className="background-work-list" aria-label="Background Sessions">
           {page.items.map(item => <li className="background-work-item" key={item.session.sessionId} data-background-session-id={item.session.sessionId}>
             <Flex vertical gap={token.paddingXS}>
-              <Flex wrap align="center" justify="space-between" gap={token.paddingXS}>
+              <Flex wrap align="center" gap={token.paddingXS}>
                 <Typography.Title level={5} className="background-work-item-title">{item.originalTitle ?? "Background task"}</Typography.Title>
                 {item.initialRun ? <AgentRunStatus run={item.initialRun} /> : null}
               </Flex>

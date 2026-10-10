@@ -68,7 +68,9 @@ describe("ResourceImportPanel", () => {
 
     expect(await screen.findByLabelText("Imported resource path 1")).toHaveValue("policy.md");
     expect(screen.getByLabelText("Imported resource path 2")).toHaveValue("notes.txt");
-    expect(screen.getAllByText("Choose a kind.")).toHaveLength(2);
+    expect(screen.queryByText("Choose a kind.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Imported resource path 1")).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByRole("button", { name: "Bind imported resources" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Imported resource path 1"), {
       target: { value: "knowledge/policy.md" }
     });
@@ -98,6 +100,43 @@ describe("ResourceImportPanel", () => {
     });
     expect(uploadAdminDraftResourceContent).toHaveBeenCalledTimes(2);
     expect(onBound).toHaveBeenCalled();
+  });
+
+  it("keeps new selections neutral and validates only the field that has been left", async () => {
+    renderPanel();
+    chooseFiles([new File(["notes"], "notes.txt", { type: "text/plain" })]);
+    const path = await screen.findByLabelText("Imported resource path 1");
+    const kind = screen.getByLabelText("Imported resource kind 1");
+    expect(path).toHaveAttribute("aria-invalid", "false");
+    expect(kind).toHaveAttribute("aria-invalid", "false");
+    expect(screen.queryByText("Choose a kind.")).not.toBeInTheDocument();
+    fireEvent.focus(kind);
+    fireEvent.blur(kind);
+    expect(await screen.findByText("Choose a kind.")).toBeInTheDocument();
+    expect(kind).toHaveAttribute("aria-invalid", "true");
+    expect(path).toHaveAttribute("aria-invalid", "false");
+    fireEvent.change(path, { target: { value: "../notes.txt" } });
+    expect(screen.queryByText("Path must not contain traversal segments.")).not.toBeInTheDocument();
+    fireEvent.blur(path);
+    expect(await screen.findByText("Path must not contain traversal segments.")).toBeInTheDocument();
+    expect(path).toHaveAttribute("aria-invalid", "true");
+    fireEvent.change(path, { target: { value: "knowledge/notes.txt" } });
+    expect(path).toHaveAttribute("aria-invalid", "false");
+    expect(kind).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByRole("button", { name: "Bind imported resources" })).toBeEnabled();
+  });
+
+  it("shows oversized file status without marking its valid path as erroneous", async () => {
+    renderPanel();
+    const file = new File(["large"], "large.log", { type: "text/plain" });
+    Object.defineProperty(file, "size", { value: 35_907_384 });
+    chooseFiles([file]);
+    const input = await screen.findByLabelText("Imported resource path 1");
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    const status = screen.getByText("File is larger than 8 MiB.");
+    expect(status).not.toHaveClass("ant-typography-danger");
+    expect(screen.getByText("34.2 MiB")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bind imported resources" })).toBeDisabled();
   });
 
   it("strips the selected folder root and infers kind from the top-level directory", async () => {

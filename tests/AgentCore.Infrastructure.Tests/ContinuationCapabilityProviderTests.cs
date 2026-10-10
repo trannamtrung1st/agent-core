@@ -92,7 +92,7 @@ public sealed class ContinuationCapabilityProviderTests
     }
 
     [Fact]
-    public async Task Malformed_or_replayed_arguments_stay_normalized_and_are_rejected()
+    public async Task Malformed_replayed_and_non_string_provider_arguments_are_rejected()
     {
         var body =
             "data: {\"choices\":[{\"delta\":{\"tool_calls\":[" +

@@ -1,6 +1,7 @@
 import { backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
+import { draftEditorSection, openDefinitionSettings } from "./admin-draft-editor-helpers";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
@@ -204,6 +205,7 @@ async function openNewDraftForm(page: import("@playwright/test").Page, definitio
   await page.getByRole("button", { name: "Create draft" }).click();
   await expect(page.getByRole("dialog", { name: "New definition" })).toBeHidden({ timeout: 15_000 });
   await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
+  await openDefinitionSettings(draftEditorSection(page), "Model defaults");
 }
 
 test("authoring options warning keeps a server diagnostic id", async ({ page }) => {
@@ -221,8 +223,8 @@ test("authoring options warning keeps a server diagnostic id", async ({ page }) 
     });
   });
   await openNewDraftForm(page, definitionId);
-  const form = page.locator("section[aria-label='Model and providers']");
-  await expect(form.getByText("Authoring options could not be loaded.")).toBeVisible({ timeout: 15_000 });
+  const form = draftEditorSection(page);
+  await expect(form.getByText(/^Authoring options could not be loaded\./)).toBeVisible({ timeout: 15_000 });
   await form.getByRole("button", { name: "Error details" }).click();
   await expect(page.getByTestId("diagnostic-id")).toHaveText("019944af-0008-7000-8000-0000000000e2");
 });
@@ -241,7 +243,7 @@ test("authoring options warning hides details when the response has no id", asyn
     });
   });
   await openNewDraftForm(page, definitionId);
-  const form = page.locator("section[aria-label='Model and providers']");
-  await expect(form.getByText("Authoring options could not be loaded.")).toBeVisible({ timeout: 15_000 });
+  const form = draftEditorSection(page);
+  await expect(form.getByText(/^Authoring options could not be loaded\./)).toBeVisible({ timeout: 15_000 });
   await expect(form.getByRole("button", { name: "Error details" })).toHaveCount(0);
 });

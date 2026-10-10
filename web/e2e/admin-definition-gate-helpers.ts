@@ -1,10 +1,10 @@
 import { expect, type Locator, type Page, type Request } from "@playwright/test";
 
 // Fetch cancellation is part of the draft evidence lifecycle. This recognizes
-// only native aborts of evaluation reads; HTTP errors still surface normally.
+// only native aborts of draft evidence/resource reads; HTTP errors still surface normally.
 export function isCanceledDraftEvidenceRead(request: Request) {
   return request.method() === "GET"
-    && /\/definition-drafts\/[^/]+\/evaluation-(scenarios|results)$/.test(request.url())
+    && /\/definition-drafts\/[^/]+\/(evaluation-(scenarios|results)|resources)$/.test(request.url())
     && request.failure()?.errorText === "net::ERR_ABORTED";
 }
 
@@ -94,7 +94,7 @@ export async function completeDefinitionDraftPublishGate(
 }
 
 export async function publishDraftFromInstructions(page: Page, draftEditor: Locator) {
-  await draftEditor.getByRole("tab", { name: "Definition" }).click();
+  await draftEditor.getByRole("tab", { name: "Identity & version" }).click();
   await draftEditor.getByRole("button", { name: "Publish…" }).click();
   const modal = page.getByRole("dialog");
   await expect(modal).toBeVisible();

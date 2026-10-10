@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { automationTriggerPermissionSummary } from "./AutomationTriggerPermissions";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -366,61 +367,62 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
           key: "memory",
           label: "Memory",
           children: (
-            <Flex vertical gap={token.paddingSM} aria-label="Learned memory administration">
-              <Descriptions {...detailLayout} size="small" column={1} bordered>
-                <Descriptions.Item label="Effective memory policy">{memoryPolicySummary(config)}</Descriptions.Item>
-              </Descriptions>
-              {memoryScope === "Session" ? (
-                <Typography.Text type="secondary">
-                  Session scope uses the selected session&apos;s pinned definition policy. The summary above reflects the
-                  instance&apos;s current version only.
-                </Typography.Text>
-              ) : null}
-              {!scopePermitted ? (
-                <Typography.Text type="warning">
-                  Effective memory policy does not allow administration for {memoryScope} scope.
-                </Typography.Text>
-              ) : null}
-              <Flex gap={token.paddingXS} wrap="wrap" align={memoryScope === "Session" ? "start" : "flex-end"}>
-                <Flex vertical gap={token.paddingXS} className="admin-memory-scope">
-                  <Typography.Text>Memory scope</Typography.Text>
-                  <Select
-                    aria-label="Memory scope"
-                    value={memoryScope}
-                    disabled={selectionLocked}
-                    onChange={(value) => {
-                      setMemoryScope(value);
-                      bumpMemoryLoadGeneration();
-                    }}
-                    options={MEMORY_SCOPES.map((value) => ({ value, label: value }))}
-                  />
-                </Flex>
+            <AgentConfigurationPanel title="Learned memory" label="Learned memory administration"
+              description="Inspect and manage learned items by scope." bodyGap="section">
+                <Descriptions {...detailLayout} size="small" column={1} bordered>
+                  <Descriptions.Item label="Effective memory policy">{memoryPolicySummary(config)}</Descriptions.Item>
+                </Descriptions>
                 {memoryScope === "Session" ? (
-                  <div className="admin-memory-source">
-                    <Typography.Text>Source conversation</Typography.Text>
-                    <AdminSessionPicker instanceId={config.instanceId} value={sessionId} disabled={selectionLocked}
-                      onChange={value => { setSessionId(value); bumpMemoryLoadGeneration(); }} />
-                  </div>
-                ) : memoryActions}
-              </Flex>
-              {memoryScope === "Session" ? memoryActions : null}
-              {memoryError ? (
-                <AdminErrorNotice message={memoryError.message} diagnosticId={memoryError.diagnosticId} tone="danger" />
-              ) : null}
-              {memoryItems ? (
-                <Table
-                  className="admin-collection-table"
-                  scroll={{ x: 1100 }}
-                  size="small"
-                  rowKey="memoryId"
-                  dataSource={memoryItems}
-                  columns={memoryColumns}
-                  expandable={{ expandedRowRender: row => <MemoryLineageDetails key={`${memoryScope}:${sessionId}:${row.memoryId}`} instanceId={config.instanceId} row={row} scope={memoryScope} sessionId={memoryScope === "Session" ? sessionId.trim() : undefined} /> }}
-                  pagination={adminCollectionPagination}
-                  locale={{ emptyText: "No active learned-memory items in this scope." }}
-                />
-              ) : null}
-            </Flex>
+                  <Typography.Text type="secondary">
+                    Session scope uses the selected session&apos;s pinned definition policy. The summary above reflects the
+                    instance&apos;s current version only.
+                  </Typography.Text>
+                ) : null}
+                {!scopePermitted ? (
+                  <Typography.Text type="warning">
+                    Effective memory policy does not allow administration for {memoryScope} scope.
+                  </Typography.Text>
+                ) : null}
+                <Flex gap={token.paddingXS} wrap="wrap" align={memoryScope === "Session" ? "start" : "flex-end"}>
+                  <Flex vertical gap={token.paddingXS} className="admin-memory-scope">
+                    <Typography.Text>Memory scope</Typography.Text>
+                    <Select
+                      aria-label="Memory scope"
+                      value={memoryScope}
+                      disabled={selectionLocked}
+                      onChange={(value) => {
+                        setMemoryScope(value);
+                        bumpMemoryLoadGeneration();
+                      }}
+                      options={MEMORY_SCOPES.map((value) => ({ value, label: value }))}
+                    />
+                  </Flex>
+                  {memoryScope === "Session" ? (
+                    <div className="admin-memory-source">
+                      <Typography.Text>Source conversation</Typography.Text>
+                      <AdminSessionPicker instanceId={config.instanceId} value={sessionId} disabled={selectionLocked}
+                        onChange={value => { setSessionId(value); bumpMemoryLoadGeneration(); }} />
+                    </div>
+                  ) : memoryActions}
+                </Flex>
+                {memoryScope === "Session" ? memoryActions : null}
+                {memoryError ? (
+                  <AdminErrorNotice message={memoryError.message} diagnosticId={memoryError.diagnosticId} tone="danger" />
+                ) : null}
+                {memoryItems ? (
+                  <Table
+                    className="admin-collection-table"
+                    scroll={{ x: 1100 }}
+                    size="small"
+                    rowKey="memoryId"
+                    dataSource={memoryItems}
+                    columns={memoryColumns}
+                    expandable={{ expandedRowRender: row => <MemoryLineageDetails key={`${memoryScope}:${sessionId}:${row.memoryId}`} instanceId={config.instanceId} row={row} scope={memoryScope} sessionId={memoryScope === "Session" ? sessionId.trim() : undefined} /> }}
+                    pagination={adminCollectionPagination}
+                    locale={{ emptyText: "No active learned-memory items in this scope." }}
+                  />
+                ) : null}
+              </AgentConfigurationPanel>
           )
         },
         {
@@ -428,18 +430,13 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
           label: "Automation",
           children: (
             <Flex vertical gap={token.padding} aria-label="Automation administration">
-              <section className="admin-definition-panel" aria-label="Execution defaults">
-                <div className="admin-definition-panel-heading">
-                  <Typography.Title level={4}>Execution defaults</Typography.Title>
-                  <Typography.Text type="secondary">Model settings for scheduled and reactive work.</Typography.Text>
-                </div>
-                <Flex vertical gap={token.padding} className="admin-definition-panel-body">
+              <AgentConfigurationPanel title="Execution defaults" label="Execution defaults"
+                description="Model settings for scheduled and reactive work." bodyGap="section">
                   <Descriptions {...detailLayout} size="small" column={1} bordered>
                     <Descriptions.Item label="Effective trigger policy">{triggerPolicySummary(config)}</Descriptions.Item>
                   </Descriptions>
                   <UnattendedModelForm config={config} models={models} />
-                </Flex>
-              </section>
+                </AgentConfigurationPanel>
 
             </Flex>
           )

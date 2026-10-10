@@ -1,5 +1,5 @@
 import { useExecutionBudgetLimits } from "./executionBudgetLimits";
-import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Alert, Button, Collapse, Flex, Form, InputNumber, Select, Spin, Typography, theme } from 'antd';
 import { getExecutionBudgets, setExecutionBudgets, type ExecutionBudgetPolicy, type ExecutionBudgetProfile, type ExecutionBudgetLimits } from '../../services/adminApi';
 import type { DefinitionCandidate } from './definitionCandidate';
@@ -10,6 +10,16 @@ const fields = ['maxSteps', 'durationSeconds', 'perToolSeconds'] as const;
 const fieldLabels = { maxSteps: 'Steps', durationSeconds: 'Duration (seconds)', perToolSeconds: 'Per-tool timeout (seconds)' };
 const minimums = { maxSteps: 8, durationSeconds: 60, perToolSeconds: 1 };
 const emptyPolicy: ExecutionBudgetPolicy = {};
+function ExecutionBudgetPanel({ children, needsAttention }: { children: ReactNode; needsAttention?: boolean }) {
+  const { token } = theme.useToken();
+  return <section aria-label="Execution budgets"><Collapse defaultActiveKey={['budgets']} items={[{
+    key: 'budgets', label: <Flex wrap align="center" gap={token.paddingXS}>
+      <span>Execution budgets</span>
+      {needsAttention && <Typography.Text type="danger" aria-hidden>Needs attention</Typography.Text>}
+    </Flex>,
+    children,
+  }]} /></section>;
+}
 function preset(kind: typeof classes[number], value: number): ExecutionBudgetProfile {
   const [steps, seconds] = kind === 'interactiveBrowser' ? [48, 300] : kind === 'unattendedBoundBrowser' ? [32, 240] : [24, 180];
   return { maxSteps: steps * (value + 1), durationSeconds: seconds * (value + 1), perToolSeconds: 30, preset: value };
@@ -27,7 +37,7 @@ const BudgetFields = memo(function BudgetFields({ value, inherited, instance, di
 }) {
   const { token } = theme.useToken();
   const id = useId();
-  return <Flex vertical gap={token.padding}>
+  return <Flex vertical gap={token.padding} className="admin-settings-form">
     <Typography.Text type="secondary">Host limits: {limits.maxSteps} steps · {limits.durationSeconds / 60} minutes · {limits.perToolSeconds} seconds per tool. Cleanup and final reply share the total budget. Changes apply to the next run.</Typography.Text>
     {classes.map(kind => { const own = value[kind]; const effective = own ?? inherited?.[kind] ?? preset(kind, 0);
       const update = (p: ExecutionBudgetProfile | null) => onChange({ ...value, [kind]: p });
@@ -73,12 +83,12 @@ export function DefinitionExecutionBudgets({ candidate, busy, readOnly, onChange
     const current = latest.current;
     current.onChange({ ...current.candidate, executionBudgets });
   }, []);
-  return <section className="admin-draft-form-section" aria-label="Execution budgets"><Typography.Title level={5}>Execution budgets</Typography.Title>
+  return <ExecutionBudgetPanel needsAttention={!!error || !!limits && !validExecutionBudgets((candidate.executionBudgets as ExecutionBudgetPolicy | null) ?? emptyPolicy, limits)}>
     {error && <Alert showIcon type="error" title={error} action={<Button onClick={reload}>Retry limits</Button>} />}
     {!limits && !error && <Spin aria-label="Loading execution limits" />}
     {limits && <BudgetFields limits={limits} value={(candidate.executionBudgets as ExecutionBudgetPolicy | null) ?? emptyPolicy} disabled={busy || readOnly}
       onChange={updateBudget} /> }
-  </section>;
+  </ExecutionBudgetPanel>;
 }
 export function InstanceExecutionBudgets({ instanceId, archived, onUpdated }: { instanceId: string; archived: boolean; onUpdated: () => void }) {
   const { token } = theme.useToken();
@@ -107,16 +117,15 @@ export function InstanceExecutionBudgets({ instanceId, archived, onUpdated }: { 
     catch (e) { if (generation === epoch.current) setError(e instanceof Error ? e.message : 'The Instance changed. Reload and review before saving.'); }
     finally { if (generation === epoch.current) setBusy(false); }
   }
-  return <Flex vertical gap={token.padding}>
-    <Typography.Title level={5} style={{ margin: 0 }}>Execution budgets</Typography.Title>
+  return <ExecutionBudgetPanel needsAttention={!!error || !!limitsError || !!limits && !validExecutionBudgets(value, limits)}><Flex vertical gap={token.padding}>
     {error && <Alert showIcon type="error" title={error} action={<Button onClick={() => { preserveDraft.current = !!dirty; setAttempt(v => v + 1); }}>Reload</Button>} />}
     {limitsError && <Alert showIcon type="error" title={limitsError} action={<Button onClick={reloadLimits}>Retry limits</Button>} />}
     {!limits && !limitsError && <Spin aria-label="Loading execution limits" />}
     {!loaded ? !error && <Spin aria-label="Loading execution budgets" /> : <>
       {limits && <BudgetFields limits={limits} value={value} inherited={loaded.definitionDefaults ?? emptyPolicy} instance disabled={busy || archived} onChange={setValue} /> }
       {dirty && <Typography.Text type="secondary">Unsaved budget changes</Typography.Text>}
-      <Flex gap={token.paddingSM} wrap><Button type="primary" loading={busy} disabled={!limits || !dirty || archived || !validExecutionBudgets(value, limits)} onClick={() => void save()}>Save execution budgets</Button>
-        <Button disabled={!dirty || busy} onClick={() => setValue(loaded.executionBudgets ?? {})}>Discard changes</Button></Flex>
+      <Flex gap={token.paddingSM} wrap><Button type="primary" loading={busy} disabled={!limits || !dirty || archived || !validExecutionBudgets(value, limits)} aria-label="Save execution budgets" onClick={() => void save()}>Save</Button>
+        <Button disabled={!dirty || busy} aria-label="Discard execution budget changes" onClick={() => setValue(loaded.executionBudgets ?? {})}>Discard</Button></Flex>
     </>}
-  </Flex>;
+  </Flex></ExecutionBudgetPanel>;
 }

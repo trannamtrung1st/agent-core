@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Empty, Flex, Select, Spin, Table, Typography } from "antd";
+import { Alert, Button, Empty, Flex, Select, Spin, Table, Typography, theme } from "antd";
 import { adminInstancePath, navigateToAppPath } from "../../app/appRoute";
 import { instanceContinuityRequest, listAdminInstances, type AdminInstanceInventoryItem, type Automation, type AutomationReview } from "../../services/adminApi";
 
 /** Owner-scoped activity is loaded separately from global, immutable definitions. */
 export function BuiltinEventSubscribers({ eventKey, instanceId }: { eventKey: string; instanceId?: string }) {
+  const { token } = theme.useToken();
   const [instances, setInstances] = useState<AdminInstanceInventoryItem[]>([]);
   const [selected, setSelected] = useState<string>();
   const ownerInstanceId = instanceId ?? selected;
@@ -27,14 +28,14 @@ export function BuiltinEventSubscribers({ eventKey, instanceId }: { eventKey: st
     }).catch(() => { if (active) setError(true); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [ownerInstanceId, eventKey, retry]);
-  return <Flex vertical gap="small">
+  return <Flex vertical gap={token.paddingXS}>
     <Typography.Title level={5} style={{ margin: 0 }}>Subscribed Automations</Typography.Title>
     {!instanceId ? <Select aria-label="Subscriber Agent Instance" placeholder="Choose an owned Instance" value={selected} loading={inventoryLoading} showSearch optionFilterProp="label" options={instances.map(i => ({ value: i.instanceId, label: `${i.personaName} · ${i.instanceId}` }))} onChange={setSelected} /> : null}
     {inventoryError ? <Alert type="error" showIcon title="Owned Instances could not be loaded. Definition details remain available." action={<Button onClick={() => setRetry(v => v + 1)}>Retry Instances</Button>} /> : null}
     {error ? <Alert type="error" showIcon title="Subscribers could not be loaded. Definition details remain available." action={<Button onClick={() => setRetry(v => v + 1)}>Retry subscribers</Button>} /> : null}
-    {loading ? <Spin aria-label="Loading subscribers" /> : ownerInstanceId && !error ? rows.length ? <Table size="small" rowKey="automationId" pagination={false} dataSource={rows} columns={[
-      { title: "Automation", render: (_, a: Automation) => <Button type="link" onClick={() => navigateToAppPath(`${adminInstancePath(ownerInstanceId, "automation", "automations")}?automation=${a.automationId}`)}>{a.name}</Button> },
-      { title: "State", render: (_, a: Automation) => a.enabled && a.triggers.some(t => t.enabled && t.source?.kind === "builtin" && t.source.key === eventKey) ? "Enabled · subject to current policy" : "Disabled" }
+    {loading ? <Spin aria-label="Loading subscribers" /> : ownerInstanceId && !error ? rows.length ? <Table aria-label="Built-in Event subscribers" className="admin-collection-table" size="small" scroll={{ x: 500 }} rowKey="automationId" pagination={false} dataSource={rows} columns={[
+      { title: "Automation", width: 280, ellipsis: true, render: (_, a: Automation) => <Button type="link" size="small" className="admin-collection-name" title={a.name} onClick={() => navigateToAppPath(`${adminInstancePath(ownerInstanceId, "automation", "automations")}?automation=${a.automationId}`)}>{a.name}</Button> },
+      { title: "State", width: 220, render: (_, a: Automation) => a.enabled && a.triggers.some(t => t.enabled && t.source?.kind === "builtin" && t.source.key === eventKey) ? "Enabled · subject to current policy" : "Disabled" }
     ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No subscriptions on this Instance." /> : <Typography.Text type="secondary">Choose an Instance to inspect its subscriptions.</Typography.Text>}
   </Flex>;
 }

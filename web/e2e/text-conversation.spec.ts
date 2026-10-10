@@ -444,12 +444,13 @@ for (const modifier of ["Meta", "Control"]) {
     await expect(page.locator(".chat-message-user")).toHaveCount(1);
     await message.fill("First line");
     await message.press("Shift+Enter");
-    await expect(message).toHaveValue("First line\n");
+    await message.pressSequentially("Second line");
+    await expect.poll(()=>message.innerText()).toBe("First line\nSecond line");
     await message.fill("Immediate steer hold the line");
     await message.press(`${modifier}+Enter`);
     await expect(page.locator(".chat-message-assistant").first()).toContainText("Interrupted", { timeout: 5_000 });
     await expect(page.locator(".chat-message-user").filter({ hasText: "Immediate steer hold the line" })).toBeVisible();
-    await expect(message).toHaveValue("");
+    await expect(message).toHaveText("");
     await expect(queuedMessages(page).locator(".pending-send-queue-text")).toHaveText(["Queued head", "Queued tail"]);
     await expect(page.locator(".chat-message-user")).toHaveCount(2);
     await page.getByRole("button", { name: "Stop", exact: true }).click();

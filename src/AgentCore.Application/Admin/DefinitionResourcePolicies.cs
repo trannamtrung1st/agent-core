@@ -26,6 +26,35 @@ public static class DefinitionResourcePolicies
         "text/plain",
         "text/markdown",
         "application/json",
+        "application/x-ndjson",
+        "text/csv",
+        "text/tab-separated-values",
+        "application/yaml",
+        "application/toml",
+        "application/xml",
+        "text/xml",
+        "application/rtf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.oasis.opendocument.text",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.oasis.opendocument.presentation",
+        "image/gif",
+        "image/bmp",
+        "image/tiff",
+        "image/avif",
+        "audio/mpeg",
+        "audio/wav",
+        "audio/ogg",
+        "audio/flac",
+        "audio/mp4",
+        "video/mp4",
+        "video/webm",
+        "video/quicktime",
         "image/png",
         "image/jpeg",
         "image/webp",
@@ -36,7 +65,14 @@ public static class DefinitionResourcePolicies
     {
         "text/plain",
         "text/markdown",
-        "application/json"
+        "text/csv",
+        "text/tab-separated-values",
+        "application/json",
+        "application/x-ndjson",
+        "application/yaml",
+        "application/toml",
+        "application/xml",
+        "text/xml"
     };
 
     public static bool IsTextualKnowledgeMediaType(string mediaType) =>
@@ -81,12 +117,26 @@ public static class DefinitionResourcePolicies
 
         var normalized = string.Join('/', segments);
         RejectForbiddenTargets(normalized);
+        ValidateFileName(normalized);
         if (normalized.Length > 240)
         {
             throw AgentCoreErrors.Validation("logicalPath is too long.");
         }
 
         return normalized;
+    }
+
+    // Uploads are inert bytes; this is a format policy, not malware detection.
+    public static void ValidateFileName(string fileName)
+    {
+        var extension = Path.GetExtension(fileName.Trim()).ToLowerInvariant();
+        if (extension is ".exe" or ".dll" or ".com" or ".scr" or ".msi" or ".msp"
+            or ".bat" or ".cmd" or ".ps1" or ".sh" or ".bash" or ".zsh"
+            or ".js" or ".mjs" or ".cjs" or ".vbs" or ".vbe" or ".wsf" or ".wsh"
+            or ".jar" or ".app" or ".dmg" or ".pkg" or ".deb" or ".rpm"
+            or ".html" or ".htm" or ".xhtml" or ".svg" or ".hta" or ".lnk" or ".url"
+            or ".docm" or ".dotm" or ".xlsm" or ".xltm" or ".xlam" or ".pptm" or ".potm" or ".ppam")
+            throw AgentCoreErrors.Validation("Executable and active-content resource files are not supported.");
     }
 
     public static string NormalizeMediaType(string mediaType)
@@ -104,7 +154,7 @@ public static class DefinitionResourcePolicies
 
         if (!AllowedMediaTypes.Contains(normalized))
         {
-            throw AgentCoreErrors.Validation("mediaType is not supported for definition resources.");
+            throw AgentCoreErrors.Validation("mediaType is not supported for resources.");
         }
 
         return normalized;
@@ -214,8 +264,7 @@ public static class DefinitionResourcePolicies
 
     public static void RejectSecretsInTextualContent(string mediaType, ReadOnlySpan<byte> content)
     {
-        if (!mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase))
+        if (!IsTextualKnowledgeMediaType(mediaType))
         {
             return;
         }

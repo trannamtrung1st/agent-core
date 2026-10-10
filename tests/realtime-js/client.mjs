@@ -201,6 +201,44 @@ async function ackClientSpeech(connection, sessionId, sequence, attachmentId, re
 
 async function run() {
   switch (scenario) {
+    case "structured-composer": {
+      const session = await createSession();
+      const headers = {"X-AgentCore-Owner-Capability":ownerToken,"content-type":"application/json"};
+      const instanceId = session.agentInstanceId;
+      const created = await fetch(`${base}/api/v2/admin/agent-instances/${instanceId}/skills`,{method:"POST",headers,body:JSON.stringify({id:"composer.review",name:"Review",description:"Review task",procedure:"Review the user task carefully.",projection:"OnDemand",enabled:true,requiredCapabilities:[]})});
+      if (!created.ok) throw new Error(`Skill setup failed: ${created.status} ${await created.text()}`);
+      const connection = await connect(); const attached = await attachSession(connection,session.sessionId); if(!attached.accepted) throw new Error(JSON.stringify(attached));
+      await waitFor(evt=>evt.type==="session.ready"); const ready = events.find(evt=>evt.type==="session.ready");
+      const parts = [{kind:"invocation",invocationKind:"skill",skillKey:"instance:composer.review"},{kind:"text",text:" inspect "},{kind:"reference",reference:{kind:"session",sessionId:session.sessionId}}];
+      const text = "/instance:composer.review inspect @session:"+session.sessionId;
+      const eventId = uuid();
+      const send = await connection.invoke("SendText",command(session.sessionId,1,"user.text",{text,parts,behavior:"queue"},{attachmentId:ready.attachmentId,eventId}));
+      if(!send.accepted) throw new Error(JSON.stringify(send));
+      await waitFor(evt=>evt.type==="agent.response.completed");
+      const history = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?limit=20`,{headers}).then(r=>r.json());
+      const user = history.items.find(e=>e.sourceEventId===eventId);
+      if(user?.parts?.length!==3 || user.parts[0].label!=="Review") throw new Error(`Missing typed history: ${JSON.stringify(history)}`);
+      const page = await fetch(`${base}/api/v2/sessions/${session.sessionId}/agent-runs`,{headers}).then(r=>r.json());
+      const input = page.items.find(r=>r.activationKind==="UserTurn")?.composerInput;
+      if(input?.explicitSkillKeys?.[0]!=="instance:composer.review" || input.references?.[0]?.status!=="valid") throw new Error(`Missing pin: ${JSON.stringify(page)}`);
+      const retry = await connection.invoke("SendText",command(session.sessionId,2,"user.text",{text,parts,behavior:"queue"},{attachmentId:ready.attachmentId,eventId}));
+      if(!retry.accepted) throw new Error(`Exact retry rejected: ${JSON.stringify(retry)}`);
+      const equivalentParts = [parts[0], {kind:"text",text:" inspect"}, {kind:"text",text:" "}, parts[2]];
+      const equivalent = await connection.invoke("SendText",command(session.sessionId,3,"user.text",{text,parts:equivalentParts,behavior:"queue"},{attachmentId:ready.attachmentId,eventId}));
+      if(!equivalent.accepted) throw new Error(`Normalized retry rejected: ${JSON.stringify(equivalent)}`);
+      const changed = await connection.invoke("SendText",command(session.sessionId,4,"user.text",{text,parts:[{...parts[0],skillKey:"definition:changed"},...parts.slice(1)],behavior:"queue"},{attachmentId:ready.attachmentId,eventId}));
+      if(changed.accepted) throw new Error("Changed-parts retry was accepted");
+      const forged = await connection.invoke("SendText",command(session.sessionId,5,"user.text",{text:"inspect",parts:[{kind:"text",text:"inspect",path:"/etc/passwd"}]},{attachmentId:ready.attachmentId}));
+      if(forged.accepted || forged.error?.code!=="ValidationError") throw new Error(`Unknown field was accepted: ${JSON.stringify(forged)}`);
+      const mismatch = await connection.invoke("SendText",command(session.sessionId,6,"user.text",{text:"different",parts:[{kind:"text",text:"inspect"}]},{attachmentId:ready.attachmentId}));
+      if(mismatch.accepted) throw new Error("Mismatched fallback accepted");
+      const onlySkill = await connection.invoke("SendText",command(session.sessionId,7,"user.text",{text:"/instance:composer.review",parts:[parts[0]]},{attachmentId:ready.attachmentId}));
+      if(onlySkill.accepted) throw new Error("Skill-only turn accepted");
+      const revisionParts = [{kind:"reference",reference:{kind:"skill",agentInstanceId:instanceId,skillKey:"instance:composer.review",selectedRevision:1}}];
+      const revision = await connection.invoke("SendText",command(session.sessionId,8,"user.text",{text:`@skill:${instanceId}/instance:composer.review`,parts:revisionParts},{attachmentId:ready.attachmentId}));
+      if(revision.accepted || revision.error?.code!=="ValidationError") throw new Error(`Skill revision was accepted: ${JSON.stringify(revision)}`);
+      await connection.stop(); break;
+    }
     case "text-roundtrip": {
       const session = await createSession();
       const connection = await connect();

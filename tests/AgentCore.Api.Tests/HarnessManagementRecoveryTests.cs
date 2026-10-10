@@ -15,7 +15,7 @@ namespace AgentCore.Api.Tests;
 public sealed class HarnessManagementRecoveryTests
 {
     [Fact]
-    public async Task Chat_adoption_failure_preserves_active_version_and_fresh_change_survives_sqlite_reopen()
+    public async Task Chat_local_write_failure_preserves_owner_and_fresh_change_survives_sqlite_reopen()
     {
         var root = Path.Combine(Path.GetTempPath(), "p97-chat-recovery-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -32,12 +32,12 @@ public sealed class HarnessManagementRecoveryTests
                 var contexts = services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>();
                 await using (var db = await contexts.CreateDbContextAsync())
                     await db.Database.ExecuteSqlRawAsync("""
-                        CREATE TRIGGER P97ChatFail BEFORE UPDATE OF ActiveVersion ON AgentInstances
-                        WHEN NEW.ActiveVersion != OLD.ActiveVersion
+                        CREATE TRIGGER P97ChatFail BEFORE UPDATE OF Revision ON AgentInstances
+                        WHEN NEW.Revision != OLD.Revision
                         BEGIN SELECT RAISE(ABORT, 'private injected fault'); END;
                         """);
                 var pinned = (await services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
-                var args = System.Text.Json.JsonSerializer.Serialize(new { expectedVersion = 21, policyRevision = instance.HarnessManagement!.PolicyRevision,
+                var args = System.Text.Json.JsonSerializer.Serialize(new { expectedInstanceRevision = instance.Revision, expectedVersion = 21, policyRevision = instance.HarnessManagement!.PolicyRevision,
                     id = "chat-recovered", content = "Durable order policy", source = "conversation:user", expected = "Retain policy", observed = "Owner supplied role knowledge" });
                 var call = new AgentCore.Application.Ports.ModelToolCall("chat", "harness.knowledge.upsert", args);
                 var executor = services.GetRequiredService<AgentCore.Application.Tools.SessionToolExecutor>();
@@ -47,7 +47,8 @@ public sealed class HarnessManagementRecoveryTests
                 Assert.DoesNotContain("\"saved\":true", failed.Text);
                 var review = await service.ReviewAsync(id);
                 Assert.Equal(21, review.ActiveVersion);
-                Assert.Equal(HarnessPreparationStatus.Failed, review.State.Preparation!.Status);
+                Assert.Null(review.State.Preparation);
+                Assert.Null(review.State.InstanceChanges);
                 await using (var db = await contexts.CreateDbContextAsync()) await db.Database.ExecuteSqlRawAsync("DROP TRIGGER P97ChatFail;");
                 var recovered = await executor.ExecuteAsync(pinned, Guid.NewGuid(), call, 100000, admission: admission);
                 Assert.Contains("\"saved\":true", recovered.Text);
@@ -56,9 +57,12 @@ public sealed class HarnessManagementRecoveryTests
             await using var reopened = new HarnessSqliteFactory(root);
             var durable = await reopened.Services.GetRequiredService<HarnessManagementService>().ReviewAsync(id);
             Assert.Equal(published, durable.ActiveVersion);
-            Assert.Equal(HarnessPreparationStatus.Published, durable.State.Preparation!.Status);
+            Assert.Null(durable.State.Preparation);
+            Assert.Single(durable.State.InstanceChanges!);
+            Assert.Equal(21, published);
             var definition = (await reopened.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", published))!;
-            Assert.Contains(definition.Environment!.KnowledgeList, k => k.Identity == "chat-recovered");
+            Assert.DoesNotContain(definition.Environment!.KnowledgeList, k => k.Identity == "chat-recovered");
+            Assert.Contains((await reopened.Services.GetRequiredService<AgentInstanceResourceService>().ListAsync(id)).Resources, r => r.Origin == "Instance" && r.LogicalPath == "knowledge/chat-recovered");
         }
         finally { Directory.Delete(root, recursive: true); }
     }

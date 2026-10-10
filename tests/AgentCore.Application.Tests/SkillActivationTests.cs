@@ -43,6 +43,10 @@ public sealed class SkillActivationTests
         var allowed = await service.WriteAsync(owner.InstanceId, "create", input: new("Local", "Local", "DEFERRED", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent, context: original);
         Assert.Contains(await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current), s => s.Key == allowed.Key && s.Projection == SkillProjection.OnDemand);
         Assert.Equal("OLD", Assert.Single(pin).Procedure);
+        var fresh = await new EffectiveSkillCatalogResolver(store).ResolveAsync(owner.InstanceId, current);
+        var explicitBudgetError = Assert.Throws<AgentCoreException>(() => AgentCore.Application.Composer.ComposerReferenceService.ActiveSkills(current, fresh, [allowed.Key]));
+        Assert.Contains("8000-character", explicitBudgetError.Message);
+        Assert.Equal(8000, fresh.Where(s => s.Projection == SkillProjection.Always).Sum(s => s.Procedure.Length));
     }
 
     [Theory]
@@ -144,7 +148,7 @@ public sealed class SkillActivationTests
         var defs = new Definitions(d); var instances = new AgentInstanceService(store, defs, ids, clock); var owner = await instances.CreateAsync(d.Id);
         var service = new AgentInstanceSkillService(store, defs, ids, clock);
         await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "customize", "definition:bound", 1, actor: SkillAuthor.Agent).AsTask());
-        Assert.True(Assert.Single((await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates).Enabled);
+        Assert.Null(Assert.Single((await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates).EnabledOverride);
         Assert.Empty((await store.ReadSkillsAsync(owner.InstanceId)).InstanceSkills);
         await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "create", input: new("Bad", "Bad", "No grant", SkillProjection.Always, true, ["shell"]), actor: SkillAuthor.Agent).AsTask());
         await instances.SetLifecycleAsync(owner.InstanceId, AgentInstanceLifecycle.Archived, owner.Revision);

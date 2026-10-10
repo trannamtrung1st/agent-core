@@ -1,3 +1,4 @@
+import { waitForResponseSettled } from "./support/response-settled";
 import { backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { expect, test } from "@playwright/test";
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
@@ -28,11 +29,15 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 
+  await expect(page.locator(".chat-message-assistant")).toContainText("Hello from synthetic.");
+  await waitForResponseSettled(page);
   const work = page.getByRole("button", { name: "Background work", exact: true });
   await expect(work).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: /need attention/ })).toHaveCount(0);
   await mockBackgroundSessions(page, []);
+  const emptyList = page.waitForResponse(response => response.url().includes("/background-sessions?") && new URL(response.url()).searchParams.get("limit") === "20");
   await work.focus(); await page.keyboard.press('Enter');
+  expect((await emptyList).ok()).toBe(true);
   const drawer = page.getByRole('dialog', { name: 'Background work', exact: true });
   await expect(drawer.getByText('No background Sessions yet')).toBeVisible();
   await drawer.getByRole('button', { name: 'Close', exact: true }).focus();

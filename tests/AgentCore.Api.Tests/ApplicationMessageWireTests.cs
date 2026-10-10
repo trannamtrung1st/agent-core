@@ -122,7 +122,7 @@ public sealed class ApplicationMessageWireTests
     public void Client_text_payload_cannot_set_role_or_destination()
     {
         var names = typeof(UserTextPayload).GetProperties().Select(property => property.Name).Order().ToArray();
-        Assert.Equal(["AttachmentIds", "Behavior", "Text"], names);
+        Assert.Equal(["AttachmentIds", "Behavior", "Parts", "Text"], names);
 
         var payload = JsonSerializer.Deserialize<UserTextPayload>(
             """{"text":"hello","role":"applicationMessage","destination":"other-session","sessionId":"elsewhere"}""",

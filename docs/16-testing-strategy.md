@@ -456,6 +456,25 @@ See [operational recommendations verification](reports/core-events-operational-r
 
 `AdaptiveBrowserEvidenceTests` additionally exercises semantic timeout with masked image/coordinate recovery, independent privacy-inspection failure with no bytes, exact-origin Canvas/SVG opt-in with retained sensitive masking, invalid trust origins and unsuccessful settlement with unchanged pixels. Dense-page benchmarks capture 10,000 elements in static and continuously updating variants, three trials each, and measure real SQLite/blob artifact storage separately. These local samples guide optimization; they are not enterprise performance guarantees. `AdaptiveBrowserRuntimeTests` verifies unavailable-observation receipts, actual image/artifact delivery for vision/text-only models and host-disabled screenshot guidance. The [follow-up report](reports/browser-review-follow-up-verification.md) records local outcomes and live acceptance limits.
 
+## Scoped configuration acceptance matrix
+
+Verify InMemory/SQLite parity for sparse inheritance, explicit null/false/zero and clear/reset; historical boolean conversion (revision-1 initialization inherits, edited and ambiguous revisions preserve choices); origin-qualified resource CRUD/copy/dependencies/quotas/media/hash/secrets/archive/isolation; selected shared promotion with no unrelated adoption; atomic adoption/Automation revision conflicts; current authority and exact approvals. General settings must not replace the existing class budget owner.
+
+Exercise built-in file-backed knowledge inspect/download, stable identity, disable/reset/copy, owner isolation and trusted-identity self-management removal; assert admitted Run bytes remain readable while next admission omits disabled knowledge. Reject Instance EvalFixture authoring/import without changing owner revision while Definition evaluation remains supported.
+
+Execute old Session/new turn after exact version adoption, preserving history and explicit model preferences, and current defaults for unselected preferences. Existing admitted Run retry/wait/restart must preserve instructions, persona, model, Skill procedures, immutable resource bytes/hashes, class/source budget, counters and cleanup intent. Test populated pre-cutover migration and fail-closed mismatched provenance. Fresh initiative, background, repair and occurrence Runs resolve current configuration; replay does not.
+
+Admin functional journeys cover unchanged Customize/no write, sparse save, per-field/section reset, resource CRUD/inspect/download, dependency/conflict rejection, retained draft reload, failed-read retry, archive and focus/Back routes. Capture settled 1440/768/390 with no page overflow and regress Skills/budgets. Run full backend, Vitest/build, Synthetic browser/worklet, SQLite restart/Compose volume and hosted exact-SHA gates. A new verification report records actual evidence and any open gate; old frozen reports are not evidence for this slice.
+
+Settings regression coverage also checks cross-section effective-value refresh, unrelated draft retention, committed-save/read-failure recovery without patch replay, tab re-entry during a pending save, stale refresh fencing after an owner switch, and explicit null model selection using the host-default reasoning choices in semantic order.
+
+
+## Shared Definition and Instance configuration UX
+
+`shared-configuration-layout.spec.ts` checks the shared `AgentConfigurationPanel` across Skills, Workspace, Continuity, Automation and global Connections at 1440/768/767/390px. It verifies heading/body alignment, token insets, local overflow, keyboard tab activation at the tablet boundary and Workspace reload. Feature journeys remain responsible for saved data, validation, conflict and retry behavior. Design documentation sync additionally validates frontmatter/sidecar references and compares preview spacing and responsive focus styling; those static previews do not establish application behavior.
+
+`definition-configuration-layout.spec.ts` exercises new Definition authoring through Profile and expandable Settings, label/keyboard switch interaction, aligned controls, collapsed invalid-recurrence markers and recovery guidance, invalid JSON and blocked Skill editing, JSON recovery, empty Skills/Resources, retained navigation/drafts, save/reload and containment at 1440/768/767/390px. Its catalog-recovery scenario verifies actionable retry guidance, blocked Form save and retained candidate edits after successful retry. Existing Admin collection, tab-history, Definition lifecycle/resource, P7.6, P8/P8.5 Skill and Instance Skill journeys remain the relevant regressions; the P8/P8.5 journeys require the host’s actual disposable SQLite database through `PLAYWRIGHT_SQLITE_PATH`. Component coverage retains candidate field mapping, revision-protected saves, version read-only/retry behavior and Instance navigation/settings. Rendered comparison checks shared form gaps, edges and widths across draft, Instance and immutable-version consumers. This bounded frontend change does not renew historical milestone or hosted acceptance.
+
 
 ### Browser privacy and logout recovery regression matrix
 
@@ -488,6 +507,16 @@ Frontend tests and Synthetic Playwright cover unified catalog/read-only Built-in
 `automation-editor-recovery.spec.ts` treats Event children as a collection keyed by stable `triggerId`, preserving identity, enabled flags, source references and multiplicity without assuming response order. The mixed enabled/disabled sibling case forwards a real HTTP save and deliberately reverses its child response order, then asserts retained data by ID. SQLite may reconstruct children in ID order; that is not an Automation wire order guarantee. The other catalog-recovery/disabled-save scenarios remain covered.
 
 The diagnostic terminal-finalization E2E configures its isolated Instance with the supported eight-step interactive-browser budget and requires exactly eight consumed steps plus `stepLimit` termination. It does not depend on exhausting the default 48-step budget inside a short UI assertion timeout. Corrected-call recovery remains a separate completed-Run case.
+
+### Heading metadata layout verification
+
+For supporting heading text, inspect title/metadata proximity and wrapping at 1440/768/767/390px. Exercise inventory search/no-match recovery, Instance Persona/Lifecycle inspection, and local Settings edit/Discard with the unsaved marker beside the section title. Check actual bounding boxes, page overflow, console errors and failed requests. Component regressions cover Admin, Settings, Execution budgets, Definition editor, Background Work and Automations. Helpers open collapsible sections by accessible name rather than raw text including supporting labels. The [local heading verification report](reports/heading-metadata-layout-verification.md) records this change’s executed checks and remaining chat drawer runtime gap; documentation sync does not renew runtime or hosted acceptance.
+
+## Unified composer acceptance
+
+Verify ordinary text and structured SendText over real MessagePack, changed-parts replay conflict, ordered batched explicit Skill union before the first model call, aggregate procedure budget, disabled/retired/stale selections, model-load budget independence and recovery pins. Exercise InMemory and temporary SQLite entry/Run reopen. Verify same-instance/profile references, foreign/guessed locators, mutable revisions, bounded lower-trust prompt projection and background-reference absence of lifecycle effects.
+
+Editor/browser checks cover multi-token insertion, keyboard/IME, atomic deletion, clipboard and undo, reference-only/Skill-only validation, plus discovery, new-chat scope, immutable Queue/Steer, lost ACK/reconnect/refresh, legacy history, Voice and attachment regressions. Capture actual Synthetic interactions at 1440/768/390px; runtime assertions establish behavior beyond screenshots. Record final implementation SHA and distinguish local, hosted and optional live-provider evidence.
 
 ## Draft evaluation SQLite writer contention
 

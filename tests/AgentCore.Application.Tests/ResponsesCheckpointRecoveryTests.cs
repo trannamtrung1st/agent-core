@@ -67,7 +67,7 @@ public sealed class ResponsesCheckpointRecoveryTests
         var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ManualBackground, [input.EntryId], input.SourceEventId,
             null, null, null, "responses-restart-fixture", Now);
         var run = AgentRun.Create(runId, owner, new(activation, Definition.Id, Definition.Version, Definition.Identity,
-            Guid.NewGuid(), AgentRunOutputContract.BackgroundOutcome), new("gpt-6-luna", "primary-llm", ModelId, "low"), 3, Now);
+            Guid.NewGuid(), AgentRunOutputContract.BackgroundOutcome, configuration: new(Definition, 0, 1, [])), new("gpt-6-luna", "primary-llm", ModelId, "low"), 3, Now);
         run = (await runs.AdmitAsync(snapshot, 0, run)).Run;
         run = await runs.ApplyAsync(owner, runId, new AgentRunCommand.Claim(run.Revision, Now, Guid.NewGuid(), Now.AddSeconds(1)));
         using var http = live ? new HttpClient() : new HttpClient(new FixtureHandler(initial: true));

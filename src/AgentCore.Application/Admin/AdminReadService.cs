@@ -14,7 +14,7 @@ public sealed class AdminReadService(
     IAgentInstanceStore instances,
     IModelCatalog catalog,
     IToolConfigurationGate configurationGate,
-    IBrowser? browser = null)
+    IBrowser? browser = null, Execution.AgentRunConfigurationResolver? configurations = null)
 {
     public const int MaxInventoryItems = 256;
 
@@ -118,8 +118,9 @@ public sealed class AdminReadService(
                 instance.ActiveVersion,
                 cancellationToken)
             .ConfigureAwait(false);
+        if (configurations is not null) definition = (await configurations.ResolveAsync(instanceId, cancellationToken, allowArchived: true)).Configuration.Definition;
         var resolved = AdminEffectiveConfigurationResolver.Resolve(
-            instance,
+            configurations is null ? instance : instance with { SettingsOverrides = null },
             definition,
             catalog,
             configurationGate,

@@ -28,6 +28,8 @@ public enum AdminEventOperationKind
     ExperienceChanged,
     AutomationChanged,
     InstanceSkillsChanged,
+    InstanceSettingsChanged,
+    InstanceResourcesChanged,
     BrowserPrivacyChanged
 }
 

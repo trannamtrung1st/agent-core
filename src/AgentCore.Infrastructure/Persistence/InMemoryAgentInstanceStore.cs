@@ -9,11 +9,25 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 {
+    private static AgentInstance CopyInstance(AgentInstance instance) => instance with { SettingsOverrides = instance.SettingsOverrides?.Copy() };
     public InMemoryCoreEventStore CoreEvents { get; set; } = new();
 
     private readonly object _gate = new();
     internal object CredentialGate => _gate;
+    internal IDisposable HoldConfigurationGeneration(Guid id, long revision)
+    {
+        Monitor.Enter(_gate);
+        if (!_instances.TryGetValue(id, out var owner) || owner.Revision != revision || owner.Lifecycle != AgentInstanceLifecycle.Active)
+        {
+            Monitor.Exit(_gate);
+            throw AgentCoreErrors.Conflict("Instance configuration changed before Run admission. Retry the new activation.");
+        }
+        return new ConfigurationGateLease(_gate);
+    }
+    private sealed class ConfigurationGateLease(object gate) : IDisposable { public void Dispose() => Monitor.Exit(gate); }
     private readonly Dictionary<Guid, AgentInstance> _instances = [];
+
+    internal InMemoryTriggerStore? TriggerStore { get; set; }
 
     internal InMemoryAdminEventStore? EventStore { get; set; }
 
@@ -54,7 +68,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
     {
         lock (_gate)
         {
-            _instances[instance.InstanceId] = instance;
+            _instances[instance.InstanceId] = CopyInstance(instance);
         }
     }
 
@@ -72,7 +86,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 .OrderBy(item => item.DefinitionId, StringComparer.Ordinal)
                 .ThenBy(item => item.InstanceId)
                 .Take(limit)
-                .ToArray();
+                .Select(CopyInstance).ToArray();
             return ValueTask.FromResult<IReadOnlyList<AgentInstance>>(items);
         }
     }
@@ -83,7 +97,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
         if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
         lock (_gate) return ValueTask.FromResult<IReadOnlyList<AgentInstance>>(_instances.Values
             .Where(r => afterId is null || string.CompareOrdinal(r.InstanceId.ToString("D"), afterId.Value.ToString("D")) > 0)
-            .OrderBy(r => r.InstanceId.ToString("D"), StringComparer.Ordinal).Take(limit).ToArray());
+            .OrderBy(r => r.InstanceId.ToString("D"), StringComparer.Ordinal).Take(limit).Select(CopyInstance).ToArray());
     }
 
     public ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default)
@@ -91,7 +105,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            return ValueTask.FromResult(_instances.TryGetValue(instanceId, out var instance) ? instance : null);
+            return ValueTask.FromResult(_instances.TryGetValue(instanceId, out var instance) ? CopyInstance(instance) : null);
         }
     }
 
@@ -106,7 +120,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
             }
 
             ValidateSkillTransition(instance.InstanceId, initialSkills);
-            _instances[instance.InstanceId] = instance;
+            _instances[instance.InstanceId] = CopyInstance(instance);
             InitializeSkills(instance.InstanceId, initialSkills, instance.UpdatedAt);
             return ValueTask.CompletedTask;
         }
@@ -147,7 +161,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 }
 
                 ValidateSkillTransition(instance.InstanceId, initialSkills);
-                _instances[instance.InstanceId] = instance;
+                _instances[instance.InstanceId] = CopyInstance(instance);
                 try
                 {
                     EventStore.AppendWithinLock(historyAppend);
@@ -240,9 +254,12 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                     ActiveVersion = activeVersion,
                     HarnessManagement = update.HarnessManagement ?? instance.HarnessManagement,
                 ExecutionBudgets = update.SetExecutionBudgets ? update.ExecutionBudgets : instance.ExecutionBudgets,
+                SettingsOverrides = (update.SetSettingsOverrides ? update.SettingsOverrides : instance.SettingsOverrides)?.Copy(),
                     UpdatedAt = updatedAt,
                     Revision = instance.Revision + 1
                 };
+                void CommitOwner()
+                {
                 _instances[update.InstanceId] = next;
                 try
                 {
@@ -256,7 +273,11 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 
                 InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
                 foreach (var e in CoreEventPersistence.Instance(previous, next)) CoreEvents.Append(e);
-                return ValueTask.FromResult(next);
+                }
+                if (TriggerStore is not null) TriggerStore.CommitConfigurationPolicy(update.InstanceId, update.AutomationPolicyChanges, updatedAt, CommitOwner);
+                else if (update.AutomationPolicyChanges?.Count > 0) throw AgentCoreErrors.Persistence("Atomic Automation store is unavailable.");
+                else CommitOwner();
+                return ValueTask.FromResult(CopyInstance(next));
             }
         }
     }
@@ -341,7 +362,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 
                 InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
                 foreach (var e in CoreEventPersistence.Instance(previous, next)) CoreEvents.Append(e);
-                return ValueTask.FromResult(next);
+                return ValueTask.FromResult(CopyInstance(next));
             }
         }
     }
@@ -435,7 +456,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 
                 InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
                 foreach (var e in CoreEventPersistence.Instance(previous, next)) CoreEvents.Append(e);
-                return ValueTask.FromResult(next);
+                return ValueTask.FromResult(CopyInstance(next));
             }
         }
     }
@@ -582,6 +603,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 PersonaRevision = personaRevision,
                 HarnessManagement = update.HarnessManagement ?? instance.HarnessManagement,
                 ExecutionBudgets = update.SetExecutionBudgets ? update.ExecutionBudgets : instance.ExecutionBudgets,
+                SettingsOverrides = (update.SetSettingsOverrides ? update.SettingsOverrides : instance.SettingsOverrides)?.Copy(),
                 UnattendedModelCatalogKey = update.SetUnattendedModel
                     ? NullIfBlank(update.UnattendedModelCatalogKey)
                     : instance.UnattendedModelCatalogKey,
@@ -589,6 +611,8 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                     ? NullIfBlank(update.UnattendedReasoningEffort)
                     : instance.UnattendedReasoningEffort
             };
+            void CommitOwner()
+            {
             if (update.History is not null)
             {
                 if (EventStore is null) throw AgentCoreErrors.Persistence("Admin history is unavailable.");
@@ -597,7 +621,11 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
             InitializeSkills(update.InstanceId, update.DefinitionSkills, updatedAt);
             _instances[update.InstanceId] = next;
             foreach (var e in CoreEventPersistence.Instance(instance, next)) CoreEvents.Append(e);
-            return ValueTask.FromResult(next);
+            }
+            if (TriggerStore is not null) TriggerStore.CommitConfigurationPolicy(update.InstanceId, update.AutomationPolicyChanges, updatedAt, CommitOwner);
+            else if (update.AutomationPolicyChanges?.Count > 0) throw AgentCoreErrors.Persistence("Atomic Automation store is unavailable.");
+            else CommitOwner();
+            return ValueTask.FromResult(CopyInstance(next));
         }
     }
 

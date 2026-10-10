@@ -20,7 +20,7 @@ public sealed class BackgroundOccurrenceIntake(
     IMemoryStore memory,
     IModelCatalog models,
     IIdGenerator ids,
-    TimeProvider time)
+    TimeProvider time, AgentRunConfigurationResolver? configurations = null)
 {
     public async ValueTask<BackgroundAdmissionPass> AcceptAwaitingAsync(CancellationToken cancellationToken = default)
     {
@@ -66,7 +66,9 @@ public sealed class BackgroundOccurrenceIntake(
             return null;
         var instance = await instances.FindAsync(occurrence.Owner.AgentInstanceId, cancellationToken).ConfigureAwait(false);
         if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active) return null;
-        var definition = eligibility.Definition!;
+        var resolved = configurations is null ? null : await configurations.ResolveAsync(instance.InstanceId, cancellationToken).ConfigureAwait(false);
+        var definition = resolved?.Configuration.Definition ?? InstanceSettingsResolver.Resolve(eligibility.Definition!, instance.SettingsOverrides);
+        var configuration = resolved?.Configuration ?? new AgentRunConfiguration(definition, 0, instance.PersonaRevision, []);
         Automation? automation = null;
         if (occurrence.AutomationId is { } automationId)
         {
@@ -86,12 +88,15 @@ public sealed class BackgroundOccurrenceIntake(
                 await RejectTargetAsync(occurrence, "target-unavailable", cancellationToken).ConfigureAwait(false);
                 return null;
             }
+            var originalTarget = target!;
+            target = target! with { Definition = definition, PinnedPersona = resolved?.Persona ?? instance.Persona,
+                ModelSelection = target!.ModelSelection?.SelectionSource is ModelSelectionSource.User or ModelSelectionSource.Host ? target.ModelSelection : SessionModelBinder.RefreshDefault(models, definition, target.ModelSelection) };
             ExecutionModelPin selected;
             try { selected = AutomationDestinationPolicy.Pin(target!, models, requiresVision: automation?.RequiresVision == true, requiresTools: automation?.RequiresTools == true); }
             catch (AgentCoreException)
             { await RejectTargetAsync(occurrence, "target-model-unavailable", cancellationToken).ConfigureAwait(false); return null; }
-            var catalog = await new EffectiveSkillCatalogResolver(instances).ResolveAsync(instance.InstanceId,
-                target!.Definition, cancellationToken).ConfigureAwait(false);
+            var catalog = resolved?.Skills ?? await new EffectiveSkillCatalogResolver(instances).ResolveAsync(instance.InstanceId,
+                definition, cancellationToken).ConfigureAwait(false);
             var triggerKind = occurrence.SourceKind switch { TriggerSourceKind.Schedule => TriggerKind.ScheduledOccurrence,
                 TriggerSourceKind.CoreEvent => TriggerKind.CoreEvent, TriggerSourceKind.ApplicationEvent => TriggerKind.ApplicationEvent, _ => TriggerKind.ManualInvocation };
             var activationKind = occurrence.SourceKind switch { TriggerSourceKind.Schedule => ActivationKind.ScheduledWork,
@@ -103,29 +108,29 @@ public sealed class BackgroundOccurrenceIntake(
             var run = AgentRun.Create(ids.NewId(), new(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
                 new(activation, target.Definition.Id, target.Definition.Version, target.PinnedPersona ?? target.Definition.Identity,
                     ids.NewId(), AgentRunOutputContract.ConversationResponse,
-                    ExecutionBudgetResolver.Resolve(target.Definition with { ExecutionBudgets = definition.ExecutionBudgets }, instance.ExecutionBudgets, false)),
+                    ExecutionBudgetResolver.Resolve(definition, resolved?.InstanceBudgets ?? instance.ExecutionBudgets, false), configuration),
                 new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort),
                 AgentRunLimits.DefaultMaxAttempts, time.GetUtcNow(), catalog,
                 catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
-            return (target, run);
+            return (originalTarget with { ModelSelection = target.ModelSelection }, run);
         }
         var pin = occurrence.ModelPin;
         if (pin is null)
         {
-            var resolved = ExecutionModelPolicy.Resolve(models, definition, instance, automation);
-            if (!resolved.Accepted) return null;
-            var pinned = await triggers.TryAssignModelPinIfMissingAsync(occurrence.OccurrenceId, resolved.Pin!,
+            var modelResolution = ExecutionModelPolicy.Resolve(models, definition, instance, automation);
+            if (!modelResolution.Accepted) return null;
+            var pinned = await triggers.TryAssignModelPinIfMissingAsync(occurrence.OccurrenceId, modelResolution.Pin!,
                 cancellationToken).ConfigureAwait(false);
             pin = pinned?.ModelPin;
             if (pin is null) return null;
         }
         if (!ExecutionModelPolicy.Validate(models, pin, definition, automation).Accepted) return null;
-        var skills = await new EffectiveSkillCatalogResolver(instances).ResolveAsync(instance.InstanceId,
+        var skills = resolved?.Skills ?? await new EffectiveSkillCatalogResolver(instances).ResolveAsync(instance.InstanceId,
             definition, cancellationToken).ConfigureAwait(false);
         return BackgroundSessionAdmissionFactory.ForOccurrence(ids.NewSessionId(), ids.NewId(), ids.NewId(),
             ids.NewId(), ids.NewId(), occurrence, definition, instance.Persona, instance.PersonaRevision,
             pin, skills, time.GetUtcNow(), automation?.Name,
-            ExecutionBudgetResolver.Resolve(definition, instance.ExecutionBudgets, false));
+            ExecutionBudgetResolver.Resolve(definition, resolved?.InstanceBudgets ?? instance.ExecutionBudgets, false), configuration);
     }
     private async ValueTask RejectTargetAsync(TriggerOccurrence occurrence, string reason, CancellationToken ct)
     {

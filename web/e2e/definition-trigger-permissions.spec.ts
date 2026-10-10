@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { forkBuiltInV1Draft } from "./admin-draft-editor-helpers";
+import { forkBuiltInV1Draft, openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { completeDefinitionDraftPublishGate, publishDraftFromInstructions, isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 
 async function view(editor: Locator, name: "Form" | "Advanced JSON") {
@@ -19,9 +19,12 @@ for (const kind of ["coreEvent", "applicationEvent"]) {
   test(`${kind} stays restricted through editing, saving and responsive keyboard interaction`, async ({ page }) => {
     await page.goto("/admin/definitions/examiner/drafts");
     const editor = await forkBuiltInV1Draft(page);
+    await openDefinitionSettings(editor, "Trigger restrictions");
     const label = kind === "coreEvent" ? "Built-in Events" : "Webhook Events";
     await editor.getByRole("checkbox", { name: label, exact: true }).check();
+    await editor.getByRole("tab", { name: "Profile", exact: true }).click();
     await editor.getByLabel("Definition name", { exact: true }).fill(`Restricted ${kind}`);
+    await openDefinitionSettings(editor, "Trigger restrictions");
     await view(editor, "Advanced JSON");
     const json = editor.getByRole("textbox", { name: "Advanced JSON", exact: true });
     const candidate = JSON.parse(await json.inputValue());
@@ -55,6 +58,7 @@ for (const kind of ["coreEvent", "applicationEvent"]) {
     const draftId = await save(page, editor, ["schedule", kind]);
     await page.reload();
     await page.locator(`[data-row-key="${draftId}"]`).getByRole("button", { name: /^Draft rev/ }).click();
+    await openDefinitionSettings(editor);
     await expect(editor.getByLabel("System instructions")).toBeVisible();
     await view(editor, "Advanced JSON");
     expect(JSON.parse(await json.inputValue()).triggerPolicy.allowedSourceKinds).toEqual(["schedule", kind]);
@@ -68,6 +72,7 @@ test("publish review and immutable details preserve independent Event permission
   page.on("requestfailed", request => { if (!isCanceledDraftEvidenceRead(request)) errors.push(`${request.method()} ${request.url()}`); });
   await page.goto("/admin/definitions/examiner/drafts");
   const editor = await forkBuiltInV1Draft(page);
+  await openDefinitionSettings(editor, "Trigger restrictions");
   await editor.getByRole("checkbox", { name: "Built-in Events", exact: true }).check();
   await save(page, editor, ["coreEvent"]);
   await completeDefinitionDraftPublishGate(page, editor);
@@ -79,6 +84,7 @@ test("publish review and immutable details preserve independent Event permission
   await page.getByRole("region", { name: "Definition drafts", exact: true }).getByRole("tab", { name: "Versions", exact: true }).click();
   await page.getByRole("button", { name: `View v${version} (durable)`, exact: true }).click();
   const details = page.getByRole("region", { name: "Version details", exact: true });
+  await openDefinitionSettings(details, "Trigger restrictions");
   await expect(details.getByRole("checkbox", { name: "Built-in Events", exact: true })).toBeChecked();
   await expect(details.getByRole("checkbox", { name: "Built-in Events", exact: true })).toBeDisabled();
   await expect(details.getByRole("checkbox", { name: "Webhook Events", exact: true })).not.toBeChecked();

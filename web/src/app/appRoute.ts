@@ -7,9 +7,10 @@ export const ADMIN_INSTANCE_TABS = ["identity", "skills", "continuity", "automat
 export type AdminInstanceTab = (typeof ADMIN_INSTANCE_TABS)[number];
 export const ADMIN_CONTINUITY_TABS = ["memory", "experience"] as const;
 export const ADMIN_AUTOMATION_TABS = ["automations", "controls"] as const;
-export const ADMIN_IDENTITY_TABS = ["profile", "workspace"] as const;
+export const ADMIN_IDENTITY_TABS = ["profile", "settings", "workspace"] as const;
+export const ADMIN_SKILL_RESOURCE_TABS = ["skills", "resources"] as const;
 export const ADMIN_ACTIVITY_TABS = ["sessions", "runs"] as const;
-export type AdminInstanceSection = (typeof ADMIN_ACTIVITY_TABS)[number] | (typeof ADMIN_IDENTITY_TABS)[number] | (typeof ADMIN_CONTINUITY_TABS)[number] | (typeof ADMIN_AUTOMATION_TABS)[number];
+export type AdminInstanceSection = (typeof ADMIN_SKILL_RESOURCE_TABS)[number] | (typeof ADMIN_ACTIVITY_TABS)[number] | (typeof ADMIN_IDENTITY_TABS)[number] | (typeof ADMIN_CONTINUITY_TABS)[number] | (typeof ADMIN_AUTOMATION_TABS)[number];
 
 export type AdminRoute =
   | { area: "admin"; view: "home"; collection?: AdminCollection }
@@ -69,6 +70,7 @@ function isInstanceSection(tab: string | undefined, section: string | undefined)
     ? ADMIN_CONTINUITY_TABS.some(value => value === section)
     : tab === "activity" ? ADMIN_ACTIVITY_TABS.some(value => value === section)
     : tab === "identity" ? ADMIN_IDENTITY_TABS.some(value => value === section)
+    : tab === "skills" ? ADMIN_SKILL_RESOURCE_TABS.some(value => value === section)
     : tab === "automation" && ADMIN_AUTOMATION_TABS.some(value => value === section));
 }
 

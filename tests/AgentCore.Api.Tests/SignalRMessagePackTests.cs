@@ -156,6 +156,7 @@ public sealed class SignalRMessagePackTests(KestrelHostFixture host)
 {
     [Theory]
     [InlineData("text-roundtrip")]
+    [InlineData("structured-composer")]
     [InlineData("protocol-version")]
     [InlineData("client-correlation")]
     [InlineData("second-connection")]

@@ -81,7 +81,7 @@ export function BrowserPrivacySection() {
         <Descriptions.Item label="Deployment restrictions">{!policy.deployment.captureAllowed ? "Screenshots prohibited" : policy.deployment.unmaskedAllowed ? "Unmasked capture limited to deployment-approved exact origins" : "Unmasked capture prohibited"}</Descriptions.Item>
         <Descriptions.Item label="Activation">{policy.activation}</Descriptions.Item>
       </Descriptions>
-      <Form form={form} layout="vertical" disabled={saving || loading} onFinish={submit}>
+      <Form form={form} layout="vertical" className="admin-config-form" disabled={saving || loading} onFinish={submit}>
         <Form.Item name="mode" label="Saved screenshot privacy mode" rules={[{ required: true }]}>
           <Select options={[
             { value: "Protected", label: "Protected — mask sensitive pixels", disabled: !policy.deployment.captureAllowed },

@@ -1,3 +1,4 @@
+import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, type Page } from "@playwright/test";
 import {
@@ -63,6 +64,7 @@ async function reopenExaminerDraftByMarker(page: Page, marker: string) {
   const draftsList = definitionDraftsSection(page);
   await draftsList.getByRole("button", { name: /Draft rev .*ForkBuiltIn/ }).first().click();
   const editor = draftEditorSection(page);
+  await openDefinitionSettings(editor);
   await expect(editor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
   });
@@ -98,7 +100,8 @@ export async function publishExaminerP7gFirstPublication(page: Page) {
 
   const resourceBody = `p7g-resource-${Date.now()}`;
   const resourcePath = `knowledge/p7g-${Date.now()}.md`;
-  await draftEditor.getByRole("tab", { name: "Resources" }).click();
+  await draftEditor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await draftEditor.getByRole("tab", { name: "Resources", exact: true }).click();
   await draftEditor.getByLabel("Resource logical path").fill(resourcePath);
   await draftEditor.locator('section[aria-label="Add draft resource"] input[type="file"]').setInputFiles({
     name: "p7g.md",
@@ -259,7 +262,7 @@ export async function publishExaminerForkedVersion(page: Page, forkFromVersion: 
   await instructions.fill(`${prior}\n${marker}`);
   await ensureToolAllowlisted(page, draftEditor, "knowledge.retrieve");
   draftEditor = draftEditorSection(page);
-  await draftEditor.getByRole("tab", { name: "Definition" }).click();
+  await draftEditor.getByRole("tab", { name: "Identity & version" }).click();
   await expect(draftEditor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
   });

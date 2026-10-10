@@ -151,6 +151,7 @@ internal static class AgentRunStoreMapping
             run.Owner, run.Admission.OutputContract, a.Kind, a.EvidenceJson, a.SourceEventId, a.TriggerOccurrenceId, a.SourceSessionId, a.SourceAgentRunId,
             SourceFingerprint = BackgroundSourceKey(snapshot, run) is null ? a.SourceFingerprint : null,
             run.DefinitionId, run.DefinitionVersion, run.PinnedPersona, run.PinnedModel, run.PinnedSkillCatalog,
+            run.Admission.Configuration, run.Admission.ExecutionBudget,
             run.ActiveSkillKeys, run.MaxAttempts, OriginKind = snapshot.Origin.Kind, snapshot.Origin.AutomationId,
             snapshot.Origin.OriginatingSessionId, snapshot.Origin.OriginatingAgentRunId,
             snapshot.Origin.ReportCompletionToOrigin, Entries = entries
@@ -178,7 +179,7 @@ internal static class AgentRunStoreMapping
     {
         if (!run.IsInitialQueued || snapshot.SessionId != run.SessionId
             || snapshot.AgentInstanceId != run.AgentInstanceId || snapshot.ProfileId != run.ProfileId
-            || snapshot.Definition.Id != run.DefinitionId || snapshot.Definition.Version != run.DefinitionVersion
+            || snapshot.Definition.Id != run.DefinitionId
             || snapshot.DurablyDeletedAt is not null || snapshot.ArchivedAt is not null
             || snapshot.Status == SessionStatus.Paused && !SessionPauseSemantics.IsTransportResumable(snapshot.PauseReason)
             || snapshot.Status is SessionStatus.Ended or SessionStatus.Ending
@@ -239,12 +240,7 @@ internal static class AgentRunStoreMapping
             || source.Status != AgentRunStatus.Running || source.CancellationRequested
             || source.Claim!.LeaseExpiresAtUtc <= child.CreatedAtUtc
             || source.Admission.Activation.Kind != ActivationKind.UserTurn
-            || source.DefinitionId != child.DefinitionId || source.DefinitionVersion != child.DefinitionVersion
-            || source.PinnedPersona != child.PinnedPersona
-            || source.PinnedModel.CatalogKey != child.PinnedModel.CatalogKey
-            || source.PinnedModel.ProviderAlias != child.PinnedModel.ProviderAlias
-            || source.PinnedModel.ModelId != child.PinnedModel.ModelId
-            || source.PinnedModel.ReasoningEffort != child.PinnedModel.ReasoningEffort)
+            || source.DefinitionId != child.DefinitionId)
             throw AgentCoreErrors.Validation("Immediate background admission requires an active owned user-turn source.");
     }
 

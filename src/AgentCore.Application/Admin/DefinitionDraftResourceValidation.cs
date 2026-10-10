@@ -77,7 +77,7 @@ internal static class DefinitionDraftResourceValidation
                 yield return new DefinitionValidationFinding(
                     field,
                     "non_textual_knowledge_resource",
-                    $"Knowledge resource at '{expectedPath}' must use text/plain, text/markdown, or application/json.",
+                    $"Knowledge resource at '{expectedPath}' must use a supported textual data format (for example text/plain, text/markdown, text/csv, or application/json).",
                     DefinitionValidationSeverity.Blocking);
             }
         }

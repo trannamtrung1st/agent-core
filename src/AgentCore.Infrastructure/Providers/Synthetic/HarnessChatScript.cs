@@ -27,7 +27,7 @@ internal static class HarnessChatScript
         {
             if (results.LastOrDefault(m => m.Name == ToolCatalog.KnowledgeRetrieve) is { } recalled)
                 return Answer(recalled.Text.Contains("payment", StringComparison.OrdinalIgnoreCase) ? "The saved policy says to check payment, shipping and fraud notes." : "No saved order policy is available in this Session.");
-            return Offered(ToolCatalog.KnowledgeRetrieve) ? Call(ToolCatalog.KnowledgeRetrieve, new { identity = "learned-orders" }) : Answer("Knowledge retrieval is unavailable.");
+            return Offered(ToolCatalog.KnowledgeRetrieve) ? Call(ToolCatalog.KnowledgeRetrieve, new { identity = request.Messages.Where(m => m.Role == ModelRole.System).Select(m => m.Text).SelectMany(text => System.Text.RegularExpressions.Regex.Matches(text, @"instance:[a-f0-9-]{36}").Select(m => m.Value)).FirstOrDefault() ?? "learned-orders" }) : Answer("Knowledge retrieval is unavailable.");
         }
         var name = knowledge ? "harness.knowledge.upsert" : tool ? "harness.tool.select" : "harness.instructions.update";
         if (!Offered(name)) return Answer("I can discuss that here, but I cannot save a durable harness change with the current policy or model. Nothing was saved.");
@@ -35,7 +35,7 @@ internal static class HarnessChatScript
         {
             using var result = JsonDocument.Parse(authored.Text);
             return Answer(result.RootElement.TryGetProperty("saved", out var saved) && saved.GetBoolean()
-                ? "Saved that for future conversations. This conversation keeps its current version. Core checks passed; production outcomes remain unverified."
+                ? "Saved for this Instance’s next Run, including this conversation. Current Runs remain unchanged. Core checks passed; production outcomes remain unverified."
                 : "Nothing was saved: " + (result.RootElement.TryGetProperty("message", out var message) ? message.GetString() : "The change was rejected or failed; inspect and try a fresh request."));
         }
         var inspection = results.LastOrDefault(m => m.Name == HarnessChatTools.Inspect);
@@ -52,9 +52,9 @@ internal static class HarnessChatScript
         }
         var args = new Dictionary<string, object?>
         {
-            ["expectedVersion"] = version.GetInt32(), ["policyRevision"] = policyRevision
+            ["expectedVersion"] = version.GetInt32(), ["policyRevision"] = policyRevision, ["expectedInstanceRevision"] = inspected.RootElement.GetProperty("instanceRevision").GetInt64()
         };
-        args["expected"] = "Reusable role knowledge should persist for future Sessions.";
+        args["expected"] = "Reusable knowledge should apply to this Instance’s next Run.";
         args["observed"] = "Material was supplied by the owner or read through an authorized tool.";
         args["limitation"] = "Production outcomes remain external evidence.";
         if (knowledge)

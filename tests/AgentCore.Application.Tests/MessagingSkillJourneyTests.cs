@@ -94,6 +94,56 @@ public sealed class MessagingSkillJourneyTests
             (await turns.ForSourceAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId))!.ActiveSkillKeys);
     }
 
+    [Fact]
+    public async Task Explicit_skills_are_active_in_the_first_request_without_load_and_do_not_leak_to_next_turn()
+    {
+        var recording = new RecordingModel(new ScriptedLanguageModel());
+        var output = new CapturingSessionOutput(); var turns = new RuntimeAgentRunStore(); var memory = new InMemoryMemoryStore();
+        var definition = Definition(Skill("first", "EXPLICIT_FIRST_PROCEDURE"), Skill("second", "EXPLICIT_SECOND_PROCEDURE"));
+        await using var runtime = Create(new SemanticResponseLanguageModel(recording), output, turns, memory, definition);
+        await runtime.AttachAsync();
+        UserMessagePart[] parts = [new("invocation", InvocationKind: "skill", SkillKey: "definition:first"),
+            new("text", Text: " Review this using "), new("invocation", InvocationKind: "skill", SkillKey: "definition:second")];
+        await runtime.SubmitUserTextAsync(UserMessageContent.DisplayText(parts), parts: parts);
+        await runtime.WaitUntilIdleAsync();
+        Assert.NotEmpty(recording.Requests);
+        Assert.Contains("EXPLICIT_FIRST_PROCEDURE", Text(recording.Requests[0]));
+        Assert.Contains("EXPLICIT_SECOND_PROCEDURE", Text(recording.Requests[0]));
+        var user = Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.User);
+        var run = await turns.ForSourceAsync(runtime.SessionId, user.SourceEventId ?? user.EntryId);
+        Assert.Equal(["definition:first", "definition:second"], run!.ActiveSkillKeys);
+        Assert.Equal(0, run.SkillLoadCount);
+        Assert.Equal(2, run.Admission.ComposerInput!.ExplicitSkillKeys.Count);
+        var before = recording.Requests.Count;
+        await runtime.SubmitUserTextAsync("A new plain turn"); await runtime.WaitUntilIdleAsync();
+        Assert.True(recording.Requests.Count > before);
+        Assert.DoesNotContain("EXPLICIT_FIRST_PROCEDURE", Text(recording.Requests[before]));
+        Assert.DoesNotContain("EXPLICIT_SECOND_PROCEDURE", Text(recording.Requests[before]));
+    }
+
+    [Fact]
+    public async Task Accepted_explicit_input_retired_before_recovery_fails_without_a_model_call()
+    {
+        var recording = new RecordingModel(new ScriptedLanguageModel());
+        var output = new CapturingSessionOutput(); var turns = new RuntimeAgentRunStore(); var memory = new InMemoryMemoryStore();
+        var definition = Definition();
+        await using var seed = Create(new SemanticResponseLanguageModel(recording), output, turns, memory, definition);
+        UserMessagePart[] parts = [new("invocation", InvocationKind: "skill", SkillKey: "definition:retired"), new("text", Text: " Review this")];
+        var entry = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User,
+            UserMessageContent.DisplayText(parts), null, EntryStatus.Completed, SessionMode.Text, 0, 0, DateTimeOffset.UtcNow, Parts: parts);
+        var accepted = seed.Snapshot with { Entries = [entry], LastEntrySequence = 1, PendingAgentInputIds = [entry.EntryId], Revision = seed.Snapshot.Revision + 1 };
+        await memory.SaveAsync(accepted, accepted.Revision - 1);
+        var saved = (await memory.LoadAsync(seed.SessionId))!;
+        await using var recovered = Create(new SemanticResponseLanguageModel(recording), output, turns, memory, definition, saved);
+        await recovered.AttachAsync(); await recovered.WaitUntilIdleAsync();
+        Assert.Empty(recording.Requests);
+        Assert.Equal(parts, Assert.Single(recovered.Snapshot.Entries, e => e.Role == ConversationRole.User).Parts);
+        var run = await turns.ForSourceAsync(recovered.SessionId, entry.SourceEventId!.Value);
+        Assert.NotNull(run!.Admission.ComposerInput!.Error);
+        Assert.Contains("definition:retired", run.Admission.ComposerInput.ExplicitSkillKeys);
+        Assert.Contains(output.Items, e => e.Payload is ErrorOutput { Code: "ComposerInputUnavailable", Fatal: false });
+    }
+
     private static string Text(ModelRequest request) =>
         string.Join('\n', request.Messages.Select(message => message.Text));
 

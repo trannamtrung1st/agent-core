@@ -105,7 +105,7 @@ describe("ChatApp accessibility", () => {
     expect(screen.getAllByText("Microphone permission was denied. Enable the microphone or continue in text.").length)
       .toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add content" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^End$/ }));
@@ -188,7 +188,7 @@ describe("ChatApp accessibility", () => {
       renderChat();
     });
     expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Attach" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add content" })).toBeInTheDocument();
   });
 
   it("keeps the text composer when Voice is unavailable for the speech locale", async () => {
@@ -488,7 +488,7 @@ describe("ChatApp accessibility", () => {
       });
     });
     const view = await act(async () => renderChat());
-    expect(screen.getByRole("button", { name: "Attach" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add content" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
     expect(screen.getByText(/40%/)).toBeInTheDocument();

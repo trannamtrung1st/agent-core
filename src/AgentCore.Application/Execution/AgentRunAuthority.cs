@@ -1,4 +1,5 @@
 using AgentCore.Application.Models;
+using AgentCore.Application.Sessions;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Ports;
@@ -20,6 +21,8 @@ public sealed class AgentRunAuthority(IAgentInstanceStore instances, IAgentDefin
             || instance.DefinitionId != run.DefinitionId || await memory.LoadProfileAsync(run.ProfileId, ct).ConfigureAwait(false) is null) return null;
         var definition = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct).ConfigureAwait(false);
         if (definition is null) return null;
+        try { definition = InstanceSettingsResolver.Resolve(definition, instance.SettingsOverrides); }
+        catch (AgentCoreException) { return null; }
         var model = new ExecutionModelPin(run.PinnedModel.CatalogKey, run.PinnedModel.ProviderAlias,
             run.PinnedModel.ModelId, run.PinnedModel.ReasoningEffort, ExecutionModelSource.ConversationDefault);
         if (!ExecutionModelPolicy.Matches(models, model, out var descriptor)) return null;

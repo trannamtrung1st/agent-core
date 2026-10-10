@@ -34,7 +34,8 @@ public sealed partial class SessionRuntime
                 || _snapshot.PendingAgentInputIds.Count > 0 || (await _agentRuns.ListForSessionAsync(RunOwner, SessionId, ct).ConfigureAwait(false)).Any(r => !r.IsTerminal))
             { input.Committed.TrySetResult(false); return; }
             var now = _time.GetUtcNow();
-            var model = _snapshot.ModelSelection;
+            var (projection, resolved) = await ResolveNewRunAsync(ct).ConfigureAwait(false);
+            var model = projection.ModelSelection;
             if (model is null)
             {
                 await _agentRuns.SkipCompletionReportAsync(child.Owner, child.AgentRunId, "target-model-unavailable", now, ct).ConfigureAwait(false);
@@ -60,12 +61,12 @@ public sealed partial class SessionRuntime
                 await _tools.CompletionArtifactsAsync(primary.SessionId, ct).ConfigureAwait(false)) : BackgroundCompletionProjection.BuildBatch(batch);
             var activation = new Activation(_ids.NewId(), SessionId, ActivationKind.BackgroundCompleted, [], primary.AgentRunId,
                 null, primary.SessionId, primary.AgentRunId, "completion:" + string.Join(":", batch.Select(b => b.Run.AgentRunId.ToString("D"))), now, evidence);
-            var skills = await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, ct).ConfigureAwait(false);
-            var report = AgentRun.Create(_ids.NewId(), RunOwner, new(activation, _snapshot.Definition.Id, _snapshot.Definition.Version,
-                _snapshot.PinnedPersona ?? _snapshot.Definition.Identity, _ids.NewId(), AgentRunOutputContract.CompletionReport,
-                    await _tools.ResolveExecutionBudgetAsync(_snapshot.AgentInstanceId, _snapshot.Definition, false, ct)), new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
+            var skills = resolved.Skills;
+            var report = AgentRun.Create(_ids.NewId(), RunOwner, new(activation, projection.Definition.Id, projection.Definition.Version,
+                resolved.Persona, _ids.NewId(), AgentRunOutputContract.CompletionReport,
+                    ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, false), resolved.Configuration), new(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
                 AgentRunLimits.DefaultMaxAttempts, now, skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
-            var current = _runAuthority is null ? _snapshot.Definition : await _runAuthority.CurrentDefinitionAsync(report, ct).ConfigureAwait(false);
+            var current = _runAuthority is null ? ExecutionDefinition : await _runAuthority.CurrentDefinitionAsync(report, ct).ConfigureAwait(false);
             if (_deactivated || _snapshot.ArchivedAt is not null || _snapshot.DurablyDeletedAt is not null || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus)
                 || _snapshot.Status is SessionStatus.Ended or SessionStatus.Ending
                 || _snapshot.Status == SessionStatus.Paused && !SessionPauseSemantics.IsTransportResumable(_snapshot.PauseReason)

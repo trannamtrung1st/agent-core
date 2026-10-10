@@ -91,6 +91,7 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   const dialog = page.getByRole('dialog', { name: 'New definition' });
   await dialog.getByLabel('Definition ID').fill(definitionId); await dialog.getByRole('button', { name: 'Create draft' }).click();
   let editor = draftEditorSection(page);
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
   await editor.getByRole('button', { name: 'Add skill' }).click();
   await page.getByRole('dialog').getByLabel('Skill ID', { exact: true }).fill('review'); await page.getByRole('dialog').getByLabel('Skill name', { exact: true }).fill('Review');
   await page.getByRole('dialog').getByLabel('Description', { exact: true }).fill('Reusable review'); await page.getByRole('dialog').getByLabel('Procedure', { exact: true }).fill('ORIGINAL_DEFINITION');
@@ -98,6 +99,7 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await editor.getByRole('button', { name: 'Save draft' }).click(); await expect(page.getByText('Draft saved.')).toBeVisible();
   await completeDefinitionDraftPublishGate(page, editor); await publishDraftFromInstructions(page, editor);
   const id = await create(page, `Upgrade ${Date.now()}`, definitionId);
+  await page.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
   await page.getByRole('tab', { name: 'Skills', exact: true }).click();
   await page.getByRole('switch', { name: 'Enable Definition Skill Review', exact: true }).click();
   await expect(page.getByRole('switch', { name: 'Enable Definition Skill Review', exact: true })).not.toBeChecked();
@@ -106,6 +108,7 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await page.getByLabel('Procedure', { exact: true }).fill('LOCAL_INDEPENDENT'); await page.getByRole('button', { name: 'Save Skill' }).click();
   await expect(page.getByRole('region', { name: 'Instance Skill editor' })).toBeHidden();
   await page.goto(`/admin/definitions/${definitionId}`); editor = await forkDurablePublicationDraft(page, 1);
+  await editor.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
   await editor.getByRole('region', { name: 'Skills', exact: true }).getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByRole('dialog').getByLabel('Procedure', { exact: true }).fill('UPGRADED_DEFINITION');
   await page.getByRole('dialog').getByRole('button', { name: 'Save Skill', exact: true }).click(); await editor.getByRole('button', { name: 'Save draft' }).click();
@@ -113,7 +116,8 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await completeDefinitionDraftPublishGate(page, editor); await publishDraftFromInstructions(page, editor);
   await page.goto(`/admin/instances/${id}`);
   await page.getByLabel('Target definition version').click(); await page.locator('.ant-select-item-option').filter({ hasText: /^v2\b/ }).click();
-  await page.getByRole('button', { name: 'Upgrade to v2' }).click(); await expect(page.getByText('Active version set to v2.')).toBeVisible();
+  await page.getByRole('button', { name: 'Upgrade to v2' }).click(); await page.getByRole("button", {name:"Adopt version",exact:true}).click(); await expect(page.getByText('Instance adopted v2.')).toBeVisible();
+  await page.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
   await page.getByRole('tab', { name: 'Skills', exact: true }).click();
   const reusable = page.getByRole('region', { name: 'Definition Skills', exact: true }); const local = page.getByRole('region', { name: 'Instance Skills', exact: true });
   await expect(reusable).toContainText('Version 2'); await expect(reusable.getByRole('switch')).not.toBeChecked();
@@ -123,8 +127,9 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await local.getByRole('button', { name: 'Edit' }).click(); await expect(page.getByLabel('Procedure', { exact: true })).toHaveValue('LOCAL_INDEPENDENT');
   await page.getByRole('button', { name: 'Cancel editing' }).click();
   await page.getByRole('tab', { name: 'Identity & version', exact: true }).click(); await page.getByLabel('Target definition version').click();
-  await page.locator('.ant-select-item-option').filter({ hasText: /^v1\b/ }).click(); await page.getByRole('button', { name: 'Rollback to v1' }).click();
-  await expect(page.getByText('Active version set to v1.')).toBeVisible(); await page.getByRole('tab', { name: 'Skills', exact: true }).click();
+  await page.locator('.ant-select-item-option').filter({ hasText: /^v1\b/ }).click(); await page.getByRole('button', { name: 'Rollback to v1' }).click(); await page.getByRole("button", {name:"Adopt version",exact:true}).click();
+  await expect(page.getByText('Instance adopted v1.')).toBeVisible(); await page.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
+  await page.getByRole('tab', { name: 'Skills', exact: true }).click();
   await expect(reusable.getByRole('switch')).not.toBeChecked(); await reusable.getByRole('button', { name: 'Inspect' }).click();
   await expect(page.getByRole('region', { name: 'Definition Skill content' })).toContainText('ORIGINAL_DEFINITION');
 });

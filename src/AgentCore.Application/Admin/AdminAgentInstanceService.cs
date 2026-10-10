@@ -17,8 +17,50 @@ public sealed class AdminAgentInstanceService(
     ITriggerInstancePolicyReconciliationService? policyReconciliation = null,
     IAdminLifecycleDeletion? deletion = null,
     AdminLifecycleCoordinator? lifecycleGate = null,
-    IModelCatalog? modelCatalog = null)
+    IModelCatalog? modelCatalog = null,
+    IAgentDefinitionResourceAdminStore? resourcePublications = null,
+    InstanceAutomationPolicy? automationPolicy = null,
+    Agents.InheritedDefinitionResourceCatalog? inheritedResources = null)
 {
+    public async ValueTask<InstanceVersionPreview> PreviewVersionAsync(Guid instanceId, int version, CancellationToken ct = default)
+    {
+        var instance = await RequireManagedAsync(instanceId, ct);
+        var baseline = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Selected Definition was not found.");
+        var target = await definitions.GetAsync(instance.DefinitionId, version, ct) ?? throw AgentCoreErrors.NotFound("Target Definition was not found.");
+        _ = await ValidateAdoptionAsync(instance, target, ct);
+        var differences = Agents.InstanceSettingsResolver.Sections.SelectMany(section =>
+            Agents.InstanceSettingsResolver.Values(baseline, section).Where(field =>
+                System.Text.Json.JsonSerializer.Serialize(field.Value) != System.Text.Json.JsonSerializer.Serialize(Agents.InstanceSettingsResolver.Values(target, section)[field.Key]))
+            .Select(field => section + "." + field.Key))
+            .Concat(Enum.GetValues<ExecutionBudgetClass>().Where(kind => baseline.ExecutionBudgets?.Get(kind) != target.ExecutionBudgets?.Get(kind)).Select(kind => "executionBudgets." + kind)).ToArray();
+        var oldResources = inheritedResources is not null ? await inheritedResources.ListAsync(baseline, ct) : resourcePublications is null ? [] : await resourcePublications.ListPublicationResourcesAsync(baseline.Id, baseline.Version, ct);
+        var newResources = inheritedResources is not null ? await inheritedResources.ListAsync(target, ct) : resourcePublications is null ? [] : await resourcePublications.ListPublicationResourcesAsync(target.Id, target.Version, ct);
+        return new(instance.Revision, baseline.Version, target.Version, differences,
+            Agents.InstanceSettingsResolver.Sections.SelectMany(section => Agents.InstanceSettingsResolver.Overrides(instance.SettingsOverrides ?? new(), section).Keys.Select(field => section + "." + field))
+                .Concat(Enum.GetValues<ExecutionBudgetClass>().Where(kind => instance.ExecutionBudgets?.Get(kind) is not null).Select(kind => "executionBudgets." + kind)).ToArray(),
+            target.SkillList.Where(s => !baseline.SkillList.Any(old => old.Id == s.Id)).Select(s => "definition:" + s.Id)
+                .Concat(newResources.Where(r => !oldResources.Any(old => old.ResourceId == r.ResourceId)).Select(r => "definition:" + r.ResourceId)).ToArray(),
+            baseline.SkillList.Where(s => !target.SkillList.Any(next => next.Id == s.Id)).Select(s => "definition:" + s.Id)
+                .Concat(oldResources.Where(r => !newResources.Any(next => next.ResourceId == r.ResourceId)).Select(r => "definition:" + r.ResourceId)).ToArray(),
+            "Applies to the next new Run in existing conversations. Current Runs are unchanged.",
+            target.SkillList.Where(s => baseline.SkillList.FirstOrDefault(old => old.Id == s.Id) is { } old && System.Text.Json.JsonSerializer.Serialize(old) != System.Text.Json.JsonSerializer.Serialize(s)).Select(s => "definition:" + s.Id)
+                .Concat(newResources.Where(r => oldResources.FirstOrDefault(old => old.ResourceId == r.ResourceId) is { } old && old != (r with { Version = old.Version })).Select(r => "definition:" + r.ResourceId)).ToArray());
+    }
+
+    private async ValueTask<AgentDefinition> ValidateAdoptionAsync(AgentInstance instance, AgentDefinition target, CancellationToken ct)
+    {
+        if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived instances are read-only.");
+        var effective = Agents.InstanceSettingsResolver.Resolve(target, instance.SettingsOverrides);
+        if (modelCatalog is not null) _ = SessionModelBinder.PinDefault(modelCatalog, effective);
+        var current = await instances.ReadSkillsAsync(instance.InstanceId, ct);
+        var skills = new InstanceSkillSnapshot(current.DefinitionStates.Concat(target.SkillList.Where(s => !current.DefinitionStates.Any(state => state.DefinitionSkillId == s.Id))
+            .Select(s => new AgentDefinitionSkillState(instance.InstanceId, s.Id, null, 1, time.GetUtcNow()))).ToArray(), current.InstanceSkills);
+        _ = Agents.EffectiveSkillCatalogResolver.Resolve(effective, skills);
+        if (inheritedResources is not null || resourcePublications is not null)
+            _ = AgentInstanceResourceService.Resolve(effective, inheritedResources is not null ? await inheritedResources.ListAsync(target, ct) : await resourcePublications!.ListPublicationResourcesAsync(target.Id, target.Version, ct),
+                await instances.ReadResourcesAsync(instance.InstanceId, ct), skills);
+        return effective;
+    }
     public ValueTask<AgentInstance> CreateManagedAsync(
         string definitionId,
         int version,
@@ -173,13 +215,15 @@ public sealed class AdminAgentInstanceService(
             instance.InstanceId,
             instance.ActiveVersion,
             definition.Version, actorKind);
+        var effective = await ValidateAdoptionAsync(instance, definition, cancellationToken);
+        var reconciliation = automationPolicy is null ? null : await automationPolicy.PlanAsync(instance, effective, now, cancellationToken);
         var updated = await instances.UpdateActiveVersionWithHistoryAsync(
-                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, ActiveVersion: definition.Version, HarnessManagement: harnessManagement, DefinitionSkills: definition.SkillList),
+                new AgentInstanceRevisionUpdate(instance.InstanceId, expectedRevision, ActiveVersion: definition.Version, HarnessManagement: harnessManagement, DefinitionSkills: definition.SkillList, AutomationPolicyChanges: reconciliation),
                 now,
                 append,
                 cancellationToken)
             .ConfigureAwait(false);
-        await ReconcileTriggerPolicyAsync(instance.InstanceId, now, cancellationToken).ConfigureAwait(false);
+        if (automationPolicy is null) await ReconcileTriggerPolicyAsync(instance.InstanceId, now, cancellationToken).ConfigureAwait(false);
         OperationalDiagnostics.RecordAdmin(
             "instanceVersion",
             "completed",

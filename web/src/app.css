@@ -652,7 +652,6 @@ body,
 
 /* Work names are content headings; history has one explicit action. */
 .background-work-item-title.ant-typography {
-  flex: 1 1 12rem;
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
@@ -1611,7 +1610,8 @@ body,
 }
 
 .admin-inventory-heading .ant-typography-secondary {
-  flex: 0 0 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 12px;
 }
 
@@ -1688,21 +1688,6 @@ body,
   text-transform: capitalize;
 }
 
-.admin-definition-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-  gap: var(--ac-space-section);
-}
-
-
-
-
-
-
-
-
-
 .admin-definition-panel-heading .ant-typography-secondary {
   font-size: 12px;
 }
@@ -1715,7 +1700,11 @@ body,
   display: block;
 }
 
-.admin-definition-panel-body > * + .ant-typography-secondary {
+.admin-definition-panel-body-stack > .ant-typography {
+  margin-block: 0;
+}
+
+.admin-definition-panel-body:not(.admin-definition-panel-body-stack) > * + .ant-typography-secondary {
   margin-block-start: var(--ac-space-default);
 }
 
@@ -1748,7 +1737,7 @@ body,
 .admin-instance-persona-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: var(--ac-space-default);
+  column-gap: var(--ac-space-section);
 }
 
 .admin-instance-persona-form .ant-form-item {
@@ -1867,31 +1856,28 @@ body,
 
 .admin-draft-focused {
   min-width: 0;
-  overflow: clip;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-section);
   scroll-margin-block-start: var(--ac-space-section);
-  border: 1px solid var(--ac-color-border);
-  border-radius: var(--ac-radius-surface);
-  background: var(--ac-color-container);
 }
 
 .admin-draft-focused-toolbar {
-  min-height: 56px;
-  padding: var(--ac-space-default) var(--ac-space-section);
-  border-block-end: 1px solid var(--ac-color-border);
+  min-width: 0;
 }
 
 .admin-draft-focused > .ant-alert {
-  margin: var(--ac-space-section) var(--ac-space-section) 0;
+  margin: 0;
 }
 
 .admin-draft-focused > .admin-draft-editor {
   margin: 0;
-  padding: var(--ac-space-section);
+  padding: 0;
   border: 0;
 }
 
 .admin-draft-editor-heading h5.ant-typography {
-  margin: 0 0 var(--ac-space-compact);
+  margin: 0;
 }
 
 .admin-draft-id {
@@ -1945,6 +1931,10 @@ body,
 .admin-draft-form-section:not(:first-child) {
   padding-block-start: var(--ac-space-section);
   border-block-start: 1px solid var(--ac-color-border);
+}
+
+.admin-draft-section-heading {
+  gap: var(--ac-space-compact);
 }
 
 .admin-draft-form-section > h5.ant-typography,
@@ -2125,28 +2115,9 @@ body,
   min-width: 0;
 }
 
-.admin-resource-preview {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-default);
-  min-width: 0;
-}
-
-.admin-resource-preview-row {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(10rem, 1fr) auto;
-  gap: var(--ac-space-compact);
-  align-items: start;
-  min-width: 0;
-}
-
-.admin-resource-preview-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--ac-space-compact);
-  min-width: 0;
-}
+/* Resource import uses AntD table cells for row spacing and aligned columns. */
+.admin-resource-preview { min-width: 0; }
+.admin-resource-preview .ant-table-cell { vertical-align: middle; }
 
 .admin-resource-list {
   padding-block-start: var(--ac-space-section);
@@ -2201,14 +2172,6 @@ body,
     font-size: 22px;
   }
 
-  .admin-definition-workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .admin-draft-focused > .admin-draft-editor {
-    padding: var(--ac-space-default);
-  }
-
   .admin-instance-control-grid,
   .admin-effective-config-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -2247,7 +2210,6 @@ body,
   }
 
   .admin-resource-form-grid,
-  .admin-resource-preview-row,
   .admin-eval-form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2320,6 +2282,40 @@ body,
 .admin-config-form .admin-form-row { margin-block-end: var(--ac-space-section); }
 .admin-config-form .admin-form-row > .ant-form-item { margin-block-end: 0; }
 .admin-config-form .ant-typography { max-width: 72ch; }
+/* Definition and Instance configuration share bounded fields and section rhythm. */
+.admin-configuration-sections,
+.admin-configuration-sections .ant-tabs-content-holder { min-width: 0; }
+.admin-settings-form { width: 100%; max-width: 48rem; min-width: 0; }
+.admin-settings-form.admin-settings-instructions { max-width: none; }
+.admin-definition-settings .admin-draft-form-section:not(:first-child) {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+.admin-settings-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ac-space-section);
+}
+.admin-definition-settings .admin-draft-field > .ant-input:not(.admin-draft-instructions),
+.admin-definition-settings .admin-draft-field > .ant-select { max-width: 20rem; }
+.admin-definition-settings .admin-draft-field > .ant-select-multiple { max-width: none; }
+.admin-definition-settings .admin-draft-field > .ant-input-number { max-width: 12rem; }
+.admin-settings-switch-row .ant-switch { flex: 0 0 auto; }
+.admin-settings-switch-row .ant-typography { margin: 0; }
+.admin-settings-field-grid > .admin-settings-switch-row { align-self: end; }
+/* Settings owns field gaps; instructions, arrays and enablement span the form. */
+.instance-settings-form .ant-form-item { min-width: 0; margin-block-end: 0; }
+.instance-settings-field-wide { grid-column: 1 / -1; }
+.instance-settings-switch-field { align-self: end; }
+.instance-settings-switch-field .ant-switch { flex: 0 0 auto; }
+.instance-settings-switch-field.instance-settings-field-wide { max-width: 20rem; }
+.instance-settings-form .instance-settings-control { width: 100%; max-width: 20rem; }
+.instance-settings-field-wide .ant-select { max-width: none; }
+.instance-settings-form .ant-input-number,
+.instance-settings-form .instance-settings-short-control { max-width: 12rem; }
+@media (max-width: 767px) {
+  .admin-settings-field-grid { grid-template-columns: minmax(0, 1fr); }
+}
 /* Automation sections own vertical rhythm; field grids own sibling alignment. */
 .automation-editor-form .ant-form-item { margin-block-end: 0; min-width: 0; }
 .automation-editor-section + .automation-editor-section {
@@ -2513,6 +2509,22 @@ body,
   flex-shrink: 0;
 }
 
+/* Skill summaries stay bounded even when the table fills a wide viewport.
+   The fixed table layout owns column sizing; Typography owns ellipsis/tooltips. */
+.admin-skills-table .admin-skill-summary {
+  display: block;
+  width: 100%;
+  max-width: 20rem;
+  min-width: 0;
+}
+
+@media (max-width: 767px) {
+  .admin-skills-table .admin-table-actions .ant-btn {
+    width: 40px;
+    padding-inline: 0;
+  }
+}
+
 .admin-collection-name.ant-btn {
   height: auto;
   max-width: 100%;
@@ -2633,3 +2645,29 @@ body,
 }
 
 .admin-activity-id.ant-typography { font-size: var(--ac-font-size-label); overflow-wrap: anywhere; }
+
+.structured-message-field { min-height: 40px; max-height: 224px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px; outline: none; position: relative; }
+.structured-message-field p { margin: 0; }
+.structured-message-field:focus-visible { box-shadow: inset 0 0 0 1px var(--ant-color-primary); border-radius: 8px; }
+.composer-shell { position: relative; }
+.composer-placeholder { position: absolute; top: 16px; left: 24px; color: var(--ant-color-text-placeholder); pointer-events: none; }
+.composer-chip { display: inline; padding: 2px 6px; border-radius: 12px; border: 1px solid var(--ant-color-border); background: var(--ant-color-fill-secondary); color: var(--ant-color-text); box-decoration-break: clone; white-space: pre-wrap; }
+.composer-chip-invocation { border-color: var(--ant-color-primary-border); color: var(--ant-color-primary-text); }
+.composer-picker { position: fixed; z-index: 1100; transform: translateY(-100%); width: min(320px, calc(100vw - 16px)); max-height: min(420px, 65vh); padding: 8px; overflow-y: auto; background: var(--ant-color-bg-elevated); color: var(--ant-color-text); border: 1px solid var(--ant-color-border-secondary); border-radius: 12px; box-shadow: var(--ant-box-shadow-secondary); }
+.composer-picker-heading { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; padding: 4px 8px 8px; }
+.composer-picker-categories { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.composer-picker-list { display: flex; flex-direction: column; gap: 8px; }
+.composer-choice { border: 0; border-radius: 6px; padding: 8px; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.composer-choice.active, .composer-choice:hover, .composer-choice:focus-visible { background: var(--ant-color-fill-secondary); }
+.composer-choice strong, .composer-choice span { display: block; overflow-wrap: anywhere; }
+.composer-choice span { font-size: 12px; color: var(--ant-color-text-secondary); margin-top: 4px; }
+.composer-choice[aria-disabled=true] { opacity: .55; cursor: not-allowed; }
+.message-parts { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.composer-editor { display: block; position: relative; }
+.composer-placeholder { top: 8px; left: 8px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+@media (max-width: 767px) {
+  .composer-picker .ant-btn, .composer-choice { min-height: 44px; }
+}

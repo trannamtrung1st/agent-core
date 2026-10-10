@@ -229,8 +229,8 @@ public sealed partial class SessionRuntime
             segment.SegmentIndex,
             segment.TextStart,
             segment.Text,
-            _snapshot.Definition.Voice.VoiceId,
-            _snapshot.Definition.Voice.SpeakingRate,
+            ExecutionDefinition.Voice.VoiceId,
+            ExecutionDefinition.Voice.SpeakingRate,
             CanonicalAudio.Format,
             SpeechLocale.Resolve(_snapshot).Effective);
         var synthesisContext = cause with { Epoch = _epoch, AgentRunGeneration = _boundAgentRun?.Claim?.Generation };
@@ -629,9 +629,9 @@ public sealed partial class SessionRuntime
                             segment.SegmentIndex,
                             segment.TextStart,
                             segment.Text,
-                            _snapshot.Definition.Voice.VoiceId,
+                            ExecutionDefinition.Voice.VoiceId,
                             SpeechLocale.Resolve(_snapshot).Effective,
-                            _snapshot.Definition.Voice.SpeakingRate)),
+                            ExecutionDefinition.Voice.SpeakingRate)),
                     cancellationToken)
                 .ConfigureAwait(false);
         }

@@ -40,7 +40,10 @@ public static class TriggerDurableSchedulingPolicy
             return null;
         }
 
-        return await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, cancellationToken).ConfigureAwait(false);
+        var baseline = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, cancellationToken).ConfigureAwait(false);
+        if (baseline is null) return null;
+        try { return Agents.InstanceSettingsResolver.Resolve(baseline, instance.SettingsOverrides); }
+        catch (Sessions.AgentCoreException) { return null; }
     }
 
     public static bool AllowsUserScheduling(AgentDefinition? definition) =>

@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { adminHomePath, navigateToAppPath } from "../../app/appRoute";
 import { AutomationEventFilter } from "./AutomationEventFilter";
 import type { AutomationPreset, AutomationChild, EventCatalogEntry, EventSourceReference } from "../../services/adminApi";
@@ -221,10 +222,8 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
     timing.maxOccurrences ? `Up to ${timing.maxOccurrences} occurrences` : null
   ].filter(Boolean).join(" · ");
   const editorTitle = editor === "new" ? "New automation" : "Edit automation";
-  return <section className="admin-definition-panel" aria-label="Automations">
-    <div className="admin-definition-panel-heading"><Typography.Title level={4}>Automations</Typography.Title>
-      <Typography.Text type="secondary">Choose when the agent follows your instructions. Each Run uses its authorized capabilities and normal approvals.</Typography.Text></div>
-    <div className="admin-definition-panel-body"><Flex vertical gap={token.padding}>
+  return <AgentConfigurationPanel title="Automations" label="Automations"
+    description="Choose when the agent follows your instructions. Each Run uses its authorized capabilities and normal approvals." bodyGap="section">
       {loading ? <Spin aria-label="Loading automations" /> : null}
       {selection?.kind === "automation" && !loading && !error && review && !review.items.some(item => item.automationId === selection.automationId) ? <Alert type="info" showIcon title="This source configuration is no longer available" description="It may have been deleted or retired. Its run remains available in Runs." /> : null}
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reload()}>Reload automations</Button>} /> : null}
@@ -255,7 +254,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             <Typography.Text strong>Automation summary</Typography.Text>
             <Typography.Text>{summaryTrigger}{summaryBounds ? ` · ${summaryBounds}` : ""}</Typography.Text>
             <Typography.Text>{draft.executionTarget.kind === "backgroundSession" ? "Run this agent in a background Session" : draft.executionTarget.sessionId ? `Run in conversation ${draft.executionTarget.sessionId}` : "Choose the conversation to run in"}</Typography.Text>
-            <Typography.Text type="secondary">{draft.executionTarget.kind === "existingSession" ? "Reply directly in that conversation using its pinned model" : draft.completionDelivery.kind === "toSession" ? draft.completionDelivery.sessionId ? `Request a completion report to conversation ${draft.completionDelivery.sessionId}` : "Choose a conversation for the completion report" : "Keep results in Background work without a conversation report"}</Typography.Text>
+            <Typography.Text type="secondary">{draft.executionTarget.kind === "existingSession" ? "Reply directly in that conversation using its model preferences" : draft.completionDelivery.kind === "toSession" ? draft.completionDelivery.sessionId ? `Request a completion report to conversation ${draft.completionDelivery.sessionId}` : "Choose a conversation for the completion report" : "Keep results in Background work without a conversation report"}</Typography.Text>
             {draft.enabled && !canEnable ? <Typography.Text type="warning">{!eligible ? "No enabled subscription is currently eligible. Repair the source policy or save as disabled." : "Current authorization or Event sources could not be validated. Retry the failed read or save as disabled."}</Typography.Text> : null}
             {!draft.enabled ? <Typography.Text type="warning">Saved disabled. Enable this Automation before it can run.</Typography.Text> : null}
           </Flex>
@@ -359,7 +358,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
         </Flex>
         <Flex component="section" vertical gap={token.padding} className="automation-editor-section" aria-label="Execution">
         <Typography.Title level={5} style={{ margin: 0 }}>Execution</Typography.Title>
-        <Form.Item label="Run in" extra={draft.executionTarget.kind === "existingSession" ? "Replies in this conversation, even when you are away. Uses its pinned model." : "Runs independently. Results stay in Background work unless you request a report."}>
+        <Form.Item label="Run in" extra={draft.executionTarget.kind === "existingSession" ? "Replies in this conversation, even when you are away. Keeps explicit model preferences; otherwise uses current Instance defaults." : "Runs independently. Results stay in Background work unless you request a report."}>
           <Select aria-label="Automation destination" disabled={busy} value={draft.executionTarget.kind}
             options={[{ value: "backgroundSession", label: "Separate background Session" }, { value: "existingSession", label: "Selected conversation" }]}
             onChange={kind => setDraft({ ...draft, executionTarget: { kind }, completionDelivery: { kind: "none" }, modelKey: null, reasoningEffort: null })} />
@@ -398,7 +397,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       </Drawer>
       <Collapse onChange={keys => { if (keys.length) void loadDeliveries(); }} items={[{ key: "deliveries", label: "Built-in Event deliveries", children: <Flex vertical gap={token.paddingSM}>
         {deliveryError ? <Alert type="error" showIcon title="Event deliveries could not be loaded" action={<Button onClick={() => void loadDeliveries()}>Retry deliveries</Button>} /> : null}
-        <Table rowKey={row => `${row.eventId}:${row.triggerId}`} size="small" scroll={{ x: 650 }} dataSource={deliveries}
+        <Table aria-label="Built-in Event deliveries" className="admin-collection-table" rowKey={row => `${row.eventId}:${row.triggerId}`} size="small" scroll={{ x: 650 }} dataSource={deliveries}
           columns={[{ title: "Automation", dataIndex: "automationId" }, { title: "Subscription", dataIndex: "triggerId" }, { title: "Revision", dataIndex: "triggerRevision" }, { title: "Outcome", dataIndex: "status" }, { title: "Reason", dataIndex: "code" }]}
           locale={{ emptyText: "No Built-in Event deliveries yet" }} />
       </Flex> }]} />
@@ -463,8 +462,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             </Flex>
           }} />
         </> : null}
-    </Flex></div>
-  </section>;
+    </AgentConfigurationPanel>;
 }
 
 export function scheduleTimingLabel(timing: ScheduleTiming) {

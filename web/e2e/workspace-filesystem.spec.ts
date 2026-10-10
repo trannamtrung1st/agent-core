@@ -27,7 +27,7 @@ for (const scope of ["scratch", "home"]) test(`native ${scope} filesystem batche
   async function send(command: string) {
     const text = `synthetic-workspace-filesystem:${command}`;
     await page.getByLabel("Message").fill(text);
-    await expect(page.getByLabel("Message")).toHaveValue(text);
+    await expect(page.getByLabel("Message")).toHaveText(text);
     await page.getByRole("button", { name: "Send", exact: true }).click();
   }
   await send(scope);

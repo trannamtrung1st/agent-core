@@ -1,3 +1,4 @@
+import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { expect, test } from "@playwright/test";
 
 async function createInstance(page: import("@playwright/test").Page) {
@@ -153,6 +154,7 @@ test("Hidden automation keeps drafts, stops polling and saves a local picker tim
 test("Draft actions remain visible at desktop and mobile scroll positions", async ({ page }) => {
   await page.goto("/admin/definitions/examiner");
   await page.getByRole("button", { name: /^Fork v\d+ \((builtIn|durable)\)$/ }).click();
+  await openDefinitionSettings(page.locator('section[aria-label="Draft editor"]'));
   await expect(page.getByLabel("System instructions", { exact: true })).toBeVisible();
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 844 });

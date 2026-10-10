@@ -26,6 +26,34 @@ public sealed class AgentRunAdmissionStoreTests
     private const string Hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Batched_explicit_input_and_reference_evidence_are_frozen_across_retry_and_reopen(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        UserMessagePart[] first = [new("invocation",InvocationKind:"skill",SkillKey:"definition:first"),new("text",Text:" Check A")];
+        UserMessagePart[] second = [new("invocation",InvocationKind:"skill",SkillKey:"definition:second"),new("reference",Reference:new("session",SessionId:Guid.NewGuid()),Label:"Evidence")];
+        var entries = new[]{first,second}.Select((parts,i)=>new ConversationEntry(Guid.NewGuid(),i+1,Guid.NewGuid(),ConversationRole.User,UserMessageContent.DisplayText(parts),null,EntryStatus.Completed,SessionMode.Text,0,0,Now,Parts:parts)).ToArray();
+        var snapshot = Snapshot(Guid.NewGuid(),entries) with {ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.SystemDefault, null)};
+        await f.Memory.SaveAsync(snapshot,0);
+        EffectiveSkill[] catalog = [new("definition:first",SkillOrigin.Definition,"first","First","First","FIRST_PROCEDURE",SkillProjection.OnDemand,[],[]),new("definition:second",SkillOrigin.Definition,"second","Second","Second","SECOND_PROCEDURE",SkillProjection.OnDemand,[],[])];
+        var references = new[]{new ComposerReferenceEvidence(second[1].Reference!,"Evidence","valid","SOURCE_ONE",7,"hash")};
+        var keys = new[]{"definition:first","definition:second"};
+        var pin = new ComposerRunInput(keys,references,Now);
+        var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),snapshot,entries,Now,catalog,composerInput:pin);
+        keys[0]="definition:mutated"; references[0]=references[0] with {Text="SOURCE_TWO"};
+        await f.Runs.AdmitAsync(snapshot with {Revision=2},1,run);
+        var claim = await f.Runs.ApplyAsync(Owner,run.AgentRunId,new AgentRunCommand.Claim(1,Now,Guid.NewGuid(),Now.AddMinutes(1)));
+        var retry = await f.Runs.ApplyAsync(Owner,run.AgentRunId,new AgentRunCommand.Fail(claim.Revision,Now,claim.Claim!.Generation,"provider-unavailable","Temporary failure",true,Now.AddSeconds(1)));
+        await f.ReopenAsync();
+        var saved=(await f.Runs.GetAsync(Owner,run.AgentRunId))!;
+        Assert.Equal(["definition:first","definition:second"],saved.ActiveSkillKeys); Assert.Equal(0,saved.SkillLoadCount);
+        Assert.Equal(entries.Select(e=>e.EntryId),saved.Admission.Activation.SourceEntryIds);
+        Assert.Equal("SOURCE_ONE",Assert.Single(saved.Admission.ComposerInput!.References).Text);
+        Assert.Equal(run.ResponseId,saved.ResponseId); Assert.Equal(retry.Status,saved.Status);
+    }
+
+    [Theory]
     [InlineData(false)] [InlineData(true)]
     public async Task Effective_budget_and_accounting_survive_reopen_retry_and_reclaim(bool sqlite)
     {
@@ -1319,10 +1347,9 @@ public sealed class AgentRunAdmissionStoreTests
             await using (var db = await factory.CreateDbContextAsync())
             {
                 await db.Database.MigrateAsync("20261008115119_AutomationDestinations");
-                var memory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now));
-                // Seed the historical schema without asking today's EF entry model to write later columns.
-                await memory.StageSaveAsync(db, parentSnapshot with { Entries = [] }, 0, default);
-                await memory.StageSaveAsync(db, child.Snapshot with { Entries = [] }, 0, default);
+                // Copy only columns available in the historical schema, then retain its legacy entry shape below.
+                await MigrationSessionSeed.CopyPersistedSessionAsync(factory, parentSnapshot with { Entries = [] }, "20261008115119_AutomationDestinations");
+                await MigrationSessionSeed.CopyPersistedSessionAsync(factory, child.Snapshot with { Entries = [] }, "20261008115119_AutomationDestinations");
                 db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(parentSnapshot, parent));
                 db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(parent));
                 db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(child.Snapshot, completed));

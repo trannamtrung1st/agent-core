@@ -1,7 +1,12 @@
+import { AgentConfigurationPanel, AgentIdentitySections, AgentSkillsResourcesSections } from "./AgentConfigurationLayout";
+import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 import { automationTriggerPermissionSummary } from "./AutomationTriggerPermissions";
 import { ExecutionBudgetLimitsProvider, useExecutionBudgetLimits } from "./executionBudgetLimits";
-import { InstanceExecutionBudgets, validExecutionBudgets } from "./ExecutionBudgetsSection";
+import { validExecutionBudgets } from "./ExecutionBudgetsSection";
 import { groupedCapabilityOptions, reconcileAlwaysCapabilities } from "./capabilityOptions";
+import { previewInstanceVersion } from "../../services/instanceConfiguration";
+import { InstanceSettingsSection } from "./InstanceSettingsSection";
+import { InstanceResourcesSection } from "./InstanceResourcesSection";
 import { InstanceSkillsSection } from "./InstanceSkillsSection";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { BrowserPrivacySection } from "./BrowserPrivacySection";
@@ -54,6 +59,8 @@ import { HarnessManagementSection, HarnessPolicyModeScopes } from "./HarnessMana
 import { CredentialsSection, InstanceCredentialsSection } from "./CredentialsSection";
 import { EventsSection } from "./EventsSection";
 import { DefinitionDraftPublishGatePanel, type DefinitionDraftEvidenceHandle } from "./definitionDraftPublishGatePanel";
+import { ResourceDeletionContent, ResourceSelectionToolbar } from "./ResourceSelectionToolbar";
+import { RESOURCE_FILE_HELP, resourceBatchLimitProblem, resourceMediaType, resourcePreviewProblem } from "./resourcePreview";
 import { ResourceImportPanel } from "./resourceImportPanel";
 import {
   type AdminDefinitionDraft,
@@ -893,7 +900,7 @@ function InventorySection({
   );
   return (
     <section aria-label={title} className="admin-inventory-section">
-      <Flex align="baseline" justify="space-between" gap={12} className="admin-inventory-heading">
+      <Flex align="baseline" wrap gap="var(--ac-space-compact)" className="admin-inventory-heading">
         <Typography.Title level={4}>{title}</Typography.Title>
         {countLabel ? <Typography.Text type="secondary">{countLabel}</Typography.Text> : null}
       </Flex>
@@ -1479,15 +1486,8 @@ function DefinitionDetail({
           />
         </section>
       ) : group || lifecycleLoading || draftSummaries.length > 0 ? (
-        <div className="admin-definition-workspace">
-          <section aria-label="Definition drafts" className="admin-definition-panel admin-definition-drafts">
-            <div className="admin-definition-panel-heading">
-              <Typography.Title level={4}>Versions &amp; drafts</Typography.Title>
-              <Typography.Text type="secondary">
-                Fork an immutable version to edit, validate, and publish a new one.
-              </Typography.Text>
-            </div>
-            <div className="admin-definition-panel-body">
+        <section aria-label="Definition drafts" className="admin-definition-drafts">
+              <Typography.Paragraph type="secondary">Fork an immutable version to edit, validate, and publish a new one.</Typography.Paragraph>
               {group && !group.draftOnly ? (
                 <Flex wrap gap={token.paddingXS} align="center" className="admin-draft-create">
                   <Select
@@ -1550,7 +1550,7 @@ function DefinitionDetail({
                   { key: "drafts", label: "Drafts", children: <>
                     {!lifecycleLoading && draftSummaries.length > 0 ? (
                       <div className="admin-draft-list">
-                        <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-list-heading">
+                        <Flex align="baseline" wrap gap="var(--ac-space-compact)" className="admin-draft-list-heading">
                           <Typography.Text strong>Existing drafts</Typography.Text>
                           <Typography.Text type="secondary">{draftSummaries.length}</Typography.Text>
                         </Flex>
@@ -1584,9 +1584,7 @@ function DefinitionDetail({
                     ) : null}
                   </> }
                 ]} />
-            </div>
         </section>
-        </div>
       ) : null}
     </Flex>
   );
@@ -1651,7 +1649,7 @@ function DraftEditor({
   jsonError,
   editorView,
   dirty,
-  busy,
+  busy: ownerBusy,
   onCandidateChange,
   onJsonTextChange,
   onEditorViewChange,
@@ -1692,7 +1690,16 @@ function DraftEditor({
       alwaysCapabilities: reconcileAlwaysCapabilities(next.alwaysCapabilities ?? authorizedNames, next.toolAllowlist, capabilityCatalog) }));
   };
 
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
+  const [resourceBusy, setResourceBusy] = useState(false);
+  const busy = ownerBusy || resourceBusy;
+  const [selectedResources, setSelectedResources] = useState<React.Key[]>([]);
+  const resourceOwner = useRef(activeDraft.draftId);
+  const resourceReadEpoch = useRef(0);
+  resourceOwner.current = activeDraft.draftId;
+  useEffect(() => { setSelectedResources([]); }, [activeDraft.draftId, activeDraft.revision]);
+  useEffect(() => { setResourceBusy(false); setResourceDeletionError(null); setResourceRevisionKnown(true); }, [activeDraft.draftId]);
+  useEffect(() => { resourceOwner.current = activeDraft.draftId; return () => { resourceOwner.current = ""; resourceReadEpoch.current++; }; }, [activeDraft.draftId]);
   const [toolRegistryLoading, setToolRegistryLoading] = useState(false);
   const [toolRegistryError, setToolRegistryError] = useState<AdminFailureNotice | null>(null);
   const [toolNames, setToolNames] = useState<string[]>([]);
@@ -1704,7 +1711,6 @@ function DraftEditor({
     ? allCapabilityNames
     : capabilities.toolAllowlist;
   const alwaysNames = reconcileAlwaysCapabilities(capabilities.alwaysCapabilities ?? authorizedNames, authorizedNames, capabilityCatalog);
-  const otherAuthorizedCapabilities = capabilityCatalog.filter(c => authorizedNames.includes(c.name) && c.discoverable && !alwaysNames.includes(c.name));
   const { token } = theme.useToken();
   // Migrate an editable legacy candidate using its exact grants and fixed discoverable projection.
   // Published versions remain immutable; Core still owns context-only projection.
@@ -1718,37 +1724,67 @@ function DraftEditor({
     }
   }, [catalogReady, candidateLocked, editorView, capabilities.capabilityMode, capabilityCatalog, onCandidateChange]);
   const numberErrors = automationNumberErrors(candidate);
-  const saveBlocked = candidateLocked || !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy, budgetLimits) || numberErrors.length > 0 || (editorView === "form" && !catalogReady);
+  const budgetsValid = validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy, budgetLimits);
+  const saveBlocked = candidateLocked || !budgetsValid || numberErrors.length > 0 || (editorView === "form" && !catalogReady);
   const saveBlockedMessage = candidateLocked
     ? "Advanced JSON is invalid — fix it before saving. This does not change the draft revision."
-    : !validExecutionBudgets((candidate.executionBudgets ?? {}) as import("../../services/adminApi").ExecutionBudgetPolicy, budgetLimits) ? budgetLimits ? "Execution budgets require whole values within the host limits." : "Execution limits are unavailable. Retry the limits read in Definition before saving budget values." : numberErrors[0]?.message ?? "Authoring options are loading. Wait before saving or use Advanced JSON.";
+    : !budgetsValid ? budgetLimits
+      ? "Review Execution budgets in Identity & version → Settings. Values must be whole numbers within the host limits."
+      : "Execution limits are unavailable. Retry Execution budgets in Identity & version → Settings before saving budget values."
+    : numberErrors.length > 0
+      ? `Review Trigger restrictions in Identity & version → Settings. ${numberErrors[0].message}`
+      : toolRegistryError
+        ? "The capability catalog is unavailable. Open Capabilities and choose Retry tool registry, or use Advanced JSON."
+        : "The capability catalog is loading. Wait before saving or use Advanced JSON.";
   const [resources, setResources] = useState<AdminDefinitionDraftResource[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [resourcesAvailable, setResourcesAvailable] = useState(false);
+  const [resourceRevisionKnown, setResourceRevisionKnown] = useState(true);
+  const [resourceDeletionError, setResourceDeletionError] = useState<string | null>(null);
   const [logicalPath, setLogicalPath] = useState("");
   const [kind, setKind] = useState<(typeof RESOURCE_KINDS)[number]>("Reference");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const resourcesReady = resourcesAvailable && resourceRevisionKnown;
+  const pendingResource = pendingFile ? { logicalPath, kind, byteLength: pendingFile.size, mediaType: resourceMediaType(pendingFile, logicalPath) } : null;
+  const pendingResourceProblem = pendingResource
+    ? resourcePreviewProblem(pendingResource, [logicalPath], resources.map(item => item.logicalPath))
+      ?? resourceBatchLimitProblem([pendingResource], resources.length, resources.reduce((sum, item) => sum + item.byteLength, 0))
+    : null;
   const [publishEligible, setPublishEligible] = useState(false);
 
   useEffect(() => {
     setPublishEligible(false);
   }, [activeDraft.draftId, activeDraft.revision]);
 
-  const reloadResources = useCallback(async () => {
+  const reloadResources = useCallback(async (signal?: AbortSignal) => {
+    const request = ++resourceReadEpoch.current;
     setResourcesLoading(true);
+    setResourcesAvailable(false);
+    setSelectedResources([]);
     onError(null);
     try {
-      const items = await listAdminDraftResources(activeDraft.draftId);
+      const items = await listAdminDraftResources(activeDraft.draftId, signal);
+      if (signal?.aborted || request !== resourceReadEpoch.current || resourceOwner.current !== activeDraft.draftId) return;
       setResources(items);
+      setResourcesAvailable(true);
+      return true;
     } catch (error) {
-      reportAdminError(onError, error, "Failed to load resources.");
+      if (!signal?.aborted && request === resourceReadEpoch.current && resourceOwner.current === activeDraft.draftId) {
+        reportAdminError(onError, error, "Failed to load resources.");
+        setResourceDeletionError(describeAdminError(error, "Failed to load resources. Reload before changing them.").message);
+      }
+      return false;
     } finally {
-      setResourcesLoading(false);
+      if (request === resourceReadEpoch.current && resourceOwner.current === activeDraft.draftId) setResourcesLoading(false);
     }
   }, [activeDraft.draftId, onError]);
 
   useEffect(() => {
-    void reloadResources();
-  }, [reloadResources, activeDraft.revision]);
+    if (busy) return;
+    const controller = new AbortController();
+    void reloadResources(controller.signal);
+    return () => controller.abort();
+  }, [reloadResources, activeDraft.revision, busy]);
 
   const reloadToolRegistry = useCallback(async () => {
     setToolRegistryLoading(true);
@@ -1772,9 +1808,29 @@ function DraftEditor({
   }, [reloadToolRegistry]);
 
   const refreshDraft = async () => {
+    if (resourceOwner.current !== activeDraft.draftId) return;
+    setResourceRevisionKnown(false);
+    setResourcesAvailable(false);
+    setSelectedResources([]);
     const draft = await getAdminDefinitionDraft(activeDraft.draftId);
+    if (resourceOwner.current !== activeDraft.draftId) return;
     onDraftRevisionChange(draft, { preserveLocalEdits: dirty });
-    await reloadResources();
+    setResourceRevisionKnown(true);
+    if (await reloadResources() === false && resourceOwner.current === activeDraft.draftId) {
+      throw new Error("Unable to reload resources. Retry before changing them.");
+    }
+  };
+
+  const retryResourceRead = async () => {
+    if (busy || resourcesLoading) return;
+    setResourceBusy(true);
+    try { await refreshDraft(); if (resourceOwner.current === activeDraft.draftId) setResourceDeletionError(null); }
+    catch (error) {
+      if (resourceOwner.current !== activeDraft.draftId) return;
+      const notice = describeAdminError(error, "Unable to reload resources. Retry before changing them.");
+      setResourceDeletionError(notice.message);
+      onError(notice.message, notice.diagnosticId ?? null);
+    } finally { if (resourceOwner.current === activeDraft.draftId) setResourceBusy(false); }
   };
 
   const updateKnowledgeSource = (
@@ -1806,65 +1862,94 @@ function DraftEditor({
   };
 
   const addResource = async () => {
-    if (!pendingFile || !logicalPath.trim()) {
-      message.warning("Choose a file and logical path.");
-      return;
-    }
+    if (busy || resourcesLoading || !resourcesReady || !pendingFile || !pendingResource?.mediaType || pendingResourceProblem) return;
+    const draftId = activeDraft.draftId;
+    setResourceBusy(true);
+    setResourceDeletionError(null);
     onError(null);
     try {
       const stored = await uploadAdminDraftResourceContent(
-        activeDraft.draftId,
+        draftId,
         pendingFile,
-        pendingFile.type || "application/octet-stream"
+        pendingResource.mediaType
       );
+      if (resourceOwner.current !== draftId) return;
       await upsertAdminDraftResource(
-        activeDraft.draftId,
+        draftId,
         activeDraft.revision,
         logicalPath.trim(),
         kind,
         stored
       );
+      if (resourceOwner.current !== draftId) return;
       message.success("Resource bound.");
       setPendingFile(null);
       setLogicalPath("");
       await refreshDraft();
     } catch (error) {
+      if (resourceOwner.current !== draftId) return;
       const notice = showAdminFailure(message, error, "Resource upload failed.");
       onError(notice.message, notice.diagnosticId ?? null);
-    }
+      setResourceDeletionError(notice.message);
+    } finally { if (resourceOwner.current === draftId) setResourceBusy(false); }
   };
 
-  const removeResource = async (resource: AdminDefinitionDraftResource) => {
+  const removeResources = async (items: AdminDefinitionDraftResource[]) => {
+    if (busy || resourcesLoading || !resourcesReady || resourceOwner.current !== activeDraft.draftId) return;
+    const draftId = activeDraft.draftId;
+    let revision = activeDraft.revision;
+    let deleted = 0;
+    setResourceBusy(true);
+    setResourceDeletionError(null);
     onError(null);
+    let failure: unknown;
     try {
-      await removeAdminDraftResource(activeDraft.draftId, resource.resourceId, activeDraft.revision);
-      message.success("Resource removed.");
-      await refreshDraft();
-    } catch (error) {
-      const notice = showAdminFailure(message, error, "Remove failed.");
-      onError(notice.message, notice.diagnosticId ?? null);
+      for (const item of items) {
+        if (resourceOwner.current !== draftId) break;
+        await removeAdminDraftResource(draftId, item.resourceId, revision);
+        revision += 1;
+        deleted += 1;
+      }
+    } catch (error) { failure = error; }
+    finally {
+      if (resourceOwner.current === draftId) {
+        setSelectedResources([]);
+        try { await refreshDraft(); }
+        catch (error) { failure ??= error; }
+        setResourceBusy(false);
+        if (failure) {
+          const notice = showAdminFailure(message, failure, "Resource deletion stopped. Reload before retrying.");
+          setResourceDeletionError(`${deleted} of ${items.length} resources deleted. ${notice.message}`);
+          onError(`${deleted} of ${items.length} resources deleted. ${notice.message}`, notice.diagnosticId ?? null);
+        } else message.success(`${deleted} resource${deleted === 1 ? '' : 's'} deleted.`);
+      }
     }
   };
+  const confirmResourceDeletion = (items: AdminDefinitionDraftResource[]) => confirmAction(modal, {
+    title: `Delete ${items.length} draft resource${items.length === 1 ? '' : 's'}?`,
+    content: <ResourceDeletionContent notice="Removes these bindings from this draft. Published versions keep their content. Deletion stops if the draft changes." paths={items.map(item => item.logicalPath)} />,
+    okText: 'Delete resources', danger: true, onOk: () => removeResources(items)
+  });
 
   return (
     <Flex vertical gap={12} className="admin-draft-editor">
-      <Flex align="start" justify="space-between" gap={12} wrap="wrap" className="admin-draft-editor-heading">
-        <div>
+      <Flex vertical gap={token.paddingXS} className="admin-draft-editor-heading">
+        <Flex align="baseline" wrap gap={token.paddingXS}>
           <Typography.Title level={5}>
             {activeDraft.sourceVersion != null
               ? `Editing draft from v${activeDraft.sourceVersion}`
               : "Editing draft"}
           </Typography.Title>
-          <Typography.Text type="secondary">
-            Revision {activeDraft.revision} · Updated {formatAdminTimestamp(activeDraft.updatedAt)}
+          <Typography.Text
+            type="secondary"
+            copyable={{ text: activeDraft.draftId, tooltips: ["Copy draft ID", "Copied"] }}
+            className="admin-draft-id"
+          >
+            ID {activeDraft.draftId.slice(0, 8)}…
           </Typography.Text>
-        </div>
-        <Typography.Text
-          type="secondary"
-          copyable={{ text: activeDraft.draftId, tooltips: ["Copy draft ID", "Copied"] }}
-          className="admin-draft-id"
-        >
-          ID {activeDraft.draftId.slice(0, 8)}…
+        </Flex>
+        <Typography.Text type="secondary">
+          Revision {activeDraft.revision} · Updated {formatAdminTimestamp(activeDraft.updatedAt)}
         </Typography.Text>
       </Flex>
       <DraftEditorActions
@@ -1876,12 +1961,11 @@ function DraftEditor({
         items={[
           {
             key: "definition",
-            label: "Definition",
-            destroyOnHidden: true,
+            label: "Identity & version",
+            destroyOnHidden: false,
             children: (
               <section className="admin-draft-tab" aria-label="Definition candidate">
                 <div className="admin-draft-tab-intro">
-                  <Typography.Title level={5}>Definition</Typography.Title>
                   <Typography.Paragraph type="secondary">
                     Form and Advanced JSON edit the same unsaved candidate. Saving from either view uses this draft revision.
                   </Typography.Paragraph>
@@ -1907,23 +1991,136 @@ function DraftEditor({
             )
           },
           {
+            key: "resources",
+            label: "Skills & resources",
+            destroyOnHidden: false,
+            children: (
+              <AgentSkillsResourcesSections
+                skills={<Flex vertical gap={token.padding}>
+                  {candidateLocked && <Alert type="error" showIcon title="Advanced JSON is invalid" description="Fix Advanced JSON in Identity & version before changing Skills. Your invalid text is retained." />}
+                  <DefinitionSkillsSection candidate={candidate} busy={busy || candidateLocked} readOnly={false} onChange={onCandidateChange} />
+                </Flex>}
+                resources={(
+              <AgentConfigurationPanel title="Resources" label="Draft resources" description="Upload immutable source material and bind it to a safe path in the published definition." bodyClassName="admin-draft-tab">
+                <section className="admin-draft-form-section" aria-label="Add draft resource">
+                  <Typography.Title level={5}>Add resource</Typography.Title>
+                  <div className="admin-resource-form-grid">
+                    <label className="admin-draft-field admin-resource-path">
+                      <Typography.Text strong>Logical path</Typography.Text>
+                      <Input
+                        aria-label="Resource logical path"
+                        placeholder="knowledge/policy.md"
+                        value={logicalPath}
+                        onChange={(event) => setLogicalPath(event.target.value)}
+                        disabled={busy}
+                      />
+                    </label>
+                    <label className="admin-draft-field">
+                      <Typography.Text strong>Kind</Typography.Text>
+                      <Select
+                        aria-label="Resource kind"
+                        value={kind}
+                        onChange={setKind}
+                        options={RESOURCE_KINDS.map((value) => ({ value, label: value }))}
+                        disabled={busy}
+                      />
+                    </label>
+                    <label className="admin-draft-field admin-resource-file">
+                      <Typography.Text strong>Resource file</Typography.Text>
+                      <div className="admin-resource-upload-block">
+                        <Upload.Dragger
+                          beforeUpload={(file) => {
+                            setPendingFile(file);
+                            return false;
+                          }}
+                          showUploadList={false}
+                          maxCount={1}
+                          multiple={false}
+                          disabled={busy}
+                          className="admin-resource-upload"
+                        >
+                          <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+                          <p className="ant-upload-text">Choose a file or drag it here</p>
+                          <p className="ant-upload-hint">One file will be bound to the logical path above.</p>
+                        </Upload.Dragger>
+                        {pendingFile ? (
+                          <Tag
+                            className="admin-resource-pending"
+                            closable={!busy}
+                            onClose={(event) => {
+                              event.preventDefault();
+                              setPendingFile(null);
+                            }}
+                          >
+                            {pendingFile.name}
+                          </Tag>
+                        ) : null}
+                      </div>
+                    </label>
+                  </div>
+                  <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{RESOURCE_FILE_HELP}</Typography.Paragraph>
+                  {pendingResourceProblem && <Alert type="error" showIcon title={pendingResourceProblem} />}
+                  <Button
+                    type="primary"
+                    aria-label="Upload and bind"
+                    onClick={() => void addResource()}
+                    disabled={busy || resourcesLoading || !resourcesReady || !pendingFile || !!pendingResourceProblem}
+                  >
+                    Upload &amp; bind
+                  </Button>
+                </section>
+                <ResourceImportPanel
+                  key={activeDraft.draftId}
+                  draftId={activeDraft.draftId}
+                  expectedRevision={activeDraft.revision}
+                  existingPaths={resources.map((item) => item.logicalPath)}
+                  existingCount={resources.length}
+                  existingBytes={resources.reduce((sum, item) => sum + item.byteLength, 0)}
+                  disabled={busy || resourcesLoading || !resourcesReady}
+                  onBusyChange={value => { if (resourceOwner.current === activeDraft.draftId) setResourceBusy(value); }}
+                  onBound={refreshDraft}
+                  onError={onError}
+                />
+                {resourceDeletionError && <Alert type="error" showIcon title={resourceDeletionError} action={<Button disabled={busy || resourcesLoading} onClick={() => void retryResourceRead()}>Reload resources</Button>} />}
+                <ResourceSelectionToolbar count={selectedResources.length} disabled={busy || resourcesLoading || !resourcesReady} busy={resourceBusy}
+                  onClear={() => setSelectedResources([])} onDelete={() => confirmResourceDeletion(resources.filter(item => selectedResources.includes(item.resourceId)))} />
+                {resourcesLoading ? <Spin /> : null}
+                {!resourcesLoading && resources.length === 0 ? (
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No resources bound to this draft." />
+                ) : null}
+                {!resourcesLoading && resources.length > 0 ? (
+                  <Table<AdminDefinitionDraftResource>
+                    className="admin-collection-table" size="small" rowKey="resourceId" tableLayout="fixed"
+                    scroll={{ x: 1200 }} pagination={adminCollectionPagination} dataSource={resources}
+                    rowSelection={{ selectedRowKeys: selectedResources, onChange: setSelectedResources,
+                      getCheckboxProps: item => ({ disabled: busy || resourcesLoading || !resourcesReady, 'aria-label': `Select resource ${item.logicalPath}` }) }}
+                    columns={[
+                      { title: 'Resource path', dataIndex: 'logicalPath', width: 300, ellipsis: true, render: (path: string) => <Typography.Text strong title={path}>{path}</Typography.Text> },
+                      { title: 'Kind', dataIndex: 'kind', width: 130 },
+                      { title: 'Media type', dataIndex: 'mediaType', width: 240 },
+                      { title: 'Size (bytes)', dataIndex: 'byteLength', width: 130, align: 'right', render: (bytes: number) => bytes.toLocaleString() },
+                      { title: 'Content hash', dataIndex: 'contentSha256', width: 200, ellipsis: true, render: (hash: string) => <Typography.Text type="secondary" title={hash}>{hash.slice(0, 12)}…</Typography.Text> },
+                      { title: 'Actions', width: 160, render: (_, item) => <Button type="text" danger aria-label="Remove" disabled={busy || resourcesLoading || !resourcesReady} onClick={() => confirmResourceDeletion([item])}>Remove resource</Button> }
+                    ]}
+                  />
+                ) : null}
+              </AgentConfigurationPanel>
+                )}
+              />
+            )
+          },
+          {
             key: "capabilities",
             label: "Capabilities",
-            destroyOnHidden: true,
+            destroyOnHidden: false,
             children: (
-              <section className="admin-draft-tab" aria-label="Draft capabilities">
-                <div className="admin-draft-tab-intro">
-                  <Typography.Title level={5}>Capabilities</Typography.Title>
-                  <Typography.Paragraph type="secondary">
-                    Choose the tools, workspace behavior, and knowledge references available to this definition.
-                  </Typography.Paragraph>
-                </div>
+              <AgentConfigurationPanel title="Capabilities" label="Draft capabilities" description="Choose the tools, workspace behavior, and knowledge references available to this definition." bodyClassName="admin-draft-tab">
                 {candidateLocked ? (
                   <Alert
                     type="error"
                     showIcon
                     title="Advanced JSON is invalid"
-                    description="Fix Advanced JSON on the Definition tab before changing capabilities. The invalid text stays in place."
+                    description="Fix Advanced JSON on Identity & version before changing capabilities. The invalid text stays in place."
                   />
                 ) : null}
                 <section className="admin-draft-form-section" aria-label="Harness and tools">
@@ -1987,10 +2184,6 @@ function DraftEditor({
                     </label>
                     <Typography.Text type="secondary">Core also includes authorized, eligible Browser v2 bootstrap tools and active Skill requirements. These can appear without an Always selection; permission still comes from Authorized capabilities.</Typography.Text>
                     <Typography.Text aria-live="polite">Authorized: {authorizedNames.length} · Always selected: {alwaysNames.length}</Typography.Text>
-                    <Typography.Text type="secondary">Not selected as Always available: {otherAuthorizedCapabilities.length}. Context-only capabilities remain controlled by Core.</Typography.Text>
-                    {otherAuthorizedCapabilities.length ? <Collapse ghost items={[{ key: "on-demand", label: "Other authorized capabilities", children: <Flex wrap gap={token.paddingXS}>
-                      {otherAuthorizedCapabilities.map(capability => <Tag key={capability.name} title={capability.summary}>{capability.name}</Tag>)}
-                    </Flex> }]} /> : null}
                   </>}
 
                 </section>
@@ -2033,9 +2226,9 @@ function DraftEditor({
                   </Flex>
                 </section>
                 <section className="admin-draft-form-section" aria-label="Knowledge source references">
-                  <Flex align="baseline" justify="space-between" gap={12} className="admin-draft-section-heading">
+                  <Flex align="baseline" className="admin-draft-section-heading">
                     <Typography.Title level={5}>Knowledge sources</Typography.Title>
-                    <Typography.Text type="secondary">{capabilities.knowledgeSources.length}</Typography.Text>
+                    <Typography.Text type="secondary" aria-label={`${capabilities.knowledgeSources.length} knowledge sources`}>({capabilities.knowledgeSources.length})</Typography.Text>
                   </Flex>
                   <Typography.Paragraph type="secondary">
                     Bind named references that can be cited by configured knowledge tools.
@@ -2103,128 +2296,7 @@ function DraftEditor({
                     Add knowledge source
                   </Button>
                 </section>
-              </section>
-            )
-          },
-          {
-            key: "resources",
-            label: "Resources",
-            destroyOnHidden: true,
-            children: (
-              <section className="admin-draft-tab" aria-label="Draft resources">
-                <div className="admin-draft-tab-intro">
-                  <Typography.Title level={5}>Resources</Typography.Title>
-                  <Typography.Paragraph type="secondary">
-                    Upload immutable source material and bind it to a safe path in the published definition.
-                  </Typography.Paragraph>
-                </div>
-                <section className="admin-draft-form-section" aria-label="Add draft resource">
-                  <Typography.Title level={5}>Add resource</Typography.Title>
-                  <div className="admin-resource-form-grid">
-                    <label className="admin-draft-field admin-resource-path">
-                      <Typography.Text strong>Logical path</Typography.Text>
-                      <Input
-                        aria-label="Resource logical path"
-                        placeholder="knowledge/policy.md"
-                        value={logicalPath}
-                        onChange={(event) => setLogicalPath(event.target.value)}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label className="admin-draft-field">
-                      <Typography.Text strong>Kind</Typography.Text>
-                      <Select
-                        aria-label="Resource kind"
-                        value={kind}
-                        onChange={setKind}
-                        options={RESOURCE_KINDS.map((value) => ({ value, label: value }))}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label className="admin-draft-field admin-resource-file">
-                      <Typography.Text strong>Resource file</Typography.Text>
-                      <div className="admin-resource-upload-block">
-                        <Upload.Dragger
-                          beforeUpload={(file) => {
-                            setPendingFile(file);
-                            return false;
-                          }}
-                          showUploadList={false}
-                          maxCount={1}
-                          multiple={false}
-                          disabled={busy}
-                          className="admin-resource-upload"
-                        >
-                          <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-                          <p className="ant-upload-text">Choose a file or drag it here</p>
-                          <p className="ant-upload-hint">One file will be bound to the logical path above.</p>
-                        </Upload.Dragger>
-                        {pendingFile ? (
-                          <Tag
-                            className="admin-resource-pending"
-                            closable={!busy}
-                            onClose={(event) => {
-                              event.preventDefault();
-                              setPendingFile(null);
-                            }}
-                          >
-                            {pendingFile.name}
-                          </Tag>
-                        ) : null}
-                      </div>
-                    </label>
-                  </div>
-                  <Button
-                    type="primary"
-                    aria-label="Upload and bind"
-                    onClick={() => void addResource()}
-                    disabled={busy || !pendingFile || !logicalPath.trim()}
-                  >
-                    Upload &amp; bind
-                  </Button>
-                </section>
-                <ResourceImportPanel
-                  draftId={activeDraft.draftId}
-                  expectedRevision={activeDraft.revision}
-                  existingPaths={resources.map((item) => item.logicalPath)}
-                  existingCount={resources.length}
-                  existingBytes={resources.reduce((sum, item) => sum + item.byteLength, 0)}
-                  disabled={busy}
-                  onBound={refreshDraft}
-                  onError={onError}
-                />
-                {resourcesLoading ? <Spin /> : null}
-                {!resourcesLoading && resources.length === 0 ? (
-                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No resources bound to this draft." />
-                ) : null}
-                {!resourcesLoading && resources.length > 0 ? (
-                  <List
-                    className="admin-resource-list"
-                    dataSource={resources}
-                    renderItem={(item) => (
-                      <List.Item
-                        actions={[
-                          <Button
-                            key="remove"
-                            type="text"
-                            danger
-                            aria-label="Remove"
-                            disabled={busy}
-                            onClick={() => void removeResource(item)}
-                          >
-                            Remove resource
-                          </Button>
-                        ]}
-                      >
-                        <List.Item.Meta
-                          title={item.logicalPath}
-                          description={`${item.kind} · ${item.byteLength.toLocaleString()} bytes · SHA-256 ${item.contentSha256.slice(0, 12)}…`}
-                        />
-                      </List.Item>
-                    )}
-                  />
-                ) : null}
-              </section>
+              </AgentConfigurationPanel>
             )
           },
           {
@@ -2428,6 +2500,7 @@ export function InstanceDetail({
   const [activityTab, setActivityTab] = useState("sessions");
   const [continuityTab, setContinuityTab] = useState("memory");
   const [automationTab, setAutomationTab] = useState("automations");
+  const [resourceTab, setResourceTab] = useState("skills");
   const [identityTab, setIdentityTab] = useState("profile");
   const [sourceSelection, setSourceSelection] = useState<AutomationSelection>();
   const [experienceSelection, setExperienceSelection] = useState<ExperienceSelection>();
@@ -2440,6 +2513,7 @@ export function InstanceDetail({
     if (tab === "activity") setActivityTab(section ?? "sessions");
     if (tab === "continuity") setContinuityTab(section ?? "memory");
     if (tab === "automation") setAutomationTab(section ?? "automations");
+    if (tab === "skills") setResourceTab(section ?? "skills");
     if (tab === "identity") setIdentityTab(section ?? "profile");
   }, [instanceId, tab, section]);
   useEffect(() => {
@@ -2461,11 +2535,12 @@ export function InstanceDetail({
     navigateToAppPath(`${window.location.pathname}${params.size ? `?${params}` : ""}`, true);
   };
   const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
-    const nextSection = selectedSection ?? (next === "activity" ? activityTab : next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : undefined);
+    const nextSection = selectedSection ?? (next === "activity" ? activityTab : next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "skills" ? resourceTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : undefined);
     updateActiveTab(next);
     if (next === "activity") setActivityTab(nextSection ?? "sessions");
     if (next === "continuity" && nextSection) setContinuityTab(nextSection);
     if (next === "automation" && nextSection) setAutomationTab(nextSection);
+    if (next === "skills") setResourceTab(nextSection ?? "skills");
     if (next === "identity") setIdentityTab(nextSection ?? "profile");
     navigateToAppPath(adminInstancePath(instanceId, next, nextSection as AdminInstanceSection | undefined));
   };
@@ -2552,13 +2627,17 @@ export function InstanceDetail({
               ...([{
                 key: "identity",
                 label: "Identity & version",
-                children: <Tabs activeKey={identityTab} onChange={key => setActiveTab("identity", key as AdminInstanceSection)} aria-label="Identity sections" items={[
-                  { key: "profile", label: "Profile", children: <Flex vertical gap={token.padding}><InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} /><InstanceExecutionBudgets key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} onUpdated={onInstanceChanged} /></Flex> },
-                  { key: "workspace", label: "Workspace", children: <InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} /> }
-                ]} />
+                children: <AgentIdentitySections activeKey={identityTab} onChange={key => setActiveTab("identity", key as AdminInstanceSection)}
+                  profile={<InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} />}
+                  settings={<InstanceSettingsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "identity" && identityTab === "settings"} onUpdated={onInstanceChanged} />}
+                  workspace={<InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} />}
+                />
               }]),
               ...([{
-                key: "skills", label: "Skills", children: <InstanceSkillsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "skills"} onUpdated={onInstanceChanged} />
+                key: "skills", label: "Skills & resources", children: <AgentSkillsResourcesSections activeKey={resourceTab} onChange={key => setActiveTab("skills", key as AdminInstanceSection)}
+                  skills={<InstanceSkillsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "skills" && resourceTab === "skills"} onUpdated={onInstanceChanged} />}
+                  resources={<InstanceResourcesSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "skills" && resourceTab === "resources"} onUpdated={onInstanceChanged} />}
+                />
               },
               {
                 key: "continuity", label: "Continuity",
@@ -2569,11 +2648,11 @@ export function InstanceDetail({
               }]),
               ...(resolved.instanceLifecycle === "Active" ? [{
                 key: "automation", label: "Automation",
-                children: <Flex vertical gap={16}>
+                children: <Flex vertical gap={token.padding}>
                   <Typography.Text type="secondary">An Automation produces a Run when its trigger fires or you choose Run now.</Typography.Text>
                   <Tabs activeKey={automationTab} onChange={key => setActiveTab("automation", key as AdminInstanceSection)} aria-label="Automation sections" items={[
                     { key: "automations", label: "Triggers", children: <InstanceAutomationsSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "automations"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
-                    { key: "controls", label: "Policies & models", children: <Flex vertical gap={16}>
+                    { key: "controls", label: "Policies & models", children: <Flex vertical gap={token.padding}>
                       <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
                       <InstanceMemoryAutomationPanel config={resolved} section="automation" />
                     </Flex> }
@@ -2593,17 +2672,10 @@ export function InstanceDetail({
               key: "effective",
               label: "Effective configuration",
               children: (
-                <section className="admin-definition-panel" aria-label="Effective configuration">
-                  <div className="admin-definition-panel-heading">
-                    <Typography.Title level={4}>Effective configuration</Typography.Title>
-                    <Typography.Text type="secondary">
-                      Resolved Definition and Instance values, with global Browser privacy controls below.
-                    </Typography.Text>
-                  </div>
-                  <div className="admin-definition-panel-body">
+                <AgentConfigurationPanel title="Effective configuration" label="Effective configuration"
+                  description="Resolved Definition and Instance values, with global Browser privacy controls below.">
                     <EffectiveConfigView config={resolved} hidePersona />
-                  </div>
-                </section>
+                  </AgentConfigurationPanel>
               )
             }
           ]}
@@ -2767,13 +2839,24 @@ export function InstanceManagedControls({
     }
     setBusy(true);
     try {
-      await updateAdminAgentInstanceActiveVersion(
-        config.instanceId,
-        config.instanceRevision,
-        targetVersion
-      );
-      message.success(`Active version set to v${targetVersion}.`);
-      onUpdated();
+      const ownerId = config.instanceId; const version = targetVersion;
+      const preview = await previewInstanceVersion(ownerId, version);
+      if (preview.instanceRevision !== config.instanceRevision) throw new Error("Instance changed. Reload and preview again.");
+      confirmAction(modal, {
+        title: `Adopt Definition v${version}?`,
+        content: <Flex vertical gap={8}>
+          <Typography.Paragraph>{preview.activationNotice}</Typography.Paragraph>
+          <Typography.Text>Changed defaults: {preview.changedDefinitionFields.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>Preserved Instance overrides: {preview.preservedInstanceOverrides.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>New inherited items: {preview.newInheritedItems.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>Changed inherited items: {preview.changedInheritedItems?.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>Removed inherited items: {preview.removedInheritedItems.join(', ') || 'None'}</Typography.Text>
+          <Typography.Text>Compatible Skill enablement choices, local resources and class budget overrides are retained.</Typography.Text>
+        </Flex>, okText: 'Adopt version', onOk: async () => {
+          await updateAdminAgentInstanceActiveVersion(ownerId, preview.instanceRevision, version);
+          message.success(`Instance adopted v${version}.`); onUpdated();
+        }
+      });
     } catch (error) {
       handleMutationError(error);
     } finally {
@@ -2797,19 +2880,11 @@ export function InstanceManagedControls({
   );
 
   return (
-    <section
-      className="admin-definition-panel admin-instance-management"
-      aria-label="Managed instance controls"
-    >
-      <div className="admin-definition-panel-heading">
-        <Typography.Title level={4}>Instance management</Typography.Title>
-        <Typography.Text type="secondary">
-          Update the persona, active definition version, and lifecycle.
-        </Typography.Text>
-      </div>
-      <div className="admin-definition-panel-body admin-instance-control-grid">
+    <AgentConfigurationPanel title="Instance management" label="Managed instance controls"
+      description="Update the persona, active definition version, and lifecycle."
+      className="admin-instance-management" bodyClassName="admin-instance-control-grid">
         <section className="admin-instance-persona" aria-label="Persona editor">
-          <Flex align="baseline" justify="space-between" gap={12} wrap="wrap">
+          <Flex align="baseline" gap="var(--ac-space-compact)" wrap>
             <Typography.Title level={5}>Persona</Typography.Title>
             <Typography.Text type="secondary">
               Rev {config.personaRevision}
@@ -2824,7 +2899,7 @@ export function InstanceManagedControls({
                 key: "form",
                 label: "Form",
                 children: (
-                  <Form className="admin-instance-persona-form" layout="vertical" disabled={busy}>
+                  <Form className="admin-instance-persona-form admin-settings-form" layout="vertical" disabled={busy}>
                     <Form.Item label="Name">
                       <Input
                         aria-label="Persona name"
@@ -2893,7 +2968,7 @@ export function InstanceManagedControls({
           <section aria-label="Active version">
             <Typography.Title level={5}>Active version</Typography.Title>
             <Typography.Paragraph type="secondary">
-              Choose the immutable definition version used by new sessions.
+              Choose the immutable Definition version used by the next new Run, including in existing conversations.
             </Typography.Paragraph>
             {inventoryError ? (
               <Alert
@@ -2930,7 +3005,7 @@ export function InstanceManagedControls({
             </Flex>
           </section>
           <section className="admin-instance-lifecycle" aria-label="Lifecycle controls">
-            <Flex align="baseline" justify="space-between" gap={12} wrap="wrap">
+            <Flex align="baseline" gap="var(--ac-space-compact)" wrap>
               <Typography.Title level={5}>Lifecycle</Typography.Title>
               <Tag color={config.instanceLifecycle === "Active" ? "green" : "default"}>
                 {config.instanceLifecycle}
@@ -2993,8 +3068,7 @@ export function InstanceManagedControls({
             Instance revision {config.instanceRevision}
           </Typography.Text>
         </div>
-      </div>
-    </section>
+    </AgentConfigurationPanel>
   );
 }
 

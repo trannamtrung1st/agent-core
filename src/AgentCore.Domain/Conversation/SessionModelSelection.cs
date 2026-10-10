@@ -13,7 +13,8 @@ public sealed record SessionModelSelection(
     string ProviderAlias,
     string ModelId,
     ModelSelectionSource SelectionSource,
-    string? ReasoningEffort);
+    string? ReasoningEffort,
+    bool HasExplicitReasoningEffort = false);
 
 public sealed record ModelGenerationProvenance(
     string CatalogKey,

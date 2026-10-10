@@ -29,6 +29,12 @@ internal static class HarnessManagementEndpoints
                 var instance = await service.StartAsync(instanceId, request.ExpectedRevision, request.Purpose, ct);
                 return await service.ReviewAsync(instanceId, ct);
             }));
+        group.MapPost("/propose-shared", (Guid instanceId, HarnessSharedProposalRequest request, HarnessManagementService service,
+            CancellationToken ct) => Respond(async () =>
+            {
+                await service.ProposeSharedAsync(instanceId, request.ExpectedRevision, request.Purpose, request.SelectedFields, request.ResourceKeys, ct);
+                return await service.ReviewAsync(instanceId, ct);
+            }));
         group.MapPost("/verify", (Guid instanceId, HarnessRunRequest request, HarnessManagementService service, CancellationToken ct) =>
             Respond(async () =>
             {
@@ -89,6 +95,9 @@ internal static class HarnessManagementEndpoints
             review.Draft?.Candidate.Environment?.ToolList ?? [], p?.PublishedChanges is { } changes ? new AdminDefinitionDraftDiffResponse(p.DraftId.ToString("D"), p.PublishedDraftRevision!.Value, "PublishedCandidate", p.BaseVersion,
                 changes.Select(s => new AdminDefinitionDiffSectionResponse(s.SectionId, s.Label, s.ChangeKind, s.BeforeSummary, s.AfterSummary)).ToArray())
                 : review.Diff is null ? null : AdminHttpMapping.ToDiff(review.Diff),
-            review.Resources.Select(AdminHttpMapping.ToDraftResource).ToArray());
+            review.Resources.Select(AdminHttpMapping.ToDraftResource).ToArray(),
+            state.InstanceChanges?.Select(c => new HarnessInstanceChangeResponse(c.OperationId.ToString("D"), c.Operation,
+                c.InstanceRevision, c.DefinitionVersion, c.PolicyRevision, c.ApprovalId?.ToString("D"), c.ActionHash, c.Source, c.SavedAt,
+                new(c.Evidence.Actor, c.Evidence.DraftRevision, c.Evidence.Check, c.Evidence.Status.ToString(), c.Evidence.Expected, c.Evidence.Observed, c.Evidence.Limitation))).ToArray());
     }
 }

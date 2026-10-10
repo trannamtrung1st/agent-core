@@ -64,7 +64,7 @@ public sealed record AgentContext(
     string? ContinuityContext = null,
     bool AllowAgentConsolidation = false,
     bool AgentWorkspaceAvailable = false,
-    IReadOnlyList<string>? LoadedCapabilityIds = null, IReadOnlyList<EffectiveSkill>? PinnedSkillCatalog = null, Guid? OwnedSessionId = null, AgentRunOutputContract OutputContract = AgentRunOutputContract.ConversationResponse, bool AuthoredAutomation = false, bool HasBackgroundClaim = false)
+    IReadOnlyList<string>? LoadedCapabilityIds = null, IReadOnlyList<EffectiveSkill>? PinnedSkillCatalog = null, Guid? OwnedSessionId = null, AgentRunOutputContract OutputContract = AgentRunOutputContract.ConversationResponse, bool AuthoredAutomation = false, bool HasBackgroundClaim = false, ComposerRunInput? ComposerInput = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 }

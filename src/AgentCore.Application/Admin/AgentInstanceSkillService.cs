@@ -11,12 +11,13 @@ public sealed record InstanceSkillInput(string Name, string Description, string 
 public sealed record InstanceSkillView(string Key, SkillOrigin Origin, string Name, string Description, string Procedure,
     SkillProjection Projection, bool Enabled, IReadOnlyList<string> RequiredCapabilities, long Revision,
     int? DefinitionVersion, string? SourceDefinitionId, int? SourceDefinitionVersion, string? SourceDefinitionSkillId,
-    IReadOnlyList<string> MissingCapabilities, SkillAuthor? CreatedBy = null, DateTimeOffset? CreatedAt = null, DateTimeOffset? UpdatedAt = null);
+    IReadOnlyList<string> MissingCapabilities, SkillAuthor? CreatedBy = null, DateTimeOffset? CreatedAt = null, DateTimeOffset? UpdatedAt = null, bool? EnabledOverride = null);
 
 public sealed record DefinitionSkillMutationState(string Key, bool Enabled, long Revision);
 public sealed record InstanceSkillCustomization(InstanceSkillView InstanceSkill, DefinitionSkillMutationState DefinitionSkill);
 
-public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAgentDefinitionStore definitions, IIdGenerator ids, TimeProvider time)
+public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAgentDefinitionStore definitions, IIdGenerator ids, TimeProvider time,
+    IAgentDefinitionResourceAdminStore? publications = null, InheritedDefinitionResourceCatalog? inheritedResources = null)
 {
     public async ValueTask<IReadOnlyList<InstanceSkillView>> ListAsync(Guid instanceId, AgentDefinition? context = null, CancellationToken ct = default)
     {
@@ -93,8 +94,15 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
                 {
                     var previous = snapshot.DefinitionStates.Single(s => "definition:" + s.DefinitionSkillId == key);
                     oldStateRevision = previous.Revision;
-                    state = previous with { Enabled = enabled.Value, Revision = previous.Revision + 1, UpdatedAt = now };
+                    state = previous with { EnabledOverride = enabled.Value, Revision = previous.Revision + 1, UpdatedAt = now };
                 }
+                break;
+            case "reset_enabled":
+                if (current!.Origin != SkillOrigin.Definition) throw AgentCoreErrors.Validation("Reset requires a Definition Skill.");
+                var inherited = snapshot.DefinitionStates.Single(s => "definition:" + s.DefinitionSkillId == key);
+                if (inherited.EnabledOverride is null) return (current, null);
+                oldStateRevision = inherited.Revision;
+                state = inherited with { EnabledOverride = null, Revision = inherited.Revision + 1, UpdatedAt = now };
                 break;
             case "customize":
                 if (current!.Origin != SkillOrigin.Definition) throw AgentCoreErrors.Validation("Customize requires a Definition Skill.");
@@ -105,7 +113,7 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
                     source.RequiredCapabilities.ToArray(), 1, now, now, actor, definition.Id, definition.Version, source.Id);
                 var old = snapshot.DefinitionStates.Single(s => s.DefinitionSkillId == source.Id);
                 oldStateRevision = old.Revision;
-                state = old with { Enabled = false, Revision = old.Revision + 1, UpdatedAt = now };
+                state = old with { EnabledOverride = false, Revision = old.Revision + 1, UpdatedAt = now };
                 break;
             default: throw AgentCoreErrors.Validation("Unknown Skill operation.");
         }
@@ -115,6 +123,9 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         // while the trusted execution context continues to govern authorization/copy content.
         var futureDefinition = definition.Version == owner.ActiveVersion ? definition : await DefinitionAsync(owner, ct);
         _ = EffectiveSkillCatalogResolver.Resolve(futureDefinition, next);
+        if (inheritedResources is not null || publications is not null)
+            _ = AgentInstanceResourceService.Resolve(futureDefinition, inheritedResources is not null ? await inheritedResources.ListAsync(futureDefinition, ct) : await publications!.ListPublicationResourcesAsync(futureDefinition.Id, futureDefinition.Version, ct),
+                await instances.ReadResourcesAsync(id, ct), next);
         var history = actor == SkillAuthor.Admin ? new AdminEventAppend(ids.NewId(), now, AdminEventActorKind.LocalOwner,
             AdminEventOperationKind.InstanceSkillsChanged, "agent.instance", id.ToString("D"), owner.Revision + 1,
             definition.Version, JsonSerializer.Serialize(new { instanceId = id.ToString("D"), operation, skillKey = key ?? "instance:" + local!.SkillId })) : null;
@@ -122,7 +133,7 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         await instances.MutateSkillsAsync(new(id, owner.Revision, state, local, delete, oldSkillRevision, oldStateRevision, history), ct);
         if (delete is not null) return (current!, null);
         var written = Views(definition, next).Single(s => s.Key == (local is not null ? "instance:" + local.SkillId : key));
-        return (written, operation == "customize" ? new("definition:" + state!.DefinitionSkillId, state.Enabled, state.Revision) : null);
+        return (written, operation == "customize" ? new("definition:" + state!.DefinitionSkillId, state.EnabledOverride!.Value, state.Revision) : null);
     }
     private static void Validate(InstanceSkillInput input, AgentDefinition definition)
     {
@@ -138,7 +149,7 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         return d.SkillList.Select(s => {
             var state = snapshot.DefinitionStates.SingleOrDefault(x => x.DefinitionSkillId == s.Id) ?? throw AgentCoreErrors.Persistence("Definition Skill state is missing.");
             return new InstanceSkillView("definition:" + s.Id, SkillOrigin.Definition, s.Name, s.Description, s.Procedure, s.Projection,
-                state.Enabled, s.RequiredCapabilities, state.Revision, d.Version, null, null, null, Missing(s.RequiredCapabilities));
+                state.EnabledOverride ?? s.DefaultEnabled, s.RequiredCapabilities, state.Revision, d.Version, null, null, null, Missing(s.RequiredCapabilities), EnabledOverride: state.EnabledOverride);
         }).Concat(snapshot.InstanceSkills.OrderBy(s => s.CreatedAt).Select(s => new InstanceSkillView("instance:" + s.SkillId,
             SkillOrigin.Instance, s.Name, s.Description, s.Procedure, s.Projection, s.Enabled, s.RequiredCapabilities, s.Revision,
             null, s.SourceDefinitionId, s.SourceDefinitionVersion, s.SourceDefinitionSkillId, Missing(s.RequiredCapabilities), s.CreatedBy, s.CreatedAt, s.UpdatedAt))).ToArray();

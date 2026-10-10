@@ -357,7 +357,7 @@ Phases A–H are observed on the runtime (including Docker `sandbox.run`). Histo
 | GET /api/v2/profile | Owner capability; returns local profile revision and allowlisted typed values with provenance (`source`) and per-field `updatedAt` |
 | PATCH /api/v2/profile | Owner capability; optimistic `expectedRevision`; allowlisted keys only; null/whitespace removes a field; server stamps `UserSet` (browser cannot set source) |
 | POST /api/v2/sessions/{id}/model | Catalog-level session model mutation (`key` Default or a catalog key, optional `reasoningEffort`). Server resolves and persists concrete `SessionModelSelection`. Rejects `SessionBusy` while generating. Terminal sessions are read-only |
-| GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if the pinned role does not allow `knowledge.retrieve` or the identity |
+| GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if current Instance authority does not allow `knowledge.retrieve` or the identity |
 | GET /api/v2/sessions/{id}/workspace | Execution-view listing (`prefix` query; omitted or `/` resolves `/home`); owner capability |
 | GET /api/v2/sessions/{id}/workspace/content?path= | Read authorized `/home` or `/working` content and read-only `/agent` or `/attachments`; relative HTTP paths resolve from `/home`; host paths are never returned |
 | PUT /api/v2/sessions/{id}/workspace/content?path= | Writes use `/working` or direct `/home` with durable replacement CAS; 250 MiB scope quotas; read-only overlays/secrets/escaping paths/symlinks remain forbidden |
@@ -433,7 +433,7 @@ Owner capability and active managed ownership protect `/api/v2/admin/agent-insta
 | POST `/experience/reset` | empty body; tombstones observations |
 | GET `/agent-runs`, `/{agentRunId}` | bounded owner-scoped run inspection; outcome is part of the safe run projection |
 
-AutomationRequest requires expectedRevision, enabled, name (1–120), instructions (1–2000), triggers, executionTarget and completionDelivery; modelKey/reasoningEffort are optional, requiresTools/requiresVision default false. The child collection selects Schedule or Events as defined below. Schedule timing fields retain existing IANA/DST, horizon, recurrence and finite bounds. ExecutionTarget is `{kind:"existingSession",sessionId:"<owned UUID>"}` or `{kind:"backgroundSession",sessionId:null}`. CompletionDelivery is `{kind:"none",sessionId:null}` or `{kind:"toSession",sessionId:"<owned UUID>"}`; ExistingSession requires None. Missing/mixed/foreign/ineligible variants fail validation. Existing targets use the pinned Session model and reject conflicting overrides; background models must support tools. Explicit task requirements are checked independently.
+AutomationRequest requires expectedRevision, enabled, name (1–120), instructions (1–2000), triggers, executionTarget and completionDelivery; modelKey/reasoningEffort are optional, requiresTools/requiresVision default false. The child collection selects Schedule or Events as defined below. Schedule timing fields retain existing IANA/DST, horizon, recurrence and finite bounds. ExecutionTarget is `{kind:"existingSession",sessionId:"<owned UUID>"}` or `{kind:"backgroundSession",sessionId:null}`. CompletionDelivery is `{kind:"none",sessionId:null}` or `{kind:"toSession",sessionId:"<owned UUID>"}`; ExistingSession requires None. Missing/mixed/foreign/ineligible variants fail validation. Existing targets use Session model preferences and reject conflicting authoring overrides. Fresh occurrence admission preserves explicit preferences and refreshes default-derived selection from current Instance defaults; retries retain the admitted Run model. Background models must support tools. Explicit task requirements are checked independently.
 
 AutomationResponse exposes automationId, revision, name, instructions, enabled/status, canonical triggers with independent child identities and eligibility, executionTarget, completionDelivery, requiresTools/requiresVision, suspensionReason, immutable authorizationOrigin/sourceSessionId/sourceEventId/createdAt, nextRunAt, model/effective selection and lastAgentRunId/executionStatus/outcome. Lifecycle uses Domain casing. AgentRunResponse includes safe owned execution/outcome diagnostics and optional sourceBackgroundSessionId for completion-report provenance; it excludes raw checkpoints/private evidence. BackgroundSessionResponse includes completionDelivery `{status,targetSessionId,parentAgentRunId,reason}` with statuses notRequested/pending/claimed/handled/admitted/delivered/failed/skipped. Delivered requires a completed report Run with durable assistant output. Session catalog adds agentInstanceId for exact owned picker filtering.
 
@@ -503,7 +503,7 @@ Scratch delete/batch approval binds exact paths and recursive intent, but not th
 
 ### Harness inspection identity fields
 
-`harness.inspect` returns `activeDefinitionVersion`, `authoringEligibleTools`, `activeDefinitionAuthorizedCapabilities`, `currentSessionPinnedDefinitionVersion` and `changesApplyToFutureSessions:true`. `policyRevision` remains the authoring CAS token; writes use `expectedVersion` equal to inspected `activeDefinitionVersion`. Instruction text is bounded and explicitly marks `instructionsTruncated`. Authoring eligibility never grants the current Session authority; live pins remain unchanged.
+`harness.inspect` returns `activeDefinitionVersion`, `authoringEligibleTools`, `activeDefinitionAuthorizedCapabilities`, `currentRunDefinitionVersion`, `instanceRevision` and `changesApplyToNextRun:true`. `policyRevision` remains the authoring CAS token; writes use `expectedVersion` equal to inspected `activeDefinitionVersion`. Instruction text is bounded and explicitly marks `instructionsTruncated`. Authoring eligibility never grants the current Session authority; live pins remain unchanged.
 
 ## Credential tool boundary
 
@@ -639,3 +639,52 @@ Automation writes submit `expectedRevision` and `triggers`: exactly one `kind: s
 GET review projects canonical children plus current `eligible`/`eligibilityReason`. Structurally valid disabled configurations can be saved without source permission; enablement requires an eligible enabled child and normal shared execution prerequisites. Source permissions are checked again at admission. Owned delivery diagnostics include `eventId`, `automationId`, `triggerId`, `triggerRevision`, status/code/decision. Occurrence evidence preserves exact child/source/parent revision; Manual provenance has no Event child.
 
 Run responses add safe `triggerOrigin: {triggerId,triggerRevision,kind,source,summary}` from immutable owned occurrence evidence. Manual Run now projects `kind: manual` without a child; scheduled and Event Runs identify the admitted child. Definitions and source links remain available after current configuration changes. Raw event data, instructions and filter samples are excluded from this projection.
+
+## Scoped Instance configuration HTTP
+
+All routes below require the existing trusted-local owner capability. Settings responses are an array of typed section projections: `section`, `definitionVersion`, `instanceRevision`, `definitionDefaults`, `overrides`, `effective`, `sources`, `configurationHash` and `constraints`. The additive `constraints` dictionary maps restricted fields to `{ reason, requiredBoolean, minimum, maximum }`; unused bounds are null. These are the selected Definition’s restrictions, validated by the same resolver on every save, rather than extra editable settings. Fields have allowlisted section ownership; budgets use the existing execution-budgets contract.
+
+| Route under `/api/v2/admin/agent-instances/{id}` | Contract |
+| --- | --- |
+| `GET /settings` or `/settings/{section}` | Read coherent effective values, sparse overrides and provenance. |
+| `PATCH /settings/{section}` | `{ "expectedInstanceRevision": 4, "set": { "maxOutputTokens": 2048 }, "clear": [] }`; set/clear are disjoint, unknown fields fail. |
+| `GET /resources` or `/resources/{key}` | Bounded origin-qualified resource metadata and dependencies. |
+| `GET /resources/{key}/content` | Authorized exact immutable bytes with matching media/path metadata. |
+| `POST /resources`, `PATCH /resources/{key}` | Multipart one file, logicalPath, kind, enabled, expectedInstanceRevision and existing expectedRevision. |
+| `PUT /resources/{key}/enabled` | Expected Instance/item revision and boolean enabled. |
+| `DELETE /resources/{key}/enabled-override` | Reset inherited state with expected Instance/state revisions. |
+| `POST /resources/{key}/copy` | Definition key, expectedInstanceRevision and target logicalPath; independent local copy. |
+| `DELETE /resources/{key}` | Local only; expected Instance/item revisions. |
+| `GET /active-version/preview?version=N` | Validated adoption diff, preserved overrides and inherited identity changes; blocking dependencies reject adoption. |
+| `POST /harness/propose-shared` | Expected revision, purpose, selectedFields map and explicit local resourceKeys; produces a reviewed draft, not a publication. |
+
+Instance resource authoring/copy accepts Knowledge, Reference, Template and StaticAsset; EvalFixture is rejected with 400 and remains Definition-only. Built-in file-backed knowledge appears in the inherited catalog with stable `definition:<uuid>` keys and the same inspect/enable/reset/copy contracts.
+
+Invalid shape/policy/media or enabled Skill resource dependencies is 400, missing capability 401/403, missing/foreign resource 404, stale revision 409. Archive permits inspection and blocks mutation. Downloads are separate from catalogs. Run JSON adds optional `configuration` containing Definition ID/version, Instance/persona revisions, SHA-256 and resource key/path/hash/length metadata. Terminal historical Runs may have no reconstructable configuration. Session descriptors continue to expose creation provenance; fresh Activations use current Instance configuration.
+
+`harness.inspect` reports `currentRunDefinitionVersion`, `instanceRevision`, `policyRevision`, `activeDefinitionVersion` and `changesApplyToNextRun:true`. Local tools require expectedInstanceRevision and preserve exact source/approval evidence. A successful local receipt reports Current Run unchanged and Next Run scope, never a shared publication.
+
+Version preview also returns `changedInheritedItems` for stable-ID Skill/resource changes, and includes Definition budget-class changes and retained Instance class overrides in its field lists. Explicit Session reasoning effort survives a default-derived model refresh; user/host model choices remain authoritative.
+
+## Structured user-message parts
+
+SendText/user.text retains text, attachmentIds and behavior and adds optional parts. Plain-text clients remain valid. Parts are ordered text, skill invocation, or typed reference records. The canonical fallback uses `/` plus the exact Skill key and `@` plus the typed canonical locator; display labels are server metadata and carry no authority. When parts are present, Core coalesces adjacent text, deduplicates Skill keys, validates exact locator fields, and requires text to match the canonical fallback. User entries expose the same parts in ready/upsert/history projections. Source-event idempotence includes normalized parts; changed targets under the same event ID are a protocol conflict.
+
+Limits: 8,000 UTF-16 fallback units, 128 supplied parts before normalization and 32 KiB UTF-8 serialized normalized parts excluding server labels, with type-specific GUID and Skill-key validation. This bounds transport complexity, not a separate selected-Skill policy. The existing 8,000 active-procedure-character budget remains authoritative. Skill-only messages require a task, attachment or reference. Reference-only messages request inspection. Picker discovery is owner-protected, metadata-only and scoped to the selected active Instance; selectable categories require an implemented resolver. All six categories are implemented: homeFile, session, backgroundSession, artifact, agentRun and skill.
+
+
+`GET /api/v2/agent-instances/{instanceId}/composer?category=invocation|homeFile|session|backgroundSession|artifact|agentRun|skill&search=...&cursor=...` returns `{items,nextCursor}` under the existing owner capability. Each page contains at most 40 metadata choices; native cursors retain all matching results across pages. Search is at most 200 characters; opaque cursor at most 1024. Choices include disambiguating canonical key/path or short ID, category, label, description, optional canonical reference/Skill key and unavailableReason. Discovery does not read resource bodies or mark work read.
+
+Exact reference shapes:
+
+| Kind | Required fields beyond kind | Optional fields |
+| --- | --- | --- |
+| homeFile | agentInstanceId, itemId | selectedRevision |
+| session / backgroundSession | sessionId | selectedRevision |
+| artifact | sessionId, artifactId | none |
+| agentRun | sessionId, agentRunId | selectedRevision |
+| skill | agentInstanceId, skillKey | none |
+
+IDs are non-empty canonical UUIDs; selectedRevision is positive. Unknown, duplicate or irrelevant fields are rejected, including labels on client input. Missing/retired/stale selections and aggregate Skill budget failures return recoverable Validation ACKs; durable admission races instead preserve the original user entry and fail the Run visibly with ComposerInputUnavailable before any model call.
+
+Run inspection adds optional composerInput: explicitSkillKeys, provenance=userExplicit, admittedAt, error and reference kind/locator/label/status/revision/sha256/truncated. It exposes safe provenance metadata, never source bodies. Full reference evidence and procedures are persisted in the existing immutable Run payload.

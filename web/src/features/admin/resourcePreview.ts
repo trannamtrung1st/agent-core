@@ -19,6 +19,39 @@ const EXTENSION_MEDIA: Record<string, string> = {
   markdown: "text/markdown",
   txt: "text/plain",
   json: "application/json",
+  csv: "text/csv",
+  tsv: "text/tab-separated-values",
+  jsonl: "application/x-ndjson",
+  ndjson: "application/x-ndjson",
+  yaml: "application/yaml",
+  yml: "application/yaml",
+  toml: "application/toml",
+  xml: "application/xml",
+  log: "text/plain",
+  ini: "text/plain",
+  rtf: "application/rtf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  odt: "application/vnd.oasis.opendocument.text",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+  odp: "application/vnd.oasis.opendocument.presentation",
+  gif: "image/gif",
+  bmp: "image/bmp",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  avif: "image/avif",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  flac: "audio/flac",
+  m4a: "audio/mp4",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -26,7 +59,18 @@ const EXTENSION_MEDIA: Record<string, string> = {
   pdf: "application/pdf"
 };
 
-const ALLOWED_MEDIA = new Set(Object.values(EXTENSION_MEDIA));
+const BLOCKED_EXTENSIONS = new Set("exe dll com scr msi msp bat cmd ps1 sh bash zsh js mjs cjs vbs vbe wsf wsh jar app dmg pkg deb rpm html htm xhtml svg hta lnk url docm dotm xlsm xltm xlam pptm potm ppam".split(" "));
+export const RESOURCE_FILE_HELP = "Supports text, CSV/TSV, JSON, YAML, XML, Office/OpenDocument, PDF, images, audio and video. Executable and active-content files are blocked. Up to 8 MiB per file.";
+export function isTextualResource(mediaType: string): boolean {
+  return ["text/plain", "text/markdown", "text/csv", "text/tab-separated-values", "application/json", "application/x-ndjson", "application/yaml", "application/toml", "application/xml", "text/xml"].includes(mediaType.toLowerCase());
+}
+function blockedPath(path: string): boolean {
+  const name = path.trim().split(/[\\/]/).at(-1) ?? "";
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 && BLOCKED_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
+}
+
+const ALLOWED_MEDIA = new Set([...Object.values(EXTENSION_MEDIA), "text/xml"]);
 
 export type ResourcePreviewItem = {
   key: string;
@@ -76,7 +120,8 @@ export function resourceRelativePath(file: File): string {
 }
 
 export function resourceMediaType(file: File, logicalPath: string): string | null {
-  return extensionMedia(logicalPath) ?? extensionMedia(file.name) ?? allowedFileType(file.type);
+  if (blockedPath(logicalPath) || blockedPath(file.name)) return null;
+  return extensionMedia(file.name) ?? extensionMedia(logicalPath) ?? allowedFileType(file.type);
 }
 
 export function createPreviewItem(file: File): ResourcePreviewItem {
@@ -94,12 +139,19 @@ export function createPreviewItem(file: File): ResourcePreviewItem {
 export function resourcePreviewProblem(
   item: Pick<ResourcePreviewItem, "logicalPath" | "kind" | "byteLength" | "mediaType" | "uploadError">,
   siblingPaths: string[],
-  existingPaths: string[]
+  existingPaths: string[],
+  scope = "draft"
 ): string | null {
   if (item.uploadError) {
     return item.uploadError;
   }
-  const path = item.logicalPath.trim();
+  return resourcePathProblem(item.logicalPath, siblingPaths, existingPaths, scope)
+    ?? resourceFileProblem(item)
+    ?? resourceKindProblem(item, scope);
+}
+
+export function resourcePathProblem(logicalPath: string, siblingPaths: string[], existingPaths: string[], scope = "draft"): string | null {
+  const path = logicalPath.trim();
   if (path.length === 0) {
     return "Path is required.";
   }
@@ -117,19 +169,32 @@ export function resourcePreviewProblem(
     return "Path is duplicated in this import.";
   }
   if (existingPaths.includes(path)) {
-    return "Path is already bound on this draft.";
+    return `Path is already bound on this ${scope}.`;
   }
+  return null;
+}
+
+export function resourceFileProblem(item: Pick<ResourcePreviewItem, "logicalPath" | "byteLength" | "mediaType">): string | null {
   if (item.byteLength <= 0) {
     return "File is empty.";
   }
   if (item.byteLength > MAX_RESOURCE_ITEM_BYTES) {
     return "File is larger than 8 MiB.";
   }
+  if (blockedPath(item.logicalPath.trim())) return "Executable and active-content files are not supported.";
   if (!item.mediaType) {
     return "This file type is not supported.";
   }
+  return null;
+}
+
+export function resourceKindProblem(item: Pick<ResourcePreviewItem, "kind" | "mediaType">, scope = "draft"): string | null {
+  if (scope === "Instance" && item.kind === "EvalFixture") return "Evaluation fixtures belong to Definitions. Choose an Instance resource kind.";
   if (!RESOURCE_KINDS.includes(item.kind as ResourceKindName)) {
     return "Choose a kind.";
+  }
+  if (item.kind === "Knowledge" && item.mediaType && !isTextualResource(item.mediaType)) {
+    return "Knowledge requires text. Choose Reference or Static asset for this file.";
   }
   return null;
 }
@@ -137,14 +202,15 @@ export function resourcePreviewProblem(
 export function resourceBatchLimitProblem(
   items: Array<Pick<ResourcePreviewItem, "byteLength">>,
   existingCount: number,
-  existingBytes: number
+  existingBytes: number,
+  scope = "draft"
 ): string | null {
   if (existingCount + items.length > MAX_RESOURCE_ITEMS) {
-    return "This import would exceed 64 resources on the draft.";
+    return `This import would exceed 64 resources on the ${scope}.`;
   }
   const incomingBytes = items.reduce((sum, item) => sum + item.byteLength, 0);
   if (existingBytes + incomingBytes > MAX_RESOURCE_AGGREGATE_BYTES) {
-    return "This import would exceed 64 MiB on the draft.";
+    return `This import would exceed 64 MiB on the ${scope}.`;
   }
   return null;
 }

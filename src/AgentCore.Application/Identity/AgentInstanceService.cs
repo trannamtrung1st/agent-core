@@ -11,7 +11,8 @@ public sealed class AgentInstanceService(
     IAgentDefinitionStore definitions,
     IIdGenerator ids,
     TimeProvider time,
-    ITriggerInstancePolicyReconciliationService? policyReconciliation = null) : IAgentInstanceService
+    ITriggerInstancePolicyReconciliationService? policyReconciliation = null,
+    Admin.AdminAgentInstanceService? adminInstances = null) : IAgentInstanceService
 {
     public async ValueTask<AgentInstance> CreateAsync(
         string definitionId,
@@ -39,6 +40,8 @@ public sealed class AgentInstanceService(
         long expectedRevision,
         CancellationToken cancellationToken = default)
     {
+        if (adminInstances is not null)
+            return await adminInstances.ReassociateActiveVersionAsync(instanceId, version, expectedRevision, cancellationToken);
         var instance = await RequireAsync(instanceId, cancellationToken).ConfigureAwait(false);
         if (instance.Revision != expectedRevision)
         {

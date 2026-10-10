@@ -27,6 +27,17 @@ beforeEach(() => {
 });
 const show = (instanceId = "instance-1") => render(<App><BackgroundWorkDrawer instanceId={instanceId} open wide onClose={() => undefined} /></App>);
 describe("Background Sessions", () => {
+  it("adds a completed background reference without continuation or navigation", async () => {
+    const owned = {...fixtureBackground, canContinueInChat:false, session:{...fixtureBackground.session,agentInstanceId:"instance-1",ended:true,archived:false}};
+    vi.mocked(getBackgroundSession).mockResolvedValue(owned);
+    const onAddReference=vi.fn(); const onClose=vi.fn();
+    render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide initialSessionId={owned.session.sessionId} onClose={onClose} onAddReference={onAddReference}/></App>);
+    fireEvent.click(await screen.findByRole("button",{name:"Add to chat"}));
+    expect(onAddReference).toHaveBeenCalledWith(owned.session.sessionId,owned.originalTitle ?? "Background task");
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(continueInChat).not.toHaveBeenCalled(); expect(openCatalogSession).not.toHaveBeenCalled();
+  });
+
   it("removes stale background actions after a later poll fails and restores them after retry", async () => {
     const owned = { ...fixtureBackground, session: { ...fixtureBackground.session, agentInstanceId: "instance-1" } };
     vi.mocked(getBackgroundSession).mockResolvedValueOnce(owned).mockRejectedValueOnce(new Error("Background refresh failed")).mockResolvedValue(owned);

@@ -19,7 +19,7 @@ public sealed partial class SessionRuntime
 
     private async Task<AgentContext> CapabilityProjectionContextAsync(AgentTrigger trigger, ILanguageModel model,
         IReadOnlyList<AgentCore.Domain.Definitions.EffectiveSkill> catalog, IReadOnlyList<string> skills, IReadOnlyList<string> loaded, CancellationToken ct) =>
-        new(_snapshot.Definition, _snapshot.Entries, _snapshot.Summary, _profile, _snapshot.Mode, _snapshot.PendingTopic,
+        new(ExecutionDefinition, _snapshot.Entries, _snapshot.Summary, _profile, _snapshot.Mode, _snapshot.PendingTopic,
             false, null, trigger, SessionAttachments: await BuildSessionAttachmentManifestAsync(ct),
             ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
             PinnedSkillCatalog: catalog, ActiveSkillKeys: skills, LoadedCapabilityIds: loaded, IntermediateMessagingAllowed: _intermediateMessagingAllowed,
@@ -31,7 +31,7 @@ public sealed partial class SessionRuntime
             Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, ct),
             AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, ct),
             AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, ct),
-            ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, _snapshot.Definition, ct));
+            ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, SessionId, ExecutionDefinition, ct));
 
     private async Task<CapabilityLoadMailboxResult> RequestCapabilityLoadAsync(EventContext cause, Guid responseId,
         string json, AgentContext context, CancellationToken ct, bool dialogRecovery = false)
@@ -64,23 +64,23 @@ public sealed partial class SessionRuntime
                 || current.CancellationRequested || current.Status != AgentRunStatus.Running) return;
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, input.RequestCancellation);
             using var json = JsonDocument.Parse(input.ArgumentsJson);
-            var context = input.ProjectionContext with { Definition = _snapshot.Definition, LoadedCapabilityIds = current.LoadedCapabilityIds, ActiveSkillKeys = current.ActiveSkillKeys, PinnedSkillCatalog = current.PinnedSkillCatalog };
+            var context = input.ProjectionContext with { Definition = ExecutionDefinition, LoadedCapabilityIds = current.LoadedCapabilityIds, ActiveSkillKeys = current.ActiveSkillKeys, PinnedSkillCatalog = current.PinnedSkillCatalog };
             CapabilityLoadResult plan;
             if (input.DialogRecovery)
             {
-                if (!ToolCatalog.Eligible(_snapshot.Definition, context, _tools.ConfigurationGate).Any(t => t.Name == ToolCatalog.BrowserDialog)
+                if (!ToolCatalog.Eligible(ExecutionDefinition, context, _tools.ConfigurationGate).Any(t => t.Name == ToolCatalog.BrowserDialog)
                     || current.LoadedCapabilityIds.Contains(ToolCatalog.BrowserDialog)) return;
                 // One exact registered recovery capability, with unchanged authorization/provider/trigger gates.
                 plan = new([ToolCatalog.BrowserDialog], [], "load_matched");
             }
             else
             {
-                if (!ToolPolicy.IsOffered(_snapshot.Definition, context, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate))
+                if (!ToolPolicy.IsOffered(ExecutionDefinition, context, ToolCatalog.CapabilitiesLoad, _tools.ConfigurationGate))
                 {
                     result = new(CapabilityLoadResult.Failure("forbidden", "load_unavailable", "Discovery is not eligible in this execution. Use offered tools or report the restriction."), null, "load_unavailable");
                     return;
                 }
-                plan = CapabilityDiscoveryMatcher.Load(_snapshot.Definition, context, _tools.ConfigurationGate, json.RootElement, current.CapabilityLoadCount);
+                plan = CapabilityDiscoveryMatcher.Load(ExecutionDefinition, context, _tools.ConfigurationGate, json.RootElement, current.CapabilityLoadCount);
             }
             matches = plan.Loaded.Count;
             var updated = plan.Outcome == "load_over_budget" ? current : await _agentRuns.ApplyAsync(current.Owner, current.AgentRunId,

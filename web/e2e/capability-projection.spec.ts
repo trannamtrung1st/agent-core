@@ -63,7 +63,7 @@ test("Admin pins All with always projection and Chat loads only the needed inter
     const count = await page.locator(".chat-message-assistant").count();
     await expect(async () => {
       await page.getByLabel("Message").fill(`synthetic-capability-projection:${command}`);
-      await expect(page.getByLabel("Message")).toHaveValue(`synthetic-capability-projection:${command}`);
+      await expect(page.getByLabel("Message")).toHaveText(`synthetic-capability-projection:${command}`);
       await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
     }).toPass();
     await page.getByRole("button", { name: "Send", exact: true }).click();

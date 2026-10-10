@@ -48,6 +48,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
 
   const editor = draftEditorSection(page);
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
   await editor.getByRole("button", { name: "Add skill" }).click();
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill ID", { exact: true }).fill("billing.review");
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill name", { exact: true }).fill("Billing review");
@@ -55,6 +56,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Description", { exact: true }).fill("Procedural guidance.");
   await page.getByRole("dialog").getByRole("button", { name: "Save Skill" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
+  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
   await editor.getByRole("button", { name: "Add skill" }).click();
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill ID", { exact: true }).fill("order.lookup");
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill name", { exact: true }).fill("Order lookup");

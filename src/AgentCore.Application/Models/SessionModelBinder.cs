@@ -50,7 +50,7 @@ public static class SessionModelBinder
             effort = NormalizeEffort(agentDefaults?.ReasoningEffort);
         }
 
-        return Bind(descriptor, effort, source);
+        return Bind(descriptor, effort, source) with { HasExplicitReasoningEffort = NormalizeEffort(requestedEffort) is not null };
     }
 
     public static SessionModelSelection Bind(
@@ -94,6 +94,13 @@ public static class SessionModelBinder
 
     public static SessionModelSelection PinDefault(IModelCatalog catalog, AgentDefinition? definition = null) =>
         Bind(catalog, requestedKey: null, requestedEffort: null, ModelSelectionSource.SystemDefault, definition?.ModelDefaults);
+
+    public static SessionModelSelection RefreshDefault(IModelCatalog catalog, AgentDefinition definition, SessionModelSelection? existing)
+    {
+        if (existing?.SelectionSource is ModelSelectionSource.User or ModelSelectionSource.Host) return existing;
+        return Bind(catalog, null, existing?.HasExplicitReasoningEffort == true ? existing.ReasoningEffort : null,
+            ModelSelectionSource.SystemDefault, definition.ModelDefaults);
+    }
 
     public static string ToWire(ModelSelectionSource source) =>
         source switch

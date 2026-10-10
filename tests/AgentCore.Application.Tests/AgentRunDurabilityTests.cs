@@ -356,7 +356,7 @@ public sealed class AgentRunDurabilityTests
         var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId],
             input.SourceEventId, null, null, null, "manual:test", now);
         var run = AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value),
-            new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId, AgentRunOutputContract.BackgroundOutcome),
+            new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId, AgentRunOutputContract.BackgroundOutcome, configuration: new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, [])),
             new("synthetic-offline/scripted", "primary-llm", "scripted", null), 3, now);
         await runs.AdmitAsync(snapshot, 0, run);
         run = await runs.ApplyAsync(run.Owner, runId, new AgentCore.Application.Execution.AgentRunCommand.Claim(
@@ -403,7 +403,7 @@ public sealed class AgentRunDurabilityTests
         var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId],
             input.SourceEventId, null, null, null, "manual:test", now);
         var run = AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value),
-            new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId, AgentRunOutputContract.BackgroundOutcome),
+            new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId, AgentRunOutputContract.BackgroundOutcome, configuration: new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, [])),
             new("synthetic-offline/scripted", "primary-llm", "scripted", null), 3, now);
         await runs.AdmitAsync(snapshot, 0, run);
         run = await runs.ApplyAsync(run.Owner, runId, new AgentCore.Application.Execution.AgentRunCommand.Claim(

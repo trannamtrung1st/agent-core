@@ -34,7 +34,8 @@ test("managed home survives deleted source, guards a revision and delivers a fre
   await page.goto(`/c/${a2}`);
   // A deep link must not become a sendable new chat while bootstrap metadata is pending.
   await expect(page.getByTestId("connection")).toHaveText("Connecting", { timeout: 20_000 });
-  await expect(page.getByLabel("Message")).toBeDisabled();
+  await expect(page.getByLabel("Message")).toHaveAttribute("contenteditable", "false");
+  await expect(page.getByLabel("Message")).toHaveAttribute("aria-readonly", "true");
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled();
   releaseModels();
   await expect(page.getByRole("heading", { name: "Riley", exact: true })).toBeVisible({ timeout: 20_000 });

@@ -12,6 +12,10 @@ import {
 } from "./AdminApp";
 import type { AdminDefinitionPublicationResource, AdminEffectiveConfiguration } from "../../services/adminApi";
 
+vi.mock("../../services/instanceConfiguration", () => ({
+  previewInstanceVersion: vi.fn(async (_id: string, version: number) => ({instanceRevision:1,currentVersion:1,targetVersion:version,changedDefinitionFields:[],preservedInstanceOverrides:[],newInheritedItems:[],removedInheritedItems:[],activationNotice:"Applies to the next Run."})),
+  listInstanceSettings: vi.fn(async () => []), listInstanceResources: vi.fn(async () => ({instanceRevision:1,definitionId:"examiner",definitionVersion:1,resources:[]}))
+}));
 const sampleEffective: AdminEffectiveConfiguration = {
   definitionSource: "builtIn",
   definitionId: "examiner",
@@ -606,6 +610,16 @@ describe("AdminApp", () => {
       expect(screen.getByRole("button", { name: /Draft rev 2/ })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: /Draft rev 2/ }));
+    await screen.findByRole("tab", { name: "Settings" });
+    const draftTabs = within(document.querySelector(".admin-draft-tabs > .ant-tabs-nav")! as HTMLElement);
+    const identityTab = draftTabs.getByRole("tab", { name: "Identity & version" });
+    const publishTab = draftTabs.getByRole("tab", { name: "Test & Publish" });
+    const actions = within(document.querySelector(".admin-draft-actions")! as HTMLElement);
+    const save = actions.getByRole("button", { name: "Save draft" });
+    const publish = actions.getByRole("button", { name: "Publish…" });
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Operating instructions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Provider preferences" }));
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
       expect(screen.getByRole("combobox", { name: "Language-model provider" })).toBeInTheDocument();
@@ -613,7 +627,7 @@ describe("AdminApp", () => {
     fireEvent.change(screen.getByLabelText("System instructions"), {
       target: { value: "Visible publish body" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    fireEvent.click(save);
     await waitFor(() => {
       expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
         draftId,
@@ -631,7 +645,7 @@ describe("AdminApp", () => {
       updatedAt: "2026-01-02T00:00:00Z",
       candidate: { systemInstructions: "Visible publish body", definitionId: "examiner", environment: { harness: [], knowledgeSources: [], workspace: {}, attachments: { allowUnreadUnsupportedTypes: false }, capabilities: { mode: "Selected", resolvedCapabilities: [] }, projection: { alwaysCapabilities: [] } } }
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Test & Publish" }));
+    fireEvent.click(publishTab);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Run validation" })).not.toBeDisabled();
     });
@@ -640,16 +654,16 @@ describe("AdminApp", () => {
       expect(validateAdminDefinitionDraft).toHaveBeenCalledWith(draftId);
       expect(screen.getByText("Draft is ready for final publish.")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Test & Publish" }));
+    fireEvent.click(identityTab);
+    fireEvent.click(publishTab);
     expect(screen.getByText("Validation snapshot")).toBeInTheDocument();
     expect(screen.getByText("Draft is ready for final publish.")).toBeInTheDocument();
     expect(validateAdminDefinitionDraft).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
+    fireEvent.click(identityTab);
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Publish…" })).not.toBeDisabled();
+      expect(publish).not.toBeDisabled();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Publish…" }));
+    fireEvent.click(publish);
     await waitFor(() => {
       expect(publishAdminDefinitionDraft).toHaveBeenCalledWith(draftId, 3);
     });
@@ -721,21 +735,29 @@ describe("AdminApp", () => {
       expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
+    await screen.findByRole("tab", { name: "Settings" });
+    const draftTabs = within(document.querySelector(".admin-draft-tabs > .ant-tabs-nav")! as HTMLElement);
+    const identityTab = draftTabs.getByRole("tab", { name: "Identity & version" });
+    const resourcesTab = draftTabs.getByRole("tab", { name: "Skills & resources" });
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Operating instructions" }));
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
     });
     fireEvent.change(screen.getByLabelText("System instructions"), {
       target: { value: "Unsaved instruction edit" }
     });
+    fireEvent.click(resourcesTab);
     fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const resources = within(document.querySelector('[aria-label="Draft resources"]')! as HTMLElement);
+    const remove = await resources.findByRole("button", { name: "Remove" });
+    expect(remove).toBeInTheDocument();
+    fireEvent.click(remove);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete resources" }));
     await waitFor(() => {
       expect(removeAdminDraftResource).toHaveBeenCalled();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Definition" }));
+    fireEvent.click(identityTab);
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toHaveValue("Unsaved instruction edit");
     });
@@ -879,8 +901,9 @@ describe("AdminApp", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Resources" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Skills & resources" })).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByRole("tab", { name: "Skills & resources" }));
     fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
     await waitFor(() => {
       expect(screen.getByText(/knowledge\/policy\.md/)).toBeInTheDocument();
@@ -1120,11 +1143,14 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.getByText("Registry unavailable")).toBeInTheDocument();
     });
+    expect(screen.getByText("The capability catalog is unavailable. Open Capabilities and choose Retry tool registry, or use Advanced JSON.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Retry tool registry" }));
     await waitFor(() => {
       expect(toolRegistryAttempts).toBe(2);
     });
     expect(screen.queryByText("Registry unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText(/The capability catalog is unavailable/)).not.toBeInTheDocument();
   });
 
   it("shows instance identity from effective config when inventory is unavailable", async () => {
@@ -1597,6 +1623,7 @@ describe("AdminApp", () => {
     });
     fireEvent.click(screen.getByText("v2 (builtIn · published)"));
     fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Adopt version" }));
 
     expect(screen.queryByRole("button", { name: "Apply anyway" })).not.toBeInTheDocument();
 
@@ -1850,6 +1877,9 @@ describe("AdminApp", () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "field-guide" }} />);
     });
 
+    await screen.findByRole("tab", { name: "Settings" });
+    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Operating instructions" }));
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toHaveValue("Stored starter instructions");
     });

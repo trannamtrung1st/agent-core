@@ -30,8 +30,8 @@ public sealed partial class SessionRuntime
             if (!await OwnsWorkerAsync(input.Context, input.ResponseId, ct).ConfigureAwait(false))
             { input.Completed.TrySetResult(new(SkillLoadAdmission.Error("Conflict", "Execution generation is stale."))); return; }
             var parent = _boundAgentRun!;
-            var current = _runAuthority is null ? _snapshot.Definition : await _runAuthority.CurrentDefinitionAsync(parent, ct).ConfigureAwait(false);
-            if (current is null || !RolePermissions.AllowsTool(current, input.Call.Name) || !RolePermissions.AllowsTool(_snapshot.Definition, input.Call.Name))
+            var current = _runAuthority is null ? ExecutionDefinition : await _runAuthority.CurrentDefinitionAsync(parent, ct).ConfigureAwait(false);
+            if (current is null || !RolePermissions.AllowsTool(current, input.Call.Name) || !RolePermissions.AllowsTool(ExecutionDefinition, input.Call.Name))
             { input.Completed.TrySetResult(new(SkillLoadAdmission.Error("forbidden", "This capability is not authorized."))); return; }
             using var document = JsonDocument.Parse(input.Call.ArgumentsJson);
             var args = document.RootElement;

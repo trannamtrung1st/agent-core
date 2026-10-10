@@ -10,6 +10,26 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
+    private readonly AgentCore.Application.Composer.ComposerReferenceService? _composer;
+    private ResolvedAgentRunConfiguration? _idleConfiguration;
+    private AgentCore.Domain.Definitions.AgentDefinition ExecutionDefinition => _boundAgentRun is { } run
+        ? run.Admission.Configuration?.Definition ?? throw AgentCoreErrors.Persistence("Run configuration is missing; historical execution must be migrated before resume.")
+        : _idleConfiguration?.Configuration.Definition ?? _snapshot.Definition;
+    private AgentCore.Domain.Definitions.AgentIdentity ExecutionPersona => _boundAgentRun?.PinnedPersona
+        ?? _idleConfiguration?.Persona ?? _snapshot.PinnedPersona ?? _snapshot.Definition.Identity;
+
+    private async ValueTask<(SessionSnapshot Projection, ResolvedAgentRunConfiguration Resolved)> ResolveNewRunAsync(CancellationToken ct)
+    {
+        var resolved = await _tools.ResolveRunConfigurationAsync(_snapshot, ct).ConfigureAwait(false);
+        _idleConfiguration = resolved;
+        var model = _snapshot.ModelSelection;
+        if (_catalog is not null && model?.SelectionSource is not (ModelSelectionSource.User or ModelSelectionSource.Host))
+            model = AgentCore.Application.Models.SessionModelBinder.RefreshDefault(_catalog, resolved.Configuration.Definition, model);
+        _snapshot = _snapshot with { ModelSelection = model };
+        return (_snapshot with { Definition = resolved.Configuration.Definition, PinnedPersona = resolved.Persona,
+            PinnedPersonaRevision = resolved.Configuration.PersonaRevision }, resolved);
+    }
+
     private readonly IAgentRunStore _agentRuns;
     private readonly IAgentRunAuthority? _runAuthority;
     private AgentRun? _boundAgentRun;
@@ -139,10 +159,25 @@ public sealed partial class SessionRuntime
         if (!CanStartUserConversationBatch()) return false;
         var users = PendingUserBatch();
         if (users.Count == 0 || users.Any(entry => _undurableUserEntryIds.Contains(entry.EntryId))) return false;
+        var (projection, resolved) = await ResolveNewRunAsync(ct).ConfigureAwait(false);
         PinModelSelectionIfMissing();
+        projection = projection with { ModelSelection = _snapshot.ModelSelection };
+        ComposerRunInput? composerInput = null;
+        if (users.Any(u => u.Parts is not null))
+        {
+            if (_composer is not null) composerInput = await _composer.PinAsync(RunOwner, users, projection.Definition, resolved.Skills, ct);
+            else
+            {
+                var explicitKeys = users.SelectMany(u => UserMessageContent.ExplicitSkills(u.Parts)).Distinct(StringComparer.Ordinal).ToArray();
+                string? error = null;
+                try { AgentCore.Application.Composer.ComposerReferenceService.ActiveSkills(projection.Definition, resolved.Skills, explicitKeys); }
+                catch (AgentCoreException exception) { error = exception.Message; }
+                composerInput = new(explicitKeys, [], _time.GetUtcNow(), error);
+            }
+        }
         var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(_ids.NewId(), _ids.NewId(), _ids.NewId(),
-            _snapshot, users, _time.GetUtcNow(), await _tools.ResolveSkillCatalogAsync(_snapshot.AgentInstanceId, _snapshot.Definition, ct),
-            await _tools.ResolveExecutionBudgetAsync(_snapshot.AgentInstanceId, _snapshot.Definition, true, ct));
+            projection, users, _time.GetUtcNow(), resolved.Skills,
+            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, true), resolved.Configuration, composerInput);
         _agentRunAdmissionPending = true;
         var proposed = _snapshot with { PendingAgentInputIds = _snapshot.PendingAgentInputIds.Except(users.Select(entry => entry.EntryId)).ToArray() };
         RequestPersist(proposed, admittedRun: run, onAdmitted: committed => run = committed, then: async token =>

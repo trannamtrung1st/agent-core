@@ -1,3 +1,4 @@
+import { AgentConfigurationPanel, AgentSkillsResourcesSections } from "./AgentConfigurationLayout";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Alert, Button, Descriptions, Drawer, Empty, Flex, Spin, Table, Tabs, Tag, Typography, theme } from "antd";
@@ -135,11 +136,15 @@ function DefinitionVersionDetails({ row, renderResources }: {
         : !candidate ? <Spin aria-label="Loading version details" />
         : <>
           <Tabs className="admin-draft-tabs" items={[
-          { key: "definition", label: "Definition", children: <DefinitionCandidateEditor
-            candidate={candidate} view={view} jsonText={candidateToJson(candidate)} busy={false} readOnly showSkills={false}
+          { key: "definition", label: "Identity & version", children: <DefinitionCandidateEditor
+            candidate={candidate} view={view} jsonText={candidateToJson(candidate)} busy={false} readOnly
             onViewChange={setView} onCandidateChange={() => {}} onJsonTextChange={() => {}} /> },
-          { key: "skills", label: "Skills", children: <DefinitionSkillsSection
-            candidate={candidate} busy={false} readOnly onChange={() => {}} /> },
+          { key: "skills", label: "Skills & resources", children: <AgentSkillsResourcesSections
+            skills={<DefinitionSkillsSection
+            candidate={candidate} busy={false} readOnly onChange={() => {}} />}
+            resources={<AgentConfigurationPanel title="Resources" label="Published resources">{row.source === "durable"
+            ? renderResources(row.version) : <Typography.Text type="secondary">Built-in resources use the shipped role environment and knowledge sources.</Typography.Text>}</AgentConfigurationPanel>}
+          /> },
           { key: "capabilities", label: "Capabilities", children: <Descriptions {...detailLayout} bordered column={1} size="small">
             <Descriptions.Item label="Capability access">{environment?.capabilityMode ?? "Legacy projection"}</Descriptions.Item>
             <Descriptions.Item label="Authorized capabilities">{environment?.toolAllowlist.join(", ") || "None"}</Descriptions.Item>
@@ -151,8 +156,7 @@ function DefinitionVersionDetails({ row, renderResources }: {
               <div key={source.identity}>{source.title} · {source.identity} · {source.citation} · {source.resourcePath || "Legacy knowledge fallback"}</div>
             ) : "None"}</Descriptions.Item>
           </Descriptions> },
-          { key: "resources", label: "Resources", children: row.source === "durable"
-            ? renderResources(row.version) : <Typography.Text type="secondary">Built-in resources use the shipped role environment and knowledge sources.</Typography.Text> }
+
           ]} />
         </>}
     </section>

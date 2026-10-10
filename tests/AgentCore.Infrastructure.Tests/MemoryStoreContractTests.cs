@@ -15,19 +15,37 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class MemoryStoreContractTests
 {
     [Fact]
+    public async Task Structured_parts_remain_typed_immutable_and_identical_after_sqlite_reopen()
+    {
+        await using var sqlite = await SqliteAsync();
+        foreach (var store in new IMemoryStore[] { new InMemoryMemoryStore(), sqlite.Store })
+        {
+            UserMessagePart[] parts = [new("text", Text: "Inspect "), new("reference", Reference: new("artifact", SessionId: Guid.NewGuid(), ArtifactId: Guid.NewGuid()), Label: "report.txt"), new("invocation", InvocationKind: "skill", SkillKey: "definition:review", Label: "Review")];
+            var text = UserMessageContent.DisplayText(parts);
+            var entry = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User, text, null, EntryStatus.Completed, SessionMode.Text, text.Length, text.Length, DateTimeOffset.UtcNow, Parts: parts);
+            var snapshot = First() with { Entries = [entry] };
+            await store.SaveAsync(snapshot, 0); parts[0] = new("text", Text: "mutated");
+            var reopened = store == sqlite.Store ? new SqliteMemoryStore(sqlite.Factory, TimeProvider.System) : store;
+            var saved = (await reopened.LoadAsync(snapshot.SessionId))!.Entries[0];
+            Assert.Equal(text, saved.Text); Assert.Equal("Inspect ", saved.Parts![0].Text);
+            Assert.Equal("report.txt", saved.Parts[1].Label);
+            Assert.Throws<NotSupportedException>(() => ((IList<UserMessagePart>)saved.Parts)[0] = parts[0]);
+            Assert.Equal(saved.Parts, (await reopened.ReadHistoryAsync(snapshot.SessionId, 0, 20))[0].Parts);
+        }
+    }
+
+    [Fact]
     public async Task Completion_time_migration_preserves_historical_entries_without_inventing_a_time()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"entry-time-migration-{Guid.NewGuid():N}.db");
-        await using var sqlite = OpenSqlite(path, deleteOnDispose: true);
         var legacy = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Historical reply");
-        var snapshot = First() with { Entries = [] };
-        await using (var db = await sqlite.Factory.CreateDbContextAsync())
-            await db.GetService<IMigrator>().MigrateAsync("20261008171951_ArtifactAgentRunOwnership");
-        await sqlite.Store.SaveAsync(snapshot, 0);
-        await using (var db = await sqlite.Factory.CreateDbContextAsync())
-            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ConversationEntries (EntryId,SessionId,EntrySequence,Role,Text,Status,DeliveryMode,HeardTextEndExclusive,ReceivedTextEndExclusive,CreatedAtUtc) VALUES ({legacy.EntryId.ToString()}, {snapshot.SessionId.ToString()}, {legacy.Sequence}, {legacy.Role.ToString()}, {legacy.Text}, {legacy.Status.ToString()}, {legacy.DeliveryMode.ToString()}, {legacy.HeardTextEndExclusive}, {legacy.ReceivedTextEndExclusive}, {legacy.CreatedAt.ToUnixTimeMilliseconds()})");
-        await sqlite.Store.EnsureCreatedAsync();
-        var restored = (await sqlite.Store.LoadAsync(snapshot.SessionId))!.Entries[0];
+        var snapshot = First() with { Entries = [legacy] };
+        // Seed the historical schema directly: scoped owned data deliberately forbids destructive downgrade.
+        var historicalPath = Path.Combine(Path.GetTempPath(), $"completion-migration-{Guid.NewGuid():N}.db");
+        var factory = new HistoricalFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={historicalPath}").Options);
+        await MigrationSessionSeed.CopyPersistedSessionAsync(factory, snapshot, "20261008171951_ArtifactAgentRunOwnership");
+        var store = new SqliteMemoryStore(factory, TimeProvider.System);
+        await store.EnsureCreatedAsync();
+        var restored = (await store.LoadAsync(snapshot.SessionId))!.Entries[0];
         Assert.Equal(legacy.Text, restored.Text);
         Assert.Equal(legacy.Sequence, restored.Sequence);
         Assert.Equal(legacy.CreatedAt, restored.CreatedAt);
@@ -1214,4 +1232,6 @@ public sealed class MemoryStoreContractTests
             return ValueTask.CompletedTask;
         }
     }
+    private sealed class HistoricalFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
+    { public AgentCoreDbContext CreateDbContext() => new(options); }
 }

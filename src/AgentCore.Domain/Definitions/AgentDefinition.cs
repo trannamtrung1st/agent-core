@@ -23,7 +23,8 @@ public sealed record AgentDefinition(
     TriggerPolicy? TriggerPolicy = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SkillSpec>? Skills = null,
-    ExecutionBudgetPolicy? ExecutionBudgets = null)
+    ExecutionBudgetPolicy? ExecutionBudgets = null,
+    [property: JsonIgnore] IReadOnlyList<EffectiveAgentResource>? ExecutionResources = null)
 {
     public IReadOnlyList<SkillSpec> SkillList => Skills ?? [];
 }
