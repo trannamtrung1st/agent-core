@@ -20,7 +20,7 @@ public sealed class BackgroundOccurrenceIntake(
     IMemoryStore memory,
     IModelCatalog models,
     IIdGenerator ids,
-    TimeProvider time, AutomationPresetCatalog? presets = null)
+    TimeProvider time)
 {
     public async ValueTask<BackgroundAdmissionPass> AcceptAwaitingAsync(CancellationToken cancellationToken = default)
     {
@@ -75,9 +75,6 @@ public sealed class BackgroundOccurrenceIntake(
             // registrations cannot admit even if routing previously found them eligible.
             if (automation is null || automation.Status is AutomationStatus.Disabled or AutomationStatus.Cancelled
                 or AutomationStatus.SuspendedPolicy)
-                return null;
-            if (automation.Provenance.PresetId is { } presetId && presets is not null
-                && !(await presets.OptionsAsync(instance.InstanceId, cancellationToken, automation.ModelOverrideCatalogKey)).Single(p => p.Template.PresetId == presetId).Eligible)
                 return null;
         }
 

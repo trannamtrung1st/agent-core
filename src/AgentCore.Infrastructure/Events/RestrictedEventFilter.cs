@@ -4,6 +4,7 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Events;
 using Jint;
+using Acornima.Ast;
 
 namespace AgentCore.Infrastructure.Events;
 
@@ -15,30 +16,37 @@ public sealed class RestrictedEventFilter : IEventFilterEvaluator
     {
         if (string.IsNullOrWhiteSpace(expression)) return null;
         if (Encoding.UTF8.GetByteCount(expression) > 1024) return "filter-source-budget";
-        try { new Grammar(expression).Parse(); Engine.PrepareScript("(" + expression + ")"); return null; }
+        try { Prepare(expression); return null; }
         catch (FilterSyntaxException e) { return e.Code; }
         catch (Exception e) when (e is not OutOfMemoryException and not StackOverflowException) { return "filter-syntax-not-allowed"; }
     }
 
     public EventFilterResult Evaluate(string? expression, JsonElement envelope, CancellationToken cancellationToken = default)
     {
-        var invalid = Validate(expression);
-        if (invalid is not null) return new(null, "error", invalid);
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(expression)) return new(true, "matched");
+        if (Encoding.UTF8.GetByteCount(expression) > 1024) return new(null, "error", "filter-source-budget");
+        Prepared<Script> script;
+        try { script = Prepare(expression); }
+        catch (FilterSyntaxException e) { return new(null, "error", e.Code); }
+        catch (Exception e) when (e is not OutOfMemoryException and not StackOverflowException)
+        { return new(null, "error", "filter-syntax-not-allowed"); }
         if (Encoding.UTF8.GetByteCount(envelope.GetRawText()) > 8192) return new(null, "error", "filter-envelope-budget");
         if (!UniqueProperties(envelope)) return new(null, "error", "filter-envelope-ambiguous");
         if (!SafeNumbers(envelope)) return new(null, "error", "filter-unsafe-number");
         if (!Workers.Wait(0, cancellationToken)) return new(null, "error", "filter-worker-budget");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(TimeSpan.FromMilliseconds(100));
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var engine = new Engine(options => options.Strict().LimitMemory(4 * 1024 * 1024)
+            using var engine = new Engine(options => options.Strict().LimitMemory(4 * 1024 * 1024)
                 .MaxStatements(256).TimeoutInterval(TimeSpan.FromMilliseconds(100)).CancellationToken(deadline.Token));
-            // JSON.parse creates engine-owned values; no CLR value, delegate or host object is projected.
-            engine.Execute("const event = JSON.parse(" + JsonSerializer.Serialize(envelope.GetRawText()) + ");");
-            var result = engine.Evaluate("(" + expression + ")");
+            // Jint JSON parsing creates engine-owned values; no CLR object or delegate is projected.
+            engine.SetValue("event", new Jint.Native.Json.JsonParser(engine).Parse(envelope.GetRawText()));
+            // Cold CLR/Jint initialization and bounded parsing are not JavaScript execution.
+            // Start the cumulative execution deadline only after those costs have completed.
+            deadline.CancelAfter(TimeSpan.FromMilliseconds(100));
+            var result = engine.Evaluate(script);
             if (!result.IsBoolean()) return new(null, "error", "filter-result-not-boolean");
             return result.AsBoolean() ? new(true, "matched") : new(false, "notMatched");
         }
@@ -53,6 +61,12 @@ public sealed class RestrictedEventFilter : IEventFilterEvaluator
             return new(null, "error", code);
         }
         finally { Workers.Release(); }
+    }
+
+    private static Prepared<Script> Prepare(string expression)
+    {
+        new Grammar(expression).Parse();
+        return Engine.PrepareScript("(" + expression + ")");
     }
 
     private static bool UniqueProperties(JsonElement value) => value.ValueKind switch

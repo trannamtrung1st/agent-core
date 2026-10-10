@@ -109,6 +109,14 @@ public sealed class CoreEventAutomationJourneyTests
         var payload = System.Text.Encoding.UTF8.GetBytes("{\"eventId\":\"order-1\",\"data\":{\"total\":150,\"agentInstanceId\":\"spoof\"}}");
         Assert.Equal(ExternalEventIngressKind.Admitted, (await ingress.AdmitAsync(source.EventKey, source.Token, payload)).Kind);
         Assert.Equal(ExternalEventIngressKind.Duplicate, (await ingress.AdmitAsync(source.EventKey, source.Token, payload)).Kind);
+        // CI contention may defer a valid match. Exercise its bounded scheduler recovery
+        // before asserting the final fan-out, rather than assuming immediate engine availability.
+        for (var attempt = 0; attempt < EventFilterRecovery.MaxAttempts - 1 &&
+            (await services.GetRequiredService<IExternalEventStore>().ListPendingDeliveriesAsync(null, 32)).Count > 0; attempt++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(1 << attempt));
+            await ingress.ResumePendingAsync();
+        }
         Assert.Single(await services.GetRequiredService<ITriggerStore>().ListByDispositionAsync(AgentCore.Domain.Triggers.OccurrenceRoutingDisposition.Pending, 20));
         var activity = await services.GetRequiredService<IExternalEventStore>().ReadActivityAsync(Guid.Parse(source.EventId));
         Assert.Contains(activity.Deliveries, d => d.Status == AgentCore.Domain.Events.ExternalEventDeliveryStatus.Filtered);

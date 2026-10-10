@@ -12,6 +12,8 @@ public sealed record ExternalEventAdmit(ExternalEventAdmitKind Kind, ExternalEve
 
 public sealed record ExternalEventActivity(IReadOnlyList<ExternalEvent> Receipts, IReadOnlyList<ExternalEventDelivery> Deliveries);
 
+public sealed record ExternalEventRecoveryCursor(Guid EventId, Guid AutomationId);
+
 public interface IExternalEventStore
 {
     ValueTask<ExternalEventActivity> ReadActivityAsync(Guid resourceId, CancellationToken ct = default);
@@ -44,9 +46,9 @@ public interface IExternalEventStore
     ValueTask<IReadOnlyList<ExternalEventDelivery>> ListPendingDeliveriesAsync(
         Guid? eventId,
         int limit,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, ExternalEventRecoveryCursor? after = null);
 
-    ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default);
+    ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null);
 
     ValueTask MarkDeliveryAsync(
         Guid eventId,

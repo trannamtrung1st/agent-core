@@ -132,17 +132,24 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
     public async ValueTask<IReadOnlyList<ExternalEventDelivery>> ListPendingDeliveriesAsync(
         Guid? eventId,
         int limit,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, ExternalEventRecoveryCursor? after = null)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var query = db.ExternalEventDeliveries.AsNoTracking()
-            .Where(item => item.Status == (int)ExternalEventDeliveryStatus.Pending);
+            .Where(item => item.Status == (int)ExternalEventDeliveryStatus.Pending
+                || item.Status == (int)ExternalEventDeliveryStatus.FilterError && item.DecisionJson != null
+                    && (EF.Functions.Like(item.DecisionJson, "%filter-worker-budget%") || EF.Functions.Like(item.DecisionJson, "%filter-timeout%")));
         if (eventId is Guid id)
         {
             var eventKey = id.ToString("D");
             query = query.Where(item => item.EventId == eventKey);
         }
 
+        if (after is not null)
+        {
+            var eventKey = after.EventId.ToString("D"); var automationKey = after.AutomationId.ToString("D");
+            query = query.Where(item => string.Compare(item.EventId, eventKey) > 0 || item.EventId == eventKey && string.Compare(item.AutomationId, automationKey) > 0);
+        }
         var rows = await query
             .OrderBy(item => item.EventId)
             .ThenBy(item => item.AutomationId)
@@ -152,10 +159,14 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
         return rows.Select(ToDelivery).ToArray();
     }
 
-    public async ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default)
+    public async ValueTask<EventFilterResult> DecideDeliveryAsync(Guid eventId, Guid automationId, EventFilterResult decision, CancellationToken ct = default, EventFilterResult? expectedDecision = null)
     { await using var db = await contexts.CreateDbContextAsync(ct);
-        await db.ExternalEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && d.DecisionJson == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(d => d.DecisionJson, System.Text.Json.JsonSerializer.Serialize(decision, CoreEventPersistence.Json)), ct);
+        var prior = await db.ExternalEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D"), ct);
+        var expectedJson = expectedDecision?.Retryable == true && prior?.DecisionJson is { } json
+            && System.Text.Json.JsonSerializer.Deserialize<EventFilterResult>(json, CoreEventPersistence.Json) == expectedDecision ? json : null;
+        await db.ExternalEventDeliveries.Where(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D") && d.DecisionJson == expectedJson && (d.Status == (int)ExternalEventDeliveryStatus.Pending || expectedJson != null && d.Status == (int)ExternalEventDeliveryStatus.FilterError))
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.Status, (int)ExternalEventDeliveryStatus.Pending)
+                .SetProperty(d => d.DecisionJson, System.Text.Json.JsonSerializer.Serialize(decision, CoreEventPersistence.Json)), ct);
         var row = await db.ExternalEventDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.EventId == eventId.ToString("D") && d.AutomationId == automationId.ToString("D"), ct);
         return row?.DecisionJson is not null && row.Status != (int)ExternalEventDeliveryStatus.Skipped
             ? System.Text.Json.JsonSerializer.Deserialize<EventFilterResult>(row.DecisionJson, CoreEventPersistence.Json)!
@@ -176,7 +187,9 @@ public sealed class SqliteExternalEventStore(IDbContextFactory<AgentCoreDbContex
                 item => item.EventId == eventKey && item.AutomationId == registrationKey,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (row is null || row.Status != (int)ExternalEventDeliveryStatus.Pending)
+        if (row is null || (row.Status != (int)ExternalEventDeliveryStatus.Pending
+            && !(row.Status == (int)ExternalEventDeliveryStatus.FilterError && row.DecisionJson is { } json
+                && System.Text.Json.JsonSerializer.Deserialize<EventFilterResult>(json, CoreEventPersistence.Json)?.Retryable == true)))
         {
             return;
         }

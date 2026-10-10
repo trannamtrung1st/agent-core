@@ -23,4 +23,7 @@ public sealed record EventSubscriptionSnapshot(Guid AutomationId, TriggerOwner O
 public sealed record EventBucketSource(Guid EventId, TriggerOwner Owner, string Key, DateTimeOffset ReceivedAtUtc, string DataJson,
     Guid? RootAgentRunId = null, int TriggerDepth = 0, IReadOnlyList<Guid>? VisitedAutomationIds = null);
 public sealed record EventFilterResult(bool? Matched, string Status, string? Code = null,
-    int SchemaVersion = 1, string ExpressionVersion = "js-expression-v1");
+    int SchemaVersion = 1, string ExpressionVersion = "js-expression-v1", int Attempt = 1, DateTimeOffset? RetryAtUtc = null)
+{
+    public bool Retryable => Matched is null && Code is "filter-worker-budget" or "filter-timeout";
+}

@@ -30,7 +30,6 @@ public sealed class TriggerScheduler
     private readonly IAgentDefinitionStore? _definitions;
     private readonly IModelCatalog? _catalog;
     private readonly int _batchSize;
-    private readonly AutomationPresetCatalog? _presets;
 
     public TriggerScheduler(ITriggerStore store, ILogger<TriggerScheduler> logger)
         : this(store, logger, DefaultBatchSize, null)
@@ -63,8 +62,8 @@ public sealed class TriggerScheduler
         IDiagnosticIdSource diagnostics,
         IAgentInstanceStore instances,
         IAgentDefinitionStore definitions,
-        IModelCatalog catalog, AutomationPresetCatalog? presets = null)
-        : this(store, logger, DefaultBatchSize, guard, diagnostics, instances, definitions, catalog, presets)
+        IModelCatalog catalog)
+        : this(store, logger, DefaultBatchSize, guard, diagnostics, instances, definitions, catalog)
     {
     }
 
@@ -86,7 +85,7 @@ public sealed class TriggerScheduler
         IDiagnosticIdSource? diagnostics = null,
         IAgentInstanceStore? instances = null,
         IAgentDefinitionStore? definitions = null,
-        IModelCatalog? catalog = null, AutomationPresetCatalog? presets = null)
+        IModelCatalog? catalog = null)
     {
         _store = store;
         _logger = logger;
@@ -95,7 +94,6 @@ public sealed class TriggerScheduler
         _instances = instances;
         _definitions = definitions;
         _catalog = catalog;
-        _presets = presets;
         _batchSize = Math.Clamp(batchSize, 1, DefaultBatchSize);
     }
 
@@ -141,15 +139,6 @@ public sealed class TriggerScheduler
                         RuntimeTelemetry.RecordTriggerScheduler("policy");
                         continue;
                     }
-                }
-
-                if (registration.Provenance.PresetId is { } presetId && _presets is not null
-                    && !(await _presets.OptionsAsync(registration.Owner.AgentInstanceId, cancellationToken, registration.ModelOverrideCatalogKey)).Single(p => p.Template.PresetId == presetId).Eligible)
-                {
-                    await _store.SuspendPolicyAsync(registration.Owner, registration.AutomationId, registration.Revision,
-                        "Preset prerequisites are no longer satisfied.", asOf, cancellationToken);
-                    rejected++;
-                    continue;
                 }
 
                 var result = await _store.TryAdmitScheduledAsync(

@@ -172,7 +172,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const destinationValid = (draft.executionTarget.kind !== "existingSession" || !!draft.executionTarget.sessionId)
     && (draft.completionDelivery.kind !== "toSession" || !!draft.completionDelivery.sessionId);
   const valid = destinationValid && draft.name.trim().length > 0 && draft.name.trim().length <= 120 && draft.instructions.trim().length > 0 && draft.instructions.trim().length <= 2000
-    && (isSchedule ? scheduleValid : draft.trigger.kind === "coreEvent" ? coreAllowed && !!selectedCore?.eligible : draft.trigger.kind === "event" && eventsAllowed && sources.some(source => source.eventId === (draft.trigger.kind === "event" ? draft.trigger.eventId : "") && source.status === "Active"));
+    && (isSchedule ? scheduleValid : draft.trigger.kind === "coreEvent" ? !!selectedCore && (!draft.enabled || coreAllowed && selectedCore.eligible) : draft.trigger.kind === "event" && eventsAllowed && sources.some(source => source.eventId === (draft.trigger.kind === "event" ? draft.trigger.eventId : "") && source.status === "Active"));
   function setTiming(change: Partial<ScheduleTiming>) { setDraft({ ...draft, trigger: { kind: "schedule", schedule: { ...timing, ...change } } }); }
   function edit(item: Automation) { editorOpener.current = document.activeElement as HTMLElement; setEditorError(null); setEditor(item.automationId); setEditorOpen(true); setDraft({ expectedRevision: item.revision, enabled: item.enabled, name: item.name, instructions: item.instructions,
     presetId: item.presetId, presetVersion: item.presetVersion, trigger: item.trigger, modelKey: item.modelKey, reasoningEffort: item.reasoningEffort, executionTarget: item.executionTarget, completionDelivery: item.completionDelivery, requiresTools: item.requiresTools, requiresVision: item.requiresVision }); }
@@ -253,14 +253,14 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
         <Flex component="section" vertical gap={token.padding} className="automation-editor-section" aria-label="Trigger">
         <Typography.Title level={5} style={{ margin: 0 }}>Trigger</Typography.Title>
         {policy ? <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Up to {policy.maxActiveRegistrations} active Automations. One-time schedules must be within {policy.oneShotHorizonDays} days; fixed intervals must be at least {policy.minFixedIntervalSeconds} seconds.</Typography.Paragraph> : null}
-        <Form.Item label="When"><Select aria-label="Automation trigger" value={draft.trigger.kind} disabled={busy} options={[{ value: "schedule", label: "Schedule", disabled: !schedulesAllowed }, { value: "event", label: "Shared Event (webhook)", disabled: !eventsAllowed }, { value: "coreEvent", label: "Core Event", disabled: !coreAllowed }]}
+        <Form.Item label="When"><Select aria-label="Automation trigger" value={draft.trigger.kind} disabled={busy} options={[{ value: "schedule", label: "Schedule", disabled: !schedulesAllowed }, { value: "event", label: "Shared Event (webhook)", disabled: !eventsAllowed }, { value: "coreEvent", label: "Core Event", disabled: draft.enabled && !coreAllowed }]}
           onChange={kind => setDraft({ ...draft, trigger: kind === "schedule" ? { kind, schedule: defaultTiming() } : kind === "coreEvent" ? { kind, coreEventKey: "run.completed" } : { kind: "event", eventId: "" } })} /></Form.Item>
         {draft.trigger.kind === "coreEvent" ? <>
           <Form.Item label="Core Event type" extra="Built-in signals from this Agent Instance only. No webhook credential is needed.">
-            <Select aria-label="Core Event type" value={draft.trigger.coreEventKey} disabled={busy} options={coreTypes.map(t => ({ value: t.key, label: t.key, disabled: !t.eligible }))}
+            <Select aria-label="Core Event type" value={draft.trigger.coreEventKey} disabled={busy} options={coreTypes.map(t => ({ value: t.key, label: t.key, disabled: draft.enabled && !t.eligible }))}
               onChange={coreEventKey => setDraft({ ...draft, trigger: { ...draft.trigger as Extract<AutomationDraft["trigger"], { kind: "coreEvent" }>, coreEventKey } })} />
           </Form.Item>
-          {!coreAllowed ? <Alert showIcon type="warning" title="Allow Core Events in the active Definition to subscribe." /> : null}
+          {!coreAllowed ? <Alert showIcon type="warning" title="Allow Core Events in the active Definition before enabling this automation. Disabled drafts can be saved." /> : null}
         </> : draft.trigger.kind === "event" ? <>
           <Form.Item label="Event" extra="Each received signal starts this Automation asynchronously in its selected destination, using normal approvals and authorization.">
             <Select aria-label="Automation Event" showSearch optionFilterProp="label" value={draft.trigger.eventId || undefined} disabled={busy}

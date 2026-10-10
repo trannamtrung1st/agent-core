@@ -98,7 +98,7 @@ public sealed class CoreEventBucketTests
         try
         {
             await core.SnapshotAsync(source.EventId, [new(automationId, owner, 1, "true", new())]);
-            var first = new EventFilterResult(null, "error", "filter-worker-budget");
+            var first = new EventFilterResult(null, "error", "filter-result-not-boolean");
             Assert.Equal(first, await core.DecideAsync(source.EventId, automationId, first));
             Assert.Equal(first, await core.DecideAsync(source.EventId, automationId, new(true, "matched")));
             Assert.Equal(EventMatchStatus.FilterError, Assert.Single(await core.DeliveriesAsync(source.EventId)).Status);
@@ -197,6 +197,57 @@ public sealed class CoreEventBucketTests
                 Assert.Equal(3, buckets.Sum(b => b.Sources.Count));
                 Assert.All(buckets.SelectMany(b => b.Sources), source => Assert.Equal(visited, source.VisitedAutomationIds));
             }
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
+
+
+    [Theory]
+    [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    public async Task Retry_decision_CAS_survives_reopen_and_late_attempts_cannot_replace_the_winner(bool sqlite, bool legacy)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"core-retry-{Guid.NewGuid():N}.db");
+        var contexts = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
+        var memory = new InMemoryCoreEventStore();
+        ICoreEventStore core = sqlite ? new SqliteCoreEventStore(contexts) : memory;
+        IExternalEventStore webhook = sqlite ? new SqliteExternalEventStore(contexts) : new InMemoryExternalEventStore();
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = new EventSubscriptionSnapshot(Guid.NewGuid(), owner, 1, "true", new());
+        var signal = new CoreEventOccurrence(Guid.NewGuid(), "retry-test", owner, "run.completed", now, "{}");
+        try
+        {
+            if (sqlite) { await using var db = await contexts.CreateDbContextAsync(); await db.Database.MigrateAsync(); CoreEventPersistence.Stage(db, signal); await db.SaveChangesAsync(); }
+            else memory.Append(signal);
+            await core.SnapshotAsync(signal.EventId, [snapshot]);
+            var ingress = new ExternalEvent(Guid.NewGuid(), Guid.NewGuid(), "retry-test", now, now, "{}");
+            await webhook.AdmitAsync(ingress, [new(snapshot.AutomationId, owner.AgentInstanceId, owner.ProfileId, snapshot)]);
+            var retry = legacy ? new EventFilterResult(null, "error", "filter-worker-budget") : new EventFilterResult(null, "retryPending", "filter-worker-budget", RetryAtUtc: now.AddSeconds(1));
+            Assert.Equal(retry, await core.DecideAsync(signal.EventId, snapshot.AutomationId, retry));
+            Assert.Equal(retry, await webhook.DecideDeliveryAsync(ingress.EventId, snapshot.AutomationId, retry));
+            if (legacy)
+            {
+                await core.FinishAsync(signal.EventId, snapshot.AutomationId, EventMatchStatus.FilterError, retry.Code);
+                await webhook.MarkDeliveryAsync(ingress.EventId, snapshot.AutomationId, ExternalEventDeliveryStatus.FilterError);
+                if (sqlite)
+                {
+                    await using var db = await contexts.CreateDbContextAsync();
+                    const string oldJson = "{\"matched\":null,\"status\":\"error\",\"code\":\"filter-worker-budget\",\"schemaVersion\":1,\"expressionVersion\":\"js-expression-v1\"}";
+                    (await db.CoreEventDeliveries.SingleAsync()).DecisionJson = oldJson;
+                    (await db.ExternalEventDeliveries.SingleAsync()).DecisionJson = oldJson;
+                    await db.SaveChangesAsync();
+                }
+            }
+            if (sqlite) { core = new SqliteCoreEventStore(contexts); webhook = new SqliteExternalEventStore(contexts); }
+            Assert.Single(await core.PendingAsync());
+            Assert.Equal(legacy ? EventMatchStatus.FilterError : EventMatchStatus.Pending, Assert.Single(await core.DeliveriesAsync(signal.EventId)).Status);
+            Assert.Equal(retry, Assert.Single(await webhook.ListPendingDeliveriesAsync(ingress.EventId, 32)).Decision);
+            var matched = new EventFilterResult(true, "matched", Attempt: 2);
+            Assert.Equal(matched, await core.DecideAsync(signal.EventId, snapshot.AutomationId, matched, expectedDecision: retry));
+            Assert.Equal(matched, await webhook.DecideDeliveryAsync(ingress.EventId, snapshot.AutomationId, matched, expectedDecision: retry));
+            // Concurrent evaluators may finish after a newer attempt; final decisions stay immutable.
+            Assert.Equal(matched, await core.DecideAsync(signal.EventId, snapshot.AutomationId, retry, expectedDecision: retry));
+            Assert.Equal(matched, await webhook.DecideDeliveryAsync(ingress.EventId, snapshot.AutomationId, retry, expectedDecision: retry));
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
     }

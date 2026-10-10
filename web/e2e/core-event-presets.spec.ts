@@ -78,3 +78,50 @@ test('Core Event presets stay opt-in, test filters without work, and preserve re
   await expect(edit).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('Disabled Core Event drafts save before policy enablement and retain authorization boundaries', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('requestfailed', r => errors.push(r.failure()?.errorText ?? r.url()));
+  await page.goto('/admin/instances');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('agent-core.owner-capability'))).not.toBeNull();
+  const token = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;
+  const headers = { 'X-AgentCore-Owner-Capability': token };
+  const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 21 } });
+  expect(created.ok(), await created.text()).toBe(true);
+  const instanceId = (await created.json()).instanceId as string;
+  await page.goto(`/admin/instances/${instanceId}/automation/automations`);
+  await page.getByRole('button', { name: 'New automation', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'New automation', exact: true });
+  await drawer.getByRole('textbox', { name: 'Automation name' }).fill('Prepared Core draft');
+  await drawer.getByRole('textbox', { name: 'Automation instructions' }).fill('Inspect configuration and finish quietly.');
+  await drawer.getByRole('switch', { name: 'Enable automation' }).click();
+  await drawer.getByRole('combobox', { name: 'Automation trigger' }).click();
+  await page.locator('.ant-select-item-option').filter({ hasText: /^Core Event$/ }).click();
+  await expect(drawer.getByText(/Disabled drafts can be saved/)).toBeVisible();
+  const save = drawer.getByRole('button', { name: 'Create automation', exact: true });
+  await expect(save).toBeEnabled();
+  await drawer.getByRole('switch', { name: 'Enable automation' }).click();
+  await expect(save).toBeDisabled();
+  await drawer.getByRole('switch', { name: 'Enable automation' }).click();
+  const saving = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/automations'));
+  await save.click(); const response = await saving;
+  expect(response.ok(), await response.text()).toBe(true);
+  const saved = await response.json(); expect(saved.enabled).toBe(false);
+  await expect(drawer).toBeHidden();
+  await page.reload();
+  await page.getByRole('button', { name: 'View automation: Prepared Core draft', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit automation', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit automation', exact: true });
+  await edit.getByRole('textbox', { name: 'Event filter expression' }).fill('false');
+  const updating = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes('/automations/'));
+  await edit.getByRole('button', { name: 'Save automation', exact: true }).click();
+  const updated = await updating; expect(updated.ok(), await updated.text()).toBe(true);
+  const current = await updated.json(); expect(current.trigger.filterExpression).toBe('false');
+  const enable = await page.request.put(`/api/v2/admin/agent-instances/${instanceId}/automations/${saved.automationId}`, {
+    headers, data: { ...current, expectedRevision: current.revision, enabled: true }
+  });
+  expect(enable.status()).toBe(403);
+  expect((await (await page.request.get(`/api/v2/agent-instances/${instanceId}/agent-runs`, { headers })).json()).items).toHaveLength(0);
+  expect(errors).toEqual([]);
+});

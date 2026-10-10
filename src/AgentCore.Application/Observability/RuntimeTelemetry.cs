@@ -20,12 +20,25 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> MemoryRetrieval = Meter.CreateCounter<long>("memory_retrieval");
     private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");
     private static readonly Counter<long> EventFilters = Meter.CreateCounter<long>("automation_event_filters");
+    private static readonly Counter<long> EventFilterEvaluations = Meter.CreateCounter<long>("automation_event_filter_evaluations");
+    private static readonly Histogram<long> EventRecoveryPageSize = Meter.CreateHistogram<long>("automation_event_recovery_page_size");
+    private static readonly Histogram<double> EventRecoveryOldestAgeMs = Meter.CreateHistogram<double>("automation_event_recovery_oldest_age_ms");
+    public static void RecordEventFilterEvaluation(string source, string outcome, string cause) => EventFilterEvaluations.Add(1,
+        new("source", source == "core" ? "core" : "webhook"),
+        new("outcome", outcome is "matched" or "filtered" or "retry_pending" or "retry_exhausted" or "permanent_error" ? outcome : "other"),
+        new("cause", cause is "worker_budget" or "timeout" or "none" ? cause : "other"));
+    public static void RecordEventRecoveryPage(string lane, int count, double oldestAgeMs)
+    {
+        var tags = new TagList { { "lane", lane is "core" or "webhook" or "bucket" ? lane : "other" } };
+        EventRecoveryPageSize.Record(Math.Clamp(count, 0, 32), tags);
+        if (count > 0) EventRecoveryOldestAgeMs.Record(Math.Max(0, oldestAgeMs), tags);
+    }
     public static void RecordEventFilter(string source, string outcome) => EventFilters.Add(1, new KeyValuePair<string, object?>("source", source), new KeyValuePair<string, object?>("outcome", outcome));
     private static readonly Counter<long> EventDeliveries = Meter.CreateCounter<long>("automation_event_delivery_attempts");
     public static void RecordEventDelivery(string source, string outcome) => EventDeliveries.Add(1,
         new KeyValuePair<string, object?>("source", source == "core" ? "core" : "webhook"),
         new KeyValuePair<string, object?>("outcome", outcome switch
-        { "emitted" or "matched" or "filtered" or "filter_error" or "coalesced" or "duplicate" or "policy_denied" or "loop_skipped" or "budget_skipped" or "admitted" or "recovered" => outcome, _ => "other" }));
+        { "retry_pending" or "emitted" or "matched" or "filtered" or "filter_error" or "coalesced" or "duplicate" or "policy_denied" or "loop_skipped" or "budget_skipped" or "admitted" or "recovered" => outcome, _ => "other" }));
     private static readonly Counter<long> AutomationEvents = Meter.CreateCounter<long>("trigger_registration_events");
     private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
     private static readonly Counter<long> ResponseRepairs = Meter.CreateCounter<long>("llm.response.repair");

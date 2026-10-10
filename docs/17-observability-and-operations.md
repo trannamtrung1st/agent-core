@@ -388,11 +388,53 @@ For budget troubleshooting, inspect requested closure, confirmed closure, reques
 
 ## Operating Core Event subscriptions
 
-Core types require no webhook resource, secret or global Connections entry. Install presets only through explicit owner/current-user authoring; creation remains disabled until prerequisites are satisfied. The built-in catalog examples are fixtures. Instance Triggers exposes safe Core delivery statuses/codes/revisions. `automation_event_filters` uses only bounded source/outcome labels; no expressions, samples, webhook data, transcripts or raw engine exceptions enter logs/metrics.
+Core types require no webhook resource, secret or global Connections entry. Install presets only through explicit owner/current-user authoring; templates start disabled and explain their current prerequisites. Preset provenance remains historical; validate the saved Automation and the capabilities it actually uses. Valid disabled Core Event drafts can be prepared before Definition policy enablement. The built-in catalog examples are fixtures. Instance Triggers exposes safe Core delivery statuses/codes/revisions. `automation_event_filters` uses only bounded source/outcome labels; no expressions, samples, webhook data, transcripts or raw engine exceptions enter logs/metrics.
 
-A filtered/error/policy/loop outcome creates no work. Correct an expression for future snapshots; do not reevaluate historical decisions with an edited predicate. An explicit Run now is a manual bypass of matching, retaining current safety checks. Revoked webhook resources cannot flush pending batches. Review unfinished owned coverage with the stable continuation cursor and exact Experience source validation. Back up SQLite plus durable roots before additive upgrade; never use old disposable cutover reset scripts for this feature. Use separate Synthetic ports/data and an isolated Compose project when verifying alongside a user's Real host.
+A filtered/permanent-error/policy/loop outcome creates no work. Worker contention and execution timeouts retain the frozen receipt and subscription, retry at 1/2/4/8-second backoff up to five attempts, and then report `filter-retry-exhausted`. Earlier persisted worker/timeout errors are recovered with their original snapshot; permanent errors are not replayed. Correct an expression for future snapshots; do not reevaluate historical decisions with an edited predicate. An explicit Run now is a manual bypass of matching, retaining current safety checks. Revoked webhook resources cannot flush pending batches. Review unfinished owned coverage with the stable continuation cursor and exact Experience source validation. Back up SQLite plus durable roots before additive upgrade; never use old disposable cutover reset scripts for this feature. Use separate Synthetic ports/data and an isolated Compose project when verifying alongside a user's Real host.
 
-The bounded automation_event_delivery_attempts counter records core/webhook emitted, matched, filtered, filter_error, coalesced, duplicate, policy_denied, loop_skipped, budget_skipped, admitted and recovered attempts. Labels contain no Instance/event IDs, resource keys, expression text or payload. Delivery ledgers establish logical exactly-once outcomes; attempt counters can increase on repair/replay.
+The bounded automation_event_delivery_attempts counter records core/webhook emitted, matched, filtered, filter_error, retry_pending, coalesced, duplicate, policy_denied, loop_skipped, budget_skipped, admitted and recovered attempts. Labels contain no Instance/event IDs, resource keys, expression text or payload. Delivery ledgers establish logical exactly-once outcomes; attempt counters can increase on repair/replay.
+
+## Observing event recovery pressure
+
+Collect from the existing BCL `AgentCore.Runtime` Meter. For a running process, use [Microsoft's dotnet-counters tool](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/dotnet-counters):
+
+```bash
+dotnet-counters monitor --process-id PID --counters AgentCore.Runtime
+dotnet-counters collect --process-id PID --counters AgentCore.Runtime --format json --duration 00:05:00 --output event-recovery
+```
+
+Attach as the same OS user with diagnostics enabled. Select the actual deployed host PID; collection observes metrics and does not issue provider calls. `Observability:OtlpEnabled` remains a validated option without an attached exporter, as described above; enabling it alone does not collect these instruments. An independently configured collector can listen to the same meter. Available instruments:
+
+| Instrument | Meaning | Bounded labels |
+| --- | --- | --- |
+| `automation_event_filter_evaluations` | Completed evaluations through durable filter recovery, including transient failures and exhaustion. Cached decisions and backoff polling do not add samples. | `source`: core/webhook; `outcome`: matched/filtered/retry_pending/retry_exhausted/permanent_error/other; `cause`: worker_budget/timeout/none/other. |
+| `automation_event_recovery_page_size` | Selected unfinished items per scan, including zero for an empty lane; maximum 32. | `lane`: core/webhook/bucket/other. |
+| `automation_event_recovery_oldest_age_ms` | Oldest selected receipt age, or due-bucket lateness, per nonempty page; clamped nonnegative. | Same lane labels. |
+
+These metrics contain no IDs, expressions, resource keys or event data. Evaluation counts measure attempts, not distinct events or durable commits; competing evaluations can each contribute an attempt. Unfiltered webhook deliveries bypass the evaluator. Page samples are **not** total backlog or global-oldest gauges: values vary as the scan advances and wraps. Failure logs and owner-checked delivery diagnostics remain the source of safe per-item investigation.
+
+During representative peak traffic, chart completed evaluation rates by source/outcome/cause, exhaustion relative to completed evaluations, full-page frequency, and upper-percentile selected age/lateness over several scan cycles. Establish a baseline before choosing alert thresholds. Investigate sustained exhaustion or increasing age with consistently full pages: correlate scheduler/dependency failures, worker/timeout pressure and current admission policy. A nonempty page alone is normal; empty-page size samples indicate an idle lane. Repeated backoff observations must not be mistaken for fresh evaluations.
+
+For an exact local backlog snapshot, open the existing SQLite database read-only and count unfinished rows; do not select payload/decision JSON into logs. For example, using the configured database path with `sqlite3 -readonly PATH`:
+
+```sql
+SELECT COUNT(*) AS unfinished_core_receipts
+FROM CoreEvents e
+WHERE e.Snapshotted = 0 OR EXISTS (
+  SELECT 1 FROM CoreEventDeliveries d WHERE d.EventId = e.EventId
+  AND (d.Status IN (0, 1) OR (d.Status = 3 AND d.Code IN ('filter-worker-budget', 'filter-timeout')))
+);
+SELECT COUNT(*) AS unfinished_webhook_deliveries
+FROM ExternalEventDeliveries
+WHERE Status = 0 OR (Status = 4 AND json_extract(DecisionJson, '$.code') IN ('filter-worker-budget', 'filter-timeout'));
+SELECT COUNT(*) AS unfinished_buckets FROM CoreEventBuckets WHERE Flushed = 0;
+SELECT Code, COUNT(*) AS exhausted_core_deliveries
+FROM CoreEventDeliveries WHERE Code = 'filter-retry-exhausted' GROUP BY Code;
+SELECT COUNT(*) AS exhausted_webhook_deliveries
+FROM ExternalEventDeliveries WHERE json_extract(DecisionJson, '$.code') = 'filter-retry-exhausted';
+```
+
+Core/webhook/bucket scans keep their 32-item per-pass bounds, advance deterministic cursors and wrap to retry earlier failures. This prevents a fixed failing first page from starving a finite healthy backlog; it does not make an overloaded producer sustainable or introduce concurrent Session ownership. Restart discards scan cursors only. Never delete receipt history, alter frozen filters or raise execution limits to conceal pressure. Real workload rates require observation of the deployed service; Synthetic concurrent probes establish the measurement and recovery mechanics only.
 
 ### Comparing semantic and adaptive browser workflows
 
