@@ -316,7 +316,7 @@ The post-P9.10 convergence replaces separate behavioral Schedule, Thought and ev
 
 ### Unified Automation execution routing
 
-Every authored Automation occurrence snapshots an execution target and completion-delivery policy. `ExistingSession(exact SessionId)` admits a zero-user-entry Activation/AgentRun into that owned Session, using its pinned model and normal conversational output. A detached resumable Session is reconstructed by SessionHost and commits text through its sole mailbox. `BackgroundSession` creates one child and finishes through `work.complete`. Only explicit `ToSession` requests create a separate bounded, tool-free completion report. Manual invocation follows the saved destination. Native source-owned routing retains its compatible-live heuristic and quiet evaluation.
+Every authored Automation occurrence snapshots an execution target and completion-delivery policy. `ExistingSession(exact SessionId)` admits a zero-user-entry Activation/AgentRun into that owned Session, preserving its explicit model/reasoning preferences and using current Instance defaults for a default-derived model selection. The admitted Run pins that selection and uses normal conversational output. A detached resumable Session is reconstructed by SessionHost and commits text through its sole mailbox. `BackgroundSession` creates one child and finishes through `work.complete`. Only explicit `ToSession` requests create a separate bounded, tool-free completion report. Manual invocation follows the saved destination. Native source-owned routing retains its compatible-live heuristic and quiet evaluation.
 
 ## Automation destinations and completion obligations
 

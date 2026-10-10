@@ -5,6 +5,7 @@ import { confirmAction } from '../../app/confirmAction';
 import { describeAdminError } from './adminErrors';
 import { listModels } from '../../services/api';
 import { InstanceExecutionBudgets } from './ExecutionBudgetsSection';
+import { orderedReasoningEfforts } from '../models/reasoningEfforts';
 
 const titles: Record<string, string> = { instructions: 'Operating instructions', conversationPolicy: 'Conversation', behaviorPolicy: 'Behavior', initiativePolicy: 'Initiative', voice: 'Voice', modelDefaults: 'Model defaults', memoryPolicy: 'Memory policy', capabilities: 'Capabilities', triggerPolicy: 'Trigger restrictions', providerPreferences: 'Provider preferences' };
 const labels: Record<string, string> = { systemInstructions: 'Operating instructions', responseLength: 'Response length', askOneQuestionAtATime: 'Ask one question at a time', maxOutputTokens: 'Maximum output tokens', interruptionStyle: 'Interruption style', acknowledgeInterruption: 'Acknowledge interruption', avoidUnsupportedClaims: 'Avoid unsupported claims', silenceThresholdMs: 'Silence threshold (ms)', cooldownMs: 'Cooldown (ms)', maxPerSilencePeriod: 'Maximum speaks per silence period', maxConsecutiveProactiveTurns: 'Maximum consecutive proactive turns', maxSilentEvaluations: 'Maximum silent evaluations', maxInactivityMs: 'Maximum inactivity (ms)', voiceId: 'Voice ID', speakingRate: 'Speaking rate', catalogKey: 'Default model', reasoningEffort: 'Reasoning effort', sessionMemory: 'Session memory', identityUserPromotion: 'Instance memory promotion', identityUserRetrieval: 'Instance memory retrieval', userPromotion: 'User memory promotion', userRetrieval: 'User memory retrieval', selected: 'Selected capabilities', always: 'Always projected capabilities', allowUnreadUnsupportedTypes: 'Allow unread unsupported attachments' };
@@ -20,16 +21,18 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, o
   const [drafts, setDrafts] = useState<Record<string, Draft>>({}); const [customized, setCustomized] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [models, setModels] = useState<{ key: string; displayName: string; supportedReasoningEfforts: string[] }[]>([]);
-  const epoch = useRef(0); const owner = useRef(instanceId); owner.current = instanceId;
-  useEffect(() => { epoch.current++; setSections(null); setExpanded([]); setDrafts({}); setCustomized({}); setError(null); setBusy(false); }, [instanceId]);
+  const [defaultModelKey, setDefaultModelKey] = useState<string | null>(null);
+  const epoch = useRef(0); const saving = useRef(false); const owner = useRef(instanceId); owner.current = instanceId;
+  useEffect(() => { epoch.current++; saving.current = false; setSections(null); setExpanded([]); setDrafts({}); setCustomized({}); setError(null); setBusy(false); }, [instanceId]);
   const reload = useCallback(async () => {
     const request = ++epoch.current; setLoading(true); setError(null); setSections(null);
     try { const result = await listInstanceSettings(instanceId); if (owner.current === instanceId && request === epoch.current) setSections(result); }
     catch (e) { if (request === epoch.current) setError(describeAdminError(e, 'Unable to read settings. Retry before saving; drafts are retained.').message); }
     finally { if (request === epoch.current) setLoading(false); }
   }, [instanceId]);
-  useEffect(() => { if (active) void reload(); }, [reload, active]);
-  useEffect(() => { let current = true; listModels().then(c => { if (current) setModels(c.models); }).catch(() => {}); return () => { current = false; }; }, []);
+  // A pending save owns its refresh; re-entering the tab must not supersede that read.
+  useEffect(() => { if (active && !saving.current) void reload(); }, [reload, active]);
+  useEffect(() => { let current = true; listModels().then(c => { if (current) { setModels(c.models); setDefaultModelKey(c.defaultKey); } }).catch(() => {}); return () => { current = false; }; }, []);
   function change(section: SettingsSection, field: string, value: SettingValue) {
     setDrafts(previous => {
       const draft = previous[section.section] ?? emptyDraft(); const set = { ...draft.set };
@@ -44,16 +47,22 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, o
   async function save(section: SettingsSection, reset = false) {
     const draft = reset ? { set: {}, clear: Object.keys(section.overrides) } : drafts[section.section] ?? emptyDraft();
     if (archived || busy || !sections || !Object.keys(draft.set).length && !draft.clear.length) return;
-    const request = epoch.current; setBusy(true); setError(null);
+    const request = epoch.current; let committed = false; saving.current = true; setBusy(true); setError(null);
     try {
-      const saved = await patchInstanceSettings(instanceId, section, draft.set, draft.clear);
+      await patchInstanceSettings(instanceId, section, draft.set, draft.clear);
       if (request !== epoch.current || owner.current !== instanceId) return;
-      setSections(current => current?.map(s => s.section === saved.section ? saved : { ...s, instanceRevision: saved.instanceRevision }) ?? null);
+      committed = true;
       setDrafts(current => ({ ...current, [section.section]: emptyDraft() }));
       if (reset) setCustomized(current => ({ ...current, [section.section]: false }));
       onUpdated();
-    } catch (e) { if (request === epoch.current) setError(describeAdminError(e, 'Settings could not be saved. Reload while retaining your draft.').message); }
-    finally { if (request === epoch.current) setBusy(false); }
+      // Resolving one section can also change another (for example Voice disables speech aliases).
+      setSections(null); setLoading(true);
+      const refreshed = await listInstanceSettings(instanceId);
+      if (request === epoch.current && owner.current === instanceId) setSections(refreshed);
+    } catch (e) { if (request === epoch.current) setError(committed
+      ? `Settings were saved. ${describeAdminError(e, 'Settings could not be refreshed.').message} Retry settings; other drafts are retained.`
+      : describeAdminError(e, 'Settings could not be saved. Reload while retaining your draft.').message); }
+    finally { if (request === epoch.current) { saving.current = false; setBusy(false); setLoading(false); } }
   }
   return <Flex vertical gap={token.padding}>
     <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.</Typography.Paragraph>
@@ -80,9 +89,10 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, o
             else if (numerics.has(field)) control = <InputNumber aria-label={label} value={typeof value === 'number' ? value : null} disabled={disabled} style={{ width: '100%' }} onChange={v => { if (v !== null || nullable.has(field)) change(section, field, v); }} />;
             else if (field === 'catalogKey') control = <Select aria-label={label} value={value as string | null} disabled={disabled || !models.length} allowClear options={models.map(m => ({ label: m.displayName, value: m.key }))} onChange={v => change(section, field, v ?? null)} />;
             else if (field === 'reasoningEffort') {
-              const selected = (draft.set.catalogKey ?? section.effective.catalogKey) as string | null;
-              const model = models.find(m => m.key === selected);
-              control = <Select aria-label={label} value={value as string | null} disabled={disabled || !model} allowClear options={(model?.supportedReasoningEfforts ?? []).map(e => ({ label: e, value: e }))} onChange={v => change(section, field, v ?? null)} />;
+              const selected = (draft.clear.includes('catalogKey') ? section.definitionDefaults.catalogKey
+                : 'catalogKey' in draft.set ? draft.set.catalogKey : section.effective.catalogKey) as string | null;
+              const model = models.find(m => m.key === (selected ?? defaultModelKey));
+              control = <Select aria-label={label} value={value as string | null} disabled={disabled || !model} allowClear options={orderedReasoningEfforts(model?.supportedReasoningEfforts ?? []).map(e => ({ label: e, value: e }))} onChange={v => change(section, field, v ?? null)} />;
             } else if (field === 'responseLength' || field === 'interruptionStyle') control = <Select aria-label={label} value={value as string} disabled={disabled} options={(field === 'responseLength' ? ['concise', 'balanced'] : ['acknowledgeThenContinue', 'answerNewTurn']).map(v => ({ label: v, value: v }))} onChange={v => change(section, field, v)} />;
             else if (Array.isArray(inherited)) control = <Select aria-label={label} mode="multiple" options={(section.definitionDefaults?.[field] as string[] ?? []).map(v => ({ label: v, value: v }))} value={Array.isArray(value) ? value : []} disabled={disabled} onChange={v => change(section, field, v)} />;
             else if (field === 'systemInstructions') control = <Input.TextArea aria-label={label} autoSize={{ minRows: 6, maxRows: 18 }} maxLength={8000} value={value as string ?? ''} disabled={disabled} onChange={e => change(section, field, nullable.has(field) && e.target.value === "" ? null : e.target.value)} />;

@@ -218,7 +218,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             <Typography.Text strong>Automation summary</Typography.Text>
             <Typography.Text>{summaryTrigger}{summaryBounds ? ` · ${summaryBounds}` : ""}</Typography.Text>
             <Typography.Text>{draft.executionTarget.kind === "backgroundSession" ? "Run this agent in a background Session" : draft.executionTarget.sessionId ? `Run in conversation ${draft.executionTarget.sessionId}` : "Choose the conversation to run in"}</Typography.Text>
-            <Typography.Text type="secondary">{draft.executionTarget.kind === "existingSession" ? "Reply directly in that conversation using its pinned model" : draft.completionDelivery.kind === "toSession" ? draft.completionDelivery.sessionId ? `Request a completion report to conversation ${draft.completionDelivery.sessionId}` : "Choose a conversation for the completion report" : "Keep results in Background work without a conversation report"}</Typography.Text>
+            <Typography.Text type="secondary">{draft.executionTarget.kind === "existingSession" ? "Reply directly in that conversation using its model preferences" : draft.completionDelivery.kind === "toSession" ? draft.completionDelivery.sessionId ? `Request a completion report to conversation ${draft.completionDelivery.sessionId}` : "Choose a conversation for the completion report" : "Keep results in Background work without a conversation report"}</Typography.Text>
             {!draft.enabled ? <Typography.Text type="warning">Saved disabled. Enable this Automation before it can run.</Typography.Text> : null}
           </Flex>
           <Flex wrap justify="flex-end" gap={token.paddingXS}>
@@ -318,7 +318,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
         </Flex>
         <Flex component="section" vertical gap={token.padding} className="automation-editor-section" aria-label="Execution">
         <Typography.Title level={5} style={{ margin: 0 }}>Execution</Typography.Title>
-        <Form.Item label="Run in" extra={draft.executionTarget.kind === "existingSession" ? "Replies in this conversation, even when you are away. Uses its pinned model." : "Runs independently. Results stay in Background work unless you request a report."}>
+        <Form.Item label="Run in" extra={draft.executionTarget.kind === "existingSession" ? "Replies in this conversation, even when you are away. Keeps explicit model preferences; otherwise uses current Instance defaults." : "Runs independently. Results stay in Background work unless you request a report."}>
           <Select aria-label="Automation destination" disabled={busy} value={draft.executionTarget.kind}
             options={[{ value: "backgroundSession", label: "Separate background Session" }, { value: "existingSession", label: "Selected conversation" }]}
             onChange={kind => setDraft({ ...draft, executionTarget: { kind }, completionDelivery: { kind: "none" }, modelKey: null, reasoningEffort: null })} />

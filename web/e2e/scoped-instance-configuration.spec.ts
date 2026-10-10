@@ -1,5 +1,52 @@
 import {test,expect} from '@playwright/test';
 
+test('saving settings refreshes dependent values and recovers a failed refresh without losing other drafts',async({page})=>{
+  await page.goto('/admin');
+  await expect(page.getByRole('heading',{name:'Agent inventory'})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('agent-core.owner-capability'))).toEqual(expect.any(String));
+  const headers={'X-AgentCore-Owner-Capability':(await page.evaluate(()=>localStorage.getItem('agent-core.owner-capability')))!};
+  const created=await page.request.post('/api/v2/admin/agent-instances',{headers,data:{definitionId:'general-assistant',version:21}});
+  expect(created.ok()).toBe(true);const owner=await created.json();
+  const root=`/api/v2/admin/agent-instances/${owner.instanceId}`;
+  await page.goto(`/admin/instances/${owner.instanceId}/identity/settings`);
+  await page.getByRole('button',{name:'Provider preferences Definition default',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'SpeechRecognizer',exact:true})).toHaveValue('primary-stt');
+  await page.getByRole('button',{name:'Conversation Definition default',exact:true}).click();
+  await page.getByRole('radiogroup',{name:'Conversation source'}).getByText('Customize',{exact:true}).click();
+  await page.getByRole('textbox',{name:'Language',exact:true}).fill('fr-FR');
+  await page.getByRole('button',{name:'Voice Definition default',exact:true}).click();
+  await page.getByRole('radiogroup',{name:'Voice source'}).getByText('Customize',{exact:true}).click();
+  await page.getByRole('switch',{name:'Enabled',exact:true}).click();
+  let releaseRefresh!:()=>void;let refreshStarted!:()=>void;
+  const refreshGate=new Promise<void>(resolve=>{releaseRefresh=resolve;});
+  const started=new Promise<void>(resolve=>{refreshStarted=resolve;});
+  await page.route(`**${root}/settings`,async route=>{refreshStarted();await refreshGate;await route.continue();});
+  await page.getByRole('button',{name:'Save Voice',exact:true}).click();
+  await started;
+  await page.getByRole('tab',{name:'Profile',exact:true}).click();
+  await page.getByRole('tab',{name:'Settings',exact:true}).click();
+  releaseRefresh();
+  await expect(page.getByRole('textbox',{name:'SpeechRecognizer',exact:true})).toHaveValue('');
+  await expect(page.getByRole('button',{name:'Reload settings',exact:true})).toBeEnabled();
+  await page.unroute(`**${root}/settings`);
+  await expect(page.getByRole('textbox',{name:'Language',exact:true})).toHaveValue('fr-FR');
+  let patches=0;
+  await page.route(`**${root}/settings**`,route=>{
+    if(route.request().method()==='PATCH'){patches++;return route.continue();}
+    return route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({detail:'Settings refresh unavailable.'})});
+  });
+  await page.getByRole('switch',{name:'Enabled',exact:true}).click();
+  await page.getByRole('button',{name:'Save Voice',exact:true}).click();
+  await expect(page.getByRole('alert').filter({hasText:'Settings were saved. Settings refresh unavailable.'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Save Voice',exact:true})).toHaveCount(0);
+  await page.unroute(`**${root}/settings**`);
+  await page.getByRole('button',{name:'Retry settings',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'SpeechRecognizer',exact:true})).toHaveValue('primary-stt');
+  await expect(page.getByRole('textbox',{name:'Language',exact:true})).toHaveValue('fr-FR');
+  await expect(page.getByRole('button',{name:'Save Voice',exact:true})).toBeDisabled();
+  expect(patches).toBe(1);
+});
+
 test('scoped settings save/reset, conflict recovery and resource inspection preserve ownership',async({page})=>{
   test.setTimeout(90_000);
   await page.goto('/admin');
