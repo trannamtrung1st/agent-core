@@ -143,6 +143,7 @@ public static class InfrastructureServiceCollectionExtensions
                 new SqliteDefinitionDraftEvaluationStore(
                     provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                     provider.GetRequiredService<IIdGenerator>()));
+            services.AddSingleton<IBrowserPrivacyStore, SqliteBrowserPrivacyStore>();
             services.AddSingleton<IAdminEventStore>(provider => new SqliteAdminEventStore(
                 provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                 provider.GetRequiredService<IIdGenerator>()));
@@ -206,6 +207,7 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<InMemoryAgentDefinitionResourceAdminStore>();
             services.TryAddSingleton<IAgentDefinitionResourceAdminStore>(provider =>
                 provider.GetRequiredService<InMemoryAgentDefinitionResourceAdminStore>());
+            services.TryAddSingleton<IBrowserPrivacyStore, InMemoryBrowserPrivacyStore>();
             services.TryAddSingleton<InMemoryAdminEventStore>();
             services.TryAddSingleton<IAdminEventStore>(provider =>
                 provider.GetRequiredService<InMemoryAdminEventStore>());
@@ -371,9 +373,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IOwnerCapabilityService, OwnerCapabilityService>();
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
         EmailProviderRegistration.AddEmail(services, profile);
+        services.TryAddSingleton(browser.PrivacyAuthority());
+        services.TryAddSingleton<BrowserPrivacyService>();
         services.TryAddSingleton(sp => new NativePlaywrightBrowser(
             sp.GetRequiredService<BrowserOptions>(),
-            sp.GetService<ILoggerFactory>(), timeProvider: sp.GetRequiredService<TimeProvider>()));
+            sp.GetService<ILoggerFactory>(), timeProvider: sp.GetRequiredService<TimeProvider>(),
+            privacy: sp.GetRequiredService<BrowserPrivacyService>()));
         services.TryAddSingleton<IBrowser>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.TryAddSingleton<IBrowserLease>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.AddHostedService(sp => sp.GetRequiredService<NativePlaywrightBrowser>());

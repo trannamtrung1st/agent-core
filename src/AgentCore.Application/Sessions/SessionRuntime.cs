@@ -2805,6 +2805,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     working = working with { Messages = PromptContextBuilder.WithToolEnvironmentSystem(
                         working.Messages, projectionContext, working.Tools ?? [], _tools.ConfigurationGate, eligibleForGuide) };
                 }
+                var recoveryTools = projectionContext is null ? working.Tools ?? []
+                    : ProjectBrowserTools(working with { Tools = ToolCatalog.Eligible(_snapshot.Definition, projectionContext, _tools.ConfigurationGate) },
+                        pageBlocked, terminalBrowserContinuation, evidence.DialogPending).Tools ?? [];
+                if (cleanupPhase) recoveryTools = recoveryTools.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray();
+                if (finalizationReason is null && !inRepair && !checkpointCapacityReached && !invalidRecoveryExhausted
+                    && evidence.SemanticRecoveryInstruction(
+                        recoveryTools.Select(t => t.Name), model.Capabilities.Vision,
+                        (_browserLease as IBrowser)?.HostPolicy.ScreenshotAvailable ?? true,
+                        (_browserLease as IBrowser)?.HostPolicy.Limits.CapturesPerScope ?? BrowserOperationalLimits.Default.CapturesPerScope,
+                        working.Tools?.Select(t => t.Name) ?? []) is { } semanticRecovery)
+                    working = working with { Messages = working.Messages.Append(new ModelMessage(ModelRole.System, semanticRecovery)).ToArray() };
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
                     ? binding.PinnedModel.CatalogKey : ToolResources.IsOccurrence(trigger.Kind)
                         ? _activeOccurrencePin?.CatalogKey : _snapshot.ModelSelection?.CatalogKey;

@@ -963,6 +963,23 @@ export const unbindCredential = (id: string, b: CredentialBinding, instanceRevis
 export const resetBrowserProfile = (id: string, expectedInstanceRevision: number) =>
   credentialRequest<void>(`agent-instances/${id}/browser-profile/reset`, "POST", { expectedInstanceRevision, confirm: true });
 
+export type BrowserPrivacyMode = "Protected" | "Unmasked" | "Disabled";
+export type BrowserScreenshotPolicy = { mode: BrowserPrivacyMode; unmaskedOrigins: string[]; trustedGraphicsOrigins: string[]; revision: number };
+export type BrowserPrivacy = {
+  saved: BrowserScreenshotPolicy; effective: BrowserScreenshotPolicy;
+  deployment: { captureAllowed: boolean; unmaskedAllowed: boolean; unmaskedOriginCeiling: string[]; graphicsOriginCeiling: string[] };
+  restartRequired: boolean; activation: string; durable: boolean;
+};
+export const getBrowserPrivacy = (signal?: AbortSignal) => browserPrivacyRequest("GET", undefined, signal);
+export const saveBrowserPrivacy = (input: Omit<BrowserScreenshotPolicy, "revision"> & { expectedRevision: number; acknowledgeExposure: boolean }, signal?: AbortSignal) =>
+  browserPrivacyRequest("PUT", input, signal);
+async function browserPrivacyRequest(method: string, input?: unknown, signal?: AbortSignal): Promise<BrowserPrivacy> {
+  const response = await ownerFetch("/api/v2/admin/browser/privacy", { method, signal,
+    ...(input ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) } : {}) });
+  if (!response.ok) throw await adminProblemMessage(response, "Unable to manage browser screenshot privacy.");
+  return response.json() as Promise<BrowserPrivacy>;
+}
+
 export type AdminWebhookEvent = {
   eventId: string; displayName: string; eventKey: string; status: string; revision: number;
   createdAt: string; updatedAt: string; subscriberCount: number; activeSubscriberCount: number; lastReceivedAt: string | null;

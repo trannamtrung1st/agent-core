@@ -21,14 +21,15 @@ public sealed partial class NativePlaywrightBrowser
         BrowserScreenshotRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (_options.ScreenshotPrivacy == "Disabled") return new("forbidden", null, 0);
+        var privacy = _capturePolicy;
+        if (privacy.Mode == BrowserScreenshotPrivacyMode.Disabled) return new("forbidden", null, 0);
         await using var interactive = await EnterInteractiveAsync(request.SessionId, cancellationToken).ConfigureAwait(false);
         if (!IsAvailable || !_sessions.TryGetValue(request.SessionId, out var session))
         {
             return new BrowserScreenshotResult("provider_unavailable", null, 0);
         }
 
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, CaptureLifetime);
         deadline.CancelAfter(OperationTimeout);
         var ct = deadline.Token;
         var entered = false;
@@ -47,6 +48,7 @@ public sealed partial class NativePlaywrightBrowser
             var settled = await BrowserPageSettle.WaitAsync(session.Page, _policy.Limits.AutomaticSettleMs, ct);
             var generation = session.Generation;
             var page = session.Page;
+            var unmasked = privacy.IsUnmasked(page.Url);
             var visualState = await ReadVisualStateAsync(page, ct);
             // Fence the whole combined observation, including asynchronous semantic reads.
             var stage = Stopwatch.StartNew();
@@ -88,8 +90,26 @@ public sealed partial class NativePlaywrightBrowser
             {
                 foreach (var frame in session.Page.Frames)
                 {
+                    if (frame != session.Page.MainFrame)
+                    {
+                        // SDK locator masks pierce open shadow roots, but cannot reach closed roots.
+                        // Never publish child-frame pixels when their whole-frame mask is unreachable.
+                        await using var element = await frame.FrameElementAsync().WaitAsync(ct);
+                        var maskable = await element.EvaluateAsync<bool>("""
+                            element => {
+                              if (!['iframe', 'frame'].includes(element.localName)) return false;
+                              for (let root = element.getRootNode(); root instanceof ShadowRoot; root = root.host.getRootNode())
+                                if (root.mode !== 'open') return false;
+                              return true;
+                            }
+                            """).WaitAsync(ct);
+                        if (!maskable) return new("target_denied", null, 0);
+                    }
                     // Mask whole child frames: screenshots cannot prove that cross-origin pixels contain no secrets.
                     if (frame != session.Page.MainFrame && !Allows(session, frame.Url, true)) continue;
+                    // Child frames are always masked as complete regions, including same-origin frames.
+                    // A parent's unmasked exception never extends into another browsing context.
+                    if (unmasked && frame == session.Page.MainFrame) continue;
                     maskedFrames.Add(frame);
                     redactions += await frame.EvaluateAsync<int>(
                 """
@@ -123,8 +143,7 @@ public sealed partial class NativePlaywrightBrowser
                   }
                   return count;
                 }
-                """, new { values = secrets, trustedGraphics = Uri.TryCreate(frame.Url, UriKind.Absolute, out var frameUri)
-                    && _trustedVisualOrigins.Contains(frameUri.GetLeftPart(UriPartial.Authority)) }).WaitAsync(ct);
+                """, new { values = secrets, trustedGraphics = privacy.TrustsGraphics(frame.Url) }).WaitAsync(ct);
                     redactions += await frame.EvaluateAsync<int>(MaskSensitiveScript).WaitAsync(ct);
                     // Hide carets using a Core-owned removable stylesheet. SDK caret hiding
                     // temporarily changes input styles, which would invalidate our own evidence.
@@ -135,7 +154,7 @@ public sealed partial class NativePlaywrightBrowser
                           document.documentElement.appendChild(style); }
                         """).WaitAsync(ct);
                 }
-                var frameMasks = session.Page.Locator("iframe");
+                var frameMasks = session.Page.Locator("iframe, frame");
                 if (request.FullPage)
                 {
                     var dimensions = await session.Page.EvaluateAsync<int[]>("() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]").WaitAsync(ct);
@@ -153,7 +172,7 @@ public sealed partial class NativePlaywrightBrowser
                 else
                     png = await target.ScreenshotAsync(new LocatorScreenshotOptions
                     { Type = ScreenshotType.Png, Scale = ScreenshotScale.Css, Caret = ScreenshotCaret.Initial,
-                      Mask = [session.Page.Locator("input[type=password], input[type=hidden]"), frameMasks], Timeout = TimeoutMs() }).WaitAsync(ct);
+                      Mask = unmasked ? [frameMasks] : [session.Page.Locator("input[type=password], input[type=hidden]"), frameMasks], Timeout = TimeoutMs() }).WaitAsync(ct);
                 if (format != "png")
                 {
                     using var image = SKImage.FromEncodedData(png);
@@ -188,6 +207,7 @@ public sealed partial class NativePlaywrightBrowser
                 height = decoded.Height;
             }
             var currentState = await ReadVisualStateAsync(page, ct);
+            ct.ThrowIfCancellationRequested();
             var consistent = !page.IsClosed
                 && ReferenceEquals(page, session.Page) && generation == session.Generation
                 && visualState is not null && visualState == currentState;
@@ -204,7 +224,7 @@ public sealed partial class NativePlaywrightBrowser
             return new BrowserScreenshotResult(null, png, redactions, width, height, "image/" + format,
                 observation, coordinateEvidence);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && !CaptureLifetime.IsCancellationRequested)
         {
             return new("timeout", null, 0);
         }

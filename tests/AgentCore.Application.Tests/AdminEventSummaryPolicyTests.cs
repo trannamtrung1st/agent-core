@@ -6,6 +6,18 @@ namespace AgentCore.Application.Tests;
 
 public sealed class AdminEventSummaryPolicyTests
 {
+    [Theory]
+    [InlineData("\"secret\"", "0", false)]
+    [InlineData("1", "\"secret\"", false)]
+    [InlineData("1", "33", false)]
+    [InlineData("1", "0", true)]
+    public void Privacy_history_rejects_non_numeric_counts_and_inconsistent_acknowledgement(string revision, string count, bool acknowledged)
+    {
+        var summary = $$"""{"mode":"Protected","revision":{{revision}},"unmaskedOriginCount":{{count}},"graphicsOriginCount":0,"exposureAcknowledged":{{acknowledged.ToString().ToLowerInvariant()}}}""";
+        var append = new AdminEventAppend(Guid.NewGuid(), DateTimeOffset.UtcNow, AdminEventActorKind.LocalOwner,
+            AdminEventOperationKind.BrowserPrivacyChanged, "browserPrivacy", "host", 1, null, summary);
+        Assert.Throws<AgentCoreException>(() => AdminEventSummaryPolicy.ValidateAppend(append));
+    }
     [Fact]
     public void PublicationChangedSectionIds_exposes_read_only_allowlist()
     {

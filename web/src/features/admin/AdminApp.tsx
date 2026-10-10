@@ -3,6 +3,7 @@ import { InstanceExecutionBudgets, validExecutionBudgets } from "./ExecutionBudg
 import { groupedCapabilityOptions, reconcileAlwaysCapabilities } from "./capabilityOptions";
 import { InstanceSkillsSection } from "./InstanceSkillsSection";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
+import { BrowserPrivacySection } from "./BrowserPrivacySection";
 import { updateHarness } from "../../services/adminApi";
 import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import {
@@ -2595,7 +2596,7 @@ export function InstanceDetail({
                   <div className="admin-definition-panel-heading">
                     <Typography.Title level={4}>Effective configuration</Typography.Title>
                     <Typography.Text type="secondary">
-                      Read-only values resolved from the active definition and instance overrides.
+                      Resolved Definition and Instance values, with global Browser privacy controls below.
                     </Typography.Text>
                   </div>
                   <div className="admin-definition-panel-body">
@@ -3005,6 +3006,7 @@ export function EffectiveConfigView({
 }) {
   const trigger = config.triggerPolicy;
   const detailLayout = useAdminDetailLayout();
+  const { token } = theme.useToken();
   return (
     <div className="admin-effective-config-grid">
       <section
@@ -3085,6 +3087,7 @@ export function EffectiveConfigView({
       {config.browser ? (
         <section className="admin-effective-config-section admin-effective-config-wide" aria-label="Browser provider">
           <Typography.Title level={5}>Browser provider</Typography.Title>
+          <Flex vertical gap={token.padding}>
           <Descriptions {...detailLayout} bordered size="small" column={1}>
             <Descriptions.Item label="Provider">{config.browser.displayName} ({config.browser.providerId})</Descriptions.Item>
             <Descriptions.Item label="Engine">{config.browser.engine || "Unknown"}</Descriptions.Item>
@@ -3100,6 +3103,8 @@ export function EffectiveConfigView({
               <Descriptions.Item label="Configuration source">Host Browser:Limits configuration · changes apply after host restart. Safety ceilings remain enforced.</Descriptions.Item>
             </> : null}
           </Descriptions>
+          <BrowserPrivacySection />
+          </Flex>
         </section>
       ) : null}
       <section className="admin-effective-config-section" aria-label="Memory policy">

@@ -222,6 +222,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<AgentDefinitionPublicationResourceRecord> AgentDefinitionPublicationResources =>
         Set<AgentDefinitionPublicationResourceRecord>();
     public DbSet<AdminEventRecord> AdminEvents => Set<AdminEventRecord>();
+    public DbSet<BrowserPrivacyRecord> BrowserPrivacy => Set<BrowserPrivacyRecord>();
 
     public DbSet<CredentialRecord> Credentials => Set<CredentialRecord>();
     public DbSet<AgentCredentialBindingRecord> AgentCredentialBindings => Set<AgentCredentialBindingRecord>();
@@ -235,6 +236,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<AgentInstanceSkillRecord> AgentInstanceSkills => Set<AgentInstanceSkillRecord>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<BrowserPrivacyRecord>(e => { e.ToTable("BrowserPrivacy"); e.HasKey(r => r.Id); e.Property(r => r.Revision).IsConcurrencyToken(); e.Property(r => r.PolicyJson).IsRequired(); });
         modelBuilder.Entity<AgentDefinitionSkillStateRecord>(e => {
             e.ToTable("AgentDefinitionSkillStates"); e.HasKey(s => new { s.AgentInstanceId, s.DefinitionSkillId });
             e.Property(s => s.AgentInstanceId).HasMaxLength(36); e.Property(s => s.DefinitionSkillId).HasMaxLength(64);

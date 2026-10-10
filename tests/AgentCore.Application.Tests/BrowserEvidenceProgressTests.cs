@@ -5,6 +5,49 @@ namespace AgentCore.Application.Tests;
 public sealed class BrowserEvidenceProgressTests
 {
     [Fact]
+    public void Authorized_unloaded_capture_is_discovered_without_inventing_projection()
+    {
+        var progress = new BrowserEvidenceProgress();
+        progress.NoteResult(new("1",ToolCatalog.BrowserFind,"{}"), """{"matches":[]}""");
+        progress.NoteResult(new("2",ToolCatalog.BrowserClick,"{}"), """{"error":"target_missing"}""");
+        var eligible = new[] { ToolCatalog.BrowserScreenshot, ToolCatalog.BrowserVisionMouse };
+        Assert.Contains("Use capabilities.load", progress.SemanticRecoveryInstruction(eligible,true,true,4,[ToolCatalog.CapabilitiesLoad]));
+        Assert.Contains("Visual recovery is unavailable", progress.SemanticRecoveryInstruction(eligible,true,true,4,[ToolCatalog.BrowserSnapshot]));
+        Assert.DoesNotContain("Use capabilities.load", progress.SemanticRecoveryInstruction(eligible,true,true,4,eligible));
+    }
+    [Theory]
+    [InlineData(true,true,true,1,true)]
+    [InlineData(false,true,true,1,false)]
+    [InlineData(true,false,true,1,false)]
+    [InlineData(true,true,false,1,true)]
+    [InlineData(true,true,true,0,false)]
+    public void Repeated_missing_targets_recommend_only_authorized_available_visual_evidence(bool vision,bool screenshot,bool mouse,int allowance,bool visual)
+    {
+        var progress = new BrowserEvidenceProgress();
+        var tools = new List<string> { ToolCatalog.BrowserSnapshot };
+        if (screenshot) tools.Add(ToolCatalog.BrowserScreenshot); if(mouse) tools.Add(ToolCatalog.BrowserVisionMouse);
+        progress.NoteResult(new("1",ToolCatalog.BrowserClick,"{}"),"""{"error":"target_missing"}""");
+        Assert.Null(progress.SemanticRecoveryInstruction(tools,vision,true,allowance));
+        progress.NoteResult(new("2",ToolCatalog.BrowserClick,"{}"),"""{"error":"target_missing"}""");
+        Assert.False(progress.DialogPending);
+        var hint=progress.SemanticRecoveryInstruction(tools,vision,true,allowance)!;
+        Assert.Contains("target_missing is not evidence",hint);
+        Assert.Equal(visual,hint.Contains("Inspect the rendered layout"));
+        Assert.Contains("Avoid more equivalent guesses",hint);
+    }
+    [Fact]
+    public void Capture_exhaustion_persists_across_checkpoint_reconstruction_without_inventing_dialogs()
+    {
+        var calls = new AgentCore.Application.Ports.ModelToolCall[] { new("1",ToolCatalog.BrowserScreenshot,"{}"), new("2",ToolCatalog.BrowserClick,"{}"),new("3",ToolCatalog.BrowserClick,"{}") };
+        var messages = new List<AgentCore.Application.Ports.ModelMessage> { new(AgentCore.Application.Ports.ModelRole.Assistant,"",ToolCalls:calls) };
+        foreach(var call in calls) messages.Add(new(AgentCore.Application.Ports.ModelRole.Tool,call.Id=="1"?"""{"error":"capture_limit"}""":"""{"error":"target_missing"}""",ToolCallId:call.Id));
+        var recovered=new BrowserEvidenceProgress(messages);
+        Assert.Contains("Visual recovery is unavailable",recovered.SemanticRecoveryInstruction([ToolCatalog.BrowserScreenshot],true,true,4));
+        Assert.False(recovered.DialogPending);
+        recovered.NoteResult(new("4",ToolCatalog.BrowserClick,"{}"),"""{"status":"ok"}""");
+        Assert.Null(recovered.SemanticRecoveryInstruction([ToolCatalog.BrowserScreenshot],true,true,4));
+    }
+    [Fact]
     public void Native_tree_changes_reset_evidence_but_new_refs_do_not()
     {
         var progress = new BrowserEvidenceProgress();

@@ -268,6 +268,9 @@ public sealed partial class SessionToolExecutor
         int remainingOutputBytes,
         CancellationToken cancellationToken)
     {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,
+            browser is IBrowserCaptureLifetime retiring ? retiring.CaptureLifetime : CancellationToken.None);
+        cancellationToken = lifetime.Token;
         var started = Stopwatch.GetTimestamp();
         var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
         if (denied is not null)
@@ -328,6 +331,8 @@ public sealed partial class SessionToolExecutor
                 width = captured.Width,
                 height = captured.Height,
                 redactions = captured.RedactionCount,
+                privacyMode = browser.HostPolicy.ScreenshotPolicy.Mode.ToString(),
+                privacyRevision = browser.HostPolicy.ScreenshotPolicy.Revision,
                 artifactId = stored.ArtifactId,
                 imageDelivered = admission?.SupportsVision == true,
                 observationUnavailable = captured.Observation?.ObservationUnavailable == true,
@@ -341,6 +346,7 @@ public sealed partial class SessionToolExecutor
             });
             text = BrowserCaptureProjection.Fit(remainingOutputBytes, text);
             var delivered = admission?.SupportsVision == true && text.Length > 0 && JsonSerializer.Deserialize<JsonElement>(text).TryGetProperty("artifactId", out _);
+            cancellationToken.ThrowIfCancellationRequested();
             return new ToolExecutionResult(
                 FinishBrowser(ToolCatalog.BrowserScreenshot, started, text),
                 delivered ? [new ModelImageContent(captured.ContentType ?? "image/png", captured.Bytes, "screenshot")] : []);
@@ -694,7 +700,7 @@ public sealed partial class SessionToolExecutor
             "stale_visual_evidence" => "Coordinate evidence is missing or stale. Use a semantic target or obtain a fresh viewport screenshot and its snapshotId for the active tab; reobserve and verify the outcome.",
             "stale_frame" => "This frame is no longer current. Observe the current permitted frame inventory.",
             "action_not_confirmed" => "The page changed during the operation. Observe current state; do not replay an uncertain effect.",
-            "target_missing" => "No current rendered target matches. Observe the page, narrow the semantics or render virtualized content before acting.",
+            "target_missing" => "No current rendered target matches. Observe the page, narrow the semantics or render virtualized content before acting. Change evidence after a small number of justified alternatives; avoid equivalent guesses. This does not indicate a native dialog.",
             "ambiguous_target" => "The target is ambiguous. Narrow role/name or use within with a unique row/group and literal hasText.",
             "not_found" => "No rendered target matches. Change the query or scroll the region to reveal virtualized content.",
             "non_actionable_target" => "The target has no actions. Search for its actionable descendant with browser.find.",

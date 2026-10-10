@@ -26,6 +26,10 @@ public sealed class BrowserCleanupIntentTests
     [InlineData("Sign me out and close my browser window", true, true)]
     [InlineData("Log-out when finished", true, false)]
     [InlineData("Explain how to log out", false, false)]
+    [InlineData("Log out and close the browser even if logout fails", true, true)]
+    [InlineData("Close the browser even if logging out fails", false, true)]
+    [InlineData("Log out, then only close the browser after verified logout", true, false)]
+    [InlineData("Keep me signed in and close the browser", false, true)]
     public void Resource_intent_is_independent_and_conservative(string text, bool logout, bool close)
     {
         var intent = BrowserCleanupIntentRecognition.From(text);

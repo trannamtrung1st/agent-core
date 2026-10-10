@@ -1,0 +1,220 @@
+{
+  "baseline_commit": "38a610071a7a472506d98ab466ee45503f7a9466",
+  "branch": "main",
+  "implementation_commit": null,
+  "snapshot_kind": "git archive baseline plus privacy-only source edits; not whole shared-checkout acceptance",
+  "files": [
+    {
+      "path": "src/AgentCore.Api/AdminBrowserPrivacyEndpoints.cs",
+      "tested_snapshot_sha256": "91b17c0e9b01f4a87887d3e09628b50cd94a0fad2646186a599d9655c5531a5e",
+      "shared_checkout_sha256": "91b17c0e9b01f4a87887d3e09628b50cd94a0fad2646186a599d9655c5531a5e"
+    },
+    {
+      "path": "src/AgentCore.Api/AdminEndpoints.cs",
+      "tested_snapshot_sha256": "e25f5687491e0f9333639504d664399b6c28591893f12cf505426f9df997beb3",
+      "shared_checkout_sha256": "e25f5687491e0f9333639504d664399b6c28591893f12cf505426f9df997beb3"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/AdminEvent.cs",
+      "tested_snapshot_sha256": "5d50ac8db4ca96d38a52146d429bffcbb59cad97f7b7b645c9f02c610592b30a",
+      "shared_checkout_sha256": "5d50ac8db4ca96d38a52146d429bffcbb59cad97f7b7b645c9f02c610592b30a"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/AdminEventSummaryPolicy.cs",
+      "tested_snapshot_sha256": "4cc3d04bb4dbe3ca25a1207eb74a46c9c1d22913d77dae35d52453e939775fe9",
+      "shared_checkout_sha256": "4cc3d04bb4dbe3ca25a1207eb74a46c9c1d22913d77dae35d52453e939775fe9"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/BrowserPrivacyService.cs",
+      "tested_snapshot_sha256": "a36136838cf5258bfad547772d0bfeab60eb958db9366d8a1072ee28e3a2daa1",
+      "shared_checkout_sha256": "a36136838cf5258bfad547772d0bfeab60eb958db9366d8a1072ee28e3a2daa1"
+    },
+    {
+      "path": "src/AgentCore.Application/Execution/BrowserCleanupIntentRecognition.cs",
+      "tested_snapshot_sha256": "216133bdd4915aa0281ae5ff9461722fa4a79d0da71be0696878f90a7c01d6a5",
+      "shared_checkout_sha256": "216133bdd4915aa0281ae5ff9461722fa4a79d0da71be0696878f90a7c01d6a5"
+    },
+    {
+      "path": "src/AgentCore.Application/Execution/RunFinalization.cs",
+      "tested_snapshot_sha256": "ae770dda7dde0e5908e835355ba655958a7bbc6e9152aaa88f4f3563c028d4d1",
+      "shared_checkout_sha256": "ae770dda7dde0e5908e835355ba655958a7bbc6e9152aaa88f4f3563c028d4d1"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/Browser.cs",
+      "tested_snapshot_sha256": "aa6f8061469fbfd087c138762aeb64590c5033df0f66d7cf26188ac0e1005c32",
+      "shared_checkout_sha256": "aa6f8061469fbfd087c138762aeb64590c5033df0f66d7cf26188ac0e1005c32"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/BrowserPrivacy.cs",
+      "tested_snapshot_sha256": "4fac54df920dac303162800b6c6a07f7ca5fb2a61f9d6346aa904a68531773eb",
+      "shared_checkout_sha256": "4fac54df920dac303162800b6c6a07f7ca5fb2a61f9d6346aa904a68531773eb"
+    },
+    {
+      "path": "src/AgentCore.Application/Sessions/SessionRuntime.cs",
+      "tested_snapshot_sha256": "5d09307a6c89e0509a44042f21c0f533439234eae811fa28901ae366966ab792",
+      "shared_checkout_sha256": "5d09307a6c89e0509a44042f21c0f533439234eae811fa28901ae366966ab792"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/BrowserEvidenceProgress.cs",
+      "tested_snapshot_sha256": "699fbda8ba2d1a4a0a99cca7edb55066495246ea34e5cb5b1ce6e59b17db83fd",
+      "shared_checkout_sha256": "699fbda8ba2d1a4a0a99cca7edb55066495246ea34e5cb5b1ce6e59b17db83fd"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/BrowserObservationGuidance.cs",
+      "tested_snapshot_sha256": "18bfa63b29edaa444979728856f5fa9a4180011ff93a556b00a0ba8f752ad053",
+      "shared_checkout_sha256": "18bfa63b29edaa444979728856f5fa9a4180011ff93a556b00a0ba8f752ad053"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.Browser.cs",
+      "tested_snapshot_sha256": "cf2c7bfd26321bc869e3dab15e8e596d05fec2b1dead976b1f5f011297fb2e3c",
+      "shared_checkout_sha256": "cf2c7bfd26321bc869e3dab15e8e596d05fec2b1dead976b1f5f011297fb2e3c"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Http/BrowserPrivacyDtos.cs",
+      "tested_snapshot_sha256": "816d2cba558b3fe05624a3bdcc3c46a35e46ff2770cb356264f536b8160b958b",
+      "shared_checkout_sha256": "816d2cba558b3fe05624a3bdcc3c46a35e46ff2770cb356264f536b8160b958b"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/BrowserOptions.cs",
+      "tested_snapshot_sha256": "7bee3caf81dbce197270c124ba9c6add11b5772bccd7bd19a3278888e74dbbb8",
+      "shared_checkout_sha256": "7bee3caf81dbce197270c124ba9c6add11b5772bccd7bd19a3278888e74dbbb8"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/Fixture/browser-logout.html",
+      "tested_snapshot_sha256": "a609936ff427f5db928b054662fd3978ea4e2a27cf48674b92763204f4eacd81",
+      "shared_checkout_sha256": "a609936ff427f5db928b054662fd3978ea4e2a27cf48674b92763204f4eacd81"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/LoopbackBrowserFixtureHost.cs",
+      "tested_snapshot_sha256": "e0abf86fa6f60d9aaf2bfc1baca18721ef287a786db0cb09aea4b93277d63469",
+      "shared_checkout_sha256": "e0abf86fa6f60d9aaf2bfc1baca18721ef287a786db0cb09aea4b93277d63469"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/NativePlaywrightBrowser.Artifacts.cs",
+      "tested_snapshot_sha256": "c8cc3c901939c1320b6c31db610977d6db931269ce6377200252bcfb46bdd5f6",
+      "shared_checkout_sha256": "c8cc3c901939c1320b6c31db610977d6db931269ce6377200252bcfb46bdd5f6"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/NativePlaywrightBrowser.Environment.cs",
+      "tested_snapshot_sha256": "d8a3b010548c97be465a3ac393df694b83ef3d342e34d71b65df2226368ea880",
+      "shared_checkout_sha256": "d8a3b010548c97be465a3ac393df694b83ef3d342e34d71b65df2226368ea880"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Browser/NativePlaywrightBrowser.cs",
+      "tested_snapshot_sha256": "3bd77358048561e29430ed7992591206515556edec163c372f8167fb8f6e5851",
+      "shared_checkout_sha256": "3bd77358048561e29430ed7992591206515556edec163c372f8167fb8f6e5851"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+      "tested_snapshot_sha256": "e78fad6061f11a0cbad335d903168d6834872986c07b86953f18a4a97ad7a462",
+      "shared_checkout_sha256": "8be58a2ca3a3e0d43f573157ce2c84671e9a4513c14e4bf0fa09dfe5ad74a66a"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/AgentCoreDbContext.cs",
+      "tested_snapshot_sha256": "dc23df42f19507ecfe373593e2a024a07783978d278cc1d3fa57681cc9958391",
+      "shared_checkout_sha256": "c21493d3672c3dcd2877bcce25e32741e3b4142b3d2106a96f92269d8012f3c1"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/BrowserPrivacyStore.cs",
+      "tested_snapshot_sha256": "4faad62473283953b3aa679962c1747af3007f2d404dfc371e25a0bb46b1de7c",
+      "shared_checkout_sha256": "4faad62473283953b3aa679962c1747af3007f2d404dfc371e25a0bb46b1de7c"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071329_BrowserPrivacyAdministration.Designer.cs",
+      "tested_snapshot_sha256": "7ebfe9e942dfeb5fccd27ad9ca6da99af0da620b7073c87ad1aeb03a542d23f2",
+      "shared_checkout_sha256": "7ebfe9e942dfeb5fccd27ad9ca6da99af0da620b7073c87ad1aeb03a542d23f2"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071329_BrowserPrivacyAdministration.cs",
+      "tested_snapshot_sha256": "31e2f480c974ed85fc1d8d648718df9cb4af28378dde694d774e00915ad6cfac",
+      "shared_checkout_sha256": "31e2f480c974ed85fc1d8d648718df9cb4af28378dde694d774e00915ad6cfac"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/AgentCoreDbContextModelSnapshot.cs",
+      "tested_snapshot_sha256": "ebb2abd7e338d4537543b4171e5ed276728eb8b4eabec1a567afb7bf41068ac4",
+      "shared_checkout_sha256": "1a6871cd3ecb771d073111dd583cda7fbbed4f7d1d226f49c836f7a4e03a43d8"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Tools/ToolConfigurationGate.cs",
+      "tested_snapshot_sha256": "96533684a11acf0da3f04077053417d516f95e7c0b37d68fbc2ea5e3d298d1b7",
+      "shared_checkout_sha256": "96533684a11acf0da3f04077053417d516f95e7c0b37d68fbc2ea5e3d298d1b7"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/BrowserPrivacyApiTests.cs",
+      "tested_snapshot_sha256": "fa7dfe0a6144f1d962084eab4426e169cda09ceae4e1f1c31df4b618b6b8ca22",
+      "shared_checkout_sha256": "fa7dfe0a6144f1d962084eab4426e169cda09ceae4e1f1c31df4b618b6b8ca22"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/AdminEventSummaryPolicyTests.cs",
+      "tested_snapshot_sha256": "31c37b689b664f3c4ca407410dd4da6d64d9c57c108ad51fb9b82a428e1e7dc0",
+      "shared_checkout_sha256": "31c37b689b664f3c4ca407410dd4da6d64d9c57c108ad51fb9b82a428e1e7dc0"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserCleanupIntentTests.cs",
+      "tested_snapshot_sha256": "59773018b68c400067a8f5a3bb3b8096fde8cc7833aa75c4f0a49844ea90f578",
+      "shared_checkout_sha256": "59773018b68c400067a8f5a3bb3b8096fde8cc7833aa75c4f0a49844ea90f578"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserEvidenceProgressTests.cs",
+      "tested_snapshot_sha256": "5fa40b907011f4bdeb61f936ee01853fc3f2007b03b51d3716cf65bba4fbd51c",
+      "shared_checkout_sha256": "5fa40b907011f4bdeb61f936ee01853fc3f2007b03b51d3716cf65bba4fbd51c"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserLogoutLiveTests.cs",
+      "tested_snapshot_sha256": "3d13123014f5b6c2f0ff1686c082ed47e0a5e0005365784e8f600c2f5176e13f",
+      "shared_checkout_sha256": "3d13123014f5b6c2f0ff1686c082ed47e0a5e0005365784e8f600c2f5176e13f"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserLogoutRecoveryTests.cs",
+      "tested_snapshot_sha256": "0c8255cd98f9cee52a58eaad0a867f394a1631c80fe83cf0413eb9d84c5ccb25",
+      "shared_checkout_sha256": "0c8255cd98f9cee52a58eaad0a867f394a1631c80fe83cf0413eb9d84c5ccb25"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserToolTests.cs",
+      "tested_snapshot_sha256": "fe6c59c6c77e84421619ef9f83552fb2f2bdbfbc96e9ba0d38d665c3ae95b199",
+      "shared_checkout_sha256": "fe6c59c6c77e84421619ef9f83552fb2f2bdbfbc96e9ba0d38d665c3ae95b199"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/BrowserPrivacyTests.cs",
+      "tested_snapshot_sha256": "7d549328434190afd98b35296d402340c4417448b887050ac188a7f59e24f0e8",
+      "shared_checkout_sha256": "7d549328434190afd98b35296d402340c4417448b887050ac188a7f59e24f0e8"
+    },
+    {
+      "path": "web/e2e/browser-privacy.spec.ts",
+      "tested_snapshot_sha256": "9a22de01236f47307bb5808bfc4ad1598222b8a22fab4fc78accff68de43f9f2",
+      "shared_checkout_sha256": "9a22de01236f47307bb5808bfc4ad1598222b8a22fab4fc78accff68de43f9f2"
+    },
+    {
+      "path": "web/playwright.browser-privacy.config.ts",
+      "tested_snapshot_sha256": "7cbb9ae60189459bbd547f418208619dcd70b5fe3c4adab9284076449f168cd8",
+      "shared_checkout_sha256": "7cbb9ae60189459bbd547f418208619dcd70b5fe3c4adab9284076449f168cd8"
+    },
+    {
+      "path": "web/src/features/admin/AdminApp.test.tsx",
+      "tested_snapshot_sha256": "f104d8d90662e0e93e3cc46eef0b8cf2b1c962d8bf5a4e4daff192e3f2ed0954",
+      "shared_checkout_sha256": "f104d8d90662e0e93e3cc46eef0b8cf2b1c962d8bf5a4e4daff192e3f2ed0954"
+    },
+    {
+      "path": "web/src/features/admin/AdminApp.tsx",
+      "tested_snapshot_sha256": "c58d33540f9e1738f303abf738110decbc784a21267bc2e7abe94dabaf836cd8",
+      "shared_checkout_sha256": "c58d33540f9e1738f303abf738110decbc784a21267bc2e7abe94dabaf836cd8"
+    },
+    {
+      "path": "web/src/features/admin/BrowserPrivacySection.test.tsx",
+      "tested_snapshot_sha256": "716f5255c7c75ef8cfeab8d7250484a0dcf4bb8db38b8cc6e740d76a628be633",
+      "shared_checkout_sha256": "716f5255c7c75ef8cfeab8d7250484a0dcf4bb8db38b8cc6e740d76a628be633"
+    },
+    {
+      "path": "web/src/features/admin/BrowserPrivacySection.tsx",
+      "tested_snapshot_sha256": "1851d7fbb09746d151ba266bd16785e647f5f0da0bf0c5893cb146ff2ce44fe8",
+      "shared_checkout_sha256": "1851d7fbb09746d151ba266bd16785e647f5f0da0bf0c5893cb146ff2ce44fe8"
+    },
+    {
+      "path": "web/src/services/adminApi.ts",
+      "tested_snapshot_sha256": "78d0cd51bde9138ea0a5203010e470bcb6467348b510018c20f10f8711409487",
+      "shared_checkout_sha256": "12544e6702a3f31a9482caeb97832849c4f4191dcbd40d707138b6bd205f21e8"
+    }
+  ],
+  "manifest_entries_sha256": "363932284a0e989613233b53eabc877ec9a9a17579a7de337dcffc9a88a07c48",
+  "implementation_commit_note": "Commit identity is supplied by the delivery; this manifest verifies source bytes without a circular self-referential commit hash."
+}

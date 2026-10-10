@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Admin;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,10 +15,13 @@ using SkiaSharp;
 
 namespace AgentCore.Infrastructure.Browser;
 
-public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Ports.IBrowser, IBrowserPasswordSink, IBrowserLease, IBrowserProfileBinding, IBrowserContextUse, IBrowserRuntimeReadiness, IBrowserProfileReset, IHostedService
+public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Ports.IBrowser, IBrowserPasswordSink, IBrowserLease, IBrowserProfileBinding, IBrowserContextUse, IBrowserRuntimeReadiness, IBrowserProfileReset, IBrowserCaptureLifetime, IHostedService
 {
     private readonly BrowserOptions _options;
-    private readonly HashSet<string> _trustedVisualOrigins = new(StringComparer.OrdinalIgnoreCase);
+    private readonly BrowserPrivacyService? _privacy;
+    private BrowserScreenshotPolicy _capturePolicy;
+    private readonly CancellationTokenSource _captureLifetime = new();
+    public CancellationToken CaptureLifetime => _captureLifetime.Token;
     private readonly ILogger _logger;
     private readonly LoopbackBrowserFixtureHost _fixture;
     private readonly Func<CancellationToken, Task<bool>>? _chromiumProbe;
@@ -53,17 +57,14 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
     public NativePlaywrightBrowser(
         BrowserOptions options,
         ILoggerFactory? loggerFactory,
-        Func<CancellationToken, Task<bool>>? chromiumProbe = null, TimeProvider? timeProvider = null)
+        Func<CancellationToken, Task<bool>>? chromiumProbe = null, TimeProvider? timeProvider = null,
+        BrowserPrivacyService? privacy = null)
     {
         options.Limits.Validate();
-        if (options.ScreenshotPrivacy is not ("DomMasking" or "Disabled")) throw new ArgumentException("Invalid browser screenshot privacy policy.");
-        foreach (var origin in options.TrustedVisualCaptureOrigins ?? [])
-        {
-            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")
-                || uri.UserInfo.Length > 0 || uri.AbsolutePath != "/" || uri.Query.Length > 0 || uri.Fragment.Length > 0)
-                throw new ArgumentException("Trusted visual capture requires exact HTTP(S) origins.");
-            _trustedVisualOrigins.Add(uri.GetLeftPart(UriPartial.Authority));
-        }
+        var authority = options.PrivacyAuthority();
+        _privacy = privacy;
+        _capturePolicy = privacy?.Effective ?? new(authority.CaptureAllowed ? BrowserScreenshotPrivacyMode.Protected
+            : BrowserScreenshotPrivacyMode.Disabled, [], authority.GraphicsOriginCeiling);
         _options = options;
         OperationTimeout = TimeSpan.FromMilliseconds(options.Limits.OperationTimeoutMs);
         _time = timeProvider ?? TimeProvider.System;
@@ -87,10 +88,16 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
     public bool IsAvailable =>
         _options.Enabled && IsRuntimeReady && Volatile.Read(ref _stopped) == 0;
 
-    public BrowserHostPolicy HostPolicy => _policy;
+    public BrowserHostPolicy HostPolicy => _policy with { ScreenshotAvailable = _capturePolicy.Mode != BrowserScreenshotPrivacyMode.Disabled,
+        ScreenshotPolicy = _capturePolicy };
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        if (_privacy is not null)
+        {
+            await _privacy.ActivateAtStartupAsync(cancellationToken);
+            _capturePolicy = _privacy.Effective;
+        }
         if (!_options.Enabled)
         {
             _policy = _options.ToHostPolicy();
@@ -143,6 +150,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         {
             return;
         }
+        await _captureLifetime.CancelAsync();
 
         foreach (var session in _sessions.Values.Distinct())
         {

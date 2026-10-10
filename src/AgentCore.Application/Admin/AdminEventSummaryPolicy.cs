@@ -200,6 +200,24 @@ public static class AdminEventSummaryPolicy
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be a JSON object.");
             }
 
+            if (append.Operation == AdminEventOperationKind.BrowserPrivacyChanged)
+            {
+                var allowed = new HashSet<string>(StringComparer.Ordinal) { "mode", "revision", "unmaskedOriginCount", "graphicsOriginCount", "exposureAcknowledged" };
+                foreach (var property in document.RootElement.EnumerateObject())
+                    if (!allowed.Contains(property.Name)) throw AgentCoreErrors.Validation("Unsupported browser privacy history metadata.");
+                RequireString(document.RootElement, "mode");
+                var mode = document.RootElement.GetProperty("mode").GetString();
+                if (mode is not ("Protected" or "Unmasked" or "Disabled")) throw AgentCoreErrors.Validation("Invalid screenshot privacy mode.");
+                if (document.RootElement.EnumerateObject().Count() != allowed.Count
+                    || !document.RootElement.TryGetProperty("revision", out var revision) || revision.ValueKind != JsonValueKind.Number || !revision.TryGetInt64(out var value)
+                    || value < 1 || value != append.Revision
+                    || !document.RootElement.TryGetProperty("unmaskedOriginCount", out var unmasked) || unmasked.ValueKind != JsonValueKind.Number || !unmasked.TryGetInt32(out var unmaskedCount) || unmaskedCount is < 0 or > 32
+                    || !document.RootElement.TryGetProperty("graphicsOriginCount", out var graphics) || graphics.ValueKind != JsonValueKind.Number || !graphics.TryGetInt32(out var graphicsCount) || graphicsCount is < 0 or > 32
+                    || !document.RootElement.TryGetProperty("exposureAcknowledged", out var acknowledged) || acknowledged.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+                    || acknowledged.GetBoolean() != (mode == "Unmasked"))
+                    throw AgentCoreErrors.Validation("Invalid browser privacy history metadata.");
+                return;
+            }
             if (append.Operation == AdminEventOperationKind.InstanceSkillsChanged)
             {
                 var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "operation", "skillKey" };

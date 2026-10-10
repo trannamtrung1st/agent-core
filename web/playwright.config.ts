@@ -59,7 +59,7 @@ export default defineConfig({
     {
       name: "synthetic",
       testIgnore:
-        /browser-stt\.spec\.ts|browser-browser\.spec\.ts|manual-a-faithful-wall-clock\.spec\.ts|admin-lifecycle\.spec\.ts|p76-admin-journey\.spec\.ts|p97-harness-management\.spec\.ts|secretary-demo\.spec\.ts|(?:p9899-continuity|continuity-enhancements|p910-continuity-maintenance)\.spec\.ts/
+        /browser-privacy\.spec\.ts|browser-stt\.spec\.ts|browser-browser\.spec\.ts|manual-a-faithful-wall-clock\.spec\.ts|admin-lifecycle\.spec\.ts|p76-admin-journey\.spec\.ts|p97-harness-management\.spec\.ts|secretary-demo\.spec\.ts|(?:p9899-continuity|continuity-enhancements|p910-continuity-maintenance)\.spec\.ts/
     },
     { name: "faithful-manual", testMatch: /manual-a-faithful-wall-clock\.spec\.ts/ },
     { name: "admin-lifecycle", testMatch: /admin-lifecycle\.spec\.ts/ },

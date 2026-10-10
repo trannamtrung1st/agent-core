@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Enterprise workspace</title>
+<style>
+body{margin:0;font:16px system-ui;background:#eef2f6;color:#172b43}header{padding:24px;background:#172b43;color:white}main{padding:32px}.account{position:absolute;right:32px;top:16px;width:48px;height:48px;background:#1266c4;border-radius:8px;cursor:pointer}.account:before{content:"";position:absolute;left:19px;top:9px;width:10px;height:10px;border-radius:50%;background:white}.account:after{content:"";position:absolute;left:13px;top:23px;width:22px;height:16px;border-radius:12px 12px 3px 3px;background:white}#menu{position:absolute;right:32px;top:74px;padding:16px;background:white;border:1px solid #ccd5e0}button{font:inherit;padding:8px}
+</style>
+<header>Enterprise workspace</header><main><h1>Operations dashboard</h1><p>Account actions are in the blue person icon at the upper right.</p><p role="status" id="state">Signed in as fixture user</p><input type="password" value="private-fixture-password" hidden></main>
+<div class="account" id="account" onclick="menu.hidden=!menu.hidden"></div>
+<section id="menu" aria-label="Account actions" hidden><button onclick="logout()">Log out</button></section>
+<script>
+const mode=new URLSearchParams(location.search).get('mode')||'icon';
+if(mode==='accessible'){account.setAttribute('role','button');account.setAttribute('aria-label','Account menu');account.tabIndex=0;account.onkeydown=e=>{if(e.key==='Enter')account.click()}}
+function logout(){menu.hidden=true;state.textContent=mode==='failure'?'Sign-out failed; still signed in':'Signed out';if(mode!=='failure')account.remove()}
+</script></html>
