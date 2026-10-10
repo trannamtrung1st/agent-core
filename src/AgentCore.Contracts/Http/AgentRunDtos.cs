@@ -10,7 +10,7 @@ public sealed record AgentRunResponse(string AgentRunId, string SessionId, strin
     string Status, long Revision, int AttemptCount, int MaxAttempts, bool CancellationRequested, bool CancellationAvailable,
     string? Progress, string? NextRetryAt, string CreatedAt, string UpdatedAt, AgentRunApprovalResponse? Approval,
     AgentRunOutcomeResponse? Outcome, string? FailureCode, string? FailureSummary, string? DiagnosticId,
-    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null, AgentRunBudgetResponse? Budget = null, AgentRunConfigurationResponse? Configuration = null, AutomationTriggerOriginResponse? TriggerOrigin = null);
+    string? KnownEffectSummary, string ModelCatalogKey, string? ResponseId, string? AutomationId, string? ExperienceId, string? SourceOccurrenceId, string? SourceBackgroundSessionId = null, AgentRunWaitResponse? Wait = null, AgentRunBudgetResponse? Budget = null, AgentRunConfigurationResponse? Configuration = null, AutomationTriggerOriginResponse? TriggerOrigin = null, ComposerRunInputResponse? ComposerInput = null);
 public sealed record AgentRunConfigurationResponse(string DefinitionId, int DefinitionVersion, long InstanceRevision,
     long PersonaRevision, string ConfigurationHash, IReadOnlyList<AgentRunResourceResponse> Resources);
 public sealed record AgentRunResourceResponse(string Key, string VirtualPath, string ContentSha256, long ByteLength);
@@ -33,3 +33,6 @@ public sealed record AgentRunBudgetResponse(string Class, string Source, int Max
     bool LogoutVerified = false, bool CleanupBlocked = false);
 
 public sealed record AutomationTriggerOriginResponse(string? TriggerId, string Kind, EventSourceReferenceDto? Source, string Summary, long? TriggerRevision = null);
+
+public sealed record ComposerRunInputResponse(IReadOnlyList<string> ExplicitSkillKeys, string Provenance, string AdmittedAt, string? Error, IReadOnlyList<ComposerReferenceResponse> References);
+public sealed record ComposerReferenceResponse(string Kind, string Locator, string Label, string Status, long? Revision, string? Sha256, bool Truncated);

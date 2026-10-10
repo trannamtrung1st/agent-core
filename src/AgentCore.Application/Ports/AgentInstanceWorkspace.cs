@@ -8,6 +8,8 @@ public sealed record AgentWorkspaceContent(AgentWorkspaceItem Item, byte[] Bytes
 /// <summary>Dedicated managed-instance storage. Provenance never owns or cascades into these bytes.</summary>
 public interface IAgentInstanceWorkspaceStore
 {
+    ValueTask<AgentWorkspaceContent> InspectAsync(Guid instanceId, Guid itemId, int maxContentBytes, CancellationToken ct = default) =>
+        throw new NotSupportedException("Bounded home inspection is unavailable.");
     ValueTask<WorkspaceTransfer> ExportAsync(Guid instanceId, string path, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Workspace tree export is unavailable.");
     ValueTask ImportAsync(Guid instanceId, string destination, WorkspaceTransfer transfer, Guid? sourceSessionId = null,

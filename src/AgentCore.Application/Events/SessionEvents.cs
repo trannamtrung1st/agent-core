@@ -27,7 +27,8 @@ public sealed record UserTextReceived(
     string Text,
     TaskCompletionSource<bool>? Persisted = null,
     IReadOnlyList<Guid>? AttachmentIds = null,
-    UserTextBehavior Behavior = UserTextBehavior.Interrupt) : SessionInput(Context);
+    UserTextBehavior Behavior = UserTextBehavior.Interrupt,
+    IReadOnlyList<UserMessagePart>? Parts = null) : SessionInput(Context);
 
 public sealed record AttachmentsStagedReceived(
     EventContext Context,
@@ -296,7 +297,8 @@ public sealed record PublicHistoryEntry(
     PublicFailureReference? Failure = null,
     IReadOnlyList<PublicMemoryReceipt>? MemoryReceipts = null,
     IReadOnlyList<PublicEffectReceipt>? EffectReceipts = null,
-    DateTimeOffset? CompletedAt = null);
+    DateTimeOffset? CompletedAt = null,
+    IReadOnlyList<UserMessagePart>? Parts = null);
 
 public sealed record PublicEffectReceipt(string Tool, string Status, string Label);
 
@@ -623,7 +625,7 @@ public static class PublicHistory
                 : null,
             memoryReceipts,
             effectReceipts,
-            entry.CompletedAt);
+            entry.CompletedAt, entry.Parts);
     }
 
     private static PublicResponseBlock ToPublicBlock(ResponseBlock block) =>

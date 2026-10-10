@@ -1,3 +1,4 @@
+import { snapshotParts, type MessagePart } from "../services/messageParts";
 import { create } from "zustand";
 import type {
   AgentDescriptor,
@@ -72,6 +73,7 @@ export type HistoryEntry = {
   sourceEventId: string | null;
   role: "user" | "assistant" | "applicationMessage";
   text: string;
+  parts?: MessagePart[];
   responseId: string | null;
   status: string;
   deliveryMode: "text" | "voice";
@@ -119,6 +121,7 @@ export type ServerEvent = {
 };
 
 export type PendingSendItem = {
+  parts?: MessagePart[];
   localId: string;
   eventId: string;
   text: string;
@@ -167,6 +170,7 @@ export type SessionView = {
   streamId: string | null;
   muted: boolean;
   draft: string;
+  draftParts?: MessagePart[] | null;
   pendingAttachments: PendingAttachment[];
   pendingSendQueue: PendingSendItem[];
   error: string | null;
@@ -224,6 +228,7 @@ export const emptySession = (): SessionView => ({
   streamId: null,
   muted: false,
   draft: "",
+  draftParts: null,
   pendingAttachments: [],
   pendingSendQueue: [],
   error: null,
@@ -420,6 +425,7 @@ export function historyFromPayload(raw: unknown): HistoryEntry[] {
       sourceEventId: row.sourceEventId == null ? null : asString(row.sourceEventId),
       role: historyRole(asString(row.role)),
       text: asString(row.text),
+      parts: safeParts(row.parts),
       responseId: row.responseId == null ? null : asString(row.responseId),
       status: asString(row.status),
       deliveryMode: asString(row.deliveryMode) === "voice" ? "voice" : "text",
@@ -621,6 +627,7 @@ function asBlocks(raw: unknown): HistoryBlock[] | undefined {
       blockId: asString(row.blockId),
       kind: asString(row.kind),
       text: asString(row.text),
+      parts: safeParts(row.parts),
       fallbackText: asString(row.fallbackText),
       attachmentId: row.attachmentId == null ? null : asString(row.attachmentId),
       artifactId: row.artifactId == null ? null : asString(row.artifactId)
@@ -1198,3 +1205,5 @@ export const useSessionStore = create<SessionStore>(() => ({
   modelCatalogDefaultKey: null,
   ...emptyCatalog()
 }));
+
+function safeParts(raw: unknown): MessagePart[] | undefined { try { return raw == null ? undefined : snapshotParts(raw as MessagePart[]); } catch { return undefined; } }

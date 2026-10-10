@@ -132,6 +132,7 @@ LegacySessionEndpoints.Map(app);
 AttachmentEndpoints.Map(app);
 WorkspaceEndpoints.Map(app);
 AgentWorkspaceEndpoints.Map(app);
+ComposerEndpoints.Map(app);
 ArtifactEndpoints.Map(app);
 
 // Read the loaded API assembly, never a mutable checkout or DLL on disk.

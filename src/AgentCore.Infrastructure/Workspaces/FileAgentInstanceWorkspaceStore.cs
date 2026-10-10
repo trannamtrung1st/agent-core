@@ -38,7 +38,13 @@ public sealed partial class FileAgentInstanceWorkspaceStore(
         }, cancellationToken);
     }
 
+    public ValueTask<AgentWorkspaceContent> InspectAsync(Guid instanceId, Guid itemId, int maxContentBytes, CancellationToken ct = default) =>
+        ReadBoundedAsync(instanceId, itemId, null, maxContentBytes, ct);
+
     public ValueTask<AgentWorkspaceContent> ReadAsync(Guid instanceId, Guid? itemId, string? path, CancellationToken cancellationToken = default) =>
+        ReadBoundedAsync(instanceId, itemId, path, maxFileBytes, cancellationToken);
+
+    private ValueTask<AgentWorkspaceContent> ReadBoundedAsync(Guid instanceId, Guid? itemId, string? path, long maxContentBytes, CancellationToken cancellationToken) =>
         WithAsync(instanceId, async ct =>
         {
             if (path is not null) path = AgentHomePath.Normalize(path);
@@ -49,6 +55,8 @@ public sealed partial class FileAgentInstanceWorkspaceStore(
             var physical = BlobPath(instanceId, row.BlobKey);
             if (!File.Exists(physical)) throw AgentCoreErrors.NotFound("Home content was not found.");
             if (new FileInfo(physical).Length != item.ByteSize || item.ByteSize > maxFileBytes) throw AgentCoreErrors.Conflict("Home content integrity check failed.");
+            if (maxContentBytes < 0 || maxContentBytes > maxFileBytes) throw AgentCoreErrors.Validation("Invalid home content bound.");
+            if (item.ByteSize > maxContentBytes || maxContentBytes == 0) return new AgentWorkspaceContent(item, []);
             var bytes = await File.ReadAllBytesAsync(physical, ct);
             if (Hash(bytes) != item.Sha256Hex) throw AgentCoreErrors.Conflict("Home content integrity check failed.");
             return new AgentWorkspaceContent(item, bytes);

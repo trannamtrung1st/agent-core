@@ -645,6 +645,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         && row.ReceivedTextEndExclusive == entry.ReceivedTextEndExclusive
         && EnvelopeUnchanged(row.EnvelopeJson, entry.Envelope)
         && row.AttachmentRefsJson == SerializeAttachmentRefs(entry.Attachments)
+        && row.UserPartsJson == SerializeUserParts(entry.Parts)
         && row.SourceAdmissionFingerprint == entry.SourceAdmissionFingerprint
         && row.FinishReason == entry.FinishReason
         && row.InterruptReason == entry.InterruptReason
@@ -747,6 +748,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         row.EnvelopeJson = SerializeEnvelope(entry.Envelope);
         row.AttachmentRefsJson = SerializeAttachmentRefs(entry.Attachments);
         row.SourceAdmissionFingerprint = entry.SourceAdmissionFingerprint;
+        row.UserPartsJson = SerializeUserParts(entry.Parts);
         row.ApplicationMessageEffectKey = entry.ApplicationMessageEffectKey;
         row.FinishReason = entry.FinishReason;
         row.InterruptReason = entry.InterruptReason;
@@ -827,7 +829,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             ReadModelProvenance(row),
             FailureReferenceJson.Deserialize(row.FailureReferenceJson),
             row.ApplicationMessageEffectKey,
-            row.CompletedAtUtc is { } completedAt ? FromUnix(completedAt) : null);
+            row.CompletedAtUtc is { } completedAt ? FromUnix(completedAt) : null,
+            row.UserPartsJson is null ? null : JsonSerializer.Deserialize<UserMessagePart[]>(row.UserPartsJson, UserMessageContent.Json));
+
+    private static string? SerializeUserParts(IReadOnlyList<UserMessagePart>? parts) => parts is null ? null : JsonSerializer.Serialize(parts, UserMessageContent.Json);
 
     private static string? SerializeAttachmentRefs(IReadOnlyList<ConversationAttachmentRef>? attachments) =>
         attachments is not { Count: > 0 }

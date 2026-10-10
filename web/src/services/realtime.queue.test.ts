@@ -1,3 +1,4 @@
+import { messageText, type MessagePart } from "./messageParts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   composerSendLabel,
@@ -18,6 +19,51 @@ describe("Codex-style pending send queue", () => {
     vi.clearAllMocks();
     hooks.resetOutput();
     useSessionStore.setState(emptySession());
+  });
+
+  it("keeps structured chips in queued snapshots and restores them after a rejected steer", async () => {
+    const parts: MessagePart[] = [{kind:"invocation",invocationKind:"skill",skillKey:"definition:review",label:"Review"},{kind:"text",text:" inspect "},{kind:"reference",reference:{kind:"session",sessionId:"11111111-1111-1111-1111-111111111111"},label:"Original chat"}];
+    const invoke = vi.fn().mockResolvedValue({accepted:false,error:{message:"Selected Skill is unavailable",category:"Validation",code:"ValidationError"}});
+    hooks.setConnection({invoke,send:vi.fn()} as never);
+    useSessionStore.setState({...emptySession(),connection:"ready",sessionId:"s1",attachmentId:"a1",liveResponseId:"r1",draft:messageText(parts),draftParts:parts});
+    await sendDraft(); parts[0] = {kind:"text",text:"mutated"};
+    const queued = useSessionStore.getState().pendingSendQueue[0];
+    expect(queued.parts?.[0].kind).toBe("invocation");
+    await steerQueuedSend(queued.localId);
+    expect(invoke).toHaveBeenCalledWith("SendText",expect.objectContaining({payload:expect.objectContaining({parts:[{kind:"invocation",invocationKind:"skill",skillKey:"definition:review"},{kind:"text",text:" inspect "},{kind:"reference",reference:{kind:"session",sessionId:"11111111-1111-1111-1111-111111111111"}}]})}));
+    expect(useSessionStore.getState().pendingSendQueue[0].parts).toEqual(queued.parts);
+    useSessionStore.setState({draft:queued.text,draftParts:queued.parts}); await sendDraft("interrupt");
+    expect(useSessionStore.getState().draftParts).toEqual(queued.parts);
+  });
+
+  it("replays uncertain typed input unchanged while preserving a newer typed draft", async () => {
+    const original: MessagePart[] = [{kind:"invocation",invocationKind:"skill",skillKey:"definition:review"},{kind:"text",text:" inspect"}];
+    const newer: MessagePart[] = [{kind:"reference",reference:{kind:"session",sessionId:"22222222-2222-2222-2222-222222222222"}}];
+    const invoke = vi.fn().mockRejectedValueOnce(new Error("lost ACK")).mockResolvedValue({accepted:true});
+    hooks.setConnection({invoke,send:vi.fn()} as never);
+    useSessionStore.setState({...emptySession(),connection:"ready",sessionId:"s1",attachmentId:"a1",liveResponseId:"r1",draft:messageText(original),draftParts:original});
+    await sendDraft("interrupt");
+    const first = invoke.mock.calls[0][1];
+    useSessionStore.setState({connection:"ready",draft:messageText(newer),draftParts:newer});
+    hooks.handleEvent({protocolVersion:1,sessionId:"s1",attachmentId:"a2",eventId:"ready",sequence:1,timestamp:new Date().toISOString(),correlationId:"ready",causationId:null,responseId:null,type:"session.ready",payload:{history:[],mode:"text",status:"attached",outputState:"idle",activeResponseId:null}});
+    await vi.waitFor(()=>expect(invoke).toHaveBeenCalledTimes(2));
+    expect(invoke.mock.calls[1][1].eventId).toBe(first.eventId);
+    expect(invoke.mock.calls[1][1].payload.parts).toEqual(first.payload.parts);
+    expect(useSessionStore.getState().draftParts).toEqual(newer);
+  });
+
+  it("omits empty editor parts for attachment-only sends", async () => {
+    const invoke=vi.fn().mockResolvedValue({accepted:true}); hooks.setConnection({invoke,send:vi.fn()} as never);
+    const file={localId:"file1",displayName:"notes.txt",contentType:"text/plain",byteSize:4,status:"ready" as const,progress:100,attachmentId:"att1",error:null};
+    useSessionStore.setState({...emptySession(),connection:"ready",sessionId:"s1",attachmentId:"a1",draft:"",draftParts:[],pendingAttachments:[file]});
+    await sendDraft(); expect(invoke).toHaveBeenCalledWith("SendText",expect.objectContaining({payload:{text:"",attachmentIds:["att1"],behavior:"queue"}}));
+  });
+
+  it("does not send a Skill-only turn", async () => {
+    const invoke = vi.fn(); hooks.setConnection({invoke,send:vi.fn()} as never);
+    const parts: MessagePart[] = [{kind:"invocation",invocationKind:"skill",skillKey:"definition:review"}];
+    useSessionStore.setState({...emptySession(),connection:"ready",sessionId:"s1",attachmentId:"a1",draft:messageText(parts),draftParts:parts});
+    await sendDraft(); expect(invoke).not.toHaveBeenCalled(); expect(useSessionStore.getState().draftParts).toEqual(parts);
   });
 
   it("queues locally during a live response without SendText or history entries", async () => {

@@ -86,6 +86,7 @@ public sealed class EntryRecord
     public string? FailureReferenceJson { get; set; }
     public string? AttachmentRefsJson { get; set; }
     public string? SourceAdmissionFingerprint { get; set; }
+    public string? UserPartsJson { get; set; }
 
     public string? ApplicationMessageEffectKey { get; set; }
     public string? FinishReason { get; set; }

@@ -246,7 +246,7 @@ Automation schedule expressions retain an elevated inset with a border, 8px radi
 - **Inline** (4px): inline Markdown code and compact focus outlines.
 - **Control** (6px): AntD buttons, Selects, 32px composer and header icon hits, status tags.
 - **Surface** (8px): session rows, code blocks, and image previews.
-- **Chip** (12px): attachment/file chips, queued-send container, and 24px operational status/time-zone chips.
+- **Chip** (12px): structured `/Skill` and `@resource` chips, attachment/file chips, queued-send container, and 24px operational status/time-zone chips.
 - **Composer** (16px): message well and Model overlay.
 - **Bubble** (18px): user turns only. Assistant content is unbubbled Markdown.
 
@@ -283,9 +283,17 @@ Ant Design owns control hover, pressed, disabled, loading and semantic states. P
 - Do not nest a card inside each assistant message.
 
 ### Inputs / Fields
-- Message: borderless textarea inside the composer; placeholder secondary text. Follow **The Additive Inset Rule** (shell `{spacing.compact}` + `{spacing.controlInner}` on the field).
+- Message: borderless headless Lexical plain-text editor inside the composer, with a labeled multiline textbox and Ant Design placeholder tone. Follow **The Additive Inset Rule** (shell `{spacing.compact}` + `{spacing.controlInner}` on the field). The editor keeps a 40px minimum and 224px maximum height with local scrolling; it introduces no second UI kit or rich-text formatting toolbar.
 - Model in the composer: one Ant Design `Dropdown` (not Modal, not a pair of Selects). The chip is a single Model text button: model name, optional Default tag, optional reasoning level as secondary text inside the same control (`aria-label="Reasoning"`, Codex-style, not a sibling button), then the chevron. The overlay lists models with compact, named capability icons for vision, reasoning, tools, and structured output; the default model carries a Default tag and the active row carries a check. When supported, a footer shows Reasoning, the current level, and a dotted slider. Overlay chrome matches the composer shell; title, rows, and footer use `{spacing.controlInner}` (8px, same as session rows). Model appears only in the composer; paused and ended sessions show no Model control.
 - Identity and Speech locale: labeled AntD Selects.
+
+### Structured composer parts and choices
+
+The same message well mixes ordinary text with atomic `/Skill` invocation and `@resource` reference chips. Inline chips use the existing 12px chip radius, Ant Design fill/text/border roles and wrapping text; invocation chips use the existing primary text/border roles. Drafts, queued drafts and user history reuse the same chip silhouette and immutable labels. Attachment previews remain in the composer shell.
+
+Slash/at-sign input and the Add content menu's Use Skill / Reference resource actions share one caret-anchored picker. Its elevated Ant Design surface has a 12px radius, 8px shell inset, viewport-bounded width up to 320px and local scrolling. Selection, editor resize, viewport resize and scrolling reposition the overlay. Direct Ant Design Input, Button, Spin, Empty and Alert provide search, resource categories, Load more, loading, empty and inline Retry states; Close uses the Ant Design icon. The choice list exposes selected/unavailable states, arrow-key and Enter selection, Escape dismissal and polite result/loading announcements. Picker buttons and choice rows have 44px minimum heights below 768px.
+
+This is a local extension of the Operate system. Existing palette, typography, spacing primitives and 52rem reading column remain unchanged. Picker geometry does not create a new global spacing or typography scale. Product meaning, immutable part identity and send/queue behavior remain owned by `/docs`.
 
 ### Navigation
 - Compact Chat list and row action menus omit unnecessary separators. Destructive items retain Ant Design danger styling and their existing confirmation. The Model overlay keeps its meaningful reasoning-footer boundary.

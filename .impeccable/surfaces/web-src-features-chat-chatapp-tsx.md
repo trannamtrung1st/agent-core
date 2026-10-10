@@ -8,6 +8,7 @@ related_targets:
   - web/src/features/chat/ChatMessage.tsx
   - web/src/features/chat/SpokenText.tsx
   - web/src/features/chat/Composer.tsx
+  - web/src/features/chat/StructuredMessageEditor.tsx
   - web/src/features/chat/ModelPicker.tsx
   - web/src/features/chat/AgentPicker.tsx
   - web/src/features/chat/SessionRail.tsx
@@ -36,12 +37,14 @@ FIRST VIEWPORT: Black rail (`#000`) and `#141414` conversation. 280px rail at 12
 
 FORM: Ant Design operate UI with ChatGPT/Codex conversational structure. Signature interaction: Enter sends on the same session; Voice is a mode transition; Model/Reasoning sit with the message well; activity is transient in-flow.
 
+COMPOSER EXTENSION: The same message well uses a headless Lexical plain-text editor with atomic `/Skill` invocation and `@resource` reference chips, ordinary text and existing attachment previews. Add content offers Attach file, Use Skill and Reference resource. Slash/at-sign and menu entry share a caret-anchored elevated picker with search, resource categories, Load more, loading/empty/error recovery and polite announcements. Selection, editor/viewport resize and scrolling reposition it. Picker chrome and controls retain Ant Design v6; Close uses its icon. Choice rows and picker buttons have 44px minimum mobile height. Draft, queue and user history reuse immutable chip labels and the same 12px chip-radius silhouette. Keep the 52rem column, additive 8px composer insets, existing palette/type/spacing and Model/Reasoning control. This local extension adds no visual world or token palette.
+
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
 
 ## Scope
 
 - Surface: `web/src/features/chat/*` and `web/src/app.css`.
-- Preserve testids `connection` and `profile`, accessible names Identity, Speech locale, Model, Reasoning, Send, Voice, Cancel voice, Mute, Unmute, End, Attach, Spoken.
+- Preserve testids `connection` and `profile`, accessible names Identity, Speech locale, Model, Reasoning, Send, Voice, Cancel voice, Mute, Unmute, End, Add content, Spoken; the Add content menu retains Attach file.
 - Composer stays in voice. End remains the existing session-end control until `/docs` and tests change together.
 - Session catalog, attachments, realtime, and voice contracts stay compatible.
 

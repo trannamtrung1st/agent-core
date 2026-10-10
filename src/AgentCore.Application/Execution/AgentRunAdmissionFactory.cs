@@ -54,7 +54,7 @@ public static class AgentRunAdmissionFactory
 
     public static AgentRun ForAcceptedUserBatch(Guid activationId, Guid agentRunId, Guid responseId,
         SessionSnapshot snapshot, IReadOnlyList<ConversationEntry> users, DateTimeOffset admittedAtUtc,
-        IReadOnlyList<EffectiveSkill> catalog, EffectiveExecutionBudget? budget = null, AgentRunConfiguration? configuration = null)
+        IReadOnlyList<EffectiveSkill> catalog, EffectiveExecutionBudget? budget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(users);
@@ -84,10 +84,12 @@ public static class AgentRunAdmissionFactory
             null, null, null, $"user-batch:{batchKey}", admittedAtUtc);
         if (budget is not null) budget = WithCleanupIntent(budget, string.Join("\n", users.Select(user => user.Text)));
         return AgentRun.Create(agentRunId, new AgentRunOwner(instanceId, profileId),
-            new AgentRunAdmission(activation, snapshot.Definition.Id, snapshot.Definition.Version, persona, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration ?? new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, [])),
+            new AgentRunAdmission(activation, snapshot.Definition.Id, snapshot.Definition.Version, persona, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration ?? new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, []), composerInput),
             new AgentRunModelPin(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc,
             pinnedSkillCatalog: catalog,
-            activeSkillKeys: catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
+            activeSkillKeys: composerInput?.Error is not null ? catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray()
+                : AgentCore.Application.Composer.ComposerReferenceService.ActiveSkills(snapshot.Definition, catalog,
+                    users.SelectMany(user => UserMessageContent.ExplicitSkills(user.Parts))));
     }
 }

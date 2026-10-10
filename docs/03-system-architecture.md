@@ -364,3 +364,9 @@ Browser screenshot privacy is global owner-administered configuration beneath im
 ## Unified Event subscriptions
 
 `UnifiedEventCatalog` projects code-owned Built-in definitions and safe durable Webhook metadata through one discovery boundary. Definition reads expose illustrative fixtures, never private occurrences or credentials. Trusted Built-in fan-out requires the originating Instance/Profile; authenticated Webhooks can fan out to separately authorized owned subscriptions. Parent/child edits commit atomically under parent CAS with retained-child revision checks. Per-child dedupe, decisions, buckets and coverage preserve sibling independence. Admission reloads current authority and resource state; frozen filters/configuration retain the semantics accepted at receipt. See [protocol](14-api-and-realtime-protocol.md#canonical-child-trigger-http-contract) and [migration](15-persistence-and-configuration.md#automation-child-trigger-upgrade).
+
+## Unified composer input ownership
+
+Structured user parts belong to the durable user entry and the existing source-event fingerprint. The Session mailbox admits them before acknowledgement. A user-turn AgentRun unions explicit Skill keys only from its ordered source entries, pins the fresh eligible catalog and preactivates the entire set with Always Skills before generation. Explicit invocation neither grants capabilities nor consumes model skills.load calls. Prior history never reactivates Skills.
+
+Typed reference resolution uses native workspace, Session, artifact, Skill and AgentRun owners. Same-instance/profile scope is reauthorized at admission. Bounded evidence and revision/hash provenance are pinned with Run admission and supplied as lower-trust evidence, never privileged system policy. Referencing a background Session has no Continue, resume, read-accounting or reporting side effect.

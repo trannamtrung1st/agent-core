@@ -107,6 +107,8 @@ public sealed class AttachPayload
 [MessagePackObject]
 public sealed class UserTextPayload
 {
+    [Key("parts")]
+    public UserMessagePartDto[]? Parts { get; set; }
     [Key("text")]
     public string Text { get; set; } = "";
 

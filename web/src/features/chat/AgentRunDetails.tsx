@@ -97,6 +97,15 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },
       { key: "updated", label: "Updated", children: <time dateTime={run.updatedAt}>{formatChatTime(run.updatedAt) ?? "Unknown time"}</time> }
     ]} />
+    {run.composerInput ? <section aria-label="Selected input" className="background-work-detail-section">
+      <Typography.Text strong>Selected for this turn</Typography.Text>
+      {run.composerInput.explicitSkillKeys.length ? <ReadingRegion label="Explicit Skills" text={run.composerInput.explicitSkillKeys.join("\n")} /> : null}
+      {run.composerInput.error ? <Alert type="warning" title={run.composerInput.error} showIcon /> : null}
+      {run.composerInput.references.map(reference => <Flex vertical key={reference.locator} gap={token.paddingXXS}>
+        <Typography.Text>{reference.label} · {reference.status}{reference.truncated ? " · truncated" : ""}</Typography.Text>
+        <Typography.Text type="secondary">{reference.locator}{reference.revision ? ` · revision ${reference.revision}` : ""}</Typography.Text>
+      </Flex>)}
+    </section> : null}
     {run.wait ? <Flex vertical gap={token.paddingXS} role="status" aria-label="Execution wait">
       <Typography.Text>{run.wait.mode === "Duration" ? "Waiting for the requested duration." : `Waiting for ${run.wait.until === "All" ? "all" : "any"} background results.`}</Typography.Text>
       <Typography.Text type="secondary">{run.wait.mode === "Duration" ? "Resumes" : "Timeout"} {new Date(run.wait.deadline).toLocaleString()}</Typography.Text>

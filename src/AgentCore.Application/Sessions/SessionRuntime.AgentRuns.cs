@@ -10,6 +10,7 @@ namespace AgentCore.Application.Sessions;
 
 public sealed partial class SessionRuntime
 {
+    private readonly AgentCore.Application.Composer.ComposerReferenceService? _composer;
     private ResolvedAgentRunConfiguration? _idleConfiguration;
     private AgentCore.Domain.Definitions.AgentDefinition ExecutionDefinition => _boundAgentRun is { } run
         ? run.Admission.Configuration?.Definition ?? throw AgentCoreErrors.Persistence("Run configuration is missing; historical execution must be migrated before resume.")
@@ -161,9 +162,22 @@ public sealed partial class SessionRuntime
         var (projection, resolved) = await ResolveNewRunAsync(ct).ConfigureAwait(false);
         PinModelSelectionIfMissing();
         projection = projection with { ModelSelection = _snapshot.ModelSelection };
+        ComposerRunInput? composerInput = null;
+        if (users.Any(u => u.Parts is not null))
+        {
+            if (_composer is not null) composerInput = await _composer.PinAsync(RunOwner, users, projection.Definition, resolved.Skills, ct);
+            else
+            {
+                var explicitKeys = users.SelectMany(u => UserMessageContent.ExplicitSkills(u.Parts)).Distinct(StringComparer.Ordinal).ToArray();
+                string? error = null;
+                try { AgentCore.Application.Composer.ComposerReferenceService.ActiveSkills(projection.Definition, resolved.Skills, explicitKeys); }
+                catch (AgentCoreException exception) { error = exception.Message; }
+                composerInput = new(explicitKeys, [], _time.GetUtcNow(), error);
+            }
+        }
         var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(_ids.NewId(), _ids.NewId(), _ids.NewId(),
             projection, users, _time.GetUtcNow(), resolved.Skills,
-            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, true), resolved.Configuration);
+            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, true), resolved.Configuration, composerInput);
         _agentRunAdmissionPending = true;
         var proposed = _snapshot with { PendingAgentInputIds = _snapshot.PendingAgentInputIds.Except(users.Select(entry => entry.EntryId)).ToArray() };
         RequestPersist(proposed, admittedRun: run, onAdmitted: committed => run = committed, then: async token =>

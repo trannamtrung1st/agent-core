@@ -1235,6 +1235,9 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         }
 
         var ids = attachmentIds!.Ids;
+        IReadOnlyList<AgentCore.Domain.Conversation.UserMessagePart>? parts;
+        try { parts = UserMessageMapping.FromWire(command.Payload?.Parts); }
+        catch (AgentCoreException exception) { return Reject(command.EventId, "Validation", exception.Code, exception.Message, false, null); }
         if (string.IsNullOrWhiteSpace(text) && ids.Count == 0)
         {
             return Reject(command.EventId, "Validation", "ValidationError", "text is required.", false, null);
@@ -1280,7 +1283,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                         sourceEventId,
                         cancellationToken,
                         ids,
-                        behavior)
+                        behavior, parts)
                     .ConfigureAwait(false);
                 if (persisted is null)
                 {
@@ -2148,7 +2151,17 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
 
     private static string Fingerprint(IRealtimeCommand command)
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(command.Payload);
+        object? payload = command.Payload;
+        if (payload is UserTextPayload { Parts: not null } user)
+        {
+            try
+            {
+                payload = new UserTextPayload { Text = user.Text, AttachmentIds = user.AttachmentIds,
+                    Behavior = user.Behavior, Parts = UserMessageMapping.ToWire(UserMessageMapping.FromWire(user.Parts)) };
+            }
+            catch (AgentCoreException) { /* Invalid input remains distinct and is rejected by admission. */ }
+        }
+        var json = System.Text.Json.JsonSerializer.Serialize(payload);
         return $"{command.Type}|{command.ResponseId}|{json}";
     }
 
@@ -2801,6 +2814,7 @@ public static class SessionEventMapper
             ["sourceEventId"] = entry.SourceEventId?.ToString(),
             ["role"] = HttpMapping.ToHistoryRole(entry.Role),
             ["text"] = entry.Text,
+            ["parts"] = UserMessageMapping.ToWire(entry.Parts),
             ["responseId"] = entry.ResponseId?.ToString(),
             ["status"] = HttpMapping.ToEntryStatus(entry.Status),
             ["deliveryMode"] = HttpMapping.ToMode(entry.DeliveryMode),

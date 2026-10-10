@@ -158,7 +158,7 @@ describe("Composer attachment staging", () => {
       />
     );
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Attach" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add content" })).toBeDisabled();
     expect(screen.getByText("Upload failed")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry notes.txt" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove notes.txt" }));

@@ -448,8 +448,10 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<IUserTurnCapabilityValidator>(),
                 provider.GetRequiredService<IStructuredMemoryService>(),
                 provider.GetRequiredService<IDiagnosticIdSource>(),
-                provider.GetService<IBrowserLease>(), provider.GetRequiredService<IAgentRunAuthority>());
+                provider.GetService<IBrowserLease>(), provider.GetRequiredService<IAgentRunAuthority>(),
+                composer: provider.GetRequiredService<AgentCore.Application.Composer.ComposerReferenceService>());
         });
+        services.TryAddSingleton<AgentCore.Application.Composer.ComposerReferenceService>();
         services.TryAddSingleton<IAgentRunAuthority, AgentCore.Application.Execution.AgentRunAuthority>();
         services.TryAddSingleton<AgentCore.Application.Execution.BackgroundOccurrenceIntake>();
         services.TryAddSingleton<AgentCore.Application.Execution.BackgroundCompletionReporter>();

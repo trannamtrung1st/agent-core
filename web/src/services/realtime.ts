@@ -1,3 +1,4 @@
+import { hasTask, messageText, snapshotParts, wireParts, type MessagePart, type ResourceReference } from "./messageParts";
 import { HttpTransportType, HubConnection, HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 import { MessagePackHubProtocol } from "@microsoft/signalr-protocol-msgpack";
 import { capture } from "../audio/capture";
@@ -193,11 +194,24 @@ export function audioOutputsReceivedCount(): number {
 }
 
 export function setDraft(draft: string): void {
-  useSessionStore.setState({ draft });
+  useSessionStore.setState({ draft, draftParts: null });
+}
+
+export function setDraftParts(parts: MessagePart[]): void {
+  const snapshot = snapshotParts(parts)!;
+  useSessionStore.setState({ draft: messageText(snapshot), draftParts: snapshot });
+}
+
+export function addResourceToDraft(reference: ResourceReference, label: string): void {
+  const state = useSessionStore.getState();
+  if (isReadonlySession(state) || state.status === "paused") return;
+  const previous = snapshotParts(state.draftParts) ?? (state.draft ? [{kind:"text" as const,text:state.draft}] : []);
+  setDraftParts([...previous, ...(previous.length ? [{kind:"text" as const,text:" "}] : []), {kind:"reference",reference,label}, {kind:"text",text:" "}]);
+  requestAnimationFrame(() => document.querySelector<HTMLElement>('[aria-label="Message"]')?.focus());
 }
 
 export function selectChatIdentity(identityKey: string): void {
-  useSessionStore.setState({ newChatIdentityKey: identityKey });
+  useSessionStore.setState({ newChatIdentityKey: identityKey, draft: "", draftParts: null });
 }
 
 function newChatVoiceAvailable(snapshot: ReturnType<typeof useSessionStore.getState>): boolean {
@@ -555,6 +569,7 @@ function composerOutputBusy(): boolean {
 }
 
 let pendingUserText: {
+  parts?: MessagePart[];
   eventId: string;
   text: string;
   attachmentIds: string[];
@@ -2557,12 +2572,13 @@ async function refreshEndedHistory(sessionId: string): Promise<void> {
   }
 }
 
-function restoreDraft(text: string, error: string, wire?: WireError | null, attachments?: PendingAttachment[]): void {
+function restoreDraft(text: string, error: string, wire?: WireError | null, attachments?: PendingAttachment[], parts?: MessagePart[]): void {
   const latest = useSessionStore.getState();
   const code = wire?.code ?? "ValidationError";
   const category = wire?.category ?? "Validation";
   useSessionStore.setState({
     draft: latest.draft === "" ? text : latest.draft,
+    draftParts: latest.draft === "" ? snapshotParts(parts) ?? null : latest.draftParts,
     ...(attachments ? { pendingAttachments: mergePendingAttachments(attachments) } : {}),
     ...sessionFailurePatch(error, { wire, category, code })
   });
@@ -2624,7 +2640,7 @@ function composerCanSend(
     return !pending.some((item) => item.status !== "ready");
   }
 
-  const hasText = draft.trim().length > 0;
+  const hasText = hasTask(useSessionStore.getState().draftParts, draft);
   const complete = pending.filter((item) => item.status === "ready" && item.attachmentId);
   const blocked = pending.some((item) => item.status !== "ready");
   if (blocked) {
@@ -2720,7 +2736,7 @@ export function composerSendEnabled(): boolean {
       newChatIdentityKey: snapshot.newChatIdentityKey,
       chatAgentInstances: snapshot.chatAgentInstances
     });
-    return ready && snapshot.draft.trim().length > 0 && snapshot.connection === "idle";
+    return ready && hasTask(snapshot.draftParts, snapshot.draft) && snapshot.connection === "idle";
   }
 
   return composerCanSend(
@@ -2870,7 +2886,8 @@ function appendOptimisticUserEntry(
   eventId: string,
   text: string,
   attachments: HistoryAttachment[],
-  mode: "text" | "voice"
+  mode: "text" | "voice",
+  parts?: MessagePart[]
 ): void {
   const latest = useSessionStore.getState();
   if (historyHasUserEvent(latest.entries, eventId)) {
@@ -2886,6 +2903,7 @@ function appendOptimisticUserEntry(
       sourceEventId: eventId,
       role: "user",
       text,
+      parts: snapshotParts(parts),
       responseId: null,
       status: "sending",
       deliveryMode: mode,
@@ -2964,7 +2982,7 @@ export async function removeQueuedSend(localId: string): Promise<void> {
   }
 }
 
-function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachmentIds: string[]): boolean {
+function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachmentIds: string[], parts?: MessagePart[]): boolean {
   const snapshot = useSessionStore.getState();
   if (snapshot.pendingSendQueue.length >= MAX_PENDING_SEND_ITEMS) {
     useSessionStore.setState({
@@ -3010,6 +3028,7 @@ function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachm
   const item: PendingSendItem = {
     localId: uuid(),
     eventId: uuid(),
+    parts: snapshotParts(parts),
     text,
     attachmentIds,
     attachments: readyFiles.map((file) => ({ ...file }))
@@ -3017,6 +3036,7 @@ function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachm
   useSessionStore.setState({
     pendingSendQueue: [...snapshot.pendingSendQueue, item],
     draft: "",
+    draftParts: null,
     pendingAttachments: [],
     error: snapshot.errorFatal ? snapshot.error : null,
     sessionError: snapshot.errorFatal ? snapshot.sessionError : null
@@ -3027,6 +3047,7 @@ function enqueueLocalSend(text: string, readyFiles: PendingAttachment[], attachm
 type DispatchSource = { kind: "composer" } | { kind: "queue"; localId: string };
 
 type OutgoingUserMessage = {
+  parts?: MessagePart[];
   text: string;
   attachmentIds: string[];
   attachments: PendingAttachment[];
@@ -3074,7 +3095,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
         message: errorMessage,
         fatal: false,
         retryAfterMs: null
-      }, message.attachments.slice());
+      }, message.attachments.slice(), message.parts);
     }
 
     return false;
@@ -3084,12 +3105,14 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
   const reusePending =
     pendingUserText !== null
     && pendingUserText.text === text
+    && JSON.stringify(pendingUserText.parts) === JSON.stringify(message.parts)
     && pendingUserText.behavior === behavior
     && pendingUserText.attachmentIds.join() === readyAttachmentIds.join();
   const eventId = reusePending ? pendingUserText!.eventId : message.eventId ?? uuid();
   const pendingAttachmentSnapshot = message.attachments.slice();
   const queueLocalId = message.source?.kind === "queue" ? message.source.localId : null;
   pendingUserText = {
+    parts: snapshotParts(message.parts),
     eventId,
     text,
     attachmentIds: readyAttachmentIds,
@@ -3104,12 +3127,13 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
       displayName: item.displayName,
       contentType: item.contentType
     }));
-  appendOptimisticUserEntry(eventId, text, refs, snapshot.mode);
+  appendOptimisticUserEntry(eventId, text, refs, snapshot.mode, message.parts);
 
   const payload: Record<string, unknown> = {
     text,
     attachmentIds: readyAttachmentIds,
-    behavior
+    behavior,
+    ...(message.parts?.length ? { parts: wireParts(message.parts) } : {})
   };
 
   if (queueLocalId) {
@@ -3144,7 +3168,7 @@ async function dispatchOutgoingUserMessage(message: OutgoingUserMessage): Promis
             ...(state.errorFatal ? {} : failure)
           }));
         } else {
-          restoreDraft(text, errorMessage, ack?.error, pendingAttachmentSnapshot);
+          restoreDraft(text, errorMessage, ack?.error, pendingAttachmentSnapshot, message.parts);
         }
 
         return;
@@ -3204,6 +3228,7 @@ async function maybeAutoDispatchQueueHead(): Promise<void> {
 
   const head = snapshot.pendingSendQueue[0];
   const accepted = await dispatchOutgoingUserMessage({
+    parts: snapshotParts(head.parts),
     text: head.text,
     attachmentIds: head.attachmentIds,
     attachments: head.attachments,
@@ -3248,6 +3273,7 @@ export async function steerQueuedSend(localId: string): Promise<void> {
   }
 
   const accepted = await dispatchOutgoingUserMessage({
+    parts: snapshotParts(item.parts),
     text: item.text,
     attachmentIds: item.attachmentIds,
     attachments: item.attachments,
@@ -3297,9 +3323,10 @@ function reconcilePendingUserText(entries: { sourceEventId: string | null; role:
     const restored = pendingUserText.pendingAttachments;
     pendingUserText = null;
     const latest = useSessionStore.getState();
-    const patch: { draft?: string; pendingAttachments?: PendingAttachment[] } = {};
+    const patch: { draft?: string; draftParts?: MessagePart[] | null; pendingAttachments?: PendingAttachment[] } = {};
     if (latest.draft === text) {
       patch.draft = "";
+      patch.draftParts = null;
     }
     clearRestoredPendingAttachments(restored);
     if (Object.keys(patch).length > 0) {
@@ -3312,7 +3339,8 @@ function reconcilePendingUserText(entries: { sourceEventId: string | null; role:
     // Retry the uncertain command itself, preserving its identity and steer intent.
     // The user may already be composing another message or uploading another file.
     void dispatchOutgoingUserMessage({
-      text: pendingUserText.text,
+      parts: snapshotParts(pendingUserText.parts),
+        text: pendingUserText.text,
       attachmentIds: pendingUserText.attachmentIds,
       attachments: pendingUserText.pendingAttachments,
       eventId: pendingUserText.eventId,
@@ -3345,7 +3373,9 @@ export async function sendDraft(behavior: "queue" | "interrupt" = "queue"): Prom
     snapshot = useSessionStore.getState();
   }
 
-  const draft = snapshot.draft.trim();
+  const draft = snapshot.draftParts ? snapshot.draft : snapshot.draft.trim();
+  const parts = snapshotParts(snapshot.draftParts ?? (!draft ? pendingUserText?.parts : undefined));
+  if (parts && !hasTask(parts, draft || pendingUserText?.text || "") && snapshot.pendingAttachments.length === 0) return;
   const readyFiles = snapshot.pendingAttachments.filter((item) => item.status === "ready" && item.attachmentId);
   const readyAttachmentIds = readyFiles.map((item) => item.attachmentId!);
   const text = draft || pendingUserText?.text || "";
@@ -3358,11 +3388,7 @@ export async function sendDraft(behavior: "queue" | "interrupt" = "queue"): Prom
       && !snapshot.pendingAttachments.some((item) => item.status !== "ready")
       && (text.length > 0 || readyAttachmentIds.length > 0)
     ) {
-      if (draft) {
-        useSessionStore.setState({ draft: "" });
-      }
-
-      enqueueLocalSend(text, readyFiles, readyAttachmentIds);
+      enqueueLocalSend(text, readyFiles, readyAttachmentIds, parts);
     }
 
     return sendRequest;
@@ -3382,9 +3408,10 @@ export async function sendDraft(behavior: "queue" | "interrupt" = "queue"): Prom
 
   if (composerOutputBusy() && behavior !== "interrupt") {
     if (text.length > 0 || readyAttachmentIds.length > 0) {
-      enqueueLocalSend(text, readyFiles, readyAttachmentIds);
+      enqueueLocalSend(text, readyFiles, readyAttachmentIds, parts);
     } else if (pendingUserText) {
       await dispatchOutgoingUserMessage({
+        parts: snapshotParts(pendingUserText.parts),
         text: pendingUserText.text,
         attachmentIds: pendingUserText.attachmentIds,
         attachments: pendingUserText.pendingAttachments
@@ -3395,10 +3422,11 @@ export async function sendDraft(behavior: "queue" | "interrupt" = "queue"): Prom
   }
 
   if (draft) {
-    useSessionStore.setState({ draft: "" });
+    useSessionStore.setState({ draft: "", draftParts: null });
   }
 
   await dispatchOutgoingUserMessage({
+    parts,
     text,
     attachmentIds: readyAttachmentIds,
     attachments: snapshot.pendingAttachments.filter((item) => item.status === "ready" && item.attachmentId),

@@ -509,3 +509,9 @@ Frontend tests and Synthetic Playwright cover unified catalog/read-only Built-in
 ### Heading metadata layout verification
 
 For supporting heading text, inspect title/metadata proximity and wrapping at 1440/768/767/390px. Exercise inventory search/no-match recovery, Instance Persona/Lifecycle inspection, and local Settings edit/Discard with the unsaved marker beside the section title. Check actual bounding boxes, page overflow, console errors and failed requests. Component regressions cover Admin, Settings, Execution budgets, Definition editor, Background Work and Automations. Helpers open collapsible sections by accessible name rather than raw text including supporting labels. The [local heading verification report](reports/heading-metadata-layout-verification.md) records this change’s executed checks and remaining chat drawer runtime gap; documentation sync does not renew runtime or hosted acceptance.
+
+## Unified composer acceptance
+
+Verify ordinary text and structured SendText over real MessagePack, changed-parts replay conflict, ordered batched explicit Skill union before the first model call, aggregate procedure budget, disabled/retired/stale selections, model-load budget independence and recovery pins. Exercise InMemory and temporary SQLite entry/Run reopen. Verify same-instance/profile references, foreign/guessed locators, mutable revisions, bounded lower-trust prompt projection and background-reference absence of lifecycle effects.
+
+Editor/browser checks cover multi-token insertion, keyboard/IME, atomic deletion, clipboard and undo, reference-only/Skill-only validation, plus discovery, new-chat scope, immutable Queue/Steer, lost ACK/reconnect/refresh, legacy history, Voice and attachment regressions. Capture actual Synthetic interactions at 1440/768/390px; runtime assertions establish behavior beyond screenshots. Record final implementation SHA and distinguish local, hosted and optional live-provider evidence.

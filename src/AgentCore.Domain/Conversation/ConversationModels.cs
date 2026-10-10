@@ -36,8 +36,19 @@ public sealed record ConversationEntry(
     ModelGenerationProvenance? ModelProvenance = null,
     FailureReference? Failure = null,
     string? ApplicationMessageEffectKey = null,
-    DateTimeOffset? CompletedAt = null)
+    DateTimeOffset? CompletedAt = null,
+    IReadOnlyList<UserMessagePart>? Parts = null)
 {
+    private IReadOnlyList<UserMessagePart>? _parts = FreezeParts(Role, Text, Parts);
+    public IReadOnlyList<UserMessagePart>? Parts
+    { get => _parts; init => _parts = FreezeParts(Role, Text, value); }
+    private static IReadOnlyList<UserMessagePart>? FreezeParts(ConversationRole role, string text, IReadOnlyList<UserMessagePart>? parts)
+    {
+        var normalized = UserMessageContent.Normalize(parts);
+        if (normalized is not null && (role != ConversationRole.User || UserMessageContent.DisplayText(normalized) != text))
+            throw new ArgumentException("Structured parts belong to a user entry with matching canonical text.");
+        return normalized;
+    }
     public bool IsPromptTurn
     {
         get

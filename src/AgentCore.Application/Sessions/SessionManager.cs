@@ -990,7 +990,7 @@ public sealed class SessionRuntimeFactory(
     IDiagnosticIdSource? diagnostics = null,
     IBrowserLease? browserLease = null,
     IAgentRunAuthority? runAuthority = null,
-    ITriggerStore? triggerOccurrences = null)
+    ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null)
 {
     private readonly IAgentRunStore _agentRuns = agentRuns ?? throw new ArgumentNullException(nameof(agentRuns));
 
@@ -1022,5 +1022,5 @@ public sealed class SessionRuntimeFactory(
             turnCapabilities: turnCapabilities,
             structuredMemory: structuredMemory,
             diagnostics: diagnostics,
-            browserLease: browserLease, runAuthority: runAuthority, triggerOccurrences: triggerOccurrences);
+            browserLease: browserLease, runAuthority: runAuthority, triggerOccurrences: triggerOccurrences, composer: composer);
 }

@@ -28,6 +28,8 @@ import {
   cancelRenderedResponse,
   respondToApproval,
   setDraft,
+  setDraftParts,
+  addResourceToDraft,
   setMuted
 } from "../../services/realtime";
 import { AgentPicker } from "./AgentPicker";
@@ -472,7 +474,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
                               return;
                             }
                             window.requestAnimationFrame(() => {
-                              document.querySelector<HTMLTextAreaElement>('[aria-label="Message"]')?.focus();
+                              document.querySelector<HTMLElement>('[aria-label="Message"]')?.focus();
                             });
                           });
                         }}
@@ -483,6 +485,9 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
                   ) : (
                     <Composer
                       draft={state.draft}
+                      parts={state.draftParts}
+                      instanceId={inSession ? backgroundInstanceId : state.newChatIdentityKey.startsWith("managed:") ? state.newChatIdentityKey.slice(8) : null}
+                      onPartsChange={setDraftParts}
                       canSend={canSend}
                       canStop={canStop}
                       sendLabel={sendLabel}
@@ -525,7 +530,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
           </Content>
         </Layout>
         {backgroundInstanceId ? <BackgroundWorkDrawer instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
-          onClose={() => setWorkOpen(false)} /> : null}
+          onClose={() => setWorkOpen(false)} onAddReference={(sessionId,label) => addResourceToDraft({kind:"backgroundSession",sessionId},label)} /> : null}
 
         {state.sessionId ? (
           <AutomationDrawer

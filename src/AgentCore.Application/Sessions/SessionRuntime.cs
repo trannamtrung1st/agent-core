@@ -215,12 +215,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IDiagnosticIdSource? diagnostics = null,
         IBrowserLease? browserLease = null,
         IAgentRunAuthority? runAuthority = null,
-        ITriggerStore? triggerOccurrences = null)
+        ITriggerStore? triggerOccurrences = null, AgentCore.Application.Composer.ComposerReferenceService? composer = null)
     {
         _diagnostics = diagnostics ?? FallbackDiagnosticIdSource.Instance;
         _snapshot = snapshot;
         _runAuthority = runAuthority;
         _triggerOccurrences = triggerOccurrences;
+        _composer = composer;
         _models = modelResolver ?? new StaticLanguageModelResolver(languageModel);
         _catalog = catalog;
         _brain = brain;
@@ -314,15 +315,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Guid? sourceEventId = null,
         CancellationToken cancellationToken = default,
         IReadOnlyList<Guid>? attachmentIds = null,
-        UserTextBehavior behavior = UserTextBehavior.Interrupt)
+        UserTextBehavior behavior = UserTextBehavior.Interrupt, IReadOnlyList<UserMessagePart>? parts = null)
     {
         ValidateUserTurn(text, attachmentIds);
+        parts = NormalizeUserParts(text, parts, attachmentIds);
         _ = cancellationToken;
         var eventId = sourceEventId ?? _ids.NewId();
         var context = new EventContext(eventId, SessionId, _epoch, _time.GetUtcNow(), eventId, null);
         BeginWork();
         return Task.FromResult(Enqueue(
-            new UserTextReceived(context, text, AttachmentIds: attachmentIds, Behavior: behavior),
+            new UserTextReceived(context, text, AttachmentIds: attachmentIds, Behavior: behavior, Parts: parts),
             urgent: false));
     }
 
@@ -331,13 +333,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         Guid sourceEventId,
         CancellationToken cancellationToken = default,
         IReadOnlyList<Guid>? attachmentIds = null,
-        UserTextBehavior behavior = UserTextBehavior.Interrupt)
+        UserTextBehavior behavior = UserTextBehavior.Interrupt, IReadOnlyList<UserMessagePart>? parts = null)
     {
         ValidateUserTurn(text, attachmentIds);
+        parts = NormalizeUserParts(text, parts, attachmentIds);
         var persisted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = new EventContext(sourceEventId, SessionId, _epoch, _time.GetUtcNow(), sourceEventId, null);
         BeginWork();
-        if (!Enqueue(new UserTextReceived(context, text, persisted, attachmentIds, behavior), urgent: false))
+        if (!Enqueue(new UserTextReceived(context, text, persisted, attachmentIds, behavior, parts), urgent: false))
         {
             persisted.TrySetResult(false);
             PersistenceFailureDiagnosticId = null;
@@ -353,6 +356,18 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var context = NewContext();
         BeginWork();
         return Task.FromResult(Enqueue(new AttachmentsStagedReceived(context, attachmentIds), urgent: true));
+    }
+
+    private static IReadOnlyList<UserMessagePart>? NormalizeUserParts(string text, IReadOnlyList<UserMessagePart>? parts, IReadOnlyList<Guid>? attachments)
+    {
+        try
+        {
+            var normalized = UserMessageContent.Normalize(parts, input: true);
+            if (normalized is not null && (UserMessageContent.DisplayText(normalized) != text || !UserMessageContent.HasTask(normalized) && attachments is not { Count: > 0 }))
+                throw new ArgumentException("Structured text must match parts and Skill selection requires a task, reference or attachment.");
+            return normalized;
+        }
+        catch (ArgumentException exception) { throw AgentCoreErrors.Validation(exception.Message); }
     }
 
     private void ValidateUserTurn(string text, IReadOnlyList<Guid>? attachmentIds)
@@ -1435,7 +1450,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var started = Stopwatch.GetTimestamp();
         _recordedLlm = false;
         var attachmentIds = NormalizeAttachmentIds(input.AttachmentIds);
-        var fingerprint = UserTextAdmission.Fingerprint(null, input.Text ?? "", attachmentIds, input.Behavior);
+        var fingerprint = UserTextAdmission.Fingerprint(null, input.Text ?? "", attachmentIds, input.Behavior, input.Parts);
         if (_snapshot.Entries.FirstOrDefault(entry =>
                 entry.SourceEventId == input.Context.EventId && entry.Role == ConversationRole.User)
             is { } existingByEvent)
@@ -1525,6 +1540,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             return;
         }
 
+        IReadOnlyList<UserMessagePart>? admittedParts = input.Parts;
+        if (input.Parts is not null)
+        {
+            try
+            {
+                if (_composer is not null) admittedParts = await _composer.ValidateInputAsync(_snapshot, input.Parts, cancellationToken);
+                else if (input.Parts.Any(p => p.Kind == "reference")) throw AgentCoreErrors.Validation("Resource references are unavailable.");
+                var (_, configuration) = await ResolveNewRunAsync(cancellationToken);
+                AgentCore.Application.Composer.ComposerReferenceService.ActiveSkills(configuration.Configuration.Definition, configuration.Skills,
+                    PendingUserBatch().SelectMany(u => UserMessageContent.ExplicitSkills(u.Parts)).Concat(UserMessageContent.ExplicitSkills(input.Parts)));
+            }
+            catch (AgentCoreException exception) { input.Persisted?.TrySetException(exception); return; }
+        }
         var attachmentRefs = await BuildAttachmentRefsAsync(attachmentIds, cancellationToken).ConfigureAwait(false);
         var userEntry = new ConversationEntry(
             input.Context.EventId,
@@ -1539,7 +1567,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             text.Length,
             now,
             Attachments: attachmentRefs.Count == 0 ? null : attachmentRefs,
-            SourceAdmissionFingerprint: fingerprint);
+            SourceAdmissionFingerprint: fingerprint, Parts: admittedParts);
 
         _undurableUserEntryIds.Add(userEntry.EntryId);
 
@@ -2415,7 +2443,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     OutputContract: _boundAgentRun?.Admission.OutputContract ?? AgentRunOutputContract.ConversationResponse,
                     AuthoredAutomation: _boundAgentRun?.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal) == true,
                     OwnedSessionId: SessionId,
-                    ActiveSkillKeys: skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
+                    ActiveSkillKeys: capturedRun?.ActiveSkillKeys ?? skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
+                    ComposerInput: capturedRun?.Admission.ComposerInput,
                     PinnedSkillCatalog: skillCatalog,
                     AgentInstanceId: _snapshot.AgentInstanceId,
                     CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
@@ -2430,7 +2459,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 BrainFailed? failure = null;
                 try
                 {
-                    decision = await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
+                    decision = capturedRun?.Admission.ComposerInput?.Error is not null
+                        ? new Speak(new ModelRequest(responseId, []))
+                        : await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (evaluationToken.IsCancellationRequested)
                 {
@@ -2609,6 +2640,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         IReadOnlyList<string> activeSkillKeys,
         CancellationToken cancellationToken)
     {
+        if (_boundAgentRun?.Admission.ComposerInput?.Error is { } inputError)
+        {
+            await PublishAsync(new SessionOutput(cause, null, new ErrorOutput("Validation", "ComposerInputUnavailable", inputError, false, null)), cancellationToken);
+            await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidResponse, inputError)), CancellationToken.None);
+            return;
+        }
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
         var checkpoint = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.Checkpoint : null;
@@ -5774,7 +5811,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             title = string.IsNullOrWhiteSpace(entry.Text) && attachments is { Names.Count: > 0 }
                 ? SessionTitles.FromAttachments(attachments.Names, attachments.ImageOnly)
-                : SessionTitles.FromUserText(entry.Text);
+                : SessionTitles.FromUserText(entry.Parts is null ? entry.Text : string.Concat(entry.Parts.Where(p => p.Kind != "invocation").Select(p => p.Kind == "text" ? p.Text : "@" + (p.Label ?? p.Reference!.Kind))));
         }
 
         return _snapshot with

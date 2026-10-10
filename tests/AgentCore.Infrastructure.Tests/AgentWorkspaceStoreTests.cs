@@ -32,6 +32,9 @@ public sealed class AgentWorkspaceStoreTests
             Assert.Empty((await store.ListAsync(b, "/home", null, 10)).Items);
             await Assert.ThrowsAsync<AgentCoreException>(async () => await store.ReadAsync(b, item.ItemId, null));
             await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(a, item.LogicalPath, item.ContentType, bytes, sourceSession, null, null));
+            Assert.Empty((await store.InspectAsync(a, item.ItemId, 0)).Bytes);
+            Assert.Empty((await store.InspectAsync(a, item.ItemId, 1)).Bytes);
+            Assert.Equal(bytes, (await store.InspectAsync(a, item.ItemId, 32)).Bytes);
             var newer = await store.WriteFileAsync(a, item.LogicalPath, item.ContentType, "revision two"u8.ToArray(), sourceSession, item.Revision, item.Sha256Hex);
             Assert.Equal(item.ItemId, newer.ItemId); Assert.Equal(2, newer.Revision);
             await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(a, item.LogicalPath, item.ContentType, bytes, sourceSession, 1, null));

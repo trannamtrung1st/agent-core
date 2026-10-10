@@ -15,6 +15,26 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class MemoryStoreContractTests
 {
     [Fact]
+    public async Task Structured_parts_remain_typed_immutable_and_identical_after_sqlite_reopen()
+    {
+        await using var sqlite = await SqliteAsync();
+        foreach (var store in new IMemoryStore[] { new InMemoryMemoryStore(), sqlite.Store })
+        {
+            UserMessagePart[] parts = [new("text", Text: "Inspect "), new("reference", Reference: new("artifact", SessionId: Guid.NewGuid(), ArtifactId: Guid.NewGuid()), Label: "report.txt"), new("invocation", InvocationKind: "skill", SkillKey: "definition:review", Label: "Review")];
+            var text = UserMessageContent.DisplayText(parts);
+            var entry = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User, text, null, EntryStatus.Completed, SessionMode.Text, text.Length, text.Length, DateTimeOffset.UtcNow, Parts: parts);
+            var snapshot = First() with { Entries = [entry] };
+            await store.SaveAsync(snapshot, 0); parts[0] = new("text", Text: "mutated");
+            var reopened = store == sqlite.Store ? new SqliteMemoryStore(sqlite.Factory, TimeProvider.System) : store;
+            var saved = (await reopened.LoadAsync(snapshot.SessionId))!.Entries[0];
+            Assert.Equal(text, saved.Text); Assert.Equal("Inspect ", saved.Parts![0].Text);
+            Assert.Equal("report.txt", saved.Parts[1].Label);
+            Assert.Throws<NotSupportedException>(() => ((IList<UserMessagePart>)saved.Parts)[0] = parts[0]);
+            Assert.Equal(saved.Parts, (await reopened.ReadHistoryAsync(snapshot.SessionId, 0, 20))[0].Parts);
+        }
+    }
+
+    [Fact]
     public async Task Completion_time_migration_preserves_historical_entries_without_inventing_a_time()
     {
         var legacy = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Historical reply");

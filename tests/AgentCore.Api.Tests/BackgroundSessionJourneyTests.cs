@@ -117,6 +117,32 @@ public sealed class BackgroundSessionJourneyTests
         var artifacts = services.GetRequiredService<IArtifactStore>();
         for (var index = 0; index < 51; index++)
             await artifacts.CreateAsync(child.Session.SessionId, $"result-{index}.txt", "text/plain", "result"u8.ToArray(), null, null, agentRunId: child.Run.AgentRunId);
+        var composer = services.GetRequiredService<AgentCore.Application.Composer.ComposerReferenceService>();
+        var beforeReference = (await memory.LoadAsync(child.Session.SessionId))!;
+        var backgroundEvidence = await composer.ResolveAsync(source.Owner, new("backgroundSession", SessionId: child.Session.SessionId), true, default);
+        Assert.Equal("valid", backgroundEvidence.Status);
+        Assert.Contains("Original task: Check progress without blocking chat", backgroundEvidence.Text);
+        var choicePage = await composer.DiscoverAsync(source.Owner, "artifact", null, null, default);
+        var choices = choicePage.Items.ToList();
+        while (choicePage.NextCursor is { } next)
+        {
+            choicePage = await composer.DiscoverAsync(source.Owner, "artifact", null, next, default);
+            choices.AddRange(choicePage.Items);
+        }
+        Assert.Equal(51, choices.Count);
+        Assert.Equal(51, choices.Select(c => c.Id).Distinct().Count());
+        var artifactReference = choices[0].Reference!;
+        Assert.Equal(child.Session.SessionId, artifactReference.SessionId);
+        var artifactEvidence = await composer.ResolveAsync(source.Owner, artifactReference, true, default);
+        Assert.Equal("valid", artifactEvidence.Status); Assert.Equal("result", artifactEvidence.Text);
+        Assert.Equal("unavailable", (await composer.ResolveAsync(source.Owner, artifactReference with { SessionId = parent.SessionId }, true, default)).Status);
+        Assert.Equal("forbidden", (await composer.ResolveAsync(new(foreignInstance, source.Owner.ProfileId), artifactReference, true, default)).Status);
+        Assert.Equal("valid", (await composer.ResolveAsync(source.Owner, new("session", SessionId: parent.SessionId), true, default)).Status);
+        var afterReference = (await memory.LoadAsync(child.Session.SessionId))!;
+        Assert.Equal(beforeReference.Revision, afterReference.Revision);
+        Assert.Equal(beforeReference.Surfaces, afterReference.Surfaces);
+        Assert.Equal(beforeReference.Origin, afterReference.Origin);
+        Assert.Single(await runs.ListForSessionAsync(source.Owner, child.Session.SessionId));
         var backgroundPath = $"/api/v2/agent-instances/{instanceId}/background-sessions";
         var listed = await client.GetFromJsonAsync<BackgroundSessionPageResponse>(backgroundPath);
         var row = Assert.Single(listed!.Items);

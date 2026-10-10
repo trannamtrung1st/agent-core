@@ -164,7 +164,9 @@ public sealed record HistoryItemResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<HistoryMemoryReceiptResponse>? MemoryReceipts = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? CompletedAt = null);
+    string? CompletedAt = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<AgentCore.Contracts.Realtime.UserMessagePartDto>? Parts = null);
 
 public sealed record HistoryFailureResponse(
     string DiagnosticId,

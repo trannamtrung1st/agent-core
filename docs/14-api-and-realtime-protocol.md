@@ -665,3 +665,26 @@ Invalid shape/policy/media or enabled Skill resource dependencies is 400, missin
 `harness.inspect` reports `currentRunDefinitionVersion`, `instanceRevision`, `policyRevision`, `activeDefinitionVersion` and `changesApplyToNextRun:true`. Local tools require expectedInstanceRevision and preserve exact source/approval evidence. A successful local receipt reports Current Run unchanged and Next Run scope, never a shared publication.
 
 Version preview also returns `changedInheritedItems` for stable-ID Skill/resource changes, and includes Definition budget-class changes and retained Instance class overrides in its field lists. Explicit Session reasoning effort survives a default-derived model refresh; user/host model choices remain authoritative.
+
+## Structured user-message parts
+
+SendText/user.text retains text, attachmentIds and behavior and adds optional parts. Plain-text clients remain valid. Parts are ordered text, skill invocation, or typed reference records. The canonical fallback uses `/` plus the exact Skill key and `@` plus the typed canonical locator; display labels are server metadata and carry no authority. When parts are present, Core coalesces adjacent text, deduplicates Skill keys, validates exact locator fields, and requires text to match the canonical fallback. User entries expose the same parts in ready/upsert/history projections. Source-event idempotence includes normalized parts; changed targets under the same event ID are a protocol conflict.
+
+Limits: 8,000 UTF-16 fallback units, 128 supplied parts before normalization and 32 KiB UTF-8 serialized normalized parts excluding server labels, with type-specific GUID and Skill-key validation. This bounds transport complexity, not a separate selected-Skill policy. The existing 8,000 active-procedure-character budget remains authoritative. Skill-only messages require a task, attachment or reference. Reference-only messages request inspection. Picker discovery is owner-protected, metadata-only and scoped to the selected active Instance; selectable categories require an implemented resolver. All six categories are implemented: homeFile, session, backgroundSession, artifact, agentRun and skill.
+
+
+`GET /api/v2/agent-instances/{instanceId}/composer?category=invocation|homeFile|session|backgroundSession|artifact|agentRun|skill&search=...&cursor=...` returns `{items,nextCursor}` under the existing owner capability. Each page contains at most 40 metadata choices; native cursors retain all matching results across pages. Search is at most 200 characters; opaque cursor at most 1024. Choices include disambiguating canonical key/path or short ID, category, label, description, optional canonical reference/Skill key and unavailableReason. Discovery does not read resource bodies or mark work read.
+
+Exact reference shapes:
+
+| Kind | Required fields beyond kind | Optional fields |
+| --- | --- | --- |
+| homeFile | agentInstanceId, itemId | selectedRevision |
+| session / backgroundSession | sessionId | selectedRevision |
+| artifact | sessionId, artifactId | none |
+| agentRun | sessionId, agentRunId | selectedRevision |
+| skill | agentInstanceId, skillKey | none |
+
+IDs are non-empty canonical UUIDs; selectedRevision is positive. Unknown, duplicate or irrelevant fields are rejected, including labels on client input. Missing/retired/stale selections and aggregate Skill budget failures return recoverable Validation ACKs; durable admission races instead preserve the original user entry and fail the Run visibly with ComposerInputUnavailable before any model call.
+
+Run inspection adds optional composerInput: explicitSkillKeys, provenance=userExplicit, admittedAt, error and reference kind/locator/label/status/revision/sha256/truncated. It exposes safe provenance metadata, never source bodies. Full reference evidence and procedures are persisted in the existing immutable Run payload.

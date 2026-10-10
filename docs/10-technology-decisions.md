@@ -415,3 +415,7 @@ The approved configuration scope is Definition baseline → sparse Instance over
 New inherited Skills and resources use nullable enablement choices; historical materialized Skill booleans migrate as explicit values. IDs remain stable through true Definition forks/publications. Independently copied local content has a separate namespace and source provenance. General settings reject authority expansion and invalid provider/model selection.
 
 Adoption is exact and explicit, with validated preview and atomic reconciliation. The next new Run in an existing Session uses current effective Instance configuration; already admitted Runs remain frozen. Managed Chat no longer publishes a shared Definition as an ordinary self-management effect. Shared reuse requires explicit selection, draft review, validation/evaluation and publication. No second UI kit, merge framework, budget pipeline or automatic cross-Instance adoption is introduced.
+
+## Decision: unified structured composer
+
+The approved unified-composer proposal extends the existing Ant Design v6 Chat shell with one headless Lexical editor. Lexical owns selection, composition, history and atomic inline nodes; it supplies no component kit or visual tokens. AntD remains the only generic UI. Canonical ordered user-message parts, never editor JSON/HTML, cross the existing SendText transport. `/` selects explicit Skills, `@` selects owned contextual references, and `+` exposes the same discovery actions. This is an additive post-MVP initiative; P10/P11 and prior freezes remain unchanged.
