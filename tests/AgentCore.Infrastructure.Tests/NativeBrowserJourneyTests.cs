@@ -22,7 +22,8 @@ public sealed class NativeBrowserJourneyTests
             Assert.All(AgentCore.Application.Tools.BrowserToolCatalog.Tools.Values.Where(t => t.Group == "core"), t => Assert.True(browser.Provider.Supports(t.Feature), t.Name));
             Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(main.Origin! + "/browser-native.html?compact=1")))).ErrorCode);
             var page = browser.ContextFor(id)!.Pages[0];
-            await page.Locator("iframe").EvaluateAsync("(frame,url)=>frame.src=url", readOnly.Origin + "/browser-native-frame.html");
+            await NativeBrowserFixtureActions.ApplyAsync(browser, id, page.MainFrame,
+                "url => { document.querySelector('iframe').src = url; }", readOnly.Origin + "/browser-native-frame.html");
             await page.FrameLocator("iframe").GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Save frame" }).WaitForAsync();
             var snapshot = await browser.ExecuteAsync(BrowserTestRequests.Inspect(id)); Assert.Null(snapshot.ErrorCode);
             var observation = (await browser.ExecuteAsync(BrowserTestRequests.Inspect(id))).Observation!;
@@ -62,8 +63,9 @@ public sealed class NativeBrowserJourneyTests
             Assert.Contains("Dropped fixture text", dropped.Observation!.Content!);
             await browser.ContextFor(id)!.Pages[0].Locator("canvas").ScrollIntoViewIfNeededAsync();
             var box = (await browser.ContextFor(id)!.Pages[0].Locator("canvas").BoundingBoxAsync())!;
-            Assert.Null((await Run("browser.screenshot", new { format = "png" })).ErrorCode);
-            var mouse = await Run("browser.mouse", new { operation = "click", x = box.X + box.Width / 2, y = box.Y + box.Height / 2 });
+            var screenshot = await Run("browser.screenshot", new { format = "png" });
+            Assert.Null(screenshot.ErrorCode);
+            var mouse = await Run("browser.mouse", new { operation = "click", x = box.X + box.Width / 2, y = box.Y + box.Height / 2, snapshotId = screenshot.Observation!.SnapshotId });
             Assert.Null(mouse.ErrorCode);
             Assert.Contains("Visual target clicked", mouse.Observation!.Content!);
             var waiting = await Find("Waiting action");

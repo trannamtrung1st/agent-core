@@ -254,7 +254,7 @@ public sealed partial class SessionToolExecutor(
 
         if (InstanceSkillTools.IsManagement(call.Name)) return await ExecuteSkillManagementAsync(definition, call, args, admission, remainingOutputBytes, cancellationToken);
 
-        if (LooksLikeSessionMutation(args) || LooksLikeHostPath(args))
+        if (LooksLikeSessionMutation(args, call.Name == ToolCatalog.BrowserVisionMouse) || LooksLikeHostPath(args))
         {
             if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("forbidden", "Tool arguments are not permitted."));
@@ -1181,10 +1181,13 @@ public sealed partial class SessionToolExecutor(
             }));
     }
 
-    private static bool LooksLikeSessionMutation(JsonElement args)
+    private static bool LooksLikeSessionMutation(JsonElement args, bool allowBrowserSnapshotId = false)
     {
         foreach (var property in args.EnumerateObject())
         {
+            // A browser evidence ID is not a mutable Session snapshot. The mouse schema
+            // validates this one exact read-only token; every other mutation name stays denied.
+            if (allowBrowserSnapshotId && property.Name == "snapshotId") continue;
             if (property.Name.Contains("snapshot", StringComparison.OrdinalIgnoreCase)
                 || property.Name.Contains("mutate", StringComparison.OrdinalIgnoreCase)
                 || property.Name.Equals("revision", StringComparison.OrdinalIgnoreCase)

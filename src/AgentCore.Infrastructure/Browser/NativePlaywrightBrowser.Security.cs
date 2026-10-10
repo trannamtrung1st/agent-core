@@ -25,7 +25,7 @@ public sealed partial class NativePlaywrightBrowser
           const name = (source.getAttribute('aria-label') || Array.from(source.labels || []).map(l=>l.textContent).join(' ') || source.textContent || '').trim();
           const metadata = [source.id, source.getAttribute('name'), source.getAttribute('autocomplete'), name].filter(Boolean).join(' ');
           const words = metadata.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[-_]+/g,' ').toLowerCase();
-          const sensitive = type === 'hidden' || /password|passwd|passcode|secret|token|api ?key|access ?key|private ?key|authorization|one time code|otp/i.test(metadata) || /password|passwd|passcode|secret|token|api ?key|access ?key|private ?key|authorization|one time code|otp/i.test(words);
+          const sensitive = source.hasAttribute('data-sensitive') || type === 'hidden' || /password|passwd|passcode|secret|token|api ?key|access ?key|private ?key|authorization|one time code|otp/i.test(metadata) || /password|passwd|passcode|secret|token|api ?key|access ?key|private ?key|authorization|one time code|otp/i.test(words);
           if (type !== 'password' && sensitive) return 'null';
           const role = source.getAttribute('role') || (type === 'password' || tag === 'textarea' || tag === 'input' && !['checkbox','radio','file','submit','button'].includes(type) ? 'textbox' : tag === 'button' ? 'button' : tag === 'a' ? 'link' : tag === 'select' ? 'combobox' : /^h[1-6]$/.test(tag) ? 'heading' : type === 'checkbox' || type === 'radio' ? type : 'generic');
           const actions = type === 'password' ? ['fill_credential'] : type === 'file' ? ['upload'] : tag === 'select' ? ['select'] : ['checkbox','radio','switch'].includes(role) ? ['check','uncheck','click'] : role === 'textbox' || source.isContentEditable ? ['fill','press'] : ['heading','tree','grid','group','region','main','status'].includes(role) ? [] : ['click'];
@@ -59,10 +59,10 @@ public sealed partial class NativePlaywrightBrowser
               push("storage", key, sessionStorage.getItem(key));
             }
           } catch { }
-          document.querySelectorAll('input,textarea,select,[contenteditable=true]').forEach(el => {
+          document.querySelectorAll('input,textarea,select,[contenteditable=true],[data-sensitive]').forEach(el => {
             const metadata=[el.type,el.id,el.name,el.getAttribute('autocomplete'),el.getAttribute('aria-label'),...Array.from(el.labels||[]).map(l=>l.textContent)].join(' ');
             const words=metadata.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[-_]+/g,' ');
-            if(/password|passwd|passcode|secret|token|api.?key|private.?key|access.?key|one.?time.?code|otp/i.test(metadata+' '+words))
+            if(el.hasAttribute('data-sensitive') || /password|passwd|passcode|secret|token|api.?key|private.?key|access.?key|one.?time.?code|otp/i.test(metadata+' '+words))
                 push("password", "", el.value || el.textContent || "");
           });
           return JSON.stringify(items);
@@ -101,6 +101,7 @@ public sealed partial class NativePlaywrightBrowser
                 return Result("action_not_confirmed");
             if (!await locator.EvaluateAsync<bool>("el => el.matches('input[type=password]')").WaitAsync(token)
                 || await ClassifyInterventionAsync(session.Page, token) != BrowserInterventionKind.None) return Result("user_intervention_required");
+            session.VisualSnapshotId = null;
             attempted = true;
             active = locator.FillAsync(value, new() { Timeout = TimeoutMs() });
             await active.WaitAsync(token);

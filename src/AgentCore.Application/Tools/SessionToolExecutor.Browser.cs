@@ -32,7 +32,7 @@ public sealed partial class SessionToolExecutor
             && !BrowserTargetPolicy.EvaluateDestination(navigate.Url, browser.HostPolicy.NavigationOrigins, browser.HostPolicy.PolicyMode).Allowed)
             return Fail("target_denied", BrowserFailureMessage("target_denied"));
         if (name == ToolCatalog.BrowserScreenshot)
-            return await CaptureBrowserAsync(sessionId, args, admission, ct);
+            return await CaptureBrowserAsync(sessionId, args, admission, remainingOutputBytes, ct);
         if (name == ToolCatalog.BrowserUpload)
         {
             var uploads = new List<BrowserUpload>();
@@ -80,7 +80,7 @@ public sealed partial class SessionToolExecutor
             }
             if (result.Bytes is { Length: > 0 } bytes)
             {
-                if (bytes.Length > (metadata.Feature == BrowserFeature.Screenshot ? browser.HostPolicy.Limits.CaptureBytes : browser.HostPolicy.Limits.DownloadBytes)) return Fail("capture_too_large", "Browser output exceeds the byte budget.");
+                if (bytes.Length > browser.HostPolicy.Limits.DownloadBytes) return Fail("download_too_large", "Browser output exceeds the effective byte budget.");
                 var stored = await StoreBrowserBytesAsync(sessionId, admission, result.FileName ?? "browser-output", result.ContentType ?? "application/octet-stream", bytes, ct);
                 if (stored.Error is not null) return TextResult(FinishBrowser(name, started, stored.Error));
                 var json = JsonSerializer.Serialize(new { status = "ok", artifactId = stored.ArtifactId, byteSize = bytes.Length, contentType = result.ContentType });
@@ -103,6 +103,7 @@ public sealed partial class SessionToolExecutor
         "invalid_frame",
         "credential_target_invalid",
         "stale_frame",
+        "stale_visual_evidence",
         "action_not_confirmed",
         "ambiguous_target",
         "not_found",
@@ -264,27 +265,28 @@ public sealed partial class SessionToolExecutor
         Guid sessionId,
         JsonElement args,
         ToolExecutionAdmission? admission,
+        int remainingOutputBytes,
         CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
         var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
         if (denied is not null)
         {
-            return TextResult(FinishBrowser(ToolCatalog.BrowserScreenshot, started, denied));
+            return FitResult(remainingOutputBytes, FinishBrowser(ToolCatalog.BrowserScreenshot, started, denied));
         }
 
         if (!TryConsumeCapture(admission, sessionId))
         {
-            return TextResult(FinishBrowser(
+            return FitResult(remainingOutputBytes, FinishBrowser(
                 ToolCatalog.BrowserScreenshot,
                 started,
-                Error("capture_limit", "This turn already captured the maximum number of images.")));
+                Error("capture_limit", "The capture budget is exhausted. Continue with semantic observation; do not retry screenshots in this scope.")));
         }
 
         if (browser is null || !browser.IsAvailable)
         {
             ReleaseCapture(admission, sessionId);
-            return TextResult(FinishBrowser(
+            return FitResult(remainingOutputBytes, FinishBrowser(
                 ToolCatalog.BrowserScreenshot,
                 started,
                 Error("provider_unavailable", "Browser is unavailable.")));
@@ -300,13 +302,13 @@ public sealed partial class SessionToolExecutor
                 var code = captured.ErrorCode is not null && BrowserErrorCodes.Contains(captured.ErrorCode)
                     ? captured.ErrorCode
                     : "provider_unavailable";
-                return TextResult(FinishBrowser(ToolCatalog.BrowserScreenshot, started, Error(code, "Browser capture failed.")));
+                return FitResult(remainingOutputBytes, FinishBrowser(ToolCatalog.BrowserScreenshot, started, Error(code, "Browser capture failed. Use semantic observation; refresh visual evidence only after resolving the cause within the remaining budget.")));
             }
 
             if (captured.Bytes.Length > browser.HostPolicy.Limits.CaptureBytes)
             {
                 ReleaseCapture(admission, sessionId);
-                return TextResult(FinishBrowser(
+                return FitResult(remainingOutputBytes, FinishBrowser(
                     ToolCatalog.BrowserScreenshot,
                     started,
                     Error("capture_too_large", "The captured image exceeds the byte cap.")));
@@ -316,7 +318,7 @@ public sealed partial class SessionToolExecutor
             if (stored.Error is not null)
             {
                 ReleaseCapture(admission, sessionId);
-                return TextResult(FinishBrowser(ToolCatalog.BrowserScreenshot, started, stored.Error));
+                return FitResult(remainingOutputBytes, FinishBrowser(ToolCatalog.BrowserScreenshot, started, stored.Error));
             }
 
             var text = JsonSerializer.Serialize(new
@@ -326,16 +328,32 @@ public sealed partial class SessionToolExecutor
                 width = captured.Width,
                 height = captured.Height,
                 redactions = captured.RedactionCount,
-                artifactId = stored.ArtifactId
+                artifactId = stored.ArtifactId,
+                imageDelivered = admission?.SupportsVision == true,
+                snapshotId = captured.Observation?.SnapshotId,
+                tabRef = captured.Observation?.TabRef,
+                observation = captured.Observation is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(SerializeBrowserSnapshot(captured.Observation, captured)),
+                coordinateEvidence = admission?.SupportsVision == true && captured.DataJson is not null && JsonSerializer.Deserialize<JsonElement>(captured.DataJson).TryGetProperty("coordinateEvidence", out var coordinate) && coordinate.ValueKind == JsonValueKind.True,
+                guidance = admission?.SupportsVision == true
+                    ? "Combine this image with its semantic observation. Prefer semantic actions. coordinateEvidence identifies fresh viewport pixels; mouse still requires vision, capability and interaction authority. Reobserve and independently verify outcomes."
+                    : "Artifact only: this model did not receive image content. Continue with semantic observation; do not claim visual understanding."
             });
+            text = BrowserCaptureProjection.Fit(remainingOutputBytes, text);
+            var delivered = admission?.SupportsVision == true && text.Length > 0 && JsonSerializer.Deserialize<JsonElement>(text).TryGetProperty("artifactId", out _);
             return new ToolExecutionResult(
                 FinishBrowser(ToolCatalog.BrowserScreenshot, started, text),
-                admission?.SupportsVision == true ? [new ModelImageContent(captured.ContentType ?? "image/png", captured.Bytes, "screenshot")] : []);
+                delivered ? [new ModelImageContent(captured.ContentType ?? "image/png", captured.Bytes, "screenshot")] : []);
         }
         catch (OperationCanceledException)
         {
             ReleaseCapture(admission, sessionId);
             RecordBrowser(ToolCatalog.BrowserScreenshot, started, "canceled");
+            throw;
+        }
+        catch
+        {
+            ReleaseCapture(admission, sessionId);
+            RecordBrowser(ToolCatalog.BrowserScreenshot, started, "provider_unavailable");
             throw;
         }
     }
@@ -671,6 +689,7 @@ public sealed partial class SessionToolExecutor
             "target_denied" => "Browser target is not allowed.",
             "invalid_target" => BrowserToolArguments.TargetGuidance,
             "invalid_frame" => "Use one current snapshot fr_ frame ID. If target.frameRef is also supplied it must match frameRef; omit frameRef for the main page.",
+            "stale_visual_evidence" => "Coordinate evidence is missing or stale. Use a semantic target or obtain a fresh viewport screenshot and its snapshotId for the active tab; reobserve and verify the outcome.",
             "stale_frame" => "This frame is no longer current. Observe the current permitted frame inventory.",
             "action_not_confirmed" => "The page changed during the operation. Observe current state; do not replay an uncertain effect.",
             "target_missing" => "No current rendered target matches. Observe the page, narrow the semantics or render virtualized content before acting.",

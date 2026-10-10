@@ -490,7 +490,7 @@ describe("AdminApp", () => {
     expect(within(browser).getByText("Navigate, Snapshot, Click")).toBeInTheDocument();
     expect(within(browser).getByText(/Snapshot 512 UTF-8 bytes/)).toBeInTheDocument();
     expect(within(browser).getByText(/Deadline 25000 ms/)).toBeInTheDocument();
-    expect(within(browser).getByText(/3 screenshots and 1 downloads/)).toBeInTheDocument();
+    expect(within(browser).getByText(/3 screenshots and 1 download per Run/)).toBeInTheDocument();
     expect(within(browser).getByText(/changes apply after host restart/)).toBeInTheDocument();
     expect(within(browser).queryByText(/Trace/)).not.toBeInTheDocument();
     const identity = screen.getByLabelText("Instance identity");

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-09T19:35:31.745829+00:00",
+  "generatedAt": "2026-10-10T02:06:20.464200+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -490,7 +490,8 @@
       "preserve keyboard focus across Background Session history navigation and keep continuation failures/recovery visible inside the drawer.",
       "reuse AdminSessionPicker across Memory and Experience, align scope/source labels at the top, keep actions in a wrapping row, and preserve sticky draft actions with field scroll clearance. Date/time fields disclose the viewer zone; errors and copy recovery stay on their affected surface.",
       "Reuse the existing Chat Model dropdown and Admin ExecutionModelFields composition. Preserve token-owned shell/control insets and mobile wrapping. All reasoning controls present supported intensity in `none → minimal → low → medium → high → xhigh → max` order through the shared utility; unknown/adaptive modes use discrete choices outside the slider. Slider value text names the visible effort. Model switching preserves supported effort and selects the new configured default only when needed. Catalog names/capabilities come from backend descriptors; unavailable saved model keys remain explicit. No automatic routing controls or extra model-tier badges.",
-      "The existing Instance Triggers drawer owns Custom/preset selection, a third Core Event trigger, optional expression, dispatch/window and read-only sample testing. Presets fill disabled editable drafts and explain prerequisites. Core types are Instance-owned built-in signals; Shared Events remain webhook resources in global Connections. Preserve shared Ant Design v6 model/reasoning controls, 640px/full-mobile drawer, footer reachability, focus return and stale-result invalidation. Test status uses aria-live and a stable accessible button label. Delivery diagnostics show safe status/code/revision with independent retry. Product behavior is owned by docs/13 and docs/14; this is presentation context only."
+      "The existing Instance Triggers drawer owns Custom/preset selection, a third Core Event trigger, optional expression, dispatch/window and read-only sample testing. Presets fill disabled editable drafts and explain prerequisites. Core types are Instance-owned built-in signals; Shared Events remain webhook resources in global Connections. Preserve shared Ant Design v6 model/reasoning controls, 640px/full-mobile drawer, footer reachability, focus return and stale-result invalidation. Test status uses aria-live and a stable accessible button label. Delivery diagnostics show safe status/code/revision with independent retry. Product behavior is owned by docs/13 and docs/14; this is presentation context only.",
+      "Reuse the existing Admin Effective configuration Browser provider Descriptions for operational budgets. Keep per-request byte units, millisecond deadlines and per-Run/occurrence allowances beside values, with host-restart applicability in the same section; retain responsive detail labels and natural wrapping."
     ],
     "donts": [
       "reproduce Pixel Dialogue Field, Obsidian Mint, Martian Mono, field textures, presence plates, or a custom Select.",

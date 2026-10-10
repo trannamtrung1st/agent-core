@@ -852,6 +852,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
     private static void AdvanceGeneration(SessionBrowser session)
     {
         Interlocked.Increment(ref session.Generation);
+        session.VisualSnapshotId = null;
         session.Frames.Clear();
     }
 
@@ -885,6 +886,11 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         public int RuntimeClosed;
 
         public int Generation;
+        public string? VisualSnapshotId;
+        public string? VisualState;
+        public IPage? VisualPage;
+        public Guid VisualSessionId;
+        public int VisualPageGeneration;
 
         public string? LastAllowedUrl { get; set; }
 

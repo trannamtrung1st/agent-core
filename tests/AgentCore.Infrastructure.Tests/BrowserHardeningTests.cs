@@ -181,6 +181,32 @@ public sealed class BrowserHardeningTests
         }
     }
 
+    [Theory]
+    [InlineData(256, false)]
+    [InlineData(2048, true)]
+    public async Task Form_attachment_preserves_body_and_cookies_once_and_enforces_effective_stream_limit(int bytes, bool oversized)
+    {
+        await using var server = new CountingServer();
+        var browser = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixtureEnabled = false,
+            NavigationOrigins = [server.Origin], InteractionOrigins = [server.Origin], InteractionMode = "InteractiveDemo",
+            Limits = new(DownloadBytes: 1024) }, null);
+        await browser.StartAsync(default); var id = Guid.NewGuid();
+        try
+        {
+            Assert.Null((await browser.ExecuteAsync(new(id, new BrowserNavigate(server.Origin + "/login")))).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(new(id, new BrowserNavigate(server.Origin + "/form?bytes=" + bytes)))).ErrorCode);
+            var result = await browser.ExecuteAsync(new(id, new BrowserClick(new("role", "button", Name: "Export record"))));
+            Assert.Null(result.ErrorCode);
+            var download = Assert.Single(result.Downloads!);
+            Assert.Equal(oversized ? "download_too_large" : null, download.ErrorCode);
+            if (oversized) Assert.Null(download.Bytes); else Assert.Equal(bytes, download.Bytes!.Length);
+            Assert.Equal(1, server.Count("/post-file")); Assert.True(server.Authenticated);
+            Assert.Equal("record=Cooling+%26+pump", server.FormBody);
+            Assert.StartsWith("application/x-www-form-urlencoded", server.FormContentType);
+        }
+        finally { await browser.StopAsync(default); }
+    }
+
     [Fact]
     public async Task DNS_pin_serves_an_alias_then_rejects_rebinding_and_redirects()
     {
@@ -349,6 +375,8 @@ public sealed class BrowserHardeningTests
         public string Origin { get; }
         public bool Authenticated { get; private set; }
         public string? LastMethod { get; private set; }
+        public string? FormBody { get; private set; }
+        public string? FormContentType { get; private set; }
         public TaskCompletionSource Stalled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Count(string path) => _counts.GetValueOrDefault(path);
@@ -368,11 +396,31 @@ public sealed class BrowserHardeningTests
             var path = context.Request.Url!.AbsolutePath; var count = _counts.AddOrUpdate(path, 1, (_, n) => n + 1);
             try
             {
+                if (path == "/form")
+                {
+                    context.Response.ContentType = "text/html";
+                    var bytes = int.Parse(context.Request.QueryString["bytes"] ?? "256");
+                    await context.Response.OutputStream.WriteAsync(Encoding.UTF8.GetBytes($"<form method='post' action='/post-file?bytes={bytes}'><label>Record<input name='record' value='Cooling &amp; pump'></label><button>Export record</button></form>"));
+                    return;
+                }
+                if (path == "/post-file")
+                {
+                    LastMethod = context.Request.HttpMethod;
+                    Authenticated = context.Request.Cookies["auth"]?.Value == "yes";
+                    FormContentType = context.Request.ContentType;
+                    using var reader = new StreamReader(context.Request.InputStream);
+                    FormBody = await reader.ReadToEndAsync();
+                    context.Response.SendChunked = true;
+                    context.Response.ContentType = "text/csv";
+                    context.Response.Headers.Add("Content-Disposition", "attachment; filename=record.csv");
+                    await context.Response.OutputStream.WriteAsync(Encoding.UTF8.GetBytes(new string('x', int.Parse(context.Request.QueryString["bytes"] ?? "256"))));
+                    return;
+                }
                 if (path == "/redirect-forbidden") { context.Response.Redirect("http://169.254.169.254/never-contact"); return; }
                 if (path == "/login") context.Response.Headers.Add("Set-Cookie", "auth=yes; HttpOnly; Path=/");
-                if (path is "/file" or "/post-file" or "/stalled")
+                if (path is "/file" or "/stalled")
                 {
-                    Authenticated = context.Request.Cookies["auth"]?.Value == "yes"; LastMethod = context.Request.HttpMethod;
+                    Authenticated = context.Request.Cookies["auth"]?.Value == "yes";
                     context.Response.Headers.Add("Content-Disposition", "attachment; filename=" + (path == "/stalled" ? "late.csv" : "record.csv"));
                     context.Response.ContentType = "text/csv";
                     if (path == "/stalled")

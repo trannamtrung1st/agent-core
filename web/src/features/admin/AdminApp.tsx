@@ -3095,7 +3095,7 @@ export function EffectiveConfigView({
             <Descriptions.Item label="Output limits">Snapshot {config.browser.maxSnapshotBytes} UTF-8 bytes; screenshot {config.browser.maxCaptureBytes} bytes; download {config.browser.maxDownloadBytes} bytes · per request</Descriptions.Item>
             {config.browser.limits ? <>
               <Descriptions.Item label="Operation budgets">Deadline {config.browser.limits.operationTimeoutMs} ms; explicit wait {config.browser.limits.waitTimeoutMs} ms; automatic settle {config.browser.limits.automaticSettleMs} ms</Descriptions.Item>
-              <Descriptions.Item label="Capture allowance">{config.browser.limits.capturesPerScope} screenshots and {config.browser.limits.downloadsPerScope} downloads per Run or occurrence; Session fallback</Descriptions.Item>
+              <Descriptions.Item label="Capture allowance">{config.browser.limits.capturesPerScope} {config.browser.limits.capturesPerScope === 1 ? "screenshot" : "screenshots"} and {config.browser.limits.downloadsPerScope} {config.browser.limits.downloadsPerScope === 1 ? "download" : "downloads"} per Run or occurrence; Session fallback</Descriptions.Item>
               <Descriptions.Item label="Interaction limits">{config.browser.limits.findMatches} matches per find; {config.browser.limits.textInputLength} characters per input</Descriptions.Item>
               <Descriptions.Item label="Configuration source">Host Browser:Limits configuration · changes apply after host restart. Safety ceilings remain enforced.</Descriptions.Item>
             </> : null}

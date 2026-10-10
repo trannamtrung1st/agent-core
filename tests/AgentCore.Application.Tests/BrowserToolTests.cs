@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Workspaces;
 using AgentCore.Application.Admin;
@@ -996,6 +997,30 @@ public sealed class BrowserToolTests
         Assert.Equal(5, browser.Captures);
 
 
+    }
+
+    [Fact]
+    public async Task Effective_download_limit_rejects_provider_bytes_without_storing_or_consuming_allowance()
+    {
+        var browser = new DownloadingBrowser { HostPolicy = InteractiveFixture with { Limits = new(DownloadBytes: 1024, DownloadsPerScope: 1) } };
+        var artifacts = new RecordingArtifacts();
+        var executor = new SessionToolExecutor(browser: browser, artifacts: artifacts, configurationGate: ToolConfigurationGates.AllowAll);
+        var session = Guid.NewGuid();
+        var call = Call(ToolCatalog.BrowserNavigate, "{\"url\":\"http://127.0.0.1:5091/\"}");
+        var admission = UserTurn();
+        browser.Bytes = Encoding.UTF8.GetBytes(new string('x', 2048));
+        var rejected = await executor.ExecuteAsync(BrowserDefinition(), session, call, ToolLimits.MaxOutputBytes, admission: admission);
+        Assert.Contains("download_too_large", rejected.Text); Assert.Equal(0, artifacts.Created);
+        browser.Bytes = "id,value\n1,approved\n"u8.ToArray();
+        var accepted = await executor.ExecuteAsync(BrowserDefinition(), session, call, ToolLimits.MaxOutputBytes, admission: admission);
+        Assert.Contains("artifactId", accepted.Text); Assert.DoesNotContain("download_too_large", accepted.Text); Assert.Equal(1, artifacts.Created);
+    }
+
+    private sealed class DownloadingBrowser : FakeBrowser
+    {
+        public byte[] Bytes { get; set; } = [];
+        public override ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default) =>
+            new(new BrowserResult(null, Observation, Downloads: [new BrowserDownload(null, "record.csv", "text/csv", Bytes)]));
     }
 
     private static SessionToolExecutor Executor(FakeBrowser browser) =>

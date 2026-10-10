@@ -41,6 +41,14 @@ public sealed partial class NativePlaywrightBrowser
             }
 
             if (session.Dialog is not null) return new("dialog_pending", null, 0);
+            // Failed/partial captures cannot retain authority from an earlier image.
+            session.VisualSnapshotId = null;
+            var settled = await BrowserPageSettle.WaitAsync(session.Page, _policy.Limits.AutomaticSettleMs, ct);
+            var generation = session.Generation;
+            var page = session.Page;
+            var visualState = await ReadVisualStateAsync(page, ct);
+            // Fence the whole combined observation, including asynchronous semantic reads.
+            var observation = (await CaptureAsync(session, request.SessionId, ct)) with { Settled = settled };
             var format = request.Format;
             if (format is not ("png" or "jpeg" or "webp")) return new("invalid", null, 0);
             ILocator? target = null;
@@ -95,6 +103,14 @@ public sealed partial class NativePlaywrightBrowser
                 }
                 """, secrets).WaitAsync(ct);
                     redactions += await frame.EvaluateAsync<int>(MaskSensitiveScript).WaitAsync(ct);
+                    // Hide carets using a Core-owned removable stylesheet. SDK caret hiding
+                    // temporarily changes input styles, which would invalidate our own evidence.
+                    await frame.EvaluateAsync("""
+                        () => { const style = document.createElement('style');
+                          style.setAttribute('data-agent-mask', '1');
+                          style.textContent = '* { caret-color: transparent !important; }';
+                          document.documentElement.appendChild(style); }
+                        """).WaitAsync(ct);
                 }
                 var frameMasks = session.Page.Locator("iframe");
                 if (request.FullPage)
@@ -107,11 +123,11 @@ public sealed partial class NativePlaywrightBrowser
                     png = await session.Page.ScreenshotAsync(new PageScreenshotOptions
                     {
                         Type = ScreenshotType.Png, FullPage = request.FullPage, Scale = ScreenshotScale.Css,
-                        Caret = ScreenshotCaret.Hide, Mask = [frameMasks], Timeout = TimeoutMs()
+                        Caret = ScreenshotCaret.Initial, Mask = [frameMasks], Timeout = TimeoutMs()
                     }).WaitAsync(ct);
                 else
                     png = await target.ScreenshotAsync(new LocatorScreenshotOptions
-                    { Type = ScreenshotType.Png, Scale = ScreenshotScale.Css, Caret = ScreenshotCaret.Hide,
+                    { Type = ScreenshotType.Png, Scale = ScreenshotScale.Css, Caret = ScreenshotCaret.Initial,
                       Mask = [session.Page.Locator("input[type=password], input[type=hidden]"), frameMasks], Timeout = TimeoutMs() }).WaitAsync(ct);
                 if (format != "png")
                 {
@@ -138,7 +154,27 @@ public sealed partial class NativePlaywrightBrowser
                 return new BrowserScreenshotResult("capture_too_large", null, redactions, width, height);
             }
 
-            return new BrowserScreenshotResult(null, png, redactions, width, height, "image/" + format);
+            using (var decoded = SKImage.FromEncodedData(png))
+            {
+                width = decoded.Width;
+                height = decoded.Height;
+            }
+            var currentState = await ReadVisualStateAsync(page, ct);
+            var consistent = !page.IsClosed
+                && ReferenceEquals(page, session.Page) && generation == session.Generation
+                && visualState is not null && visualState == currentState;
+            observation = observation with { Settled = settled && consistent };
+            var coordinateEvidence = !request.FullPage && request.Target is null && consistent;
+            if (coordinateEvidence)
+            {
+                session.VisualSnapshotId = observation.SnapshotId;
+                session.VisualState = currentState;
+                session.VisualPage = page;
+                session.VisualSessionId = request.SessionId;
+                session.VisualPageGeneration = generation;
+            }
+            return new BrowserScreenshotResult(null, png, redactions, width, height, "image/" + format,
+                observation, coordinateEvidence);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -456,7 +492,15 @@ public sealed partial class NativePlaywrightBrowser
 
     private sealed record BrowserScreenshotRequest(Guid SessionId, string Format = "png", bool FullPage = false, BrowserTarget? Target = null);
     private sealed record BrowserScreenshotResult(string? ErrorCode, byte[]? Png, int RedactionCount,
-        int Width = 0, int Height = 0, string? ContentType = null);
+        int Width = 0, int Height = 0, string? ContentType = null,
+        BrowserSnapshot? Observation = null, bool CoordinateEvidence = false);
 
     // Reuse the settle observer for freshness. No page content or protected values leave this check.
+    private static Task<string?> ReadVisualStateAsync(IPage page, CancellationToken ct) =>
+        page.EvaluateAsync<string?>("""
+            () => window.__acSettle && window.__acSettle.inflight === 0 && document.fonts.status === 'loaded'
+              && !document.getAnimations().some(animation => animation.playState === 'running')
+              ? JSON.stringify([performance.timeOrigin, window.__acSettle.visualGeneration,
+                innerWidth, innerHeight, scrollX, scrollY]) : null
+            """).WaitAsync(ct);
 }

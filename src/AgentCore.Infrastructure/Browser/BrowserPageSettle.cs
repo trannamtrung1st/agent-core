@@ -27,7 +27,7 @@ internal static class BrowserPageSettle
           const state = { generation: 0, inflight: 0, visualGeneration: 0 };
           window.__acSettle = state;
           const bump = () => { state.generation += 1; };
-          const isMask = node => node.nodeType === 1 && node.hasAttribute('data-agent-mask');
+          const isMask = node => node.nodeType === 1 && (node.hasAttribute('data-agent-mask') || node.nodeName === 'X-PW-GLASS');
           const observer = new MutationObserver(records => {
             bump();
             if (records.some(record => record.type !== 'childList'
@@ -44,8 +44,7 @@ internal static class BrowserPageSettle
               subtree: true,
               childList: true,
               characterData: true,
-              attributes: true,
-              attributeFilter: ["class", "hidden", "aria-busy", "aria-hidden", "style"]
+              attributes: true
             });
           };
           if (document.documentElement) arm();

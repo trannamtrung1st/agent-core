@@ -290,7 +290,7 @@ public sealed record BrowserGenerateLocator(BrowserTarget Target) : BrowserComma
 {
     public override BrowserOperation Kind => BrowserOperation.GenerateLocator;
 }
-public sealed record BrowserMouse(string Operation, float X, float Y, float? TargetX = null, float? TargetY = null, float? DeltaX = null, float? DeltaY = null) : BrowserCommand
+public sealed record BrowserMouse(string Operation, float X, float Y, float? TargetX = null, float? TargetY = null, float? DeltaX = null, float? DeltaY = null, string? SnapshotId = null) : BrowserCommand
 {
     public override BrowserOperation Kind => BrowserOperation.Mouse;
 }

@@ -47,7 +47,8 @@ public sealed partial class NativePlaywrightBrowser
             var extension = capture.ContentType switch { "image/png" => "png", "image/jpeg" => "jpeg", "image/webp" => "webp", _ => null };
             if (extension is null || capture.Png is not { Length: > 0 }) return new("capture_invalid");
             return new(null, Bytes: capture.Png, ContentType: capture.ContentType, FileName: "screenshot." + extension,
-                RedactionCount: capture.RedactionCount, Width: capture.Width, Height: capture.Height);
+                RedactionCount: capture.RedactionCount, Width: capture.Width, Height: capture.Height,
+                Observation: capture.Observation, DataJson: JsonSerializer.Serialize(new { coordinateEvidence = capture.CoordinateEvidence }));
         }
         await using var interactive = await EnterInteractiveAsync(command.SessionId, cancellationToken).ConfigureAwait(false);
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -95,6 +96,7 @@ public sealed partial class NativePlaywrightBrowser
                 || command.Command is BrowserDialog { Operation: "inspect" };
             if (!readsOnly && !BrowserTargetPolicy.EvaluateAct(_policy.InteractionMode,
                 session.Page.Url, _policy.EffectiveInteractionOrigins, _policy.PolicyMode).Allowed) return new("forbidden");
+            if (!readsOnly && command.Command is not BrowserMouse) session.VisualSnapshotId = null;
             switch (command.Command)
             {
                 case BrowserSetGeolocation args:
@@ -374,6 +376,11 @@ public sealed partial class NativePlaywrightBrowser
                     }
                 case BrowserMouse args:
                     {
+                        if (session.VisualSessionId != command.SessionId || args.SnapshotId is null || args.SnapshotId != session.VisualSnapshotId
+                            || !ReferenceEquals(session.VisualPage, session.Page)
+                            || session.VisualPageGeneration != session.Generation
+                            || session.VisualState != await ReadVisualStateAsync(session.Page, ct))
+                            return new("stale_visual_evidence");
                         var x = args.X; var y = args.Y; var viewport = session.Page.ViewportSize;
                         if (viewport is null || !float.IsFinite(x) || !float.IsFinite(y) || x < 0 || y < 0 || x > viewport.Width || y > viewport.Height) return new("invalid");
                         async Task<bool> SafePoint(float px, float py) => await session.Page.EvaluateAsync<bool>(
@@ -446,6 +453,7 @@ public sealed partial class NativePlaywrightBrowser
 
         async Task Action(Task action)
         {
+            session.VisualSnapshotId = null;
             activeAction = action;
             effectAttempted = true; effectConfirmed = false;
             ActionStartedProbe?.Invoke();
