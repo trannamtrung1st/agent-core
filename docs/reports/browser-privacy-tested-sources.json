@@ -1,7 +1,7 @@
 {
   "baseline_commit": "38a610071a7a472506d98ab466ee45503f7a9466",
   "branch": "main",
-  "implementation_commit": null,
+  "implementation_commit": "76b03275fad7721e7aaa87ca652b33aa14a1d02e",
   "snapshot_kind": "git archive baseline plus privacy-only source edits; not whole shared-checkout acceptance",
   "files": [
     {
@@ -216,5 +216,9 @@
     }
   ],
   "manifest_entries_sha256": "363932284a0e989613233b53eabc877ec9a9a17579a7de337dcffc9a88a07c48",
-  "implementation_commit_note": "Commit identity is supplied by the delivery; this manifest verifies source bytes without a circular self-referential commit hash."
+  "implementation_commit_note": "Commit identity is supplied by the delivery; this manifest verifies source bytes without a circular self-referential commit hash.",
+  "committed_tree_verification": {
+    "matching_build_and_test_files": 1503,
+    "mismatches": 0
+  }
 }
