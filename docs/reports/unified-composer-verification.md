@@ -45,7 +45,7 @@ Hosted CI, Docker Compose deployment/restart, paid-provider behavior, physical m
 
 ## Consistency review follow-up (2026-10-11)
 
-Review of `develop/branch-1` after `2c3af5f8` found and corrected three behavior gaps:
+Review of `develop/branch-1` after `2c3af5f8` found and corrected three behavior gaps in `c9cb061a`:
 
 - Internal paste deduplicated its payload but not existing editor chips, leaving two visible Skill chips for one canonical activation. The Chromium regression reproduced two chips before the fix. Paste now deduplicates against retained chips after removing the replacement selection; selecting and replacing the same Skill remains supported.
 - Reconnect reconciliation compared only fallback text and could erase a newer draft with the same reference locator but a different selected revision. It now also compares label-free structured parts before clearing the restored draft. A lost-ACK regression verifies the newer revision survives without retransmission.
@@ -61,3 +61,7 @@ Executed locally with Node 22 and disposable Synthetic SQLite roots:
 - Frontend build passed, retaining Vite's existing large-chunk advisory. `git diff --check` passed.
 
 This follow-up verifies the affected local behavior; the hosted/manual verification boundaries above still apply.
+
+The follow-up fetched and merged the new `origin/main` commit `6ef26d82` as `d10310c9`. The sole conflict was in `docs/16-testing-strategy.md`; both branches' acceptance guidance was retained, including main's diagnostic budget and SQLite writer checks. Infrastructure dependency registration retains both the composer service and the configured SQLite busy timeout. The merged frontend build and `DefinitionDraftEvaluationStoreTests` passed (10 tests, including real SQLite lock contention).
+
+Combined-branch Chromium verification (`pnpm exec playwright test --project=synthetic structured-composer.spec.ts diagnostic-details.spec.ts`): **18 passed**, including the eight-step terminal-finalization check, diagnostic copy/reload, both clipboard cases and typed queue steering. No required local follow-up check remains failing. Broader hosted/paid/manual gates and the unrelated secretary journey were not rerun in this bounded review.

@@ -521,4 +521,3 @@ Editor/browser checks cover multi-token insertion, keyboard/IME, atomic deletion
 ## Draft evaluation SQLite writer contention
 
 `DefinitionDraftEvaluationStoreTests` starts 20 workers with the same expected draft revision and requires exactly one successful atomic revision/scenario update plus 19 Conflict responses, repeated across five disposable databases. It then removes the scenario with the fresh revision. Controlled context admission verifies bounded timeout, cancellation, unchanged durable rows while queued and successful admission after stale-revision failure. A separate SQLite connection holds a real write transaction: the evaluation store must return Conflict on busy timeout, preserve both revision and scenario state, and commit a fresh request after the lock is released. These checks keep ordinary per-operation contexts and database locking; they do not share a context, suppress SQLite syntax errors, or retry failed transactions.
-
