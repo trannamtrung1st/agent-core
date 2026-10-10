@@ -1,10 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
 
-async function openEditor(page: Page, kind: 'schedule' | 'event') {
+async function openEditor(page: Page, kind: 'schedule' | 'event', withDisabledWebhook = false) {
   await page.goto('/');
   expect((await (await page.request.get('/health')).json()).profile).toBe('Synthetic');
   await expect.poll(() => page.evaluate(() => localStorage.getItem('agent-core.owner-capability'))).not.toBeNull();
   const headers = { 'X-AgentCore-Owner-Capability': (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))! };
+  let webhookId: string | undefined;
+  if (withDisabledWebhook) {
+    const event = await page.request.post('/api/v2/admin/connections/events', { headers, data: {
+      displayName: 'Retained disabled sibling', eventKey: 'disabled.sibling.' + crypto.randomUUID() } });
+    expect(event.ok()).toBe(true);
+    webhookId = (await event.json()).eventId;
+  }
   const instance = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'secretary', version: 9 } });
   expect(instance.ok()).toBe(true);
   const route = `/api/v2/admin/agent-instances/${(await instance.json()).instanceId}/automations`;
@@ -12,7 +19,8 @@ async function openEditor(page: Page, kind: 'schedule' | 'event') {
     name: 'Recover held draft', instructions: 'Review the current signal quietly.',
     triggers: [{ triggerId: crypto.randomUUID(), enabled: true, revision: 1, kind,
       ...(kind === 'schedule' ? { schedule: { kind: 'daily', interval: 1, timeZone: 'UTC', localTime: '14:30' } }
-        : { source: { kind: 'builtin', key: 'run.failed' } }) }],
+        : { source: { kind: 'builtin', key: withDisabledWebhook ? 'run.completed' : 'run.failed' } }) },
+      ...(webhookId ? [{ triggerId: crypto.randomUUID(), enabled: false, revision: 1, kind: 'event', source: { kind: 'webhook', eventId: webhookId } }] : [])],
     executionTarget: { kind: 'backgroundSession' }, completionDelivery: { kind: 'none' } } });
   expect(response.ok()).toBe(true);
   const saved = await response.json();
@@ -33,6 +41,22 @@ test('Schedule remains saveable with an unavailable Webhook catalog', async ({ p
   await drawer.getByRole('button', { name: 'Save automation', exact: true }).click();
   const saved = await (await write).json();
   expect(saved.enabled).toBe(true); expect(saved.triggers[0].kind).toBe('schedule');
+  await expect(drawer).toBeHidden();
+});
+
+test('an unavailable disabled Webhook sibling does not block the healthy Built-in subscription', async ({ page }) => {
+  await page.route('**/api/v2/admin/connections/events/catalog?kind=webhook', route => route.fulfill({ status: 503,
+    contentType: 'application/problem+json', body: JSON.stringify({ title: 'Webhook catalog unavailable' }) }));
+  const { saved, drawer } = await openEditor(page, 'event', true);
+  await expect(page.getByRole('button', { name: 'Reload Events and models', exact: true })).toBeVisible();
+  await drawer.getByLabel('Automation instructions').fill('Keep the healthy subscription enabled and retain the disabled sibling.');
+  await expect(drawer.getByRole('button', { name: 'Save automation', exact: true })).toBeEnabled();
+  const write = page.waitForResponse(r => r.request().method() === 'PUT' && r.url().includes('/automations/'));
+  await drawer.getByRole('button', { name: 'Save automation', exact: true }).click();
+  const result = await (await write).json();
+  expect(result.enabled).toBe(true);
+  expect(result.triggers.map((t: { triggerId: string; enabled: boolean; source: unknown }) => ({ triggerId: t.triggerId, enabled: t.enabled, source: t.source })))
+    .toEqual(saved.triggers.map((t: { triggerId: string; enabled: boolean; source: unknown }) => ({ triggerId: t.triggerId, enabled: t.enabled, source: t.source })));
   await expect(drawer).toBeHidden();
 });
 

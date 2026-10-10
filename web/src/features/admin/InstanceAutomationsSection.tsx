@@ -189,7 +189,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const eligible = isSchedule ? schedulesAllowed && kindAllowed && (timing.kind === "oneShot" || policy?.allowIndefiniteRecurrence !== false || hasEnd)
     : draft.triggers.some(t => t.enabled && t.source && (t.source.kind === "builtin" ? coreAllowed : eventsAllowed && sources.some(e => e.eventId === (t.source?.kind === "webhook" ? t.source.eventId : "") && e.status === "Active")));
   const authorityReady = !!review && !error && !loading;
-  const sourcesReady = isSchedule || draft.triggers.every(t => t.source && catalogReady[t.source.kind]
+  const sourcesReady = isSchedule || draft.triggers.every(t => !t.enabled || t.source && catalogReady[t.source.kind]
     && catalog.some(e => eventSourceKey(e.source) === eventSourceKey(t.source!)));
   const canEnable = eligible && authorityReady && sourcesReady;
   const canSave = valid && (!draft.enabled || canEnable);

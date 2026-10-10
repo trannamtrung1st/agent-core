@@ -21,6 +21,32 @@ beforeEach(() => {
   request.mockResolvedValue({ items: [], policy: allowedPolicy });
 });
 describe("Owner schedule authoring", () => {
+  it.each([false, true])("validates an unavailable Webhook sibling only when enabled=%s", async webhookEnabled => {
+    vi.mocked(listEventCatalog).mockImplementation(async kind => {
+      if (kind === "webhook") throw new Error("Webhook unavailable");
+      return [{ source: { kind: "builtin", key: "run.completed" }, key: "run.completed", name: "Run completed",
+        description: "Completed Run", state: "Active", schemaVersion: 1, example: {}, fieldSchema: {} }];
+    });
+    const triggers: Automation["triggers"] = [
+      { triggerId: "healthy", revision: 1, enabled: true, kind: "event", source: { kind: "builtin", key: "run.completed" } },
+      { triggerId: "unavailable", revision: 2, enabled: webhookEnabled, kind: "event", source: { kind: "webhook", eventId: "retained-webhook" } },
+    ];
+    request.mockResolvedValue({ items: [{ ...row, triggers }], policy: { ...allowedPolicy, allowCoreEvents: true } });
+    render(view());
+    fireEvent.click(await screen.findByRole("button", { name: `View automation: ${row.name}` }));
+    await screen.findByRole("button", { name: "Reload Events and models" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit automation" }));
+    const save = screen.getByRole("button", { name: "Save automation" });
+    if (webhookEnabled) {
+      expect(save).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Save as disabled" })).toBeEnabled();
+    } else {
+      expect(save).toBeEnabled();
+      fireEvent.click(save);
+      await waitFor(() => expect(request).toHaveBeenCalledWith("instance", "automations/scheduled", "PUT",
+        expect.objectContaining({ enabled: true, triggers })));
+    }
+  });
   it("saves an enabled Schedule despite an unrelated Webhook catalog failure", async () => {
     vi.mocked(listEventCatalog).mockImplementation(async kind => { if (kind === "webhook") throw new Error("Webhook unavailable"); return []; });
     request.mockResolvedValue({ items: [row], policy: allowedPolicy });
