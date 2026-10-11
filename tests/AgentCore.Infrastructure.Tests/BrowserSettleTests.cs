@@ -3,23 +3,69 @@ using System.Diagnostics;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Infrastructure.Browser;
+using Microsoft.Playwright;
+using Xunit.Abstractions;
 
 namespace AgentCore.Infrastructure.Tests;
 
 [Collection(BrowserChromiumCollection.Name)]
-public sealed class BrowserSettleTests(BrowserHostFixture fixture) : IClassFixture<BrowserHostFixture>
+public sealed class BrowserSettleTests(BrowserHostFixture fixture, ITestOutputHelper output) : IClassFixture<BrowserHostFixture>
 {
-    [Fact]
-    public async Task Navigation_includes_content_that_arrives_after_the_document_loads()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Navigation_includes_content_that_arrives_after_the_document_loads(bool holdUntilAutomaticDeadline)
     {
         var origin = fixture.Session.Fixture.Origin!;
         var id = Guid.NewGuid();
-        var observed = await fixture.Session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/settle-delayed")));
+        Assert.Null((await fixture.Session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/")))).ErrorCode);
+        var page = fixture.Session.ContextFor(id)!.Pages[0];
+        var loaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnLoaded(object? sender, IPage _) => loaded.TrySetResult();
+        page.DOMContentLoaded += OnLoaded;
+        // Deliver after document load, without spending the automatic budget on the fixture's
+        // 500 ms server timer. The second case deliberately keeps the request in flight instead.
+        await page.RouteAsync("**/settle-hold?*", async route =>
+        {
+            await loaded.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            if (holdUntilAutomaticDeadline) await release.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await route.FulfillAsync(new() { Body = "AC-SETTLE-ROW", ContentType = "text/plain" });
+        });
+        try
+        {
+            var observed = await fixture.Session.ExecuteAsync(BrowserTestRequests.Navigate(id, new Uri(origin + "/settle-delayed")));
 
-        Assert.Null(observed.ErrorCode);
-        Assert.Contains("Orders", observed.Observation!.Content!, StringComparison.Ordinal);
-        Assert.Contains("AC-SETTLE-ROW", observed.Observation.Content!, StringComparison.Ordinal);
-        Assert.Equal(true, observed.Observation.Settled);
+            var state = await page.EvaluateAsync<long[]>("() => [window.__acSettle.generation, window.__acSettle.inflight]");
+            output.WriteLine("automatic settled={0}; domGeneration={1}; inflight={2}", observed.Observation?.Settled, state[0], state[1]);
+            Assert.Null(observed.ErrorCode);
+            Assert.Contains("Orders", observed.Observation!.Content!, StringComparison.Ordinal);
+            Assert.Equal(!holdUntilAutomaticDeadline, observed.Observation.Settled);
+            if (holdUntilAutomaticDeadline)
+            {
+                Assert.True(state[1] > 0);
+                Assert.DoesNotContain("AC-SETTLE-ROW", observed.Observation.Content!, StringComparison.Ordinal);
+                release.TrySetResult();
+                // Wait for the observable fixture result, rather than guessing its arrival time.
+                await page.GetByRole(AriaRole.Cell, new() { Name = "AC-SETTLE-ROW" }).WaitForAsync();
+                var recovered = await fixture.Session.ExecuteAsync(BrowserTestRequests.Inspect(
+                    id, new BrowserWaitFor("stable", TimeoutMs: BrowserToolLimits.DefaultObserveTimeoutMs)));
+                Assert.Null(recovered.ErrorCode);
+                Assert.True(recovered.Observation!.Settled);
+                Assert.Contains("AC-SETTLE-ROW", recovered.Observation.Content!, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.Equal(0, state[1]);
+                Assert.Contains("AC-SETTLE-ROW", observed.Observation.Content!, StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            release.TrySetResult();
+            page.DOMContentLoaded -= OnLoaded;
+            await fixture.Session.ExecuteAsync(new(id, new BrowserClose()));
+        }
     }
 
     [Fact]
