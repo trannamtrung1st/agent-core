@@ -79,7 +79,8 @@ public sealed class AgentStepUserTurnAdmissionTests
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 16, 0, 0, 0, TimeSpan.Zero));
         var output = new CapturingSessionOutput();
         var turns = new RuntimeAgentRunStore();
-        var model = new SemanticResponseLanguageModel(new ChatNoChatChatLanguageModel());
+        var scriptedModel = new ChatNoChatChatLanguageModel();
+        var model = new SemanticResponseLanguageModel(scriptedModel);
         var definition = SampleDefinitions.Examiner with
         {
             InitiativePolicy = new InitiativePolicy(
@@ -109,10 +110,17 @@ public sealed class AgentStepUserTurnAdmissionTests
         Assert.NotNull(helloExecution);
         Assert.Equal(AgentRunStatus.Completed, helloExecution!.Status);
 
+        // Advancing fake time can release the real timer continuation after the mailbox
+        // appears drained. Submit the same generation so either delivery wins once,
+        // then wait for the no-chat response's actual terminal output.
+        var idleGeneration = runtime.TimerGeneration;
         time.Advance(TimeSpan.FromSeconds(91));
-        await runtime.WaitUntilMailboxDrainedAsync();
-        await runtime.SubmitTimerElapsedAsync("idle", runtime.TimerGeneration);
+        await runtime.SubmitTimerElapsedAsync("idle", idleGeneration);
+        await output.WaitForAsync(item => item.ResponseId != helloExecution.ResponseId
+            && item.Payload is ResponseCompletedOutput { Failed: false });
         await runtime.WaitUntilIdleAsync();
+        Assert.Equal(2, scriptedModel.CallCount);
+        Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant);
 
         Assert.DoesNotContain(runtime.Snapshot.Entries, entry => entry.Status == EntryStatus.Interrupted);
         Assert.DoesNotContain(
@@ -231,6 +239,8 @@ public sealed class AgentStepUserTurnAdmissionTests
     private sealed class ChatNoChatChatLanguageModel : ILanguageModel
     {
         private int _calls;
+
+        public int CallCount => Volatile.Read(ref _calls);
 
         public ModelCapabilities Capabilities { get; } = new(true, true, StructuredOutput: true);
 
