@@ -79,7 +79,7 @@ test("deletes the active chat in one confirmation without revision conflict", as
 
 test("session catalog orders by latest update, renames, and deletes ended sessions", async ({ page }) => {
   const stamp = Date.now().toString(36);
-  const firstTitle = `First session ${stamp}`;
+  const firstTitle = `First session ${stamp} with a long title that needs an ellipsis tooltip`;
   const secondTitle = `Second session ${stamp}`;
   const revisedTitle = `First session revised ${stamp}`;
 
@@ -105,6 +105,8 @@ test("session catalog orders by latest update, renames, and deletes ended sessio
   await expect(owned.nth(0)).toContainText(secondTitle);
   await expect(owned.nth(1)).toContainText(firstTitle);
 
+  await owned.nth(1).locator(".session-row-name").hover();
+  await expect(page.getByRole("tooltip").filter({ hasText: firstTitle })).toBeVisible();
   await page.getByRole("button", { name: secondTitle, exact: true }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect(owned.nth(0)).toContainText(secondTitle);

@@ -402,7 +402,10 @@ export function SessionRail({
                     >
                       <Flex vertical align="flex-start" gap={0} className="session-row-copy">
                         <Flex align="baseline" gap={8} className="session-row-title">
-                          <Typography.Text ellipsis={{ tooltip: item.title }} className="session-row-name">
+                          <Typography.Text
+                            ellipsis={{ tooltip: { title: item.title, styles: { root: { pointerEvents: "none" } } } }}
+                            className="session-row-name"
+                          >
                             {item.title}
                           </Typography.Text>
                           {updatedLabel ? (
