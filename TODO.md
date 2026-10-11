@@ -1456,3 +1456,7 @@ This closure changes documentation only. Original completion-inbox/Automation fr
 - [ ] Observe deployed workload exhaustion/backlog trends and establish alert baselines. Synthetic evidence is not a production rate measurement.
 
 This is a bounded follow-up to the stabilization, not a feature or architecture expansion. Current local evidence is recorded in [verification](docs/reports/core-events-automation-presets-verification.md); commit/push does not wait for CI, as requested. Historical acceptance remains unchanged.
+
+## Agent self-management and configuration assistance (2026-10-11)
+
+Implementation extends the existing Instance owners and Harness policy record with Definition defaults, sparse management overrides, gated Built-in procedures, typed Settings/Resources/Connections tools, exact proposals, immediate freeze and one Admin authority panel. Default suites remain credential-free. Acceptance remains pending the bounded real tool-capable model UAT and full safe automatic continuation journey; the implemented continuation fallback requires a deliberate new owner turn. See [verification and A01–A20 status](docs/reports/agent-self-management-verification.md). Prior frozen milestones retain their original evidence.

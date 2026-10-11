@@ -30,6 +30,7 @@ public static class AdminEventSummaryPolicy
             "capabilities",
             "memoryPolicy",
             "triggerPolicy",
+            "selfManagement",
             "skills",
             "resources"
         });
@@ -209,6 +210,14 @@ public static class AdminEventSummaryPolicy
                     throw AgentCoreErrors.Validation("Resource history identity is invalid.");
                 return;
             }
+            if (append.Operation == AdminEventOperationKind.CredentialBindingChanged)
+            {
+                foreach (var property in document.RootElement.EnumerateObject())
+                    if (property.Name is not ("operation" or "bindingId" or "credentialId")) throw AgentCoreErrors.Validation("Unsupported binding history metadata.");
+                RequireString(document.RootElement, "operation");
+                RequireString(document.RootElement, "bindingId");
+                return;
+            }
             if (append.Operation == AdminEventOperationKind.InstanceSettingsChanged)
             {
                 foreach (var property in document.RootElement.EnumerateObject())
@@ -259,9 +268,12 @@ public static class AdminEventSummaryPolicy
             }
             if (append.Operation is AdminEventOperationKind.HarnessPolicyChanged or AdminEventOperationKind.HarnessPreparationChanged)
             {
-                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "draftId", "operation", "outcome", "policyRevision", "draftRevision" };
+                var allowed = new HashSet<string>(StringComparer.Ordinal) { "instanceId", "draftId", "operation", "outcome", "policyRevision", "draftRevision", "changedFields" };
                 foreach (var property in document.RootElement.EnumerateObject())
                     if (!allowed.Contains(property.Name)) throw AgentCoreErrors.Validation("Unsupported harness history metadata.");
+                if (document.RootElement.TryGetProperty("changedFields", out var changed) && (changed.ValueKind != JsonValueKind.Array || changed.GetArrayLength() > 6
+                    || changed.EnumerateArray().Any(f => f.ValueKind != JsonValueKind.String || f.GetString() is not ("mode" or "scopes" or "managedAutoApply" or "configurationAssistance" or "harnessAuthoring" or "frozen"))))
+                    throw AgentCoreErrors.Validation("Invalid management policy history fields.");
                 return;
             }
 

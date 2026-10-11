@@ -8,15 +8,16 @@ namespace AgentCore.Application.Tools;
 
 public static class InstanceSkillTools
 {
-    public static bool IsManagement(string name) => name is "skills.list" or "skills.inspect" or "skills.create" or "skills.update" or "skills.set_enabled" or "skills.delete" or "skills.customize";
+    public static bool IsManagement(string name) => name is "skills.list" or "skills.inspect" or "skills.create" or "skills.update" or "skills.set_enabled" or "skills.delete" or "skills.customize" or "skills.reset_enabled";
     public static IEnumerable<ToolDescriptor> Descriptors()
     {
-        foreach (var op in new[] { "list", "inspect", "create", "update", "set_enabled", "delete", "customize" })
+        foreach (var op in new[] { "list", "inspect", "create", "update", "set_enabled", "delete", "customize", "reset_enabled" })
         {
             var properties = new JsonObject(); var required = new JsonArray();
             void Add(string name, JsonObject field) { properties[name] = field; required.Add(name); }
             if (op is not ("list" or "create")) Add("key", new() { ["type"] = "string", ["maxLength"] = 75 });
-            if (op is "update" or "set_enabled" or "delete" or "customize") Add("expectedRevision", new() { ["type"] = "integer", ["minimum"] = 1 });
+            if (op is "update" or "set_enabled" or "delete" or "customize" or "reset_enabled") Add("expectedRevision", new() { ["type"] = "integer", ["minimum"] = 1 });
+            if (op is not ("list" or "inspect")) Add("expectedInstanceRevision", new() { ["type"] = "integer", ["minimum"] = 1 });
             if (op == "create") properties["id"] = new JsonObject { ["type"] = "string", ["maxLength"] = 64, ["description"] = "Optional ID unique within this instance. Empty generates from name." };
             if (op is "create" or "update")
             {
@@ -28,7 +29,7 @@ public static class InstanceSkillTools
             if (op is "create" or "update" or "set_enabled") Add("enabled", new() { ["type"] = "boolean" });
             var schema = new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["properties"] = properties, ["required"] = required };
             yield return new(new("skills." + op,
-                $"{op} Skills of the current trusted Agent Instance. Definition content is read-only. Customize returns instanceSkill (the independent copy) and definitionSkill (the disabled source key, enabled state and revision). Writes apply to future executions; use current revisions from inspect. Required capabilities never grant authority.", schema.ToJsonString()),
+                $"{op} Skills of the current trusted Agent Instance. Definition content is read-only. Customize returns instanceSkill (the independent copy) and definitionSkill (the disabled source key, enabled state and revision). Writes apply to future executions; use current item and Instance revisions from inspect. Required capabilities never grant authority.", schema.ToJsonString()),
                 op is "list" or "inspect" ? ToolEffect.ReadOnly : ToolEffect.Write, ToolOfferRule.RoleAllowlist,
                 ToolResourceScope.Owner, op is "list" or "inspect" ? ToolReplaySafety.ReplaySafe : ToolReplaySafety.NonReplayable);
         }
@@ -57,14 +58,14 @@ public sealed partial class SessionToolExecutor
                 if (!args.TryGetProperty(r.GetString()!, out _)) throw AgentCoreErrors.Validation($"{r.GetString()} is required.");
             var op = call.Name[7..];
             object result;
-            if (op == "list") result = (await instanceSkills.ListAsync(id, definition, ct)).Select(s => new { s.Key, s.Origin, s.Name, s.Description, s.Projection, s.Enabled, s.Revision, s.RequiredCapabilities, s.MissingCapabilities, s.SourceDefinitionId, s.SourceDefinitionVersion, s.SourceDefinitionSkillId }).ToArray();
+            if (op == "list") result = new { instanceRevision = (await _agentInstances!.FindAsync(id, ct))!.Revision, skills = (await instanceSkills.ListAsync(id, definition, ct)).Select(s => new { s.InstanceRevision, s.Key, s.Origin, s.Name, s.Description, s.Projection, s.Enabled, s.Revision, s.RequiredCapabilities, s.MissingCapabilities, s.SourceDefinitionId, s.SourceDefinitionVersion, s.SourceDefinitionSkillId }).ToArray() };
             else if (op == "inspect") result = await instanceSkills.InspectAsync(id, args.GetProperty("key").GetString()!, definition, ct);
             else if (op == "customize") result = await instanceSkills.CustomizeAsync(id, args.GetProperty("key").GetString()!,
-                args.GetProperty("expectedRevision").GetInt64(), SkillAuthor.Agent, definition, ct);
+                args.GetProperty("expectedRevision").GetInt64(), SkillAuthor.Agent, definition, ct, args.GetProperty("expectedInstanceRevision").GetInt64());
             else result = await instanceSkills.WriteAsync(id, op, args.TryGetProperty("key", out var key) ? key.GetString() : null,
                 args.TryGetProperty("expectedRevision", out var rev) ? rev.GetInt64() : null,
                 op is "create" or "update" ? InstanceSkillTools.ReadInput(args) : null,
-                args.TryGetProperty("enabled", out var enabled) ? enabled.GetBoolean() : null, SkillAuthor.Agent, definition, ct);
+                args.TryGetProperty("enabled", out var enabled) ? enabled.GetBoolean() : null, SkillAuthor.Agent, definition, ct, args.GetProperty("expectedInstanceRevision").GetInt64());
             return FitResult(budget, JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } }));
         }
         catch (AgentCoreException e) { return TextResult(Error(e.Code, e.Message)); }

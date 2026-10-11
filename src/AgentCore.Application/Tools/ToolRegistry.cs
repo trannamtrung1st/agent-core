@@ -260,7 +260,7 @@ public static class ToolRegistry
                 ToolEffect.Write)
         };
 
-    private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().Concat(InstanceSkillTools.Descriptors()).ToDictionary(d => d.Name, StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<string, ToolDescriptor> Contextual = HarnessChatTools.Descriptors().Concat(InstanceSkillTools.Descriptors()).Concat(ConfigurationTools.Descriptors()).ToDictionary(d => d.Name, StringComparer.Ordinal);
     public static IEnumerable<ToolDescriptor> All => Registered.Values.Concat(Contextual.Values).Concat(BrowserToolCatalog.Tools.Values.Select(t => t.Descriptor));
 
     public static IEnumerable<ToolDescriptor> DefinitionAuthorizable => All.Where(d => d.DefinitionAuthorizable);
@@ -280,7 +280,7 @@ public static class ToolRegistry
             ? descriptor
             : throw new KeyNotFoundException($"Unknown tool '{toolName}'.");
 
-    public static IEnumerable<string> AllKnownNames() => Registered.Keys.Concat(BrowserToolCatalog.Tools.Keys);
+    public static IEnumerable<string> AllKnownNames() => Registered.Keys.Concat(Contextual.Values.Where(d => d.DefinitionAuthorizable).Select(d => d.Name)).Concat(BrowserToolCatalog.Tools.Keys);
 
     private static ToolDescriptor Descriptor(
         string name,

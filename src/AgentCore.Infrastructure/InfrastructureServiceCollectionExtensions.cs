@@ -419,7 +419,8 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AdminAutomationAuthoringService>(),
             provider.GetRequiredService<AgentInstanceSkillService>(),
             provider.GetRequiredService<ICoreEventStore>(),
-            provider.GetRequiredService<InheritedDefinitionResourceCatalog>()));
+            provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),
+            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

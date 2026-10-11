@@ -1,5 +1,8 @@
 namespace AgentCore.Contracts.Http;
 
+public sealed record SelfManagementPolicyRequest(long ExpectedRevision, string? Mode = null, IReadOnlyList<string>? Scopes = null,
+    IReadOnlyList<string>? ManagedAutoApply = null, bool? ConfigurationAssistance = null, bool? HarnessAuthoring = null, bool? Frozen = null);
+
 public sealed record HarnessPolicyRequest(long ExpectedRevision, string Mode, IReadOnlyList<string> Scopes,
     IReadOnlyList<string> Sources, IReadOnlyList<string> EligibleTools, bool Frozen = false);
 public sealed record HarnessStartRequest(long ExpectedRevision, string Purpose);

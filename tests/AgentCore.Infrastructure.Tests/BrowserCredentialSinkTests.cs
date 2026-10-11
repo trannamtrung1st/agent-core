@@ -73,7 +73,7 @@ public sealed class BrowserCredentialSinkTests(BrowserHostFixture fixture) : ICl
             Assert.Equal("target_missing", stale.ErrorCode);
             Assert.False(resolvedStale);
             // Unbind denies future protected use without logging out the browser.
-            await service.UnbindAsync(owner, binding.BindingId, 1, 1); Assert.Empty(await service.SafeMetadataAsync(owner));
+            await service.UnbindAsync(owner, binding.BindingId, 1, 2); Assert.Empty(await service.SafeMetadataAsync(owner));
             Assert.DoesNotContain(password, await Execute(ToolCatalog.BrowserSnapshot, "{}"));
             var listed = await executor.ExecuteAsync(definition, session, new("list", ToolCatalog.CredentialsList, "{}"), ToolLimits.MaxOutputBytes, admission: admission);
             Assert.Contains("\"items\":[]", listed.Text); Assert.DoesNotContain(password, listed.Text);

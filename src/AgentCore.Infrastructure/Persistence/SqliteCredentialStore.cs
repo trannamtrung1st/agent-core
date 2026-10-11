@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
 using Microsoft.EntityFrameworkCore;
@@ -40,29 +41,34 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
         if (instanceId is Guid id) query = query.Where(b => b.AgentInstanceId == id.ToString("D"));
         return (await query.OrderBy(b => b.Reference).ToArrayAsync(ct)).Select(b => new AgentCredentialBinding(Guid.Parse(b.BindingId), Guid.Parse(b.AgentInstanceId), Guid.Parse(b.CredentialId), b.Reference, b.Revision, DateTimeOffset.FromUnixTimeMilliseconds(b.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(b.UpdatedAtUtc))).ToArray();
     }
-    public async ValueTask BindAsync(AgentCredentialBinding b, long expectedInstanceRevision, CancellationToken ct = default)
+    public async ValueTask BindAsync(AgentCredentialBinding b, long expectedInstanceRevision, CancellationToken ct = default, AdminEventAppend? history = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct); await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await RequireActive(db, b.AgentInstanceId, expectedInstanceRevision, ct);
         if (!await db.Credentials.AnyAsync(c => c.CredentialId == b.CredentialId.ToString("D"), ct)) throw AgentCoreErrors.NotFound("Credential was not found.");
         db.AgentCredentialBindings.Add(new() { BindingId = b.BindingId.ToString("D"), AgentInstanceId = b.AgentInstanceId.ToString("D"), CredentialId = b.CredentialId.ToString("D"), Reference = b.Reference, Revision = b.Revision, CreatedAtUtc = b.CreatedAtUtc.ToUnixTimeMilliseconds(), UpdatedAtUtc = b.UpdatedAtUtc.ToUnixTimeMilliseconds() });
+        if (history is not null) AdminEventPersistence.StageAppend(db, history, Guid.NewGuid());
         await Save(db, ct); await transaction.CommitAsync(ct);
     }
-    public async ValueTask UnbindAsync(Guid instanceId, Guid bindingId, long expectedRevision, long instanceRevision, CancellationToken ct = default)
+    public async ValueTask UnbindAsync(Guid instanceId, Guid bindingId, long expectedRevision, long instanceRevision, CancellationToken ct = default, AdminEventAppend? history = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct); await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await RequireActive(db, instanceId, instanceRevision, ct);
         var row = await db.AgentCredentialBindings.SingleOrDefaultAsync(b => b.BindingId == bindingId.ToString("D") && b.AgentInstanceId == instanceId.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Binding was not found.");
         if (row.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Binding revision is stale.");
-        db.AgentCredentialBindings.Remove(row); await Save(db, ct); await transaction.CommitAsync(ct);
+        db.AgentCredentialBindings.Remove(row);
+        if (history is not null) AdminEventPersistence.StageAppend(db, history, Guid.NewGuid());
+        await Save(db, ct); await transaction.CommitAsync(ct);
     }
     public async ValueTask DeleteBindingsAsync(Guid instanceId, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct); await db.AgentCredentialBindings.Where(b => b.AgentInstanceId == instanceId.ToString("D")).ExecuteDeleteAsync(ct); }
     private static async Task RequireActive(AgentCoreDbContext db, Guid id, long revision, CancellationToken ct)
     {
-        var row = await db.AgentInstances.AsNoTracking().SingleOrDefaultAsync(a => a.InstanceId == id.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
+        var row = await db.AgentInstances.SingleOrDefaultAsync(a => a.InstanceId == id.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
         if (row.Lifecycle != "Active") throw AgentCoreErrors.Forbidden("Archived agent credentials are read-only.");
         if (row.Revision != revision) throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
+        row.Revision++;
+        row.UpdatedAtUtc = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
     private static async Task Save(AgentCoreDbContext db, CancellationToken ct)
     { try { await db.SaveChangesAsync(ct); } catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Credential or binding changed concurrently or is already bound."); } }

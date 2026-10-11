@@ -46,6 +46,8 @@ export function parseAppRoute(pathname: string): AppRoute {
 
   const instanceMatch = ADMIN_INSTANCE_PATTERN.exec(pathname);
   if (instanceMatch) {
+    if (instanceMatch[2]?.toLowerCase() === "automation" && instanceMatch[3]?.toLowerCase() === "harness")
+      return { area: "admin", view: "instance", instanceId: instanceMatch[1].toLowerCase(), tab: "identity", section: "settings" };
     const legacyRuns = instanceMatch[2]?.toLowerCase() === "runs";
     const tab = legacyRuns ? "activity" : instanceMatch[2]?.toLowerCase();
     const section = legacyRuns ? "runs" : instanceMatch[3]?.toLowerCase();

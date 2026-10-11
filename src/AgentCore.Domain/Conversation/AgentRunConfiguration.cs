@@ -11,7 +11,7 @@ public sealed class AgentRunConfiguration
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public AgentRunConfiguration(AgentDefinition definition, long instanceRevision, long personaRevision,
-        IReadOnlyList<EffectiveAgentResource> resources)
+        IReadOnlyList<EffectiveAgentResource> resources, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? credentialBindings = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(resources);
@@ -21,19 +21,22 @@ public sealed class AgentRunConfiguration
                 || r.ContentSha256.Length != 64 || r.ContentSha256.Any(c => !char.IsAsciiHexDigit(c)) || r.ByteLength <= 0))
             throw new ArgumentException("Resource manifest identity/content is invalid.");
         Resources = Array.AsReadOnly(resources.ToArray());
+        CredentialBindings = Array.AsReadOnly((credentialBindings ?? []).ToArray());
         InstanceRevision = instanceRevision; PersonaRevision = personaRevision;
         Definition = Freeze(definition) with { ExecutionResources = Resources };
         ConfigurationHash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
-            new { Definition, InstanceRevision, PersonaRevision, Resources }, Json))).ToLowerInvariant();
+            new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings }, Json))).ToLowerInvariant();
     }
     public AgentDefinition Definition { get; }
     public long InstanceRevision { get; }
     public long PersonaRevision { get; }
     public IReadOnlyList<EffectiveAgentResource> Resources { get; }
     public string ConfigurationHash { get; }
+    public IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding> CredentialBindings { get; }
 
     private static IReadOnlyList<T> Copy<T>(IReadOnlyList<T> values) => Array.AsReadOnly(values.ToArray());
     private static AgentDefinition Freeze(AgentDefinition d) => d with {
+        SelfManagement = d.SelfManagement is { } management ? management with { Scopes = Copy(management.Scopes), Sources = Copy(management.Sources), EligibleTools = Copy(management.EligibleTools), ManagedAutoApply = Copy(management.ManagedAutoApply ?? []) } : null,
         Goals = Copy(d.Goals), Metadata = new ReadOnlyDictionary<string, string>(d.Metadata.ToDictionary(p => p.Key, p => p.Value)),
         InitiativePolicy = d.InitiativePolicy with { Triggers = Copy(d.InitiativePolicy.Triggers) },
         TriggerPolicy = d.TriggerPolicy is { } trigger ? trigger with { AllowedSourceKinds = Copy(trigger.AllowedSourceKinds) } : null,

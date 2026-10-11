@@ -1,3 +1,4 @@
+import { DefinitionSelfManagement } from "./DefinitionSelfManagement";
 import { AutomationTriggerPermissions } from "./AutomationTriggerPermissions";
 import { orderedReasoningEfforts, retainedReasoningEffort } from "../models/reasoningEfforts";
 import { DefinitionExecutionBudgets } from "./ExecutionBudgetsSection";
@@ -644,6 +645,9 @@ function DefinitionCandidateForm({
                   />
                 </section>
               )
+            },
+            {
+              key: "selfManagement", label: "Agent self-management defaults", children: <DefinitionSelfManagement candidate={candidate} disabled={busy || readOnly} onChange={onCandidateChange} />
             },
             {
               key: "providerPreferences", label: "Provider preferences", children: (

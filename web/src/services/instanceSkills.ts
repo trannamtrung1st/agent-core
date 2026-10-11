@@ -1,7 +1,7 @@
 import { ownerFetch } from './api';
 import { adminProblemMessage } from './adminApi';
 export type SkillInput = { id?: string; name: string; description: string; procedure: string; projection: 'Always' | 'OnDemand'; enabled: boolean; requiredCapabilities: string[] };
-export type InstanceSkill = SkillInput & { key: string; origin: 'Definition' | 'Instance'; revision: number; enabledOverride?: boolean | null; definitionVersion: number | null; sourceDefinitionId: string | null; sourceDefinitionVersion: number | null; sourceDefinitionSkillId: string | null; missingCapabilities: string[] };
+export type InstanceSkill = SkillInput & { key: string; origin: 'Definition' | 'Instance' | 'BuiltIn'; revision: number; enabledOverride?: boolean | null; enabledChoice?: boolean | null; definitionVersion: number | null; sourceDefinitionId: string | null; sourceDefinitionVersion: number | null; sourceDefinitionSkillId: string | null; missingCapabilities: string[] };
 const path = (id: string, key?: string) => `/api/v2/admin/agent-instances/${encodeURIComponent(id)}/skills${key ? '/' + encodeURIComponent(key) : ''}`;
 async function request<T>(url: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await ownerFetch(url, { method, ...(body !== undefined ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });

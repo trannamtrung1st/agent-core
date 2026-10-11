@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HarnessManagementSection } from "./HarnessManagementSection";
@@ -23,9 +23,9 @@ describe("Harness governance", () => {
   beforeEach(() => { vi.mocked(getHarnessReview).mockReset(); vi.mocked(updateHarness).mockReset(); });
   it("keeps Manual defaults and explains conversational teaching without preparation controls", async () => {
     vi.mocked(getHarnessReview).mockResolvedValue(base); mount();
-    expect(await screen.findByText("Manual")).toBeVisible();
-    expect(screen.getByLabelText("Authoring mode")).toBeVisible();
-    expect(screen.getByRole("button", {name:"Save authoring policy"})).toBeDisabled();
+    expect(await screen.findByText(/No harness changes yet/)).toBeVisible();
+    expect(screen.queryByLabelText("Authoring mode")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name:"Save authoring policy"})).not.toBeInTheDocument();
     for (const name of ["Prepare harness", "Continue preparation", "Verify candidate", "Publish & adopt"])
       expect(screen.queryByRole("button", {name})).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Permitted sources")).not.toBeInTheDocument();
@@ -48,19 +48,11 @@ describe("Harness governance", () => {
     fireEvent.click(await screen.findByRole("button", {name:"Discard candidate"}));
     await waitFor(() => expect(updateHarness).toHaveBeenCalledWith("instance", "cancel", {expectedRevision:1}));
   });
-  it("refreshes a policy conflict without replay and keeps the error actionable", async () => {
-    vi.mocked(getHarnessReview).mockResolvedValue(candidate);vi.mocked(updateHarness).mockRejectedValue(new Error("Policy revision is stale; reload."));mount();
-    fireEvent.click(await screen.findByRole("button", {name:"Freeze self-management"}));
-    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", {name:/^Freeze self-management$/}));
-    expect(await screen.findByText("Policy revision is stale; reload.")).toBeVisible();
-    expect(screen.getByRole("button", {name:"Reload"})).toBeEnabled();
-    expect(updateHarness).toHaveBeenCalledTimes(1);expect(getHarnessReview).toHaveBeenCalledTimes(2);
-  });
+
   it("retains published evidence and the tested revision after freeze", async () => {
     vi.mocked(getHarnessReview).mockResolvedValue({...candidate, activeVersion:13,draftRevision:4,policy:{...candidate.policy,mode:"Disabled",frozen:true},
       preparation:{...candidate.preparation!,status:"Published",publishedVersion:13,publishedDraftRevision:3}}); mount();
-    expect(await screen.findByText("Frozen")).toBeVisible();
-    fireEvent.click(screen.getByText("Recent harness change & verification"));
+    fireEvent.click(await screen.findByText("Recent harness change & verification"));
     expect(await screen.findByText("Published shared Definition · version 13")).toBeVisible();
     expect(screen.queryByText("Stale · revision 3")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", {name:"Discard unfinished candidate"})).not.toBeInTheDocument();
@@ -68,21 +60,7 @@ describe("Harness governance", () => {
   it("offers a retry for a failed governance load", async () => {
     vi.mocked(getHarnessReview).mockRejectedValueOnce(new Error("Load failed")).mockResolvedValueOnce(base);mount();
     expect(await screen.findByText("Load failed")).toBeVisible();fireEvent.click(screen.getByRole("button", {name:"Reload"}));
-    expect(await screen.findByText("Manual")).toBeVisible();
+    expect(await screen.findByText(/No harness changes yet/)).toBeVisible();
   });
-  it("requires an area for an enabled policy and recovers when one is selected", async () => {
-    vi.mocked(getHarnessReview).mockResolvedValue({ ...base, policy: { ...base.policy, mode: "Managed" } });
-    vi.mocked(updateHarness).mockResolvedValue({ ...base, policy: { ...base.policy, mode: "Managed", scopes: ["KnowledgeResources"] } });
-    mount();
-    expect(await screen.findByRole("group", { name: "Areas the agent may manage" })).toHaveAccessibleDescription("Select at least one area.");
-    const save = screen.getByRole("button", { name: "Save authoring policy" });
-    expect(save).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Authoring mode" })).toHaveAccessibleDescription("Allowed knowledge may auto-save. Instructions and tools need approval.");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Knowledge & resources" }));
-    expect(save).toBeEnabled();
-    fireEvent.click(save);
-    await waitFor(() => expect(updateHarness).toHaveBeenCalledWith("instance", "policy", {
-      expectedRevision: 1, mode: "Managed", scopes: ["KnowledgeResources"], sources: [], eligibleTools: [], frozen: false
-    }));
-  });
+
 });

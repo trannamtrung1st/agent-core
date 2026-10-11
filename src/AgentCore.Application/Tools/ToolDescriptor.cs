@@ -38,7 +38,7 @@ public sealed record ToolExecutionAdmission(
     AgentCore.Domain.Conversation.AgentRunModelPin? Model = null,
     string? WorkspaceCwd = null, Guid? OwnedSessionId = null,
     IReadOnlyList<AgentCore.Domain.Definitions.EffectiveSkill>? PinnedSkillCatalog = null,
-    IReadOnlyList<string>? ActiveSkillKeys = null);
+    IReadOnlyList<string>? ActiveSkillKeys = null, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? PinnedCredentialBindings = null);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,
@@ -53,6 +53,6 @@ public sealed record ToolDescriptor(
     public IReadOnlyList<string> Tags => Category switch { "browser" => BrowserToolCatalog.TryGet(Name, out var browser) ? browser.DiscoveryTags : ["browser"], "email" => ["mail", "messages"], "automation" => ["schedule", "event", "reminder"], _ => [Category] };
     public bool DefinitionAuthorizable => OfferRule is ToolOfferRule.RoleAllowlist
         or ToolOfferRule.ConfigurationWhenRoleAllows or ToolOfferRule.SessionAttachmentsWhenRoleAllows;
-    public bool Discoverable => OfferRule is ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows;
+    public bool Discoverable => OfferRule is ToolOfferRule.RoleAllowlist or ToolOfferRule.ConfigurationWhenRoleAllows or ToolOfferRule.HarnessAuthority;
     public string DefaultProjectionClass => Name is ToolCatalog.CapabilitiesLoad or ToolCatalog.SkillsLoad ? "bootstrap" : Discoverable ? "onDemand" : "contextOnly";
 }

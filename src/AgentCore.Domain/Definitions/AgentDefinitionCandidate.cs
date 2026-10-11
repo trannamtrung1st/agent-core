@@ -24,7 +24,8 @@ public sealed record AgentDefinitionCandidate(
     TriggerPolicy? TriggerPolicy = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<SkillSpec>? Skills = null,
-    ExecutionBudgetPolicy? ExecutionBudgets = null)
+    ExecutionBudgetPolicy? ExecutionBudgets = null,
+    HarnessManagementPolicy? SelfManagement = null)
 {
     public IReadOnlyList<SkillSpec> SkillList => Skills ?? [];
 
@@ -46,7 +47,7 @@ public sealed record AgentDefinitionCandidate(
             ModelDefaults,
             MemoryPolicy,
             TriggerPolicy,
-            Skills, ExecutionBudgets);
+            Skills, ExecutionBudgets, SelfManagement: SelfManagement);
 
     public static AgentDefinitionCandidate FromDefinition(AgentDefinition definition) =>
         new(
@@ -65,5 +66,5 @@ public sealed record AgentDefinitionCandidate(
             definition.ModelDefaults,
             definition.MemoryPolicy,
             definition.TriggerPolicy,
-            definition.Skills, definition.ExecutionBudgets);
+            definition.Skills, definition.ExecutionBudgets, definition.SelfManagement);
 }

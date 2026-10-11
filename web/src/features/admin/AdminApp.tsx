@@ -55,6 +55,7 @@ import {
   type DefinitionCandidate
 } from "./definitionCandidate";
 import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definitionCandidateEditor";
+import { SelfManagementSection } from "./SelfManagementSection";
 import { HarnessManagementSection, HarnessPolicyModeScopes } from "./HarnessManagementSection";
 import { CredentialsSection, InstanceCredentialsSection } from "./CredentialsSection";
 import { EventsSection } from "./EventsSection";
@@ -2629,7 +2630,7 @@ export function InstanceDetail({
                 label: "Identity & version",
                 children: <AgentIdentitySections activeKey={identityTab} onChange={key => setActiveTab("identity", key as AdminInstanceSection)}
                   profile={<InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} />}
-                  settings={<InstanceSettingsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "identity" && identityTab === "settings"} onUpdated={onInstanceChanged} />}
+                  settings={<Flex vertical gap={token.padding}><SelfManagementSection instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} onUpdated={onInstanceChanged} /><InstanceSettingsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "identity" && identityTab === "settings"} onUpdated={onInstanceChanged} />{resolved.instanceLifecycle === "Active" && <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />}</Flex>}
                   workspace={<InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} />}
                 />
               }]),
@@ -2653,7 +2654,6 @@ export function InstanceDetail({
                   <Tabs activeKey={automationTab} onChange={key => setActiveTab("automation", key as AdminInstanceSection)} aria-label="Automation sections" items={[
                     { key: "automations", label: "Triggers", children: <InstanceAutomationsSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "automations"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
                     { key: "controls", label: "Policies & models", children: <Flex vertical gap={token.padding}>
-                      <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />
                       <InstanceMemoryAutomationPanel config={resolved} section="automation" />
                     </Flex> }
                   ]} />

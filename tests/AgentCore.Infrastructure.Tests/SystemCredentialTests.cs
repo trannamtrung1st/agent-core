@@ -57,11 +57,11 @@ public sealed class SystemCredentialTests
             Assert.Empty(await service.SafeMetadataAsync(a.InstanceId));
             await Assert.ThrowsAsync<AgentCoreException>(() => service.ResolvePasswordAsync(a.InstanceId, "primary", "http://localhost:5088").AsTask());
             c = await service.UpdateAsync(c.CredentialId, c.Revision, c.DisplayName, "Active", c.Metadata, c.AllowedOrigins);
-            await service.UnbindAsync(a.InstanceId, ga.BindingId, ga.Revision, a.Revision);
+            await service.UnbindAsync(a.InstanceId, ga.BindingId, ga.Revision, (await owners.FindAsync(a.InstanceId))!.Revision);
             await Assert.ThrowsAsync<AgentCoreException>(() => service.ResolvePasswordAsync(a.InstanceId, "primary", "http://localhost:5088").AsTask());
             Assert.Equal("replacement-secret", await service.ResolvePasswordAsync(b.InstanceId, "shared", "http://localhost:5088"));
             await Assert.ThrowsAsync<AgentCoreException>(() => service.DeleteAsync(c.CredentialId, c.Revision).AsTask());
-            await service.UnbindAsync(b.InstanceId, gb.BindingId, gb.Revision, b.Revision);
+            await service.UnbindAsync(b.InstanceId, gb.BindingId, gb.Revision, (await owners.FindAsync(b.InstanceId))!.Revision);
             await service.DeleteAsync(c.CredentialId, c.Revision); Assert.Empty(await service.ListAsync());
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
@@ -95,7 +95,7 @@ public sealed class SystemCredentialTests
             for (var i = 24; i >= 0; i--)
             {
                 var credential = await service.CreateAsync("Credential " + i, "Password", new Dictionary<string,string> { ["label"] = new string('界', 1500) }, [], "protected-fixture");
-                granted.Add(await service.BindAsync(owner.InstanceId, credential.CredentialId, $"alias-{i:D2}", owner.Revision));
+                granted.Add(await service.BindAsync(owner.InstanceId, credential.CredentialId, $"alias-{i:D2}", (await owners.FindAsync(owner.InstanceId))!.Revision));
             }
             definition = CapabilityAuthorizationResolver.ResolveCandidate(draft).ToPublished(4);
             var executor = new SessionToolExecutor(credentials: service);
@@ -122,7 +122,7 @@ public sealed class SystemCredentialTests
             Assert.Contains("Validation", await List("{\"limit\":0}", 1000));
             Assert.Contains("Validation", await List("{\"owner\":\"other\"}", 1000));
             Assert.Equal(before.AuthorizationFingerprint, CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!.AuthorizationFingerprint);
-            foreach (var binding in granted) await service.UnbindAsync(owner.InstanceId, binding.BindingId, binding.Revision, owner.Revision);
+            foreach (var binding in granted) await service.UnbindAsync(owner.InstanceId, binding.BindingId, binding.Revision, (await owners.FindAsync(owner.InstanceId))!.Revision);
             Assert.Equal(before.AuthorizationFingerprint, CapabilityAuthorizationResolver.ResolveCandidate(draft).Environment!.Capabilities!.AuthorizationFingerprint);
             Assert.Contains("\"hasMore\":false", await List("{}", 1000));
         }
@@ -168,7 +168,7 @@ public sealed class SystemCredentialTests
             await Assert.ThrowsAsync<AgentCoreException>(() => service.BindAsync(archived.InstanceId, key.CredentialId, "archived", archived.Revision).AsTask());
             var second = await service.CreateAsync("Other", "Password", null, [], "password");
             await Assert.ThrowsAsync<AgentCoreException>(() => service.BindAsync(a.InstanceId, second.CredentialId, "primary", a.Revision).AsTask());
-            await Assert.ThrowsAsync<AgentCoreException>(() => service.BindAsync(a.InstanceId, second.CredentialId, "other", a.Revision + 1).AsTask());
+            await Assert.ThrowsAsync<AgentCoreException>(() => service.BindAsync(a.InstanceId, second.CredentialId, "other", a.Revision + 2).AsTask());
             Assert.Throws<ArgumentException>(() => CredentialRules.Metadata(new Dictionary<string,string> { ["Key"] = "one", [" key "] = "two" }));
             Assert.Throws<ArgumentException>(() => CredentialRules.Metadata(new Dictionary<string,string> { ["value"] = new string('x',2049) }));
             Assert.Throws<ArgumentException>(() => CredentialRules.Origins(["https://*.example.test"]));

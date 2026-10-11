@@ -33,7 +33,7 @@ public sealed class CredentialApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Contains("primary", await client.GetStringAsync(aPath));
         Assert.DoesNotContain("shared\"", await client.GetStringAsync(aPath));
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(aPath, new AdminBindCredentialRequest(credential.CredentialId, "second", 1))).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync(bPath + $"/{grantA.BindingId}?expectedRevision=1&expectedInstanceRevision=1")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync(bPath + $"/{grantA.BindingId}?expectedRevision=1&expectedInstanceRevision=2")).StatusCode);
         var replaced = await client.PutAsJsonAsync(path + "/value", new AdminReplaceCredentialRequest(1, "replacement-private-9386"));
         Assert.True(replaced.IsSuccessStatusCode);
         AssertSafe(await replaced.Content.ReadAsStringAsync(), initial, "replacement-private-9386");
@@ -44,20 +44,20 @@ public sealed class CredentialApiTests : IClassFixture<AgentCoreApiFactory>
         var disabled = await client.PatchAsJsonAsync(path, new AdminUpdateCredentialRequest(2, credential.DisplayName, "Disabled", credential.Metadata, credential.AllowedOrigins));
         Assert.True(disabled.IsSuccessStatusCode);
         Assert.Contains("Disabled", await client.GetStringAsync(aPath));
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{a}/browser-profile/reset", new AdminResetBrowserProfileRequest(1, false))).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{a}/browser-profile/reset", new AdminResetBrowserProfileRequest(1, true))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{a}/browser-profile/reset", new AdminResetBrowserProfileRequest(2, false))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{a}/browser-profile/reset", new AdminResetBrowserProfileRequest(2, true))).StatusCode);
         Assert.Contains("primary", await client.GetStringAsync(aPath));
-        var archived = await client.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{a}/lifecycle", new AdminUpdateAgentInstanceLifecycleRequest(1, "Archived"));
+        var archived = await client.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{a}/lifecycle", new AdminUpdateAgentInstanceLifecycleRequest(2, "Archived"));
         Assert.True(archived.IsSuccessStatusCode);
         Assert.True((await client.GetAsync(aPath)).IsSuccessStatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.DeleteAsync(aPath + $"/{grantA.BindingId}?expectedRevision=1&expectedInstanceRevision=2")).StatusCode);
-        using var deletion = new HttpRequestMessage(HttpMethod.Delete, $"/api/v2/admin/agent-instances/{a}") { Content = JsonContent.Create(new { expectedRevision = 2 }) };
+        using var deletion = new HttpRequestMessage(HttpMethod.Delete, $"/api/v2/admin/agent-instances/{a}") { Content = JsonContent.Create(new { expectedRevision = 3 }) };
         Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(deletion)).StatusCode);
         credential = (await client.GetFromJsonAsync<AdminCredentialResponse>(path))!;
         Assert.Equal(1, credential.BindingCount);
         Assert.Contains("shared", await client.GetStringAsync(bPath));
         var grantB = (await bindB.Content.ReadFromJsonAsync<AdminCredentialBindingResponse>())!;
-        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(bPath + $"/{grantB.BindingId}?expectedRevision=1&expectedInstanceRevision=1")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(bPath + $"/{grantB.BindingId}?expectedRevision=1&expectedInstanceRevision=2")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync(path + "?expectedRevision=3")).StatusCode);
     }
 

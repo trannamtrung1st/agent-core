@@ -21,7 +21,9 @@ public static class ToolPolicy
         if (ToolCatalog.IsCompletionTool(toolName) && admission?.OwnedSessionId is null) return ToolPolicyDecision.Deny;
         if (toolName == ToolCatalog.BackgroundStart && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return ToolPolicyDecision.Deny;
-        if (InstanceSkillTools.IsManagement(toolName) && admission is not { AgentInstanceId: not null, SupportsTools: true })
+        if (ManagementTools.IsManagement(toolName) && (admission is not { AgentInstanceId: not null, SupportsTools: true }
+            || !ManagementTools.Allows(toolName, definition, admission.Harness)
+            || !HarnessChatTools.IsHarness(toolName) && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }))
             return ToolPolicyDecision.Deny;
 
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)
@@ -129,6 +131,11 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (InstanceSkillTools.IsManagement(toolName) && descriptor.Effect != ToolEffect.ReadOnly
+            && !(admission!.Harness!.Policy.AutoApplies(ManagementAutoApply.SkillChanges)
+                && (definition.SelfManagement?.AutoApplies(ManagementAutoApply.SkillChanges) ?? true)) && grant is null)
+            return ToolPolicyDecision.RequireApproval;
+
         if (descriptor.Effect is ToolEffect.SensitiveWrite or ToolEffect.Destructive)
         {
             if (grant is null
@@ -154,7 +161,9 @@ public static class ToolPolicy
         if (ToolCatalog.IsCompletionTool(descriptor.Name) && context?.OwnedSessionId is null) return false;
         if (descriptor.Name == ToolCatalog.BackgroundStart && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return false;
-        if (InstanceSkillTools.IsManagement(descriptor.Name) && context is not { AgentInstanceId: not null, ModelSupportsTools: true })
+        if (ManagementTools.IsManagement(descriptor.Name) && (context is not { AgentInstanceId: not null, ModelSupportsTools: true }
+            || !ManagementTools.Allows(descriptor.Name, definition, context.Harness)
+            || !HarnessChatTools.IsHarness(descriptor.Name) && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn }))
             return false;
 
         if (descriptor.OfferRule == ToolOfferRule.CredentialAuthority)

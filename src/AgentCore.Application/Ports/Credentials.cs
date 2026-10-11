@@ -1,4 +1,5 @@
 using AgentCore.Domain.Credentials;
+using AgentCore.Application.Admin;
 
 namespace AgentCore.Application.Ports;
 
@@ -12,8 +13,8 @@ public interface ICredentialStore
 public interface IAgentCredentialBindingStore
 {
     ValueTask<IReadOnlyList<AgentCredentialBinding>> ListBindingsAsync(Guid? instanceId = null, CancellationToken ct = default);
-    ValueTask BindAsync(AgentCredentialBinding binding, long expectedInstanceRevision, CancellationToken ct = default);
-    ValueTask UnbindAsync(Guid instanceId, Guid bindingId, long expectedRevision, long expectedInstanceRevision, CancellationToken ct = default);
+    ValueTask BindAsync(AgentCredentialBinding binding, long expectedInstanceRevision, CancellationToken ct = default, AdminEventAppend? history = null);
+    ValueTask UnbindAsync(Guid instanceId, Guid bindingId, long expectedRevision, long expectedInstanceRevision, CancellationToken ct = default, AdminEventAppend? history = null);
     ValueTask DeleteBindingsAsync(Guid instanceId, CancellationToken ct = default);
 }
 public interface ICredentialProtector

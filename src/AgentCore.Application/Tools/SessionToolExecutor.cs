@@ -37,7 +37,8 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Continuity.IdentityMaintenanceService? identityMaintenance = null,
     AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
     AgentCore.Application.Credentials.CredentialService? credentials = null,
-    AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null)
+    AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
+    AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -74,20 +75,24 @@ public sealed partial class SessionToolExecutor(
 
     public async ValueTask<HarnessChatContext?> HarnessContextAsync(Guid? instanceId, CancellationToken ct)
     {
-        if (instanceId is not Guid id || _agentInstances is null || harnessAuthoring is null) return null;
+        if (instanceId is not Guid id || _agentInstances is null || _agentDefinitions is null) return null;
         var instance = await _agentInstances.FindAsync(id, ct);
-        if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active
-            || instance.HarnessManagement is not { } state || state.Policy.Frozen || state.Policy.Mode == HarnessManagementMode.Disabled) return null;
-        return new(state.Policy, state.PolicyRevision, instance.ActiveVersion);
+        if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active) return null;
+        var definition = await _agentDefinitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
+        if (definition is null) return null;
+        var policy = ManagementPolicyResolver.Resolve(definition, instance);
+        if (policy.Frozen || policy.Mode == HarnessManagementMode.Disabled) return null;
+        return new(policy, instance.HarnessManagement?.PolicyRevision ?? 1, instance.ActiveVersion);
     }
 
     public async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct)
     {
         if (_agentInstances is not null && _agentDefinitions is not null && definitionResources is not null)
-            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources).ResolveAsync(session.AgentInstanceId, ct);
+            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources, credentialBindings).ResolveAsync(session.AgentInstanceId, ct);
         // Isolated fixtures can supply their immutable Definition directly. Production wires all stores.
         var owner = _agentInstances is null ? null : await _agentInstances.FindAsync(session.AgentInstanceId, ct);
-        return new(new(session.Definition, 0, session.PinnedPersonaRevision ?? 0, []), session.PinnedPersona ?? session.Definition.Identity,
+        var bindings = credentialBindings is null ? [] : await credentialBindings.ListBindingsAsync(session.AgentInstanceId, ct);
+        return new(new(session.Definition, 0, session.PinnedPersonaRevision ?? 0, [], credentialBindings: bindings), session.PinnedPersona ?? session.Definition.Identity,
             await ResolveSkillCatalogAsync(session.AgentInstanceId, session.Definition, ct), owner?.ExecutionBudgets);
     }
 
@@ -116,7 +121,10 @@ public sealed partial class SessionToolExecutor(
         ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         if (admission?.OwnedSessionId is { } ownedSession && (ownedSession == Guid.Empty || ownedSession != sessionId)) return ToolPolicyDecision.Deny;
-        if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return EvaluateExecutionPolicy(definition, call.Name, admission: admission);
+        if (ManagementTools.IsManagement(call.Name) && admission is not null)
+            admission = admission with { Harness = await HarnessContextAsync(admission.AgentInstanceId, ct) };
+        if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return ManagementDecision(definition, call.Name, args, admission, null,
+            EvaluateExecutionPolicy(definition, call.Name, admission: admission));
         if (identityMaintenance is null) { RecordMaintenanceRejection(call.Name); return ToolPolicyDecision.Deny; }
         try
         {
@@ -211,10 +219,15 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("forbidden", "Trigger changes are not authorized from occurrence evidence."));
         }
 
-        if (HarnessChatTools.IsHarness(call.Name) && admission is not null)
+        if (ManagementTools.IsManagement(call.Name) && admission is not null)
             admission = admission with { Harness = await HarnessContextAsync(admission.AgentInstanceId, cancellationToken) };
 
         var policy = ToolPolicy.EvaluateExecution(definition, call.Name, _configurationGate, approvalGrant, admission);
+        if (ConfigurationTools.IsTool(call.Name))
+        {
+            try { using var decisionArgs = JsonDocument.Parse(call.ArgumentsJson); policy = ManagementDecision(definition, call.Name, decisionArgs.RootElement, admission, approvalGrant, policy); }
+            catch (JsonException) { return TextResult(Error("invalid", "Management arguments are malformed.")); }
+        }
         if (policy == ToolPolicyDecision.Deny
             || string.IsNullOrWhiteSpace(call.Name))
         {
@@ -260,7 +273,6 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("invalid", "Tool arguments were malformed."));
         }
 
-        if (InstanceSkillTools.IsManagement(call.Name)) return await ExecuteSkillManagementAsync(definition, call, args, admission, remainingOutputBytes, cancellationToken);
 
         if (LooksLikeSessionMutation(args, call.Name == ToolCatalog.BrowserVisionMouse) || LooksLikeHostPath(args))
         {
@@ -280,6 +292,9 @@ public sealed partial class SessionToolExecutor(
                 return TextResult(Error("stale_approval", "Approval no longer matches the requested action."));
             }
         }
+
+        if (InstanceSkillTools.IsManagement(call.Name)) return await ExecuteSkillManagementAsync(definition, call, args, admission, remainingOutputBytes, cancellationToken);
+        if (ConfigurationTools.IsTool(call.Name)) return await ExecuteConfigurationAsync(definition, call, args, admission, remainingOutputBytes, cancellationToken);
 
         try
         {

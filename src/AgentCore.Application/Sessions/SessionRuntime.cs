@@ -2773,13 +2773,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
 
                 BrowserSnapshotCompaction.Compact(messages);
-                messages = PromptContextBuilder.WithActiveSkillSystem(messages, pinnedCatalog, pinnedSkills).ToList();
-                AgentContext? projectionContext = null;
-                if (ExecutionDefinition.Environment?.Capabilities is not null || RolePermissions.AllowsTool(ExecutionDefinition, ToolCatalog.BackgroundAcknowledge))
-                {
-                    projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken);
-                    authorizedTools = _tools.ProjectTools(ExecutionDefinition, projectionContext);
-                }
+                var projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken);
+                authorizedTools = _tools.ProjectTools(ExecutionDefinition, projectionContext);
+                var visibleCatalog = ManagementBuiltInSkills.Visible(pinnedCatalog, projectionContext.Harness, initial: false);
+                var visibleKeys = pinnedSkills.Where(k => visibleCatalog.Any(s => s.Key == k)).ToArray();
+                messages = PromptContextBuilder.WithActiveSkillSystem(messages, visibleCatalog, visibleKeys).ToList();
+                // Rebuild metadata from pinned procedures and current revocations, including checkpoint restoration.
+                messages.RemoveAll(m => m.Role == ModelRole.System && m.Text.StartsWith(PromptContextBuilder.SkillCatalogPrefix, StringComparison.Ordinal));
+                var skillMetadata = PromptContextBuilder.BuildSkillCatalogSystem(ManagementBuiltInSkills.Visible(pinnedCatalog, projectionContext.Harness,
+                    initial: !loadedCapabilities.Any(ManagementTools.IsManagement)));
+                if (skillMetadata.Length > 0) messages.Insert(0, new(ModelRole.System, skillMetadata));
                 var pageBlocked = browserPageOrigin is not null && blockedBrowserOrigins.Contains(browserPageOrigin);
                 var prompt = messages;
                 if (inRepair)
@@ -3330,7 +3333,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     allowedIntermediate,
                                     _snapshot.AgentInstanceId,
                                     Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
-                                    SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills), overallCts.Token);
+                                    SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings), overallCts.Token);
                             if (_runAuthority is not null && _boundAgentRun is { } authorizedRun)
                             {
                                 var currentDefinition = await _runAuthority.CurrentDefinitionAsync(authorizedRun, overallCts.Token).ConfigureAwait(false);
@@ -3433,7 +3436,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             args,
                                             overallCts.Token,
                                             ExecutionDefinition, SessionId,
-                                            new ToolExecutionAdmission(IsInitialBackgroundRun, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills))
+                                            new ToolExecutionAdmission(IsInitialBackgroundRun, trigger.Kind, AgentInstanceId: _snapshot.AgentInstanceId, SupportsTools: model.Capabilities.Tools, WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings))
                                         .ConfigureAwait(false);
                                     if (prepared.Preparation is null)
                                     {
@@ -3597,7 +3600,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 OwnerTurnText: trigger.Kind == TriggerKind.UserTurn ? trigger.Text : null,
                                                 SupportsTools: model.Capabilities.Tools,
                                                 Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Conversation.AgentRunModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null,
-                                                WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills))
+                                                WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings))
                                         .ConfigureAwait(false);
                                     if (executionResult.WorkspaceCwd is { } nextCwd)
                                     {

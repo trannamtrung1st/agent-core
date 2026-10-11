@@ -11,6 +11,26 @@ internal static class HarnessManagementEndpoints
 {
     internal static void Map(RouteGroupBuilder admin)
     {
+        var management = admin.MapGroup("/agent-instances/{instanceId:guid}/self-management");
+        management.MapGet("", async (Guid instanceId, SelfManagementService service, CancellationToken ct) =>
+        {
+            try { return ManagementResult(await service.ReadAsync(instanceId, ct)); }
+            catch (AgentCoreException e) { return ProblemResults.From(e); }
+        });
+        management.MapPut("", async (Guid instanceId, SelfManagementPolicyRequest request, SelfManagementService service, CancellationToken ct) =>
+        {
+            try
+            {
+                var overrides = new ManagementPolicyOverrides(request.Mode is null ? null : new(Parse<HarnessManagementMode>(request.Mode)),
+                    request.Scopes is null ? null : new(request.Scopes.Select(Parse<HarnessManagementScope>).ToArray()),
+                    request.ManagedAutoApply is null ? null : new(request.ManagedAutoApply.Select(Parse<ManagementAutoApply>).ToArray()),
+                    request.ConfigurationAssistance is null ? null : new(request.ConfigurationAssistance.Value),
+                    request.HarnessAuthoring is null ? null : new(request.HarnessAuthoring.Value));
+                return ManagementResult(await service.UpdateAsync(instanceId, request.ExpectedRevision, overrides, request.Frozen, ct: ct));
+            }
+            catch (AgentCoreException e) { return ProblemResults.From(e); }
+            catch (ArgumentException) { return ProblemResults.From(AgentCoreErrors.Validation("Invalid self-management policy.")); }
+        });
         var group = admin.MapGroup("/agent-instances/{instanceId:guid}/harness");
         group.MapGet("", (Guid instanceId, HarnessManagementService service, CancellationToken ct) =>
             Respond(() => service.ReviewAsync(instanceId, ct)));
@@ -60,6 +80,10 @@ internal static class HarnessManagementEndpoints
                 return await service.ReviewAsync(instanceId, ct);
             }));
     }
+
+    private static IResult ManagementResult(ManagementPolicyView view) => Results.Json(view,
+        new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web) {
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } });
 
     private static async Task<IResult> Respond(Func<ValueTask<HarnessReview>> action)
     {

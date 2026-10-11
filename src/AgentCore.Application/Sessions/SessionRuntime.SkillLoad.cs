@@ -93,6 +93,10 @@ public sealed partial class SessionRuntime
             return SkillLoadMailboxResult.Failed(errorJson, "denied");
         }
 
+        var management = await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, cancellationToken);
+        var visibleCatalog = ManagementBuiltInSkills.Visible(current.PinnedSkillCatalog, management, initial: false);
+        if (requestedIds.Any(k => k.StartsWith("builtin:", StringComparison.Ordinal) && !visibleCatalog.Any(s => s.Key == k)))
+            return SkillLoadMailboxResult.Failed(SkillLoadAdmission.Error("forbidden", "Procedure is unavailable in this execution."), "denied");
         var plan = SkillLoadAdmission.Plan(
             current.PinnedSkillCatalog,
             current.ActiveSkillKeys,

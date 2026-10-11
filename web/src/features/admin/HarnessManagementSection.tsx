@@ -26,9 +26,7 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AdminFailureNotice | null>(null);
-  const [mode, setMode] = useState<HarnessMode>("Disabled");
-  const [scopes, setScopes] = useState<HarnessScope[]>([]);
-  function accept(next: HarnessReview) { if (owner.current !== next.instanceId) return; setReview(next); setMode(next.policy.mode); setScopes(next.policy.scopes); }
+  function accept(next: HarnessReview) { if (owner.current !== next.instanceId) return; setReview(next); }
   useEffect(() => {
     let current = true;
     setChoices(null); setSelection([]); setReview(null); setBusy(false); setLoading(true); setError(null);
@@ -54,30 +52,12 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
   }
   const prep = review?.preparation;
   const enabled = review && !review.policy.frozen && review.policy.mode !== "Disabled";
-  const changed = review && (mode !== review.policy.mode || JSON.stringify(scopes) !== JSON.stringify(review.policy.scopes));
   const testedRevision = prep?.publishedDraftRevision ?? review?.draftRevision;
-  return <AgentConfigurationPanel title="Harness management" label="Harness management"
+  return <AgentConfigurationPanel title="Shared Definition promotion & change evidence" label="Shared Definition promotion"
     description="Chat saves only to this Instance. Changes apply to the next new Run, including in existing conversations." bodyGap="section" bodyClassName="harness-management-content">
       {loading ? <Spin aria-label="Loading harness management" /> : null}
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void reload()} disabled={busy}>Reload</Button>} /> : null}
       {review ? <>
-        <Flex wrap gap={token.paddingXS}><Typography.Text strong>Active version {review.activeVersion}</Typography.Text>
-          <Tag>{review.policy.frozen ? "Frozen" : review.policy.mode === "Disabled" ? "Manual" : review.policy.mode}</Tag></Flex>
-        <Form layout="vertical" className="admin-config-form">
-          <Flex vertical gap={token.padding}>
-            <HarnessPolicyModeScopes mode={mode} scopes={scopes} busy={busy} onMode={setMode} onScopes={setScopes} />
-            <Typography.Text type="secondary">Current Runs keep their admitted configuration. New Runs resolve current Instance settings.</Typography.Text>
-            <Flex wrap gap={token.paddingXS}>
-              <Button type="primary" disabled={busy || (!changed && !review.policy.frozen) || (mode !== "Disabled" && scopes.length === 0)} onClick={() => void run("policy", {
-                expectedRevision: review.instanceRevision, mode, scopes: mode === "Disabled" ? [] : scopes, sources: [], eligibleTools: [], frozen: false
-              })}>Save authoring policy</Button>
-              {enabled ? <Button disabled={busy} onClick={() => confirmAction(modal, { title: "Freeze self-management?", content: "Disable harness changes in Chat. The agent keeps using its active version.",
-                okText: "Freeze self-management", onOk: () => run("policy", { expectedRevision: review.instanceRevision, ...review.policy, mode: "Disabled", frozen: true }) })}>Freeze self-management</Button> : null}
-            </Flex>
-          </Flex>
-        </Form>
-        {review.policy.frozen ? <Alert type="info" showIcon title="Self-management is frozen" description="Chat continues normally. Save an enabled policy to allow new durable improvements." />
-          : !enabled ? <Typography.Text type="secondary">Manual mode: Chat can discuss material without saving it to the harness.</Typography.Text> : null}
         {!!review.instanceChanges?.length && <Collapse items={[{ key: "local", label: "Recent Instance changes", children: <Flex vertical gap={token.paddingSM}>{review.instanceChanges.slice().reverse().map(change => <div key={change.operationId}>
           <Typography.Text strong>{change.operation} · Instance revision {change.instanceRevision}</Typography.Text>
           <Typography.Paragraph type="secondary">Saved to this Instance for the next Run. Current Run unchanged.</Typography.Paragraph>

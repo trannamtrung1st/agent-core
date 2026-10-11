@@ -11,7 +11,7 @@ public sealed record ResolvedAgentRunConfiguration(AgentRunConfiguration Configu
     IReadOnlyList<EffectiveSkill> Skills, ExecutionBudgetPolicy? InstanceBudgets);
 
 public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
-    IAgentDefinitionResourceAdminStore resources, InheritedDefinitionResourceCatalog? inheritedResources = null)
+    IAgentDefinitionResourceAdminStore resources, InheritedDefinitionResourceCatalog? inheritedResources = null, IAgentCredentialBindingStore? credentialBindings = null)
 {
     public async ValueTask<ResolvedAgentRunConfiguration> ResolveAsync(Guid id, CancellationToken ct = default, bool allowArchived = false)
     {
@@ -22,10 +22,11 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
             var baseline = await definitions.GetAsync(owner.DefinitionId, owner.ActiveVersion, ct) ?? throw AgentCoreErrors.Persistence("Selected Definition is unavailable.");
             var skillState = await instances.ReadSkillsAsync(id, ct);
             var resourceState = await instances.ReadResourcesAsync(id, ct);
+            var bindings = credentialBindings is null ? [] : await credentialBindings.ListBindingsAsync(id, ct);
             var published = inheritedResources is not null ? await inheritedResources.ListAsync(baseline, ct) : await resources.ListPublicationResourcesAsync(baseline.Id, baseline.Version, ct);
             var current = await instances.FindAsync(id, ct);
             if (current?.Revision != owner.Revision) continue;
-            var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides);
+            var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
             var manifest = AgentInstanceResourceService.Resolve(effective, published, resourceState, skillState);
             var environment = RoleEnvironments.Of(effective);
             // A disabled inherited file removes its knowledge binding; a local knowledge file adds an origin-qualified one.
@@ -34,7 +35,7 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
                 .Concat(manifest.Where(r => r.Key.StartsWith("instance:", StringComparison.Ordinal) && r.Kind == AgentDefinitionResourceKind.Knowledge)
                     .Select(r => new KnowledgeSourceRef(r.Key, r.LogicalPath, r.VirtualPath, r.LogicalPath))).ToArray();
             effective = effective with { Environment = environment with { KnowledgeSources = knowledge } };
-            return new(new(effective, owner.Revision, owner.PersonaRevision, manifest), owner.Persona,
+            return new(new(effective, owner.Revision, owner.PersonaRevision, manifest, bindings), owner.Persona,
                 EffectiveSkillCatalogResolver.Resolve(effective, skillState), owner.ExecutionBudgets);
         }
         throw AgentCoreErrors.Conflict("Instance changed while resolving configuration. Retry admission.");

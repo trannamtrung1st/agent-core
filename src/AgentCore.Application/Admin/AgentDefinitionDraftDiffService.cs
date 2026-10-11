@@ -140,6 +140,8 @@ public sealed class AgentDefinitionDraftDiffService(
             "Automation trigger permissions",
             FormatTriggerPolicy(baseline.TriggerPolicy),
             FormatTriggerPolicy(current.TriggerPolicy));
+        if (baseline.SelfManagement is not null || current.SelfManagement is not null) yield return TextSection("selfManagement", "Agent self-management defaults",
+            System.Text.Json.JsonSerializer.Serialize(baseline.SelfManagement), System.Text.Json.JsonSerializer.Serialize(current.SelfManagement));
         yield return TextSection(
             "skills",
             "Skills",
@@ -149,6 +151,7 @@ public sealed class AgentDefinitionDraftDiffService(
 
     private static IEnumerable<DefinitionDiffSection> AddedCandidateSections(AgentDefinitionCandidate current)
     {
+        if (current.SelfManagement is not null) yield return AddedSection("selfManagement", "Agent self-management defaults", System.Text.Json.JsonSerializer.Serialize(current.SelfManagement));
         yield return AddedSection("instructions", "Instructions", current.SystemInstructions);
         yield return AddedSection("goals", "Goals", FormatGoals(current.Goals));
         yield return AddedSection("identity", "Identity seed", FormatIdentity(current.Identity));

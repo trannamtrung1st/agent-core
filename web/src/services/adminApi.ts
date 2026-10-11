@@ -1021,7 +1021,7 @@ export async function setAdminUnattendedModel(
 }
 
 export type HarnessMode = "Disabled" | "Assisted" | "Managed";
-export type HarnessScope = "KnowledgeResources" | "Instructions" | "ToolSelection";
+export type HarnessScope = "KnowledgeResources" | "Instructions" | "ToolSelection" | "Settings" | "Skills" | "Resources" | "Connections" | "ManagementPolicy" | "AutomationPreferences";
 export type HarnessPolicy = { mode: HarnessMode; scopes: HarnessScope[]; sources: string[]; eligibleTools: string[]; frozen: boolean };
 export type HarnessSkill = { id: string; name: string; description: string; procedure: string; requiredCapabilities: string[]; resourcePaths: string[] };
 export type HarnessOperation = { kind: string; draftRevision: number; id: string | null; content: string | null; source: string | null;
@@ -1129,4 +1129,23 @@ export async function getExecutionBudgetLimits(): Promise<ExecutionBudgetLimits>
     || !Number.isSafeInteger(value.perToolSeconds) || value.perToolSeconds < 1
     || value.perToolSeconds > value.durationSeconds) throw new Error('Execution limits response is invalid.');
   return value;
+}
+
+export type ManagementAutoApply = 'ConversationPreferences' | 'TextResources' | 'SkillChanges';
+export type ManagementOverrides = { mode: { value: HarnessMode } | null; scopes: { value: HarnessScope[] } | null;
+  autoApply: { value: ManagementAutoApply[] } | null; configurationAssistance: { value: boolean } | null; harnessAuthoring: { value: boolean } | null };
+export type SelfManagementPolicy = HarnessPolicy & { managedAutoApply: ManagementAutoApply[] | null;
+  builtInSkills: { configurationAssistance: boolean; harnessAuthoring: boolean } | null };
+export type SelfManagementView = { instanceRevision: number; policyRevision: number; source: string;
+  effective: SelfManagementPolicy; definitionDefaults: SelfManagementPolicy; overrides: ManagementOverrides | null };
+export async function getSelfManagement(instanceId: string): Promise<SelfManagementView> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/self-management`);
+  if (!response.ok) throw await adminProblemMessage(response, 'Self-management could not be loaded.');
+  return await response.json() as SelfManagementView;
+}
+export async function saveSelfManagement(instanceId: string, body: { expectedRevision: number; mode: HarnessMode | null; scopes: HarnessScope[] | null;
+  managedAutoApply: ManagementAutoApply[] | null; configurationAssistance: boolean | null; harnessAuthoring: boolean | null; frozen?: boolean }): Promise<SelfManagementView> {
+  const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/self-management`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!response.ok) throw await adminProblemMessage(response, 'Self-management could not be saved. Your draft is retained.');
+  return await response.json() as SelfManagementView;
 }

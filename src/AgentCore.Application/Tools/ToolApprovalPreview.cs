@@ -60,12 +60,12 @@ public static class ToolApprovalPreview
                 : $"{operation.Kind}: {ReadString(args, "id") ?? "operating instructions"}; enabled={ReadValue(args, "enabled")}; unsupported readability={ReadValue(args, "allowUnreadUnsupportedTypes")}";
             AgentCore.Application.Admin.DefinitionResourcePolicies.RejectSecretsInTextualContent("text/plain", System.Text.Encoding.UTF8.GetBytes(details["Change"]));
             if (details["Change"].Length > 32000) throw new ArgumentException("Harness approval exceeds its content bound.");
-            details["Applies to"] = "Future conversations; this Session stays pinned.";
+            details["Applies to"] = "Next new Run, including in existing Sessions; the current Run remains unchanged.";
             details["Active version"] = ReadValue(args, "expectedVersion");
             details["Policy revision"] = ReadValue(args, "policyRevision");
             if (ReadString(args, "source") is { } source) details["Source"] = source;
             if (ReadString(args, "limitation") is { } limit) details["Limitations"] = limit;
-            return (Bound($"Save {operation.Kind} for future conversations"), details);
+            return (Bound($"Save {operation.Kind} to this Instance"), details);
         }
 
         if (string.Equals(toolName, ToolCatalog.DemoSensitiveAction, StringComparison.Ordinal))

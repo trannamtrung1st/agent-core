@@ -155,6 +155,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in instanceSkillEvents) yield return item;
             yield break;
         }
+        if (SelfManagementScript.Generate(request) is { } managementEvents)
+        { foreach (var e in managementEvents) yield return e; yield break; }
+
         if (HarnessChatScript.Generate(request) is { } chatEvents)
         {
             foreach (var item in chatEvents) yield return item;

@@ -7,6 +7,7 @@ using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Admin;
 using Microsoft.Extensions.Time.Testing;
 namespace AgentCore.Application.Tests;
 
@@ -20,7 +21,7 @@ public sealed class SkillActivationTests
     {
         await using var db = sqlite ? await SqliteTestHarness.CreateMigratedAsync() : null;
         var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
-        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore();
+        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore { EventStore = new InMemoryAdminEventStore(new SystemIdGenerator(TimeProvider.System)) };
         var original = Definition(1, new SkillSpec("review", "Review", "Review", "OLD", SkillProjection.Always, true, [], []));
         var current = Definition(2,
             new SkillSpec("review", "Review", "Review", new string('a', 4000), SkillProjection.Always, true, [], []),
@@ -56,7 +57,7 @@ public sealed class SkillActivationTests
     {
         await using var db = sqlite ? await SqliteTestHarness.CreateMigratedAsync() : null;
         var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
-        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore();
+        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore { EventStore = new InMemoryAdminEventStore(new SystemIdGenerator(TimeProvider.System)) };
         var original = Definition(1, new SkillSpec("review", "Review", "Review", "SMALL", SkillProjection.Always, true, [], []));
         var upgraded = Definition(2,
             new SkillSpec("review", "Review", "Review", new string('a', 4000), SkillProjection.Always, true, [], []),
@@ -80,7 +81,7 @@ public sealed class SkillActivationTests
     {
         await using var db = sqlite ? await SqliteTestHarness.CreateMigratedAsync() : null;
         var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
-        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore();
+        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore { EventStore = new InMemoryAdminEventStore(new SystemIdGenerator(TimeProvider.System)) };
         var original = Definition(1, new SkillSpec("review", "Review", "Review orders", "ORIGINAL", SkillProjection.OnDemand, true, [], []));
         var upgraded = Definition(2, new SkillSpec("review", "Review", "New review", "UPSTREAM", SkillProjection.Always, false, [], []), new SkillSpec("added", "Added", "New default", "ADDED", SkillProjection.OnDemand, false, [], []));
         var removed = Definition(3);
@@ -88,7 +89,7 @@ public sealed class SkillActivationTests
         var instances = new AgentInstanceService(store, defs, ids, clock);
         var owner = await instances.CreateAsync(original.Id, 1);
         var service = new AgentInstanceSkillService(store, defs, ids, clock);
-        var initial = Assert.Single(await service.ListAsync(owner.InstanceId));
+        var initial = Assert.Single(await service.ListAsync(owner.InstanceId), s => s.Origin != SkillOrigin.BuiltIn);
         Assert.True(initial.Enabled); Assert.Equal("definition:review", initial.Key);
         var customized = await service.CustomizeAsync(owner.InstanceId, initial.Key, initial.Revision, actor: SkillAuthor.Agent);
         var copied = customized.InstanceSkill;
@@ -112,7 +113,7 @@ public sealed class SkillActivationTests
         Assert.Equal("LOCAL", afterUpgrade.Single(s => s.Key == copied.Key).Procedure);
         owner = (await store.FindAsync(owner.InstanceId))!;
         await instances.UpgradeAsync(owner.InstanceId, 3, owner.Revision);
-        Assert.Single(await service.ListAsync(owner.InstanceId));
+        Assert.Single(await service.ListAsync(owner.InstanceId), s => s.Origin != SkillOrigin.BuiltIn);
         Assert.Equal(2, (await store.ReadSkillsAsync(owner.InstanceId)).DefinitionStates.Count);
         owner = (await store.FindAsync(owner.InstanceId))!;
         await instances.UpgradeAsync(owner.InstanceId, 1, owner.Revision);
@@ -125,7 +126,7 @@ public sealed class SkillActivationTests
     [Fact]
     public async Task Current_execution_keeps_old_content_and_next_execution_sees_durable_changes_without_shadowing()
     {
-        var store = new InMemoryAgentInstanceStore(); var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
+        var store = new InMemoryAgentInstanceStore { EventStore = new InMemoryAdminEventStore(new SystemIdGenerator(TimeProvider.System)) }; var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
         var d = Definition(1, new SkillSpec("review", "Review", "Definition review", "DEFINITION", SkillProjection.Always, true, [], []));
         var defs = new Definitions(d); var owner = await new AgentInstanceService(store, defs, ids, clock).CreateAsync(d.Id);
         var service = new AgentInstanceSkillService(store, defs, ids, clock);
@@ -143,7 +144,7 @@ public sealed class SkillActivationTests
     [Fact]
     public async Task Resources_missing_authority_and_archived_lifecycle_fail_without_mutation()
     {
-        var store = new InMemoryAgentInstanceStore(); var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
+        var store = new InMemoryAgentInstanceStore { EventStore = new InMemoryAdminEventStore(new SystemIdGenerator(TimeProvider.System)) }; var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider(Now);
         var d = Definition(1, new SkillSpec("bound", "Bound", "Bound resource", "Read reference", SkillProjection.OnDemand, true, [], ["knowledge/reference"]));
         var defs = new Definitions(d); var instances = new AgentInstanceService(store, defs, ids, clock); var owner = await instances.CreateAsync(d.Id);
         var service = new AgentInstanceSkillService(store, defs, ids, clock);
@@ -154,7 +155,7 @@ public sealed class SkillActivationTests
         await instances.SetLifecycleAsync(owner.InstanceId, AgentInstanceLifecycle.Archived, owner.Revision);
         await Assert.ThrowsAsync<AgentCoreException>(() => service.WriteAsync(owner.InstanceId, "create", input: new("Local", "Local", "Local", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent).AsTask());
     }
-    internal static AgentDefinition Definition(int version, params SkillSpec[] skills) => SampleDefinitions.Examiner with { Version = version, Skills = skills, Environment = RoleEnvironment.Empty };
+    internal static AgentDefinition Definition(int version, params SkillSpec[] skills) => SampleDefinitions.Examiner with { Version = version, Skills = skills, Environment = RoleEnvironment.Empty, SelfManagement = new(HarnessManagementMode.Assisted, [HarnessManagementScope.Skills], [], [], BuiltInSkills: new(false, false)) };
     internal sealed class Definitions(params AgentDefinition[] versions) : IAgentDefinitionStore
     {
         public ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken cancellationToken = default) => ValueTask.FromResult(versions.Where(d => d.Id == id && (version is null || d.Version == version)).OrderByDescending(d => d.Version).FirstOrDefault());

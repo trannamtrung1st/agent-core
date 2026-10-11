@@ -62,7 +62,7 @@ public sealed class HarnessManagementService(
             var instance = await RequireInstanceAsync(instanceId, token);
             RequireRevision(instance, expectedRevision);
             if (!Enum.IsDefined(policy.Mode) || policy.Scopes.Any(scope => !Enum.IsDefined(scope))
-                || policy.Scopes.Count > 4 || policy.Sources.Count > 24 || policy.EligibleTools.Count > ToolRegistry.All.Count())
+                || policy.Scopes.Count > Enum.GetValues<HarnessManagementScope>().Length || policy.Sources.Count > 24 || policy.EligibleTools.Count > ToolRegistry.All.Count())
                 throw AgentCoreErrors.Validation("Harness policy is invalid or exceeds its bounds.");
             foreach (var source in policy.Sources)
             {
@@ -82,6 +82,7 @@ public sealed class HarnessManagementService(
             var next = old with
             {
                 Policy = policy with { Scopes = policy.Scopes.Distinct().ToArray(), Sources = policy.Sources.Distinct().ToArray(), EligibleTools = policy.EligibleTools.Concat(old.Policy.EligibleTools).Concat(RoleEnvironments.Of(active).ToolList.Append(ToolCatalog.AttachmentsRead)).Where(t => ToolRegistry.TryGet(t, out var d) && d.OfferRule != ToolOfferRule.HarnessAuthority && toolConfiguration.IsConfigured(t)).Distinct().ToArray() },
+                Overrides = null,
                 PolicyRevision = old.PolicyRevision + 1,
                 Preparation = old.Preparation is null || old.Preparation.Status == HarnessPreparationStatus.Published ? old.Preparation : old.Preparation with
                 {
@@ -366,9 +367,10 @@ public sealed class HarnessManagementService(
     public async ValueTask<HarnessChatContext?> ChatContextAsync(Guid instanceId, CancellationToken ct)
     {
         var instance = await instances.FindAsync(instanceId, ct);
-        if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active
-            || instance.HarnessManagement is not { } state || state.Policy.Frozen || state.Policy.Mode == HarnessManagementMode.Disabled) return null;
-        return new(state.Policy, state.PolicyRevision, instance.ActiveVersion);
+        if (instance is null || instance.Lifecycle != AgentInstanceLifecycle.Active) return null;
+        var definition = await RequireDefinitionAsync(instance, ct);
+        var policy = ManagementPolicyResolver.Resolve(definition, instance);
+        return Tools.ManagementTools.Enabled(policy) ? new(policy, instance.HarnessManagement?.PolicyRevision ?? 1, instance.ActiveVersion) : null;
     }
 
     public async ValueTask<object> InspectChatAsync(Guid instanceId, int currentRunDefinitionVersion, CancellationToken ct)
@@ -672,7 +674,9 @@ public sealed class HarnessManagementService(
         var instance = await instances.FindAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
         if (instance.Lifecycle != AgentInstanceLifecycle.Active)
             throw AgentCoreErrors.Validation("Harness management requires an active managed Agent Instance.");
-        return instance;
+        var definition = await RequireDefinitionAsync(instance, ct);
+        var policy = ManagementPolicyResolver.Resolve(definition, instance);
+        return instance with { HarnessManagement = (instance.HarnessManagement ?? new(policy)) with { Policy = policy } };
     }
 
     private async ValueTask<AgentDefinition> RequireDefinitionAsync(AgentInstance instance, CancellationToken ct) =>

@@ -37,6 +37,9 @@ test('Instance Skills: authorized Chat creation, next-turn load, owner editor an
   const creation = page.waitForResponse(r => r.url().endsWith('/api/v2/admin/agent-instances') && r.request().method() === 'POST' && r.ok());
   const name = `Skills ${Date.now()}`; const id = await create(page, name);
   const pin = await (await creation).json();
+  const owner = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
+  const policy = await page.request.put('/api/v2/admin/agent-instances/'+id+'/self-management', {headers:{'X-AgentCore-Owner-Capability':owner!},data:{expectedRevision:pin.revision,mode:'Managed',scopes:['Skills'],managedAutoApply:['SkillChanges']}});
+  expect(policy.ok()).toBe(true);
   await chat(page, name); await send(page, 'Learn this accounting Skill.');
   await expect(page.getByText('Saved the accounting Skill. It applies to the next execution.', { exact: true })).toBeVisible();
   await send(page, 'Use my accounting Skill.');
@@ -78,6 +81,9 @@ test('Instance Skills: authorized Chat creation, next-turn load, owner editor an
 test('A restricted Definition cannot grant itself Skill management', async ({ page }) => {
   const name = `Restricted ${Date.now()}`;
   const id = await create(page, name, 'Customer Support · customer-support');
+  const owner = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
+  const policy = await page.request.put('/api/v2/admin/agent-instances/'+id+'/self-management', {headers:{'X-AgentCore-Owner-Capability':owner!},data:{expectedRevision:1,mode:'Managed',scopes:['Skills'],managedAutoApply:['SkillChanges']}});
+  expect(policy.ok()).toBe(true);
   await chat(page, name); await send(page, 'Learn this accounting Skill.');
   await expect(page.getByText('Skill management is not authorized. Nothing was saved.', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open Admin' }).click(); await page.goto(`/admin/instances/${id}/skills`);

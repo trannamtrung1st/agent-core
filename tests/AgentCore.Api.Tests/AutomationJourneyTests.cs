@@ -45,7 +45,7 @@ public sealed class AutomationJourneyTests
     }
 
     [Fact(Timeout = 90000)]
-    public async Task Experience_to_automation_to_instance_skill_survives_restart_then_finishes_quietly_without_more_work()
+    public async Task Experience_automation_cannot_administer_skills_and_survives_restart_quietly()
     {
         var db = Path.Combine(Path.GetTempPath(), $"automation-{Guid.NewGuid():N}.db");
         Guid instanceId, automationId, workId; int originalVersion;
@@ -98,7 +98,7 @@ public sealed class AutomationJourneyTests
             item = (await work.GetAsync(owner, workId))!;
             Assert.Equal(AgentRunStatus.Completed, item.Status);
             Assert.Null(item.Approval);
-            Assert.Single((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(instanceId)).InstanceSkills, skill => skill.Name == "Experience review");
+            Assert.Empty((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(instanceId)).InstanceSkills);
             Assert.Equal(originalVersion, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instanceId))!.ActiveVersion);
             var edited = await client.PutAsJsonAsync(path + "/" + automationId, Draft(r.Revision) with { Instructions = "synthetic-automation-attention future prompt" }); edited.EnsureSuccessStatusCode();
             var historical = (await client.GetFromJsonAsync<AgentRunResponse>(detailPath))!;
@@ -125,13 +125,13 @@ public sealed class AutomationJourneyTests
             var work = s.GetRequiredService<IAgentRunStore>(); var owner = new AgentRunOwner(instanceId, AgentCore.Domain.Conversation.LocalUserProfile.Id);
             var item = (await work.GetAsync(owner, workId))!;
             Assert.Equal(AgentRunStatus.Completed, item.Status);
-            Assert.Equal("Response", item.Result!.OutcomeKind.ToString());
+            Assert.Equal("NoAction", item.Result!.OutcomeKind.ToString());
             Assert.False(item.Result.AttentionRequired);
             var instance = (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(instanceId))!;
             Assert.Equal(originalVersion, instance.ActiveVersion);
             var future = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, instance.ActiveVersion))!;
             Assert.DoesNotContain(future.SkillList, skill => skill.Name == "Experience review");
-            Assert.Single((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(instanceId)).InstanceSkills, skill => skill.Name == "Experience review" && skill.CreatedBy == SkillAuthor.Agent);
+            Assert.Empty((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(instanceId)).InstanceSkills);
             Assert.Empty(await Alerts(work, owner));
             var r = (await s.GetRequiredService<ITriggerStore>().GetAsync(new(instanceId, owner.ProfileId), automationId))!;
             r = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instanceId, automationId, r.Revision, true, 3600, "synthetic-automation-improve", null, null);

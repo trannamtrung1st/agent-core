@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Admin;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
 using AgentCore.Domain.Definitions;
@@ -36,7 +37,7 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
     }
     public ValueTask<IReadOnlyList<AgentCredentialBinding>> ListBindingsAsync(Guid? instanceId = null, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) return ValueTask.FromResult<IReadOnlyList<AgentCredentialBinding>>(_bindings.Values.Where(b => instanceId is null || b.AgentInstanceId == instanceId).OrderBy(b => b.Reference).ToArray()); }
-    public ValueTask BindAsync(AgentCredentialBinding b, long expectedInstanceRevision, CancellationToken ct = default)
+    public ValueTask BindAsync(AgentCredentialBinding b, long expectedInstanceRevision, CancellationToken ct = default, AdminEventAppend? history = null)
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
@@ -44,16 +45,18 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
             if (!_credentials.ContainsKey(b.CredentialId)) throw AgentCoreErrors.NotFound("Credential was not found.");
             if (_bindings.ContainsKey(b.BindingId) || _bindings.Values.Any(x => x.AgentInstanceId == b.AgentInstanceId && (x.Reference == b.Reference || x.CredentialId == b.CredentialId)))
                 throw AgentCoreErrors.Conflict("Credential or reference is already bound to this agent.");
+            instances.UpdateWithExpectedRevisionAsync(new(b.AgentInstanceId, expectedInstanceRevision, History: instances.EventStore is null ? null : history), b.UpdatedAtUtc, ct).GetAwaiter().GetResult();
             _bindings.Add(b.BindingId, b); return ValueTask.CompletedTask;
         }
     }
-    public ValueTask UnbindAsync(Guid instanceId, Guid bindingId, long expectedRevision, long instanceRevision, CancellationToken ct = default)
+    public ValueTask UnbindAsync(Guid instanceId, Guid bindingId, long expectedRevision, long instanceRevision, CancellationToken ct = default, AdminEventAppend? history = null)
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
             RequireActive(instanceId, instanceRevision);
             if (!_bindings.TryGetValue(bindingId, out var b) || b.AgentInstanceId != instanceId) throw AgentCoreErrors.NotFound("Binding was not found.");
             if (b.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Binding revision is stale.");
+            instances.UpdateWithExpectedRevisionAsync(new(instanceId, instanceRevision, History: instances.EventStore is null ? null : history), history?.OccurredAt ?? DateTimeOffset.UtcNow, ct).GetAwaiter().GetResult();
             _bindings.Remove(bindingId); return ValueTask.CompletedTask;
         }
     }

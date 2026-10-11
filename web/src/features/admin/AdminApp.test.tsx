@@ -109,6 +109,8 @@ vi.mock("../../services/adminApi", () => ({
   updateAdminAgentInstancePersona: vi.fn(),
   updateAdminAgentInstanceLifecycle: vi.fn(),
   updateAdminAgentInstanceActiveVersion: vi.fn(),
+  getSelfManagement: vi.fn().mockResolvedValue({ instanceRevision: 1, policyRevision: 1, source: 'definition', effective: { mode: 'Disabled', scopes: [], sources: [], eligibleTools: [], frozen: false, managedAutoApply: [], builtInSkills: null }, definitionDefaults: { mode: 'Disabled', scopes: [], sources: [], eligibleTools: [], frozen: false, managedAutoApply: [], builtInSkills: null }, overrides: null }),
+  saveSelfManagement: vi.fn(),
   getHarnessReview: vi.fn().mockResolvedValue({ instanceId: "instance", instanceRevision: 1, activeVersion: 1, policyRevision: 1,
     policy: { mode: "Disabled", scopes: [], sources: [], eligibleTools: [], frozen: false }, preparation: null,
     draftRevision: null, instructions: null, skills: [], knowledge: [], selectedTools: [], diff: null, resources: [] }),

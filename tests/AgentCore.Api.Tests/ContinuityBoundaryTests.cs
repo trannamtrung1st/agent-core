@@ -245,7 +245,7 @@ public sealed class ContinuityBoundaryTests
     [Theory(Timeout = 60000)]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task Harness_policy_does_not_control_ordinary_skill_authority_and_origin_payload_cannot_bootstrap_authority(bool freeze)
+    public async Task Detached_automation_cannot_administer_skills_and_origin_payload_cannot_bootstrap_authority(bool freeze)
     {
         var db = Path.Combine(Path.GetTempPath(), $"automation-frozen-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db);
@@ -270,8 +270,8 @@ public sealed class ContinuityBoundaryTests
         var store = s.GetRequiredService<IAgentRunStore>(); var owner = new AgentRunOwner(id, LocalUserProfile.Id);
         var item = Assert.Single(await s.AutomationRunsAsync(owner, Guid.Parse(reg.AutomationId)));
         Assert.Equal(AgentRunStatus.Completed, item.Status);
-        Assert.Equal("Response", item.Result!.OutcomeKind.ToString());
-        Assert.Single((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(id)).InstanceSkills);
+        Assert.Equal("NoAction", item.Result!.OutcomeKind.ToString());
+        Assert.Empty((await s.GetRequiredService<IAgentInstanceStore>().ReadSkillsAsync(id)).InstanceSkills);
         Assert.Equal(21, (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(id))!.ActiveVersion);
         var definition = (await s.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 21))!;
         var tools = s.GetRequiredService<SessionToolExecutor>();

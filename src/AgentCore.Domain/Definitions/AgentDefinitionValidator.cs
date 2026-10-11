@@ -34,6 +34,14 @@ public static class AgentDefinitionValidator
             throw new ArgumentException("version must be a positive integer.");
         }
 
+        if (definition.SelfManagement is { } management && (management.Frozen || !Enum.IsDefined(management.Mode)
+            || management.Scopes is null || management.Sources is null || management.EligibleTools is null
+            || management.Scopes.Count > 9 || management.Scopes.Distinct().Count() != management.Scopes.Count
+            || management.Scopes.Any(s => !Enum.IsDefined(s))
+            || (management.ManagedAutoApply ?? []).Count > 3 || (management.ManagedAutoApply ?? []).Distinct().Count() != (management.ManagedAutoApply ?? []).Count
+            || (management.ManagedAutoApply ?? []).Any(a => !Enum.IsDefined(a))))
+            throw new ArgumentException("Definition self-management defaults are invalid; Frozen is Instance-local.");
+
         ValidateIdentity(definition.Identity);
         if (definition.Goals.Count is < 1 or > 10 || definition.Goals.Any(goal => string.IsNullOrWhiteSpace(goal) || goal.Length > 500))
         {

@@ -19,7 +19,7 @@ public static class CapabilityUsageGuidance
         if (!offered.Any(t => t.Name == ToolCatalog.CapabilitiesLoad)) return string.Empty;
         var projected = offered.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
         var groups = (eligible ?? ToolCatalog.Eligible(definition, context, gate))
-            .Where(t => !projected.Contains(t.Name) && ToolRegistry.Get(t.Name).Discoverable)
+            .Where(t => !projected.Contains(t.Name) && ToolRegistry.Get(t.Name).Discoverable && !ManagementTools.IsManagement(t.Name))
             .Select(t => ToolRegistry.Get(t.Name)).GroupBy(t => t.Category)
             .OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => g.OrderBy(t => t.Name, StringComparer.Ordinal).ToArray()).ToArray();

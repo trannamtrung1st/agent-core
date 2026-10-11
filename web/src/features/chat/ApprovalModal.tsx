@@ -25,9 +25,10 @@ export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalPr
   const { token } = theme.useToken();
   const open = approval != null;
   const filesystem = ["workspace.delete", "workspace.batch"].includes(approval?.toolName ?? "");
-  const semantic = filesystem || approval?.toolName.startsWith("harness.") || ["memory.consolidate", "experience.consolidate", "memory.forget"].includes(approval?.toolName ?? "");
+  const management = /^(configuration|management|settings|resources|skills)\./.test(approval?.toolName ?? "") || approval?.toolName === "credentials.binding.propose";
+  const semantic = management || filesystem || approval?.toolName.startsWith("harness.") || ["memory.consolidate", "experience.consolidate", "memory.forget"].includes(approval?.toolName ?? "");
   const detailEntries = approval ? Object.entries(approval.details) : [];
-  const revisionKeys = ["Active version", "Policy revision"];
+  const revisionKeys = ["Active version", "Policy revision", "Instance revision"];
   const revisions = detailEntries.filter(([key]) => revisionKeys.includes(key));
   const scope = approval?.details["Applies to"];
   const content = detailEntries.filter(([key]) => !revisionKeys.includes(key) && key !== "Applies to");
@@ -38,8 +39,8 @@ export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalPr
       className="chat-approval"
       centered
       width={semantic ? 720 : 520}
-      title={filesystem ? "Approve workspace changes?" : approval?.toolName.startsWith("harness.") ? "Save this harness change?" : approval?.toolName === "memory.forget" ? "Forget this learned-memory item?" : semantic ? "Approve identity consolidation" : "Approve sensitive action"}
-      okText="Approve"
+      title={management ? (approval?.toolName === "management.freeze" ? "Freeze self-management?" : "Apply configuration to this Instance?") : filesystem ? "Approve workspace changes?" : approval?.toolName.startsWith("harness.") ? "Save this harness change?" : approval?.toolName === "memory.forget" ? "Forget this learned-memory item?" : semantic ? "Approve identity consolidation" : "Approve sensitive action"}
+      okText={management ? approval?.toolName === "management.freeze" ? "Freeze self-management" : "Apply to this Instance" : "Approve"}
       cancelText="Reject"
       onOk={onApprove}
       onCancel={onReject}

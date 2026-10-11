@@ -62,7 +62,7 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
         return await ListAsync(id, ct);
     }
     public async ValueTask<InstanceResourceCatalog> CopyAsync(Guid id, string key, long expectedInstanceRevision,
-        string logicalPath, CancellationToken ct = default)
+        string logicalPath, CancellationToken ct = default, SkillAuthor actor = SkillAuthor.Admin)
     {
         var owner = await WritableAsync(id, expectedInstanceRevision, ct);
         var parsed = ParseKey(key);
@@ -72,7 +72,7 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
         var bytes = await content.ReadAsync(resource.ContentSha256, ct) ?? throw AgentCoreErrors.Persistence("Source bytes are unavailable.");
         Verify(resource.ContentSha256, resource.ByteLength, bytes);
         return await UpsertAsync(id, expectedInstanceRevision, null, null, logicalPath, resource.Kind, resource.MediaType,
-            bytes, true, SkillAuthor.Admin, ct, resource);
+            bytes, true, actor, ct, resource);
     }
     public async ValueTask<InstanceResourceCatalog> SetEnabledAsync(Guid id, string key, long expectedInstanceRevision,
         long expectedResourceRevision, bool? enabled, SkillAuthor actor = SkillAuthor.Admin, CancellationToken ct = default, HarnessManagementState? harnessManagement = null)

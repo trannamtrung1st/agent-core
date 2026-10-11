@@ -50,7 +50,8 @@ public sealed partial class SessionToolExecutor
                 || credentials is null || browser is not IBrowserPasswordSink sink)
                 return Fail("forbidden", "Protected credential use requires direct Chat.");
             var filled = await sink.FillCredentialAsync(sessionId, ((BrowserFillCredential)request.Command).Target,
-                (origin, token) => credentials.ResolvePasswordAsync(owner, ((BrowserFillCredential)request.Command).CredentialRef, origin, token), ct);
+                (origin, token) => credentials.ResolvePasswordAsync(owner, ((BrowserFillCredential)request.Command).CredentialRef, origin, token,
+                    admission.PinnedCredentialBindings), ct);
             return FitResult(remainingOutputBytes, FinishBrowser(name, started,
                 await PresentBrowserAsync(sessionId, admission, filled, ct)));
         }

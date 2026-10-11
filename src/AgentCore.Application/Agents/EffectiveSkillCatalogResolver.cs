@@ -8,7 +8,8 @@ public sealed class EffectiveSkillCatalogResolver(IAgentInstanceStore instances)
     public async ValueTask<IReadOnlyList<EffectiveSkill>> ResolveAsync(Guid instanceId, AgentDefinition definition, CancellationToken ct = default)
     {
         var state = await instances.ReadSkillsAsync(instanceId, ct);
-        return Resolve(definition, state);
+        var owner = await instances.FindAsync(instanceId, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
+        return Resolve(definition with { SelfManagement = ManagementPolicyResolver.Resolve(definition, owner) }, state);
     }
     public static IReadOnlyList<EffectiveSkill> Resolve(AgentDefinition definition, InstanceSkillSnapshot state)
     {
@@ -23,6 +24,7 @@ public sealed class EffectiveSkillCatalogResolver(IAgentInstanceStore instances)
         entries.AddRange(state.InstanceSkills.Where(s => s.Enabled).OrderBy(s => s.SkillId).Select(s =>
             new EffectiveSkill("instance:" + s.SkillId, SkillOrigin.Instance, s.SkillId, s.Name,
                 s.Description, s.Procedure, s.Projection, s.RequiredCapabilities.ToArray(), [])));
+        entries.AddRange(ManagementBuiltInSkills.Resolve(definition));
         if (entries.Where(s => s.Projection == SkillProjection.Always).Sum(s => s.Procedure.Length) > SkillPolicy.MaxActiveProcedureCharacters)
             throw AgentCoreErrors.Validation("Enabled Always Skills exceed the 8000-character procedure context budget.");
         return SkillPolicy.FreezeCatalog(entries);

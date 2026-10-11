@@ -108,7 +108,7 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             var credential = await service.CreateAsync("Demo SSO", "Password", null,
                 [scenario == "wrong-origin" ? fixture.ApplicationOrigin : fixture.IdentityOrigin], GenericSsoFixture.Password);
             await service.BindAsync(owner, credential.CredentialId, "demo-sso", 1);
-            var executor = new SessionToolExecutor(browser: browser, agentInstances: instances, credentials: service, configurationGate: ToolConfigurationGates.AllowAll);
+            var executor = new SessionToolExecutor(browser: browser, agentInstances: instances, credentials: service, credentialBindings: store, configurationGate: ToolConfigurationGates.AllowAll);
             var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: owner);
             async Task<string> Execute(string name, object args) => (await executor.ExecuteAsync(definition, session,
                 new(Guid.NewGuid().ToString(), name, JsonSerializer.Serialize(args)), ToolLimits.MaxOutputBytes, admission: admission)).Text;
@@ -206,7 +206,7 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             await using var runtime = SessionRuntimeFixture.Create(snapshot, recording,
                 new DefaultAgentBrain(new PromptContextBuilder(ToolConfigurationGates.AllowAll, browser)), memory, sink,
                 new SystemIdGenerator(TimeProvider.System), TimeProvider.System, NullLogger<SessionRuntime>.Instance,
-                tools: new SessionToolExecutor(browser: browser, agentInstances: instances, credentials: service, configurationGate: ToolConfigurationGates.AllowAll), browserLease: browser);
+                tools: new SessionToolExecutor(browser: browser, agentInstances: instances, credentials: service, credentialBindings: credentials, configurationGate: ToolConfigurationGates.AllowAll), browserLease: browser);
             await runtime.AttachAsync();
             // Identical task, no tool names, targeting hints, call order or secret value.
             Assert.True(await runtime.SubmitUserTextAsync($"Open {fixture.ApplicationOrigin}/. Sign in as {GenericSsoFixture.Email} with the saved Demo SSO credential and report the status of record AC-1042. Use only this demo site and its sign-in page."));

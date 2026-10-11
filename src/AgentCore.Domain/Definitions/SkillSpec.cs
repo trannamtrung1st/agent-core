@@ -14,7 +14,7 @@ public sealed class SkillProjectionJsonConverter : System.Text.Json.Serializatio
         writer.WriteStringValue(value switch { SkillProjection.Always => "Always", SkillProjection.OnDemand => "OnDemand",
             _ => throw new System.Text.Json.JsonException("Skill projection is invalid.") });
 }
-public enum SkillOrigin { Definition, Instance }
+public enum SkillOrigin { Definition, Instance, BuiltIn }
 public enum SkillAuthor { Admin, Agent }
 
 public sealed record SkillSpec(
@@ -38,7 +38,8 @@ public sealed record EffectiveSkill(string Key, SkillOrigin Origin, string Sourc
 public static class SkillKeys
 {
     public static bool IsValid(string? key) => key is not null &&
-        (key.StartsWith("definition:", StringComparison.Ordinal) && SkillIds.IsValid(key[11..])
+        (key.StartsWith("builtin:", StringComparison.Ordinal) && SkillIds.IsValid(key[8..])
+        || key.StartsWith("definition:", StringComparison.Ordinal) && SkillIds.IsValid(key[11..])
         || key.StartsWith("instance:", StringComparison.Ordinal) && (SkillIds.IsValid(key[9..]) || Guid.TryParseExact(key[9..], "D", out var id) && id != Guid.Empty));
 }
 
@@ -49,7 +50,7 @@ public static class SkillPolicy
     public static IReadOnlyList<EffectiveSkill> FreezeCatalog(IReadOnlyList<EffectiveSkill> catalog)
     {
         if (catalog.Any(s => !SkillKeys.IsValid(s.Key) || !Enum.IsDefined(s.Origin)
-            || s.Key != (s.Origin == SkillOrigin.Definition ? "definition:" : "instance:") + s.SourceId
+            || s.Key != (s.Origin == SkillOrigin.Definition ? "definition:" : s.Origin == SkillOrigin.BuiltIn ? "builtin:" : "instance:") + s.SourceId
             || s.Origin == SkillOrigin.Instance && s.ResourcePaths.Count != 0)
             || catalog.Select(s => s.Key).Distinct(StringComparer.Ordinal).Count() != catalog.Count)
             throw new ArgumentException("Pinned Skill catalog keys are invalid.");

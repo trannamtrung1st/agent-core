@@ -6,6 +6,7 @@ using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Admin;
 using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
@@ -77,7 +78,7 @@ public sealed class InstanceSettingsResolverTests
     {
         await using var db = sqlite ? await SqliteTestHarness.CreateMigratedAsync() : null;
         var ids = new SystemIdGenerator(TimeProvider.System); var clock = new FakeTimeProvider();
-        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore();
+        IAgentInstanceStore store = sqlite ? new SqliteAgentInstanceStore(db!.Factory, ids) : new InMemoryAgentInstanceStore { EventStore = new InMemoryAdminEventStore(new SystemIdGenerator(TimeProvider.System)) };
         var spec = new SkillSpec("review", "Review", "Review", "Review carefully", SkillProjection.OnDemand, true, [], []);
         var v1 = SkillActivationTests.Definition(1, spec); var v2 = SkillActivationTests.Definition(2, spec with { DefaultEnabled = false });
         var defs = new SkillActivationTests.Definitions(v1, v2); var service = new AgentInstanceService(store, defs, ids, clock);

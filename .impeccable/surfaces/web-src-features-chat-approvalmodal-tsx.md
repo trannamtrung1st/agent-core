@@ -11,10 +11,14 @@ related_targets:
 
 Mode: Operate. Preserve the incumbent Chat transcript, composer and Ant Design Modal.
 
-THESIS: Teaching an assistant should produce a clear future-conversation receipt or an exact decision in the same Chat.
+THESIS: Teaching an assistant should produce a clear next-Run receipt or an exact decision in the same Chat.
 
-STORY: Ordinary authorized source access → semantic proposal → exact approval when needed → verified immutable adoption → concise receipt. Current Session pins stay unchanged.
+STORY: Ordinary authorized source access → semantic proposal → exact approval when needed → verified Instance commit (shared publication remains explicit) → concise receipt. Current Run pins stay unchanged; a fresh Run in the same Session resolves new state.
 
-FORM: “Save this harness change?” keeps future-conversation scope visible in an Ant Design info notice and authority version/policy context in compact labeled tags. A quiet Change inset emphasizes supplied headings and aligns wrapped list lines while preserving complete escaped text. Center the Modal at up to 720px for semantic proposals and 520px for ordinary sensitive approvals. Use one keyboard-focusable review region within 40vh for remaining details, with title, scope, metadata and actions outside it. Cap the container to the dynamic viewport with 16px clearance, let review content shrink on short screens, and reset its scroll for each new approval identity. Share 8/12/16 spacing and 40px narrow footer actions across the existing approval consumers. No inferred summaries or interpreted HTML.
+FORM: “Save this harness change?” keeps next-Run scope visible in an Ant Design info notice and authority version/policy context in compact labeled tags. A quiet Change inset emphasizes supplied headings and aligns wrapped list lines while preserving complete escaped text. Center the Modal at up to 720px for semantic proposals and 520px for ordinary sensitive approvals. Use one keyboard-focusable review region within 40vh for remaining details, with title, scope, metadata and actions outside it. Cap the container to the dynamic viewport with 16px clearance, let review content shrink on short screens, and reset its scroll for each new approval identity. Share 8/12/16 spacing and 40px narrow footer actions across the existing approval consumers. No inferred summaries or interpreted HTML.
 
 FINISH: Desktop, 768px and 390px checks cover exact proposal, automatic receipt, rejection/failure and frozen normal Chat. Keyboard/native confirmations and diagnostic primitives remain. Synthetic evidence does not prove real external production actions or subjective quality.
+
+## Self-management exact decisions (2026-10-11)
+
+Apply to this Instance shows complete bounded before/source/after with Instance and policy revisions. Freeze self-management confirms immediate revocation once and keeps ordinary Chat available. Keep the approval review region, Escape/focus return, wrapping actions and 1440/768/390 viewport checks. A configuration approval is distinct from approval of the original sensitive task. Deliberate next owner turn is the current safe continuation fallback; do not imply an automatic resume.

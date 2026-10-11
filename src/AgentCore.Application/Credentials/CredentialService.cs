@@ -1,4 +1,6 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Admin;
+using System.Text.Json;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
 using AgentCore.Domain.Definitions;
@@ -57,18 +59,18 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
             result.Add(new(binding.BindingId, binding.CredentialId, binding.Reference, binding.Revision, await GetAsync(binding.CredentialId, ct)));
         return result;
     }
-    public async ValueTask<CredentialBindingView> BindAsync(Guid instanceId, Guid credentialId, string reference, long expectedInstanceRevision, CancellationToken ct = default)
+    public async ValueTask<CredentialBindingView> BindAsync(Guid instanceId, Guid credentialId, string reference, long expectedInstanceRevision, CancellationToken ct = default, AdminEventActorKind actor = AdminEventActorKind.LocalOwner)
     {
         await RequireInstance(instanceId, true, ct); await RequireCredential(credentialId, ct);
         var alias = Validate(() => CredentialRules.Reference(reference)); var now = time.GetUtcNow();
         var binding = new AgentCredentialBinding(ids.NewId(), instanceId, credentialId, alias, 1, now, now);
-        await bindings.BindAsync(binding, expectedInstanceRevision, ct);
+        await bindings.BindAsync(binding, expectedInstanceRevision, ct, new(ids.NewId(), now, actor, AdminEventOperationKind.CredentialBindingChanged, "agent.instance", instanceId.ToString("D"), expectedInstanceRevision + 1, null, JsonSerializer.Serialize(new { operation = "bind", bindingId = binding.BindingId, credentialId })));
         return new(binding.BindingId, credentialId, alias, 1, await GetAsync(credentialId, ct));
     }
-    public async ValueTask UnbindAsync(Guid instanceId, Guid bindingId, long revision, long instanceRevision, CancellationToken ct = default)
+    public async ValueTask UnbindAsync(Guid instanceId, Guid bindingId, long revision, long instanceRevision, CancellationToken ct = default, AdminEventActorKind actor = AdminEventActorKind.LocalOwner)
     {
         await RequireInstance(instanceId, true, ct);
-        await bindings.UnbindAsync(instanceId, bindingId, revision, instanceRevision, ct);
+        await bindings.UnbindAsync(instanceId, bindingId, revision, instanceRevision, ct, new(ids.NewId(), time.GetUtcNow(), actor, AdminEventOperationKind.CredentialBindingChanged, "agent.instance", instanceId.ToString("D"), instanceRevision + 1, null, JsonSerializer.Serialize(new { operation = "unbind", bindingId })));
     }
     public ValueTask<IReadOnlyList<BoundCredentialMetadata>> SafeMetadataAsync(Guid instanceId, CancellationToken ct = default) =>
         SafeMetadataPageAsync(instanceId, null, int.MaxValue, ct);
@@ -87,12 +89,16 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
         }
         return result;
     }
-    public async ValueTask<string> ResolvePasswordAsync(Guid instanceId, string reference, string origin, CancellationToken ct = default)
+    public ValueTask<string> ResolvePasswordAsync(Guid instanceId, string reference, string origin, CancellationToken ct = default) =>
+        ResolvePasswordAsync(instanceId, reference, origin, ct, null);
+    public async ValueTask<string> ResolvePasswordAsync(Guid instanceId, string reference, string origin, CancellationToken ct, IReadOnlyList<AgentCredentialBinding>? admittedBindings)
     {
         await RequireInstance(instanceId, true, ct);
         var alias = Validate(() => CredentialRules.Reference(reference));
         var binding = (await bindings.ListBindingsAsync(instanceId, ct)).SingleOrDefault(b => b.Reference == alias)
             ?? throw AgentCoreErrors.Forbidden("Credential binding is unavailable.");
+        if (admittedBindings is not null && !admittedBindings.Any(b => b.BindingId == binding.BindingId && b.CredentialId == binding.CredentialId && b.Reference == binding.Reference && b.Revision == binding.Revision))
+            throw AgentCoreErrors.Forbidden("This credential binding was not admitted for this Run; start a fresh owner turn.");
         var credential = await RequireCredential(binding.CredentialId, ct);
         if (credential.Status != CredentialStatus.Active || credential.Kind != CredentialKind.Password
             || !credential.AllowedOrigins.Contains(Validate(() => CredentialRules.Origin(origin)), StringComparer.Ordinal))

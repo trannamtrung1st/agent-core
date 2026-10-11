@@ -30,6 +30,8 @@ internal static class HarnessChatScript
             return Offered(ToolCatalog.KnowledgeRetrieve) ? Call(ToolCatalog.KnowledgeRetrieve, new { identity = request.Messages.Where(m => m.Role == ModelRole.System).Select(m => m.Text).SelectMany(text => System.Text.RegularExpressions.Regex.Matches(text, @"instance:[a-f0-9-]{36}").Select(m => m.Value)).FirstOrDefault() ?? "learned-orders" }) : Answer("Knowledge retrieval is unavailable.");
         }
         var name = knowledge ? "harness.knowledge.upsert" : tool ? "harness.tool.select" : "harness.instructions.update";
+        if (!Offered(name) && Offered(ToolCatalog.CapabilitiesLoad) && !results.Any(m => m.Name == ToolCatalog.CapabilitiesLoad))
+            return Call(ToolCatalog.CapabilitiesLoad, new { query = "harness", limit = 8 });
         if (!Offered(name)) return Answer("I can discuss that here, but I cannot save a durable harness change with the current policy or model. Nothing was saved.");
         if (results.LastOrDefault(m => m.Name == name) is { } authored)
         {

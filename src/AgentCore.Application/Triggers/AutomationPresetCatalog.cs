@@ -35,7 +35,7 @@ public sealed class AutomationPresetCatalog(ExperienceService owners, IExperienc
             if (modelKey is not null ? models.Get(modelKey)?.Tools != true : !resolved.Accepted || models.Get(resolved.Pin!.CatalogKey)?.Tools != true) reasons.Add("Select an available tool-capable unattended model.");
             if (t.PresetId == "review-recent-work") { if (!enabled) reasons.Add("Enable Experience for this instance.");  }
             if (t.PresetId == "consolidate-continuity") { if (!maintenance) reasons.Add("Enable Allow agent consolidation."); if (!enabled && definition.MemoryPolicy is not { IdentityUserRetrieval: true }) reasons.Add("Enable eligible owned Memory or Experience continuity."); }
-            if (t.PresetId == "improve-harness" && instance.HarnessManagement?.Policy is not { Frozen: false, Mode: not HarnessManagementMode.Disabled, Scopes.Count: > 0 }) reasons.Add("Enable Harness Management, select a scope, and unfreeze it.");
+            if (t.PresetId == "improve-harness" && ManagementPolicyResolver.Resolve(definition, instance) is not { Frozen: false, Mode: not HarnessManagementMode.Disabled, Scopes.Count: > 0 }) reasons.Add("Enable Harness Management, select a scope, and unfreeze it.");
             return new AutomationPresetOption(t, reasons.Count == 0, reasons);
         }).ToArray();
     }

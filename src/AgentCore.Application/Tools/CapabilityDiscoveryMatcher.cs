@@ -67,7 +67,8 @@ public static class CapabilityDiscoveryMatcher
         if (calls >= MaxCalls) return new([], [], "load_over_budget");
         var query = q.GetString()!.Trim().ToLowerInvariant();
         var tokens = Words(query);
-        var descriptors = ToolRegistry.All.Where(d => d.Discoverable).ToArray();
+        var descriptors = ToolRegistry.All.Where(d => d.Discoverable
+            && (!ManagementTools.IsManagement(d.Name) || ManagementTools.Allows(d.Name, definition, context.Harness))).ToArray();
         // Explicit registered names narrow the request, including names that are not authorized.
         // This prevents a denied exact request from falling back to unrelated category matches.
         var exact = descriptors.Where(d => tokens.Contains(d.Name)).Select(d => d.Name).ToHashSet(StringComparer.Ordinal);

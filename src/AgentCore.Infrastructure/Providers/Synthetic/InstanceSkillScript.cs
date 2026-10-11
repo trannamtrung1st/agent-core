@@ -17,8 +17,14 @@ internal static class InstanceSkillScript
         {
             if (results.LastOrDefault(m => m.Name == "skills.create") is { } created)
                 return Answer(created.Text.Contains("\"error\"", StringComparison.Ordinal) ? "Skill creation was rejected." : "Saved the accounting Skill. It applies to the next execution.");
+            if (!Offered("skills.create") && Offered(ToolCatalog.CapabilitiesLoad) && !results.Any(m => m.Name == ToolCatalog.CapabilitiesLoad))
+                return Call(ToolCatalog.CapabilitiesLoad, new { query = "skills", limit = 8 });
             if (!Offered("skills.create")) return Answer("Skill management is not authorized. Nothing was saved.");
-            return Call("skills.create", new { name = "Accounting", description = "Review an accounting entry", procedure = "ACCOUNTING_PROCEDURE: inspect evidence, check totals, and explain the result.", projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "workspace.read" } });
+            var listing = results.LastOrDefault(m => m.Name == "skills.list");
+            if (listing is null) return Call("skills.list", new { });
+            using var inspected = JsonDocument.Parse(listing.Text);
+            if (!inspected.RootElement.TryGetProperty("instanceRevision", out var revision)) return Answer("Skill inspection was rejected. Nothing was saved.");
+            return Call("skills.create", new { expectedInstanceRevision = revision.GetInt64(), name = "Accounting", description = "Review an accounting entry", procedure = "ACCOUNTING_PROCEDURE: inspect evidence, check totals, and explain the result.", projection = "OnDemand", enabled = true, requiredCapabilities = new[] { "workspace.read" } });
         }
         if (results.LastOrDefault(m => m.Name == ToolCatalog.SkillsLoad) is { })
             return Answer(prompt.Contains("ACCOUNTING_PROCEDURE", StringComparison.Ordinal) ? "Accounting procedure loaded from the pinned Instance Skill." : "The Skill did not load.");
