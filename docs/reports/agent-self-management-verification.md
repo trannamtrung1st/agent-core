@@ -1,6 +1,6 @@
 # Agent self-management and configuration assistance verification
 
-Date: 2026-10-11. Reviewed baseline: `4c05de7f8add60504f4eeba933925c36146492c9`. Implementation is an uncommitted successor on the current checkout; source identity is recorded below. **Acceptance remains open.** Synthetic/local checks establish the implemented paths; automatic safe fresh-Run continuation and the required real tool-capable model UAT are outstanding. No prior frozen milestone is reopened and P10/P11 remain unopened.
+Date: 2026-10-11. Reviewed baseline: `4c05de7f8add60504f4eeba933925c36146492c9`. Exact local behavior candidate: `2d0bdd445bd3d7f2b4a54147e61edfad3c780242` on `main`. Checks ran on the corresponding working tree before commit; the final Built-in provenance/copy follow-up used focused API/UI tests, build and live Synthetic inspection. Subsequent report-only edits do not change that behavior SHA. **Acceptance remains open.** Synthetic/local checks establish the implemented paths; automatic safe fresh-Run continuation and the required real tool-capable model UAT are outstanding. No prior frozen milestone is reopened and P10/P11 remain unopened.
 
 ## Architecture, owners and migration
 
@@ -75,7 +75,7 @@ Playwright MCP independently exercised the running disposable Synthetic app, the
 | A17 | Attached/detached origin and owner scoping enforced; existing untrusted-source/foreign-owner regressions retained; broader new-tool injection matrix remains open |
 | A18 | Existing selected shared promotion/other-Instance isolation regression retained; no automatic shared publication path introduced |
 | A19 | Preserved stale drafts/errors, approval/rejection/readback, 3 widths and keyboard checks passed; external screen-reader review unrun |
-| A20 | Canonical/design owners synchronized; exact final behavior commit SHA/hosted acceptance pending |
+| A20 | Canonical/design owners synchronized; exact local behavior SHA recorded above; hosted/full proposal acceptance remains pending |
 
 ## Outstanding acceptance and owner-only exceptions
 
