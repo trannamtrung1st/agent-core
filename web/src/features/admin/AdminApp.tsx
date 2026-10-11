@@ -540,9 +540,8 @@ function AdminAppContent({ route }: { route: AdminRoute }) {
             effective={effectiveConfig}
             onBack={() => navigateToAppPath(adminHomePath("instances"))}
             onRetryEffective={() => void reloadEffectiveConfig(route.instanceId)}
-            onInstanceChanged={() => {
-              void reloadEffectiveConfig(route.instanceId);
-              void reloadInstances();
+            onInstanceChanged={async () => {
+              await Promise.all([reloadEffectiveConfig(route.instanceId), reloadInstances()]);
             }}
             onInstanceDeleted={() => {
               void reloadInstances();
@@ -2493,7 +2492,7 @@ export function InstanceDetail({
   effective: EffectiveConfigLoadState;
   onBack: () => void;
   onRetryEffective: () => void;
-  onInstanceChanged: () => void;
+  onInstanceChanged: () => void | Promise<void>;
   onInstanceDeleted: () => void;
 }) {
   const { token } = theme.useToken();
@@ -2666,7 +2665,7 @@ export function InstanceDetail({
                 ]} /> },
               {
                 key: "credentials", label: "Credentials",
-                children: <InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={resolved.instanceLifecycle !== "Active"} />
+                children: <InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={resolved.instanceLifecycle !== "Active"} onUpdated={onInstanceChanged} />
               },
             {
               key: "effective",

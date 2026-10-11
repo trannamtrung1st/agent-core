@@ -150,11 +150,11 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
     }
     private static IReadOnlyList<InstanceSkillView> BuiltIns(AgentDefinition definition, HarnessManagementPolicy policy, AgentInstance owner)
     {
-        var templates = ManagementBuiltInSkills.Resolve(definition with { SelfManagement = new(HarnessManagementMode.Assisted,
-            [HarnessManagementScope.KnowledgeResources, HarnessManagementScope.Instructions, HarnessManagementScope.ToolSelection], [], [], BuiltInSkills: new()) });
+        var templates = ManagementBuiltInSkills.Catalog;
         return templates.Select(s => new InstanceSkillView(s.Key, SkillOrigin.BuiltIn, s.Name, s.Description, s.Procedure, s.Projection,
             ManagementTools.Enabled(policy) && (s.Key == ManagementBuiltInSkills.ConfigurationKey ? policy.BuiltInSkills?.ConfigurationAssistance != false : policy.BuiltInSkills?.HarnessAuthoring != false)
-                && (s.Key != ManagementBuiltInSkills.HarnessKey || policy.Scopes.Any(a => a is HarnessManagementScope.KnowledgeResources or HarnessManagementScope.Instructions or HarnessManagementScope.ToolSelection)),
+                && (s.Key != ManagementBuiltInSkills.HarnessKey || policy.Scopes.Any(a => a is HarnessManagementScope.KnowledgeResources or HarnessManagementScope.Instructions or HarnessManagementScope.ToolSelection))
+                && s.RequiredCapabilities.All(c => RolePermissions.AllowsTool(definition, c)),
             s.RequiredCapabilities, owner.HarnessManagement?.PolicyRevision ?? 1, null, null, null, s.SourceId,
             s.RequiredCapabilities.Where(c => !RolePermissions.AllowsTool(definition, c)).ToArray(),
             EnabledOverride: s.Key == ManagementBuiltInSkills.ConfigurationKey ? owner.HarnessManagement?.Overrides?.ConfigurationAssistance?.Value : owner.HarnessManagement?.Overrides?.HarnessAuthoring?.Value,

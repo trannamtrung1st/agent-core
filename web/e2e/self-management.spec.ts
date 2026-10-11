@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { waitForResponseSettled } from './support/response-settled';
 async function select(page: Page, name: string, text: string, search = false) {
   const field = page.getByRole('combobox', {name,exact:true}); await field.click();
   if (search) await field.fill(text);
@@ -31,14 +32,24 @@ test('Admin enable, bounded save, exact rejection and approval, next Run readbac
   await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();await select(page,'Identity',name,true);
   await send(page,'Always answer briefly.');await expect(page.getByText('Saved for my next Run. The current Run remains unchanged.',{exact:true}).last()).toBeVisible();
   const chat=page.url();
-  await send(page,'Turn on user memory retrieval.');
+  const memory = () => page.evaluate(async instanceId => {
+    const response = await fetch(`/api/v2/admin/agent-instances/${instanceId}/settings/memoryPolicy`, {
+      headers: { 'X-AgentCore-Owner-Capability': localStorage.getItem('agent-core.owner-capability')! } });
+    if (!response.ok) throw new Error(`Memory readback failed: ${response.status}`);
+    return (await response.json()).effective.sessionMemory;
+  }, id);
+  expect(await memory()).toBe(true);
+  await send(page,'Turn off session memory.');
   const approval=page.getByRole('dialog',{name:'Apply configuration to this Instance?',exact:true});
-  await expect(approval).toContainText('userRetrieval');await expect(approval).toContainText('Next new Run');
+  await expect(approval).toContainText('sessionMemory');await expect(approval).toContainText('Next new Run');
+  await approval.getByRole('button',{name:'Reject',exact:true}).focus();
   await page.keyboard.press('Escape');await expect(approval).toBeHidden();
   await expect(page.getByText('Nothing was saved. Inspect the current revision and policy before retrying.',{exact:true}).last()).toBeVisible();
-  await send(page,'Turn on user memory retrieval.');await expect(approval).toBeVisible();
+  await waitForResponseSettled(page); expect(await memory()).toBe(true);
+  await send(page,'Turn off session memory.');await expect(approval).toBeVisible();
   await approval.getByRole('button',{name:'Apply to this Instance',exact:true}).click();await expect(approval).toBeHidden();
-  await expect(page.getByText('Saved for my next Run. The current Run remains unchanged.',{exact:true}).last()).toBeVisible();
+  await expect(page.locator('.chat-message-assistant').last()).toContainText('Saved for my next Run. The current Run remains unchanged.');
+  await waitForResponseSettled(page); expect(await memory()).toBe(false);
   await send(page,'Verify my saved configuration.');await expect(page.getByText('Current response length: concise. Configuration applies to this fresh Run.',{exact:true})).toBeVisible();
   await send(page,'Freeze self-management.');
   const freeze=page.getByRole('dialog',{name:'Freeze self-management?',exact:true});await expect(freeze).toContainText('Immediate management revocation');

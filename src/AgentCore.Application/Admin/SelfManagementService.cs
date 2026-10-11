@@ -68,8 +68,9 @@ public sealed class SelfManagementService(IAgentInstanceStore instances, IAgentD
         var owner = await OwnerAsync(id, ct);
         var effective = ManagementPolicyResolver.Resolve(await DefinitionAsync(owner, ct), owner);
         if (agent && !effective.Allows(HarnessManagementScope.Skills)) throw AgentCoreErrors.Forbidden("Built-in enablement is outside the management grant.");
-        var overrides = owner.HarnessManagement?.Overrides ?? new ManagementPolicyOverrides(new(effective.Mode), new(effective.Scopes.ToArray()), new((effective.ManagedAutoApply ?? []).ToArray()),
-            new(effective.BuiltInSkills?.ConfigurationAssistance ?? true), new(effective.BuiltInSkills?.HarnessAuthoring ?? true));
+        var overrides = owner.HarnessManagement is { } stored
+            ? stored.Overrides ?? ManagementPolicyOverrides.FromLegacy(effective)
+            : new ManagementPolicyOverrides();
         overrides = key switch {
             AgentCore.Application.Agents.ManagementBuiltInSkills.ConfigurationKey => overrides with { ConfigurationAssistance = enabled is null ? null : new(enabled.Value) },
             AgentCore.Application.Agents.ManagementBuiltInSkills.HarnessKey => overrides with { HarnessAuthoring = enabled is null ? null : new(enabled.Value) },
@@ -88,6 +89,7 @@ public sealed class SelfManagementService(IAgentInstanceStore instances, IAgentD
         if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Forbidden("Archived Instances are read-only.");
         var old = owner.HarnessManagement ?? new(effective);
         var next = old with { Policy = effective with { Frozen = true }, PolicyRevision = old.PolicyRevision + 1,
+            Overrides = owner.HarnessManagement is null ? new() : old.Overrides,
             Preparation = old.Preparation is { Status: not HarnessPreparationStatus.Published } prep ? prep with {
                 Status = HarnessPreparationStatus.Cancelled,
                 Approvals = prep.Approvals.Select(a => a.Status == "Pending" ? a with { Status = "Cancelled" } : a).ToArray() } : old.Preparation };

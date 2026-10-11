@@ -10,7 +10,7 @@ internal static class SelfManagementScript
     public static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
     {
         var user = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
-        if (user is not ("Inspect my configuration." or "Always answer briefly." or "Turn off user memory retrieval." or "Turn on user memory retrieval." or "Freeze self-management." or "Verify my saved configuration.")) return null;
+        if (user is not ("Inspect my configuration." or "Always answer briefly." or "Turn off user memory retrieval." or "Turn on user memory retrieval." or "Turn off session memory." or "Freeze self-management." or "Verify my saved configuration.")) return null;
         var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
         bool Offered(string name) => request.Tools?.Any(t => t.Name == name) == true;
         var freeze = user == "Freeze self-management.";
@@ -39,7 +39,9 @@ internal static class SelfManagementScript
         if (freeze) return Call(name, new { expectedInstanceRevision = revision.GetInt64() });
         return user == "Always answer briefly."
             ? Call(name, new { expectedInstanceRevision = revision.GetInt64(), section = "conversationPolicy", set = new { responseLength = "concise" }, clear = Array.Empty<string>() })
-            : Call(name, new { expectedInstanceRevision = revision.GetInt64(), section = "memoryPolicy", set = new { userRetrieval = user == "Turn on user memory retrieval." }, clear = Array.Empty<string>() });
+            : user == "Turn off session memory."
+                ? Call(name, new { expectedInstanceRevision = revision.GetInt64(), section = "memoryPolicy", set = new { sessionMemory = false }, clear = Array.Empty<string>() })
+                : Call(name, new { expectedInstanceRevision = revision.GetInt64(), section = "memoryPolicy", set = new { userRetrieval = user == "Turn on user memory retrieval." }, clear = Array.Empty<string>() });
     }
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object args) => [new ModelToolCallEvent(new("self-" + name, name, JsonSerializer.Serialize(args))), new ModelCompleted(ModelStopReason.ToolCalls)];
     private static IReadOnlyList<ModelGenerationEvent> Answer(string text) => [new ModelSemanticResponseReady(new(text, new(ModelSpeechMode.Same, null), [])), new ModelCompleted(ModelStopReason.Completed)];

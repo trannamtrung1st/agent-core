@@ -10,6 +10,31 @@ async function owner(page: Page, path: string, method = "GET", body?: unknown) {
   return responseText ? JSON.parse(responseText) : null;
 }
 
+test("consecutive binding changes refresh the Instance revision without navigation", async ({ page }) => {
+  await page.goto("/admin/connections/credentials");
+  await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
+  const instance = await owner(page, "agent-instances", "POST", { definitionId: "general-assistant", version: 23 });
+  const name = `Binding revision ${Date.now()}`;
+  const credential = await owner(page, "credentials", "POST", { displayName: name, kind: "Password", metadata: {},
+    allowedOrigins: ["https://store.example.test"], protectedValue: "disposable-synthetic-fixture-value" });
+  await page.goto(`/admin/instances/${instance.instanceId}/credentials`);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page.getByRole("button", { name: "Bind credential", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Bind credential", exact: true });
+    await dialog.getByRole("combobox", { name: "System credential" }).fill(name);
+    await page.getByTitle(`${name} · Password · Active`, { exact: true }).click();
+    await dialog.getByLabel("Reference", { exact: true }).fill("revision-check");
+    await dialog.getByRole("button", { name: "Bind credential", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("cell", { name: "revision-check", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Unbind", exact: true }).click();
+    await page.getByRole("dialog", { name: "Unbind revision-check?" }).getByRole("button", { name: "Unbind", exact: true }).click();
+    await expect(page.getByText("No credentials bound")).toBeVisible();
+  }
+  expect((await owner(page, `instances/${instance.instanceId}/effective-config`)).instanceRevision).toBe(instance.revision + 4);
+  await owner(page, `credentials/${credential.credentialId}?expectedRevision=${credential.revision}`, "DELETE");
+});
+
 test("shared system credentials have safe CRUD, explicit bindings, profile reset and mobile navigation", async ({page}) => {
   test.setTimeout(120_000);
   const errors: string[] = []; page.on("pageerror", e => errors.push(e.message));
@@ -108,7 +133,8 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await page.getByRole("button",{name:"Unbind",exact:true}).click();
   await page.getByRole("dialog",{name:"Unbind primary?"}).getByRole("button",{name:"Unbind",exact:true}).click();
   await expect(page.getByText("No credentials bound")).toBeVisible();
-  await owner(page, `agent-instances/${b.instanceId}/lifecycle`, "PATCH", {expectedRevision:1,lifecycle:"Archived"});
+  const currentB = await owner(page, `instances/${b.instanceId}/effective-config`);
+  await owner(page, `agent-instances/${b.instanceId}/lifecycle`, "PATCH", {expectedRevision:currentB.instanceRevision,lifecycle:"Archived"});
   await page.goto(`/admin/instances/${b.instanceId}/credentials`); await expect(page.getByRole("button",{name:"Bind credential",exact:true})).toBeDisabled(); await expect(page.getByRole("button",{name:"Unbind",exact:true})).toBeDisabled();
   for (const width of [1440,768,390]) {
     await page.setViewportSize({width,height:900}); await expect(page.getByRole("heading",{name:"Credential bindings"})).toBeVisible();

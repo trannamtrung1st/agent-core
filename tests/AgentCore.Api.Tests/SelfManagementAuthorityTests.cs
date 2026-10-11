@@ -107,4 +107,109 @@ public sealed class SelfManagementAuthorityTests
         finally { Directory.Delete(root, true); }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Builtin_choice_changes_only_that_field_and_new_definition_defaults_still_inherit(bool sqlite)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "management-builtin-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            await using AgentCoreApiFactory factory = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
+            var services = factory.Services;
+            var admin = services.GetRequiredService<AdminAgentInstanceService>();
+            var owner = await admin.CreateManagedAsync("general-assistant", 23);
+            var skills = services.GetRequiredService<AgentInstanceSkillService>();
+            var builtin = await skills.InspectAsync(owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
+            await skills.WriteAsync(owner.InstanceId, "set_enabled", builtin.Key, builtin.Revision, enabled: false);
+            var policy = await services.GetRequiredService<SelfManagementService>().ReadAsync(owner.InstanceId);
+            Assert.Null(policy.Overrides!.Mode);
+            Assert.Null(policy.Overrides.Scopes);
+            Assert.Null(policy.Overrides.AutoApply);
+            Assert.Null(policy.Overrides.HarnessAuthoring);
+            Assert.False(policy.Overrides.ConfigurationAssistance!.Value);
+            var lifecycle = services.GetRequiredService<AgentDefinitionLifecycleService>();
+            var draft = await lifecycle.ForkDraftAsync("general-assistant", 23, DefinitionDraftSourceKind.ForkBuiltIn);
+            draft = await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, draft.Candidate with {
+                Environment = draft.Candidate.Environment! with { KnowledgeSources = [] },
+                SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
+            var published = await services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
+            await admin.ReassociateActiveVersionAsync(owner.InstanceId, published.Version, policy.InstanceRevision);
+            policy = await services.GetRequiredService<SelfManagementService>().ReadAsync(owner.InstanceId);
+            Assert.Equal(HarnessManagementMode.Managed, policy.Effective.Mode);
+            Assert.Equal([HarnessManagementScope.Settings], policy.Effective.Scopes);
+            Assert.False(policy.Effective.BuiltInSkills!.ConfigurationAssistance);
+            builtin = await skills.InspectAsync(owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
+            await skills.WriteAsync(owner.InstanceId, "reset_enabled", builtin.Key, builtin.Revision);
+            policy = await services.GetRequiredService<SelfManagementService>().ReadAsync(owner.InstanceId);
+            Assert.Equal("definition", policy.Source);
+            Assert.True(policy.Effective.BuiltInSkills!.ConfigurationAssistance);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task Exact_agent_policy_update_preserves_independent_builtin_choices()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        var services = factory.Services;
+        var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
+        var management = services.GetRequiredService<SelfManagementService>();
+        var view = await management.UpdateAsync(owner.InstanceId, owner.Revision,
+            new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.ManagementPolicy]), ConfigurationAssistance: new(false)));
+        var definition = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
+        var args = JsonSerializer.SerializeToElement(new { expectedInstanceRevision = view.InstanceRevision,
+            mode = "Assisted", scopes = new[] { "ManagementPolicy" }, managedAutoApply = Array.Empty<string>() });
+        var call = new ModelToolCall("change", "management.policy.update", args.GetRawText());
+        var grant = new ToolApprovalGrant(Guid.NewGuid(), call.Name, ToolActionHash.Compute(call.Name, args), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var result = await services.GetRequiredService<SessionToolExecutor>().ExecuteAsync(definition, Guid.NewGuid(), call, 100000,
+            approvalGrant: grant, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId));
+        Assert.Contains("\"outcome\":\"applied\"", result.Text);
+        Assert.Contains("\"revocationsApplyTo\":\"immediate\"", result.Text);
+        view = await management.ReadAsync(owner.InstanceId);
+        Assert.Equal(HarnessManagementMode.Assisted, view.Effective.Mode);
+        Assert.False(view.Effective.BuiltInSkills!.ConfigurationAssistance);
+        Assert.False(view.Overrides!.ConfigurationAssistance!.Value);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Freezing_fresh_owner_preserves_all_definition_inheritance(bool sqlite)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "management-freeze-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            await using AgentCoreApiFactory host = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
+            var lifecycle = host.Services.GetRequiredService<AgentDefinitionLifecycleService>();
+            var draft = await lifecycle.ForkDraftAsync("general-assistant", 23, DefinitionDraftSourceKind.ForkBuiltIn);
+            draft = await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, draft.Candidate with {
+                Environment = draft.Candidate.Environment! with { KnowledgeSources = [] },
+                SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
+            var published = await host.Services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
+            var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", published.Version);
+            var policy = await host.Services.GetRequiredService<SelfManagementService>().FreezeAsync(owner.InstanceId, owner.Revision);
+            Assert.True(policy.Effective.Frozen);
+            Assert.Equal("definition", policy.Source);
+            Assert.Equal(new ManagementPolicyOverrides(), policy.Overrides);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task Admin_builtin_catalog_discloses_missing_authority_without_runtime_grant()
+    {
+        await using var host = new AgentCoreApiFactory();
+        var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
+        var skill = await host.Services.GetRequiredService<AgentInstanceSkillService>().InspectAsync(owner.InstanceId, ManagementBuiltInSkills.ConfigurationKey);
+        Assert.False(skill.Enabled);
+        Assert.Contains("configuration.inspect", skill.MissingCapabilities);
+        Assert.Equal(SkillOrigin.BuiltIn, skill.Origin);
+        var definition = (await host.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(owner.DefinitionId, owner.ActiveVersion))!;
+        Assert.DoesNotContain(ManagementBuiltInSkills.Resolve(definition with { SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) }),
+            s => s.Key == ManagementBuiltInSkills.ConfigurationKey);
+    }
+
 }

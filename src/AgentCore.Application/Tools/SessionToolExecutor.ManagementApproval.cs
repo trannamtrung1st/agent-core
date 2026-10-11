@@ -22,15 +22,17 @@ public sealed partial class SessionToolExecutor
             if (call.Name == "configuration.propose") ValidateRemediationOption(id, policy, args);
             var details = new Dictionary<string, string> {
                 ["Target"] = "This Agent Instance: " + id.ToString("D"), ["Instance revision"] = revision.ToString(),
-                ["Policy revision"] = policy.PolicyRevision.ToString(), ["Applies to"] = call.Name == "management.freeze" ? "Immediate management revocation" : "Next new Run, including existing Sessions; current Run remains pinned",
+                ["Policy revision"] = policy.PolicyRevision.ToString(), ["Applies to"] = call.Name == "management.freeze" ? "Immediate management revocation"
+                    : call.Name == "management.policy.update" ? "Authority removals revoke immediately; new grants apply to the next new Run"
+                    : "Next new Run, including existing Sessions; current Run remains pinned",
                 ["Exact operation"] = call.Name, ["Approval scope"] = "This configuration only. Original sensitive task actions need their separate approvals." };
             if (call.Name is "settings.patch" or "configuration.propose")
             {
                 var state = await instanceSettings!.ReadAsync(id, args.GetProperty("section").GetString()!, ct);
                 var set = args.GetProperty("set").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
                 var clear = args.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!).ToArray();
-                // Validate types, paths and cross-section fields before exposing a confirmation.
-                _ = AgentCore.Application.Agents.InstanceSettingsResolver.Patch(new(), state.Section, set, clear);
+                // Preview and commit use the same owner, Definition and host constraints.
+                await instanceSettings.ValidatePatchAsync(id, state.Section, revision, set, clear, ct);
                 var fields = set.Keys.Concat(clear).ToArray();
                 details["Before and source"] = JsonSerializer.Serialize(fields.ToDictionary(f => f, f => new { value = state.Effective[f], source = state.Sources[f] }), ManagementJson);
                 details["After"] = JsonSerializer.Serialize(new { section = state.Section, set, clear, inheritedDefaults = clear.ToDictionary(f => f, f => state.DefinitionDefaults[f]) }, ManagementJson);

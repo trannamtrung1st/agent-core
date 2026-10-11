@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App, ConfigProvider } from "antd";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CredentialsSection, InstanceCredentialsSection } from "./CredentialsSection";
 import * as api from "../../services/adminApi";
@@ -116,6 +117,38 @@ describe("System credentials", () => {
     fireEvent.click(dialog.getByRole("button", { name: "Bind credential" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(api.bindCredential).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes the owner revision after binding before a consecutive unbind", async () => {
+    const binding = { bindingId: "grant", credentialId: "credential", reference: "store-admin", revision: 1, credential };
+    let bound = false;
+    vi.mocked(api.listCredentialBindings).mockImplementation(async () => bound ? [binding] : []);
+    vi.mocked(api.bindCredential).mockImplementation(async () => { bound = true; return binding; });
+    vi.mocked(api.unbindCredential).mockImplementation(async () => { bound = false; });
+    let finishRefresh!: () => void;
+    const refresh = vi.fn(() => new Promise<void>(resolve => { finishRefresh = resolve; }));
+    function Owner() {
+      const [revision, setRevision] = useState(2);
+      return <InstanceCredentialsSection instanceId="owner" revision={revision} archived={false}
+        onUpdated={async () => { await refresh(); setRevision(value => value + 1); }} />;
+    }
+    view(<Owner />);
+    const opener = await screen.findByRole("button", { name: "Bind credential" });
+    await waitFor(() => expect(opener).toBeEnabled()); fireEvent.click(opener);
+    const dialog = within(screen.getByRole("dialog", { name: "Bind credential" }));
+    fireEvent.mouseDown(dialog.getByRole("combobox", { name: "System credential" }));
+    fireEvent.click(await screen.findByText("Shared store · Password · Active"));
+    fireEvent.change(dialog.getByLabelText("Reference", { exact: true }), { target: { value: "store-admin" } });
+    fireEvent.click(dialog.getByRole("button", { name: "Bind credential" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(opener).toBeDisabled(); await act(async () => finishRefresh());
+    await screen.findByRole("cell", { name: "store-admin" }, { timeout: 5000 });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Unbind" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Unbind" }));
+    fireEvent.click(within(await screen.findByRole("dialog", {}, { timeout: 5000 })).getByRole("button", { name: "Unbind" }));
+    await waitFor(() => expect(api.unbindCredential).toHaveBeenCalledWith("owner", binding, 3));
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2)); await act(async () => finishRefresh());
+    expect(await screen.findByText("No credentials bound")).toBeInTheDocument();
   });
 
 });

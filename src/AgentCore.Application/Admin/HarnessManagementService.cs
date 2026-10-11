@@ -676,7 +676,7 @@ public sealed class HarnessManagementService(
             throw AgentCoreErrors.Validation("Harness management requires an active managed Agent Instance.");
         var definition = await RequireDefinitionAsync(instance, ct);
         var policy = ManagementPolicyResolver.Resolve(definition, instance);
-        return instance with { HarnessManagement = (instance.HarnessManagement ?? new(policy)) with { Policy = policy } };
+        return instance with { HarnessManagement = (instance.HarnessManagement ?? new(policy, Overrides: new())) with { Policy = policy } };
     }
 
     private async ValueTask<AgentDefinition> RequireDefinitionAsync(AgentInstance instance, CancellationToken ct) =>

@@ -12,6 +12,28 @@ using Microsoft.Extensions.DependencyInjection;
 namespace AgentCore.Api.Tests;
 public sealed class SelfManagementRemediationTests
 {
+    [Theory]
+    [InlineData("capabilities", "{\"selected\":[\"unknown.external.effect\"]}")]
+    [InlineData("providerPreferences", "{\"languageModel\":\"unknown-provider\"}")]
+    [InlineData("modelDefaults", "{\"catalogKey\":\"unknown-model\"}")]
+    [InlineData("memoryPolicy", "{\"userRetrieval\":true}")]
+    public async Task Invalid_definition_or_host_selection_is_rejected_before_approval(string section, string patch)
+    {
+        await using var host = new AgentCoreApiFactory();
+        var services = host.Services;
+        var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 23);
+        var policy = await services.GetRequiredService<SelfManagementService>().UpdateAsync(owner.InstanceId, owner.Revision,
+            new(new(HarnessManagementMode.Assisted), new([HarnessManagementScope.Settings])));
+        var args = JsonSerializer.SerializeToElement(new { expectedInstanceRevision = policy.InstanceRevision, section,
+            set = JsonSerializer.Deserialize<JsonElement>(patch), clear = Array.Empty<string>() });
+        var preview = await services.GetRequiredService<SessionToolExecutor>().PrepareManagementApprovalAsync(
+            new("invalid", "settings.patch", args.GetRawText()), args,
+            new(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId), default);
+        Assert.Null(preview.Preparation);
+        Assert.NotNull(preview.ErrorJson);
+        Assert.Equal(policy.InstanceRevision, (await services.GetRequiredService<SelfManagementService>().ReadAsync(owner.InstanceId)).InstanceRevision);
+    }
+
     [Fact]
     public async Task Options_bind_owner_section_policy_and_revision_and_invalid_schema_never_writes()
     {

@@ -152,7 +152,7 @@ export function CredentialsSection() {
     </Modal></AgentConfigurationPanel>;
 }
 
-export function InstanceCredentialsSection({ instanceId, revision, archived }: { instanceId: string; revision: number; archived: boolean }) {
+export function InstanceCredentialsSection({ instanceId, revision, archived, onUpdated }: { instanceId: string; revision: number; archived: boolean; onUpdated?: () => void | Promise<void> }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [bindings, setBindings] = useState<CredentialBinding[]>([]); const [choices, setChoices] = useState<SystemCredential[]>([]);
   const [loading, setLoading] = useState(true); const [loaded, setLoaded] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<AdminFailureNotice>();
@@ -166,7 +166,7 @@ export function InstanceCredentialsSection({ instanceId, revision, archived }: {
   useEffect(() => { void load(); }, [load, revision]);
   async function mutate(action: () => Promise<unknown>, inDialog = false) {
     setBusy(true); if (inDialog) setBindingError(undefined); else setError(undefined);
-    try { await action(); setOpen(false); form.resetFields(); await load(); }
+    try { await action(); setOpen(false); form.resetFields(); await onUpdated?.(); await load(); }
     catch (e) { const notice = describeAdminError(e, "Binding operation failed. Reload the instance if its revision changed.");
       if (inDialog) setBindingError(notice); else setError(notice); }
     finally { setBusy(false); }

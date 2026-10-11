@@ -30,23 +30,23 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         return View(owner, await DefinitionAsync(owner, ct), section);
     }
 
+    public async ValueTask ValidatePatchAsync(Guid id, string section, long expectedRevision,
+        IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear, CancellationToken ct = default)
+    {
+        var owner = await RequireAsync(id, ct);
+        RequireWritableRevision(owner, expectedRevision);
+        _ = ResolvePatch(await DefinitionAsync(owner, ct), owner.SettingsOverrides ?? new(), section, set, clear);
+    }
+
     public async ValueTask<InstanceSettingsSection> PatchAsync(Guid id, string section, long expectedRevision,
         IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear, CancellationToken ct = default,
         AdminEventActorKind actor = AdminEventActorKind.LocalOwner, HarnessManagementState? harnessManagement = null)
     {
         var owner = await RequireAsync(id, ct);
-        if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived instances are read-only.");
-        if (owner.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Instance revision is stale. Reload while retaining your draft.");
+        RequireWritableRevision(owner, expectedRevision);
         var definition = await DefinitionAsync(owner, ct);
         var current = owner.SettingsOverrides ?? new();
-        var next = InstanceSettingsResolver.Patch(current, section, set, clear);
-        var effective = InstanceSettingsResolver.Resolve(definition, next);
-        if (models is not null) _ = SessionModelBinder.PinDefault(models, effective);
-        if (aliases is not null && (!aliases.LanguageModels.Contains(effective.ProviderPreferences.LanguageModel)
-            || effective.ProviderPreferences.SpeechRecognizer is { } stt && !aliases.SpeechRecognizers.Contains(stt)
-            || effective.ProviderPreferences.SpeechSynthesizer is { } tts && !aliases.SpeechSynthesizers.Contains(tts)))
-            throw AgentCoreErrors.Validation("Provider alias is not configured on this host.");
-        DefinitionResourcePolicies.RejectSecretTokens(effective.SystemInstructions);
+        var (next, effective) = ResolvePatch(definition, current, section, set, clear);
         if (JsonSerializer.Serialize(current, Json) == JsonSerializer.Serialize(next, Json)) return View(owner, definition, section);
         var now = time.GetUtcNow();
         var history = new AdminEventAppend(ids.NewId(), now, actor, AdminEventOperationKind.InstanceSettingsChanged,
@@ -56,6 +56,26 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         var updated = await instances.UpdateWithExpectedRevisionAsync(new(id, expectedRevision,
             History: history, SetSettingsOverrides: true, SettingsOverrides: next, AutomationPolicyChanges: reconciliation, HarnessManagement: harnessManagement), now, ct);
         return View(updated, definition, section);
+    }
+
+    private static void RequireWritableRevision(AgentInstance owner, long expectedRevision)
+    {
+        if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived instances are read-only.");
+        if (owner.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Instance revision is stale. Reload while retaining your draft.");
+    }
+
+    private (InstanceSettingsOverrides Next, AgentDefinition Effective) ResolvePatch(AgentDefinition definition,
+        InstanceSettingsOverrides current, string section, IReadOnlyDictionary<string, JsonElement> set, IReadOnlyList<string> clear)
+    {
+        var next = InstanceSettingsResolver.Patch(current, section, set, clear);
+        var effective = InstanceSettingsResolver.Resolve(definition, next);
+        if (models is not null) _ = SessionModelBinder.PinDefault(models, effective);
+        if (aliases is not null && (!aliases.LanguageModels.Contains(effective.ProviderPreferences.LanguageModel)
+            || effective.ProviderPreferences.SpeechRecognizer is { } stt && !aliases.SpeechRecognizers.Contains(stt)
+            || effective.ProviderPreferences.SpeechSynthesizer is { } tts && !aliases.SpeechSynthesizers.Contains(tts)))
+            throw AgentCoreErrors.Validation("Provider alias is not configured on this host.");
+        DefinitionResourcePolicies.RejectSecretTokens(effective.SystemInstructions);
+        return (next, effective);
     }
 
     private static InstanceSettingsSection View(AgentInstance owner, AgentDefinition definition, string section)

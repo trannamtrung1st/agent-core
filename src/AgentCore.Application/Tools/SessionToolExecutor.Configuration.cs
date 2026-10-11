@@ -107,10 +107,13 @@ public sealed partial class SessionToolExecutor
                 case "management.inspect": result = policy; break;
                 case "management.freeze": result = new { outcome = "frozen", policy = await selfManagement.FreezeAsync(id, revision, ct), changesApplyTo = "immediateRevocation", ordinaryTasksAvailable = true }; break;
                 case "management.policy.update":
-                    var overrides = new ManagementPolicyOverrides(new(Enum.Parse<HarnessManagementMode>(args.GetProperty("mode").GetString()!, false)),
-                        new(args.GetProperty("scopes").EnumerateArray().Select(a => Enum.Parse<HarnessManagementScope>(a.GetString()!, false)).ToArray()),
-                        new(args.GetProperty("managedAutoApply").EnumerateArray().Select(a => Enum.Parse<ManagementAutoApply>(a.GetString()!, false)).ToArray()));
-                    result = new { outcome = "applied", policy = await selfManagement.UpdateAsync(id, revision, overrides, agent: true, ct: ct), changesApplyTo = "nextRun" }; break;
+                    var overrides = policy.Overrides ?? (policy.Source == "instance"
+                        ? ManagementPolicyOverrides.FromLegacy(policy.Effective) : new ManagementPolicyOverrides());
+                    overrides = overrides with {
+                        Mode = new(Enum.Parse<HarnessManagementMode>(args.GetProperty("mode").GetString()!, false)),
+                        Scopes = new(args.GetProperty("scopes").EnumerateArray().Select(a => Enum.Parse<HarnessManagementScope>(a.GetString()!, false)).ToArray()),
+                        AutoApply = new(args.GetProperty("managedAutoApply").EnumerateArray().Select(a => Enum.Parse<ManagementAutoApply>(a.GetString()!, false)).ToArray()) };
+                    result = new { outcome = "applied", policy = await selfManagement.UpdateAsync(id, revision, overrides, agent: true, ct: ct), changesApplyTo = "nextRun", revocationsApplyTo = "immediate" }; break;
                 case "settings.list": result = await instanceSettings!.ReadAllAsync(id, ct); break;
                 case "settings.inspect": result = await instanceSettings!.ReadAsync(id, args.GetProperty("section").GetString()!, ct); break;
                 case "configuration.propose":

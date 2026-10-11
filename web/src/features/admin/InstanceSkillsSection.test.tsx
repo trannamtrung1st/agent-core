@@ -9,6 +9,20 @@ const local: InstanceSkill = { ...definition, key: 'instance:00000000-0000-0000-
 const view = (archived = false) => <ConfigProvider><App><InstanceSkillsSection instanceId="owner" archived={archived} /></App></ConfigProvider>;
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(listInstanceSkills).mockResolvedValue([definition, local]); vi.mocked(inspectInstanceSkill).mockImplementation(async (_id, key) => key === definition.key ? definition : local); vi.mocked(toggleInstanceSkill).mockResolvedValue(definition); vi.mocked(customizeInstanceSkill).mockResolvedValue({ instanceSkill: local, definitionSkill: { key: definition.key, enabled: false, revision: definition.revision + 1 } }); vi.mocked(deleteInstanceSkill).mockResolvedValue(local); vi.mocked(createInstanceSkill).mockResolvedValue(local); });
 describe('Instance Skills ownership', () => {
+  it('shows a read-only Core Skill and distinguishes missing authority from policy suppression', async () => {
+    const builtin: InstanceSkill = { ...definition, key: 'builtin:configuration-assistance.v1', origin: 'BuiltIn',
+      name: 'Configuration assistance', enabled: false, enabledChoice: true, definitionVersion: null,
+      missingCapabilities: ['configuration.inspect'] };
+    vi.mocked(listInstanceSkills).mockResolvedValue([builtin]);
+    render(view());
+    const region = within(await screen.findByRole('region', { name: 'Built-in Skills' }));
+    expect(region.getByText('Core v1')).toBeInTheDocument();
+    expect(region.getByText('Missing required capabilities')).toBeInTheDocument();
+    expect(region.queryByText('Suppressed by management policy')).toBeNull();
+    expect(region.queryByRole('button', { name: 'Customize' })).toBeNull();
+    expect(region.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(region.getByRole('switch', { name: 'Enable Built-in Skill Configuration assistance' })).toBeChecked();
+  });
   it('groups both same-name origins, warns about missing capabilities, and toggles with revision', async () => {
     render(view()); await screen.findByText('Reusable review', {}, { timeout: 5000 });
     expect(within(screen.getByRole('region', { name: 'Definition Skills' })).getByText('Review')).toBeInTheDocument();

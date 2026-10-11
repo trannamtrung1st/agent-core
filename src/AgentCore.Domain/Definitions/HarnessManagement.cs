@@ -13,7 +13,13 @@ public sealed record ManagementPolicyOverrides(
     InstanceField<HarnessManagementScope[]>? Scopes = null,
     InstanceField<ManagementAutoApply[]>? AutoApply = null,
     InstanceField<bool>? ConfigurationAssistance = null,
-    InstanceField<bool>? HarnessAuthoring = null);
+    InstanceField<bool>? HarnessAuthoring = null)
+{
+    // Only legacy full-policy records need materialization. Fresh records remain sparse.
+    public static ManagementPolicyOverrides FromLegacy(HarnessManagementPolicy policy) => new(
+        new(policy.Mode), new(policy.Scopes.ToArray()), new((policy.ManagedAutoApply ?? []).ToArray()),
+        new(policy.BuiltInSkills?.ConfigurationAssistance ?? true), new(policy.BuiltInSkills?.HarnessAuthoring ?? true));
+}
 public enum HarnessPreparationStatus { Preparing, AwaitingApproval, Ready, Failed, Cancelled, Published }
 public enum HarnessEvidenceStatus { Verified, PartiallyVerified, CannotVerify, RequiresExternalEvidence, Failed }
 
