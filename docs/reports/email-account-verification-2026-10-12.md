@@ -44,7 +44,7 @@ Initial stale Definition version expectations were updated; an initial unrestric
 
 EA-06 has separate Synthetic Admin observations and fake TLS authentication without dispatch, not live Gmail connectivity. EA-08 preserves Gmail REST contract tests but does not enable that adapter in the production factory until typed OAuth profiles exist. EA-22 live Gmail/delivery remains deliberately deferred. EA-23 canonical owners, setup, README/TODO/plan and DESIGN/PRODUCT context are synchronized. EA-24 local checks are reported precisely; exact behavior-commit hosted CI is unrun and full release acceptance is not claimed.
 
-Behavior candidate: `b456fdada83698d5b0b43bdeda294935800fb5ae` on `develop/branch-1`, with main through `10b156bb49b62f78ea6266109394f825d9c03923` integrated. Automatic approval review rejected pushing this candidate to `https://github.com/trannamtrung1st/agent-core.git`: repository ownership/trust and explicit source-export authorization were not established. An explicit owner approval is pending. No push, hosted workflow, PR or merge into main was performed. The final report is a documentation-only descendant of the behavior candidate. Local verification servers were stopped after the journeys. This is an authorization blocker, not a failing CI result.
+Behavior candidate: `b456fdada83698d5b0b43bdeda294935800fb5ae` on `develop/branch-1`, with main through `10b156bb49b62f78ea6266109394f825d9c03923` integrated. Automatic approval review rejected pushing this candidate to `https://github.com/trannamtrung1st/agent-core.git`: repository ownership/trust and explicit source-export authorization were not established. That first attempt did not push or dispatch CI. The subsequent user request explicitly authorizes commit/push to the current development branch, resolving the source-export blocker. The follow-up below records its new candidate and hosted results. No PR or merge into main was requested. The final report is a documentation-only descendant of the behavior candidate. Local verification servers were stopped after the journeys. This is an authorization blocker, not a failing CI result.
 
 Impeccable reported that DESIGN.md is newer than its local design sidecar; the skill requires reporting drift without silently regenerating it. Product presentation context itself was synchronized to the observed UI.
 
@@ -61,3 +61,32 @@ Custom DNS rebinding/private-address policy tests exercise the validation and pi
 ![Tablet owner chooser](assets/email-account/email-chooser-768.png)
 
 ![Mobile owner chooser](assets/email-account/email-chooser-390.png)
+
+
+## Consistency and behavior review follow-up
+
+The user requested another review, corrections, commit and push to `develop/branch-1`. Main's subsequent `c2dc0512` authorization fix was reviewed and merged into this branch without rewriting the email commits.
+
+Three related findings were corrected:
+
+- Malformed mail aliases raised `ArgumentException` outside the normal tool/approval error boundary. Translate them into a safe Validation response. Two integration regressions first reproduced the exception in InMemory/SQLite and then passed; no provider dispatch occurs.
+- Serial polling discarded updated choices/revisions when the request ID was unchanged. Apply every current snapshot, preserve only eligible selected accounts and require an explicit choice after removal. Allow also verifies that the selected account is present. Keep decided-request memory bounded to the current attachment and fence late decisions as well as polling/refresh callbacks after disconnect/Session change.
+- Zero eligible accounts may mean disabled accounts exist. The message now says “No active email accounts” and offers add/enable guidance.
+
+Playwright MCP on isolated Synthetic :5292/:5392 created a masked fixture account and opened the owner chooser at 390×900. Disabling the selected account through the owner Admin API removed its radio and disabled Allow. Re-enabling restored the option without selection. Explicit selection/confirmation completed one fresh email continuation and retained exactly one original user entry. Document dimensions remained 390×900; the final journey had no console errors. An initial fixture provisioning request used the wrong version field, returned 400 safely, and was corrected to the existing `version` contract before the journey.
+
+Focused checks: 36 Infrastructure mail/credential integration tests; 47 API email/selection/scheduling journeys; seven editor/picker component tests. The affected Synthetic browser run passed all nine journeys at 1440/768/390px, and the final frontend build passed. Exact candidate hosted CI remains the last non-live gate at this commit. Initial new picker regressions reproduced stale revision/removed-choice behavior; no failing run is counted as passing evidence. Real Gmail remains deferred by the user and SMTP defaults off.
+
+
+Follow-up commands (local):
+
+```sh
+dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-restore --nologo -m:1 -nodeReuse:false --filter 'FullyQualifiedName~EmailAccountIntegrationTests|FullyQualifiedName~ImapSmtpEmailProviderTests|FullyQualifiedName~GmailEmailProviderTests|FullyQualifiedName~SystemCredentialTests'
+dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --no-restore --nologo -m:1 -nodeReuse:false --filter 'FullyQualifiedName~EmailAccountApiTests|FullyQualifiedName~EmailSelectionRuntimeTests|FullyQualifiedName~ReliabilityJourneyTests'
+pnpm --dir web run test --run src/features/chat/EmailAccountPicker.test.tsx src/features/admin/EmailAccountDialog.test.tsx --maxWorkers=1
+pnpm --dir web run build
+# Isolated ports :5358/:5458, fixture :5359 and disposable persistence roots:
+CI=1 PLAYWRIGHT_FAITHFUL_MANUAL=1 PLAYWRIGHT_API_PORT=5358 PLAYWRIGHT_WEB_PORT=5458 PLAYWRIGHT_FIXTURE_PORT=5359 PLAYWRIGHT_SQLITE_PATH=/tmp/email-review-e2e.db pnpm --dir web exec playwright test email-accounts.spec.ts email-harness.spec.ts system-credentials.spec.ts credential-bindings-work.spec.ts self-management.spec.ts --project=synthetic
+```
+
+Local broad-suite evidence above is retained for its original candidate. The hosted workflow must verify all backend/frontend/browser/Compose gates on this final reviewed source, including the latest-main integration; focused results alone do not claim that gate.

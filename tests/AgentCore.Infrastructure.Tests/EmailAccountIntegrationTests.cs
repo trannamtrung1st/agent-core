@@ -135,6 +135,27 @@ public sealed class EmailAccountIntegrationTests
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
     private static ToolApprovalGrant Grant(string hash) => new(Guid.NewGuid(), ToolCatalog.EmailSend, hash, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Malformed_account_alias_returns_safe_tool_and_approval_errors(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite);
+        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Gmail("sender@example.test"), "protected-fixture");
+        var admission = await f.Bind(f.A, account, "mail"); var session = Guid.NewGuid();
+        var draft = await f.Email.CreateDraftAsync(session, admission, "mail", new(["to@example.test"], [], [], "Subject", "Body"), default);
+        var definition = new AgentDefinition(1, "general-assistant", 25, new("Test", "Assistant", "Test", "neutral"), [], "instructions",
+            new("answerNewTurn", true, true), new("balanced", false, "en", 2048), new(false, 60_000, 120_000, 1, ["longSilence"], 0),
+            new(false, "default", 1), new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
+            new(ToolAllowlist: [ToolCatalog.EmailSearch]));
+        var executor = new SessionToolExecutor(emailAccounts: f.Email, configurationGate: ToolConfigurationGates.AllowAll);
+        var search = await executor.ExecuteAsync(definition, session,
+            new("bad-alias", ToolCatalog.EmailSearch, """{"query":"harness","accountRef":"../mail"}"""), ToolLimits.MaxOutputBytes, admission: admission);
+        Assert.Contains("Validation", search.Text); Assert.DoesNotContain("protected-fixture", search.Text);
+        var approval = await executor.PrepareEmailSendApprovalAsync(JsonSerializer.SerializeToElement(new { draftId = draft.DraftId, accountRef = "../mail" }), default, admission, session);
+        Assert.Null(approval.Preparation); Assert.Contains("Validation", approval.ErrorJson!);
+        Assert.Equal(0, f.Factory.Dispatches);
+    }
     private sealed class DbFactory(string root) : IDbContextFactory<AgentCoreDbContext>
     {
         public DbContextOptions<AgentCoreDbContext> Options => new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/email.db").Options;

@@ -1305,7 +1305,8 @@ public sealed partial class SessionToolExecutor(
         if (!args.TryGetProperty("accountRef", out var value) || value.ValueKind == JsonValueKind.Null) return null;
         if (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString()))
             throw AgentCoreErrors.Validation("accountRef must be a bound account alias.");
-        return AgentCore.Domain.Credentials.CredentialRules.Reference(value.GetString()!);
+        try { return AgentCore.Domain.Credentials.CredentialRules.Reference(value.GetString()!); }
+        catch (ArgumentException) { throw AgentCoreErrors.Validation("accountRef must contain 1–64 letters, digits or hyphens."); }
     }
     private async Task<string> ListEmailAccountsAsync(ToolExecutionAdmission? admission, CancellationToken ct)
     {
