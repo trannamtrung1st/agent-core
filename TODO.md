@@ -1464,5 +1464,5 @@ Implementation extends the existing Instance owners and Harness policy record wi
 ## Account-scoped Email follow-on
 
 - Implementation: typed account Credentials, account-scoped factory/transports, Core drafts and durable send fence, Admin forms/tests and owner chooser/fresh continuation.
-- Local verification and remaining release gates: [dated report](docs/reports/email-account-verification-2026-10-12.md).
-- Real Gmail smoke deferred by user until setup; hosted exact behavior-commit CI required before full acceptance. Historical milestone statuses remain unchanged.
+- Review corrections and all required non-deferred checks complete on `d69e0622`: all seven [hosted Synthetic/Compose gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38168762832) passed. Local/hosted results and scope: [dated report](docs/reports/email-account-verification-2026-10-12.md).
+- Real Gmail authentication/read/send smoke remains deferred by user until setup; SMTP defaults disabled. Historical milestone statuses remain unchanged.

@@ -1,6 +1,6 @@
 # Account-scoped Email verification — 12 October 2026
 
-Implementation started on `9d664ca6` (`refactor`). The three intervening main commits through `10b156bb` were reviewed and are included in the final candidate; this is follow-on evidence, not a new milestone freeze. The user explicitly deferred Real setup/execution. Existing historical reports and P10/P11 remain unchanged. SMTP defaults disabled. No user database, key ring or browser profile was reset.
+Implementation started on `9d664ca6` (`refactor`). Main through `c2dc0512` was reviewed and integrated before final verification. The reviewed source `d69e0622cfa48b9c728e0b6bff683daee866e9f2` passed all seven [hosted Synthetic/Compose gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38168762832). All required non-deferred checks are complete; Real mailbox setup/execution remains explicitly deferred by the user. This is follow-on evidence, not a new milestone freeze. Existing historical reports and P10/P11 remain unchanged. SMTP defaults disabled. No user database, key ring or browser profile was reset.
 
 ## Implemented behavior
 
@@ -23,7 +23,7 @@ Commands ran with repository Node 22 / pnpm 9 and .NET 10, without hosted-provid
 | Latest-main integration | `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --no-restore --nologo -m:1 -nodeReuse:false --filter 'FullyQualifiedName~EmailAccountApiTests\|FullyQualifiedName~EmailSelectionRuntimeTests\|FullyQualifiedName~ReliabilityJourneyTests'`: 41 passed. `dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --no-restore --nologo -m:1 -nodeReuse:false --filter 'FullyQualifiedName~ModelTriggerCommandAuthorizerTests'`: 45 passed. Final frontend build passed. |
 | Full API separately | `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --no-restore --nologo -m:1 -nodeReuse:false --blame-hang --blame-hang-timeout 120s`: 527 passed / 3 opt-in live skips. |
 | Focused mail Infrastructure | `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --filter 'FullyQualifiedName~ImapSmtpEmailProviderTests\|FullyQualifiedName~EmailAccountIntegrationTests\|FullyQualifiedName~SystemCredentialTests\|FullyQualifiedName~GmailEmailProviderTests' --nologo -m:1 -nodeReuse:false`: 34 passed. |
-| Frontend broad suite | `pnpm --dir web run test --run --maxWorkers=2`: 115 files / 928 passed. Subsequent STARTTLS editor regression and picker refresh fencing: `pnpm --dir web run test --run src/features/admin/EmailAccountDialog.test.tsx src/features/chat/EmailAccountPicker.test.tsx --maxWorkers=1`: 4 passed. The required hosted CI would include the final extra test. |
+| Frontend broad suite | `pnpm --dir web run test --run --maxWorkers=2`: 115 files / 928 passed. Subsequent STARTTLS editor regression and picker refresh fencing: `pnpm --dir web run test --run src/features/admin/EmailAccountDialog.test.tsx src/features/chat/EmailAccountPicker.test.tsx --maxWorkers=1`: 4 passed. These initial results precede the follow-up and final hosted verification below. |
 | Build | `pnpm --dir web run build`: passed; existing SignalR annotation / bundle-size warnings. |
 | Synthetic affected journeys | `pnpm --dir web exec playwright test email-accounts.spec.ts email-harness.spec.ts system-credentials.spec.ts credential-bindings-work.spec.ts self-management.spec.ts --project=synthetic`: 9 passed on isolated :5328/:5428. Final keyboard/send recheck: 4 passed on :5338/:5438. Final chooser layout/focus recheck: 3 passed on :5348/:5448, at 1440/768/390px. Runs use `CI=1 PLAYWRIGHT_FAITHFUL_MANUAL=1`, disposable SQLite/workspace/key-ring paths and dedicated fixture ports. |
 | Compose / key ring | `AGENTCORE_COMPOSE_PORT=5318 COMPOSE_PROJECT_NAME=email-account-verify-20261012 bash scripts/compose-sqlite-volume.sh`: passed. |
@@ -42,9 +42,9 @@ Initial stale Definition version expectations were updated; an initial unrestric
 | EA-17–19 | Fake TLS transports, public-DNS policy tests, existing header/injection/approval tests and captured model requests: reject downgrade/invalid certificates/private addresses, preserve independent authority and redact protected values. This is bounded adversarial test evidence, not a claim to prove every possible malicious email. |
 | EA-20–21 | Responsive interactive Playwright/MCP, keyboard explicit choice and focus receipt, safe Admin create/edit/rotate/test plus existing binding/send/SelfManagement regressions. Full backend/frontend suites retain legacy contracts. |
 
-EA-06 has separate Synthetic Admin observations and fake TLS authentication without dispatch, not live Gmail connectivity. EA-08 preserves Gmail REST contract tests but does not enable that adapter in the production factory until typed OAuth profiles exist. EA-22 live Gmail/delivery remains deliberately deferred. EA-23 canonical owners, setup, README/TODO/plan and DESIGN/PRODUCT context are synchronized. EA-24 local checks are reported precisely; exact behavior-commit hosted CI is unrun and full release acceptance is not claimed.
+EA-06 has separate Synthetic Admin observations and fake TLS authentication without dispatch, not live Gmail connectivity. EA-08 preserves Gmail REST contract tests but does not enable that adapter in the production factory until typed OAuth profiles exist. EA-22 live Gmail/delivery remains deliberately deferred. EA-23 canonical owners, setup, README/TODO/plan and DESIGN/PRODUCT context are synchronized. EA-24 required non-deferred checks have local and exact-source hosted evidence below. Live connectivity/delivery acceptance is not claimed.
 
-Behavior candidate: `b456fdada83698d5b0b43bdeda294935800fb5ae` on `develop/branch-1`, with main through `10b156bb49b62f78ea6266109394f825d9c03923` integrated. Automatic approval review rejected pushing this candidate to `https://github.com/trannamtrung1st/agent-core.git`: repository ownership/trust and explicit source-export authorization were not established. That first attempt did not push or dispatch CI. The subsequent user request explicitly authorizes commit/push to the current development branch, resolving the source-export blocker. The follow-up below records its new candidate and hosted results. No PR or merge into main was requested. The final report is a documentation-only descendant of the behavior candidate. Local verification servers were stopped after the journeys. This is an authorization blocker, not a failing CI result.
+Initial behavior candidate: `b456fdada83698d5b0b43bdeda294935800fb5ae` on `develop/branch-1`, with main through `10b156bb49b62f78ea6266109394f825d9c03923` integrated. Automatic approval review initially rejected its push because repository trust and explicit source-export authorization were not established; that attempt did not push or dispatch CI. The subsequent user request explicitly authorized commit/push to the current development branch and resolved the blocker. The follow-up below records successful pushes and final hosted results. No PR or merge into main was requested. Final evidence updates are a documentation-only descendant of the verified source `d69e0622`. Local verification servers were stopped after the journeys.
 
 Impeccable reported that DESIGN.md is newer than its local design sidecar; the skill requires reporting drift without silently regenerating it. Product presentation context itself was synchronized to the observed UI.
 
@@ -75,7 +75,7 @@ Three related findings were corrected:
 
 Playwright MCP on isolated Synthetic :5292/:5392 created a masked fixture account and opened the owner chooser at 390×900. Disabling the selected account through the owner Admin API removed its radio and disabled Allow. Re-enabling restored the option without selection. Explicit selection/confirmation completed one fresh email continuation and retained exactly one original user entry. Document dimensions remained 390×900; the final journey had no console errors. An initial fixture provisioning request used the wrong version field, returned 400 safely, and was corrected to the existing `version` contract before the journey.
 
-Focused checks: 36 Infrastructure mail/credential integration tests; 47 API email/selection/scheduling journeys; seven editor/picker component tests. The affected Synthetic browser run passed all nine journeys at 1440/768/390px, and the final frontend build passed. Exact candidate hosted CI remains the last non-live gate at this commit. Initial new picker regressions reproduced stale revision/removed-choice behavior; no failing run is counted as passing evidence. Real Gmail remains deferred by the user and SMTP defaults off.
+Focused checks: 36 Infrastructure mail/credential integration tests; 47 API email/selection/scheduling journeys; seven editor/picker component tests. The affected Synthetic browser run passed all nine journeys at 1440/768/390px, and the final frontend build passed. These checks preceded hosted verification below. Initial new picker regressions reproduced stale revision/removed-choice behavior; no failing run is counted as passing evidence. Real Gmail remains deferred by the user and SMTP defaults off.
 
 
 Follow-up commands (local):
@@ -89,7 +89,7 @@ pnpm --dir web run build
 CI=1 PLAYWRIGHT_FAITHFUL_MANUAL=1 PLAYWRIGHT_API_PORT=5358 PLAYWRIGHT_WEB_PORT=5458 PLAYWRIGHT_FIXTURE_PORT=5359 PLAYWRIGHT_SQLITE_PATH=/tmp/email-review-e2e.db pnpm --dir web exec playwright test email-accounts.spec.ts email-harness.spec.ts system-credentials.spec.ts credential-bindings-work.spec.ts self-management.spec.ts --project=synthetic
 ```
 
-Local broad-suite evidence above is retained for its original candidate. The hosted workflow must verify all backend/frontend/browser/Compose gates on this final reviewed source, including the latest-main integration; focused results alone do not claim that gate.
+Local broad-suite evidence above is retained for its original candidate. Final hosted verification below covers all backend/frontend/browser/Compose gates on the reviewed source, including the latest-main integration.
 
 
 ### Hosted gate reproduction and correction
@@ -100,4 +100,18 @@ The shared E2E classifier now recognizes only GET + that exact route + native `n
 
 Commands: `pnpm --dir web run test --run src/test/request-failures.test.ts --maxWorkers=1`; isolated Synthetic `pnpm --dir web exec playwright test --project=admin-lifecycle` on :5368/:5468; `pnpm --dir web exec playwright test admin-shell.spec.ts instance-skills.spec.ts p8-skill-journey.spec.ts scripted-vision.spec.ts core-event-presets.spec.ts --project=synthetic` on :5378/:5478. Both browser invocations used fresh disposable SQLite/workspace/key-ring roots and `CI=1 PLAYWRIGHT_FAITHFUL_MANUAL=1`. All unexpected-request, console and response assertions remain required.
 
-The first failed run stays in the ledger. A new exact-source run replaces it after the corrected candidate is pushed; unfinished old gates may be cancelled by the workflow's existing same-branch concurrency rule and are not counted as passing.
+The first failed run stays in the ledger. Its unfinished gates were cancelled by the workflow's existing same-branch concurrency rule when the corrected source was dispatched; they are not counted as passing.
+
+### Final hosted verification and handoff
+
+Source `d69e0622cfa48b9c728e0b6bff683daee866e9f2` was committed and pushed to `develop/branch-1`. [Synthetic workflow 38168762832](https://github.com/trannamtrung1st/agent-core/actions/runs/38168762832) completed successfully on that exact SHA; all seven jobs passed:
+
+| Hosted gate | Result |
+| --- | --- |
+| Backend | Domain 195; Infrastructure 1,187 / 16 skips; Application 1,735 / 8 skips; API 547 / 3 skips. Total 3,664 passed / 27 skips. Skips are 21 opt-in live/model checks and six opt-in Docker sandbox probes; none is counted as passing. The four deployment plugin tests passed in the separate local broad run above. |
+| Frontend shards 1/2 | 58 files / 525 tests and 58 files / 408 tests: 116 files / 933 tests total. Both TypeScript/Vite builds passed. |
+| Core Playwright shards 1/2 | 102 and 96 passed: 198 Synthetic browser scenarios. |
+| Playwright acceptance | 16 passed across faithful manual, Admin lifecycle, P7.6 Admin, P9.7 Harness, P9.8/P9.9 continuity, P9.10 maintenance and Secretary journeys. |
+| Compose smoke | Owner-capability path, SQLite persistence and key-ring/volume survival passed. |
+
+The production fixes were committed in `9ce0079c`; `d69e0622` adds only the narrowly scoped cancellation classifier, its tests and evidence. This final report/TODO/plan/README update changes documentation only. Required non-deferred review and verification are complete. Real Gmail authentication, live IMAP reads and live SMTP acceptance/delivery remain unexecuted until account setup; SMTP remains disabled by default. Historical freeze SHAs and unrelated pending acceptance work remain unchanged.
