@@ -1,6 +1,6 @@
 # Agent self-management review follow-up
 
-Date: 2026-10-11. Reviewed behavior commit: `c976f3f7041439458c776808dd82d0588464a8c9` on `main`. Checks ran on the corresponding working tree before commit. This report supersedes the affected claims in [initial verification](agent-self-management-verification.md); full proposal acceptance remains open.
+Date: 2026-10-11. Reviewed behavior commit: `c976f3f7041439458c776808dd82d0588464a8c9` on `main`. Checks ran on the corresponding working tree before commit. This report supersedes affected claims in [initial verification](agent-self-management-verification.md); the newer [focused completion review](agent-self-management-completion-followup.md) records the six additional corrections, automatic continuation and current verification. Full proposal acceptance remains open.
 
 ## Findings corrected
 
@@ -38,4 +38,4 @@ The temporary config, removed after verification, imports `standard` from `./pla
 
 ## Acceptance remaining open
 
-The safe continuation fallback still requires a deliberate new owner turn; automatic fresh-Run continuation is not implemented. On 2026-10-11 the owner explicitly chose to skip real-model UAT against OpenRouter and leave acceptance pending. No live request was sent; do not run it without new explicit authorization. Expanded captured-request, new-tool recovery and blocker journeys remain open as listed in the initial A01–A20 disposition. These review fixes do not close the entire proposal or reopen P10/P11.
+At this historical commit, continuation required a deliberate new owner turn. The [focused completion review](agent-self-management-completion-followup.md) implements and locally verifies automatic bounded fresh-Run handoff, captured unrelated requests, approval restart/cancellation and additional blocker journeys. On 2026-10-11 the owner explicitly chose to skip real-model UAT against OpenRouter and leave acceptance pending. No live request was sent; do not run it without new explicit authorization. Exhaustive acceptance matrices and live-model gates remain open. These review fixes do not close the entire proposal or reopen P10/P11.

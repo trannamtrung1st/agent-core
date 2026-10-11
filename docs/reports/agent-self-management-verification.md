@@ -1,6 +1,6 @@
 # Agent self-management and configuration assistance verification
 
-Date: 2026-10-11. Reviewed baseline: `4c05de7f8add60504f4eeba933925c36146492c9`. Initial behavior candidate: `2d0bdd445bd3d7f2b4a54147e61edfad3c780242` on `main`. Checks below are historical results for that candidate; the [review follow-up](agent-self-management-review-followup.md) records fixes, corrected memory acceptance evidence and current verification at `c976f3f7041439458c776808dd82d0588464a8c9`. **Acceptance remains open.** Synthetic/local checks establish the implemented paths; automatic safe fresh-Run continuation and the required real tool-capable model UAT are outstanding. No prior frozen milestone is reopened and P10/P11 remain unopened.
+Date: 2026-10-11. Reviewed baseline: `4c05de7f8add60504f4eeba933925c36146492c9`. Initial behavior candidate: `2d0bdd445bd3d7f2b4a54147e61edfad3c780242` on `main`. Checks below are historical results for that candidate; the [first review](agent-self-management-review-followup.md) records fixes and corrected memory evidence at `c976f3f7041439458c776808dd82d0588464a8c9`. The [focused completion review](agent-self-management-completion-followup.md) supersedes the automatic-continuation gap and related current behavior claims with fresh verification. **Acceptance remains open**, including required real tool-capable model UAT skipped by owner decision. No prior frozen milestone is reopened and P10/P11 remain unopened.
 
 ## Architecture, owners and migration
 
@@ -70,7 +70,7 @@ Playwright MCP independently exercised the running disposable Synthetic app, the
 | A12 | Implemented truthful Definition/Instance/host blockers and owner destinations; comprehensive browser/email/model blocker journey remains open |
 | A13 | Existing durable approval/recovery suite plus new stale CAS and consumed-action mutation checks; complete new-tool expire/cancel/restart matrix remains open |
 | A14 | Immutable configuration/resource/binding pins and same-Session new Run readback; live freeze/revocation tests passed |
-| A15 | Deliberate fresh owner-turn fallback is implemented; automatic fresh safe continuation with pending-task identity, delayed approval and uncertain-effect replay test remains open |
+| A15 | Initial candidate used deliberate fresh-turn fallback. Automatic bounded handoff, pending-task identity, restart approval and uncertain-effect rejection are implemented and locally verified in the [focused completion review](agent-self-management-completion-followup.md); real-model acceptance remains pending |
 | A16 | Full Synthetic Chat/Admin journey, same-owner service, SQLite reopen and adoption freeze passed |
 | A17 | Attached/detached origin and owner scoping enforced; existing untrusted-source/foreign-owner regressions retained; broader new-tool injection matrix remains open |
 | A18 | Existing selected shared promotion/other-Instance isolation regression retained; no automatic shared publication path introduced |
@@ -79,7 +79,7 @@ Playwright MCP independently exercised the running disposable Synthetic app, the
 
 ## Outstanding acceptance and owner-only exceptions
 
-The implemented safe continuation fallback asks the owner for a deliberate new turn after a commit. It does not schedule an automatic new Run, infer a pending-task identity or replay original input. This is a deliberate safety limit permitted by the failure invariant, but the mandatory automatic A15 journey is not accepted. Host-only configuration, secrets/OAuth/MFA, shared publication/adoption and unsupported typed operations remain explicit owner interactions.
+The initial candidate's fresh-turn-only fallback has been superseded by the [focused completion review](agent-self-management-completion-followup.md): a verified committed receipt can admit one bounded fresh Run through the existing Session mailbox. Unsafe/unsupported cases still require a deliberate owner turn, and real-model A15 acceptance remains pending. Host-only configuration, secrets/OAuth/MFA, shared publication/adoption and unsupported typed operations remain explicit owner interactions.
 
 The prepared `SelfManagementLiveTests` is default-skipped. Automatic approval review initially rejected enabling OpenRouter UAT because it would send test prompts/configuration metadata to `https://openrouter.ai/api/v1/` using the protected development key without specific authorization for that payload/destination. On 2026-10-11 the owner answered the authorization question: skip live UAT and leave acceptance pending. No live request was sent. The prepared bounded UAT would send disposable Instance prompts, synthetic messages, tool schemas, safe metadata and tool results; no key values or repository source. Do not run it without new explicit authorization.
 
