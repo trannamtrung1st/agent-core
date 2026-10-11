@@ -25,6 +25,7 @@ public static partial class ScheduleIntervalLanguage
         }
 
         var match = EveryInterval().Match(normalized);
+        if (!match.Success) match = IntervalCorrection().Match(normalized);
         if (!match.Success)
         {
             return null;
@@ -36,13 +37,14 @@ public static partial class ScheduleIntervalLanguage
         }
 
         var unit = match.Groups["unit"].Value;
-        return unit switch
+        var multiplier = unit switch
         {
-            "s" or "sec" or "second" or "seconds" => value,
-            "m" or "min" or "minute" or "minutes" => value * 60,
-            "h" or "hour" or "hours" => value * 3600,
-            _ => null
+            "s" or "sec" or "second" or "seconds" => 1,
+            "m" or "min" or "minute" or "minutes" => 60,
+            "h" or "hour" or "hours" => 3600,
+            _ => 0
         };
+        return multiplier > 0 && value <= int.MaxValue / multiplier ? value * multiplier : null;
     }
 
     public static bool LooksLikeIntervalCorrection(string text) =>
@@ -57,7 +59,8 @@ public static partial class ScheduleIntervalLanguage
             return false;
         }
 
-        return !CarriesIndependentScheduleIntent(text, conversationLanguage);
+        return !CarriesIndependentScheduleIntent(text, conversationLanguage)
+            && CorrectionRemainder().IsMatch(StripIntervalPhrases(text));
     }
 
     public static bool CarriesIndependentScheduleIntent(string text, string? conversationLanguage = null)
@@ -82,8 +85,15 @@ public static partial class ScheduleIntervalLanguage
         stripped = EveryMinutePhrase().Replace(stripped, " ");
         stripped = EveryHourPhrase().Replace(stripped, " ");
         stripped = EveryInterval().Replace(stripped, " ");
+        stripped = IntervalCorrection().Replace(stripped, " ");
         return CollapseWhitespace().Replace(stripped, " ").Trim();
     }
+
+    [GeneratedRegex(@"^(?:(?:ok(?:ay)?|yes|so|then|make it|change it to|use|instead)\s*[,;:]?\s*)*(?<value>\d+)\s*(?<unit>s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)\b(?:\s+(?:instead|please))?[.!?]*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex IntervalCorrection();
+
+    [GeneratedRegex(@"^(?:(?:ok(?:ay)?|yes|so|then|make it|change it to|use|instead|please)\s*[,;:]?\s*)*[.!?]*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex CorrectionRemainder();
 
     [GeneratedRegex(@"\bevery\s+(?<value>\d+)\s*(?<unit>s|sec|second|seconds|m|min|minute|minutes|h|hour|hours)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex EveryInterval();

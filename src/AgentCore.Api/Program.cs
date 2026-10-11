@@ -22,6 +22,7 @@ builder.Services.Configure<JsonOptions>(options =>
     options.SerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never;
 });
 
+builder.Services.AddSingleton<SchedulerReadiness>();
 var agentDirectory = ResolveAgentDirectory(builder);
 var profile = builder.Configuration["AgentCore:Profile"] ?? "Synthetic";
 var languageModel = builder.Configuration.GetSection("Providers:LanguageModels:primary-llm")
@@ -140,11 +141,11 @@ ArtifactEndpoints.Map(app);
 var buildVersion = typeof(Program).Assembly
     .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
     .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().SingleOrDefault()?.InformationalVersion;
-app.MapGet("/health", (IConfiguration configuration) =>
+app.MapGet("/health", (IConfiguration configuration, SchedulerReadiness scheduler) =>
         Results.Json(new HealthResponse(
             "healthy",
             configuration["AgentCore:Profile"] ?? "Synthetic",
-            HttpMapping.ProtocolVersion, buildVersion)))
+            HttpMapping.ProtocolVersion, buildVersion, scheduler.Snapshot())))
     .WithName("Health");
 
 app.MapGet("/api/v1/agents", async (SessionManager sessions, CancellationToken cancellationToken) =>

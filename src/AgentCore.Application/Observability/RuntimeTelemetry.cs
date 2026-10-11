@@ -48,6 +48,9 @@ public static class RuntimeTelemetry
         { "retry_pending" or "emitted" or "matched" or "filtered" or "filter_error" or "coalesced" or "duplicate" or "policy_denied" or "loop_skipped" or "budget_skipped" or "admitted" or "recovered" => outcome, _ => "other" }));
     private static readonly Counter<long> AutomationEvents = Meter.CreateCounter<long>("trigger_registration_events");
     private static readonly Histogram<double> TriggerDueLagMs = Meter.CreateHistogram<double>("trigger_due_lag_ms");
+    private static readonly Histogram<double> BackgroundDeliveryLagMs = Meter.CreateHistogram<double>("background_completion_delivery_lag_ms", "ms");
+    public static void RecordBackgroundDeliveryLag(string phase, double milliseconds) => BackgroundDeliveryLagMs.Record(
+        Math.Max(0, milliseconds), new KeyValuePair<string, object?>("phase", phase is "admission" or "delivery" ? phase : "other"));
     private static readonly Counter<long> ResponseRepairs = Meter.CreateCounter<long>("llm.response.repair");
 
     private static readonly ConcurrentQueue<TimelineEvent> Timeline = new();
@@ -163,6 +166,21 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> IdentityMaintenanceEvents = Meter.CreateCounter<long>("identity_maintenance_events");
     public static void RecordIdentityMaintenance(string outcome) => IdentityMaintenanceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
     public static void RecordExperience(string outcome) => ExperienceEvents.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+    private static readonly Counter<long> SchedulerPasses = Meter.CreateCounter<long>("automation_scheduler_passes");
+    private static readonly Counter<long> RunOutcomes = Meter.CreateCounter<long>("agent_run_outcomes");
+    public static void RecordSchedulerPass(bool succeeded) => SchedulerPasses.Add(1, new KeyValuePair<string, object?>("outcome", succeeded ? "ready" : "failed"));
+    public static void RecordRunOutcome(string status, string? reason, bool recovered)
+    {
+        var boundedReason = reason switch
+        {
+            null => "none",
+            "completion-required" or "semantic-response-invalid" or "tool-call-invalid" or "run-deadline" or "tool-timeout" or "tool-step-limit" or "tool-output-limit" => reason,
+            "provider-unavailable" or "provider-ratelimited" or "provider-timeout" or "provider-invalidresponse" or "provider-authentication" => reason,
+            _ => "other"
+        };
+        RunOutcomes.Add(1, new TagList { { "status", status is "completed" or "failed" or "cancelled" ? status : "other" },
+            { "reason", boundedReason }, { "retry_recovered", recovered } });
+    }
     private static readonly Counter<long> AgentRunEvents = Meter.CreateCounter<long>("agent_run_events");
     private static readonly Counter<long> ActivationEvents = Meter.CreateCounter<long>("activation_events");
     private static readonly Counter<long> BackgroundSessionEvents = Meter.CreateCounter<long>("background_session_events");

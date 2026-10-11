@@ -94,6 +94,14 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
         { key: "cleanupBlocked", label: "Cleanup blocker", children: run.budget.cleanupBlocked ? 'Unresolved browser failure; see result evidence.' : 'None recorded' }
       ] : []),
       ...(run.triggerOrigin ? [{ key: "trigger", label: "Trigger", children: <Flex vertical gap={token.paddingXS}><Typography.Text>{run.triggerOrigin.summary}</Typography.Text>{run.triggerOrigin.source ? <Typography.Link href={`/admin/connections/events?${run.triggerOrigin.source.kind === "builtin" ? `builtin=${encodeURIComponent(run.triggerOrigin.source.key ?? "")}` : `event=${run.triggerOrigin.source.eventId}`}`}>View Event definition</Typography.Link> : null}{run.triggerOrigin.triggerId ? <Typography.Text type="secondary">Subscription {run.triggerOrigin.triggerId}{run.triggerOrigin.triggerRevision ? ` · revision ${run.triggerOrigin.triggerRevision}` : ""}</Typography.Text> : null}</Flex> }] : []),
+      ...(run.executionDiagnostic ? [
+        { key: "checkpoint", label: "Last tool checkpoint", children: `${run.executionDiagnostic.lastTool ?? "No tool result"} · ${run.executionDiagnostic.recordedToolResults} recorded receipts` },
+        { key: "remaining", label: "Remaining time", children: `${(run.executionDiagnostic.remainingBudgetMs / 1000).toFixed(1)}s at last checkpoint` },
+        { key: "providerAttempts", label: "Recorded provider failures", children: run.executionDiagnostic.failedAttempts.length
+          ? <Flex vertical gap={token.paddingXS}>{run.executionDiagnostic.failedAttempts.map((attempt, index) => <Typography.Text key={index} style={{ overflowWrap: "anywhere" }}>
+            Attempt {attempt.attempt}: {attempt.code}{attempt.reason ? ` · ${attempt.reason}` : ""}{attempt.channel ? ` · ${attempt.channel}` : ""}
+          </Typography.Text>)}</Flex> : "None recorded" }
+      ] : []),
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },
       { key: "updated", label: "Updated", children: <time dateTime={run.updatedAt}>{formatChatTime(run.updatedAt) ?? "Unknown time"}</time> }
     ]} />

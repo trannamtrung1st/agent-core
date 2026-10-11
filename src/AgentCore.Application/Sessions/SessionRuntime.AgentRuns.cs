@@ -296,7 +296,7 @@ public sealed partial class SessionRuntime
                 EntryStatus.Interrupted => new AgentRunCommand.CommitCancellation(run.Revision, now, claim.Generation, null),
                 EntryStatus.Failed when assistant.Failure?.FailureReason == "runDeadline" => new AgentRunCommand.DeadlineExceeded(run.Revision, now, claim.Generation),
                 EntryStatus.Failed => new AgentRunCommand.Fail(run.Revision, now, claim.Generation,
-                    AgentRunFailureCode(_agentRunProviderFailure), AgentRunFailureSummary(_agentRunProviderFailure), false, null),
+                    AgentRunFailureCode(_agentRunProviderFailure), AgentRunFailureSummary(_agentRunProviderFailure), false, null, assistant.Failure?.DiagnosticId),
                 _ => new AgentRunCommand.Complete(run.Revision, now, claim.Generation,
                     string.IsNullOrWhiteSpace(assistant.Text) ? "Response completed." : assistant.Text[..Math.Min(assistant.Text.Length, AgentRunLimits.MaxResultCharacters)],
                     AgentRunOutcomeKind.Response, assistant.EntryId)
@@ -315,7 +315,15 @@ public sealed partial class SessionRuntime
             ? await _tools.ExperienceContextAsync(_snapshot.AgentInstanceId, ct).ConfigureAwait(false) : selected;
     }
 
-    private static string AgentRunFailureCode(ProviderFailure? failure) => failure?.SafeMessage switch
+    private static string AgentRunFailureCode(ProviderFailure? failure) => failure switch
+    {
+        { FailureReason: ProviderFailureReason.BackgroundCompletionRequired } => "completion-required",
+        { FailureReason: ProviderFailureReason.IncompleteToolCall or ProviderFailureReason.ToolCallTruncated } => "tool-call-invalid",
+        { ResponseChannel: ProviderResponseChannel.StructuredOutput or ProviderResponseChannel.ResponseFunction, Code: ProviderErrorCode.InvalidResponse } => "semantic-response-invalid",
+        _ => LegacyAgentRunFailureCode(failure)
+    };
+
+    private static string LegacyAgentRunFailureCode(ProviderFailure? failure) => failure?.SafeMessage switch
     {
         "Run deadline reached." => "run-deadline",
         "Tool execution timed out." => "tool-timeout",
@@ -335,7 +343,9 @@ public sealed partial class SessionRuntime
         "invalid-tool-strategy" => "Repeated invalid tool strategy blocked.",
         "tool-output-limit" => "Tool output limit reached.",
         "tool-deadline" => "Tool deadline reached.",
-        "completion-required" => "Background work requires an explicit completion outcome.",
+        "completion-required" => "Background work did not provide work.complete after bounded completion recovery. Verified work remains available.",
+        "tool-call-invalid" => "The provider returned an incomplete tool call; no incomplete action was dispatched.",
+        "semantic-response-invalid" => "The provider response violated the semantic response contract.",
         _ => "The model response failed."
     };
 
@@ -346,8 +356,7 @@ public sealed partial class SessionRuntime
             || run.AttemptCount >= run.MaxAttempts
             || run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
             || !(failure.Code is ProviderErrorCode.Unavailable or ProviderErrorCode.RateLimited
-                || failure.Code == ProviderErrorCode.Timeout && failure.FailureReason is ProviderFailureReason.SetupTimeout or ProviderFailureReason.StreamIdle
-                || IsInitialBackgroundRun && AgentRunFailureCode(failure) == "completion-required")) return false;
+                || failure.Code == ProviderErrorCode.Timeout && failure.FailureReason is ProviderFailureReason.SetupTimeout or ProviderFailureReason.StreamIdle)) return false;
         // Keep the same durable placeholder and checkpoint. A crash before releasing the claim
         // follows ordinary lease recovery; a later attempt reuses the response identity.
         UpdateAssistant(EntryStatus.Streaming);

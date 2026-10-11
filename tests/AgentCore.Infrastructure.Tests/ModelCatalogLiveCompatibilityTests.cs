@@ -87,6 +87,45 @@ public sealed class ModelCatalogLiveCompatibilityTests(ITestOutputHelper output)
         output.WriteLine($"{key}: image color independently verified; structured response accepted.");
     }
 
+    [CatalogLiveTheory]
+    [InlineData("gpt-6-luna")]
+    [InlineData("claude-haiku-5.5")]
+    [InlineData("gpt-6.1-sol")]
+    [InlineData("deepseek-v41-flash")]
+    public async Task Completion_only_phase_preserves_tool_receipt_and_calls_work_complete(string key)
+    {
+        var descriptor = ModelCatalogFactory.Real().Get(key)!;
+        using var http = new HttpClient();
+        var model = new SemanticResponseLanguageModel(new OpenAICompatibleLanguageModel(http, new()
+        {
+            Adapter = "OpenAICompatible", BaseUrl = "https://openrouter.ai/api/v1/", DefaultModel = descriptor.ModelId,
+            ApiKey = Environment.GetEnvironmentVariable("OPENROUTER_API_KEY"), Transport = descriptor.Transport,
+            Tools = true, StructuredOutput = descriptor.StructuredOutput, ReasoningObjectWire = true,
+            Timeouts = new() { SetupSeconds = 30, StreamIdleSeconds = 60, TotalSeconds = 90 }
+        }), preferResponseFunction: descriptor.PreferResponseFunction);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+        var calls = new List<ModelToolCall>();
+        await foreach (var evt in model.GenerateAsync(new(Guid.NewGuid(), [
+            new(ModelRole.System, "Finish the background task using only work.complete. Summarize the verified fixture answer exactly; choose Response with attentionRequired false. Do not generate prose."),
+            new(ModelRole.User, "Retrieve the fixture answer and complete the task."),
+            new(ModelRole.Assistant, "", ToolCalls: [new("verified-lookup", "lookup", "{}")]),
+            new(ModelRole.Tool, "fixture-answer-7429", ToolCallId: "verified-lookup", Name: "lookup")
+        ], MaxOutputTokens: 4096, Tools: [AgentCore.Application.Work.WorkCompletionRequest.Contract],
+            ReasoningEffort: descriptor.DefaultReasoningEffort, ToolChoice: ModelToolChoice.Named, ToolChoiceName: "work.complete"), deadline.Token))
+        {
+            if (evt is ModelFailed failed) Assert.Fail($"Completion failed: {failed.Failure.Code}; {failed.Failure.FailureReason}; {failed.Failure.ResponseChannel}");
+            if (evt is ModelToolCallEvent call) calls.Add(call.Call);
+        }
+        var completion = Assert.Single(calls);
+        Assert.Equal("work.complete", completion.Name);
+        using var args = JsonDocument.Parse(completion.ArgumentsJson);
+        Assert.True(AgentCore.Application.Work.WorkCompletionRequest.TryParse(args.RootElement, [], out var result, out var attention, out _));
+        Assert.False(attention);
+        Assert.Equal("Response", AgentCore.Application.Work.WorkCompletionRequest.Outcome(result));
+        Assert.Contains("fixture-answer-7429", AgentCore.Application.Work.WorkCompletionRequest.Summary(result));
+        output.WriteLine($"{key}: {descriptor.Transport}; completion-only work.complete verified.");
+    }
+
     private const string RedPng = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC";
 
 }

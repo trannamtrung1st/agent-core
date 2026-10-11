@@ -30,7 +30,8 @@ public sealed class BackgroundCompletionReporter(IAgentRunStore runs, IMemorySto
             }
             if (parent!.PendingAgentInputIds.Count > 0 || (await runs.ListForSessionAsync(source.Run.Owner, parent.SessionId, ct).ConfigureAwait(false)).Any(r => !r.IsTerminal)) continue;
             // Capacity and transport failures retain the source for a later bounded pass.
-            await dispatcher.AdmitCompletionAsync(source, ct).ConfigureAwait(false);
+            if (await dispatcher.AdmitCompletionAsync(source, ct).ConfigureAwait(false))
+                Observability.RuntimeTelemetry.RecordBackgroundDeliveryLag("admission", (time.GetUtcNow() - source.Run.UpdatedAtUtc).TotalMilliseconds);
         }
     }
 }

@@ -27,16 +27,7 @@ public static class ScheduleDraftAdmission
             return draft;
         }
 
-        if (!TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(text, language, scheduleContext))
-        {
-            return null;
-        }
-
-        if (HeuristicTriggerCommandAuthorizer.MatchesCreate(turn, language, scheduleContext, scheduleDraft: null))
-        {
-            return null;
-        }
-
-        return draft;
+        // Only an interval-only next turn can carry omitted task details forward.
+        return null;
     }
 }

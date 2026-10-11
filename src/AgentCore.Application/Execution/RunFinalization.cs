@@ -13,6 +13,10 @@ internal static class RunFinalization
         or ToolCatalog.BrowserHover or "browser.scroll" or ToolCatalog.BrowserWait
         or "browser.verify" or ToolCatalog.BrowserPressKey or ToolCatalog.BrowserScreenshot or ToolCatalog.BrowserVisionMouse or ToolCatalog.BrowserConfiguration;
     internal const string Marker = "Core finalization phase: ";
+    internal const string BackgroundInstruction = "The work phase has ended. Call work.complete exactly once with a truthful bounded summary of verified results from existing durable tool receipts. No substantive tools or new external effects are permitted. Do not invent research, artifacts or successful effects. Use NeedsAttention for incomplete or uncertain work; NoAction is only for a verified quiet outcome. Ordinary prose does not complete a background Run.";
+    internal static ProviderFailure MissingCompletion() => new(ProviderErrorCode.InvalidResponse,
+        "Background work requires an explicit completion outcome.", FailureReason: ProviderFailureReason.BackgroundCompletionRequired,
+        ResponseChannel: ProviderResponseChannel.BackgroundCompletion);
     internal const string Instruction = "The work phase has ended. Generate a final reply only from existing durable tool receipts. No tools or new external effects are permitted. Distinguish recorded actions from unverified task outcomes. A browser closure does not establish sign-out. Report incomplete or uncertain work accurately.";
     internal static DateTimeOffset? Deadline(DateTimeOffset now, DateTimeOffset? overallDeadline, TimeSpan reserve)
     {
@@ -22,7 +26,7 @@ internal static class RunFinalization
     }
     internal static string? Restore(IEnumerable<ModelMessage> messages) => messages
         .Where(m => m.Role == ModelRole.System && m.Text.StartsWith(Marker, StringComparison.Ordinal))
-        .Select(m => m.Text[Marker.Length..]).FirstOrDefault(r => r is "runDeadline" or "providerTimeout" or "providerCancelled" or "browserBlocked" or "stepLimit" or "checkpointCapacity" or "outputLimit" or "cleanupBlocked");
+        .Select(m => m.Text[Marker.Length..]).FirstOrDefault(r => r is "completionRequired" or "runDeadline" or "providerTimeout" or "providerCancelled" or "browserBlocked" or "stepLimit" or "checkpointCapacity" or "outputLimit" or "cleanupBlocked");
     internal static bool HasEvidence(IEnumerable<ModelMessage> messages) => messages.Any(m =>
     {
         if (m.Role != ModelRole.Tool) return false;

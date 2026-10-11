@@ -7,6 +7,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const style = {
     "--ac-color-primary": token.colorPrimary,
     "--ac-color-primary-bg": token.colorPrimaryBg,
+    "--ac-color-focus": token.colorPrimaryTextHover,
     "--ac-color-success": token.colorSuccess,
     "--ac-color-success-hover": token.colorSuccessTextHover,
     "--ac-color-success-bg": token.colorSuccessBg,

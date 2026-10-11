@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace AgentCore.Contracts.Http;
 
-public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion, string? BuildVersion = null);
+public sealed record HealthResponse(string Status, string Profile, int ProtocolVersion, string? BuildVersion = null, SchedulerReadinessResponse? Scheduler = null);
 
 public sealed record CreateSessionRequest(
     Guid? AgentInstanceId,
@@ -297,3 +297,5 @@ public sealed record ChatAgentInstanceResponse(
     string Language);
 
 public sealed record ChatAgentInstanceListResponse(IReadOnlyList<ChatAgentInstanceResponse> Items);
+
+public sealed record SchedulerReadinessResponse(string Status, string? LastPassAt, string? LastSuccessAt);

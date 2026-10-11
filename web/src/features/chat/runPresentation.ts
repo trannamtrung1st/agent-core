@@ -21,7 +21,7 @@ export function runBudgetLabel(value: string) {
   return ({ Standard: "Standard", InteractiveBrowser: "Interactive Browser", UnattendedBoundBrowser: "Unattended Bound Browser",
     system: "System default", definition: "Definition default", instance: "Instance override",
     work: "Work", cleanup: "Cleanup", finalization: "Finalization", stepLimit: "Step limit reached",
-    runDeadline: "Execution time limit reached", checkpointCapacity: "Checkpoint capacity reached", outputLimit: "Output limit reached",
+    completionRequired: "Completion recovery", runDeadline: "Execution time limit reached", checkpointCapacity: "Checkpoint capacity reached", outputLimit: "Output limit reached",
     cleanupBlocked: "Cleanup blocked", notRequested: "Not requested", blocked: "Blocked", completed: "Completed", partial: "Partially completed", unverified: "Unverified"
   } as Record<string, string>)[value] ?? value;
 }

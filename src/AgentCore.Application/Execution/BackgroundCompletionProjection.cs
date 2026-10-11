@@ -11,6 +11,25 @@ public static class BackgroundCompletionProjection
 {
     private static readonly JsonSerializerOptions Json = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
+    // Core formats an already admitted receipt; reporting never needs another provider call.
+    public static string ReportText(string evidence)
+    {
+        using var document = JsonDocument.Parse(evidence);
+        var root = document.RootElement;
+        var items = root.TryGetProperty("completions", out var batch) ? batch.EnumerateArray().ToArray() : [root];
+        return string.Join("\n\n", items.Select(item =>
+        {
+            var summary = item.GetProperty("summary").GetString() ?? "Background work ended.";
+            var status = item.GetProperty("status").GetString();
+            return status switch
+            {
+                "Failed" => "Background work failed.\n\n" + summary + "\n\nOpen Background work to inspect the Run and retained results.",
+                "Cancelled" => "Background work was cancelled.\n\n" + summary,
+                _ => "Background work: " + summary
+            };
+        }));
+    }
+
     public static string BuildBatch(IReadOnlyList<(AgentRun Run, string Objective)> sources)
     {
         if (sources.Count is < 1 or > 2) throw new ArgumentException("Completion report batch must contain one or two sources.");

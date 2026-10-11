@@ -5,6 +5,7 @@ namespace AgentCore.Application.Ports;
 /// </summary>
 public static class ProviderFailureReason
 {
+    public const string BackgroundCompletionRequired = "backgroundCompletionRequired";
     public const string InvalidJson = "invalidJson";
     public const string ResponseTooLarge = "responseTooLarge";
     public const string MissingDisplayText = "missingDisplayText";
@@ -38,6 +39,7 @@ public static class ProviderFailureReason
 
 public static class ProviderResponseChannel
 {
+    public const string BackgroundCompletion = "backgroundCompletion";
     public const string ResponseFunction = "responseFunction";
     public const string StructuredOutput = "structuredOutput";
     public const string MarkerCompatibility = "markerCompatibility";

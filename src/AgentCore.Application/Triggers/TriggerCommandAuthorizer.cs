@@ -86,6 +86,14 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         @"\b(cancel|delete|remove|drop|clear|stop)\b.{0,30}\b(that|the|this|it|reminder|schedule|automation)\b|\bdelete that reminder\b|\bcancel that reminder\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    private static readonly Regex TimedImperative = new(
+        @"^(?:please\s+|i want you to\s+)?(say|tell|send|message|check|wake|notify|ping|alert|nudge|remind)\b.{0,80}\b(in|after|every)\s+\d+\s*(s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?)\b|^(?:please\s+)?(in|after|every)\s+\d+\s*(s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?)\b\s*[,]?\s*(say|tell|send|message|check|wake|notify|ping|alert|nudge|remind)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    internal static bool IsExplicitlyNegated(string text) => Regex.IsMatch(text,
+        @"\b(don'?t|do not|never)\b.{0,60}\b(create|set|configure|update|edit|change|cancel|delete|remove|stop|say|tell|send|message|check|wake|notify|ping|alert|nudge|remind|schedule)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     private static readonly Regex NegatedCreate = new(
         @"\b(don'?t|do not|never)\b.{0,30}\b(create|remind|schedule|set)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -110,7 +118,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             return ValueTask.FromResult(TriggerCommandAuthorizationDecision.Deny);
         }
 
-        if (Regex.IsMatch(text, @"\b(don'?t|do not|never)\b.{0,30}\b(create|set|configure|update|edit|change|cancel|delete|remove|stop)\b", RegexOptions.IgnoreCase))
+        if (IsExplicitlyNegated(text))
             return ValueTask.FromResult(TriggerCommandAuthorizationDecision.Deny);
 
         var allowed = requestedAction switch
@@ -175,8 +183,10 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         ScheduleConversationContext? scheduleContext = null,
         ScheduleDraftContext? scheduleDraft = null)
     {
+        if (IsExplicitlyNegated(text)) return false;
+
         if (scheduleDraft is { IsActive: true }
-            && ScheduleIntervalLanguage.LooksLikeIntervalCorrection(text))
+            && ScheduleIntervalLanguage.IsIntervalOnlyCorrection(text, conversationLanguage))
         {
             return true;
         }
@@ -201,7 +211,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             return true;
         }
 
-        return AgentDirectedCreate.IsMatch(text) || Regex.IsMatch(text, @"\b(create|set up|configure)\b.{0,50}\bautomation\b|\bwhen\b.{0,40}\border\b.{0,40}\b(placed|created|arrives)\b.{0,80}\b(review|check|notify|run)\b", RegexOptions.IgnoreCase);
+        return TimedImperative.IsMatch(text) || AgentDirectedCreate.IsMatch(text) || Regex.IsMatch(text, @"\b(create|set up|configure)\b.{0,50}\bautomation\b|\bwhen\b.{0,40}\border\b.{0,40}\b(placed|created|arrives)\b.{0,80}\b(review|check|notify|run)\b", RegexOptions.IgnoreCase);
     }
 
     internal static bool MatchesList(string text, string? conversationLanguage) =>
@@ -255,6 +265,9 @@ public sealed class ModelTriggerCommandAuthorizer(
         {
             return TriggerCommandAuthorizationDecision.Deny;
         }
+
+        if (HeuristicTriggerCommandAuthorizer.IsExplicitlyNegated(text))
+            return TriggerCommandAuthorizationDecision.Deny;
 
         var heuristicDecision = await heuristic.AuthorizeCurrentTurnAsync(
             text,
@@ -381,6 +394,7 @@ public sealed class ModelTriggerCommandAuthorizer(
         var builder = new System.Text.StringBuilder();
         await foreach (var item in model.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
         {
+            if (item is ModelFailed) return string.Empty;
             if (item is ModelTextDelta delta)
             {
                 builder.Append(delta.Text);

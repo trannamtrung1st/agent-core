@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Drawer, Empty, Flex, Spin, Table, Typography, theme } from "antd";
-import { getInstanceAgentRun, listInstanceAgentRuns, type AgentRun } from "../../services/api";
+import { getHealth, type HealthResponse, getInstanceAgentRun, listInstanceAgentRuns, type AgentRun } from "../../services/api";
 import { AgentRunDetails, AgentRunStatus } from "../chat/AgentRunDetails";
 import { useCursorPages } from "../chat/useCursorPages";
 import { DrawerListFooter } from "../chat/DrawerListFooter";
@@ -16,6 +16,14 @@ export function InstanceRunsSection({ instanceId, open, wide = true, inline = fa
   const { token } = theme.useToken();
   const page = useCursorPages(instanceId, open && !detailsOnly, listInstanceAgentRuns);
   const { search, setSearch } = useActivitySearch();
+  const [scheduler, setScheduler] = useState<HealthResponse["scheduler"]>();
+  useEffect(() => {
+    if (!open || detailsOnly) return;
+    let current = true;
+    async function refresh() { try { const health = await getHealth(); if (current) setScheduler(health.scheduler); } catch { if (current) setScheduler(undefined); } }
+    void refresh(); const timer = window.setInterval(() => void refresh(), 5_000);
+    return () => { current = false; window.clearInterval(timer); };
+  }, [open, detailsOnly]);
   const [selected, setSelected] = useState<AgentRun | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -36,6 +44,10 @@ export function InstanceRunsSection({ instanceId, open, wide = true, inline = fa
     {error ? <Alert type="error" showIcon title={error} /> : selected ? <AgentRunDetails run={selected} onChange={setSelected} /> : <Spin aria-label="Loading run details" />}
   </Flex> : <Flex vertical gap={token.padding}>
     <Typography.Text type="secondary">Individual invocations, including chat, automation and background work. Newest first.</Typography.Text>
+    {scheduler ? <Typography.Text type={scheduler.status === "ready" ? "secondary" : "warning"}>
+      Scheduler: {({ ready: "Ready", starting: "Starting", stale: "No recent pass", degraded: "A scheduler phase failed" })[scheduler.status]}
+      {scheduler.lastPassAt ? ` · Last pass ${new Date(scheduler.lastPassAt).toLocaleString()}` : ""}
+    </Typography.Text> : <Typography.Text type="secondary">Scheduler readiness unavailable.</Typography.Text>}
     <AdminCollectionToolbar label="loaded runs" value={search} onChange={setSearch} />
     {page.error ? <Alert type="error" showIcon title={page.error} /> : null}
     <Table<AgentRun> aria-label="Runs table" className="admin-collection-table" size="small" rowKey="agentRunId"

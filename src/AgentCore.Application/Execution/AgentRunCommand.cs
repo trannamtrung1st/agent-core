@@ -20,7 +20,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
         AgentRunOutcomeKind OutcomeKind, Guid? OutcomeEntryId)
         : AgentRunCommand(Revision, At);
     public sealed record Fail(long Revision, DateTimeOffset At, Guid Generation, string Code, string Summary,
-        bool ReplaySafe, DateTimeOffset? RetryAt)
+        bool ReplaySafe, DateTimeOffset? RetryAt, Guid? DiagnosticId = null)
         : AgentRunCommand(Revision, At);
     // Terminal only: cannot revive a lease, retry work or commit an external effect.
     public sealed record DeadlineExceeded(long Revision, DateTimeOffset At, Guid Generation) : AgentRunCommand(Revision, At);
@@ -69,7 +69,7 @@ public abstract record AgentRunCommand(long ExpectedRevision, DateTimeOffset AtU
             Checkpoint c => run.SaveCheckpoint(c.ExpectedRevision, c.Generation, c.Value, c.Progress, c.AtUtc),
             Complete c => run.Complete(c.ExpectedRevision, c.Generation, c.Summary, c.AtUtc,
                 c.OutcomeKind == AgentRunOutcomeKind.NeedsAttention, c.OutcomeKind, c.OutcomeEntryId),
-            Fail c => run.Fail(c.ExpectedRevision, c.Generation, c.Code, c.Summary, c.ReplaySafe, c.AtUtc, c.RetryAt, allocateDiagnosticId),
+            Fail c => run.Fail(c.ExpectedRevision, c.Generation, c.Code, c.Summary, c.ReplaySafe, c.AtUtc, c.RetryAt, () => c.DiagnosticId ?? allocateDiagnosticId()),
             DeadlineExceeded c => run.Fail(c.ExpectedRevision, c.Generation, "run-deadline",
                 "The Run deadline expired before the reply completed. Recorded actions were preserved.", false, c.AtUtc, null, allocateDiagnosticId),
             RequestCancellation c => run.RequestCancellation(c.ExpectedRevision, c.KnownEffect, c.AtUtc),

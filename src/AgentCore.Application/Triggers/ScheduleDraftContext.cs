@@ -9,7 +9,8 @@ public sealed record ScheduleDraftContext(
     string RecurrenceKind,
     int? IntervalSeconds,
     string FailureCode,
-    DateTimeOffset CapturedAtUtc)
+    DateTimeOffset CapturedAtUtc,
+    string? ArgumentsJson = null)
 {
     public bool IsActive =>
         Action is TriggerCommandAction.Create
@@ -26,7 +27,8 @@ public sealed record ScheduleDraftContext(
         try
         {
             using var document = JsonDocument.Parse(json);
-            if (!document.RootElement.TryGetProperty("scheduleDraft", out var draft))
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("scheduleDraft", out var draft) || draft.ValueKind != JsonValueKind.Object)
             {
                 return null;
             }
@@ -61,9 +63,11 @@ public sealed record ScheduleDraftContext(
 
             return string.IsNullOrWhiteSpace(intent) || string.IsNullOrWhiteSpace(recurrenceKind)
                 ? null
-                : new ScheduleDraftContext(intent, action, recurrenceKind, intervalSeconds, failureCode, captured);
+                : new ScheduleDraftContext(intent, action, recurrenceKind, intervalSeconds, failureCode, captured,
+                    draft.TryGetProperty("arguments", out var arguments) && arguments.ValueKind == JsonValueKind.Object
+                        ? arguments.GetRawText() : null);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)
         {
             return null;
         }
@@ -78,12 +82,13 @@ public sealed record ScheduleDraftContext(
 
     public object ToJsonObject() => new
     {
-        intent = Instructions,
+        instructions = Instructions,
         action = Action.ToString(),
         recurrenceKind = RecurrenceKind,
         intervalSeconds = IntervalSeconds,
         failureCode = FailureCode,
-        capturedAtUtc = CapturedAtUtc.ToString("O")
+        capturedAtUtc = CapturedAtUtc.ToString("O"),
+        arguments = ArgumentsJson is null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(ArgumentsJson)
     };
 
     public IReadOnlyList<string> ToPromptLines() =>

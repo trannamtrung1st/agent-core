@@ -2648,6 +2648,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidResponse, inputError)), CancellationToken.None);
             return;
         }
+        if (trigger.Kind == TriggerKind.BackgroundCompleted)
+        {
+            var report = BackgroundCompletionProjection.ReportText(trigger.Text ?? "{}");
+            await MailboxModelAsync(cause, request.ResponseId, new ModelDisplayDelta(report), cancellationToken).ConfigureAwait(false);
+            await MailboxModelAsync(cause, request.ResponseId, new ModelSemanticResponseReady(new(report,
+                new(ModelSpeechMode.None, null), [])), cancellationToken).ConfigureAwait(false);
+            await MailboxModelAsync(cause, request.ResponseId, new ModelCompleted(ModelStopReason.Completed), cancellationToken).ConfigureAwait(false);
+            return;
+        }
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
         var checkpoint = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.Checkpoint : null;
@@ -2667,7 +2676,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var harnessSources = new List<HarnessSourceReceipt>();
         var outputBytes = checked((int)(checkpoint?.OutputBytes ?? 0));
         var repairReason = restored ? AgentRunToolCallCheckpoint.ReadProtocolRepairReason(checkpoint) : null;
-        var repairingTerminal = repairReason is not null;
+        var repairingTerminal = !IsInitialBackgroundRun && repairReason is not null;
         var protocolRepairAttempted = repairingTerminal;
         var repairPhase = steps == 0 ? "initial" : "follow-up";
         var repairOpen = repairingTerminal;
@@ -2693,6 +2702,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             InteractiveBrowser: trigger.Kind == TriggerKind.UserTurn
                 && ToolCatalog.AuthorizesBrowser(budgetTools),
             PersistentBrowserLease: backgroundBrowser?.PersistentBrowserLease == true));
+        var finalizationReserve = IsInitialBackgroundRun
+            ? TimeSpan.FromSeconds(Math.Min(30, budget.Overall.TotalSeconds / 4)) : budget.FinalizationReserve;
         var toolDeadline = request.Tools is { Count: > 0 } || executionRun?.Admission.ExecutionBudget is not null;
         var remainingBudget = checkpoint is null ? budget.Overall
             : TimeSpan.FromMilliseconds(checkpoint.RemainingOverallBudgetMs);
@@ -2713,24 +2724,24 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         async Task BeginCleanupAsync()
         {
             if (cleanupPhase || finalizationReason is not null || budget.CleanupReserve == TimeSpan.Zero
-                || overallDeadline - _time.GetUtcNow() > budget.CleanupReserve + budget.FinalizationReserve
+                || overallDeadline - _time.GetUtcNow() > budget.CleanupReserve + finalizationReserve
                     && steps < budget.MaxSteps - cleanupSteps) return;
             cleanupPhase = true;
             messages.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker));
             await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
         }
         using var workCts = CancellationTokenSource.CreateLinkedTokenSource(generateToken);
-        using ITimer? workTimer = toolDeadline && budget.FinalizationReserve > TimeSpan.Zero
-            ? ScheduleCancel(_time, workCts, remainingBudget > budget.FinalizationReserve + budget.CleanupReserve ? remainingBudget - budget.FinalizationReserve - budget.CleanupReserve : TimeSpan.Zero) : null;
+        using ITimer? workTimer = toolDeadline && finalizationReserve > TimeSpan.Zero
+            ? ScheduleCancel(_time, workCts, remainingBudget > finalizationReserve + budget.CleanupReserve ? remainingBudget - finalizationReserve - budget.CleanupReserve : TimeSpan.Zero) : null;
         using var cleanupCts = CancellationTokenSource.CreateLinkedTokenSource(generateToken);
-        using ITimer? cleanupTimer = toolDeadline && budget.FinalizationReserve > TimeSpan.Zero
-            ? ScheduleCancel(_time, cleanupCts, remainingBudget > budget.FinalizationReserve ? remainingBudget - budget.FinalizationReserve : TimeSpan.Zero) : null;
+        using ITimer? cleanupTimer = toolDeadline && finalizationReserve > TimeSpan.Zero
+            ? ScheduleCancel(_time, cleanupCts, remainingBudget > finalizationReserve ? remainingBudget - finalizationReserve : TimeSpan.Zero) : null;
         async Task BeginFinalizationAsync(string reason)
         {
             finalizationReason = reason;
             workTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             cleanupTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-            overallDeadline = RunFinalization.Deadline(_time.GetUtcNow(), overallDeadline, budget.FinalizationReserve);
+            overallDeadline = RunFinalization.Deadline(_time.GetUtcNow(), overallDeadline, finalizationReserve);
             if (overallDeadline is { } deadline)
             {
                 var remaining = deadline - _time.GetUtcNow();
@@ -2741,6 +2752,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"finalization_reserve\"}", ToolCallId: unexecuted.Id, Name: unexecuted.Name));
             messages.Add(new ModelMessage(ModelRole.System, RunFinalization.Marker + reason));
             await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+        }
+        async Task RecordFailureAsync(ProviderFailure failure)
+        {
+            messages.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, failure));
+            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
+                overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
         }
         try
         {
@@ -2819,7 +2836,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (evidence.RepeatedDialogInstruction is { } repeatedDialogInstruction) prompt.Add(new ModelMessage(ModelRole.System, repeatedDialogInstruction));
                 if (budget.CleanupReserve > TimeSpan.Zero) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.BrowserLifecycleInstruction));
                 if (cleanupPhase && finalizationReason is null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupInstruction));
-                if (finalizationReason is not null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.Instruction));
+                if (finalizationReason is not null) prompt.Add(new ModelMessage(ModelRole.System,
+                    IsInitialBackgroundRun ? RunFinalization.BackgroundInstruction : RunFinalization.Instruction));
 
                 var working = inRepair
                     ? request with
@@ -2845,8 +2863,12 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
                 if (cleanupPhase && finalizationReason is null && working.Tools is { } cleanupTools)
                     working = working with { Tools = cleanupTools.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray() };
-                if (finalizationReason is not null) working = working with { Tools = null, ToolChoice = ModelToolChoice.Auto, ToolChoiceName = null,
-                    MaxOutputTokens = Math.Min(working.MaxOutputTokens, 2048) };
+                if (finalizationReason is not null) working = IsInitialBackgroundRun
+                    ? working with { Tools = [AgentCore.Application.Work.WorkCompletionRequest.Contract],
+                        ToolChoice = ModelToolChoice.Named, ToolChoiceName = ToolCatalog.WorkComplete, ResponseContract = null,
+                        MaxOutputTokens = 4096 }
+                    : working with { Tools = null, ToolChoice = ModelToolChoice.Auto, ToolChoiceName = null,
+                        MaxOutputTokens = Math.Min(working.MaxOutputTokens, 2048) };
                 if (projectionContext is not null)
                 {
                     IReadOnlyList<ModelToolDefinition>? eligibleForGuide = null;
@@ -2905,19 +2927,28 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         continue;
                     if (IsInitialBackgroundRun && evt is ModelCompleted { Reason: not ModelStopReason.ToolCalls })
                     {
+                        if (finalizationReason is null && evt is ModelCompleted { Reason: ModelStopReason.Completed })
+                        {
+                            await BeginFinalizationAsync("completionRequired").ConfigureAwait(false);
+                            retryGeneration = true;
+                            break;
+                        }
+                        await RecordFailureAsync(RunFinalization.MissingCompletion()).ConfigureAwait(false);
                         await MailboxModelAsync(cause, request.ResponseId,
-                            new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidResponse, "Background work requires an explicit completion outcome.")), generateToken).ConfigureAwait(false);
+                            new ModelFailed(RunFinalization.MissingCompletion()), generateToken).ConfigureAwait(false);
                         return;
                     }
                     if (evt is ModelToolCallEvent tool)
                     {
-                        if (finalizationReason is not null)
+                        if (finalizationReason is not null && (!IsInitialBackgroundRun || tool.Call.Name != ToolCatalog.WorkComplete || pending.Count > 0))
                         {
-                            await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(
-                                ProviderErrorCode.InvalidResponse, "Finalization cannot request tools.", FailureReason: "finalizationToolCall")), generateToken).ConfigureAwait(false);
+                            var violation = new ProviderFailure(ProviderErrorCode.InvalidResponse, "Finalization cannot request substantive tools.",
+                                FailureReason: "finalizationToolCall", ResponseChannel: IsInitialBackgroundRun ? ProviderResponseChannel.BackgroundCompletion : null);
+                            await RecordFailureAsync(violation).ConfigureAwait(false);
+                            await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(violation), generateToken).ConfigureAwait(false);
                             return;
                         }
-                        if (!inRepair && !terminalBrowserContinuation)
+                        if (!inRepair && (!terminalBrowserContinuation || IsInitialBackgroundRun))
                         {
                             pending.Add(tool.Call);
                         }
@@ -2995,7 +3026,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         continue;
                     }
 
-                    if (!inRepair
+                    if (!IsInitialBackgroundRun && !inRepair
                         && evt is ModelFailed repairable
                         && !protocolRepairAttempted
                         && TryProtocolRepair(repairable, pending, publishedVisible, generateToken, overallDeadline))
@@ -3019,7 +3050,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         _protocolRepairOutcome = "failed";
                     }
 
-                    if (evt is ModelFailed finalFailure && finalizationReason is null && workTimer is not null
+                    if (!IsInitialBackgroundRun && evt is ModelFailed finalFailure && finalizationReason is null && workTimer is not null
                         && !publishedVisible && pending.Count == 0 && !cancellationToken.IsCancellationRequested
                         && RunFinalization.HasEvidence(CheckpointSuffix()) && RunFinalization.RecoveryReason(finalFailure.Failure) is { } reason)
                     {
@@ -3027,6 +3058,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         retryGeneration = true;
                         break;
                     }
+                    if (evt is ModelFailed observedFailure)
+                        messages.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, observedFailure.Failure));
                     if (evt is ModelFailed or ModelCompleted)
                         await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
                             overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
@@ -3116,7 +3149,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     continue;
                 }
 
-                if (terminalBrowserContinuation && !finished)
+                if (terminalBrowserContinuation && !IsInitialBackgroundRun && !finished)
                 {
                     await MailboxModelAsync(
                             cause,
@@ -3132,13 +3165,15 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     return;
                 }
 
-                if (finalizationReason is null && workTimer is not null && overallDeadline - _time.GetUtcNow() <= budget.FinalizationReserve + budget.PerTool)
+                if (finalizationReason is null && workTimer is not null && overallDeadline - _time.GetUtcNow() <= finalizationReserve + budget.PerTool)
                 {
                     await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
                     continue;
                 }
 
-                if (steps + (resumingBatch ? 0 : pending.Count) > budget.MaxSteps)
+                var completionBatch = IsInitialBackgroundRun && pending.Count == 1 && pending[0].Name == ToolCatalog.WorkComplete;
+                var stepCeiling = budget.MaxSteps - (IsInitialBackgroundRun && !completionBatch ? 1 : 0);
+                if (steps + (resumingBatch ? 0 : pending.Count) > stepCeiling)
                 {
                     if (finalizationReason is null && !publishedVisible)
                     {
@@ -3214,7 +3249,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                         continue;
                     }
-                    if (cleanupPhase && !RunFinalization.CleanupTool(call.Name))
+                    if (finalizationReason is null && cleanupPhase && !RunFinalization.CleanupTool(call.Name))
                     {
                         messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"cleanup_reserve\"}", ToolCallId: call.Id, Name: call.Name));
                         await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
@@ -3390,6 +3425,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         AgentCore.Application.Work.WorkCompletionRequest.Summary(result), overallCts.Token).ConfigureAwait(false)) return;
                                     return;
                                 }
+                                if (finalizationReason is not null)
+                                {
+                                    await RecordFailureAsync(RunFinalization.MissingCompletion()).ConfigureAwait(false);
+                                    await MailboxModelAsync(cause, request.ResponseId,
+                                        new ModelFailed(RunFinalization.MissingCompletion()), generateToken).ConfigureAwait(false);
+                                    return;
+                                }
                                 executionResult = ToolExecutionResult.FromText(JsonSerializer.Serialize(new { error = "invalid", message = rejection }));
                             }
                             else if (string.Equals(call.Name, ToolCatalog.CapabilitiesLoad, StringComparison.Ordinal) && projectionContext is not null)
@@ -3516,8 +3558,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             pausedOverallRemaining);
                                         if (workTimer is not null && pausedOverallRemaining is { } restoredRemaining)
                                         {
-                                            workTimer.Change(restoredRemaining > budget.FinalizationReserve + budget.CleanupReserve ? restoredRemaining - budget.FinalizationReserve - budget.CleanupReserve : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
-                                            cleanupTimer?.Change(restoredRemaining > budget.FinalizationReserve ? restoredRemaining - budget.FinalizationReserve : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+                                            workTimer.Change(restoredRemaining > finalizationReserve + budget.CleanupReserve ? restoredRemaining - finalizationReserve - budget.CleanupReserve : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+                                            cleanupTimer?.Change(restoredRemaining > finalizationReserve ? restoredRemaining - finalizationReserve : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
                                         }
                                     }
 
@@ -3776,7 +3818,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         await BeginFinalizationAsync("browserBlocked").ConfigureAwait(false);
                         break;
                     }
-                    if (finalizationReason is null && workTimer is not null && overallDeadline - _time.GetUtcNow() <= budget.FinalizationReserve + budget.PerTool)
+                    if (finalizationReason is null && workTimer is not null && overallDeadline - _time.GetUtcNow() <= finalizationReserve + budget.PerTool)
                     {
                         await BeginFinalizationAsync("runDeadline").ConfigureAwait(false);
                         break;
@@ -4616,12 +4658,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         ProviderFailure failure,
         Guid? existingId)
     {
+        var completionViolation = failure.ResponseChannel == ProviderResponseChannel.BackgroundCompletion;
+        var category = completionViolation ? "execution" : "provider";
+        var code = failure.FailureReason == ProviderFailureReason.BackgroundCompletionRequired ? "CompletionRequired"
+            : completionViolation ? "CompletionProtocolViolation" : failure.Code.ToString();
         if (existingId is { } supplied && supplied != Guid.Empty)
         {
             return new FailureReference(
                 supplied,
-                "provider",
-                failure.Code.ToString(),
+                category,
+                code,
                 CorrelationOrNull(context),
                 failure.FailureReason,
                 failure.ResponseChannel,
@@ -4634,16 +4680,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             context,
             responseId,
             diagnosticId,
-            "provider",
-            failure.Code.ToString(),
-            "Assistant response failed.",
+            category,
+            code,
+            completionViolation ? "Background completion protocol failed." : "Assistant response failed.",
             null,
             failure.FailureReason,
             failure.ResponseChannel);
         return new FailureReference(
             diagnosticId,
-            "provider",
-            failure.Code.ToString(),
+            category,
+            code,
             CorrelationOrNull(context),
             failure.FailureReason,
             failure.ResponseChannel,

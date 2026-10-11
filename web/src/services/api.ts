@@ -14,6 +14,7 @@ export type HealthResponse = {
   status: string;
   profile: string;
   protocolVersion: number;
+  scheduler?: { status: "starting" | "ready" | "degraded" | "stale"; lastPassAt: string | null; lastSuccessAt: string | null };
 };
 
 export type SessionModelChoice = {
@@ -65,6 +66,7 @@ export type SessionResponse = {
 };
 
 export type AgentRun = {
+  executionDiagnostic?: { remainingBudgetMs: number; lastTool: string | null; recordedToolResults: number; failedAttempts: { attempt: number; code: string; reason: string | null; channel: string | null }[] } | null;
   composerInput?: {explicitSkillKeys:string[];provenance:string;admittedAt:string;error:string|null;references:{kind:string;locator:string;label:string;status:string;revision:number|null;sha256:string|null;truncated:boolean}[]} | null;
   configuration?: { definitionId: string; definitionVersion: number; instanceRevision: number; personaRevision: number; configurationHash: string; resources: { key: string; logicalPath: string; virtualPath: string; contentSha256: string; byteLength: number }[] } | null;
   triggerOrigin?: { triggerRevision?: number | null; triggerId: string | null; kind: string; source: { kind: string; key?: string | null; eventId?: string | null } | null; summary: string } | null;

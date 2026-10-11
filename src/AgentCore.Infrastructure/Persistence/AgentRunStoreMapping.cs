@@ -42,6 +42,10 @@ internal static class AgentRunStoreMapping
                 AgentRunStatus.WaitingToRetry => "retry", AgentRunStatus.WaitingForApproval => "approval",
                 AgentRunStatus.Completed => "completed", AgentRunStatus.Failed => "failed", AgentRunStatus.Cancelled => "cancelled", _ => null };
             if (outcome is not null) RuntimeTelemetry.RecordAgentRun(outcome);
+            if (after.IsTerminal) RuntimeTelemetry.RecordRunOutcome(outcome ?? "other", after.Failure?.Code,
+                after.Status == AgentRunStatus.Completed && after.AttemptCount > 1);
+            if (after.Status == AgentRunStatus.Completed && after.Admission.Activation.Kind == ActivationKind.BackgroundCompleted)
+                RuntimeTelemetry.RecordBackgroundDeliveryLag("delivery", (after.UpdatedAtUtc - after.CreatedAtUtc).TotalMilliseconds);
         }
         if (before.SideEffect.Disposition != after.SideEffect.Disposition && after.SideEffect.Disposition == AgentRunSideEffectDisposition.Indeterminate)
             RuntimeTelemetry.RecordAgentRun("unconfirmed-effect");

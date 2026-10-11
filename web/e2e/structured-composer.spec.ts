@@ -509,6 +509,21 @@ test("picker active option belongs to the focused editor or plus search", async 
   await search.press("ArrowDown");
   await expect(search).toHaveAttribute("aria-activedescendant", "composer-choice-1");
   await expect(page.locator("#composer-choice-1")).toHaveAttribute("aria-selected", "true");
+  // Tab focus can differ from the combobox selection: keep its target visible.
+  await search.press("Tab");
+  const firstChoice = page.locator("#composer-choice-0");
+  await expect(firstChoice).toBeFocused();
+  await expect(firstChoice).toHaveCSS("outline-style", "solid");
+  await expect(firstChoice).toHaveCSS("outline-width", "2px");
+  await expect(page.locator("#composer-choice-1")).not.toBeFocused();
+  await expect(page.locator("#composer-choice-1")).toHaveAttribute("aria-selected", "true");
+  await firstChoice.press("Enter");
+  await expect(editor).toBeFocused();
+  await expect(editor.locator('[data-skill-key="instance:check"]')).toHaveCount(1);
+  await expect(editor.locator('[data-skill-key="instance:review"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Add content" }).click();
+  await page.getByRole("menuitem", { name: "Use Skill" }).click();
+  await expect(search).toBeFocused();
   await search.fill("no-such-skill-needle");
   await expect(page.getByText("No matching choices", { exact: true })).toBeVisible();
   await expect(search).not.toHaveAttribute("aria-activedescendant");

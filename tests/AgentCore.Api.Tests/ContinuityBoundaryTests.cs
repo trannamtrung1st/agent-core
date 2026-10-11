@@ -177,14 +177,14 @@ public sealed class ContinuityBoundaryTests
         var record = await s.GetRequiredService<ExperienceService>().RequestSessionAsync(instance.InstanceId, source.SessionId);
         await s.ExecuteRunsAsync(100);
         var item = (await s.GetRequiredService<IAgentRunStore>().GetAsync(new(instance.InstanceId, LocalUserProfile.Id), record.GenerationAgentRunId))!;
-        Assert.Equal(mode == "prose" ? AgentRunStatus.WaitingToRetry : AgentRunStatus.Failed, item.Status);
+        Assert.Equal(AgentRunStatus.Failed, item.Status);
         Assert.Equal(mode == "prose" ? "completion-required" : "provider-invalidresponse", item.Failure!.Code);
         if (mode != "prose")
         {
             // The strategy stays blocked; an uncorrected model eventually violates
-            // the existing tool-free finalization boundary instead of disabling all tools.
+            // the completion-only finalization boundary instead of dispatching more substantive tools.
             Assert.Contains("invalid_tool_strategy_blocked", item.Checkpoint!.PayloadJson);
-            Assert.Equal(item.Admission.ExecutionBudget!.Profile.MaxSteps, item.Checkpoint.StepCount);
+            Assert.Equal(item.Admission.ExecutionBudget!.Profile.MaxSteps - 1, item.Checkpoint.StepCount);
         }
         Assert.Null((await s.GetRequiredService<IExperienceStore>().GetAsync(instance.InstanceId, record.ExperienceId))!.Content);
         Assert.Empty(await s.GetRequiredService<IExperienceStore>().PendingAsync(100));

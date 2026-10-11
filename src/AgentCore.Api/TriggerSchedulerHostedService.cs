@@ -15,6 +15,7 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
     private readonly TimeProvider _time;
     private readonly ILogger<TriggerSchedulerHostedService> _logger;
     private readonly IDiagnosticIdSource _diagnostics;
+    private readonly SchedulerReadiness? _readiness;
 
     public TriggerSchedulerHostedService(
         TriggerScheduler scheduler,
@@ -22,12 +23,12 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
         ExternalEventIngress events,
         TimeProvider time,
         ILogger<TriggerSchedulerHostedService> logger,
-        IDiagnosticIdSource diagnostics, CoreEventDispatcher coreEvents)
+        IDiagnosticIdSource diagnostics, CoreEventDispatcher coreEvents, SchedulerReadiness readiness)
         : this(
             cancellationToken => RunProductionAsync(scheduler, router, events, coreEvents, time, logger, diagnostics, cancellationToken),
             time,
             logger,
-            diagnostics)
+            diagnostics, readiness)
     {
     }
 
@@ -35,12 +36,13 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
         Func<CancellationToken, Task> pass,
         TimeProvider time,
         ILogger<TriggerSchedulerHostedService> logger,
-        IDiagnosticIdSource diagnostics)
+        IDiagnosticIdSource diagnostics, SchedulerReadiness? readiness = null)
     {
         _pass = pass;
         _time = time;
         _logger = logger;
         _diagnostics = diagnostics;
+        _readiness = readiness;
     }
 
     internal IDiagnosticIdSource DiagnosticIds => _diagnostics;
@@ -74,6 +76,8 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
         try
         {
             await _pass(stoppingToken).ConfigureAwait(false);
+            _readiness?.Record(true);
+            RuntimeTelemetry.RecordSchedulerPass(true);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -81,6 +85,8 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
         }
         catch (Exception exception)
         {
+            _readiness?.Record(false);
+            RuntimeTelemetry.RecordSchedulerPass(false);
             DiagnosticLog.Warning(
                 _logger,
                 exception,
@@ -99,25 +105,29 @@ public sealed class TriggerSchedulerHostedService : BackgroundService
         IDiagnosticIdSource diagnostics,
         CancellationToken cancellationToken)
     {
-        await RunPhasesAsync([
+        var succeeded = await RunPhasesAsync([
             async ct => { await coreEvents.RunOnceAsync(ct).ConfigureAwait(false); },
             async ct => { await events.ResumePendingAsync(ct).ConfigureAwait(false); },
             async ct => { await scheduler.RunOnceAsync(time.GetUtcNow(), ct).ConfigureAwait(false); },
             async ct => { await router.RouteOnceAsync(ct).ConfigureAwait(false); }
         ], logger, diagnostics, cancellationToken).ConfigureAwait(false);
+        if (!succeeded) throw new InvalidOperationException("One or more scheduler phases failed.");
     }
 
-    internal static async Task RunPhasesAsync(IReadOnlyList<Func<CancellationToken, Task>> phases,
+    internal static async Task<bool> RunPhasesAsync(IReadOnlyList<Func<CancellationToken, Task>> phases,
         ILogger<TriggerSchedulerHostedService> logger, IDiagnosticIdSource diagnostics, CancellationToken ct)
     {
+        var succeeded = true;
         foreach (var phase in phases)
         {
             ct.ThrowIfCancellationRequested();
             try { await phase(ct).ConfigureAwait(false); }
             catch (Exception exception) when (!ct.IsCancellationRequested && exception is not OutOfMemoryException and not StackOverflowException)
             {
+                succeeded = false;
                 DiagnosticLog.Warning(logger, exception, diagnostics.NewId(), "Trigger scheduler phase failed; continuing remaining phases.");
             }
         }
+        return succeeded;
     }
 }

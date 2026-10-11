@@ -6,6 +6,27 @@ public sealed class ScheduleDraftAdmissionTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 24, 9, 30, 0, TimeSpan.Zero);
 
+    [Theory]
+    [InlineData("okay so 60s", true)]
+    [InlineData("60 seconds", true)]
+    [InlineData("1 minute", true)]
+    [InlineData("every minute", true)]
+    [InlineData("don't use 60s", false)]
+    [InlineData("60s then delete the report", false)]
+    [InlineData("every minute what is the weather?", false)]
+    [InlineData("2147483647 hours", false)]
+    public void Serialized_draft_survives_only_one_interval_correction(string text, bool expected)
+    {
+        var draft = ScheduleDraftContext.ForFixedIntervalRejection("Wake me up", 30, "recurrence_below_minimum", Now);
+        var json = System.Text.Json.JsonSerializer.Serialize(new { scheduleDraft = draft.ToJsonObject() });
+        Assert.Equal(draft, ScheduleDraftContext.TryFromToolError(json));
+        var eligible = true;
+        var retained = ScheduleDraftAdmission.PrepareDraftForUserTurn(draft, ref eligible, text, "en", null);
+        Assert.Equal(expected, retained is not null);
+        Assert.False(eligible);
+        Assert.Null(ScheduleDraftAdmission.PrepareDraftForUserTurn(draft, ref eligible, "60s", "en", null));
+    }
+
     [Fact]
     public void Unrelated_turn_after_rejection_clears_draft_before_prompt()
     {

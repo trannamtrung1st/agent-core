@@ -12,7 +12,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class AgentRunDurabilityTests
+public sealed partial class AgentRunDurabilityTests
 {
     [Fact]
     public async Task Coordinator_winning_fast_admission_claim_launches_exactly_once()

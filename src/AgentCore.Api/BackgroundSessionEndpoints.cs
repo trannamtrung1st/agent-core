@@ -2,6 +2,7 @@ using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
 using AgentCore.Api.Realtime;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
@@ -160,7 +161,11 @@ public static class BackgroundSessionEndpoints
         run.Admission.Configuration is { } config ? new(config.Definition.Id, config.Definition.Version, config.InstanceRevision,
             config.PersonaRevision, config.ConfigurationHash, config.Resources.Select(r => new AgentRunResourceResponse(r.Key, r.VirtualPath, r.ContentSha256, r.ByteLength)).ToArray()) : null, ToTriggerOrigin(run),
         run.Admission.ComposerInput is { } input ? new(input.ExplicitSkillKeys, "userExplicit", HttpMapping.Format(input.AdmittedAtUtc), input.Error,
-            input.References.Select(r => new ComposerReferenceResponse(r.Reference.Kind, r.Reference.Locator, r.Label, r.Status, r.Revision, r.Sha256, r.Truncated)).ToArray()) : null);
+            input.References.Select(r => new ComposerReferenceResponse(r.Reference.Kind, r.Reference.Locator, r.Label, r.Status, r.Revision, r.Sha256, r.Truncated)).ToArray()) : null, ToExecutionDiagnostic(run));
+
+    private static RunExecutionDiagnosticResponse? ToExecutionDiagnostic(AgentRun run) => RunDiagnosticProjection.From(run) is { } diagnostic
+        ? new(diagnostic.RemainingBudgetMs, diagnostic.LastTool, diagnostic.RecordedToolResults,
+            diagnostic.FailedAttempts.Select(a => new RunAttemptDiagnosticResponse(a.Attempt, a.Code, a.Reason, a.Channel)).ToArray()) : null;
 
     private static async Task<AgentRunResponse> WithTriggerOriginAsync(AgentRunResponse response, AgentRun run, ITriggerStore triggers, CancellationToken ct)
     {

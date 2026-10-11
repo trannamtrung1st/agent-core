@@ -25,6 +25,8 @@ internal static class BackgroundSessionScript
             catch (Exception exception) when (exception is JsonException or ArgumentOutOfRangeException or InvalidOperationException)
             { return [new ModelTextDelta("Background work ended. Open Background work to inspect the result."), new ModelCompleted(ModelStopReason.Completed)]; }
         }
+        if (request.Messages.Any(message => message.Text.Contains("synthetic-background-prose", StringComparison.Ordinal)))
+            return [new ModelTextDelta("Fixture prose without an explicit completion."), new ModelCompleted(ModelStopReason.Completed)];
         // Background work never fans out, even when the original objective contains this fixture marker.
         if (request.Messages.Any(message => message.Role == ModelRole.System && message.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal))) return null;
         var prompt = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? "";
@@ -52,7 +54,7 @@ internal static class BackgroundSessionScript
                 return Call(ToolCatalog.CapabilitiesLoad, new { query = "start an immediate background task", limit = 1 });
             return [new ModelTextDelta("This Agent is not authorized to start background tasks."), new ModelCompleted(ModelStopReason.Completed)];
         }
-        return Call(ToolCatalog.BackgroundStart, new { objective = prompt.Contains("[test:background-files]", StringComparison.Ordinal) ? "synthetic-background-files: create the original task report" : "synthetic-automation-attention: check the requested progress and report the outcome", title = "Background progress check", reportCompletion = true });
+        return Call(ToolCatalog.BackgroundStart, new { objective = prompt.Contains("[test:background-prose]", StringComparison.Ordinal) ? "synthetic-background-prose: verify bounded failure reporting" : prompt.Contains("[test:background-files]", StringComparison.Ordinal) ? "synthetic-background-files: create the original task report" : "synthetic-automation-attention: check the requested progress and report the outcome", title = "Background progress check", reportCompletion = true });
     }
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object arguments) =>
         [new ModelToolCallEvent(new("background-fixture-" + name, name, JsonSerializer.Serialize(arguments))), new ModelCompleted(ModelStopReason.ToolCalls)];

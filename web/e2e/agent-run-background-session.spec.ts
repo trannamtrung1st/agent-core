@@ -97,3 +97,41 @@ test("immediate child reports once, then continues as the same Session with a ne
   expect(finalParentRuns.items.filter(run => run.activationKind === "BackgroundCompleted")).toHaveLength(1);
   expect(errors).toEqual([]);
 });
+
+test("missing background completion reports a durable failure once with visible diagnostics", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/");
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 24 });
+  await expect(page.getByTestId("connection")).toHaveText("Ready");
+  await page.getByLabel("Message", { exact: true }).fill("[test:background-start] [test:background-prose] Check progress in the background and report it.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".conversation-scroll")).toContainText("Background work failed.", { timeout: 30_000 });
+  await waitForResponseSettled(page);
+  const parentId = page.url().match(/\/c\/([0-9a-f-]{36})/i)![1];
+  const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
+  const headers = { "X-AgentCore-Owner-Capability": token! };
+  const parent = await (await page.request.get(`/api/v2/sessions/${parentId}`, { headers })).json();
+  const children = await (await page.request.get(`/api/v2/agent-instances/${parent.agentInstanceId}/background-sessions`, { headers })).json() as CursorPage<BackgroundSession>;
+  const child = children.items[0];
+  expect(child.initialRun?.failureCode).toBe("completion-required");
+  expect(child.initialRun?.attemptCount).toBe(1);
+  expect(child.initialRun?.executionDiagnostic?.failedAttempts).toEqual([
+    { attempt: 1, code: "InvalidResponse", reason: "backgroundCompletionRequired", channel: "backgroundCompletion" }
+  ]);
+  expect(child.completionDelivery?.status).toBe("delivered");
+  const text = await page.locator(".conversation-scroll").innerText();
+  expect(text).not.toContain("\\n\\n");
+  expect(text.match(/Background work failed\./g)).toHaveLength(1);
+  await page.getByRole("button", { name: /Background work/ }).click();
+  await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View original result", exact: true }).click();
+  const details = page.getByRole("dialog", { name: "Background progress check", exact: true });
+  await expect(details).toContainText("backgroundCompletionRequired");
+  await expect(details).toContainText("backgroundCompletion");
+  await expect(details).toContainText("Last tool checkpoint");
+  await expect(details).toContainText("Completion recovery");
+  await expect(details).toContainText("Attempt 1: InvalidResponse");
+  const reports = await (await page.request.get(`/api/v2/sessions/${parentId}/agent-runs`, { headers })).json() as CursorPage<AgentRun>;
+  expect(reports.items.filter(run => run.activationKind === "BackgroundCompleted")).toHaveLength(1);
+  expect(errors).toEqual([]);
+});

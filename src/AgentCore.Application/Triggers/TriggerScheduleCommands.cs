@@ -205,7 +205,7 @@ public static class TriggerScheduleCommands
                 RuntimeTelemetry.RecordAutomation(operation, "authorization_classifier_unavailable");
                 return Result(
                     "authorization_classifier_unavailable",
-                    "Schedule authorization is temporarily unavailable. Ask the user to restate the request or try again shortly.",
+                    "Schedule authorization is temporarily unavailable. Preserve the request and explain that it can be retried when the provider recovers.",
                     clearProposal: false);
             }
 
@@ -324,7 +324,8 @@ public static class TriggerScheduleCommands
                 exception.ErrorCode,
                 exception.Message,
                 clearProposal: false,
-                exception.Draft);
+                exception.Draft is { } draft
+                    ? draft with { ArgumentsJson = MergeDraftArguments(effectiveArguments, context).GetRawText() } : null);
         }
         catch (ArgumentException exception)
         {
@@ -346,12 +347,12 @@ public static class TriggerScheduleCommands
         TriggerSchedule schedule = merged.TryGetProperty("kind", out var kind) && kind.GetString() is "daily" or "weekly" or "fixed_interval"
             ? ResolveRecurring(merged, context, policy) : ResolveOneShot(merged, context, policy).Schedule;
         return RegistrationJson(await authoring.SaveAsync(owner.AgentInstanceId, null, 0, true,
-            TryString(arguments, "name", out var name) ? name : instructions[..Math.Min(80, instructions.Length)],
+            TryString(merged, "name", out var name) ? name : instructions[..Math.Min(80, instructions.Length)],
             instructions, new ScheduleTrigger(schedule),
-            TryString(arguments, "modelKey", out var model) ? model : null,
-            TryString(arguments, "reasoningEffort", out var effort) ? effort : null, ct,
+            TryString(merged, "modelKey", out var model) ? model : null,
+            TryString(merged, "reasoningEffort", out var effort) ? effort : null, ct,
             new(TriggerAuthorizationOrigin.CurrentUserTurn, context.SessionId, context.SourceEventId, context.UtcNow, context.UtcNow),
-                        executionTarget: ChatTarget(arguments, context), completionDelivery: ChatDelivery(arguments, context), requiresTools: OptionalRequirement(arguments, "requiresTools"), requiresVision: OptionalRequirement(arguments, "requiresVision")));
+                        executionTarget: ChatTarget(merged, context), completionDelivery: ChatDelivery(merged, context), requiresTools: OptionalRequirement(merged, "requiresTools"), requiresVision: OptionalRequirement(merged, "requiresVision")));
     }
 
     private static async Task<string> CreateOnceAsync(
@@ -839,6 +840,16 @@ public static class TriggerScheduleCommands
         if (context.ScheduleDraft is not { IsActive: true } draft)
         {
             return arguments;
+        }
+
+        // An interval-only reply may change only the interval, never the original task or destination.
+        if (ScheduleIntervalLanguage.IsIntervalOnlyCorrection(context.CurrentUserText ?? "", context.ConversationLanguage)
+            && draft.ArgumentsJson is { } original)
+        {
+            var saved = System.Text.Json.Nodes.JsonNode.Parse(original)!.AsObject();
+            saved["instructions"] = draft.Instructions;
+            saved["intervalSeconds"] = ScheduleIntervalLanguage.TryParseIntervalSeconds(context.CurrentUserText) ?? draft.IntervalSeconds;
+            return JsonSerializer.SerializeToElement(saved);
         }
 
         using var document = JsonDocument.Parse(arguments.GetRawText());

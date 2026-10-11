@@ -21,6 +21,7 @@ export function detailLinesCopyText(header: string, lines: DetailLine[]): string
 }
 
 const failureReasonTokens = new Set([
+  "backgroundCompletionRequired",
   "invalidJson",
   "responseTooLarge",
   "missingDisplayText",
@@ -59,6 +60,7 @@ const failureReasonTokens = new Set([
 ]);
 
 const responseChannelTokens = new Set([
+  "backgroundCompletion",
   "responseFunction",
   "structuredOutput",
   "markerCompatibility",

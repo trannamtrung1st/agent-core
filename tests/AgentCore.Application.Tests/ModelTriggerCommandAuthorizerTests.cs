@@ -59,6 +59,38 @@ public sealed class ModelTriggerCommandAuthorizerTests
             authorizer.AuthorizeCurrentTurnAsync("remind me", "en", TriggerCommandAction.Create, null, null, cts.Token).AsTask());
     }
 
+    [Theory]
+    [InlineData("say hello in 15s", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("in 15 seconds, say hello", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("every 60s, wake me up", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("don't say hello in 15s", TriggerCommandAuthorizationDecision.Deny)]
+    [InlineData("do not wake me every 60s", TriggerCommandAuthorizationDecision.Deny)]
+    [InlineData("never create an automation", TriggerCommandAuthorizationDecision.Deny)]
+    public async Task Clear_requests_and_negation_do_not_call_unavailable_classifier(string text, TriggerCommandAuthorizationDecision expected)
+    {
+        var authorizer = new ModelTriggerCommandAuthorizer(new FailingLanguageModel(), new());
+        Assert.Equal(expected, await authorizer.AuthorizeCurrentTurnAsync(text, "en", TriggerCommandAction.Create));
+    }
+
+    [Fact]
+    public async Task Failed_stream_cannot_authorize_from_partial_json()
+    {
+        var authorizer = new ModelTriggerCommandAuthorizer(new PartiallyFailedModel(), new());
+        Assert.Equal(TriggerCommandAuthorizationDecision.ClassifierUnavailable,
+            await authorizer.AuthorizeCurrentTurnAsync("another at 8:52", "en", TriggerCommandAction.Create));
+    }
+
+    private sealed class PartiallyFailedModel : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.CompletedTask;
+            yield return new ModelTextDelta("{\"decision\":\"allow\"}");
+            yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Provider unavailable."));
+        }
+    }
+
     private sealed class StubLanguageModel(string text) : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(StreamingText: true, Cancellation: true, Tools: false);
