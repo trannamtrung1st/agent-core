@@ -187,11 +187,17 @@ public sealed class ReliabilityJourneyTests
     }
 
     [Theory(Timeout = 60000)]
-    [InlineData("unavailable", "authorization_classifier_unavailable")]
-    [InlineData("invalid", "authorization_classifier_invalid_output")]
-    [InlineData("ambiguous", "authorization_ambiguous")]
-    [InlineData("deny", "authorization_denied")]
-    public async Task Ambiguous_schedule_diagnostics_are_distinct_and_never_create(string mode, string expected)
+    [InlineData("maybe greet me every minute", "unavailable", "authorization_classifier_unavailable")]
+    [InlineData("maybe greet me every minute", "invalid", "authorization_classifier_invalid_output")]
+    [InlineData("maybe greet me every minute", "ambiguous", "authorization_ambiguous")]
+    [InlineData("maybe greet me every minute", "deny", "authorization_denied")]
+    [InlineData("create an automation to greet me every minute if I return", "ambiguous", "authorization_ambiguous")]
+    [InlineData("if I return, create an automation to greet me every minute", "unavailable", "authorization_classifier_unavailable")]
+    [InlineData("create an automation if I return", "ambiguous", "authorization_ambiguous")]
+    [InlineData("we used to create an automation every minute", "deny", "authorization_denied")]
+    [InlineData("we used to create an automation", "deny", "authorization_denied")]
+    [InlineData("maybe greet me every minute", "conflicting", "authorization_classifier_invalid_output")]
+    public async Task Ambiguous_schedule_diagnostics_are_distinct_and_never_create(string request, string mode, string expected)
     {
         var path = Path.Combine(Path.GetTempPath(), $"reliability-classifier-{Guid.NewGuid():N}.db");
         var model = new SchedulingModel();
@@ -205,7 +211,7 @@ public sealed class ReliabilityJourneyTests
         var snapshot = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
         await using var runtime = s.GetRequiredService<SessionRuntimeFactory>().Create(snapshot, new QuietOutput());
         await runtime.AttachAsync();
-        Assert.True(await runtime.SubmitUserTextAsync("maybe greet me every minute"));
+        Assert.True(await runtime.SubmitUserTextAsync(request));
         await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
         Assert.Empty(await s.GetRequiredService<ITriggerStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), null));
         Assert.Contains(model.ScheduleResults, text => text.Contains("\"error\":\"" + expected + "\"", StringComparison.Ordinal));
@@ -220,7 +226,12 @@ public sealed class ReliabilityJourneyTests
             if (mode == "unavailable") yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Classifier unavailable."));
             else
             {
-                yield return new ModelTextDelta(mode == "invalid" ? "{\"decision\":42}" : "{\"decision\":\"" + mode + "\"}");
+                yield return new ModelTextDelta(mode switch
+                {
+                    "invalid" => "{\"decision\":42}",
+                    "conflicting" => "{\"decision\":\"deny\",\"decision\":\"allow\"}",
+                    _ => "{\"decision\":\"" + mode + "\"}"
+                });
                 yield return new ModelCompleted(ModelStopReason.Completed);
             }
         }

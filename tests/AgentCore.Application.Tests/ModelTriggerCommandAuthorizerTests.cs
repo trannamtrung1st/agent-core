@@ -27,6 +27,7 @@ public sealed class ModelTriggerCommandAuthorizerTests
     [InlineData("{\"decision\":{}}")]
     [InlineData("[]")]
     [InlineData("{\"decision\":\"maybe\"}")]
+    [InlineData("{\"decision\":\"deny\",\"decision\":\"allow\"}")]
     public async Task Invalid_classifier_shape_fails_closed(string output)
     {
         var model = new StubLanguageModel(output);
@@ -40,6 +41,11 @@ public sealed class ModelTriggerCommandAuthorizerTests
     [InlineData("maybe greet me every minute", "ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
     [InlineData("say hello to me every minute if I return", "ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
     [InlineData("say \"hello\" to me every minute", "ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
+    [InlineData("create an automation to greet me every minute if I return", "ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
+    [InlineData("if I return, create an automation to greet me every minute", "ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
+    [InlineData("create an automation if I return", "ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
+    [InlineData("we used to create an automation every minute", "deny", TriggerCommandAuthorizationDecision.Deny)]
+    [InlineData("we used to create an automation", "deny", TriggerCommandAuthorizationDecision.Deny)]
     [InlineData("the kettle is blue", "deny", TriggerCommandAuthorizationDecision.Deny)]
     [InlineData("another at 8:52", "allow", TriggerCommandAuthorizationDecision.Allow)]
     public async Task Genuine_ambiguity_still_uses_classifier(string text, string token, TriggerCommandAuthorizationDecision expected)
@@ -97,6 +103,9 @@ public sealed class ModelTriggerCommandAuthorizerTests
 
     [Theory]
     [InlineData("check the oven in 1 minute for me", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("create an automation to greet me every minute", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("please configure an automation", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("enable core event review recent work", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("in 1 minute, check the oven for me", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("greet me every 60 seconds", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("every 60 seconds, greet me", TriggerCommandAuthorizationDecision.Allow)]

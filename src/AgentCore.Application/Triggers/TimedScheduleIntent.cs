@@ -22,10 +22,11 @@ internal static class TimedScheduleIntent
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     internal static bool HasTiming(string text) => Timing.IsMatch(text);
+    internal static bool HasQualification(string text) => Qualification.IsMatch(text);
 
     internal static bool Matches(string text)
     {
-        if (text.Length > 512 || Qualification.IsMatch(text)) return false;
+        if (text.Length > 512 || HasQualification(text)) return false;
         var command = text.Trim().TrimEnd('.', '!').Trim();
         foreach (var suffix in new[] { " please", " for me", " to me" })
             if (command.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
