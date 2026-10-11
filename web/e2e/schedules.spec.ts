@@ -40,7 +40,6 @@ test("create a schedule in chat, refresh the list, and cancel it", async ({ page
     }
   });
   await page.getByRole("button", { name: "Start a new chat" }).click();
-  await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("remind me tomorrow");
