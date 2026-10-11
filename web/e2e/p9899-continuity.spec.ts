@@ -12,7 +12,7 @@ async function send(page: Page, text: string) {
   await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
-test('Experience informs an authorized Instance Skill Automation; next activation stays quiet; owner controls work at narrow width', async ({ page }, testInfo) => {
+test('Experience informs Chat while unattended Skill management stays unavailable; owner controls work at narrow width', async ({ page }, testInfo) => {
   test.setTimeout(150_000);
   const errors: string[] = [];
   const reviewerName = `Continuity reviewer ${Date.now()}`;
@@ -123,24 +123,37 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   await page.unroute(statusPattern);
   await initiative.getByRole('button', { name: 'Refresh automations', exact: true }).click();
 
-  await expect(initiative.getByText(/Completed · Response/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(initiative.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
   expect(runRequests).toBe(1);
   await page.unroute(runPattern);
   await initiative.getByRole('button', { name: 'View last run: Review recent experience', exact: true }).click();
   const work = page.getByRole('dialog', { name: 'Run details', exact: true });
-  await expect(work.getByText('Response', { exact: true }).first()).toBeVisible();
-  await expect(work.locator('.agent-run-details').getByText('Response', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(work.locator('.agent-run-details').getByText('No action', { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(work).toContainText('Skill management is unavailable; no change was made.');
   await expect(work.getByRole('button', { name: 'Approve Automation · Manual', exact: true })).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath('automation-instance-skill-desktop.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('automation-management-boundary-desktop.png'), fullPage: true });
   await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('button', { name: 'View Automation', exact: true }).click();
   await page.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
   await page.getByRole('tab', { name: 'Skills', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Instance Skills', exact: true })).toContainText('Experience review');
+  const skills = page.getByRole('region', { name: 'Instance Skills', exact: true });
+  await expect(skills).toContainText('Create a local Skill or Customize a Definition Skill to keep your own procedure.');
+  await expect(skills.getByText('Experience review', { exact: true })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Automation', exact: true }).click();
   await page.getByRole('tab', { name: 'Triggers', exact: true }).click();
   await initiative.getByRole('button', { name: 'Refresh automations', exact: true }).click();
-  await expect(initiative.getByText(/Completed · Response/).first()).toBeVisible();
+  await expect(initiative.getByText(/Completed · No action/).first()).toBeVisible();
   await initiative.getByRole('button', { name: 'Run automation now', exact: true }).click();
+  // Both results are quiet now; the first row's unchanged label cannot prove
+  // the second execution finished. Wait for two distinct durable completions.
+  await expect.poll(async () => {
+    const read = await page.request.get(`/api/v2/agent-instances/${id}/agent-runs`, {
+      headers: { 'X-AgentCore-Owner-Capability': ownerToken! }
+    });
+    expect(read.ok()).toBe(true);
+    const pageOfRuns = await read.json();
+    return pageOfRuns.items.filter((item: { activationKind: string; automationId?: string; status: string }) =>
+      item.activationKind === 'ManualBackground' && item.automationId && item.status === 'completed').length;
+  }, { timeout: 30_000 }).toBe(2);
   await expect(initiative.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
   const owner = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const response = await page.request.get(`/api/v2/agent-instances/${id}/agent-runs`, { headers: { 'X-AgentCore-Owner-Capability': owner! } });
@@ -148,6 +161,7 @@ test('Experience informs an authorized Instance Skill Automation; next activatio
   const data = await response.json();
   const manualRuns = data.items.filter((item: { activationKind: string; automationId?: string }) => item.activationKind === 'ManualBackground' && item.automationId);
   expect(manualRuns).toHaveLength(2); expect(manualRuns.every((item: { outcome: { attentionRequired: boolean } }) => !item.outcome.attentionRequired)).toBe(true);
+  expect(manualRuns.every((item: { outcome: { kind: string } }) => item.outcome.kind === 'NoAction')).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   await initiative.getByRole('button', { name: 'Disable automation', exact: true }).click();
   await expect(initiative.getByRole('button', { name: 'Run automation now', exact: true })).toBeDisabled();

@@ -23,12 +23,13 @@ test('Shared Admin panels keep aligned insets and usable actions across viewport
     await page.setViewportSize({ width, height: 900 });
     const surfaces = [
       { tab: 'Identity & version', section: 'Workspace', labels: ['Agent Workspace'] },
+      { tab: 'Identity & version', section: 'Settings', labels: ['Agent self-management'] },
       { tab: 'Skills & resources', section: 'Skills', labels: ['Definition Skills', 'Instance Skills'] },
       { tab: 'Skills & resources', section: 'Resources', labels: ['Definition resources', 'Instance resources'] },
       { tab: 'Continuity', section: 'Memory', labels: ['Identity maintenance', 'Learned memory administration'] },
       { tab: 'Continuity', section: 'Experience', labels: ['Experience'] },
       { tab: 'Automation', section: 'Triggers', labels: ['Automations'] },
-      { tab: 'Automation', section: 'Policies & models', labels: ['Harness management', 'Execution defaults'] },
+      { tab: 'Automation', section: 'Policies & models', labels: ['Execution defaults'] },
       { tab: 'Credentials', labels: ['Credential bindings', 'Browser state'] },
       { tab: 'Effective configuration', labels: ['Effective configuration'] }
     ];

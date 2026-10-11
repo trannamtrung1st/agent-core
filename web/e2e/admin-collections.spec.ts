@@ -232,21 +232,23 @@ test("Behavior updates preserve persona edits through a failed refresh and retry
   const { instanceId } = await response.json();
   await page.goto(`/admin/instances/${instanceId}`);
   await page.getByLabel("Persona name", { exact: true }).fill("Unsaved persona survives");
-  await page.getByRole("tab", { name: "Automation", exact: true }).click();
-  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
-  await page.getByRole("combobox", { name: "Authoring mode", exact: true }).click();
+  await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  const management = page.getByRole("region", { name: "Agent self-management", exact: true });
+  await management.getByRole("combobox", { name: "Self-management mode", exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: "Assisted" }).click();
-  await page.getByLabel("Knowledge & resources", { exact: true }).check();
+  await management.getByRole("button", { name: "Customize areas", exact: true }).click();
+  await management.getByRole("checkbox", { name: "Resources", exact: true }).check();
   const pattern = `**/admin/instances/${instanceId}/effective-config`;
   await page.route(pattern, route => route.fulfill({ status: 503, contentType: "application/problem+json",
     body: JSON.stringify({ title: "Configuration refresh unavailable", status: 503 }) }));
-  await page.getByRole("button", { name: "Save authoring policy", exact: true }).click();
+  await management.getByRole("button", { name: "Save self-management", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Configuration refresh unavailable" })).toBeVisible();
   await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Unsaved persona survives");
   await expect(page.locator("[inert] .admin-instance-tabs")).toHaveCount(1);
   await page.unroute(pattern);
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await page.getByRole("tab", { name: "Identity & version", exact: true }).click();
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Unsaved persona survives");
   await page.getByRole("button", { name: "Save persona", exact: true }).click();
   await expect(page.getByText("Persona updated.", { exact: true })).toBeVisible();
