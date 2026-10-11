@@ -3,9 +3,64 @@ import {
   hasTask,
   messageText,
   normalizeParts,
+  snapshotParts,
   wireParts,
 } from "./messageParts";
 describe("canonical composer input", () => {
+  it.each(["builtin:harness-authoring.v1", "builtin:configuration-assistance.v1"])(
+    "preserves built-in Skill %s through invocation, snapshots and references",
+    (skillKey) => {
+      const invocation = {
+        kind: "invocation" as const,
+        invocationKind: "skill" as const,
+        skillKey,
+        label: "Core procedure",
+      };
+      const parts = normalizeParts([invocation, { ...invocation }]);
+      expect(parts).toEqual([invocation]);
+      expect(hasTask(parts, "")).toBe(true);
+      expect(messageText(parts)).toBe(`/${skillKey}`);
+      expect(snapshotParts(parts)).toEqual(parts);
+      expect(wireParts(parts)).toEqual([
+        { kind: "invocation", invocationKind: "skill", skillKey },
+      ]);
+      const reference = {
+        kind: "skill" as const,
+        agentInstanceId: "11111111-1111-1111-1111-111111111111",
+        skillKey,
+      };
+      expect(normalizeParts([{ kind: "reference", reference }])).toEqual([
+        { kind: "reference", reference },
+      ]);
+    },
+  );
+  it.each([
+    "builtin:",
+    "builtin:Harness-authoring.v1",
+    "builtin:../harness-authoring.v1",
+    "builtin:11111111-1111-1111-1111-111111111111",
+    `builtin:${"a".repeat(65)}`,
+    "unknown:harness-authoring.v1",
+  ])(
+    "rejects malformed Skill key %s for invocations and references",
+    (skillKey) => {
+      const invocation = {
+        kind: "invocation" as const,
+        invocationKind: "skill" as const,
+        skillKey,
+      };
+      expect(() => normalizeParts([invocation])).toThrow("Invalid message part.");
+      expect(hasTask([invocation], "")).toBe(false);
+      expect(() => normalizeParts([{
+        kind: "reference",
+        reference: {
+          kind: "skill",
+          agentInstanceId: "11111111-1111-1111-1111-111111111111",
+          skillKey,
+        },
+      }])).toThrow("Invalid reference locator.");
+    },
+  );
   it("coalesces text, deduplicates IDs, and keeps same-name distinct IDs", () => {
     const parts = normalizeParts([
       { kind: "text", text: "one " },

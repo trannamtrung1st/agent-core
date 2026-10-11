@@ -67,8 +67,9 @@ export function hasTask(
     : text.trim().length > 0;
 }
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// Match Domain SkillKeys namespaces; availability and authority stay server-owned.
 const skill =
-  /^(?:definition:[a-z][a-z0-9._-]{0,63}|instance:(?:[a-z][a-z0-9._-]{0,63}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/;
+  /^(?:(?:definition|builtin):[a-z][a-z0-9._-]{0,63}|instance:(?:[a-z][a-z0-9._-]{0,63}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$/;
 const emptyGuid = "00000000-0000-0000-0000-000000000000";
 const validGuid = (value: string) => guid.test(value) && value !== emptyGuid;
 const validSkill = (value: string) => skill.test(value) && value !== `instance:${emptyGuid}`;
