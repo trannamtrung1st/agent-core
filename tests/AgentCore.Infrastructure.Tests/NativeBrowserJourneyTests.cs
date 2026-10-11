@@ -5,7 +5,7 @@ using AgentCore.Infrastructure.Browser;
 namespace AgentCore.Infrastructure.Tests;
 
 [Collection(BrowserChromiumCollection.Name)]
-public sealed class NativeBrowserJourneyTests
+public sealed class NativeBrowserJourneyTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     [Fact]
     public async Task Readable_frame_ref_cannot_bypass_the_interaction_origin_policy()
@@ -37,11 +37,14 @@ public sealed class NativeBrowserJourneyTests
         }
         finally { await browser.StopAsync(CancellationToken.None); }
     }
-    [Fact]
-    public async Task Native_forms_keyboard_visual_target_and_pending_action_cancellation_recover()
+    [Theory]
+    [InlineData(720, false)]
+    [InlineData(400, false)]
+    [InlineData(720, true)]
+    public async Task Native_forms_keyboard_visual_target_and_pending_action_cancellation_recover(int viewportHeight, bool withholdFirstCapture)
     {
         var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixtureEnabled = true,
-            FixturePort = 0, InteractionMode = "InteractiveDemo", NavigationOrigins = ["http://127.0.0.1:5091"], InteractionOrigins = ["http://127.0.0.1:5091"] }, loggerFactory: null);
+            FixturePort = 0, Environment = new() { ViewportWidth = 1280, ViewportHeight = viewportHeight }, InteractionMode = "InteractiveDemo", NavigationOrigins = ["http://127.0.0.1:5091"], InteractionOrigins = ["http://127.0.0.1:5091"] }, loggerFactory: null);
         await browser.StartAsync(CancellationToken.None);
         var id = Guid.NewGuid();
         try
@@ -62,11 +65,19 @@ public sealed class NativeBrowserJourneyTests
             var dropped = await Run("browser.drop", new { target = await Find("Drop zone"), text = "Dropped fixture text" });
             Assert.Contains("Dropped fixture text", dropped.Observation!.Content!);
             await browser.ContextFor(id)!.Pages[0].Locator("canvas").ScrollIntoViewIfNeededAsync();
+            // Successful image delivery alone does not authorize coordinates. Only
+            // read-only capture acquisition may repeat; the mouse call below executes once.
+            if (withholdFirstCapture)
+                browser.CaptureConsistencyProbe = async page =>
+                {
+                    browser.CaptureConsistencyProbe = null;
+                    await page.EvaluateAsync("() => document.querySelector('canvas').style.border='1px solid black'");
+                };
+            var screenshot = await CoordinateCaptureAsync(browser, id);
             var box = (await browser.ContextFor(id)!.Pages[0].Locator("canvas").BoundingBoxAsync())!;
-            var screenshot = await Run("browser.screenshot", new { format = "png" });
-            Assert.Null(screenshot.ErrorCode);
+            await LogFreshnessAsync(browser, id);
             var mouse = await Run("browser.mouse", new { operation = "click", x = box.X + box.Width / 2, y = box.Y + box.Height / 2, snapshotId = screenshot.Observation!.SnapshotId });
-            Assert.Null(mouse.ErrorCode);
+            Assert.True(mouse.ErrorCode is null, $"Mouse error: {mouse.ErrorCode}; effectAttempted={mouse.EffectAttempted}");
             Assert.Contains("Visual target clicked", mouse.Observation!.Content!);
             var waiting = await Find("Waiting action");
             var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -80,8 +91,103 @@ public sealed class NativeBrowserJourneyTests
             var recovered = await Run("browser.snapshot", new { }); Assert.Null(recovered.ErrorCode);
             Assert.Contains("Nothing selected", recovered.Observation!.Content!);
         }
-        finally { await browser.StopAsync(CancellationToken.None); }
+        finally { browser.CaptureConsistencyProbe = null; await browser.StopAsync(CancellationToken.None); }
     }
+    [Fact]
+    public async Task Unadmitted_capture_and_expired_admitted_capture_reject_before_effect_then_fresh_capture_recovers()
+    {
+        var browser = new NativePlaywrightBrowser(new() { Enabled = true, Headless = true, FixturePort = 0 }, null);
+        await browser.StartAsync(default);
+        var id = Guid.NewGuid();
+        try
+        {
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(id,
+                new Uri(browser.HostPolicy.NavigationOrigins.Single() + "/")))).ErrorCode);
+            var page = browser.ContextFor(id)!.Pages[0];
+            await page.EvaluateAsync("""
+                () => {
+                    document.body.innerHTML = '<button id="visual">Stable control</button>';
+                    window.fixtureClicks = 0;
+                    document.querySelector('button').onclick = () => { window.fixtureClicks++; };
+                }
+                """);
+            // Deterministic native mutation inside collection: pixels are delivered,
+            // but admission must be withheld before any mouse call is possible.
+            browser.CaptureConsistencyProbe = p => p.EvaluateAsync("() => document.querySelector('button').style.marginLeft='20px'");
+            var unadmitted = await browser.ExecuteAsync(new(id, new BrowserScreenshot()));
+            browser.CaptureConsistencyProbe = null;
+            Assert.Null(unadmitted.ErrorCode);
+            Assert.NotEmpty(unadmitted.Bytes!);
+            output.WriteLine("unadmitted capture: {0}", unadmitted.DataJson);
+            using (var receipt = JsonDocument.Parse(unadmitted.DataJson!))
+            {
+                Assert.False(receipt.RootElement.GetProperty("coordinateEvidence").GetBoolean());
+                Assert.Contains("visual_state_changed_during_capture", receipt.RootElement.GetProperty("coordinateEvidenceUnavailableReasons").EnumerateArray().Select(r => r.GetString()));
+            }
+            await LogFreshnessAsync(browser, id);
+            var rejected = await browser.ExecuteAsync(new(id, new BrowserMouse("click", 40, 20, SnapshotId: unadmitted.Observation!.SnapshotId)));
+            Assert.Equal("stale_visual_evidence", rejected.ErrorCode);
+            Assert.False(rejected.EffectAttempted);
+            Assert.Equal(0, await page.EvaluateAsync<int>("() => window.fixtureClicks"));
+
+            var admitted = await CoordinateCaptureAsync(browser, id);
+            // This second failure is different: admission succeeded, then the page changed.
+            await page.EvaluateAsync("() => document.querySelector('button').style.marginLeft='80px'");
+            await LogFreshnessAsync(browser, id);
+            var expired = await browser.ExecuteAsync(new(id, new BrowserMouse("click", 40, 20, SnapshotId: admitted.Observation!.SnapshotId)));
+            Assert.Equal("stale_visual_evidence", expired.ErrorCode);
+            Assert.False(expired.EffectAttempted);
+            Assert.Equal(0, await page.EvaluateAsync<int>("() => window.fixtureClicks"));
+
+            var fresh = await CoordinateCaptureAsync(browser, id);
+            var box = (await page.GetByRole(Microsoft.Playwright.AriaRole.Button).BoundingBoxAsync())!;
+            await LogFreshnessAsync(browser, id);
+            var click = new BrowserRequest(id, new BrowserMouse("click", box.X + box.Width / 2, box.Y + box.Height / 2, SnapshotId: fresh.Observation!.SnapshotId));
+            var clicked = await browser.ExecuteAsync(click);
+            Assert.Null(clicked.ErrorCode);
+            Assert.True(clicked.EffectAttempted);
+            Assert.Equal(1, await page.EvaluateAsync<int>("() => window.fixtureClicks"));
+            // A consumed image must not authorize a second execution of the same action.
+            var replay = await browser.ExecuteAsync(click);
+            Assert.Equal("stale_visual_evidence", replay.ErrorCode);
+            Assert.False(replay.EffectAttempted);
+            Assert.Equal(1, await page.EvaluateAsync<int>("() => window.fixtureClicks"));
+        }
+        finally { browser.CaptureConsistencyProbe = null; await browser.StopAsync(default); }
+    }
+
+    private async Task<BrowserResult> CoordinateCaptureAsync(NativePlaywrightBrowser browser, Guid id)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var captured = await browser.ExecuteAsync(new(id, new BrowserScreenshot()), deadline.Token);
+            Assert.Null(captured.ErrorCode);
+            output.WriteLine("coordinate capture attempt {0}: {1}", attempt, captured.DataJson);
+            using var receipt = JsonDocument.Parse(captured.DataJson!);
+            if (receipt.RootElement.GetProperty("coordinateEvidence").GetBoolean())
+            {
+                Assert.True(captured.Observation!.Settled);
+                Assert.Empty(receipt.RootElement.GetProperty("coordinateEvidenceUnavailableReasons").EnumerateArray());
+                return captured;
+            }
+            // This retry is explicit, bounded and read-only. No potentially executed
+            // action is retried, and an unsettled image never supplies mouse authority.
+            Assert.NotEmpty(receipt.RootElement.GetProperty("coordinateEvidenceUnavailableReasons").EnumerateArray());
+        }
+        Assert.Fail("No admitted coordinate image within three read-only captures and the 20-second deadline.");
+        throw new InvalidOperationException();
+    }
+
+    private async Task LogFreshnessAsync(NativePlaywrightBrowser browser, Guid id) =>
+        output.WriteLine("pre-mouse freshness: {0}", await browser.ContextFor(id)!.Pages[0].EvaluateAsync<string>("""
+            () => JSON.stringify({ visualGeneration: window.__acSettle?.visualGeneration,
+                domGeneration: window.__acSettle?.generation, inflight: window.__acSettle?.inflight,
+                fontsLoading: document.fonts.status !== 'loaded',
+                runningAnimations: document.getAnimations().filter(a => a.playState === 'running').length,
+                viewport: [innerWidth, innerHeight, scrollX, scrollY] })
+            """));
+
     [Fact]
     public async Task Generic_dialogs_popups_upload_download_screenshots_and_storage_boundaries()
     {
