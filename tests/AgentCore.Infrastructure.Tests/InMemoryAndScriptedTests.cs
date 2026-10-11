@@ -153,7 +153,7 @@ public sealed class InMemoryAndScriptedTests
         Guid automationId,
         string intent)
     {
-        var userText = $"{threadMarker} remind me tomorrow";
+        var userText = $"remind me tomorrow ({threadMarker})";
         var create = await AwaitScheduleToolCallAsync(
             model,
             new ModelRequest(Guid.NewGuid(), [new ModelMessage(ModelRole.User, userText)], Tools: tools),

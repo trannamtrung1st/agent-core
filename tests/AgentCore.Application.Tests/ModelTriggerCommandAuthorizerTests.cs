@@ -51,6 +51,16 @@ public sealed class ModelTriggerCommandAuthorizerTests
     }
 
     [Fact]
+    public async Task Oversized_timed_command_cannot_fall_through_directive_match()
+    {
+        var model = new StubLanguageModel("{\"decision\":\"ambiguous\"}");
+        Assert.Equal(TriggerCommandAuthorizationDecision.Ambiguous,
+            await new ModelTriggerCommandAuthorizer(model, new()).AuthorizeCurrentTurnAsync(
+                "say hello to me " + new string('x', 512) + " every minute", "en", TriggerCommandAction.Create));
+        Assert.Equal(1, model.Calls);
+    }
+
+    [Fact]
     public async Task Malformed_json_denies_without_claiming_user_ambiguity()
     {
         var authorizer = new ModelTriggerCommandAuthorizer(
@@ -86,6 +96,8 @@ public sealed class ModelTriggerCommandAuthorizerTests
     }
 
     [Theory]
+    [InlineData("check the oven in 1 minute for me", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("in 1 minute, check the oven for me", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("greet me every 60 seconds", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("every 60 seconds, greet me", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("please greet me every minute", TriggerCommandAuthorizationDecision.Allow)]

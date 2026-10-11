@@ -21,13 +21,18 @@ internal static class TimedScheduleIntent
         @"\b(if|unless|maybe|perhaps|whether|hypothetically)\b|[?\r\n""“”]",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    internal static bool HasTiming(string text) => text.Length <= 512 && Timing.IsMatch(text);
+    internal static bool HasTiming(string text) => Timing.IsMatch(text);
 
     internal static bool Matches(string text)
     {
         if (text.Length > 512 || Qualification.IsMatch(text)) return false;
         var command = text.Trim().TrimEnd('.', '!').Trim();
-        if (command.EndsWith(" please", StringComparison.OrdinalIgnoreCase)) command = command[..^7].TrimEnd(',', ' ');
+        foreach (var suffix in new[] { " please", " for me", " to me" })
+            if (command.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                command = command[..^suffix.Length].TrimEnd(',', ' ');
+                break;
+            }
         foreach (var prefix in new[] { "please ", "i want you to " })
             if (command.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
