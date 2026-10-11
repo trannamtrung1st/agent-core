@@ -2655,10 +2655,13 @@ body,
 .composer-choice { display: flex; flex-shrink: 0; align-items: center; gap: var(--ac-space-compact); width: 100%; min-height: 40px; border: 0; border-radius: var(--ac-radius-control); padding: var(--ac-space-compact); background: transparent; color: inherit; text-align: start; cursor: pointer; font: inherit; }
 .composer-choice.active, .composer-choice:hover, .composer-choice:focus-visible { background: var(--ant-color-fill-secondary); outline: none; }
 .composer-choice-icon { flex: none; color: var(--ant-color-text-secondary); }
-.composer-choice-body { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: stretch; gap: 0; }
-.composer-choice-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-.composer-choice-description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ac-font-size-label); color: var(--ant-color-text-secondary); }
-.composer-choice-kind { flex: none; max-width: 7em; text-align: end; font-size: var(--ac-font-size-label); color: var(--ant-color-text-secondary); }
+.composer-choice-body { display: flex; flex: 1; min-width: 0; align-items: baseline; gap: var(--ac-space-compact); }
+.composer-choice-title { flex: 0 0 auto; min-width: 0; max-width: min(55%, 24rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-choice-title:has(.composer-choice-title-start) { display: flex; }
+.composer-choice-title-start { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.composer-choice-title-end { flex: none; }
+.composer-choice-description { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--ac-font-size-label); color: var(--ant-color-text-secondary); }
+.composer-choice-kind { flex: none; white-space: nowrap; font-size: var(--ac-font-size-label); color: var(--ant-color-text-secondary); }
 .composer-choice[aria-disabled=true] { opacity: .55; cursor: not-allowed; }
 .message-parts { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.85; }
 .pending-send-queue-text .composer-chip { white-space: nowrap; }

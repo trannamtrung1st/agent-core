@@ -745,6 +745,11 @@ function Controller(props: Props) {
           >
             {items.map((item, i) => {
               const { label, Icon } = choiceTypes[item.category as keyof typeof choiceTypes] ?? choiceTypes.homeFile;
+              // Keep a file's extension and identifying tail visible as the row shrinks.
+              const characters = Array.from(item.label);
+              const fileTail = item.category === "homeFile" && characters.length > 12
+                ? characters.slice(-12).join("") : null;
+              const details = item.unavailableReason ?? item.description;
               return (
               <button
                 type="button"
@@ -756,16 +761,22 @@ function Controller(props: Props) {
                   i === active ? "composer-choice active" : "composer-choice"
                 }
                 key={`${item.category}:${item.id}`}
-                title={`${item.label} · ${item.unavailableReason ?? item.description}`}
+                aria-label={[item.label, details, label].filter(Boolean).join(" · ")}
+                title={[item.label, details, label].filter(Boolean).join(" · ")}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => choose(item)}
               >
                 <Icon className="composer-choice-icon" aria-hidden />
                 <span className="composer-choice-body">
-                  <span className="composer-choice-title">{item.label}</span>
-                  <span className="composer-choice-description">{item.unavailableReason ?? item.description}</span>
+                  <span className="composer-choice-title">
+                    {fileTail ? <>
+                      <span className="composer-choice-title-start">{characters.slice(0, -12).join("")}</span>
+                      <span className="composer-choice-title-end">{fileTail}</span>
+                    </> : item.label}
+                  </span>
+                  {details ? <span className="composer-choice-description">{details}</span> : null}
+                  <span className="composer-choice-kind">{label}</span>
                 </span>
-                <span className="composer-choice-kind">{label}</span>
               </button>
             ); })}
           </div>
