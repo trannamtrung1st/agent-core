@@ -58,7 +58,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         @"\b(can you|could you|do you)\b.{0,20}\b(schedule|remind)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    private static readonly Regex EventAutomationCreate = new(@"\b(create|set up|enable)\b.{0,80}\b(automation|core event|review recent work|consolidate continuity|improve agent harness)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex EventAutomationCreate = new(@"^(?:please\s+|i want you to\s+)?(create|set up|configure|enable)\b.{0,80}\b(automation|core event|review recent work|consolidate continuity|improve agent harness)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex AgentDirectedCreate = new(
         @"^(?:please\s+|i want you to\s+)?(remind me|notify me|ping me|alert me|nudge me|wake me|set a reminder|schedule a\b|schedule\b.{0,80}\b(at|for|in)\b|every\s+\w+\s+remind|\bsay\b.{0,60}\bto me\b|\b(in|after)\s+\d+\s*(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs)\b.{0,40}\b(to me|me)\b)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -120,7 +120,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
 
         var allowed = requestedAction switch
         {
-            TriggerCommandAction.Create => EventAutomationCreate.IsMatch(text) || MatchesCreate(text, conversationLanguage, scheduleContext, scheduleDraft),
+            TriggerCommandAction.Create => MatchesCreate(text, conversationLanguage, scheduleContext, scheduleDraft),
             TriggerCommandAction.List => MatchesList(text, conversationLanguage),
             TriggerCommandAction.Update => MatchesUpdate(text, conversationLanguage, scheduleContext),
             TriggerCommandAction.Cancel => MatchesCancel(text, conversationLanguage, scheduleContext),
@@ -180,7 +180,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         ScheduleConversationContext? scheduleContext = null,
         ScheduleDraftContext? scheduleDraft = null)
     {
-        if (IsClearlyNonAuthorizing(text)) return false;
+        if (IsClearlyNonAuthorizing(text) || TimedScheduleIntent.HasQualification(text)) return false;
 
         if (scheduleDraft is { IsActive: true }
             && ScheduleIntervalLanguage.IsIntervalOnlyCorrection(text, conversationLanguage))
@@ -210,7 +210,8 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             return true;
         }
 
-        return AgentDirectedCreate.IsMatch(text) || Regex.IsMatch(text, @"\b(create|set up|configure)\b.{0,50}\bautomation\b|\bwhen\b.{0,40}\border\b.{0,40}\b(placed|created|arrives)\b.{0,80}\b(review|check|notify|run)\b", RegexOptions.IgnoreCase);
+        return AgentDirectedCreate.IsMatch(text) || EventAutomationCreate.IsMatch(text)
+            || Regex.IsMatch(text, @"^(?:please\s+)?when\b.{0,40}\border\b.{0,40}\b(placed|created|arrives)\b.{0,80}\b(review|check|notify|run)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     internal static bool MatchesList(string text, string? conversationLanguage) =>
@@ -244,8 +245,6 @@ public sealed class ModelTriggerCommandAuthorizer(
     ILanguageModel languageModel,
     HeuristicTriggerCommandAuthorizer heuristic) : ITriggerCommandAuthorizer
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-
     public async ValueTask<TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(
         string? currentUserText,
         string? conversationLanguage,
@@ -366,6 +365,7 @@ public sealed class ModelTriggerCommandAuthorizer(
 
             using var document = JsonDocument.Parse(raw[start..(end + 1)]);
             if (document.RootElement.ValueKind != JsonValueKind.Object
+                || document.RootElement.EnumerateObject().Count(property => property.NameEquals("decision")) != 1
                 || !document.RootElement.TryGetProperty("decision", out var element)
                 || element.ValueKind != JsonValueKind.String)
             {

@@ -43,3 +43,20 @@ The first pushed candidate `da1f38c3` failed the Faithful Manual-A browser gate:
 
 
 The initial backend job also failed `Scripted_language_model_keeps_schedule_scratch_isolated_across_conversations`: its fixture put the opaque `thread-alpha` marker before `remind me tomorrow`, so the anchored recognizer no longer treated it as an imperative. The marker now follows the explicit request; both distinct conversation seeds and the cross-conversation cancellation-isolation assertions remain. Authorization matching was not widened to satisfy the fixture. The six-case `InMemoryAndScriptedTests` regression is rerun alongside the affected acceptance journey.
+
+
+## Completed baseline and consistency review (2026-10-12)
+
+All seven Synthetic jobs passed on `10b156bb49b62f78ea6266109394f825d9c03923` in [workflow 38164724985](https://github.com/trannamtrung1st/agent-core/actions/runs/38164724985): 3,619 backend tests passed with 27 opt-in/environment skips, 925 frontend tests passed, 195 core browser tests passed, and the acceptance and Compose smoke jobs succeeded. A second bounded Real/DeepSeek journey verified that exact loaded build before submission: `greet me every 60 seconds` created Automation `01a12c45-4556-79a6-8f31-7eeb8d9ed983`; two distinct completed occurrences greeted the user at due slots 60 seconds apart. Admin disabled it afterward. This evidence supersedes the earlier pending CI statement for that baseline only; it does not qualify a later candidate.
+
+The requested consistency review began from a clean main checkout. Outside-session composer layout, focus and built-in Skill changes are already included through `8d036114`, `787508c5` and `9d664ca6`; no uncommitted frontend edits were omitted. The review found an event-Automation branch that bypassed bounded timed admission for conditional or historical mentions, plus JSON parsing that selected the last of conflicting decision fields. Six new unit regressions reproduced these failures before correction. Creation now goes through the shared qualification/timing gate, event requests require an anchored directive, and duplicate decision fields fail as invalid output. Conditional or uncertain wording retains model classification. Clear event directives and the exact greeting requests still authorize with zero classifier calls. Owner, policy, permission, trigger and interval restrictions remain independent; no timeout, retry or provider budget changed.
+
+Current review checks:
+
+- Application scheduling/draft regression filter: **204 passed**.
+- API reliability/readiness integration filter: **37 passed**, including the six added conditional/historical/conflicting-output cases. They produce the expected safe error and zero persisted Automations; the four greeting journeys still persist and execute once per slot after reopen.
+- Frontend TypeScript/Vite build: **passed** (existing bundle-size advisory remains).
+- Synthetic structured/built-in composer browser regressions: **27 passed**, including 1440/768/390 viewport checks, disabled-Skill recovery, chip/history preservation, keyboard editing and pagination.
+- Playwright MCP separately selected the built-in Harness authoring Skill through the visible picker, submitted it as the only first-turn content and observed `/Harness authoring` in user history plus `Hello from synthetic.`. The 1200px picker has 40px rows, 8px gaps/padding, one row per choice and no page overflow. An initial stale-capability model-catalog read returned 401 when switching disposable deployments; bootstrap recovered, and the subsequent reload and submitted journey showed zero console errors and HTTP 200 for the resulting Session read.
+
+The full frontend run and final candidate CI are checked after these focused checks; delivery results must identify the actual pushed SHA. Historical freezes and P10/P11 remain unchanged. Real evidence above covers the earlier exact baseline; any new Real run must verify its loaded build separately. The prior generic classifier-format limitation and full live-catalog qualification remain outside this bounded evidence.
