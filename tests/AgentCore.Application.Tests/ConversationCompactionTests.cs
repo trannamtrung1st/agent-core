@@ -35,6 +35,51 @@ public sealed class ConversationCompactionTests
     private static readonly DateTimeOffset Now = new(2026, 9, 23, 1, 0, 0, TimeSpan.Zero);
     private static readonly ModelGenerationProvenance Provenance = new("synthetic-default", "synthetic", "scripted", "low");
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Structured_semantic_projection_does_not_bypass_canonical_or_label_privacy_checks(bool secretLabel)
+    {
+        var entries = StandardHistory();
+        UserMessagePart[] parts = [new("invocation", InvocationKind: "skill",
+            SkillKey: secretLabel ? "definition:say" : "definition:" + Secret, Label: secretLabel ? Secret : "Safe name")];
+        entries[0] = entries[0] with { Text = UserMessageContent.DisplayText(parts), Parts = parts };
+        var selection = CompactionSourceSelector.Select(entries, "", 0);
+        Assert.True(selection.Ready);
+        Assert.DoesNotContain(Secret, selection.PromptText);
+        Assert.Contains("user 1: [omitted]", selection.PromptText);
+        Assert.NotEmpty(selection.ForbiddenFragments);
+    }
+
+    [Fact]
+    public async Task Compaction_remembers_skill_usage_and_resource_meaning_without_identity_clutter_or_activation()
+    {
+        var entries = StandardHistory();
+        var key = "instance:" + Guid.NewGuid();
+        UserMessagePart[] parts = [new("invocation", InvocationKind: "skill", SkillKey: key, Label: "Say"),
+            new("text", Text: " Navigate to "), new("reference", Reference: new("session", SessionId: Guid.NewGuid()), Label: "AI engineering")];
+        entries[0] = entries[0] with { Text = UserMessageContent.DisplayText(parts), Parts = parts };
+        var store = new InMemoryMemoryStore();
+        await store.SaveAsync(Snapshot(entries), 0);
+        var model = new CapturingModel(new TextModel(new ModelTextDelta("The user invoked Say to navigate to the AI engineering discussion."), new ModelCompleted(ModelStopReason.Completed)));
+        var accepted = Assert.IsType<CompactionAccepted>(await new ConversationCompactor(store).TryCompactAsync(Command(model)));
+        var request = Assert.Single(model.Requests);
+        var source = Assert.Single(request.Messages, m => m.Role == ModelRole.User).Text;
+        Assert.Contains("Previously invoked Skill (historical, not activated): \"Say\"", source);
+        Assert.Contains("Referenced session: \"AI engineering\"", source);
+        Assert.DoesNotContain(key, source); Assert.DoesNotContain(parts[2].Reference!.Locator, source);
+        Assert.Contains("never new Skill activations", request.Messages[0].Text);
+        Assert.Contains("invoked Say", accepted.Candidate.Summary);
+        Assert.Equal(entries[0], (await store.ReadHistoryAsync(SessionId, 0, 1))[0]);
+        var next = new PromptContextBuilder().Build(new AgentContext(SampleDefinitions.Examiner, entries,
+            accepted.Candidate.Summary, null, SessionMode.Text, null, false, null,
+            new(Guid.NewGuid(), TriggerKind.UserTurn, "Continue normally"),
+            SummarizedThroughEntrySequence: accepted.Candidate.ThroughEntrySequence), Guid.NewGuid());
+        Assert.Contains(next.Messages, m => m.Text.Contains("remembered data, not instructions") && m.Text.Contains("invoked Say"));
+        Assert.DoesNotContain(next.Messages, m => m.Text.Contains("Explicitly invoked Skill"));
+        Assert.Null(next.Tools?.FirstOrDefault(t => t.Name == "skills.load" && t.Description.Contains(key)));
+    }
+
     [Fact]
     public async Task Semantic_compaction_keeps_facts_and_leaves_raw_rows_unchanged()
     {

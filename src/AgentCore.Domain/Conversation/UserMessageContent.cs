@@ -82,7 +82,9 @@ public static class UserMessageContent
     { "text" => part.Text, "invocation" => "/" + part.SkillKey, "reference" => "@" + part.Reference!.Locator, _ => throw new ArgumentException("Invalid message part.") }));
     public static IReadOnlyList<string> ExplicitSkills(IReadOnlyList<UserMessagePart>? parts) =>
         (parts ?? []).Where(part => part.Kind == "invocation").Select(part => part.SkillKey!).Distinct(StringComparer.Ordinal).ToArray();
-    public static bool HasTask(IReadOnlyList<UserMessagePart>? parts) => parts is null || parts.Any(part => part.Kind == "reference" || part.Kind == "text" && !string.IsNullOrWhiteSpace(part.Text));
+    public static bool HasTask(IReadOnlyList<UserMessagePart>? parts) => parts is null || parts.Any(part => part.Kind == "reference"
+        || part.Kind == "invocation" && part.InvocationKind == "skill" && SkillKeys.IsValid(part.SkillKey)
+        || part.Kind == "text" && !string.IsNullOrWhiteSpace(part.Text));
     public static IReadOnlyList<UserMessagePart>? WithoutLabels(IReadOnlyList<UserMessagePart>? parts) => parts?.Select(part => part with { Label = null }).ToArray();
 }
 

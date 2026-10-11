@@ -55,7 +55,11 @@ public sealed partial class SessionRuntime
         var compacted = messages.ToList();
         BrowserSnapshotCompaction.Compact(compacted);
         messages = compacted;
-        var run = _boundAgentRun ?? throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
+        var run = _boundAgentRun;
+        // Terminalization cancels before releasing this binding. Preserve cancellation
+        // instead of diagnosing an expected ownership loss as a provider failure.
+        ct.ThrowIfCancellationRequested();
+        if (run is null) throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
         var observationRequired = run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
             && run.SideEffect.ActionHash is not null;
         AgentRunToolCallCheckpoint.TryReadState(run.Checkpoint, out _, out _, out var blockedActionHash);

@@ -61,6 +61,7 @@ export function hasTask(
     ? parts.some(
         (p) =>
           p.kind === "reference" ||
+          (p.kind === "invocation" && validSkill(p.skillKey)) ||
           (p.kind === "text" && p.text.trim().length > 0),
       )
     : text.trim().length > 0;

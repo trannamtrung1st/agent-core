@@ -1,0 +1,26 @@
+# Combined composer review and CI follow-up
+
+October 11, 2026. The UI polish, behavior review and design synchronization chat completed before the combined commit. This follow-up retains its shared chip presentation, bounded picker placement/scrolling, and canonical Skill content projections. P10/P11 remain unopened.
+
+## Review corrections
+
+- `StructuredMessageEditor.tsx`: paging a successful source previously replaced the failed-source map, hiding another source's Retry. The controller now removes only queried failure cursors and retains untouched failures. The browser regression proves Load more does not requery the failed source, retains Retry, and recovers that source without discarding successful rows.
+- `app.css`, design guide and preview: invocation text used blue with insufficient contrast. The shared readable text token now serves drafts, queue and history while retaining the primary border accent. Actual normal-state composited contrast is 8.75:1 in draft/queue and 7.06:1 in history.
+- `SessionRuntime.RunCheckpoint.cs` and `SessionRuntime.AgentRuns.cs`: cancellation is checked after reading the bound Run and before interpreting missing ownership or requesting a command. Existing active response, epoch, generation, authorization, checkpoint and effect fences remain authoritative.
+- `ConversationFailureDiagnosticTests.cs`: waits for provider entry and the actual interrupted response completion, then deliberately delivers a late failure despite cancellation. Assertions retain completed active response, no superseded failure entry/output, no error log and no consumed diagnostic ID. All waits are bounded; no action is retried.
+
+## Observed CI failure and reproduction
+
+[The preceding native-coordinate commit's run](https://github.com/trannamtrung1st/agent-core/actions/runs/38103583844) passed Infrastructure (1,166 tests, 15 opt-in/platform skips), including native coordinate authority checks. Its Application step failed the supersession test's final diagnostic-ID assertion. Twenty baseline focused executions passed locally, but the strengthened late-provider fixture reproduced that same extra-ID failure under contention.
+
+Captured synthetic logs showed `AgentRun ownership is unavailable` from `SaveRunCheckpointAsync` after the old response had been terminalized. A late provider event tried to checkpoint after the cancelled Run binding was released, and the generic model-pump catch allocated a provider-failure diagnostic. The correction preserves cancellation before that ownership check; it does not suppress live Run ownership errors. The original browser run lacked admission/freshness diagnostics, so its exact denial-versus-expiry branch remains unproven; [native-coordinate evidence](native-coordinate-ci-regression-verification.md) records that distinction.
+
+## Verification
+
+- Failure diagnostics: 12 focused tests passed after the correction. The strengthened supersession test passed 20 further separate executions alongside the complete backend run. The affected Application suite passed 1,667 tests, with seven live-test skips; Infrastructure passed 1,172 tests, with nine opt-in skips.
+- Isolated Synthetic/InMemory API on 5097 and Vite on 5187: composer/model browser suite 21 passed; existing queue/Stop, Meta/Control steering and auto-dispatch cases four passed; independent partial-source regression also passed separately. Temporary runner configuration lives outside the repository.
+- Playwright MCP created a disposable examiner Instance and a long Unicode Skill label; selected/sent a Skill-only message, observed the Synthetic reply, inserted mixed Skill/reference chips, recovered empty search, selected with the keyboard, and reloaded readable history. Actual queued Skill and Stop behavior retained the queue. Console: zero errors; all 53 inspected API requests succeeded.
+- Rendered measurements at 1280×900, 768×900, 390×844 and 390×320: popup and a complete choice remained visible; 8px shell insets, neutral border, no nested editor outline and no horizontal overflow. Phone choice heights exceeded 44px. Shared normal-state contrast measurements are recorded above.
+- Final frontend build passed, with existing Rollup/chunk-size notices. The complete backend run passed **3,495 tests**, with **18 opt-in skips** across Domain, Application, Infrastructure, API and the OrderEvents plugin. The complete Node 22 frontend suite and the final commit's seven hosted Synthetic gates are release checks; their completion results are reported in the completion message.
+
+No paid providers or physical voice devices were used. Browser IME event coverage and ARIA associations do not establish physical IME or spoken assistive-technology behavior. Screenshot authority, privacy masking and action replay validation are unchanged.

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Empty, Spin, Input } from "antd";
-import { CloseOutlined } from "@ant-design/icons";
+import { CloseOutlined, FileOutlined, MessageOutlined, InboxOutlined, FileDoneOutlined, PlayCircleOutlined, CodeOutlined } from "@ant-design/icons";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -23,16 +23,13 @@ import {
   CUT_COMMAND,
   PASTE_COMMAND,
   KEY_DOWN_COMMAND,
-  TextNode,
   type LexicalNode,
-  type NodeKey,
-  type SerializedTextNode,
-  type Spread,
   type RangeSelection,
 } from "lexical";
-import { ownerFetch } from "../../services/api";
+import { loadComposerChoices, type ChoiceCursors } from "./composerChoices";
+// Keep the registered Lexical constructor outside React's refresh boundary.
+import { ComposerChipNode } from "./ComposerChipNode";
 import {
-  displayPart,
   messageText,
   normalizeParts,
   type ComposerChoice,
@@ -40,63 +37,6 @@ import {
 } from "../../services/messageParts";
 
 type ChipPart = Exclude<MessagePart, { kind: "text" }>;
-type SerializedChip = Spread<
-  { type: "composer-chip"; part: ChipPart },
-  SerializedTextNode
->;
-export class ComposerChipNode extends TextNode {
-  __part: ChipPart;
-  static getType() {
-    return "composer-chip";
-  }
-  static clone(node: ComposerChipNode) {
-    return new ComposerChipNode(node.__part, node.__key);
-  }
-  constructor(part: ChipPart, key?: NodeKey) {
-    super(displayPart(part), key);
-    this.__part = structuredClone(part);
-    this.__mode = 1;
-  }
-  static importJSON(value: SerializedChip) {
-    const part = normalizeParts([value.part])[0];
-    if (!part || part.kind === "text") throw new Error("Invalid chip");
-    return new ComposerChipNode(part);
-  }
-  exportJSON(): SerializedChip {
-    return {
-      ...super.exportJSON(),
-      type: "composer-chip",
-      version: 1,
-      part: this.__part,
-    };
-  }
-  createDOM() {
-    const span = document.createElement("span");
-    span.className = `composer-chip composer-chip-${this.__part.kind}`;
-    span.textContent = this.__text;
-    span.title =
-      this.__part.kind === "invocation"
-        ? `${this.__part.skillKey} · activates for the next turn`
-        : messageText([this.__part]);
-    span.setAttribute("data-composer-chip", this.__part.kind);
-    if (this.__part.kind === "invocation")
-      span.setAttribute("data-skill-key", this.__part.skillKey);
-    return span;
-  }
-  updateDOM(previous: this, element: HTMLElement) {
-    if (previous.__text !== this.__text) element.textContent = this.__text;
-    return false;
-  }
-  isTextEntity() {
-    return true;
-  }
-  canInsertTextBefore() {
-    return false;
-  }
-  canInsertTextAfter() {
-    return false;
-  }
-}
 function partsFromRoot(): MessagePart[] {
   const result: MessagePart[] = [];
   function visit(node: LexicalNode) {
@@ -125,14 +65,15 @@ function writeParts(parts: MessagePart[]) {
       p.kind === "text" ? $createTextNode(p.text) : new ComposerChipNode(p),
     );
 }
-const categories = [
-  { key: "homeFile", label: "Files" },
-  { key: "session", label: "Chats" },
-  { key: "backgroundSession", label: "Background work" },
-  { key: "artifact", label: "Artifacts" },
-  { key: "agentRun", label: "Runs" },
-  { key: "skill", label: "Skills" },
-];
+const choiceTypes = {
+  homeFile: { label: "File", Icon: FileOutlined },
+  session: { label: "Chat", Icon: MessageOutlined },
+  backgroundSession: { label: "Background work", Icon: InboxOutlined },
+  artifact: { label: "Artifact", Icon: FileDoneOutlined },
+  agentRun: { label: "Run", Icon: PlayCircleOutlined },
+  skill: { label: "Skill reference", Icon: CodeOutlined },
+  invocation: { label: "Skill", Icon: CodeOutlined },
+};
 export type PickerRequest = {
   category: "invocation" | "homeFile";
   nonce: number;
@@ -161,16 +102,35 @@ function Controller(props: Props) {
     start: number | null;
     x: number;
     y: number;
+    width: number;
+    placement: "above" | "below";
+    maxHeight: number;
   } | null>(null);
   const savedSelection = useRef<RangeSelection | null>(null);
   const pickerRef = useRef(picker);
   pickerRef.current = picker;
-  const [category, setCategory] = useState("homeFile");
+  const panelRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<ComposerChoice[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursors, setCursors] = useState<ChoiceCursors>({});
+  const [failed, setFailed] = useState<ChoiceCursors>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
+  const [focusedControl, setFocusedControl] = useState<"editor" | "search" | null>(null);
+  const activeOptionId = items[active] ? `composer-choice-${active}` : undefined;
+  useEffect(() => {
+    const trackFocus = () => setFocusedControl(
+      document.activeElement === editor.getRootElement() ? "editor" :
+      document.activeElement === panelRef.current?.querySelector('[aria-label="Search composer choices"]') ? "search" : null,
+    );
+    trackFocus();
+    document.addEventListener("focusin", trackFocus);
+    document.addEventListener("focusout", trackFocus);
+    return () => {
+      document.removeEventListener("focusin", trackFocus);
+      document.removeEventListener("focusout", trackFocus);
+    };
+  }, [editor]);
   const dismissed = useRef<string | null>(null);
   const requestEpoch = useRef(0);
   const last = useRef<string>("");
@@ -183,14 +143,83 @@ function Controller(props: Props) {
         : null;
     const rect = range?.getBoundingClientRect();
     const host = editor.getRootElement()?.getBoundingClientRect();
+    const width = Math.min(640, root?.closest(".composer-shell")?.clientWidth ?? 640, window.innerWidth - 16);
+    // The caret may be clipped by the scrolling editor or a short viewport.
+    const caretTop = Math.max(8, Math.min(rect?.top || host?.top || 8, window.innerHeight - 8));
+    const caretBottom = Math.max(caretTop, Math.min(rect?.bottom || caretTop, window.innerHeight - 8));
+    const above = Math.max(0, caretTop - 16);
+    const below = Math.max(0, window.innerHeight - caretBottom - 16);
+    const placement = above >= below ? "above" as const : "below" as const;
+    // Keep room for chrome plus a complete choice even when neither side fits.
+    // In that case overlap the caret rather than clipping the controls/results.
+    const maxHeight = Math.min(420, window.innerHeight - 16, Math.max(224, placement === "above" ? above : below));
     return {
+      width,
       x: Math.max(
         8,
-        Math.min(rect?.left || host?.left || 8, window.innerWidth - 328),
+        Math.min(rect?.left || host?.left || 8, window.innerWidth - width - 8),
       ),
-      y: Math.max(8, (rect?.top || host?.top || 400) - 8),
+      y: placement === "above"
+        ? Math.max(caretTop - 8, maxHeight + 8)
+        : Math.min(caretBottom + 8, window.innerHeight - maxHeight - 8),
+      placement,
+      maxHeight,
     };
   }
+  function dismissPicker(restoreFocus = false) {
+    editor.getEditorState().read(() => {
+      const selection = $getSelection() ?? savedSelection.current;
+      if ($isRangeSelection(selection))
+        dismissed.current = selection.anchor.getNode().getTextContent().slice(0, selection.anchor.offset);
+    });
+    pickerRef.current = null;
+    requestEpoch.current++;
+    setPicker(null);
+    setError(null);
+    if (restoreFocus) editor.focus();
+  }
+  const dismissRef = useRef(dismissPicker);
+  dismissRef.current = dismissPicker;
+  useEffect(() => {
+    if (!picker) return;
+    const contains = (target: EventTarget | null) => target instanceof Node &&
+      (editor.getRootElement()?.contains(target) || panelRef.current?.contains(target));
+    const outside = (event: PointerEvent | FocusEvent) => {
+      if (!contains(event.target)) dismissRef.current();
+    };
+    const focusOut = (event: FocusEvent) => {
+      if (!contains(event.target) || contains(event.relatedTarget)) return;
+      if (event.relatedTarget) dismissRef.current();
+      else {
+        // Removing a focused Retry/Load more control during loading is not an outside blur.
+        const target = event.target;
+        requestAnimationFrame(() => {
+          if (target instanceof Node && target.isConnected && !contains(document.activeElement)) dismissRef.current();
+        });
+      }
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Tab" && event.target === editor.getRootElement()) dismissRef.current();
+      if (event.key === "Escape" && !event.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        dismissRef.current(true);
+      }
+    };
+    const blur = () => dismissRef.current();
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("focusin", outside);
+    document.addEventListener("focusout", focusOut);
+    document.addEventListener("keydown", escape, true);
+    window.addEventListener("blur", blur);
+    return () => {
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("focusin", outside);
+      document.removeEventListener("focusout", focusOut);
+      document.removeEventListener("keydown", escape, true);
+      window.removeEventListener("blur", blur);
+    };
+  }, [Boolean(picker), editor]);
   function choose(choice: ComposerChoice) {
     if (choice.unavailableReason) return;
     editor.update(() => {
@@ -276,6 +305,7 @@ function Controller(props: Props) {
             propsRef.current.onValidationChange?.(false);
             return;
           }
+          if (!parts.length) dismissed.current = null;
           propsRef.current.onValidationChange?.(true);
           if (!pickerRef.current) setError(null);
           const serialized = JSON.stringify(parts);
@@ -285,7 +315,7 @@ function Controller(props: Props) {
               propsRef.current.onPartsChange(parts);
             else propsRef.current.onChange(messageText(parts));
           }
-          if (tags.has("external-draft") || editor.isComposing()) return;
+          if (tags.has("external-draft") || editor.isComposing() || document.activeElement !== editor.getRootElement()) return;
           const selection = $getSelection();
           if ($isRangeSelection(selection))
             savedSelection.current = selection.clone();
@@ -294,8 +324,14 @@ function Controller(props: Props) {
             !selection.isCollapsed() ||
             !$isTextNode(selection.anchor.getNode()) ||
             selection.anchor.getNode() instanceof ComposerChipNode
-          )
+          ) {
+            if (pickerRef.current && pickerRef.current.start !== null) {
+              setPicker(null);
+              dismissed.current = null;
+            }
             return;
+          }
+          if (pickerRef.current?.start === null) return;
           const prefix = selection.anchor
             .getNode()
             .getTextContent()
@@ -309,7 +345,10 @@ function Controller(props: Props) {
               old.query === match[2] &&
               old.start === prefix.length - match[2].length - 1 &&
               old.x === location.x &&
-              old.y === location.y
+              old.y === location.y &&
+              old.width === location.width &&
+              old.maxHeight === location.maxHeight &&
+              old.placement === location.placement
                 ? old
                 : {
                     mode,
@@ -329,7 +368,6 @@ function Controller(props: Props) {
   useEffect(() => {
     if (!props.pickerRequest || !props.ready) return;
     editor.focus();
-    setCategory("homeFile");
     dismissed.current = null;
     setPicker({
       mode:
@@ -345,7 +383,7 @@ function Controller(props: Props) {
     setPicker(null);
     setItems([]);
     requestEpoch.current++;
-  }, [props.instanceId]);
+  }, [props.instanceId, props.ready]);
   useEffect(() => {
     if (!picker) return;
     const reposition = () => setPicker((p) => (p ? { ...p, ...anchor() } : p));
@@ -377,54 +415,57 @@ function Controller(props: Props) {
   useEffect(() => {
     const root = editor.getRootElement();
     if (!root) return;
-    if (picker) {
+    if (picker && focusedControl === "editor") {
       root.setAttribute("aria-controls", "composer-choices");
-      root.setAttribute("aria-activedescendant", `composer-choice-${active}`);
+      root.setAttribute("aria-autocomplete", "list");
+      if (activeOptionId) root.setAttribute("aria-activedescendant", activeOptionId);
+      else root.removeAttribute("aria-activedescendant");
     } else {
       root.removeAttribute("aria-controls");
+      root.removeAttribute("aria-autocomplete");
       root.removeAttribute("aria-activedescendant");
     }
-  }, [editor, picker, active]);
-  async function load(next?: string) {
+  }, [editor, picker, focusedControl, activeOptionId]);
+  useEffect(() => {
+    panelRef.current?.querySelector(`[id="composer-choice-${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+  function reloadChoices(next: ChoiceCursors) {
+    // Retry/Load more can disappear during loading. Keep focus on the stable
+    // editing control so removing the button does not dismiss the picker.
+    const search = panelRef.current?.querySelector<HTMLInputElement>('[aria-label="Search composer choices"]');
+    if (search) search.focus();
+    else editor.focus();
+    void load(next);
+  }
+  async function load(next?: ChoiceCursors) {
     const p = pickerRef.current;
     const instance = propsRef.current.instanceId;
     if (!p || !instance) {
-      setError(
-        "Choose an active Agent Instance to select Skills and resources.",
-      );
+      setError("Choose an active Agent Instance to select Skills and resources.");
+      setLoading(false);
       return;
     }
     const epoch = ++requestEpoch.current;
     setLoading(true);
     setError(null);
-    try {
-      const params = new URLSearchParams({
-        category: p.mode === "invocation" ? "invocation" : category,
-        search: p.query,
-        ...(next ? { cursor: next } : {}),
-      });
-      const response = await ownerFetch(
-        `/api/v2/agent-instances/${instance}/composer?${params}`,
-      );
-      if (!response.ok) throw new Error("Unable to load choices. Try again.");
-      const page = (await response.json()) as {
-        items: ComposerChoice[];
-        nextCursor: string | null;
-      };
-      if (
-        requestEpoch.current !== epoch ||
-        propsRef.current.instanceId !== instance
-      )
-        return;
-      setItems((old) => (next ? [...old, ...page.items] : page.items));
-      setCursor(page.nextCursor);
-      setActive(0);
-    } catch (e) {
-      if (requestEpoch.current === epoch)
-        setError(e instanceof Error ? e.message : "Unable to load choices.");
-    } finally {
-      if (requestEpoch.current === epoch) setLoading(false);
-    }
+    const page = await loadComposerChoices(instance, p.mode, p.query, next);
+    if (requestEpoch.current !== epoch || propsRef.current.instanceId !== instance) return;
+    setItems((old) => {
+      const merged = next ? [...old, ...page.items] : page.items;
+      return [...new Map(merged.map((item) => [`${item.category}:${item.id}`, item])).values()];
+    });
+    setCursors((old) => {
+      const remaining = next ? { ...old } : {};
+      for (const source of Object.keys(next ?? {})) delete remaining[source];
+      return { ...remaining, ...page.next };
+    });
+    const remainingFailed = next ? { ...failed } : {};
+    for (const source of Object.keys(next ?? {})) delete remainingFailed[source];
+    Object.assign(remainingFailed, page.failed);
+    setFailed(remainingFailed);
+    setError(Object.keys(remainingFailed).length ? "Some choices could not load. Retry to load the missing results." : null);
+    if (!next) setActive(0);
+    setLoading(false);
   }
   useEffect(() => {
     if (!picker) {
@@ -432,11 +473,12 @@ function Controller(props: Props) {
       return;
     }
     setItems([]);
-    setCursor(null);
+    setCursors({});
+    setFailed({});
     setLoading(true);
     const timer = window.setTimeout(() => void load(), 150);
-    return () => window.clearTimeout(timer);
-  }, [picker?.mode, picker?.query, category, props.instanceId]);
+    return () => { window.clearTimeout(timer); requestEpoch.current++; };
+  }, [picker?.mode, picker?.query, props.instanceId]);
   useEffect(
     () =>
       editor.registerCommand(
@@ -451,19 +493,11 @@ function Controller(props: Props) {
           const p = pickerRef.current;
           if (
             p &&
-            ["ArrowDown", "ArrowUp", "Escape", "Enter"].includes(event.key)
+            ["ArrowDown", "ArrowUp", "Enter"].includes(event.key)
           ) {
             event.preventDefault();
-            if (event.key === "Escape") {
-              const s = $getSelection();
-              if ($isRangeSelection(s))
-                dismissed.current = s.anchor
-                  .getNode()
-                  .getTextContent()
-                  .slice(0, s.anchor.offset);
-              setPicker(null);
-            } else if (event.key === "ArrowDown")
-              setActive((i) => Math.min(i + 1, items.length - 1));
+            if (event.key === "ArrowDown")
+              setActive((i) => Math.max(0, Math.min(i + 1, items.length - 1)));
             else if (event.key === "ArrowUp")
               setActive((i) => Math.max(0, i - 1));
             else if (items[active] && !event.repeat)
@@ -617,6 +651,7 @@ function Controller(props: Props) {
       ) : null}
       {picker ? (
         <div
+          ref={panelRef}
           className="composer-picker"
           role="dialog"
           aria-label={
@@ -625,7 +660,9 @@ function Controller(props: Props) {
           style={{
             left: picker.x,
             top: picker.y,
-            maxHeight: Math.max(48, Math.min(420, picker.y - 8)),
+            width: picker.width,
+            maxHeight: picker.maxHeight,
+            transform: picker.placement === "above" ? "translateY(-100%)" : "none",
           }}
         >
           <div className="composer-picker-heading">
@@ -635,34 +672,19 @@ function Controller(props: Props) {
             <Button
               type="text"
               size="small"
-              onClick={() => {
-                setPicker(null);
-                editor.getEditorState().read(() => { const selection=$getSelection(); if($isRangeSelection(selection)) dismissed.current=selection.anchor.getNode().getTextContent().slice(0,selection.anchor.offset); });
-                editor.focus();
-              }}
+              onClick={() => dismissPicker(true)}
               aria-label="Close picker"
               icon={<CloseOutlined aria-hidden />}
             />
           </div>
-          {picker.mode === "reference" ? (
-            <div className="composer-picker-categories">
-              {categories.map((c) => (
-                <Button
-                  size="small"
-                  key={c.key}
-                  type={category === c.key ? "primary" : "text"}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setCategory(c.key)}
-                >
-                  {c.label}
-                </Button>
-              ))}
-            </div>
-          ) : null}
           {picker.start === null ? (
             <Input
-              autoFocus
               aria-label="Search composer choices"
+              role="combobox"
+              aria-expanded="true"
+              aria-autocomplete="list"
+              aria-controls={focusedControl === "search" ? "composer-choices" : undefined}
+              aria-activedescendant={focusedControl === "search" ? activeOptionId : undefined}
               placeholder="Search choices"
               value={picker.query}
               onChange={(e) =>
@@ -675,13 +697,9 @@ function Controller(props: Props) {
                   e.preventDefault();
                   e.stopPropagation();
                   if (items[active]) choose(items[active]);
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
-                  setPicker(null);
-                  editor.focus();
                 } else if (e.key === "ArrowDown") {
                   e.preventDefault();
-                  setActive((i) => Math.min(i + 1, items.length - 1));
+                  setActive((i) => Math.max(0, Math.min(i + 1, items.length - 1)));
                 } else if (e.key === "ArrowUp") {
                   e.preventDefault();
                   setActive((i) => Math.max(0, i - 1));
@@ -700,7 +718,9 @@ function Controller(props: Props) {
             aria-label="Composer choices"
             className="composer-picker-list"
           >
-            {items.map((item, i) => (
+            {items.map((item, i) => {
+              const { label, Icon } = choiceTypes[item.category as keyof typeof choiceTypes] ?? choiceTypes.homeFile;
+              return (
               <button
                 type="button"
                 id={`composer-choice-${i}`}
@@ -710,21 +730,26 @@ function Controller(props: Props) {
                 className={
                   i === active ? "composer-choice active" : "composer-choice"
                 }
-                key={item.id}
+                key={`${item.category}:${item.id}`}
+                title={`${item.label} · ${item.unavailableReason ?? item.description}`}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => choose(item)}
               >
-                <strong>{item.label}</strong>
-                <span>{item.unavailableReason ?? item.description}</span>
+                <Icon className="composer-choice-icon" aria-hidden />
+                <span className="composer-choice-body">
+                  <span className="composer-choice-title">{item.label}</span>
+                  <span className="composer-choice-description">{item.unavailableReason ?? item.description}</span>
+                </span>
+                <span className="composer-choice-kind">{label}</span>
               </button>
-            ))}
+            ); })}
           </div>
           {loading ? (
             <Spin size="small" />
           ) : !items.length && !error ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="No matching choices"
+              description={Object.keys(cursors).length ? "More choices remain. Load more to continue searching." : "No matching choices"}
             />
           ) : null}
           {error ? (
@@ -732,17 +757,17 @@ function Controller(props: Props) {
               type="warning"
               title={error}
               action={
-                <Button size="small" onClick={() => void load()}>
+                <Button size="small" onClick={() => reloadChoices(failed)}>
                   Retry
                 </Button>
               }
             />
           ) : null}
-          {cursor ? (
+          {Object.keys(cursors).length ? (
             <Button
               size="small"
               disabled={loading}
-              onClick={() => void load(cursor)}
+              onClick={() => reloadChoices(cursors)}
             >
               Load more
             </Button>

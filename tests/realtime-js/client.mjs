@@ -232,8 +232,14 @@ async function run() {
       if(forged.accepted || forged.error?.code!=="ValidationError") throw new Error(`Unknown field was accepted: ${JSON.stringify(forged)}`);
       const mismatch = await connection.invoke("SendText",command(session.sessionId,6,"user.text",{text:"different",parts:[{kind:"text",text:"inspect"}]},{attachmentId:ready.attachmentId}));
       if(mismatch.accepted) throw new Error("Mismatched fallback accepted");
-      const onlySkill = await connection.invoke("SendText",command(session.sessionId,7,"user.text",{text:"/instance:composer.review",parts:[parts[0]]},{attachmentId:ready.attachmentId}));
-      if(onlySkill.accepted) throw new Error("Skill-only turn accepted");
+      const onlyEventId = uuid();
+      const completedBefore = events.filter(evt=>evt.type==="agent.response.completed").length;
+      const onlySkill = await connection.invoke("SendText",command(session.sessionId,7,"user.text",{text:"/instance:composer.review",parts:[parts[0]]},{attachmentId:ready.attachmentId,eventId:onlyEventId}));
+      if(!onlySkill.accepted) throw new Error(`Skill-only turn rejected: ${JSON.stringify(onlySkill)}`);
+      await waitFor(()=>events.filter(evt=>evt.type==="agent.response.completed").length>completedBefore);
+      const onlyHistory = await fetch(`${base}/api/v1/sessions/${session.sessionId}/messages?limit=20`,{headers}).then(r=>r.json());
+      const onlyUser = onlyHistory.items.find(e=>e.sourceEventId===onlyEventId);
+      if(onlyUser?.parts?.[0]?.label!=="Review" || onlyUser.text!=="/instance:composer.review") throw new Error(`Missing Skill-only history: ${JSON.stringify(onlyHistory)}`);
       const revisionParts = [{kind:"reference",reference:{kind:"skill",agentInstanceId:instanceId,skillKey:"instance:composer.review",selectedRevision:1}}];
       const revision = await connection.invoke("SendText",command(session.sessionId,8,"user.text",{text:`@skill:${instanceId}/instance:composer.review`,parts:revisionParts},{attachmentId:ready.attachmentId}));
       if(revision.accepted || revision.error?.code!=="ValidationError") throw new Error(`Skill revision was accepted: ${JSON.stringify(revision)}`);

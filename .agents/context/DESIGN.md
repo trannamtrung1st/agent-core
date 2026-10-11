@@ -71,6 +71,16 @@ components:
     textColor: "{colors.text}"
     rounded: "{rounded.control}"
     padding: "{spacing.controlInner}"
+  composer-chip:
+    backgroundColor: "{colors.bubble}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.chip}"
+    padding: "2px 8px"
+  composer-picker:
+    backgroundColor: "{colors.elevated}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.chip}"
+    padding: "{spacing.compact}"
   file-chip:
     backgroundColor: "{colors.elevated}"
     textColor: "{colors.text}"
@@ -135,7 +145,7 @@ components:
 
 # Design System: Agent Core
 
-This file is lightweight MVP **presentation** guidance only. Screens, copy, and behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md); `/docs` wins on conflicts. The current component source, `antdTheme`, `AppShell` and `app.css` supply the visual values recorded here. The [cutover verification report](../../docs/reports/activation-agent-run-background-sessions-verification.md) records historical component, runtime, backend and exact-SHA hosted acceptance on `8cec78c5d47a43e0236a5c38f2e312f4e36ce283`. The [Admin UI feedback report](../../docs/reports/admin-ui-feedback-verification.md) records the subsequent bounded Synthetic checks at 1440, 768 and 390px; it does not renew hosted milestone acceptance. This guide and its preview sidecar were synchronized with source commit `9145e66e` on October 10, 2026. The [main UI consistency report](../../docs/reports/main-ui-style-consistency-verification.md) records the latest privacy, Built-in subscriber and delivery-table checks at 1440/768/767/390px; this documentation refresh adds no runtime or hosted acceptance claim. The [shared Admin composition report](../../docs/reports/shared-admin-compositions-verification.md) records the current extraction, desktop/tablet/mobile interaction checks and remaining full-suite limits.
+This file is lightweight MVP **presentation** guidance only. Screens, copy, and behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md); `/docs` wins on conflicts. The current component source, `antdTheme`, `AppShell` and `app.css` supply the visual values recorded here. The [cutover verification report](../../docs/reports/activation-agent-run-background-sessions-verification.md) records historical component, runtime, backend and exact-SHA hosted acceptance on `8cec78c5d47a43e0236a5c38f2e312f4e36ce283`. The [Admin UI feedback report](../../docs/reports/admin-ui-feedback-verification.md) records the subsequent bounded Synthetic checks at 1440, 768 and 390px; it does not renew hosted milestone acceptance. The October 10 synchronization used source commit `9145e66e`. This October 11 refresh merges the current working-tree composer presentation into the guide, preview sidecar and Chat surface brief; the [composer review report](../../docs/reports/composer-mention-polish-verification.md) separates existing runtime evidence from documentation checks. The [main UI consistency report](../../docs/reports/main-ui-style-consistency-verification.md) records the latest privacy, Built-in subscriber and delivery-table checks at 1440/768/767/390px; this documentation refresh adds no runtime or hosted acceptance claim. The [shared Admin composition report](../../docs/reports/shared-admin-compositions-verification.md) records the current extraction, desktop/tablet/mobile interaction checks and remaining full-suite limits.
 
 ## Overview
 
@@ -157,6 +167,7 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 
 - Admin uses contextual creation, sticky draft actions, shared conversation source selection, explicit time-zone previews and inline recovery on the same Ant Design baseline.
 - Definition and Instance configuration reuse shared panel shells and Identity / Skills & resources navigation; forms retain a bounded reading width within full-width panels.
+- Structured composer choices use category icons and quiet type labels in one flat list; draft, queue and history share immutable chip labels, with pending and historical tooltips distinguished.
 
 ## Colors
 
@@ -175,7 +186,7 @@ Dark operate neutrals with one primary accent and one success accent for live mi
 - **Elevated** (`{colors.elevated}`): composer shell, code, chips-on-dark.
 - **Border** (`{colors.border}`): 1px hairlines (rail edge, header, composer, Spoken separator).
 - **Fill** (`{colors.fill}`): session-row hover across the whole row including overflow.
-- **Bubble** (`{colors.bubble}`): user message fill only.
+- **Bubble** (`{colors.bubble}`): user message fill. Structured chips and active picker choices consume the same Ant Design `colorFillSecondary` role directly.
 - **Text / secondary / tertiary** (`{colors.text}`, `{colors.textSecondary}`, `{colors.textTertiary}`): body, meta/timestamps/Spoken body, Spoken caption and icons.
 
 **The Role Surfaces Rule.** `AppShell` owns the CSS bridge: primary → `colorPrimary`, success → `colorSuccess`, listening hover → `colorSuccessTextHover`, layout/container/elevated → `colorBgLayout`/`colorBgContainer`/`colorBgElevated`, border → `colorBorderSecondary`, fill → `colorFillTertiary`, bubble → `colorFillSecondary`. Error color uses `colorError`; selection uses `colorPrimaryBg`, and live microphone fill uses `colorSuccessBg`. The values above record the resolved dark theme, not a parallel palette. Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.
@@ -189,7 +200,7 @@ Dark operate neutrals with one primary accent and one success accent for live mi
 ### Hierarchy
 - **Headline** (600, 28px desktop / 22px below 768px): empty-chat “What do you want to work on?”
 - **Title** (600, 16px): Agent Core rail wordmark (line-height 1.4) and session header agent name (line-height 1.3).
-- **Body** (400, 14px, line-height 1.57): conversation, composer field, rail titles. Reading column max width 52rem.
+- **Body** (400, 14px, line-height 1.57): conversation, composer field, rail titles. Structured editor/history text uses the local 1.85 line-height variant to accommodate wrapped inline chips; queue previews remain single-line. Reading column max width 52rem.
 - **Label** (400, 12px): timestamps, header subtitle, connection/profile, Spoken caption. Spoken icon matches this size.
 
 **The One Face Rule.** Do not self-host a display face or costume monospace except for code in Markdown.
@@ -232,7 +243,7 @@ The [heading metadata verification](../../docs/reports/heading-metadata-layout-v
 
 ## Elevation & Depth
 
-Mostly flat tonal layering (layout → container → elevated → bubble/fill). One structural shadow is shared by the composer and its Model overlay.
+Mostly flat tonal layering (layout → container → elevated → bubble/fill). One structural shadow is shared by the composer and its Model overlay. The structured choice picker consumes Ant Design `boxShadowSecondary` for overlay elevation.
 
 Automation schedule expressions retain an elevated inset with a border, 8px radius, 12px padding and 8px internal gap. Current Run outcomes, confirmed effects and approval previews use open labeled ReadingRegion sections inside AgentRunDetails. They add no card fill, border or outer padding; each text region is independently scrollable, keyboard-focusable and capped at `clamp(8rem, 24dvh, 16rem)`. Short content remains natural height. Run metadata uses direct compact Ant Design Descriptions for Model, Attempt and Updated. The drawer body owns the shared 16px outer inset.
 
@@ -264,7 +275,7 @@ Inline/control/surface radii map to Ant Design `borderRadiusSM`/`borderRadius`/`
 
 ### Keyboard and control states
 
-Ant Design owns control hover, pressed, disabled, loading and semantic states. Product text controls (Model chip/options, session links/actions and header icons) retain a shared 2px primary `:focus-visible` outline inside their hit area, including when hover resets remove default outlines. The composer shell shows a primary border while a nested control has focus. Disabled controls do not gain active or focus styling. State meanings stay visible in text or accessible labels; color does not carry them alone.
+Ant Design owns control hover, pressed, disabled, loading and semantic states. Product text controls (Model chip/options, session links/actions and header icons) retain a shared 2px primary `:focus-visible` outline inside their hit area, including when hover resets remove default outlines. The composer shell retains its neutral border and the editor has no nested focus outline. Picker choices use the visible active/focus fill; the focused editor or picker search identifies the active choice. Ant Design search retains its normal focus state. Disabled controls do not gain active or focus styling. State meanings stay visible in text or accessible labels; color does not carry them alone.
 
 ### Buttons
 - **Shape:** 6px radius; header icon actions are 32×32px. Composer Send/Attach/Voice are 32×32px and become 44px below 768px.
@@ -273,6 +284,8 @@ Ant Design owns control hover, pressed, disabled, loading and semantic states. P
 - **Success:** live microphone control uses `{colors.success}`.
 
 ### Chips
+Skill invocation chips use the same readable text token as resource chips, with the existing primary border accent. The shared `.composer-chip` owns this foreground across the Lexical draft, queue and user history; previews retain the same role. Normal-state measured text contrast is 8.75:1 in draft/queue and 7.06:1 in history after background compositing.
+
 - Interrupted/failed: solid Ant Design Tag, not a full-width banner. Default tag marks the catalog default model in the Model menu.
 - Operational state: filled Ant Design Tag with an icon and text, 24px minimum height, 8px inline padding, and 12px radius. Semantic color reinforces the label; it never replaces the icon and text.
 
@@ -289,16 +302,24 @@ Ant Design owns control hover, pressed, disabled, loading and semantic states. P
 
 ### Structured composer parts and choices
 
-The same message well mixes ordinary text with atomic `/Skill` invocation and `@resource` reference chips. Inline chips use the existing 12px chip radius, Ant Design fill/text/border roles and wrapping text; invocation chips use the existing primary text/border roles. Drafts, queued drafts and user history reuse the same chip silhouette and immutable labels. Attachment previews remain in the composer shell.
+The same message well mixes ordinary text with atomic `/Skill` invocation and `@resource` reference chips. Inline chips use the existing 12px chip radius, Ant Design fill/text/border roles and wrapping text; invocation chips use the existing primary text/border roles. Drafts, queued drafts and user history reuse one product chip presentation and immutable labels. Chips keep 8px inline padding, secondary borders and 1.85 line height in the editor/history so wrapped labels do not crowd neighboring lines; queued previews remain single-line. Typed tooltips identify resources and distinguish pending activation from historical invocation. Attachment previews remain in the composer shell.
 
-Slash/at-sign input and the Add content menu's Use Skill / Reference resource actions share one caret-anchored picker. Its elevated Ant Design surface has a 12px radius, 8px shell inset, viewport-bounded width up to 320px and local scrolling. Selection, editor resize, viewport resize and scrolling reposition the overlay. Direct Ant Design Input, Button, Spin, Empty and Alert provide search, resource categories, Load more, loading, empty and inline Retry states; Close uses the Ant Design icon. The choice list exposes selected/unavailable states, arrow-key and Enter selection, Escape dismissal and polite result/loading announcements. Picker buttons and choice rows have 44px minimum heights below 768px.
+Slash/at-sign input and the Add content menu's Use Skill / Reference resource actions share one caret-anchored picker. Its elevated Ant Design surface has a 12px radius, 8px shell inset, viewport-bounded width up to 640px, capped to the composer and available viewport. It chooses above or below the caret according to available space; when neither side fits the controls plus a complete choice, it overlaps the caret within viewport bounds. The list owns local scrolling while heading, search and recovery controls remain visible; rows retain their natural height. Selection, editor resize, viewport resize and scrolling reposition the overlay. Direct Ant Design Input, Button, Spin, Empty and Alert provide search, Load more, loading, empty and inline Retry states. Choice names occupy up to two lines above a muted single-line description. The picker stack owns the 8px gap between heading, search, list and recovery states; each row owns its 8px inner inset. Resources share one flat list with category icons, quiet trailing type labels and independently retained source cursors; slash Skills reuse the same rows; Close uses the Ant Design icon. The choice list exposes selected/unavailable states, arrow-key and Enter selection, outside-click, focus-leave, window-blur and Escape dismissal and polite result/loading announcements. The editor and composer border remain neutral while focused, without nested blue outlines. Picker buttons and choice rows have 44px minimum heights below 768px.
 
 This is a local extension of the Operate system. Existing palette, typography, spacing primitives and 52rem reading column remain unchanged. Picker geometry does not create a new global spacing or typography scale. Product meaning, immutable part identity and send/queue behavior remain owned by `/docs`.
+
+Composer picker accessibility follows [Frontend](../../docs/13-frontend-implementation-spec.md#unified-structured-composer): the focused editor or plus search owns the active-option association, and empty results do not name a missing option. Known metadata-only files use the existing muted choice-description style. A bounded search with remaining pages gives continuation guidance before showing an exhausted empty state; no additional visual tokens are introduced.
+
+Structured chips preserve immutable presentation labels across draft, queue and history. Skill-only sending, trigger deletion, title semantics and historical activation boundaries remain governed by [Frontend](../../docs/13-frontend-implementation-spec.md#unified-structured-composer) and [Backend](../../docs/12-backend-implementation-spec.md); presentation labels never replace canonical identities. [MessageParts](../../web/src/features/chat/MessageParts.tsx) owns the shared chip presentation, and [ComposerChipNode](../../web/src/features/chat/ComposerChipNode.ts) applies it to the atomic editor node.
 
 ### Navigation
 - Compact Chat list and row action menus omit unnecessary separators. Destructive items retain Ant Design danger styling and their existing confirmation. The Model overlay keeps its meaningful reasoning-footer boundary.
 - Session row hover, keyboard focus-within, and active state fill the whole row including overflow (24px icon, inside row padding, common right edge).
 - Header: identity (agent name, 12px timestamp, and role), Speech locale, compact icon actions, and status metadata. The 32×32px actions use a 6px radius and `{colors.fill}` hover. Background Work uses an 18px inbox icon plus an attention badge; Automations, Admin, and the direct confirmed End action use 16px icons. End opens the shared centered confirmation. Profile and conversation status remain visible. Credential inventory and binding controls belong in Admin; Chat has no application connection row. Header actions stay on the identity row. No Model appears in the live header.
+
+### Definition permission hierarchy
+
+The existing Definition Form presents Schedule and Events with nested Built-in Events and Webhook Events using Ant Design v6 checkboxes, mixed parent state, paddingLG nesting and token-based spacing. Child permissions derive from the canonical candidate; a local parent off/on restores restricted choices. Read-only versions retain accurate disabled controls and overall-disabled guidance. Summaries and publish diffs name exact family grants. Backend identifiers and independent authority are unchanged. Product behavior belongs to [Frontend](../../docs/13-frontend-implementation-spec.md#unified-events-catalog-and-automation-editor); no additional visual system or permission state is introduced.
 
 ### Shared Admin configuration compositions
 
@@ -454,6 +475,3 @@ The existing Browser provider section in Effective configuration owns provider r
 - **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
 - **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
 - **Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`.
-## Definition permission hierarchy
-
-The existing Definition Form presents Schedule and Events with nested Built-in Events and Webhook Events using Ant Design v6 checkboxes, mixed parent state, paddingLG nesting and token-based spacing. Child permissions derive from the canonical candidate; a local parent off/on restores restricted choices. Read-only versions retain accurate disabled controls and overall-disabled guidance. Summaries and publish diffs name exact family grants. Backend identifiers and independent authority are unchanged. Product behavior belongs to [Frontend](../../docs/13-frontend-implementation-spec.md#unified-events-catalog-and-automation-editor); no additional visual system or permission state is introduced.

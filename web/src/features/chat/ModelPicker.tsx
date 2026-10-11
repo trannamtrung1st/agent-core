@@ -176,7 +176,7 @@ export function ModelPicker({
 
     function onPointerDown(event: PointerEvent): void {
       const target = event.target as HTMLElement | null;
-      if (target?.closest(".model-picker-popover") || target?.closest(".model-picker-chip")) {
+      if (target?.closest(".model-picker-popover, .model-picker-effort-popup") || target?.closest(".model-picker-chip")) {
         return;
       }
       setOpen(false);
@@ -188,9 +188,18 @@ export function ModelPicker({
       }
     }
 
+    function onFocus(event: FocusEvent): void {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest(".model-picker-popover, .model-picker-chip, .model-picker-effort-popup")) setOpen(false);
+    }
+    function onBlur(): void { setOpen(false); }
+    document.addEventListener("focusin", onFocus);
+    window.addEventListener("blur", onBlur);
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => {
+      document.removeEventListener("focusin", onFocus);
+      window.removeEventListener("blur", onBlur);
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
@@ -299,6 +308,7 @@ export function ModelPicker({
             aria-label="Reasoning effort"
           /> : null}
           {modes.length > 0 ? <Select
+            classNames={{ popup: { root: "model-picker-effort-popup" } }}
             aria-label="Reasoning mode"
             value={effortValue}
             disabled={disabled}

@@ -1,4 +1,4 @@
-import { displayPart } from "../../services/messageParts";
+import { MessageParts } from "./MessageParts";
 import { ConversationDestination } from "./AutomationDestination";
 import { Flex, Typography, theme } from "antd";
 import type { HistoryBlock, HistoryEntry, MemoryReceiptView } from "../../state/sessionStore";
@@ -91,7 +91,11 @@ export function ChatMessage({
         <div className={isUser ? "user-bubble" : "assistant-body"}>
           {isUser ? (
             <>
-              {entry.text ? <Typography.Paragraph className="user-bubble-text message-parts">{entry.parts ? entry.parts.map((part,i) => part.kind === "text" ? part.text : <span key={i} className={`composer-chip composer-chip-${part.kind}`} title={part.kind === "invocation" ? part.skillKey : undefined}>{displayPart(part)}</span>) : entry.text}</Typography.Paragraph> : null}
+              {entry.text ? (
+                <Typography.Paragraph className="user-bubble-text message-parts">
+                  {entry.parts ? <MessageParts parts={entry.parts} context="history" /> : entry.text}
+                </Typography.Paragraph>
+              ) : null}
               {blocks}
               {files}
             </>

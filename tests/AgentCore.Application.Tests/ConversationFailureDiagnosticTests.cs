@@ -236,16 +236,20 @@ public sealed class ConversationFailureDiagnosticTests
         var logs = new DiagnosticLogCapture<SessionRuntime>();
         var diagnostics = new QueueDiagnosticIdSource([DiagnosticId, SecondDiagnosticId]);
         var output = new CapturingSessionOutput();
-        await using var runtime = CreateRuntime(new HoldThenFailModel(gate), logs, diagnostics, output);
+        var model = new HoldThenFailModel(gate);
+        await using var runtime = CreateRuntime(model, logs, diagnostics, output);
         Assert.True(await runtime.SubmitPersistedUserTextAsync("first", Guid.Parse("019944af-00d7-7000-8000-000000000061")));
-        await output.WaitForAsync(item => item.Payload is ResponseStartedOutput);
+        var first = await output.WaitForAsync(item => item.Payload is ResponseStartedOutput);
+        await model.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.True(await runtime.SubmitPersistedUserTextAsync(
             "second",
             Guid.Parse("019944af-00d7-7000-8000-000000000062"),
             behavior: UserTextBehavior.Interrupt));
-        // Admission is asynchronous; establish the interruption fence before releasing the old provider.
-        await runtime.WaitUntilMailboxDrainedAsync();
+        // A drained mailbox can precede asynchronous admission. Observe the actual response fence.
+        await output.WaitForAsync(item => item.ResponseId == first.ResponseId
+            && item.Payload is ResponseCompletedOutput { InterruptReason: not null });
         gate.TrySetResult();
+        await model.LateFailureProduced.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await runtime.WaitUntilIdleAsync();
 
         var assistants = runtime.Snapshot.Entries.Where(entry => entry.Role == ConversationRole.Assistant).ToArray();
@@ -258,6 +262,7 @@ public sealed class ConversationFailureDiagnosticTests
         Assert.All(
             assistants.Where(entry => entry.EntryId != active.EntryId),
             entry => Assert.Null(entry.Failure));
+        Assert.DoesNotContain(logs.Entries, entry => entry.Level == LogLevel.Error);
         Assert.Equal(DiagnosticId, diagnostics.NewId());
     }
 
@@ -535,6 +540,8 @@ file sealed class ThrowingModel : ILanguageModel
 file sealed class HoldThenFailModel(TaskCompletionSource gate) : ILanguageModel
 {
     public ModelCapabilities Capabilities { get; } = new(true, true);
+    public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource LateFailureProduced { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
         ModelRequest request,
@@ -543,15 +550,10 @@ file sealed class HoldThenFailModel(TaskCompletionSource gate) : ILanguageModel
         var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? "";
         if (lastUser.Contains("first", StringComparison.Ordinal))
         {
-            try
-            {
-                await gate.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                yield break;
-            }
-
+            Entered.TrySetResult();
+            // Deliberately emulate a provider that delivers a late result despite cancellation.
+            await gate.Task.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            LateFailureProduced.TrySetResult();
             yield return new ModelFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "late failure"));
             yield break;
         }

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using AgentCore.Application.Composer;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -734,12 +735,9 @@ public sealed class PromptContextBuilder(
             ]);
     }
 
-    private static string UserTextForModel(ConversationEntry entry) => entry.Parts is null ? entry.Text
-        : string.Concat(entry.Parts.Where(p => p.Kind != "invocation").Select(p => p.Kind == "text" ? p.Text : "[Referenced " + p.Reference!.Locator + "]"));
-
-    private static string BuildHistoricalUserText(ConversationEntry entry)
+    private static string BuildUserText(ConversationEntry entry, bool currentTurn)
     {
-        var text = UserTextForModel(entry);
+        var text = UserMessageProjection.ForModel(entry, currentTurn);
         if (entry.Attachments is not { Count: > 0 })
         {
             return text;
@@ -769,7 +767,7 @@ public sealed class PromptContextBuilder(
             .Where(entry => entry.IsPromptTurn && entry.Status != EntryStatus.Streaming)
             .Select(entry => (entry, text: entry.Role == ConversationRole.Assistant
                 ? EligibleAssistantText(entry)
-                : entry.Text))
+                : UserMessageProjection.ForModel(entry, currentIds.Contains(entry.EntryId))))
             .Where(pair =>
                 pair.text.Length > 0
                 || (currentIds.Contains(pair.entry.EntryId)
@@ -854,14 +852,14 @@ public sealed class PromptContextBuilder(
                         }
 
                         return BuildCurrentUserMessage(
-                            UserTextForModel(entry),
+                            UserMessageProjection.ForModel(entry, currentTurn: true),
                             contents,
                             ToolCatalog.OffersAttachmentRead(context.Definition, context, _configurationGate),
                             allocations);
                     }
                 }
 
-                return new ModelMessage(role, BuildHistoricalUserText(entry));
+                return new ModelMessage(role, BuildUserText(entry, currentIds.Contains(entry.EntryId)));
             })
             .ToArray();
     }

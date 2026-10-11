@@ -19,6 +19,67 @@ namespace AgentCore.Application.Tests;
 
 public sealed class MessagingSkillJourneyTests
 {
+    [Theory]
+    [InlineData("retired")]
+    [InlineData("disabled")]
+    public async Task Unavailable_skill_only_input_is_rejected_without_a_user_entry_or_model_call(string id)
+    {
+        var recording = new RecordingModel(new ScriptedLanguageModel());
+        var definition = Definition(Skill("disabled", "DISABLED_PROCEDURE") with { DefaultEnabled = false });
+        await using var runtime = Create(new SemanticResponseLanguageModel(recording), new(), new(), new(), definition);
+        await runtime.AttachAsync();
+        UserMessagePart[] parts = [new("invocation", InvocationKind: "skill", SkillKey: "definition:" + id)];
+        await Assert.ThrowsAsync<AgentCoreException>(() => runtime.SubmitPersistedUserTextAsync(UserMessageContent.DisplayText(parts), Guid.NewGuid(), parts: parts));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Empty(recording.Requests);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, e => e.Role == ConversationRole.User);
+        Assert.Equal(SessionTitles.Default, runtime.Snapshot.Title);
+    }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(2, true)]
+    public async Task Skill_only_turn_is_accepted_answers_and_preserves_its_run_and_title(int count, bool renamed)
+    {
+        var recording = new RecordingModel(new ScriptedLanguageModel());
+        var turns = new RuntimeAgentRunStore(); var memory = new InMemoryMemoryStore();
+        var definition = Definition(Skill("say", "SAY_PROCEDURE"), Skill("research", "RESEARCH_PROCEDURE"));
+        await using var seed = Create(new SemanticResponseLanguageModel(recording), new(), new(), new(), definition);
+        var initial = seed.Snapshot with { Title = renamed ? "My title" : SessionTitles.Default };
+        await using var runtime = Create(new SemanticResponseLanguageModel(recording), new(), turns, memory, definition, initial);
+        await runtime.AttachAsync();
+        var parts = new[] { new UserMessagePart("invocation", InvocationKind: "skill", SkillKey: "definition:say"),
+            new UserMessagePart("invocation", InvocationKind: "skill", SkillKey: "definition:research") }.Take(count).ToArray();
+        Assert.True(await runtime.SubmitUserTextAsync(UserMessageContent.DisplayText(parts), parts: parts));
+        await runtime.WaitUntilIdleAsync();
+        var user = Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.User);
+        Assert.Equal(UserMessageContent.DisplayText(parts), user.Text);
+        Assert.Equal(parts, user.Parts);
+        Assert.Contains(runtime.Snapshot.Entries, e => e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed);
+        Assert.Equal(renamed ? "My title" : count == 1 ? "/say" : "/say + /research", runtime.Snapshot.Title);
+        var first = recording.Requests[0];
+        Assert.Contains(first.Messages, m => m.Role == ModelRole.User && m.Text.Contains("Explicitly invoked Skill:") && m.Text.Contains("key=definition:say"));
+        Assert.Contains("SAY_PROCEDURE", Text(first));
+        if (count == 2) Assert.Contains("RESEARCH_PROCEDURE", Text(first));
+        var run = (await turns.ForSourceAsync(runtime.SessionId, user.SourceEventId!.Value))!;
+        Assert.Equal(UserMessageContent.ExplicitSkills(parts), run.Admission.ComposerInput!.ExplicitSkillKeys);
+        Assert.Equal(run.Admission.ComposerInput.ExplicitSkillKeys, run.ActiveSkillKeys);
+        Assert.Equal(0, run.SkillLoadCount);
+        var saved = (await memory.LoadAsync(runtime.SessionId))!;
+        await using var reopened = Create(new SemanticResponseLanguageModel(recording), new(), turns, memory, definition, saved, idStart: 101);
+        await reopened.AttachAsync(); await reopened.WaitUntilIdleAsync();
+        var before = recording.Requests.Count;
+        Assert.True(await reopened.SubmitUserTextAsync("Continue normally"));
+        await reopened.WaitUntilIdleAsync();
+        var next = recording.Requests[before];
+        Assert.Contains(next.Messages, m => m.Role == ModelRole.User && m.Text.Contains("Previously invoked Skill (historical, not activated):"));
+        Assert.DoesNotContain("SAY_PROCEDURE", Text(next));
+        Assert.DoesNotContain("RESEARCH_PROCEDURE", Text(next));
+        Assert.Equal(run.ActiveSkillKeys, (await turns.ForSourceAsync(runtime.SessionId, user.SourceEventId.Value))!.ActiveSkillKeys);
+        Assert.Equal(saved.Title, reopened.Snapshot.Title);
+    }
+
     [Fact]
     public async Task Scripted_journey_sends_one_message_loads_the_missed_skill_and_answers_once()
     {
@@ -165,11 +226,12 @@ public sealed class MessagingSkillJourneyTests
         RuntimeAgentRunStore turns,
         InMemoryMemoryStore memory,
         AgentDefinition definition,
-        SessionSnapshot? snapshot = null)
+        SessionSnapshot? snapshot = null,
+        int idStart = 1)
     {
         var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-30T12:00:00Z"));
         var ids = new DeterministicIdGenerator(
-            Enumerable.Range(1, 80).Select(index => Guid.Parse($"019944af-00f5-7000-8000-{index:D12}")),
+            Enumerable.Range(idStart, 80).Select(index => Guid.Parse($"019944af-00f5-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
         var now = time.GetUtcNow();
         snapshot ??= new SessionSnapshot(

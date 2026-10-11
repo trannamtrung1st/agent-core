@@ -18,7 +18,9 @@ public sealed class UserMessageContentTests
         Assert.Throws<ArgumentException>(()=>UserMessageContent.Normalize([new("reference",Reference:new("artifact",ArtifactId:Guid.NewGuid()))]));
         Assert.Throws<ArgumentException>(()=>UserMessageContent.Normalize([new("reference",Reference:new("session",SessionId:Guid.NewGuid(),ItemId:Guid.NewGuid()))]));
         Assert.Throws<ArgumentException>(()=>UserMessageContent.Normalize([new("invocation",InvocationKind:"skill",SkillKey:"definition:review",Label:"forged")],input:true));
-        Assert.False(UserMessageContent.HasTask([new("invocation",InvocationKind:"skill",SkillKey:"definition:review")]));
+        Assert.True(UserMessageContent.HasTask([new("invocation",InvocationKind:"skill",SkillKey:"definition:review")]));
+        Assert.False(UserMessageContent.HasTask([new("invocation",InvocationKind:"skill",SkillKey:"invalid")]));
+        Assert.False(UserMessageContent.HasTask([new("text",Text:" ")]));
         Assert.True(UserMessageContent.HasTask([new("reference",Reference:new("session",SessionId:Guid.NewGuid()))]));
     }
     [Fact]

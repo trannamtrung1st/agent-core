@@ -375,7 +375,9 @@ public sealed partial class SessionRuntime
     private async Task<AgentRun?> RequestAgentRunCommandAsync(EventContext cause, Guid responseId,
         Func<AgentRun, DateTimeOffset, AgentRunCommand> build, CancellationToken ct)
     {
-        var bound = _boundAgentRun ?? throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
+        var bound = _boundAgentRun;
+        ct.ThrowIfCancellationRequested();
+        if (bound is null) throw AgentCoreErrors.Conflict("AgentRun ownership is unavailable.");
         var generation = cause.AgentRunGeneration ?? bound.Claim?.Generation ?? bound.Approval?.ExecutionGeneration
             ?? throw AgentCoreErrors.Conflict("AgentRun generation is unavailable.");
         var completed = new TaskCompletionSource<AgentRun?>(TaskCreationOptions.RunContinuationsAsynchronously);

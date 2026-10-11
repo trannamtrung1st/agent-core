@@ -104,6 +104,6 @@ describe("canonical composer input", () => {
         ],
         "/definition:review",
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 });

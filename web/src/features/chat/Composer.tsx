@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Button, Flex, Dropdown, Tooltip, Alert, theme } from "antd";
 import {
   AudioOutlined,
@@ -8,6 +8,8 @@ import {
   DownOutlined,
   PaperClipOutlined,
   PlusOutlined,
+  CodeOutlined,
+  FolderOpenOutlined,
   PhoneFilled,
   PhoneOutlined,
   RightOutlined,
@@ -16,7 +18,8 @@ import {
   UnorderedListOutlined
 } from "@ant-design/icons";
 import { StructuredMessageEditor, type PickerRequest } from "./StructuredMessageEditor";
-import { displayPart, type MessagePart } from "../../services/messageParts";
+import { type MessagePart } from "../../services/messageParts";
+import { MessageParts } from "./MessageParts";
 import {
   composerSteerEnabled,
   queueComposerFiles,
@@ -262,8 +265,27 @@ export function Composer({
   const { token } = theme.useToken();
   const fileInput = useRef<HTMLInputElement>(null);
   const [pickerRequest, setPickerRequest] = useState<PickerRequest>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [editorValid, setEditorValid] = useState(true);
   const [queueExpanded, setQueueExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!addOpen) return;
+    const dismiss = () => setAddOpen(false);
+    const focus = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('.composer-add-menu, [aria-label="Add content"]')) dismiss();
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") dismiss(); };
+    document.addEventListener("focusin", focus);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("blur", dismiss);
+    return () => {
+      document.removeEventListener("focusin", focus);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("blur", dismiss);
+    };
+  }, [addOpen]);
 
   function focusMessage() {
     document.querySelector<HTMLElement>('[aria-label="Message"]')?.focus();
@@ -333,7 +355,7 @@ export function Composer({
                   <UnorderedListOutlined className="pending-send-queue-icon" aria-hidden="true" />
                   <div className="pending-send-queue-body">
                     <span className="pending-send-queue-text" title={queuePreview(item)}>
-                      {item.parts ? item.parts.map((part,i) => part.kind === "text" ? part.text : <span key={i} className={`composer-chip composer-chip-${part.kind}`}>{displayPart(part)}</span>) : queuePreview(item)}
+                      {item.parts ? <MessageParts parts={item.parts} context="queue" /> : queuePreview(item)}
                     </span>
                     {item.attachments.length > 0 ? (
                       <span className="pending-send-queue-attachments">
@@ -416,8 +438,25 @@ export function Composer({
         <Flex justify="space-between" align="center" gap={token.paddingXS} wrap="wrap" className="composer-toolbar">
           <Flex gap={token.paddingXS} align="center" wrap="wrap" className="composer-toolbar-start">
             {modelControls}
-            <Dropdown trigger={["click"]} menu={{items:[{key:"attach",label:"Attach file",icon:<PaperClipOutlined/>},{key:"invocation",label:"Use Skill"},{key:"homeFile",label:"Reference resource"}],onClick:({key})=>{if(key==="attach") fileInput.current?.click();else setPickerRequest({category:key as "invocation"|"homeFile",nonce:Date.now()});}}}>
-              <Button type="text" className="composer-icon" aria-label="Add content" disabled={!ready} icon={<PlusOutlined/>}/>
+            <Dropdown
+              open={addOpen}
+              onOpenChange={setAddOpen}
+              classNames={{ root: "composer-add-menu" }}
+              trigger={["click"]}
+              menu={{
+                items: [
+                  { key: "attach", label: "Attach file", icon: <PaperClipOutlined /> },
+                  { key: "invocation", label: "Use Skill", icon: <CodeOutlined /> },
+                  { key: "homeFile", label: "Reference resource", icon: <FolderOpenOutlined /> }
+                ],
+                onClick: ({ key }) => {
+                  setAddOpen(false);
+                  if (key === "attach") fileInput.current?.click();
+                  else setPickerRequest({ category: key as "invocation" | "homeFile", nonce: Date.now() });
+                }
+              }}
+            >
+              <Button type="text" className="composer-icon" aria-label="Add content" disabled={!ready} icon={<PlusOutlined />} />
             </Dropdown>
             {voiceAvailable ? (
               <>

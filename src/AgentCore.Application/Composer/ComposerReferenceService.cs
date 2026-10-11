@@ -165,10 +165,16 @@ public sealed class ComposerReferenceService(IAgentInstanceStore instances, Agen
 
     private sealed record NestedCursor(string? SessionCursor, Guid? ItemCursor);
 
+    private static bool SupportsText(string contentType) =>
+        contentType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || contentType is "application/json" or "application/xml";
+
+    private static string ContentDescription(string description, long byteSize, string contentType) =>
+        byteSize > MaxBodyBytes || !SupportsText(contentType) ? description + " · Metadata only" : description;
+
     private static (string Text, string Status, bool Truncated) ReadText(byte[] bytes, string contentType)
     {
         if (bytes.Length > MaxBodyBytes) return ("", "metadataOnly", true);
-        if (!(contentType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) || contentType is "application/json" or "application/xml")) return ("", "metadataOnly", false);
+        if (!SupportsText(contentType)) return ("", "metadataOnly", false);
         try { return (new UTF8Encoding(false, true).GetString(bytes), "valid", false); }
         catch (DecoderFallbackException) { return ("", "metadataOnly", false); }
     }
@@ -177,6 +183,20 @@ public sealed class ComposerReferenceService(IAgentInstanceStore instances, Agen
     {
         await ActiveAsync(owner.AgentInstanceId, ct);
         if ((search?.Length ?? 0) > 200 || (cursor?.Length ?? 0) > 1024) throw AgentCoreErrors.Validation("Picker search or cursor is too long.");
+        // Each native page is bounded to 40 candidates. Keep scanning empty filtered
+        // pages, but return the exact native continuation after at most 40 scans.
+        for (var scanned = 0; scanned < 40; scanned++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var page = await DiscoverPageAsync(owner, category, search, cursor, ct);
+            if (page.Items.Count > 0 || page.NextCursor is null) return page;
+            cursor = page.NextCursor;
+        }
+        return new(Array.Empty<ComposerChoice>(), cursor);
+    }
+
+    private async ValueTask<ComposerChoicePage> DiscoverPageAsync(AgentRunOwner owner, string category, string? search, string? cursor, CancellationToken ct)
+    {
         bool Matches(string name, string description) => string.IsNullOrWhiteSpace(search) || (name + " " + description).Contains(search, StringComparison.OrdinalIgnoreCase);
         var choices = new List<ComposerChoice>(); string? next = null;
         if (category is "invocation" or "skill")
@@ -199,7 +219,7 @@ public sealed class ComposerReferenceService(IAgentInstanceStore instances, Agen
         {
             var page = await home.ListAsync(owner.AgentInstanceId, "/home", cursor, 40, ct); next = page.NextPath;
             foreach (var item in page.Items.Where(i => !i.Directory && Matches(i.LogicalPath, i.ContentType)))
-                choices.Add(new(item.ItemId.ToString("D"), Label(item.LogicalPath), item.ContentType, category, Reference: new(category, AgentInstanceId: owner.AgentInstanceId, ItemId: item.ItemId, SelectedRevision: item.Revision)));
+                choices.Add(new(item.ItemId.ToString("D"), Label(item.LogicalPath), ContentDescription(item.ContentType, item.ByteSize, item.ContentType), category, Reference: new(category, AgentInstanceId: owner.AgentInstanceId, ItemId: item.ItemId, SelectedRevision: item.Revision)));
         }
         else if (category is "session" or "backgroundSession")
         {
@@ -215,33 +235,29 @@ public sealed class ComposerReferenceService(IAgentInstanceStore instances, Agen
             NestedCursor position;
             try { position = cursor is null ? new(null, null) : JsonSerializer.Deserialize<NestedCursor>(Convert.FromBase64String(cursor)) ?? throw new FormatException(); }
             catch (Exception e) when (e is FormatException or JsonException) { throw AgentCoreErrors.Validation("Invalid picker cursor."); }
-            for (var visited = 0; visited < 40; visited++)
+            var page = await sessions.ListInstanceSessionsAsync(owner, position.SessionCursor, 1, ct);
+            var session = page.Items.FirstOrDefault();
+            if (session is null) return new(Array.Empty<ComposerChoice>(), null);
+            var retained = session.ArchivedAt is null && session.DurablyDeletedAt is null && session.AgentInstanceId == owner.AgentInstanceId && session.ProfileId == owner.ProfileId;
+            Guid? nextItem = null;
+            if (retained && category == "artifact")
             {
-                var page = await sessions.ListInstanceSessionsAsync(owner, position.SessionCursor, 1, ct);
-                var session = page.Items.FirstOrDefault();
-                if (session is null) break;
-                var retained = session.ArchivedAt is null && session.DurablyDeletedAt is null && session.AgentInstanceId == owner.AgentInstanceId && session.ProfileId == owner.ProfileId;
-                Guid? nextItem = null;
-                if (retained && category == "artifact")
-                {
-                    var items = await artifacts.ListPageAsync(session.SessionId, position.ItemCursor, 40, ct);
-                    foreach (var item in items.Items)
-                        if (Matches(item.DisplayName, session.Title)) choices.Add(new(item.ArtifactId.ToString("D"), Label(item.DisplayName), $"{Label(session.Title)} · {item.ArtifactId.ToString("D")[..8]}", category, Reference: new(category, SessionId: session.SessionId, ArtifactId: item.ArtifactId)));
-                    if (items.HasMore) nextItem = items.NextCursor;
-                }
-                else if (retained)
-                {
-                    var items = await runs.ListPageAsync(owner, session.SessionId, position.ItemCursor, 40, ct);
-                    foreach (var run in items.Items)
-                        if (Matches(session.Title, run.Status + " " + run.AgentRunId)) choices.Add(new(run.AgentRunId.ToString("D"), $"{Label(session.Title)} · {run.AgentRunId.ToString("D")[..8]}", run.Status.ToString(), category, Reference: new(category, SessionId: session.SessionId, AgentRunId: run.AgentRunId)));
-                    if (items.HasMore) nextItem = items.NextCursor;
-                }
-                if (nextItem is not null) position = position with { ItemCursor = nextItem };
-                else if (page.NextCursor is { } nextSession) position = new(nextSession, null);
-                else { next = null; break; }
-                next = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(position));
-                if (choices.Count > 0 || nextItem is not null) break;
+                var items = await artifacts.ListPageAsync(session.SessionId, position.ItemCursor, 40, ct);
+                foreach (var item in items.Items)
+                    if (Matches(item.DisplayName, session.Title)) choices.Add(new(item.ArtifactId.ToString("D"), Label(item.DisplayName), ContentDescription($"{Label(session.Title)} · {item.ArtifactId.ToString("D")[..8]}", item.ByteSize, item.ContentType), category, Reference: new(category, SessionId: session.SessionId, ArtifactId: item.ArtifactId)));
+                if (items.HasMore) nextItem = items.NextCursor;
             }
+            else if (retained)
+            {
+                var items = await runs.ListPageAsync(owner, session.SessionId, position.ItemCursor, 40, ct);
+                foreach (var run in items.Items)
+                    if (Matches(session.Title, run.Status + " " + run.AgentRunId)) choices.Add(new(run.AgentRunId.ToString("D"), $"{Label(session.Title)} · {run.AgentRunId.ToString("D")[..8]}", run.Status.ToString(), category, Reference: new(category, SessionId: session.SessionId, AgentRunId: run.AgentRunId)));
+                if (items.HasMore) nextItem = items.NextCursor;
+            }
+            if (nextItem is not null) position = position with { ItemCursor = nextItem };
+            else if (page.NextCursor is { } nextSession) position = new(nextSession, null);
+            else return new(Array.AsReadOnly(choices.ToArray()), null);
+            next = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(position));
         }
         else throw AgentCoreErrors.Validation("Unknown picker category.");
         return new(Array.AsReadOnly(choices.ToArray()), next);

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Audio;
+using AgentCore.Application.Composer;
 using AgentCore.Application.Events;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Interaction;
@@ -364,7 +365,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             var normalized = UserMessageContent.Normalize(parts, input: true);
             if (normalized is not null && (UserMessageContent.DisplayText(normalized) != text || !UserMessageContent.HasTask(normalized) && attachments is not { Count: > 0 }))
-                throw new ArgumentException("Structured text must match parts and Skill selection requires a task, reference or attachment.");
+                throw new ArgumentException("Structured text must match parts and contain text, a Skill, a reference or an attachment.");
             return normalized;
         }
         catch (ArgumentException exception) { throw AgentCoreErrors.Validation(exception.Message); }
@@ -5811,7 +5812,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             title = string.IsNullOrWhiteSpace(entry.Text) && attachments is { Names.Count: > 0 }
                 ? SessionTitles.FromAttachments(attachments.Names, attachments.ImageOnly)
-                : SessionTitles.FromUserText(entry.Parts is null ? entry.Text : string.Concat(entry.Parts.Where(p => p.Kind != "invocation").Select(p => p.Kind == "text" ? p.Text : "@" + (p.Label ?? p.Reference!.Kind))));
+                : SessionTitles.FromUserText(UserMessageProjection.ForTitle(entry));
         }
 
         return _snapshot with

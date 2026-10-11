@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using AgentCore.Application.Composer;
 using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Agents;
@@ -105,7 +106,7 @@ public static class CompactionSourceSelector
     }
 
     internal static string Project(ConversationEntry entry) =>
-        entry.Role == ConversationRole.Assistant ? AssistantSemanticProjection.Text(entry) : entry.Text;
+        entry.Role == ConversationRole.Assistant ? AssistantSemanticProjection.Text(entry) : UserMessageProjection.ForSummary(entry);
 
     private static CompactionSelection Empty(string reason, string previousSummary, long baseThrough) =>
         new(false, reason, [], 0, previousSummary, baseThrough, [], "");
@@ -161,9 +162,11 @@ public static class CompactionSourceSelector
     {
         var projected = Project(entry);
         RememberHiddenTail(entry, projected, forbidden);
-        if (IsSecretOrBinary(projected))
+        var structuredUser = entry.Role == ConversationRole.User && entry.Parts is not null;
+        if (IsSecretOrBinary(projected) || structuredUser && IsSecretOrBinary(entry.Text))
         {
             Remember(forbidden, projected);
+            if (structuredUser) Remember(forbidden, entry.Text);
             return "[omitted]";
         }
 

@@ -9,6 +9,9 @@ related_targets:
   - web/src/features/chat/SpokenText.tsx
   - web/src/features/chat/Composer.tsx
   - web/src/features/chat/StructuredMessageEditor.tsx
+  - web/src/features/chat/ComposerChipNode.ts
+  - web/src/features/chat/MessageParts.tsx
+  - web/src/features/chat/composerChoices.ts
   - web/src/features/chat/ModelPicker.tsx
   - web/src/features/chat/AgentPicker.tsx
   - web/src/features/chat/SessionRail.tsx
@@ -37,7 +40,7 @@ FIRST VIEWPORT: Black rail (`#000`) and `#141414` conversation. 280px rail at 12
 
 FORM: Ant Design operate UI with ChatGPT/Codex conversational structure. Signature interaction: Enter sends on the same session; Voice is a mode transition; Model/Reasoning sit with the message well; activity is transient in-flow.
 
-COMPOSER EXTENSION: The same message well uses a headless Lexical plain-text editor with atomic `/Skill` invocation and `@resource` reference chips, ordinary text and existing attachment previews. Add content offers Attach file, Use Skill and Reference resource. Slash/at-sign and menu entry share a caret-anchored elevated picker with search, resource categories, Load more, loading/empty/error recovery and polite announcements. Selection, editor/viewport resize and scrolling reposition it. Picker chrome and controls retain Ant Design v6; Close uses its icon. Choice rows and picker buttons have 44px minimum mobile height. Draft, queue and user history reuse immutable chip labels and the same 12px chip-radius silhouette. Keep the 52rem column, additive 8px composer insets, existing palette/type/spacing and Model/Reasoning control. This local extension adds no visual world or token palette.
+COMPOSER EXTENSION: The same message well uses a headless Lexical plain-text editor with atomic `/Skill` invocation and `@resource` reference chips, ordinary text and existing attachment previews. Add content offers Attach file, Use Skill and Reference resource. Slash/at-sign and menu entry share a caret-anchored elevated picker: one flat list with category icons, quiet trailing type labels, up to two lines for names and one muted description line. Its 12px radius, 8px shell/row insets and 8px section gaps extend the existing rhythm. Width caps to 640px, the composer and viewport; placement chooses above/below, overlapping the caret within viewport bounds when neither side fits controls plus a complete choice. The list scrolls independently; heading, search, Load more and inline recovery stay visible and rows keep their natural height. Selection, editor/viewport resize and scrolling reposition it. Direct Ant Design v6 controls, Close icon, selected/unavailable states and polite announcements remain. The composer retains its neutral border and borderless editor while focused; choices show active/focus fill and search keeps its Ant Design focus state. Outside click, focus leaving, window blur and Escape dismiss overlays. Choice rows and picker buttons have 44px minimum mobile height. Draft, queue and user history share immutable labels, a 12px chip radius and 8px inline padding; editor/history line height is 1.85, queue previews single-line. Typed tooltips distinguish pending activation from historical invocation. `MessageParts` shares chip presentation with `ComposerChipNode`. Keep the 52rem column, additive 8px composer insets, existing palette/type/spacing and Model/Reasoning control. Behavior and canonical identity remain owned by docs/13 and the backend specification.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
 
@@ -66,3 +69,7 @@ BOUNDED REVIEW: October 9, 2026 inspection confirms the current Background Work 
 ## Heading metadata sync (2026-10-10)
 
 Background Work initial Run status and Automations status follow the task title in a left-aligned wrapping row with an 8px compact gap. Background task titles use their natural width and wrap without growing to push status away. See [local verification](../../docs/reports/heading-metadata-layout-verification.md): live Admin checks at 1440/768/767/390px; chat drawer component coverage only. This sync adds no runtime run or hosted acceptance.
+
+## Composer design synchronization (2026-10-11)
+
+The presentation guide, schema-v2 preview sidecar and this brief use the current working-tree composer source. See [composer verification](../../docs/reports/composer-mention-polish-verification.md) for the existing 28 focused unit passes, 21 distinct browser scenarios across the final run and scoped rerun, runtime captures and limitations. This documentation refresh does not repeat application or hosted CI verification.

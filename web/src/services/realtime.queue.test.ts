@@ -73,11 +73,12 @@ describe("Codex-style pending send queue", () => {
     await sendDraft(); expect(invoke).toHaveBeenCalledWith("SendText",expect.objectContaining({payload:{text:"",attachmentIds:["att1"],behavior:"queue"}}));
   });
 
-  it("does not send a Skill-only turn", async () => {
-    const invoke = vi.fn(); hooks.setConnection({invoke,send:vi.fn()} as never);
+  it("sends a Skill-only turn with its canonical structured identity", async () => {
+    const invoke = vi.fn().mockResolvedValue({accepted:true}); hooks.setConnection({invoke,send:vi.fn()} as never);
     const parts: MessagePart[] = [{kind:"invocation",invocationKind:"skill",skillKey:"definition:review"}];
     useSessionStore.setState({...emptySession(),connection:"ready",sessionId:"s1",attachmentId:"a1",draft:messageText(parts),draftParts:parts});
-    await sendDraft(); expect(invoke).not.toHaveBeenCalled(); expect(useSessionStore.getState().draftParts).toEqual(parts);
+    await sendDraft(); expect(invoke).toHaveBeenCalledWith("SendText", expect.objectContaining({payload: expect.objectContaining({text:messageText(parts),parts})}));
+    expect(useSessionStore.getState().draftParts).toBeNull();
   });
 
   it("queues locally during a live response without SendText or history entries", async () => {
