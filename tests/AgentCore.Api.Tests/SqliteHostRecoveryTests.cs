@@ -777,6 +777,8 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
                 services.Remove(store);
             }
 
+            services.RemoveAll<IEmailStore>();
+            services.AddSingleton<IEmailStore, SqliteEmailStore>();
             services.AddSingleton<SqliteCredentialStore>();
             services.AddSingleton<ICredentialStore>(provider => provider.GetRequiredService<SqliteCredentialStore>());
             services.AddSingleton<IAgentCredentialBindingStore>(provider => provider.GetRequiredService<SqliteCredentialStore>());

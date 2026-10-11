@@ -1,3 +1,4 @@
+import { EmailAccountDialog } from "./EmailAccountDialog";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useState } from "react";
 import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, Modal, Select, Spin, Table, Tag, Typography, theme } from "antd";
@@ -6,7 +7,7 @@ import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollect
 import { confirmAction } from "../../app/confirmAction";
 import { adminHomePath, navigateToAppPath } from "../../app/appRoute";
 import { bindCredential, createCredential, deleteCredential, listCredentialBindings, listCredentials,
-  replaceCredentialValue, resetBrowserProfile, unbindCredential, updateCredential,
+  testEmailAccount, type EmailConnectionTest, replaceCredentialValue, resetBrowserProfile, unbindCredential, updateCredential,
   type CredentialBinding, type SystemCredential } from "../../services/adminApi";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminErrorNotice } from "./adminFailure";
@@ -48,11 +49,15 @@ function CredentialFields({ create }: { create: boolean }) {
 
 function matchesCredential(credential: SystemCredential, search: string) {
   return [credential.displayName, credential.kind, credential.status,
-    ...Object.entries(credential.metadata).flat(), ...credential.allowedOrigins]
+    credential.purpose ?? "General", credential.emailAccount?.emailAddress ?? "", credential.emailAccount?.preset ?? "", ...Object.entries(credential.metadata).flat(), ...credential.allowedOrigins]
     .join(" ").toLowerCase().includes(search.trim().toLowerCase());
 }
 
 function CredentialPolicySummary({ credential }: { credential: SystemCredential }) {
+  if (credential.emailAccount) return <Flex vertical style={{ minWidth: 0 }}>
+    <Typography.Text ellipsis title={credential.emailAccount.emailAddress}>{credential.emailAccount.emailAddress}</Typography.Text>
+    <Typography.Text type="secondary">{credential.emailAccount.preset} · IMAP/SMTP</Typography.Text>
+  </Flex>;
   const entries = Object.entries(credential.metadata);
   const more = [entries.length > 2 ? `${entries.length - 2} more metadata ${entries.length === 3 ? "field" : "fields"}` : "",
     credential.allowedOrigins.length > 1 ? `${credential.allowedOrigins.length - 1} more ${credential.allowedOrigins.length === 2 ? "origin" : "origins"}` : ""].filter(Boolean);
@@ -65,25 +70,50 @@ function CredentialPolicySummary({ credential }: { credential: SystemCredential 
 }
 
 function CredentialDetails({ credential }: { credential: SystemCredential }) {
-  const detailLayout = useAdminDetailLayout();
+  const detailLayout = useAdminDetailLayout(); const { token } = theme.useToken();
+  const [tests, setTests] = useState<Partial<Record<'imap' | 'smtp', EmailConnectionTest>>>({});
+  const [testing, setTesting] = useState<'imap' | 'smtp'>(); const [testError, setTestError] = useState<AdminFailureNotice>();
+  useEffect(() => { setTests({}); setTestError(undefined); }, [credential.revision]);
+  async function test(protocol: 'imap' | 'smtp') {
+    setTesting(protocol); setTestError(undefined);
+    try { const result = await testEmailAccount(credential, protocol); setTests(t => ({ ...t, [protocol]: result })); }
+    catch (e) { setTestError(describeAdminError(e, 'Connection test failed. Refresh the account and retry.')); }
+    finally { setTesting(undefined); }
+  }
   return <div role="region" aria-label={`Details for ${credential.displayName}`} style={{ whiteSpace: "normal" }}>
     <Descriptions bordered column={1} size="small" {...detailLayout} items={[
-      { key: "kind", label: "Kind", children: credential.kind },
+      { key: "kind", label: "Kind / purpose", children: `${credential.kind} · ${credential.purpose === 'EmailAccount' ? 'Email account' : 'General'}` },
+      ...(credential.emailAccount ? [
+        { key: 'sender', label: 'Sender', children: credential.emailAccount.emailAddress },
+        { key: 'incoming', label: 'Incoming', children: `${credential.emailAccount.imapEndpoint.host}:${credential.emailAccount.imapEndpoint.port} · ${credential.emailAccount.imapEndpoint.tlsMode}` },
+        { key: 'outgoing', label: 'Outgoing', children: `${credential.emailAccount.smtpEndpoint.host}:${credential.emailAccount.smtpEndpoint.port} · ${credential.emailAccount.smtpEndpoint.tlsMode}` }
+      ] : []),
       { key: "metadata", label: "Metadata", children: Object.keys(credential.metadata).length
         ? <Flex vertical>{Object.entries(credential.metadata).map(([key, value]) => <Typography.Text key={key}>{key}: {value}</Typography.Text>)}</Flex> : "None" },
       { key: "origins", label: "Allowed origins", children: credential.allowedOrigins.length
         ? <Flex vertical>{credential.allowedOrigins.map(origin => <Typography.Text key={origin}>{origin}</Typography.Text>)}</Flex> : "None configured" }
     ]} />
+    {credential.emailAccount && <Flex vertical gap={token.paddingXS} style={{ paddingBlockStart: token.paddingSM }}>
+      <Typography.Text type="secondary">Connection tests authenticate without sending mail. A configured account has not been tested.</Typography.Text>
+      {testError && <Alert type="error" showIcon title={<AdminErrorNotice message={testError.message} diagnosticId={testError.diagnosticId} showDetailsLabel />} />}
+      {(['imap', 'smtp'] as const).map(protocol => <Flex key={protocol} align="center" wrap gap={token.paddingXS}>
+        <Button disabled={!!testing || credential.status !== 'Active'} loading={testing === protocol} onClick={() => void test(protocol)}>Test {protocol === 'imap' ? 'incoming' : 'outgoing'}</Button>
+        <Typography.Text type={tests[protocol]?.status === 'failed' ? 'danger' : 'secondary'}>{testing === protocol ? 'Testing…' : tests[protocol]?.status === 'connected' ? 'Connected' : tests[protocol]?.status === 'synthetic' ? 'Synthetic — no server connection' : tests[protocol]?.status === 'failed' ? 'Failed — Retry' : tests[protocol]?.status === 'disabled' ? 'Disabled by host' : 'Not tested'}</Typography.Text>
+        {tests[protocol] && <time dateTime={tests[protocol]!.observedAtUtc}>{new Date(tests[protocol]!.observedAtUtc).toLocaleString()}</time>}
+        {tests[protocol]?.error && <Typography.Text type="danger">{tests[protocol]!.error}</Typography.Text>}
+      </Flex>)}
+    </Flex>}
   </div>;
 }
-function ProtectedValueField() {
-  return <Form.Item name="protectedValue" label="Protected value" rules={[{ required: true }]} extra="Protected values cannot be read back. Replace the value if it changes.">
+function ProtectedValueField({ email = false }: { email?: boolean }) {
+  return <Form.Item name="protectedValue" label={email ? "App Password" : "Protected value"} rules={[{ required: true }]} extra="Protected values cannot be read back. Replace the value if it changes.">
     <Input.Password visibilityToggle={false} autoComplete="new-password" spellCheck={false} />
   </Form.Item>;
 }
 
 export function CredentialsSection() {
   const { token } = theme.useToken(); const { modal, message } = App.useApp();
+  const [emailDialog, setEmailDialog] = useState<{ account?: SystemCredential }>();
   const [items, setItems] = useState<SystemCredential[]>([]); const [loading, setLoading] = useState(true); const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<AdminFailureNotice>(); const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<{ kind: "create" | "edit" | "replace"; item?: SystemCredential }>();
@@ -121,7 +151,7 @@ export function CredentialsSection() {
   }
   return <AgentConfigurationPanel title="System credentials" label="System credentials"
     description="Reusable protected values. Agents receive access through explicit bindings; bindings do not grant tools."
-    extra={<Button type="primary" disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button>} bodyGap="default">
+    extra={<Flex gap={token.paddingXS} wrap><Button disabled={busy || loading || !loaded} onClick={() => setEmailDialog({})}>Add email account</Button><Button type="primary" disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button></Flex>} bodyGap="default">
     {error && <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void load()}>Retry</Button>} />}
     {loading ? <Spin aria-label="Loading credentials" /> : loaded && <>
       <AdminCollectionToolbar label="credentials" value={search} onChange={setSearch} />
@@ -130,24 +160,25 @@ export function CredentialsSection() {
         dataSource={items.filter(c => matchesCredential(c, search))}
         expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, c) => setExpanded(open ? [c.credentialId] : []), expandedRowRender: c => <CredentialDetails credential={c} /> }}
         columns={[
-          { title: "Credential", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a, b) => a.displayName.localeCompare(b.displayName), render: (name, c) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={name}>{name}</Typography.Text><Typography.Text type="secondary">{c.kind}</Typography.Text></Flex> },
+          { title: "Credential", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a, b) => a.displayName.localeCompare(b.displayName), render: (name, c) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={name}>{name}</Typography.Text><Typography.Text type="secondary">{c.kind} · {c.purpose === "EmailAccount" ? "Email account" : "General"}</Typography.Text></Flex> },
           { title: "Status", dataIndex: "status", width: 100, filters: [{ text: "Active", value: "Active" }, { text: "Disabled", value: "Disabled" }], onFilter: (status, c) => c.status === status, render: s => <Tag>{s}</Tag> },
           { title: "Metadata & origins", width: 280, render: (_, c) => <CredentialPolicySummary credential={c} /> },
           { title: "Bindings", dataIndex: "bindingCount", width: 80, align: "right" },
           { title: "Updated", width: 180, render: (_, c) => <time dateTime={c.updatedAtUtc}>{new Date(c.updatedAtUtc).toLocaleString()}</time> },
           { title: "Actions", width: 300, render: (_, c) => <Flex className="admin-table-actions" gap={token.paddingXS}>
-            <Button disabled={busy} onClick={() => open("edit", c)}>Edit</Button><Button disabled={busy} onClick={() => open("replace", c)}>Replace value</Button>
+            <Button disabled={busy} onClick={() => c.purpose === "EmailAccount" ? setEmailDialog({ account: c }) : open("edit", c)}>Edit</Button><Button disabled={busy} onClick={() => open("replace", c)}>Replace value</Button>
             <Button danger disabled={busy || c.bindingCount > 0} onClick={() => confirmAction(modal, { title: `Delete ${c.displayName}?`, content: "This permanently removes the credential. Unbind all agents first.", okText: "Delete credential", danger: true, onOk: () => remove(c) })}>Delete</Button>
           </Flex> }
         ]} />
     </>}
+    {emailDialog && <EmailAccountDialog open account={emailDialog.account} onClose={() => setEmailDialog(undefined)} onSaved={load} />}
     <Modal className="admin-credential-dialog" centered width={dialog?.kind === "replace" ? 520 : 640} open={!!dialog} title={dialog?.kind === "create" ? "Create credential" : dialog?.kind === "replace" ? "Replace protected value" : "Edit credential"}
       onCancel={close} onOk={() => void save().catch(() => {})} confirmLoading={busy} closable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }} okText="Save credential" okButtonProps={{ disabled: busy, "aria-label": "Save credential" }} mask={{ closable: false }} forceRender>
       <Flex vertical gap={token.padding}>
       {dialog?.kind === "replace" && <Flex align="center" gap={token.paddingXS} wrap><Typography.Text strong style={{ overflowWrap: "anywhere" }}>{dialog.item?.displayName}</Typography.Text><Tag>{dialog.item?.kind}</Tag></Flex>}
       {dialogError && <Alert type="error" showIcon title={<AdminErrorNotice message={dialogError.message} diagnosticId={dialogError.diagnosticId} showDetailsLabel />} />}
       <Form form={form} className="admin-config-form" layout="vertical" disabled={busy} autoComplete="off" initialValues={{ kind: "Password", status: "Active", metadata: [], origins: "" }}>
-        {dialog?.kind === "replace" ? <ProtectedValueField /> : <CredentialFields create={dialog?.kind === "create"} />}
+        {dialog?.kind === "replace" ? <ProtectedValueField email={dialog.item?.purpose === "EmailAccount"} /> : <CredentialFields create={dialog?.kind === "create"} />}
       </Form></Flex>
     </Modal></AgentConfigurationPanel>;
 }
@@ -198,7 +229,7 @@ export function InstanceCredentialsSection({ instanceId, revision, archived, onU
       <Flex vertical gap={token.padding}>
       {bindingError && <Alert type="error" showIcon title={<AdminErrorNotice message={bindingError.message} diagnosticId={bindingError.diagnosticId} showDetailsLabel />} />}
       {available.length === 0 && <Alert type="info" showIcon title="No unbound credentials available" description="Manage system credentials to create another credential or review existing bindings." />}
-      <Form form={form} className="admin-config-form" layout="vertical" disabled={busy || available.length === 0} preserve={false}><Form.Item name="credentialId" label="System credential" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={available.map(c => ({ value: c.credentialId, label: `${c.displayName} · ${c.kind} · ${c.status}` }))} /></Form.Item>
+      <Form form={form} className="admin-config-form" layout="vertical" disabled={busy || available.length === 0} preserve={false}><Form.Item name="credentialId" label="System credential" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={available.map(c => ({ value: c.credentialId, label: `${c.displayName} · ${c.emailAccount?.emailAddress ?? c.kind} · ${c.status}` }))} /></Form.Item>
         <Form.Item name="reference" label="Reference" rules={[{ required: true, pattern: /^[a-zA-Z0-9][a-zA-Z0-9-]{0,63}$/, message: "Use 1–64 letters, digits or hyphens." }]} extra="Stable agent alias. Changing it requires unbinding and binding again."><Input autoComplete="off" /></Form.Item></Form>
       </Flex></Modal>
   </Flex>;

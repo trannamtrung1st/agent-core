@@ -1210,6 +1210,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case BackgroundStartReceived backgroundStart:
                     await HandleBackgroundStartAsync(backgroundStart, cancellationToken).ConfigureAwait(false);
                     break;
+                case EmailSelectionDecisionReceived emailSelection:
+                    await HandleEmailSelectionDecisionAsync(emailSelection, cancellationToken).ConfigureAwait(false);
+                    break;
                 case CapabilityLoadRequested capabilityLoad:
                     await HandleCapabilityLoadAsync(capabilityLoad, cancellationToken).ConfigureAwait(false);
                     break;
@@ -1253,6 +1256,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 receipt.Admitted.TrySetResult(false);
             }
 
+            if (input is EmailSelectionDecisionReceived emailSelection) emailSelection.Completed.TrySetResult(false);
             if (input is WorkspaceCwdRequested workspaceCwd) workspaceCwd.Completed.TrySetResult(null);
             if (input is CapabilityLoadRequested capabilityLoad) capabilityLoad.Completed.TrySetResult(new(SkillLoadAdmission.Error("stale", "Capability load is no longer owned by this execution."), null, "load_stale"));
             if (input is SkillLoadRequested skillLoad)
@@ -1332,6 +1336,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         switch (input)
         {
+            case EmailSelectionDecisionReceived emailSelection:
+                emailSelection.Completed.TrySetResult(false);
+                break;
             case AcceptedConversationWorkQueryReceived query:
                 query.Result.TrySetResult(value);
                 break;
@@ -3804,6 +3811,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         ToolCallId: call.Id,
                         Name: call.Name));
                     await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                    if (IsInitialBackgroundRun && call.Name == ToolCatalog.EmailRequestAccount
+                        && executionResult.Text.Contains("\"needs_attention\"", StringComparison.Ordinal))
+                    {
+                        await RequestRunOutcomeAsync(cause, request.ResponseId, AgentRunOutcomeKind.NeedsAttention,
+                            "Email account access needs owner action. Configure Connections → Credentials (/admin/connections/credentials), then start new work.", generateToken).ConfigureAwait(false);
+                        return;
+                    }
                     if (effectFenced)
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                     if (call.Name.StartsWith("browser.", StringComparison.Ordinal) && BrowserDialogPending(executionResult.Text)

@@ -82,7 +82,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetService<IPublicWebFetcher>(),
             provider.GetService<IEmailProvider>(),
             provider.GetService<IBrowser>(),
-            provider.GetRequiredService<BrowserOptions>().Enabled));
+            provider.GetRequiredService<BrowserOptions>().Enabled, provider.GetService<IEmailProviderFactory>()));
         services.TryAddSingleton<PromptContextBuilder>(provider =>
             new PromptContextBuilder(
                 provider.GetRequiredService<IToolConfigurationGate>(),
@@ -160,6 +160,7 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(),
                     provider.GetRequiredService<IIdGenerator>(),
                     provider.GetRequiredService<TimeProvider>()));
+            services.AddSingleton<IEmailStore, SqliteEmailStore>();
             services.AddSingleton<SqliteCredentialStore>();
             services.AddSingleton<ICredentialStore>(p => p.GetRequiredService<SqliteCredentialStore>());
             services.AddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<SqliteCredentialStore>());
@@ -195,7 +196,8 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<ITriggerStore>(provider => provider.GetRequiredService<InMemoryTriggerStore>());
             services.TryAddSingleton<IAgentRunStore>(provider => new InMemoryAgentRunStore(
                 provider.GetRequiredService<InMemoryMemoryStore>(),
-                provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<InMemoryTriggerStore>(), provider.GetRequiredService<InMemoryAgentInstanceStore>()));
+                provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<InMemoryTriggerStore>(), provider.GetRequiredService<InMemoryAgentInstanceStore>(), provider.GetRequiredService<IEmailStore>()));
+            services.TryAddSingleton<IEmailStore, InMemoryEmailStore>();
             services.TryAddSingleton<InMemoryCredentialStore>();
             services.TryAddSingleton<ICredentialStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
             services.TryAddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
@@ -420,7 +422,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AgentInstanceSkillService>(),
             provider.GetRequiredService<ICoreEventStore>(),
             provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),
-            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>()));
+            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

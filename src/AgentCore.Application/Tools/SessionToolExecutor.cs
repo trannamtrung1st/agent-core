@@ -39,7 +39,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
     AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null)
+    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -482,16 +482,18 @@ public sealed partial class SessionToolExecutor(
                     definition, sessionId, call.Name, args, admission, remainingOutputBytes, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.DemoSensitiveAction => TextResult(
                     ExecuteDemoSensitiveAction(sessionId, args, approvalGrant)),
+                ToolCatalog.EmailRequestAccount => TextResult(await RequestEmailAccountAsync(definition, sessionId, args, admission, cancellationToken)),
+                ToolCatalog.EmailAccounts => FitResult(remainingOutputBytes, await ListEmailAccountsAsync(admission, cancellationToken)),
                 ToolCatalog.EmailSearch => FitResult(
                     remainingOutputBytes,
-                    await SearchEmailAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                    await SearchEmailAsync(args, remainingOutputBytes, cancellationToken, admission).ConfigureAwait(false)),
                 ToolCatalog.EmailRead => FitResult(
                     remainingOutputBytes,
-                    await ReadEmailAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                    await ReadEmailAsync(args, remainingOutputBytes, cancellationToken, admission).ConfigureAwait(false)),
                 ToolCatalog.EmailCreateDraft => TextResult(
-                    await CreateEmailDraftAsync(args, cancellationToken).ConfigureAwait(false)),
+                    await CreateEmailDraftAsync(args, cancellationToken, admission, sessionId).ConfigureAwait(false)),
                 ToolCatalog.EmailSend => TextResult(
-                    await SendEmailDraftAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),
+                    await SendEmailDraftAsync(args, approvalGrant, cancellationToken, admission, sessionId).ConfigureAwait(false)),
                 ToolCatalog.AutomationCreate or ToolCatalog.AutomationList
                     or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationDelete => await TriggerScheduleCommands.ExecuteAsync(
                         definition,
@@ -1273,11 +1275,50 @@ public sealed partial class SessionToolExecutor(
         }
     }
 
+    internal IEmailStore? EmailStore => emailStore;
+    internal AgentCore.Application.Credentials.CredentialService? EmailCredentials => credentials;
+    private async Task<string> RequestEmailAccountAsync(AgentDefinition definition, Guid sessionId, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
+    {
+        if (admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, AgentInstanceId: { } owner, AgentRunId: { } runId }
+            || emailStore is null || emailAccounts is null || !emailAccounts.IsEnabled)
+            return JsonSerializer.Serialize(new { error = "needs_attention", destination = "/admin/connections/credentials", message = "Configure an account and Instance binding before starting a new user turn. Unattended work cannot request account selection." });
+        if (emailRuns is not null)
+        {
+            var source = await emailRuns.GetAsync(new(owner, LocalUserProfile.Id), runId, ct);
+            if (source is null || source.SessionId != sessionId
+                || source.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
+                || !AgentCore.Application.Execution.AgentRunToolCallCheckpoint.TryReadState(source.Checkpoint, out var messages, out var uncertain, out var blocked)
+                || uncertain || blocked is not null || messages is null
+                || messages.Any(m => m.Role == ModelRole.Tool && (!ToolRegistry.TryGet(m.Name ?? "", out var descriptor) || descriptor.Effect != ToolEffect.ReadOnly)))
+                return JsonSerializer.Serialize(new { error = "needs_attention", destination = "/admin/connections/credentials", message = "Prior effects prevent safe automatic continuation. Configure account access in Admin, then send a new user turn." });
+        }
+        var target = TryString(args, "target", out var requested) ? requested : ToolCatalog.EmailSearch;
+        if (target is not (ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft or ToolCatalog.EmailSend)
+            || !AgentCore.Application.Agents.RolePermissions.AllowsTool(definition, target)) return Error("forbidden", "Requested email operation is not authorized.");
+        await emailStore.CreateSelectionAsync(new(runId, owner, sessionId, runId, target, emailAccounts.UtcNow.AddMinutes(10)), ct);
+        return JsonSerializer.Serialize(new { status = "account_selection_requested", requestId = runId, message = "Choose an email account in the trusted owner UI, then continue in a fresh Run. Never enter a password in Chat." });
+    }
+    private static ToolExecutionAdmission RequireMailAdmission(ToolExecutionAdmission? admission) => admission
+        ?? throw AgentCoreErrors.Forbidden("Email requires an owned Run admission.");
+    private static string? AccountRef(JsonElement args)
+    {
+        if (!args.TryGetProperty("accountRef", out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        if (value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString()))
+            throw AgentCoreErrors.Validation("accountRef must be a bound account alias.");
+        return AgentCore.Domain.Credentials.CredentialRules.Reference(value.GetString()!);
+    }
+    private async Task<string> ListEmailAccountsAsync(ToolExecutionAdmission? admission, CancellationToken ct)
+    {
+        if (emailAccounts is null || !emailAccounts.IsEnabled) return Error("provider_disabled", "Email capability is disabled.");
+        var accounts = await emailAccounts.AccountsAsync(RequireMailAdmission(admission), ct);
+        return JsonSerializer.Serialize(new { accounts = accounts.Select(c => new { accountRef = c.AccountRef, displayName = c.DisplayName, emailAddress = c.EmailAddress, provider = c.Provider }), status = accounts.Count == 0 ? "no_eligible_account" : "available" });
+    }
+
     public async Task<EmailSendApprovalPrepareResult> PrepareEmailSendApprovalAsync(
         JsonElement args,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, ToolExecutionAdmission? admission = null, Guid sessionId = default)
     {
-        if (emailProvider is null || !emailProvider.IsAvailable)
+        if (emailAccounts is null ? emailProvider is null || !emailProvider.IsAvailable : !emailAccounts.IsEnabled)
         {
             return new EmailSendApprovalPrepareResult(null, Error("unavailable", "Email is not configured."));
         }
@@ -1287,7 +1328,10 @@ public sealed partial class SessionToolExecutor(
             return new EmailSendApprovalPrepareResult(null, Error("invalid", "draftId is required."));
         }
 
-        var draft = await emailProvider.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
+        EmailDraftSnapshot? draft;
+        try { draft = emailAccounts is null ? await emailProvider!.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false)
+            : await emailAccounts.DraftAsync(sessionId, RequireMailAdmission(admission), draftId, AccountRef(args), cancellationToken); }
+        catch (AgentCoreException ex) { return new(null, Error(ex.Code, ex.Message)); }
         if (draft is null)
         {
             return new EmailSendApprovalPrepareResult(null, Error("notFound", "Draft was not found."));
@@ -1295,15 +1339,21 @@ public sealed partial class SessionToolExecutor(
 
         var normalized = EmailDraftNormalizer.Normalize(draft);
         var actionHash = EmailDraftNormalizer.ComputeSendActionHash(normalized);
-        var summary = ToolApprovalPreview.BoundSummary($"Send email to {FormatRecipientPreview(normalized.To)}");
+        var summary = ToolApprovalPreview.BoundSummary($"Send email to {string.Join(", ", normalized.To)}");
         var details = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["To"] = ToolApprovalPreview.BoundDetailValue(FormatRecipientPreview(normalized.To)),
-            ["Cc"] = ToolApprovalPreview.BoundDetailValue(FormatRecipientPreview(normalized.Cc)),
-            ["Bcc"] = ToolApprovalPreview.BoundDetailValue(FormatRecipientPreview(normalized.Bcc)),
-            ["Subject"] = ToolApprovalPreview.BoundDetailValue(TruncatePreview(normalized.Subject, EmailToolLimits.MaxPreviewSubjectLength)),
-            ["Body"] = ToolApprovalPreview.BoundDetailValue(normalized.Body)
+            ["To"] = string.Join(", ", normalized.To),
+            ["Cc"] = string.Join(", ", normalized.Cc),
+            ["Bcc"] = string.Join(", ", normalized.Bcc),
+            ["Subject"] = normalized.Subject,
+            ["Body"] = normalized.Body
         };
+        if (normalized.AccountId is not null)
+        {
+            details["Account"] = $"{normalized.AccountRef} · {normalized.AccountId:D}";
+            details["From"] = normalized.Sender ?? "";
+            details["Revisions"] = $"Account {normalized.AccountRevision}; draft {normalized.Revision}; binding {normalized.BindingRevision}";
+        }
         return new EmailSendApprovalPrepareResult(
             new EmailSendApprovalPreparation(actionHash, summary, details),
             null);
@@ -1312,9 +1362,9 @@ public sealed partial class SessionToolExecutor(
     private async Task<string> SearchEmailAsync(
         JsonElement args,
         int remainingOutputBytes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, ToolExecutionAdmission? admission = null)
     {
-        if (emailProvider is null || !emailProvider.IsAvailable)
+        if (emailAccounts is null ? emailProvider is null || !emailProvider.IsAvailable : !emailAccounts.IsEnabled)
         {
             return Error("unavailable", "Email is not configured.");
         }
@@ -1340,7 +1390,9 @@ public sealed partial class SessionToolExecutor(
 
         limit = Math.Clamp(limit, 1, EmailToolLimits.MaxSearchLimit);
         var started = Stopwatch.GetTimestamp();
-        var result = await emailProvider
+        var scopedAccount = emailAccounts is null ? null : await emailAccounts.ResolveAsync(RequireMailAdmission(admission), AccountRef(args), cancellationToken);
+        var selectedProvider = scopedAccount is null ? emailProvider! : emailAccounts!.Provider(scopedAccount);
+        var result = await selectedProvider
             .SearchAsync(new EmailSearchRequest(query, limit), cancellationToken)
             .ConfigureAwait(false);
         RuntimeTelemetry.Record("email.search", RuntimeTelemetry.ElapsedMs(started));
@@ -1355,15 +1407,15 @@ public sealed partial class SessionToolExecutor(
         }).ToArray();
         return ToolJsonResults.FitToBudget(
             remainingOutputBytes,
-            JsonSerializer.Serialize(new { query, results = items, truncated = result.Truncated }));
+            JsonSerializer.Serialize(new { accountRef = scopedAccount?.AccountRef, query, results = items, truncated = result.Truncated }));
     }
 
     private async Task<string> ReadEmailAsync(
         JsonElement args,
         int remainingOutputBytes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, ToolExecutionAdmission? admission = null)
     {
-        if (emailProvider is null || !emailProvider.IsAvailable)
+        if (emailAccounts is null ? emailProvider is null || !emailProvider.IsAvailable : !emailAccounts.IsEnabled)
         {
             return Error("unavailable", "Email is not configured.");
         }
@@ -1374,7 +1426,9 @@ public sealed partial class SessionToolExecutor(
         }
 
         var started = Stopwatch.GetTimestamp();
-        var message = await emailProvider
+        var scopedAccount = emailAccounts is null ? null : await emailAccounts.ResolveAsync(RequireMailAdmission(admission), AccountRef(args), cancellationToken);
+        var selectedProvider = scopedAccount is null ? emailProvider! : emailAccounts!.Provider(scopedAccount);
+        var message = await selectedProvider
             .ReadAsync(new EmailReadRequest(messageId), cancellationToken)
             .ConfigureAwait(false);
         RuntimeTelemetry.Record("email.read", RuntimeTelemetry.ElapsedMs(started));
@@ -1383,6 +1437,8 @@ public sealed partial class SessionToolExecutor(
             message.Body,
             (body, truncated) => JsonSerializer.Serialize(new
             {
+                accountRef = scopedAccount?.AccountRef,
+                trust = "untrusted_email_content",
                 messageId = message.MessageId,
                 threadId = message.ThreadId,
                 from = message.From,
@@ -1402,9 +1458,9 @@ public sealed partial class SessionToolExecutor(
             }));
     }
 
-    private async Task<string> CreateEmailDraftAsync(JsonElement args, CancellationToken cancellationToken)
+    private async Task<string> CreateEmailDraftAsync(JsonElement args, CancellationToken cancellationToken, ToolExecutionAdmission? admission = null, Guid sessionId = default)
     {
-        if (emailProvider is null || !emailProvider.IsAvailable)
+        if (emailAccounts is null ? emailProvider is null || !emailProvider.IsAvailable : !emailAccounts.IsEnabled)
         {
             return Error("unavailable", "Email is not configured.");
         }
@@ -1447,12 +1503,16 @@ public sealed partial class SessionToolExecutor(
         }
 
         var started = Stopwatch.GetTimestamp();
-        var created = await emailProvider
-            .CreateDraftAsync(new EmailCreateDraftRequest(to, cc, bcc, subject, body), cancellationToken)
-            .ConfigureAwait(false);
+        var created = emailAccounts is null
+            ? await emailProvider!.CreateDraftAsync(new EmailCreateDraftRequest(to, cc, bcc, subject, body), cancellationToken).ConfigureAwait(false)
+            : new EmailDraftResult(await emailAccounts.CreateDraftAsync(sessionId, RequireMailAdmission(admission), AccountRef(args), new(to, cc, bcc, subject, body), cancellationToken));
         RuntimeTelemetry.Record("email.create_draft", RuntimeTelemetry.ElapsedMs(started));
         return JsonSerializer.Serialize(new
         {
+            storage = emailAccounts is null ? "provider" : "core",
+            accountRef = created.Draft.AccountRef,
+            sender = created.Draft.Sender,
+            body = created.Draft.Body,
             draftId = created.Draft.DraftId,
             to = created.Draft.To,
             cc = created.Draft.Cc,
@@ -1464,14 +1524,14 @@ public sealed partial class SessionToolExecutor(
     private async Task<string> SendEmailDraftAsync(
         JsonElement args,
         ToolApprovalGrant? approvalGrant,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, ToolExecutionAdmission? admission = null, Guid sessionId = default)
     {
         if (approvalGrant is null)
         {
             return Error("approval_required", "Tool execution requires explicit approval.");
         }
 
-        if (emailProvider is null || !emailProvider.IsAvailable)
+        if (emailAccounts is null ? emailProvider is null || !emailProvider.IsAvailable : !emailAccounts.IsEnabled)
         {
             return Error("unavailable", "Email is not configured.");
         }
@@ -1481,7 +1541,12 @@ public sealed partial class SessionToolExecutor(
             return Error("invalid", "draftId is required.");
         }
 
-        var draft = await emailProvider.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
+        if (emailAccounts is not null)
+        {
+            var receipt = await emailAccounts.SendAsync(sessionId, RequireMailAdmission(admission), draftId, AccountRef(args), approvalGrant, cancellationToken);
+            return JsonSerializer.Serialize(new { outcome = receipt.Outcome.ToString().ToLowerInvariant(), providerMessageId = receipt.ProviderMessageId, error = receipt.ErrorCode, message = receipt.ErrorMessage });
+        }
+        var draft = await emailProvider!.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
         if (draft is null)
         {
             return Error("notFound", "Draft was not found.");

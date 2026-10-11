@@ -26,14 +26,17 @@ public static class AgentRunAdmissionFactory
 
     public static AgentRun ForConfigurationContinuation(Guid activationId, Guid runId, Guid responseId,
         SessionSnapshot snapshot, AgentRun source, ConfigurationPendingTask task, DateTimeOffset now,
-        IReadOnlyList<EffectiveSkill> catalog, EffectiveExecutionBudget budget, AgentRunConfiguration configuration)
+        IReadOnlyList<EffectiveSkill> catalog, EffectiveExecutionBudget budget, AgentRunConfiguration configuration, bool emailContinuation = false)
     {
         var text = $"Continue verified configuration task: {task.Goal}\nPending task: {source.AgentRunId:D}. "
             + $"The configuration change committed at Instance revision {task.InstanceRevision}. This is one bounded fresh Run. "
             + $"Use {task.Target} to finish only this diagnosed task. Do not repeat configuration changes or prior effects. Any write requires a new exact owner approval.";
+        if (emailContinuation) text = $"Continue the owner's email task after confirmed account access: {task.Goal}\n"
+            + $"Source Run: {source.AgentRunId:D}. This fresh Run uses newly admitted bindings. Use {task.Target} for this task only. "
+            + "Never repeat prior effects or configuration changes. Every write needs a new exact owner approval.";
         var activation = new Activation(activationId, snapshot.SessionId, ActivationKind.ConfigurationContinuation,
             [], source.ActivationId, null, snapshot.SessionId, source.AgentRunId,
-            $"configuration-continuation:{source.AgentRunId:D}", now, JsonSerializer.Serialize(new { TriggerKind = TriggerKind.UserTurn, Text = text, EnvironmentKind = "configuration", ContinuationTarget = task.Target }));
+            $"configuration-continuation:{source.AgentRunId:D}", now, JsonSerializer.Serialize(new { TriggerKind = TriggerKind.UserTurn, Text = text, EnvironmentKind = emailContinuation ? "email-account" : "configuration", ContinuationTarget = task.Target }));
         var selection = snapshot.ModelSelection ?? throw AgentCoreErrors.Validation("Continuation requires a resolved model.");
         return AgentRun.Create(runId, source.Owner, new(activation, configuration.Definition.Id, configuration.Definition.Version,
             snapshot.PinnedPersona!, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration),

@@ -141,7 +141,7 @@ curl -sS http://127.0.0.1:5080/health
 Real/hosted Compose is the same `agent-core` service and image with `docker-compose.real.yml` overlaid. It does not replace the default file: `docker compose up` stays Synthetic and key-free so CI and local smoke need no credentials. Use two `-f` flags so Compose does not also load an unrelated override file:
 
 ```text
-# once: cp .env.example .env  && edit OPENROUTER_API_KEY (optional: BRAVE_SEARCH_API_KEY, GMAIL_* for Real web/email)
+# once: cp .env.example .env  && edit OPENROUTER_API_KEY (optional: BRAVE_SEARCH_API_KEY for Real web; Email accounts use Admin)
 docker compose -f docker-compose.yml -f docker-compose.real.yml up --build
 curl -sS http://127.0.0.1:5080/health
 ```
@@ -492,3 +492,11 @@ For dynamic-page failures, inspect the existing screenshot receipts' `coordinate
 Management policy and binding writes reuse append-only Admin history with trusted actor, target, owner revision, operation/outcome, policy revision and changed fields. Credential audit contains safe IDs only; neither protected value nor provider key enters approval, tool receipt, transcript or audit. Diagnostic references preserve existing private-server exception policy.
 
 Run `dotnet test tests/AgentCore.Api.Tests --filter 'FullyQualifiedName~SelfManagement'` for focused credential-free verification. The real-model fixture requires `AGENTCORE_LIVE_SELF_MANAGEMENT=1`, a protected development key, and explicit external-provider authorization; default suites skip it. Never print keys or copy them into test commands/reports. Disposable Synthetic hosts/databases can be isolated under `/private/tmp`; production data reset is neither needed nor authorized. See the [successor report](reports/agent-self-management-verification.md) for browser commands, screenshots and unresolved acceptance.
+
+## Email account setup and recovery
+
+Create the dedicated Gmail account through Connections → Credentials → Add email account. Enable two-step verification and generate an App Password where Google permits it; managed/Advanced Protection accounts may prohibit this ([Google guidance](https://support.google.com/accounts/answer/185833)). Enter the secret only in the masked Admin field. Gmail uses IMAP 993 implicit TLS and SMTP 465 implicit TLS (typed API also admits 587 required STARTTLS). Test incoming/outgoing separately; authentication success is not delivery evidence. Bind under Instance → Credentials or confirm Chat's owner chooser. Never paste passwords into Chat.
+
+For Custom accounts, configure the operator host:port allowlist and required TLS. Private/loopback/link-local/metadata destinations and invalid certificates are rejected. Set `Email__SmtpEnabled=true` only after verification when intentionally enabling external sending; the Real Compose overlay maps `AGENTCORE_EMAIL_SMTP_ENABLED` (default false). Legacy `GMAIL_*` host configuration no longer enables production email; the REST adapter remains testing-only. IMAP/SMTP requires no Gmail OAuth configuration.
+
+Send an exact approved Core draft to a disposable intended recipient. Sent means SMTP accepted the message, not proof of final delivery. Inspect immutable send receipts via the owner Admin receipt route. An unfinished claim after restart is Indeterminate and never auto-retried. Check the mailbox before intentionally creating a new approved draft. Rotation/disable/unbind prevents stale operations while retaining receipts. Restore SQLite plus protection keys together. Transport errors and observations never log/reveal passwords, raw SMTP responses or authentication challenges; keep protocol logging disabled.

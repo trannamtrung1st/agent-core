@@ -1263,6 +1263,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("ProtectionVersion")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("General");
+
                     b.Property<long>("Revision")
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
@@ -1277,6 +1283,94 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasKey("CredentialId");
 
                     b.ToTable("Credentials", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailAccountProfileRecord", b =>
+                {
+                    b.Property<string>("CredentialId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("CredentialId");
+
+                    b.ToTable("EmailAccountProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailAccountSelectionRecord", b =>
+                {
+                    b.Property<string>("RequestId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SelectionJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("RequestId");
+
+                    b.ToTable("EmailAccountSelections", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailDraftRecord", b =>
+                {
+                    b.Property<string>("DraftId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DraftJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("DraftId");
+
+                    b.ToTable("EmailDrafts", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailSendOperationRecord", b =>
+                {
+                    b.Property<string>("DraftId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActionHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ApprovalId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ClaimedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("DraftRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("DraftId");
+
+                    b.ToTable("EmailSendOperations", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EntryRecord", b =>
@@ -2193,6 +2287,24 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailAccountProfileRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.CredentialRecord", null)
+                        .WithOne("EmailAccount")
+                        .HasForeignKey("AgentCore.Infrastructure.Persistence.EmailAccountProfileRecord", "CredentialId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailSendOperationRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.EmailDraftRecord", null)
+                        .WithOne()
+                        .HasForeignKey("AgentCore.Infrastructure.Persistence.EmailSendOperationRecord", "DraftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EntryRecord", b =>
                 {
                     b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", "Session")
@@ -2236,6 +2348,11 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AutomationRecord", b =>
                 {
                     b.Navigation("Triggers");
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.CredentialRecord", b =>
+                {
+                    b.Navigation("EmailAccount");
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SessionRecord", b =>

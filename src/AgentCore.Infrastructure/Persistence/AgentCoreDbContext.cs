@@ -655,13 +655,26 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.SummaryJson).IsRequired();
             entity.HasIndex(row => new { row.TargetType, row.TargetId, row.OccurredAtUtc });
         });
+        modelBuilder.Entity<EmailAccountSelectionRecord>(entity => { entity.ToTable("EmailAccountSelections"); entity.HasKey(r => r.RequestId); });
+        modelBuilder.Entity<EmailDraftRecord>(entity => { entity.ToTable("EmailDrafts"); entity.HasKey(d => d.DraftId); });
+        modelBuilder.Entity<EmailSendOperationRecord>(entity =>
+        {
+            entity.ToTable("EmailSendOperations"); entity.HasKey(s => s.DraftId);
+            entity.HasOne<EmailDraftRecord>().WithOne().HasForeignKey<EmailSendOperationRecord>(s => s.DraftId).OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<CredentialRecord>(entity =>
         {
             entity.ToTable("Credentials"); entity.HasKey(c => c.CredentialId);
+            entity.Property(c => c.Purpose).HasDefaultValue("General");
             entity.Property(c => c.Revision).IsConcurrencyToken();
             entity.Property(c => c.DisplayName).HasMaxLength(120).IsRequired();
             entity.Property(c => c.MetadataJson).HasMaxLength(16384).IsRequired();
             entity.Property(c => c.ProtectedPayload).IsRequired();
+        });
+        modelBuilder.Entity<EmailAccountProfileRecord>(entity =>
+        {
+            entity.ToTable("EmailAccountProfiles"); entity.HasKey(c => c.CredentialId);
+            entity.HasOne<CredentialRecord>().WithOne(c => c.EmailAccount).HasForeignKey<EmailAccountProfileRecord>(c => c.CredentialId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<AgentCredentialBindingRecord>(entity =>
         {

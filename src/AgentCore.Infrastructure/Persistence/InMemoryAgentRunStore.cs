@@ -21,13 +21,15 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
     private readonly IDiagnosticIdSource diagnostics;
     private readonly InMemoryTriggerStore? triggers;
     private readonly InMemoryAgentInstanceStore? instances;
+    private readonly IEmailStore? emails;
 
-    public InMemoryAgentRunStore(InMemoryMemoryStore sessions, IDiagnosticIdSource diagnostics, InMemoryTriggerStore? triggers = null, InMemoryAgentInstanceStore? instances = null)
+    public InMemoryAgentRunStore(InMemoryMemoryStore sessions, IDiagnosticIdSource diagnostics, InMemoryTriggerStore? triggers = null, InMemoryAgentInstanceStore? instances = null, IEmailStore? emails = null)
     {
         this.sessions = sessions;
         this.diagnostics = diagnostics;
         this.triggers = triggers;
         this.instances = instances;
+        this.emails = emails;
         triggers?.BindAgentRuns(sessions);
     }
 
@@ -159,7 +161,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             if (State.Runs.ContainsKey(run.AgentRunId) || State.Activations.ContainsKey(run.ActivationId))
                 throw AgentCoreErrors.Conflict("AgentRun or Activation identity already exists.");
             State.Runs.TryGetValue(run.Admission.Activation.SourceAgentRunId ?? Guid.Empty, out var source);
-            AgentRunStoreMapping.ValidateConfigurationContinuation(run, source);
+            AgentRunStoreMapping.ValidateConfigurationContinuation(run, source, source is null ? null : emails?.GetSelectionAsync(source.AgentRunId, cancellationToken).GetAwaiter().GetResult());
             var sourceSession = source is null ? null : sessions.LoadMetadataAsync(source.SessionId, cancellationToken).GetAwaiter().GetResult();
             AgentRunStoreMapping.ValidateImmediateSource(run, source, sourceSession is not null
                 && sourceSession.DurablyDeletedAt is null && sourceSession.ArchivedAt is null

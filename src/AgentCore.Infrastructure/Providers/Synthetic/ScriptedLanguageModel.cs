@@ -487,6 +487,22 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
+        if (lastUser.Contains("email account chooser", StringComparison.OrdinalIgnoreCase))
+        {
+            var continued = request.Messages.Any(m => m.Text.Contains("Continue the owner's email task", StringComparison.Ordinal));
+            var tool = continued ? ToolCatalog.EmailSearch : ToolCatalog.EmailRequestAccount;
+            if (toolRounds == 0 && Offers(request, tool))
+            {
+                yield return new ModelToolCallEvent(new("email-account", tool, continued ? """{"query":"harness"}""" : "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
+            else
+            {
+                yield return new ModelTextDelta(continued ? "Email inspected with the selected account." : "Choose an email account to continue.");
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            yield break;
+        }
         if (TryScriptEmailHarness(request, toolRounds, lastUser, lastTool, out var emailEvent))
         {
             yield return emailEvent;
@@ -1134,6 +1150,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains(HistoricalImageRereadMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(SensitiveApprovalMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("email account chooser", StringComparison.OrdinalIgnoreCase)
             || (request.Tools?.Any(t => t.Name == ToolCatalog.AutomationList || t.Name == ToolCatalog.AutomationCreate) == true && IsScheduleTurn(request, lastUser))
             || request.Messages.Any(message => message.Role == ModelRole.Tool)
             || request.Messages.Any(message =>

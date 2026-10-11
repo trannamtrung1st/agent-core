@@ -125,6 +125,7 @@ app.MapHub<SessionHub>("/hubs/session");
 AdminEndpoints.Map(app);
 HookEndpoints.Map(app);
 SessionCatalogEndpoints.Map(app);
+EmailSelectionEndpoints.Map(app);
 SessionAutomationEndpoints.Map(app);
 
 BackgroundSessionEndpoints.Map(app);

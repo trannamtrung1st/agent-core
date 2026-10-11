@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using AgentCore.Application.Credentials;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
+using AgentCore.Domain.Credentials;
+using AgentCore.Application.Ports;
 
 namespace AgentCore.Api;
 
@@ -10,6 +12,25 @@ internal static class AdminCredentialEndpoints
 {
     internal static void MapCredentials(this RouteGroupBuilder group)
     {
+        group.MapPost("/email-accounts", (AdminCreateEmailAccountRequest request, [FromServices] CredentialService service, CancellationToken ct) => Run(async () =>
+            Results.Json(Map(await service.CreateEmailAccountAsync(request.DisplayName, Profile(request.Profile), request.ProtectedValue, ct)), statusCode: 201)));
+        group.MapPatch("/email-accounts/{credentialId:guid}", (Guid credentialId, AdminUpdateEmailAccountRequest request, [FromServices] CredentialService service, CancellationToken ct) => Run(async () =>
+        {
+            Positive(request.ExpectedRevision);
+            return Results.Json(Map(await service.UpdateEmailAccountAsync(credentialId, request.ExpectedRevision, request.DisplayName, request.Status, Profile(request.Profile), ct)));
+        }));
+        group.MapPost("/email-accounts/{credentialId:guid}/test", (Guid credentialId, AdminTestEmailAccountRequest request, IEmailProviderFactory factory, CancellationToken ct) => Run(async () =>
+        {
+            Positive(request.ExpectedRevision);
+            return Results.Json(await factory.TestAsync(credentialId, request.ExpectedRevision, request.Protocol, ct));
+        }));
+        group.MapGet("/email-send-operations/{draftId}", (string draftId, IEmailStore store, CancellationToken ct) => Run(async () =>
+        {
+            var operation = await store.GetSendAsync(draftId, ct) ?? throw AgentCoreErrors.NotFound("Email send receipt was not found.");
+            return Results.Json(new { operation.DraftId, operation.AccountId, operation.DraftRevision, operation.ClaimedAtUtc,
+                outcome = (operation.Result?.Outcome ?? EmailSendOutcome.Indeterminate).ToString(), operation.Result?.ProviderMessageId,
+                operation.Result?.ErrorCode, operation.Result?.ErrorMessage });
+        }));
         group.MapGet("/credentials", ([FromServices] CredentialService service, CancellationToken ct) => Run(async () => Results.Json(new { items = (await service.ListAsync(ct)).Select(Map) })));
         group.MapGet("/credentials/{credentialId:guid}", (Guid credentialId, [FromServices] CredentialService service, CancellationToken ct) => Run(async () => Results.Json(Map(await service.GetAsync(credentialId, ct)))));
         group.MapPost("/credentials", (AdminCreateCredentialRequest request, [FromServices] CredentialService service, CancellationToken ct) => Run(async () => Results.Json(Map(await service.CreateAsync(request.DisplayName, request.Kind, request.Metadata, request.AllowedOrigins, request.ProtectedValue, ct)), statusCode: 201)));
@@ -28,8 +49,20 @@ internal static class AdminCredentialEndpoints
             Positive(request.ExpectedInstanceRevision); if (!request.Confirm) throw AgentCoreErrors.Validation("Explicit browser profile reset confirmation is required.");
             await service.ResetAsync(instanceId, request.ExpectedInstanceRevision, ct); return Results.NoContent(); }));
     }
+    private static T Parse<T>(string value) where T : struct, Enum => Enum.TryParse<T>(value, out var parsed)
+        && Enum.IsDefined(parsed) && Enum.GetNames<T>().Contains(value) ? parsed : throw AgentCoreErrors.Validation("Unknown email preset or TLS mode.");
+    private static EmailAccountProfile Profile(EmailAccountProfileDto value)
+    {
+        if (value is null || value.ImapEndpoint is null || value.SmtpEndpoint is null) throw AgentCoreErrors.Validation("Typed mail endpoints are required.");
+        return new(Parse<EmailProviderPreset>(value.Preset), value.EmailAddress, value.ImapUsername, value.SmtpUsername,
+            new(value.ImapEndpoint.Host, value.ImapEndpoint.Port, Parse<MailTlsMode>(value.ImapEndpoint.TlsMode)),
+            new(value.SmtpEndpoint.Host, value.SmtpEndpoint.Port, Parse<MailTlsMode>(value.SmtpEndpoint.TlsMode)));
+    }
+    private static EmailAccountProfileDto Map(EmailAccountProfile value) => new(value.Preset.ToString(), value.EmailAddress,
+        value.ImapUsername, value.SmtpUsername, new(value.ImapEndpoint.Host, value.ImapEndpoint.Port, value.ImapEndpoint.TlsMode.ToString()),
+        new(value.SmtpEndpoint.Host, value.SmtpEndpoint.Port, value.SmtpEndpoint.TlsMode.ToString()));
     private static void Positive(long revision) { if (revision < 1) throw AgentCoreErrors.Validation("Expected revision must be positive."); }
     private static async Task<IResult> Run(Func<Task<IResult>> action) { try { return await action(); } catch (AgentCoreException ex) { return ProblemResults.From(ex); } }
-    private static AdminCredentialResponse Map(CredentialView c) => new(c.CredentialId, c.DisplayName, c.Kind, c.Status, c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, c.BindingCount);
+    private static AdminCredentialResponse Map(CredentialView c) => new(c.CredentialId, c.DisplayName, c.Kind, c.Status, c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, c.BindingCount, c.Purpose, c.EmailAccount is null ? null : Map(c.EmailAccount));
     private static AdminCredentialBindingResponse Map(CredentialBindingView b) => new(b.BindingId, b.CredentialId, b.Reference, b.Revision, Map(b.Credential));
 }

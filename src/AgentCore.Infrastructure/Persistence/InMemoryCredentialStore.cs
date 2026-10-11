@@ -19,8 +19,10 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
             var current = _credentials.GetValueOrDefault(c.CredentialId);
-            if ((current?.Revision ?? 0) != expectedRevision || c.Revision != expectedRevision + 1 || current is not null && current.Kind != c.Kind)
+            if ((current?.Revision ?? 0) != expectedRevision || c.Revision != expectedRevision + 1 || current is not null && (current.Kind != c.Kind || current.Purpose != c.Purpose))
                 throw AgentCoreErrors.Conflict("Credential revision is stale.");
+            if ((c.Purpose == CredentialPurpose.EmailAccount) != (c.EmailAccount is not null) || c.Purpose == CredentialPurpose.EmailAccount && (c.Kind != CredentialKind.Password || c.AllowedOrigins.Count != 0)) throw AgentCoreErrors.Validation("Invalid credential purpose/profile.");
+            c.EmailAccount?.Validate();
             _credentials[c.CredentialId] = c; return ValueTask.CompletedTask;
         }
     }
