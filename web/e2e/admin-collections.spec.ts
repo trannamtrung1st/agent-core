@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { expect, test } from "@playwright/test";
@@ -261,7 +262,9 @@ test("Version inspection creates no draft and the shared actions publish from Te
   const errors: string[] = [];
   const failedRequests: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  page.on("requestfailed", request => { if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(request.url()); });
+  page.on("requestfailed", request => {
+    if (isCanceledEmailAccountPoll(request)) return;
+    if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(request.url()); });
   await page.goto("/");
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
   const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));

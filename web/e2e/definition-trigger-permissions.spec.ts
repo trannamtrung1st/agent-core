@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { forkBuiltInV1Draft, openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { completeDefinitionDraftPublishGate, publishDraftFromInstructions, isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
@@ -69,7 +70,9 @@ test("publish review and immutable details preserve independent Event permission
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
-  page.on("requestfailed", request => { if (!isCanceledDraftEvidenceRead(request)) errors.push(`${request.method()} ${request.url()}`); });
+  page.on("requestfailed", request => {
+    if (isCanceledEmailAccountPoll(request)) return;
+    if (!isCanceledDraftEvidenceRead(request)) errors.push(`${request.method()} ${request.url()}`); });
   await page.goto("/admin/definitions/examiner/drafts");
   const editor = await forkBuiltInV1Draft(page);
   await openDefinitionSettings(editor, "Trigger restrictions");

@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test, type Page } from '@playwright/test';
 import { completeDefinitionDraftPublishGate, publishDraftFromInstructions } from './admin-definition-gate-helpers';
 import { draftEditorSection, forkDurablePublicationDraft } from './admin-draft-editor-helpers';
@@ -33,7 +34,7 @@ test('Instance Skills: authorized Chat creation, next-turn load, owner editor an
   test.setTimeout(120_000);
   const errors: string[] = []; const failed: string[] = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('requestfailed', r => failed.push(r.url()));
+  page.on('requestfailed', r => { if (!isCanceledEmailAccountPoll(r)) failed.push(r.url()); });
   const creation = page.waitForResponse(r => r.url().endsWith('/api/v2/admin/agent-instances') && r.request().method() === 'POST' && r.ok());
   const name = `Skills ${Date.now()}`; const id = await create(page, name);
   const pin = await (await creation).json();

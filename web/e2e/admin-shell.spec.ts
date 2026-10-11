@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
@@ -58,6 +59,7 @@ test("chat to admin effective config and back with a new turn", async ({ page })
     }
   });
   page.on("requestfailed", (request) => {
+    if (isCanceledEmailAccountPoll(request)) return;
     failedRequests.push(`${request.method()} ${request.url()}`);
   });
 

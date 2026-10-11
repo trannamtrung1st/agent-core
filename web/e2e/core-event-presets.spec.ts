@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test } from '@playwright/test';
 import fs from 'node:fs';
 
@@ -82,7 +83,7 @@ test('Core Event presets stay opt-in, test filters without work, and preserve re
 test('Disabled Core Event drafts save before policy enablement and retain authorization boundaries', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('requestfailed', r => errors.push(r.failure()?.errorText ?? r.url()));
+  page.on('requestfailed', r => { if (!isCanceledEmailAccountPoll(r)) errors.push(r.failure()?.errorText ?? r.url()); });
   await page.goto('/admin/instances');
   await expect.poll(() => page.evaluate(() => localStorage.getItem('agent-core.owner-capability'))).not.toBeNull();
   const token = (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))!;

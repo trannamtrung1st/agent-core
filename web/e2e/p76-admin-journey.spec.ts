@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
@@ -40,6 +41,7 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
     }
   });
   page.on("requestfailed", (request) => {
+    if (isCanceledEmailAccountPoll(request)) return;
     if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`);
   });
 

@@ -90,3 +90,14 @@ CI=1 PLAYWRIGHT_FAITHFUL_MANUAL=1 PLAYWRIGHT_API_PORT=5358 PLAYWRIGHT_WEB_PORT=5
 ```
 
 Local broad-suite evidence above is retained for its original candidate. The hosted workflow must verify all backend/frontend/browser/Compose gates on this final reviewed source, including the latest-main integration; focused results alone do not claim that gate.
+
+
+### Hosted gate reproduction and correction
+
+[First hosted run](https://github.com/trannamtrung1st/agent-core/actions/runs/38167937271) targeted exact source `9ce0079c883725f79b5332d38b6d4aa143b88201`. Its Admin lifecycle acceptance job failed because native cancellation of owner picker GET polls during Chat/Admin navigation was counted as an unexpected transport error. Local reproduction retained the original assertion and added error text: all three entries were `net::ERR_ABORTED` on `/api/v2/sessions/<guid>/email-account-request`.
+
+The shared E2E classifier now recognizes only GET + that exact route + native `net::ERR_ABORTED`. It never ignores connection refusal/reset, decision POSTs, unrelated reads or HTTP error responses. Existing draft-evidence cancellation checks/receipt assertions remain intact. The unit regression verifies these exclusions; all one unit test, one reproduced Admin lifecycle journey and ten representative Chat/Admin/Core Event/Skill/vision journeys passed. TypeScript/Vite build and `git diff --check` passed. This changes verification classification, not production cancellation or mail behavior.
+
+Commands: `pnpm --dir web run test --run src/test/request-failures.test.ts --maxWorkers=1`; isolated Synthetic `pnpm --dir web exec playwright test --project=admin-lifecycle` on :5368/:5468; `pnpm --dir web exec playwright test admin-shell.spec.ts instance-skills.spec.ts p8-skill-journey.spec.ts scripted-vision.spec.ts core-event-presets.spec.ts --project=synthetic` on :5378/:5478. Both browser invocations used fresh disposable SQLite/workspace/key-ring roots and `CI=1 PLAYWRIGHT_FAITHFUL_MANUAL=1`. All unexpected-request, console and response assertions remain required.
+
+The first failed run stays in the ledger. A new exact-source run replaces it after the corrected candidate is pushed; unfinished old gates may be cancelled by the workflow's existing same-branch concurrency rule and are not counted as passing.

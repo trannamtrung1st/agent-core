@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
 import { expect, test } from "@playwright/test";
@@ -23,6 +24,7 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
     }
   });
   page.on("requestfailed", (request) => {
+    if (isCanceledEmailAccountPoll(request)) return;
     if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`);
   });
 

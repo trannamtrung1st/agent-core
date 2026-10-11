@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
 import { execFileSync } from "node:child_process";
@@ -32,6 +33,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
     }
   });
   page.on("requestfailed", (request) => {
+    if (isCanceledEmailAccountPoll(request)) return;
     if (isCanceledDraftEvidenceRead(request)) {
       canceledEvidenceRequests.add(request);
     } else {
