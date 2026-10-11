@@ -314,12 +314,19 @@ public sealed class AdminAgentInstanceService(
             SetExecutionBudgets: true, ExecutionBudgets: policy), time.GetUtcNow(), ct).ConfigureAwait(false);
     }
 
+    public void ValidateUnattendedModel(string? catalogKey, string? reasoningEffort)
+    {
+        if (modelCatalog is null) throw AgentCoreErrors.Validation("The model catalog is not available.");
+        ExecutionModelPolicy.RequireSelectable(modelCatalog, catalogKey, reasoningEffort);
+    }
+
     public async ValueTask<AgentInstance> SetUnattendedModelAsync(
         Guid instanceId,
         long expectedRevision,
         string? catalogKey,
         string? reasoningEffort,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        AdminEventActorKind actor = AdminEventActorKind.LocalOwner)
     {
         var instance = await RequireManagedAsync(instanceId, cancellationToken).ConfigureAwait(false);
         if (instance.Revision != expectedRevision)
@@ -327,12 +334,7 @@ public sealed class AdminAgentInstanceService(
             throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
         }
 
-        if (modelCatalog is null)
-        {
-            throw AgentCoreErrors.Validation("The model catalog is not available.");
-        }
-
-        ExecutionModelPolicy.RequireSelectable(modelCatalog, catalogKey, reasoningEffort);
+        ValidateUnattendedModel(catalogKey, reasoningEffort);
         var key = string.IsNullOrWhiteSpace(catalogKey) ? null : catalogKey.Trim();
         var effort = string.IsNullOrWhiteSpace(reasoningEffort) ? null : reasoningEffort.Trim();
         if (string.Equals(instance.UnattendedModelCatalogKey, key, StringComparison.Ordinal)
@@ -347,7 +349,10 @@ public sealed class AdminAgentInstanceService(
                 expectedRevision,
                 SetUnattendedModel: true,
                 UnattendedModelCatalogKey: key,
-                UnattendedReasoningEffort: effort),
+                UnattendedReasoningEffort: effort,
+                History: new(ids.NewId(), time.GetUtcNow(), actor, AdminEventOperationKind.InstanceSettingsChanged,
+                    "agent.instance", instanceId.ToString("D"), expectedRevision + 1, instance.ActiveVersion,
+                    System.Text.Json.JsonSerializer.Serialize(new { section = "automationPreferences", set = new[] { "catalogKey", "reasoningEffort" }, clear = Array.Empty<string>() }))),
             time.GetUtcNow(),
             cancellationToken).ConfigureAwait(false);
     }

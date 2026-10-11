@@ -1664,6 +1664,47 @@ public sealed class AgentRunAdmissionStoreTests
         new(1, sessionId, 1, Definition, SessionMode.Text, null, SessionStatus.Created, entries, "", 0, null,
             Owner.ProfileId, Now, Now, Owner.AgentInstanceId, PinnedPersona: Definition.Identity);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Configuration_continuation_requires_exact_source_receipt_and_deduplicates_after_reopen(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        await f.InsertContinuationOwnerAsync();
+        var (snapshot, _) = UserTurn();
+        snapshot = snapshot with { ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.SystemDefault, null) };
+        var source = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            snapshot, snapshot.Entries, Now, []);
+        await f.Runs.AdmitAsync(snapshot, 0, source);
+        source = await Claim(f, source);
+        var task = new ConfigurationPendingTask(source.AgentRunId, ToolCatalog.WorkspaceList, "List the workspace", 1);
+        var messages = new[] { new ModelMessage(ModelRole.Tool,
+            System.Text.Json.JsonSerializer.Serialize(new { outcome = "applied", pendingTask = task },
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)),
+            Name: "configuration.propose", ToolCallId: "configuration") };
+        source = await f.Runs.ApplyAsync(Owner, source.AgentRunId, new AgentRunCommand.Checkpoint(source.Revision,
+            Now, source.Claim!.Generation, new(AgentRunToolCallCheckpoint.Write(messages), 1, 0, 10000), null));
+        source = await CompleteParent(f, source);
+        snapshot = (await f.Memory.LoadAsync(snapshot.SessionId))!;
+        var next = snapshot with { Revision = snapshot.Revision + 1 };
+        var configuration = new AgentRunConfiguration(Definition, 1, 0, []);
+        var budget = ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser, null, null);
+        AgentRun Propose(ConfigurationPendingTask receipt) => AgentRunAdmissionFactory.ForConfigurationContinuation(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), snapshot, source, receipt, Now, [], budget, configuration);
+        var invalid = Propose(task with { Target = ToolCatalog.WorkspaceSearch });
+        Assert.Equal("Conflict", (await Assert.ThrowsAsync<AgentCoreException>(
+            () => f.Runs.AdmitAsync(next, snapshot.Revision, invalid).AsTask())).Code);
+        Assert.Equal(snapshot.Revision, (await f.Memory.LoadAsync(snapshot.SessionId))!.Revision);
+        var admitted = await f.Runs.AdmitAsync(next, snapshot.Revision, Propose(task));
+        Assert.True(admitted.Created);
+        await f.ReopenAsync();
+        var duplicate = await f.Runs.AdmitAsync(next, snapshot.Revision, Propose(task));
+        Assert.False(duplicate.Created);
+        Assert.Equal(admitted.Run.AgentRunId, duplicate.Run.AgentRunId);
+        Assert.Equal(2, (await f.Runs.ListForSessionAsync(Owner, snapshot.SessionId)).Count);
+        Assert.Empty(duplicate.Run.Admission.Activation.SourceEntryIds);
+    }
+
     private static AgentRun NewRun(Activation activation) => AgentRun.Create(Guid.NewGuid(), Owner,
         new AgentRunAdmission(activation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), activation.Kind == ActivationKind.BackgroundCompleted ? AgentRunOutputContract.CompletionReport
             : activation.SourceEntryIds.Count > 0 && activation.Kind != ActivationKind.UserTurn ? AgentRunOutputContract.BackgroundOutcome : AgentRunOutputContract.ConversationResponse),
@@ -1680,9 +1721,18 @@ public sealed class AgentRunAdmissionStoreTests
         internal ICoreEventStore CoreEvents => _factory is null ? ((InMemoryMemoryStore)Memory).CoreEvents : new SqliteCoreEventStore(_factory);
         private string? _path;
         private Factory? _factory;
+        private IAgentInstanceStore? _continuationInstances;
         public IMemoryStore Memory { get; private set; } = null!;
         public IAgentRunStore Runs { get; private set; } = null!;
         public ITriggerStore Triggers { get; private set; } = null!;
+        public async Task InsertContinuationOwnerAsync()
+        {
+            _continuationInstances = _factory is null ? new InMemoryAgentInstanceStore()
+                : new SqliteAgentInstanceStore(_factory, new SystemIdGenerator(TimeProvider.System));
+            await _continuationInstances.InsertAsync(new AgentInstance(Owner.AgentInstanceId, Definition.Id,
+                Definition.Version, Definition.Identity, AgentInstanceLifecycle.Active, Now, Now));
+            await ReopenAsync();
+        }
         public static async Task<Fixture> CreateAsync(bool sqlite)
         {
             var f = new Fixture();
@@ -1707,7 +1757,8 @@ public sealed class AgentRunAdmissionStoreTests
         {
             if (_factory is null)
             {
-                Runs = new InMemoryAgentRunStore((InMemoryMemoryStore)Memory, new Diagnostics(), (InMemoryTriggerStore)Triggers);
+                Runs = new InMemoryAgentRunStore((InMemoryMemoryStore)Memory, new Diagnostics(), (InMemoryTriggerStore)Triggers,
+                    _continuationInstances as InMemoryAgentInstanceStore);
                 return;
             }
             var memory = new SqliteMemoryStore(_factory, new FakeTimeProvider(Now));

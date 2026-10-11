@@ -9,7 +9,7 @@ namespace AgentCore.Application.Tools;
 public static class ConfigurationTools
 {
     public static bool IsTool(string name) => Names.Contains(name, StringComparer.Ordinal);
-    private static readonly string[] Names = ["configuration.inspect", "configuration.propose", "management.inspect", "management.policy.update", "management.freeze", "settings.list", "settings.inspect", "settings.patch", "resources.list", "resources.inspect", "resources.upsert", "resources.set_enabled", "resources.delete", "resources.copy", "credentials.binding.propose", "credentials.binding.remove"];
+    private static readonly string[] Names = ["configuration.inspect", "configuration.propose", "management.inspect", "management.policy.update", "management.freeze", "settings.list", "settings.inspect", "settings.patch", "resources.list", "resources.inspect", "resources.upsert", "resources.set_enabled", "resources.delete", "resources.copy", "credentials.binding.propose", "credentials.binding.remove", "automation.preferences.inspect", "automation.preferences.patch"];
     public static IEnumerable<ToolDescriptor> Descriptors()
     {
         foreach (var name in Names)
@@ -25,7 +25,7 @@ public static class ConfigurationTools
             if (name is "settings.inspect" or "settings.patch" or "configuration.propose") Field("section", Choice(InstanceSettingsResolver.Sections));
             if (name is "settings.patch" or "configuration.propose")
             {
-                if (name == "configuration.propose") Field("option", Text(64));
+                if (name == "configuration.propose") { Field("option", Text(64)); Field("target", Text(64)); Field("goal", Text(200)); }
                 // Field names are strictly validated by the existing typed settings owner. Cross-section fields fail closed.
                 var settingFields = new JsonObject();
                 foreach (var field in InstanceSettingsResolver.Sections.SelectMany(InstanceSettingsResolver.Fields).Distinct())
@@ -54,6 +54,11 @@ public static class ConfigurationTools
             }
             if (name == "credentials.binding.propose") { Field("credentialId", Text(36)); Field("reference", Text(80)); }
             if (name == "credentials.binding.remove") { Field("bindingId", Text(36)); Field("expectedBindingRevision", Integer()); }
+            if (name == "automation.preferences.patch")
+            {
+                Field("catalogKey", new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 128 });
+                Field("reasoningEffort", new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 64 });
+            }
             var schema = new JsonObject { ["type"] = "object", ["additionalProperties"] = false, ["properties"] = properties, ["required"] = required };
             yield return new(new(name, Help(name), schema.ToJsonString()), read ? ToolEffect.ReadOnly : ToolEffect.SensitiveWrite,
                 ToolOfferRule.RoleAllowlist, ToolResourceScope.Owner, read ? ToolReplaySafety.ReplaySafe : ToolReplaySafety.NonReplayable);

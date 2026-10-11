@@ -16,6 +16,17 @@ const approval: PendingApproval = {
 };
 
 describe("ApprovalModal", () => {
+  it.each(["automation.preferences.patch", "credentials.binding.remove"])("reviews %s as an exact Instance configuration change", (toolName) => {
+    render(<ApprovalModal approval={{ ...approval, toolName, details: {
+      Target: "This Instance", Before: "Current preference", After: "Requested preference",
+      "Instance revision": "7", "Applies to": "Next new Run"
+    } }} onApprove={vi.fn()} onReject={vi.fn()} />);
+    const dialog = screen.getByRole("dialog", { name: "Apply configuration to this Instance?" });
+    expect(within(dialog).getByRole("button", { name: "Apply to this Instance" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Requested preference")).toBeInTheDocument();
+    expect(within(dialog).getByText("Instance revision:")).toBeInTheDocument();
+  });
+
   it("keeps the complete plain-text proposal in a keyboard-accessible review region", () => {
     const approve = vi.fn();
     const reject = vi.fn();

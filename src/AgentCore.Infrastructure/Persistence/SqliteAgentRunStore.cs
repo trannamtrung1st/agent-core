@@ -119,6 +119,12 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         }
         if (expectedRoutingRevision is null && occurrence?.AcceptedAgentRunId is not null)
             throw AgentCoreErrors.Persistence("Live receipt has no matching admitted Run.");
+        if (run.Admission.Activation.Kind == ActivationKind.ConfigurationContinuation)
+        {
+            var sourceId = run.Admission.Activation.SourceAgentRunId?.ToString("D");
+            var sourceRow = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(row => row.AgentRunId == sourceId, cancellationToken).ConfigureAwait(false);
+            AgentRunStoreMapping.ValidateConfigurationContinuation(run, sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow));
+        }
         if (run.Admission.Activation.Kind == ActivationKind.ImmediateBackground)
         {
             var sourceId = run.Admission.Activation.SourceAgentRunId!.Value.ToString("D");

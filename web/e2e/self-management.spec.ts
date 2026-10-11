@@ -42,6 +42,7 @@ test('Admin enable, bounded save, exact rejection and approval, next Run readbac
   await send(page,'Turn off session memory.');
   const approval=page.getByRole('dialog',{name:'Apply configuration to this Instance?',exact:true});
   await expect(approval).toContainText('sessionMemory');await expect(approval).toContainText('Next new Run');
+  await expect(approval).not.toHaveClass(/ant-zoom-(?:appear|enter)-active/);
   await approval.getByRole('button',{name:'Reject',exact:true}).focus();
   await page.keyboard.press('Escape');await expect(approval).toBeHidden();
   await expect(page.getByText('Nothing was saved. Inspect the current revision and policy before retrying.',{exact:true}).last()).toBeVisible();
@@ -61,4 +62,43 @@ test('Admin enable, bounded save, exact rejection and approval, next Run readbac
   await expect(panel.getByText('Self-management is frozen',{exact:true})).toHaveCount(0);
   for(const [width,height] of [[1440,900],[768,900],[390,844]]) {await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);}
   await page.goto(chat);await send(page,'Verify my saved configuration.');await expect(page.getByText('Current response length: concise. Configuration applies to this fresh Run.',{exact:true}).last()).toBeVisible();
+});
+
+test('approval continues a diagnosed task automatically in exactly one fresh Run', async({page})=>{
+  test.setTimeout(90000);
+  await page.goto('/admin/instances');await page.getByRole('button',{name:'New instance',exact:true}).click();
+  await select(page,'Definition','General Assistant · general-assistant',true);
+  await select(page,'Published version','v24 · Built-in · Published',true);
+  const create=page.getByRole('dialog',{name:'New instance',exact:true});
+  await create.getByText('Custom persona',{exact:true}).click();
+  for(const [label,value] of [['Persona name','Continuation UAT'],['Persona role','Operations'],['Persona description','Verify bounded configuration continuation.'],['Persona tone','Clear']])await create.getByLabel(label).fill(value);
+  await create.getByRole('button',{name:'Create instance',exact:true}).click();await expect(page.getByRole('heading',{name:'Continuation UAT',exact:true})).toBeVisible();
+  const id=new URL(page.url()).pathname.split('/')[3];
+  await page.goto('/admin/instances/'+id+'/identity/settings');
+  const panel=page.getByRole('region',{name:'Agent self-management',exact:true});
+  await select(page,'Self-management mode','Assisted');await panel.getByRole('button',{name:'Customize areas'}).click();
+  await panel.getByRole('checkbox',{name:'Settings',exact:true}).check();await panel.getByRole('button',{name:'Save self-management'}).click();
+  await expect(panel).toContainText('policy revision 2');
+  // Fixture setup: narrow one ordinary capability while retaining Definition authority.
+  await page.evaluate(async id=>{
+    const headers={'Content-Type':'application/json','X-AgentCore-Owner-Capability':localStorage.getItem('agent-core.owner-capability')!};
+    const url=`/api/v2/admin/agent-instances/${id}/settings/capabilities`;
+    const read=await fetch(url,{headers});if(!read.ok)throw new Error('Read setup failed');const state=await read.json();
+    const saved=await fetch(url,{method:'PATCH',headers,body:JSON.stringify({expectedInstanceRevision:state.instanceRevision,set:{selected:state.effective.selected.filter((name:string)=>name!=='workspace.list')},clear:[]})});
+    if(!saved.ok)throw new Error('Narrow setup failed');
+  },id);
+  await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();await select(page,'Identity','Continuation UAT',true);
+  await send(page,'List my workspace after enabling workspace listing.');
+  const approval=page.getByRole('dialog',{name:'Apply configuration to this Instance?',exact:true});
+  await expect(approval).toContainText('workspace.list');await expect(approval).toContainText('capabilities');
+  await approval.getByRole('button',{name:'Apply to this Instance',exact:true}).click();
+  await expect(page.getByText('Workspace inspected in a fresh Run.',{exact:true})).toBeVisible();await waitForResponseSettled(page);
+  const chat=page.url();
+  const evidence=await page.evaluate(async id=>{
+    const response=await fetch(`/api/v2/agent-instances/${id}/agent-runs`,{headers:{'X-AgentCore-Owner-Capability':localStorage.getItem('agent-core.owner-capability')!}});
+    if(!response.ok)throw new Error(`Run evidence failed: ${response.status}`);return response.json();
+  },id);
+  expect(evidence.items).toHaveLength(2);expect(evidence.items.filter((r:{activationKind:string})=>r.activationKind==='ConfigurationContinuation')).toHaveLength(1);
+  await page.reload();await expect(page.getByText('Workspace inspected in a fresh Run.',{exact:true})).toBeVisible();expect(page.url()).toBe(chat);
+  expect(await page.locator('.chat-message-user').count()).toBe(1);
 });

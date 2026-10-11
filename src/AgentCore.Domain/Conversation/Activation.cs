@@ -12,7 +12,8 @@ public enum ActivationKind
     ApplicationEvent,
     ManualBackground,
     BackgroundCompleted,
-    CoreEvent
+    CoreEvent,
+    ConfigurationContinuation
 }
 
 /// <summary>Immutable admission of one effective turn, including its ordered input batch.</summary>
@@ -46,6 +47,9 @@ public sealed class Activation
         AgentRunText.RequireOptionalId(triggerOccurrenceId, "Trigger occurrence");
         AgentRunText.RequireOptionalId(sourceSessionId, "Source Session");
         AgentRunText.RequireOptionalId(sourceAgentRunId, "Source AgentRun");
+        if (kind == ActivationKind.ConfigurationContinuation && (sourceSessionId != sessionId || sourceAgentRunId is null
+            || sourceEventId is null || entries.Length != 0 || evidenceJson is null))
+            throw new ArgumentException("Configuration continuation requires its source Run in the same Session, bounded task evidence and no newly owned inputs.");
         if (kind == ActivationKind.ScheduledWork && triggerOccurrenceId is null)
             throw new ArgumentException("Scheduled work requires its admitted occurrence.");
         if (kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted

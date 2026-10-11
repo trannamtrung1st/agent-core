@@ -24,6 +24,7 @@ public sealed partial class SessionRuntime
             ModelSupportsTools: model.Capabilities.Tools, ModelSupportsVision: model.Capabilities.Vision,
             PinnedSkillCatalog: catalog, ActiveSkillKeys: skills, LoadedCapabilityIds: loaded, IntermediateMessagingAllowed: _intermediateMessagingAllowed,
             DetachedExecution: IsInitialBackgroundRun, OwnedSessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId,
+            ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun),
             OutputContract: _boundAgentRun?.Admission.OutputContract ?? AgentRunOutputContract.ConversationResponse,
             AuthoredAutomation: _boundAgentRun?.Admission.Activation.DedupeKey.StartsWith("automation:", StringComparison.Ordinal) == true,
             HasBackgroundClaim: _boundAgentRun is { Claim: { } claim } bound && await _agentRuns.HasCompletionClaimAsync(bound.Owner, bound.AgentRunId, claim.Generation, _time.GetUtcNow(), ct),

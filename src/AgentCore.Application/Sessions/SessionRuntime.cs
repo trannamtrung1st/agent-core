@@ -2446,6 +2446,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     OwnedSessionId: SessionId,
                     ActiveSkillKeys: capturedRun?.ActiveSkillKeys ?? skillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray(),
                     ComposerInput: capturedRun?.Admission.ComposerInput,
+                    ConfigurationContinuationTarget: ContinuationTarget(capturedRun),
                     PinnedSkillCatalog: skillCatalog,
                     AgentInstanceId: _snapshot.AgentInstanceId,
                     CredentialMetadataAvailable: await _tools.CredentialMetadataAvailableAsync(_snapshot.AgentInstanceId, evaluationToken),
@@ -2609,7 +2610,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         var tools = ApplicationMessageToolOffer.Apply(
             authorizedTools,
-            _intermediateMessagingAllowed,
+            _intermediateMessagingAllowed && ContinuationTarget(_boundAgentRun) is null,
             ApplicationMessageBudgetFor(request.ResponseId),
             ExecutionDefinition,
             trigger,
@@ -3333,7 +3334,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     allowedIntermediate,
                                     _snapshot.AgentInstanceId,
                                     Harness: await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, overallCts.Token),
-                                    SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings), overallCts.Token);
+                                    SupportsTools: model.Capabilities.Tools, SupportsVision: model.Capabilities.Vision, OwnedSessionId: SessionId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings, ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun)), overallCts.Token);
                             if (_runAuthority is not null && _boundAgentRun is { } authorizedRun)
                             {
                                 var currentDefinition = await _runAuthority.CurrentDefinitionAsync(authorizedRun, overallCts.Token).ConfigureAwait(false);
@@ -3478,7 +3479,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         if (_boundAgentRun?.Approval is { Decision: AgentRunApprovalDecision.Approved } approved
                                             && approved.ToolName == call.Name && approved.ActionHash == actionHash
                                             && approved.PreparedActionJson == args.GetRawText())
-                                            approvalGrant = new ToolApprovalGrant(approved.ApprovalId, call.Name, actionHash, _epoch, request.ResponseId, operationId);
+                                            approvalGrant = new ToolApprovalGrant(approved.ApprovalId, call.Name, actionHash,
+                                                ResponseId: request.ResponseId, OperationId: operationId, RuntimeEpoch: _epoch);
                                         else if (_boundAgentRun?.Approval is { Decision: AgentRunApprovalDecision.Rejected or AgentRunApprovalDecision.Expired } denied
                                             && denied.ToolName == call.Name && denied.ActionHash == actionHash)
                                             approvalGrant = null;
@@ -3600,7 +3602,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                                 OwnerTurnText: trigger.Kind == TriggerKind.UserTurn ? trigger.Text : null,
                                                 SupportsTools: model.Capabilities.Tools,
                                                 Model: _snapshot.ModelSelection is { } choice ? new AgentCore.Domain.Conversation.AgentRunModelPin(choice.CatalogKey, choice.ProviderAlias, choice.ModelId, choice.ReasoningEffort) : null,
-                                                WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings))
+                                                WorkspaceCwd: workspaceCwd, OwnedSessionId: SessionId, AgentRunId: _boundAgentRun?.AgentRunId, PinnedSkillCatalog: pinnedCatalog, ActiveSkillKeys: pinnedSkills, PinnedCredentialBindings: _boundAgentRun?.Admission.Configuration?.CredentialBindings,
+                                                ConfigurationContinuationTarget: ContinuationTarget(_boundAgentRun)))
                                         .ConfigureAwait(false);
                                     if (executionResult.WorkspaceCwd is { } nextCwd)
                                     {

@@ -44,11 +44,11 @@ public sealed class SelfManagementRemediationTests
         var definition = (await s.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
         var tools = s.GetRequiredService<SessionToolExecutor>();var session = Guid.NewGuid();
         var admission = new ToolExecutionAdmission(false,TriggerKind.UserTurn,AgentInstanceId:owner.InstanceId);
-        var inspect = await tools.ExecuteAsync(definition,session,new("inspect","configuration.inspect","{}"),100000,admission:admission);
+        var inspect = await tools.ExecuteAsync(definition,session,new("inspect","configuration.inspect", "{\"goal\":\"Always answer briefly.\",\"target\":\"settings.patch\"}"),100000,admission:admission);
         using var metadata = JsonDocument.Parse(inspect.Text);
         var option = metadata.RootElement.GetProperty("remediationOptions").EnumerateArray().Single(o=>o.GetProperty("section").GetString()=="conversationPolicy").GetProperty("option").GetString();
         async Task<string> Patch(string token) => (await tools.ExecuteAsync(definition,session,new("patch","configuration.propose",JsonSerializer.Serialize(new {
-            expectedInstanceRevision=view.InstanceRevision,option=token,section="conversationPolicy",set=new {responseLength="concise"},clear=Array.Empty<string>()})),100000,admission:admission)).Text;
+            expectedInstanceRevision=view.InstanceRevision,option=token,target="settings.patch",goal="Always answer briefly.",section="conversationPolicy",set=new {responseLength="concise"},clear=Array.Empty<string>()})),100000,admission:admission)).Text;
         Assert.Contains("Conflict",await Patch(new string('0',64)));
         Assert.Equal(view.InstanceRevision,(await management.ReadAsync(owner.InstanceId)).InstanceRevision);
         Assert.Contains("\"outcome\":\"applied\"",await Patch(option!));

@@ -8,11 +8,12 @@ public static class ManagementTools
     public static bool IsManagement(string name) => HarnessChatTools.IsHarness(name) || InstanceSkillTools.IsManagement(name)
         || name.StartsWith("settings.", StringComparison.Ordinal) || name.StartsWith("resources.", StringComparison.Ordinal)
         || name.StartsWith("configuration.", StringComparison.Ordinal) || name.StartsWith("management.", StringComparison.Ordinal)
-        || name.StartsWith("credentials.binding.", StringComparison.Ordinal);
+        || name.StartsWith("credentials.binding.", StringComparison.Ordinal) || name.StartsWith("automation.preferences.", StringComparison.Ordinal);
 
     public static HarnessManagementScope? Area(string name) => name.Split('.')[0] switch {
         "skills" => HarnessManagementScope.Skills, "settings" => HarnessManagementScope.Settings,
         "resources" => HarnessManagementScope.Resources, "credentials" => HarnessManagementScope.Connections,
+        "automation" when name.StartsWith("automation.preferences.", StringComparison.Ordinal) => HarnessManagementScope.AutomationPreferences,
         "management" when name == "management.policy.update" => HarnessManagementScope.ManagementPolicy,
         "configuration" when name == "configuration.propose" => HarnessManagementScope.Settings,
         "harness" when HarnessChatTools.Operations.TryGetValue(name, out var op) => op.Scope,

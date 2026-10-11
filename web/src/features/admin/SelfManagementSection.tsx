@@ -45,9 +45,10 @@ export function SelfManagementSection({ instanceId, archived, onUpdated }: { ins
     if (!view || archived) return;
     const request = generation.current; setBusy(true); setError(null);
     try {
-      const next = await saveSelfManagement(instanceId, { expectedRevision: view.instanceRevision, ...draft, ...(frozen !== undefined ? { frozen } : {}) });
+      const next = await saveSelfManagement(instanceId, { expectedRevision: view.instanceRevision,
+        ...(frozen === undefined ? draft : draftOf(view)), ...(frozen !== undefined ? { frozen } : {}) });
       if (request !== generation.current) return;
-      setView(next); setDraft(draftOf(next)); onUpdated();
+      setView(next); if (frozen === undefined) setDraft(draftOf(next)); onUpdated();
     } catch (e) { if (request === generation.current) setError(describeAdminError(e, 'Policy could not be saved. Refresh revisions; your draft is retained.')); }
     finally { if (request === generation.current) setBusy(false); }
   }
@@ -81,7 +82,7 @@ export function SelfManagementSection({ instanceId, archived, onUpdated }: { ins
             <Flex vertical gap={token.paddingXS}>
               <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => setDraft(d => ({ ...d, managedAutoApply: d.managedAutoApply === null ? view.effective.managedAutoApply ?? [] : null }))}>{draft.managedAutoApply === null ? 'Customize automatic changes' : 'Inherit automatic changes'}</Button>
               <Checkbox.Group aria-label="Managed automatic changes" disabled={disabled || draft.managedAutoApply === null} value={draft.managedAutoApply ?? view.definitionDefaults.managedAutoApply ?? []}
-                options={[{ label: 'Conversation preferences', value: 'ConversationPreferences' }, { label: 'New text resources', value: 'TextResources' }, { label: 'Skill administration', value: 'SkillChanges' }]}
+                options={[{ label: 'Conversation preferences', value: 'ConversationPreferences' }, { label: 'New text resources', value: 'TextResources' }, { label: 'Skill create/update/enable', value: 'SkillChanges' }]}
                 onChange={values => setDraft(d => ({ ...d, managedAutoApply: values as ManagementAutoApply[] }))} />
             </Flex>
           </Form.Item>}

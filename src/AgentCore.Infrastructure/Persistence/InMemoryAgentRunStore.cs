@@ -159,6 +159,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
             if (State.Runs.ContainsKey(run.AgentRunId) || State.Activations.ContainsKey(run.ActivationId))
                 throw AgentCoreErrors.Conflict("AgentRun or Activation identity already exists.");
             State.Runs.TryGetValue(run.Admission.Activation.SourceAgentRunId ?? Guid.Empty, out var source);
+            AgentRunStoreMapping.ValidateConfigurationContinuation(run, source);
             var sourceSession = source is null ? null : sessions.LoadMetadataAsync(source.SessionId, cancellationToken).GetAwaiter().GetResult();
             AgentRunStoreMapping.ValidateImmediateSource(run, source, sourceSession is not null
                 && sourceSession.DurablyDeletedAt is null && sourceSession.ArchivedAt is null

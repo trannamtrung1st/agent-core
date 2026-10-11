@@ -100,8 +100,12 @@ public sealed class AgentInstanceSkillTests
             new(new(HarnessManagementMode.Managed), new([HarnessManagementScope.Skills]), new([ManagementAutoApply.SkillChanges])));
         var executor = host.Services.GetRequiredService<SessionToolExecutor>();
         var customizeCall = new ModelToolCall("self-customize", "skills.customize", JsonSerializer.Serialize(new { key = sourceKey, expectedRevision = 3, expectedInstanceRevision = (await host.Services.GetRequiredService<IAgentInstanceStore>().FindAsync(owner.InstanceId))!.Revision }));
+        Assert.Contains("approval_required", (await executor.ExecuteAsync(definition, Guid.NewGuid(), customizeCall, 8192,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId))).Text);
+        using var exactArgs = JsonDocument.Parse(customizeCall.ArgumentsJson);
+        var grant = new ToolApprovalGrant(Guid.NewGuid(), customizeCall.Name, ToolActionHash.Compute(customizeCall.Name, exactArgs.RootElement), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         var customizeResult = await executor.ExecuteAsync(definition, Guid.NewGuid(), customizeCall, 8192,
-            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId));
+            approvalGrant: grant, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner.InstanceId));
         using var resultJson = JsonDocument.Parse(customizeResult.Text);
         var agentCopy = resultJson.RootElement.GetProperty("instanceSkill");
         Assert.Equal("Instance", agentCopy.GetProperty("origin").GetString());

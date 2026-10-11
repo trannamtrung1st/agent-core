@@ -158,7 +158,8 @@ public sealed partial class SessionRuntime
     {
         if (!CanStartUserConversationBatch()) return false;
         var users = PendingUserBatch();
-        if (users.Count == 0 || users.Any(entry => _undurableUserEntryIds.Contains(entry.EntryId))) return false;
+        if (users.Count == 0) return await TryStartConfigurationContinuationAsync(cause, ct).ConfigureAwait(false);
+        if (users.Any(entry => _undurableUserEntryIds.Contains(entry.EntryId))) return false;
         var (projection, resolved) = await ResolveNewRunAsync(ct).ConfigureAwait(false);
         PinModelSelectionIfMissing();
         projection = projection with { ModelSelection = _snapshot.ModelSelection };
@@ -210,7 +211,7 @@ public sealed partial class SessionRuntime
         ct.ThrowIfCancellationRequested();
         cause = cause with { AgentRunGeneration = run.Claim!.Generation };
         var users = run.Admission.Activation.SourceEntryIds.Select(id => _snapshot.Entries.Single(entry => entry.EntryId == id)).ToArray();
-        if (run.Admission.Activation.EvidenceJson is { } evidence && users.Length == 0)
+        if (run.Admission.Activation.EvidenceJson is { } evidence && (users.Length == 0 || run.Admission.Activation.Kind == ActivationKind.ConfigurationContinuation))
         {
             var signal = JsonSerializer.Deserialize<AgentRunAdmissionFactory.SignalInput>(evidence)
                 ?? throw AgentCoreErrors.Persistence("AgentRun signal evidence is missing.");

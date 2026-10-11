@@ -420,7 +420,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AgentInstanceSkillService>(),
             provider.GetRequiredService<ICoreEventStore>(),
             provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),
-            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>()));
+            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),

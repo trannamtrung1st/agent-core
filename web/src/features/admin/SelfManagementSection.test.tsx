@@ -48,4 +48,21 @@ describe('Agent self-management authority panel', () => {
     fireEvent.click(await screen.findByRole('button', {name:/^Unfreeze$/}));
     await waitFor(() => expect(saveSelfManagement).toHaveBeenCalledWith('owner', expect.objectContaining({frozen:false,expectedRevision:1})));
   });
+  it.each([false, true])('changes only the persisted lock with unsaved mode and area edits (frozen=%s)', async frozen => {
+    const stored = {...initial, effective:{...off, mode:'Assisted' as const, scopes:['Settings' as const], frozen},
+      source:'instance' as const, overrides:{mode:{value:'Assisted' as const}, scopes:{value:['Settings' as const]}, autoApply:null, configurationAssistance:null, harnessAuthoring:null}};
+    vi.mocked(getSelfManagement).mockResolvedValue(stored);
+    vi.mocked(saveSelfManagement).mockResolvedValue({...stored, instanceRevision:2, effective:{...stored.effective, frozen:!frozen}});
+    mount(); await screen.findByText('Instance policy · policy revision 1 · Instance revision 1');
+    await chooseMode('Managed'); fireEvent.click(screen.getByRole('checkbox', {name:/^Skills$/}));
+    fireEvent.click(screen.getByRole('button', {name:frozen ? 'Unfreeze self-management' : 'Freeze self-management'}));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(dialog.querySelector('.ant-btn-primary')!);
+    await waitFor(() => expect(saveSelfManagement).toHaveBeenCalledWith('owner', expect.objectContaining({
+      expectedRevision:1, mode:'Assisted', scopes:['Settings'], frozen:!frozen
+    })));
+    await screen.findByText('Instance policy · policy revision 1 · Instance revision 2');
+    fireEvent.click(screen.getByRole('button', {name:'Save self-management'}));
+    await waitFor(() => expect(saveSelfManagement).toHaveBeenLastCalledWith('owner', expect.objectContaining({mode:'Managed',scopes:['Settings','Skills'],expectedRevision:2})));
+  });
 });

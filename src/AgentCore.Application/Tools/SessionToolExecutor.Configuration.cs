@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Security.Cryptography;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
@@ -13,15 +12,6 @@ namespace AgentCore.Application.Tools;
 public sealed partial class SessionToolExecutor
 {
     private static readonly JsonSerializerOptions ManagementJson = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
-    private static string RemediationOption(Guid owner, long revision, long policyRevision, string section) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"configuration.v1:{owner:D}:{revision}:{policyRevision}:settings.patch:{section}")));
-
-    private static void ValidateRemediationOption(Guid owner, ManagementPolicyView policy, JsonElement args)
-    {
-        if (args.GetProperty("option").GetString() != RemediationOption(owner, policy.InstanceRevision, policy.PolicyRevision, args.GetProperty("section").GetString()!))
-            throw AgentCoreErrors.Conflict("Remediation option is unknown or stale. Inspect this Instance again.");
-    }
-
     private ToolPolicyDecision ManagementDecision(AgentDefinition definition, string name, JsonElement args,
         ToolExecutionAdmission? admission, ToolApprovalGrant? grant, ToolPolicyDecision fallback)
     {
@@ -52,38 +42,58 @@ public sealed partial class SessionToolExecutor
     {
         var policy = await selfManagement!.ReadAsync(id, ct);
         var state = policy.Effective;
+        var goalScoped = args.TryGetProperty("goal", out _) || args.TryGetProperty("target", out _);
+        var diagnosedTarget = DiagnosisTarget(args);
         var settingsViews = state.Allows(HarnessManagementScope.Settings) && admitted.SelfManagement?.Allows(HarnessManagementScope.Settings) != false && instanceSettings is not null
             ? await instanceSettings.ReadAllAsync(id, ct) : [];
+        if (goalScoped && diagnosedTarget is null) settingsViews = [];
+        else if (goalScoped) settingsViews = settingsViews.Where(s => s.Section == (diagnosedTarget == "settings.patch" ? "conversationPolicy" : "capabilities")).ToArray();
         object? blocker = null;
-        if (args.TryGetProperty("target", out var target))
+        if (diagnosedTarget is { } name)
         {
-            var name = target.GetString()!;
             var registered = ToolRegistry.TryGet(name, out var descriptor);
             var baseline = _agentDefinitions is null ? admitted : await _agentDefinitions.GetAsync(admitted.Id, admitted.Version, ct) ?? admitted;
             var authorized = registered && descriptor!.DefinitionAuthorizable && RolePermissions.AllowsTool(baseline, name);
             var enabled = authorized && RolePermissions.AllowsTool(admitted, name);
-            blocker = new { target = name, outcome = !authorized ? "owner_action_required" : !enabled ? "instance_restriction" : !_configurationGate.IsConfigured(name) ? "owner_action_required" : "ready",
-                reason = !authorized ? "definition_limit" : !enabled ? "instance_selection" : !_configurationGate.IsConfigured(name) ? "host_only" : "available",
+            var configured = _configurationGate.IsConfigured(name);
+            var hostReason = name.StartsWith("email.", StringComparison.Ordinal) ? "provider_unavailable" : "host_only";
+            var reasons = new List<string>();
+            if (!authorized) reasons.Add("definition_limit");
+            else { if (!enabled) reasons.Add("instance_selection"); if (!configured) reasons.Add(hostReason); }
+            blocker = new { target = name, outcome = !authorized || !configured ? "owner_action_required" : !enabled ? "instance_restriction" : "ready",
+                reason = !authorized ? "definition_limit" : !configured ? hostReason : !enabled ? "instance_selection" : "available", reasons,
                 nextStep = !authorized ? "Review and publish the selected Definition in Admin; an Instance cannot exceed its authority."
-                    : !enabled ? "Review the capabilities section and propose the smallest permitted selection change with exact approval."
-                    : !_configurationGate.IsConfigured(name) ? "Configure the integration in Admin or host setup." : "Use the ordinary tool with its own policy and approvals.",
+                    : !configured ? "Configure the integration in Admin or host setup before requesting any Instance remedy."
+                    : !enabled ? "Review the returned exact capability-selection remedy and request approval."
+                    : "Use the ordinary tool with its own policy and approvals.",
                 adminPath = "/admin/instances/" + id.ToString("D") + "/identity/settings" };
         }
-        var bindings = state.Allows(HarnessManagementScope.Connections) && admitted.SelfManagement?.Allows(HarnessManagementScope.Connections) != false && credentials is not null
-            ? await credentials.SafeMetadataAsync(id, ct) : [];
-        var eligible = state.Allows(HarnessManagementScope.Connections) && admitted.SelfManagement?.Allows(HarnessManagementScope.Connections) != false && credentials is not null
-            ? (await credentials.ListAsync(ct)).Where(c => c.Status == "Active").Take(24)
+        else if (goalScoped) blocker = new { outcome = "owner_action_required", reason = "unsupported_goal",
+            nextStep = "Name the actual blocked tool or inspect the relevant area. Core cannot infer a safe setting change from this goal.",
+            adminPath = "/admin/instances/" + id.ToString("D") + "/identity/settings" };
+        var connectionGoal = !goalScoped || diagnosedTarget is ToolCatalog.BrowserFillCredential || args.TryGetProperty("goal", out var connectionText) && connectionText.GetString()!.Contains("sign in", StringComparison.OrdinalIgnoreCase);
+        var connectionsGranted = state.Allows(HarnessManagementScope.Connections) && admitted.SelfManagement?.Allows(HarnessManagementScope.Connections) != false && credentials is not null;
+        var bindings = connectionGoal && connectionsGranted
+            ? await credentials!.SafeMetadataAsync(id, ct) : [];
+        var eligible = connectionGoal && connectionsGranted
+            ? (await credentials!.ListAsync(ct)).Where(c => c.Status == "Active").Take(24)
                 .Select(c => new { c.CredentialId, c.DisplayName, c.Kind }).ToArray() : [];
-        var skillViews = state.Allows(HarnessManagementScope.Skills) && admitted.SelfManagement?.Allows(HarnessManagementScope.Skills) != false && instanceSkills is not null
+        if (diagnosedTarget == ToolCatalog.BrowserFillCredential && RolePermissions.AllowsTool(admitted, diagnosedTarget)
+            && _configurationGate.IsConfigured(diagnosedTarget) && connectionsGranted && !bindings.Any(b => b.Kind == "Password"))
+            blocker = new { target = diagnosedTarget, outcome = "owner_action_required", reason = "credential_binding_missing",
+                nextStep = "Choose an eligible existing System Credential and propose its exact Instance binding, or configure sign-in in Admin. OAuth and MFA require owner interaction.",
+                adminPath = "/admin/instances/" + id.ToString("D") + "/credentials" };
+        var skillViews = !goalScoped && state.Allows(HarnessManagementScope.Skills) && admitted.SelfManagement?.Allows(HarnessManagementScope.Skills) != false && instanceSkills is not null
             ? (await instanceSkills.ListAsync(id, admitted, ct)).Take(24).Select(s => new { s.Key, s.Name, s.Enabled, s.Revision, s.MissingCapabilities }).ToArray() : [];
-        var resourceViews = state.Allows(HarnessManagementScope.Resources) && admitted.SelfManagement?.Allows(HarnessManagementScope.Resources) != false && instanceResources is not null
+        var resourceViews = !goalScoped && state.Allows(HarnessManagementScope.Resources) && admitted.SelfManagement?.Allows(HarnessManagementScope.Resources) != false && instanceResources is not null
             ? (await instanceResources.ListAsync(id, ct)).Resources.Take(24).ToArray() : [];
+        var remedy = goalScoped ? await DiagnoseRemedyAsync(id, policy, admitted, args, ct) : null;
+        var options = remedy is null ? Array.Empty<ConfigurationRemedy>() : new[] { remedy };
         return new { outcome = "inspected", instanceRevision = policy.InstanceRevision, policyRevision = policy.PolicyRevision,
             changesApplyTo = "nextRun", settings = settingsViews, skills = skillViews, resources = resourceViews,
             bindings, eligibleCredentials = eligible, blocker,
-            remediationOptions = settingsViews.Select(s => new { option = RemediationOption(id, policy.InstanceRevision, policy.PolicyRevision, s.Section), operation = "settings.patch", s.Section, fields = s.Effective.Keys,
-                requiredTool = "settings.patch", expectedInstanceRevision = policy.InstanceRevision }).ToArray(),
-            continuation = "After a committed change, use a fresh owner turn for the unfinished task. Never replay uncertain effects.",
+            remediationOptions = options,
+            continuation = "After a diagnosed committed change Core may admit one bounded fresh Run for the unfinished task. New writes require new exact approval; uncertain effects never replay.",
             ownerOnly = "Provider secrets, OAuth/MFA, host policies and Definition-denied authority require owner setup in Admin." };
     }
 
@@ -105,6 +115,16 @@ public sealed partial class SessionToolExecutor
             {
                 case "configuration.inspect": result = await InspectConfigurationAsync(id, definition, args, admission, ct); break;
                 case "management.inspect": result = policy; break;
+                case "automation.preferences.inspect":
+                    var automationOwner = await _agentInstances!.FindAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Instance was not found.");
+                    result = new { instanceRevision = revision, automationOwner.UnattendedModelCatalogKey, automationOwner.UnattendedReasoningEffort,
+                        triggerPolicy = await instanceSettings!.ReadAsync(id, "triggerPolicy", ct), changesApplyTo = "nextRun" }; break;
+                case "automation.preferences.patch":
+                    if (instanceAdmin is null) throw AgentCoreErrors.Validation("Automation model preferences are unavailable in this host.");
+                    var automationUpdated = await instanceAdmin.SetUnattendedModelAsync(id, revision,
+                        args.GetProperty("catalogKey").GetString(), args.GetProperty("reasoningEffort").GetString(), ct, AdminEventActorKind.Agent);
+                    result = new { outcome = automationUpdated.Revision == revision ? "unchanged" : "applied", instanceRevision = automationUpdated.Revision,
+                        automationUpdated.UnattendedModelCatalogKey, automationUpdated.UnattendedReasoningEffort, changesApplyTo = "nextRun" }; break;
                 case "management.freeze": result = new { outcome = "frozen", policy = await selfManagement.FreezeAsync(id, revision, ct), changesApplyTo = "immediateRevocation", ordinaryTasksAvailable = true }; break;
                 case "management.policy.update":
                     var overrides = policy.Overrides ?? (policy.Source == "instance"
@@ -120,12 +140,16 @@ public sealed partial class SessionToolExecutor
                 case "settings.patch":
                     if (!policy.Effective.Allows(HarnessManagementScope.Settings) || definition.SelfManagement?.Allows(HarnessManagementScope.Settings) == false)
                         throw AgentCoreErrors.Forbidden("Settings are outside the effective management grant.");
-                    if (call.Name == "configuration.propose") ValidateRemediationOption(id, policy, args);
+                    if (call.Name == "configuration.propose") await ValidateTargetedRemedyAsync(id, policy, definition, args, ct);
                     var section = args.GetProperty("section").GetString()!;
                     var set = args.GetProperty("set").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
                     var clear = args.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!).ToArray();
                     var updated = await instanceSettings!.PatchAsync(id, section, revision, set, clear, ct, AdminEventActorKind.Agent);
-                    result = new { outcome = updated.InstanceRevision == revision ? "unchanged" : "applied", state = updated, changesApplyTo = "nextRun", continuation = "Start a fresh owner turn; the current Run remains pinned." }; break;
+                    result = new { outcome = updated.InstanceRevision == revision ? "unchanged" : "applied", state = updated, changesApplyTo = "nextRun",
+                        pendingTask = call.Name == "configuration.propose" && args.TryGetProperty("target", out var taskTarget)
+                            && admission.AgentRunId is { } sourceRun && args.TryGetProperty("goal", out var taskGoal)
+                            ? new AgentCore.Application.Execution.ConfigurationPendingTask(sourceRun, taskTarget.GetString()!, taskGoal.GetString()!, updated.InstanceRevision) : null,
+                        continuation = "Core may admit a bounded fresh Run for a diagnosed task. Other tasks require a deliberate next owner turn; never replay uncertain effects." }; break;
                 case "resources.list": result = await instanceResources!.ListAsync(id, ct); break;
                 case "resources.inspect":
                     var read = await instanceResources!.ReadContentAsync(id, args.GetProperty("key").GetString()!, ct);

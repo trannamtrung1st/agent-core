@@ -53,6 +53,19 @@ internal static class AgentRunStoreMapping
             throw AgentCoreErrors.Validation("This Activation requires its atomic, fenced admission method.");
     }
 
+    public static void ValidateConfigurationContinuation(AgentRun run, AgentRun? source)
+    {
+        if (run.Admission.Activation.Kind != ActivationKind.ConfigurationContinuation) return;
+        var task = source is null ? null : ConfigurationPendingTask.ReadSafe(source);
+        if (source is null || task is null || source.Owner != run.Owner || source.SessionId != run.SessionId
+            || run.Admission.Activation.SourceSessionId != source.SessionId || run.Admission.Activation.SourceEventId != source.ActivationId
+            || run.Admission.Activation.DedupeKey != $"configuration-continuation:{source.AgentRunId:D}"
+            || run.Admission.Activation.SourceEntryIds.Count != 0 || run.MaxAttempts != 1
+            || run.Admission.Configuration?.InstanceRevision != task.InstanceRevision
+            || ConfigurationPendingTask.ReadTarget(run.Admission.Activation.EvidenceJson) != task.Target)
+            throw AgentCoreErrors.Conflict("Configuration continuation requires its completed, safe owned task receipt.");
+    }
+
     public static void ValidateImmediateAdmission(AgentRun run, Guid expectedParentGeneration)
     {
         if (run.Admission.Activation.Kind != ActivationKind.ImmediateBackground || expectedParentGeneration == Guid.Empty)

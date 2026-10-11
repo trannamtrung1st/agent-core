@@ -25,7 +25,7 @@ export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalPr
   const { token } = theme.useToken();
   const open = approval != null;
   const filesystem = ["workspace.delete", "workspace.batch"].includes(approval?.toolName ?? "");
-  const management = /^(configuration|management|settings|resources|skills)\./.test(approval?.toolName ?? "") || approval?.toolName === "credentials.binding.propose";
+  const management = /^(configuration|management|settings|resources|skills|credentials\.binding|automation\.preferences)\./.test(approval?.toolName ?? "");
   const semantic = management || filesystem || approval?.toolName.startsWith("harness.") || ["memory.consolidate", "experience.consolidate", "memory.forget"].includes(approval?.toolName ?? "");
   const detailEntries = approval ? Object.entries(approval.details) : [];
   const revisionKeys = ["Active version", "Policy revision", "Instance revision"];

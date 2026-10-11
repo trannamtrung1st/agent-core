@@ -38,7 +38,8 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
-    AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null)
+    AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
+    AdminAgentInstanceService? instanceAdmin = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;

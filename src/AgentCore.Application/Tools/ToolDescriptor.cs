@@ -38,7 +38,8 @@ public sealed record ToolExecutionAdmission(
     AgentCore.Domain.Conversation.AgentRunModelPin? Model = null,
     string? WorkspaceCwd = null, Guid? OwnedSessionId = null,
     IReadOnlyList<AgentCore.Domain.Definitions.EffectiveSkill>? PinnedSkillCatalog = null,
-    IReadOnlyList<string>? ActiveSkillKeys = null, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? PinnedCredentialBindings = null);
+    IReadOnlyList<string>? ActiveSkillKeys = null, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? PinnedCredentialBindings = null,
+    string? ConfigurationContinuationTarget = null);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,

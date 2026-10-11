@@ -18,6 +18,8 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (admission?.ConfigurationContinuationTarget is { } continuationTarget && (ManagementTools.IsManagement(toolName) || descriptor.Effect != ToolEffect.ReadOnly && toolName != continuationTarget))
+            return ToolPolicyDecision.Deny;
         if (ToolCatalog.IsCompletionTool(toolName) && admission?.OwnedSessionId is null) return ToolPolicyDecision.Deny;
         if (toolName == ToolCatalog.BackgroundStart && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return ToolPolicyDecision.Deny;
@@ -132,11 +134,11 @@ public static class ToolPolicy
         }
 
         if (InstanceSkillTools.IsManagement(toolName) && descriptor.Effect != ToolEffect.ReadOnly
-            && !(admission!.Harness!.Policy.AutoApplies(ManagementAutoApply.SkillChanges)
-                && (definition.SelfManagement?.AutoApplies(ManagementAutoApply.SkillChanges) ?? true)) && grant is null)
+            && (toolName is "skills.delete" or "skills.customize" || !(admission!.Harness!.Policy.AutoApplies(ManagementAutoApply.SkillChanges)
+                && (definition.SelfManagement?.AutoApplies(ManagementAutoApply.SkillChanges) ?? true))) && grant is null)
             return ToolPolicyDecision.RequireApproval;
 
-        if (descriptor.Effect is ToolEffect.SensitiveWrite or ToolEffect.Destructive)
+        if (descriptor.Effect is ToolEffect.SensitiveWrite or ToolEffect.Destructive || admission?.ConfigurationContinuationTarget is not null && descriptor.Effect != ToolEffect.ReadOnly)
         {
             if (grant is null
                 || !string.Equals(grant.ToolName, toolName, StringComparison.Ordinal)
@@ -157,6 +159,7 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (context?.ConfigurationContinuationTarget is { } continuationTarget && (ManagementTools.IsManagement(descriptor.Name) || descriptor.Effect != ToolEffect.ReadOnly && descriptor.Name != continuationTarget)) return false;
         if (descriptor.Name == ToolCatalog.BackgroundAcknowledge && context?.HasBackgroundClaim != true) return false;
         if (ToolCatalog.IsCompletionTool(descriptor.Name) && context?.OwnedSessionId is null) return false;
         if (descriptor.Name == ToolCatalog.BackgroundStart && context is not { DetachedExecution: false, Trigger.Kind: TriggerKind.UserTurn, OwnedSessionId: not null })

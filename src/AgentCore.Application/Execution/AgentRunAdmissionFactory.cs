@@ -24,6 +24,23 @@ public static class AgentRunAdmissionFactory
 
     public sealed record SignalInput(TriggerKind TriggerKind, string? Text, string? EnvironmentKind);
 
+    public static AgentRun ForConfigurationContinuation(Guid activationId, Guid runId, Guid responseId,
+        SessionSnapshot snapshot, AgentRun source, ConfigurationPendingTask task, DateTimeOffset now,
+        IReadOnlyList<EffectiveSkill> catalog, EffectiveExecutionBudget budget, AgentRunConfiguration configuration)
+    {
+        var text = $"Continue verified configuration task: {task.Goal}\nPending task: {source.AgentRunId:D}. "
+            + $"The configuration change committed at Instance revision {task.InstanceRevision}. This is one bounded fresh Run. "
+            + $"Use {task.Target} to finish only this diagnosed task. Do not repeat configuration changes or prior effects. Any write requires a new exact owner approval.";
+        var activation = new Activation(activationId, snapshot.SessionId, ActivationKind.ConfigurationContinuation,
+            [], source.ActivationId, null, snapshot.SessionId, source.AgentRunId,
+            $"configuration-continuation:{source.AgentRunId:D}", now, JsonSerializer.Serialize(new { TriggerKind = TriggerKind.UserTurn, Text = text, EnvironmentKind = "configuration", ContinuationTarget = task.Target }));
+        var selection = snapshot.ModelSelection ?? throw AgentCoreErrors.Validation("Continuation requires a resolved model.");
+        return AgentRun.Create(runId, source.Owner, new(activation, configuration.Definition.Id, configuration.Definition.Version,
+            snapshot.PinnedPersona!, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration),
+            new(selection.CatalogKey, selection.ProviderAlias, selection.ModelId, selection.ReasoningEffort),
+            1, now, catalog, catalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key).ToArray());
+    }
+
     public static AgentRun ForAdmittedSignal(Guid activationId, Guid runId, Guid responseId, SessionSnapshot snapshot,
         AgentTrigger trigger, DateTimeOffset atUtc, IReadOnlyList<EffectiveSkill> catalog, ExecutionModelPin? occurrenceModel = null, EffectiveExecutionBudget? budget = null, AgentRunConfiguration? configuration = null)
     {
