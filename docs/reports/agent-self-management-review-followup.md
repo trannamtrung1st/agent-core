@@ -38,4 +38,4 @@ The temporary config, removed after verification, imports `standard` from `./pla
 
 ## Acceptance remaining open
 
-The safe continuation fallback still requires a deliberate new owner turn; automatic fresh-Run continuation is not implemented. Real tool-capable model UAT remains unrun because specific authorization to send its bounded test payload to OpenRouter has not arrived. Expanded captured-request, new-tool recovery and blocker journeys remain open as listed in the initial A01–A20 disposition. These review fixes do not close the entire proposal or reopen P10/P11.
+The safe continuation fallback still requires a deliberate new owner turn; automatic fresh-Run continuation is not implemented. On 2026-10-11 the owner explicitly chose to skip real-model UAT against OpenRouter and leave acceptance pending. No live request was sent; do not run it without new explicit authorization. Expanded captured-request, new-tool recovery and blocker journeys remain open as listed in the initial A01–A20 disposition. These review fixes do not close the entire proposal or reopen P10/P11.
