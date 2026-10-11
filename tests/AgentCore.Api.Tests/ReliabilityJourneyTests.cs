@@ -19,6 +19,71 @@ public sealed class ReliabilityJourneyTests
     private static readonly DateTimeOffset Now = new(2026, 10, 12, 0, 0, 0, TimeSpan.Zero);
 
     [Theory(Timeout = 60000)]
+    [InlineData("complete")]
+    [InlineData("prose")]
+    public async Task Completion_waits_for_active_user_reply_then_delivers_once_after_reopen(string mode)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"reliability-busy-parent-{Guid.NewGuid():N}.db");
+        var clock = new AutomationClock(Now);
+        var model = new ConcurrentCompletionModel(new CompletionModel(mode, clock));
+        Guid instanceId, parentId, childId;
+        await using (var host = new ExperienceHost(path, model, clock, configure: s => ConfigureArtifacts(s, path)))
+        {
+            var s = host.Services;
+            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24)).InstanceId;
+            var parent = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
+            parentId = parent.SessionId;
+            var owner = new AgentRunOwner(instanceId, LocalUserProfile.Id);
+            var store = s.GetRequiredService<IAgentRunStore>();
+            await using (var runtime = s.GetRequiredService<SessionRuntimeFactory>().Create(parent, new QuietOutput()))
+            {
+                await runtime.AttachAsync();
+                Assert.True(await runtime.SubmitUserTextAsync("Hold the foreground reply"));
+                await model.ParentStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                try
+                {
+                    var automation = await s.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(instanceId, null, 0, true,
+                        "Fixture", "Save a verified fixture and report its result", new ScheduleTrigger(new FixedIntervalSchedule(60, Now.AddSeconds(60))),
+                        null, null, executionTarget: AutomationExecutionTarget.Background, completionDelivery: AutomationCompletionDelivery.ToSession(parentId), requiresTools: true);
+                    await s.GetRequiredService<AdminAutomationAuthoringService>().RunNowAsync(instanceId, automation.AutomationId, automation.Revision);
+                    await Intake(s);
+                    await s.ExecuteRunsAsync();
+                    var child = Assert.Single(await store.ListAsync(owner, 100), r => r.Admission.OutputContract == AgentRunOutputContract.BackgroundOutcome);
+                    childId = child.AgentRunId;
+                    Assert.True(child.IsTerminal);
+                    await s.GetRequiredService<BackgroundCompletionReporter>().ReportPendingAsync(100);
+                    Assert.Equal("pending", (await store.GetCompletionDeliveryAsync(owner, childId)).Status);
+                    Assert.DoesNotContain(await store.ListForSessionAsync(owner, parentId), r => r.Admission.Activation.Kind == ActivationKind.BackgroundCompleted);
+                    Assert.Equal(EntryStatus.Streaming, runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant).Status);
+                }
+                finally { model.ReleaseParent.TrySetResult(); }
+                await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Equal(EntryStatus.Completed, runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant).Status);
+            }
+            await s.GetRequiredService<BackgroundCompletionReporter>().ReportPendingAsync(100);
+            await s.ExecuteRunsAsync();
+            await s.GetRequiredService<BackgroundCompletionReporter>().ReportPendingAsync(100);
+            Assert.Equal("delivered", (await store.GetCompletionDeliveryAsync(owner, childId)).Status);
+            Assert.Equal(1, model.ParentRequests);
+        }
+        await using var reopened = new ExperienceHost(path, model, clock, configure: s => ConfigureArtifacts(s, path));
+        await reopened.Services.ExecuteRunsAsync();
+        var runStore = reopened.Services.GetRequiredService<IAgentRunStore>();
+        var history = (await reopened.Services.GetRequiredService<IMemoryStore>().LoadAsync(parentId))!;
+        Assert.Single(history.Entries, e => e.Role == ConversationRole.Assistant && e.Text == "Foreground reply finished.");
+        Assert.Single(history.Entries, e => e.Role == ConversationRole.Assistant && e.Text.StartsWith("Background work", StringComparison.Ordinal));
+        Assert.Single(await runStore.ListForSessionAsync(new(instanceId, LocalUserProfile.Id), parentId), r => r.Admission.Activation.Kind == ActivationKind.BackgroundCompleted);
+        var source = (await runStore.GetAsync(new(instanceId, LocalUserProfile.Id), childId))!;
+        Assert.Equal(mode == "complete" ? AgentRunStatus.Completed : AgentRunStatus.Failed, source.Status);
+        Assert.Single(await reopened.Services.GetRequiredService<IArtifactStore>().ListAsync(source.SessionId));
+        Assert.Equal(1, model.ParentRequests);
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData("don't greet me every 60 seconds", false)]
+    [InlineData("can you greet me every 60 seconds?", false)]
+    [InlineData("yesterday I asked you to greet me every 60 seconds", false)]
+    [InlineData("the kettle is blue", false)]
     [InlineData("don't say hello in 15s", false)]
     [InlineData("do not schedule it for every 60s", true)]
     [InlineData("delete it", true)]
@@ -44,6 +109,10 @@ public sealed class ReliabilityJourneyTests
     }
 
     [Theory(Timeout = 60000)]
+    [InlineData("greet me every 60 seconds", null, 60)]
+    [InlineData("every 60 seconds, greet me", null, 60)]
+    [InlineData("please greet me every minute", null, 60)]
+    [InlineData("say hello to me every 60s", null, 60)]
     [InlineData("say hello in 15s", null, 15)]
     [InlineData("every 60s, wake me up", null, 60)]
     [InlineData("every 30s, wake me up", "okay so 60s", 60)]
@@ -54,11 +123,12 @@ public sealed class ReliabilityJourneyTests
         var path = Path.Combine(Path.GetTempPath(), $"reliability-schedule-{Guid.NewGuid():N}.db");
         var clock = new AutomationClock(Now);
         var model = new SchedulingModel();
+        var classifier = new ForbiddenClassifier();
         Guid instanceId, sessionId;
         await using (var host = new ExperienceHost(path, model, clock, configure: services =>
         {
             services.RemoveAll<ITriggerCommandAuthorizer>();
-            services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(new UnavailableClassifier(), new()));
+            services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(classifier, new()));
         }))
         {
             var s = host.Services;
@@ -76,7 +146,7 @@ public sealed class ReliabilityJourneyTests
                 await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
             }
             var automation = Assert.Single(await s.GetRequiredService<ITriggerStore>().ListAsync(new(instanceId, LocalUserProfile.Id), null));
-            Assert.Equal(request.StartsWith("say") ? "Say hello" : "Wake me up", automation.Instructions);
+            Assert.Equal(request.Contains("greet") || request.Contains("hello") ? "Say hello" : "Wake me up", automation.Instructions);
             Assert.Equal(AutomationExecutionTarget.Existing(sessionId), automation.ExecutionTarget);
             Assert.Equal(seconds, automation.Schedule is FixedIntervalSchedule recurring ? recurring.IntervalSeconds
                 : (int)(Assert.IsType<OneShotSchedule>(automation.Schedule).AtUtc - Now).TotalSeconds);
@@ -87,6 +157,7 @@ public sealed class ReliabilityJourneyTests
         await services.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.GetUtcNow());
         await Intake(services);
         await services.ExecuteRunsAsync();
+        await services.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.GetUtcNow());
         await Intake(services);
         await services.ExecuteRunsAsync();
         var runs = await services.GetRequiredService<IAgentRunStore>().ListForSessionAsync(new(instanceId, LocalUserProfile.Id), sessionId);
@@ -94,6 +165,65 @@ public sealed class ReliabilityJourneyTests
         Assert.Equal(AgentRunStatus.Completed, occurrence.Status);
         var history = (await services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Entries;
         Assert.Single(history, e => e.Role == ConversationRole.Assistant && e.Text == "Hello!");
+        Assert.Equal(0, classifier.Calls);
+        if (request.Contains("greet") || request.Contains("every 60s") && request.Contains("hello"))
+        {
+            clock.Advance(TimeSpan.FromSeconds(seconds));
+            for (var pass = 0; pass < 2; pass++)
+            {
+                await services.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.GetUtcNow());
+                await Intake(services);
+                await services.ExecuteRunsAsync();
+            }
+            var scheduledRuns = (await services.GetRequiredService<IAgentRunStore>()
+                .ListForSessionAsync(new(instanceId, LocalUserProfile.Id), sessionId))
+                .Where(r => r.Admission.Activation.TriggerOccurrenceId is not null).ToArray();
+            Assert.Equal(2, scheduledRuns.Length);
+            Assert.Equal(2, scheduledRuns.Select(r => r.Admission.Activation.TriggerOccurrenceId).Distinct().Count());
+            Assert.All(scheduledRuns, r => Assert.Equal(AgentRunStatus.Completed, r.Status));
+            Assert.Equal(2, (await services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Entries
+                .Count(e => e.Role == ConversationRole.Assistant && e.Text == "Hello!"));
+        }
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData("unavailable", "authorization_classifier_unavailable")]
+    [InlineData("invalid", "authorization_classifier_invalid_output")]
+    [InlineData("ambiguous", "authorization_ambiguous")]
+    [InlineData("deny", "authorization_denied")]
+    public async Task Ambiguous_schedule_diagnostics_are_distinct_and_never_create(string mode, string expected)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"reliability-classifier-{Guid.NewGuid():N}.db");
+        var model = new SchedulingModel();
+        await using var host = new ExperienceHost(path, model, new AutomationClock(Now), configure: services =>
+        {
+            services.RemoveAll<ITriggerCommandAuthorizer>();
+            services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(new ClassifierModel(mode), new()));
+        });
+        var s = host.Services;
+        var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24);
+        var snapshot = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
+        await using var runtime = s.GetRequiredService<SessionRuntimeFactory>().Create(snapshot, new QuietOutput());
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitUserTextAsync("maybe greet me every minute"));
+        await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.Empty(await s.GetRequiredService<ITriggerStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), null));
+        Assert.Contains(model.ScheduleResults, text => text.Contains("\"error\":\"" + expected + "\"", StringComparison.Ordinal));
+    }
+
+    private sealed class ClassifierModel(string mode) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.CompletedTask;
+            if (mode == "unavailable") yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Classifier unavailable."));
+            else
+            {
+                yield return new ModelTextDelta(mode == "invalid" ? "{\"decision\":42}" : "{\"decision\":\"" + mode + "\"}");
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+        }
     }
 
     [Theory(Timeout = 60000)]
@@ -186,6 +316,42 @@ public sealed class ReliabilityJourneyTests
         public ValueTask PublishAsync(SessionOutput item, CancellationToken ct = default) => ValueTask.CompletedTask;
     }
 
+    private sealed class ConcurrentCompletionModel(ILanguageModel background) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities => background.Capabilities;
+        public TaskCompletionSource ParentStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseParent { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int ParentRequests { get; private set; }
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
+        {
+            if (request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text == "Hold the foreground reply")
+            {
+                ParentRequests++;
+                ParentStarted.TrySetResult();
+                await ReleaseParent.Task.WaitAsync(ct);
+                yield return new ModelDisplayDelta("Foreground reply finished.");
+                yield return new ModelSemanticResponseReady(new("Foreground reply finished.", new(ModelSpeechMode.None, null), []));
+                yield return new ModelCompleted(ModelStopReason.Completed);
+            }
+            else await foreach (var item in background.GenerateAsync(request, ct)) yield return item;
+        }
+    }
+
+    private sealed class ForbiddenClassifier : ILanguageModel
+    {
+        public int Calls { get; private set; }
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.CompletedTask;
+            Calls++;
+            throw new InvalidOperationException("Clear scheduling must not call the classifier.");
+#pragma warning disable CS0162
+            yield break;
+#pragma warning restore CS0162
+        }
+    }
+
     private sealed class UnavailableClassifier : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(true, true);
@@ -198,6 +364,7 @@ public sealed class ReliabilityJourneyTests
 
     private sealed class SchedulingModel : ILanguageModel
     {
+        public List<string> ScheduleResults { get; } = [];
         public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
@@ -206,12 +373,15 @@ public sealed class ReliabilityJourneyTests
             var scheduled = request.Messages.Any(m => m.Text.Contains("Execute the previously authorized Automation instructions now"));
             var lastUser = request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User);
             var results = request.Messages.Skip(lastUser + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
+            ScheduleResults.AddRange(results.Where(m => m.Name == ToolCatalog.AutomationCreate).Select(m => m.Text));
             if (!scheduled && !results.Any(m => m.Name == ToolCatalog.AutomationCreate))
             {
                 if (!request.Tools!.Any(t => t.Name == ToolCatalog.AutomationCreate))
                 {
                     yield return Call(ToolCatalog.CapabilitiesLoad, new { query = ToolCatalog.AutomationCreate, limit = 1 });
                 }
+                else if (user.Contains("greet") || user.Contains("hello") && user.Contains("every"))
+                    yield return Call(ToolCatalog.AutomationCreate, new { executionTarget = "currentSession", instructions = "Say hello", kind = "fixed_interval", intervalSeconds = 60 });
                 else if (user.StartsWith("say"))
                     yield return Call(ToolCatalog.AutomationCreate, new { executionTarget = "currentSession", instructions = "Say hello", relativeDelaySeconds = 15 });
                 else if (user.StartsWith("every"))

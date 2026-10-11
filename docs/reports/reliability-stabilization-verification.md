@@ -17,6 +17,8 @@ Date: 2026-10-12. Scope: the requested scheduling/background reliability success
 
 Eight background journeys save a workspace file and artifact, then exercise completion success, repeated prose, prohibited finalization work, transient unavailable-provider retry after reopen, invalid structured response, incomplete tool call, authentication failure and reserve entry. Every recovery request exposes only named `work.complete` without a conversational response envelope. Artifacts survive reopen, the successful file effect occurs once, and no prohibited replay file is created. A FakeTimeProvider test crosses the work cutoff and hard expiry: cutoff completes truthfully with NeedsAttention; hard expiry fails `run-deadline` without a fabricated result or retry.
 
+Two additional integrated cases hold a real parent Runtime's user reply open while a successful or failed background Run becomes terminal. Reporting stays pending, no completion-report Run is admitted and the user's assistant entry stays Streaming. After the foreground reply completes normally, the terminal report is delivered once. SQLite reopen preserves the original child status/artifact, one foreground reply and one completion report. These cases were added after the full backend run and passed in the final 19-case reliability/readiness regression.
+
 The Synthetic browser journey observes one durable parent failure report, no literal `\\n\\n`, completion delivery `delivered`, and original Run diagnostics in Background Work. The successful child/artifact journey continues the same child conversation and retains the original result. Existing destination and diagnostic regressions also pass.
 
 Playwright MCP exercised the actual Admin controls against API `5280`, web `5373` and native fixture `5291`, with disposable SQLite/workspace/artifact roots under `/private/tmp/agent-core-reliability-browser`. It created an Instance, opened Activity → Runs and observed live Scheduler: Ready/last-pass metadata, then opened the actual failed background conversation and its original result. The report rendered three paragraphs; details showed completion recovery, attempt 1, `InvalidResponse/backgroundCompletionRequired/backgroundCompletion`, 30 seconds remaining at the checkpoint and zero tool receipts. The dialog had no horizontal overflow. No browser console errors or failed related API requests were observed.
@@ -26,14 +28,15 @@ Playwright MCP exercised the actual Admin controls against API `5280`, web `5373
 | Gate | Result |
 | --- | --- |
 | Focused Application scheduling/authorizer/timer regressions | 27 passed |
-| SQLite reliability and scheduler readiness regressions | 17 passed |
+| SQLite reliability and scheduler readiness regressions | 19 passed, including both active-parent completion/restart cases |
 | Reliability, destination and completion-boundary regression run | 47 passed before the added diagnostics/reserve cases |
 | Frontend production build | Passed; existing large-bundle warning |
 | Background Session and exact-destination Playwright cases | 4 passed |
 | Diagnostic Playwright regressions | 10 passed |
-| Full backend suites on final implementation | Domain 195 passed; Application 1,694 passed / 8 live skips; Infrastructure 1,174 passed / 10 live skips; API/plugin final gate pending |
+| Full backend suites on final implementation | 3,583 passed / 21 live skips: Domain 195, Application 1,694, Infrastructure 1,174, API 516, plugin 4 |
 | Full frontend unit suite | 925 passed with experimental Node Web Storage disabled |
 | Diff whitespace checks | Passed |
+| Changed documentation fences, report link target and complete health JSON example | Passed |
 | Live catalog qualification | Explicit opt-in attempt: 3 theories skipped because no OpenRouter credential is configured; no hosted requests executed |
 | Hosted CI/deployment verification | Not executed in this local request |
 
@@ -47,6 +50,6 @@ Browser command: `PLAYWRIGHT_FAITHFUL_MANUAL=1 PLAYWRIGHT_API_PORT=5280 PLAYWRIG
 
 ## Remaining acceptance limits
 
-No screenshot diagnostic/correlation IDs or original hosted logs were supplied, so this work does not identify the exact historical pictured Run or prove its selected provider/model. No OpenRouter API key is present in environment or the API's user-secrets configuration. The new real-model qualifier and existing catalog qualifiers must run with an authorized configured key before hosted protocol acceptance; Synthetic evidence does not establish live-model reliability. No hosted CI run, deployment or remote changes were requested or performed.
+No screenshot diagnostic/correlation IDs or original hosted logs were supplied, so this work does not identify the exact historical pictured Run or prove its selected provider/model. No OpenRouter API key is present in environment or the API's user-secrets configuration. The new real-model qualifier and existing catalog qualifiers must run with an authorized configured key before hosted protocol acceptance; Synthetic evidence does not establish live-model reliability. The initial investigation did not execute hosted CI or deployment verification. The subsequent user-authorized review and [explicit greeting fix](greeting-scheduling-authorization-verification.md) includes commit/push and exact-candidate CI verification.
 
 The optional fixed-reminder deterministic delivery recommendation remains a separate design decision; this pass preserves scheduled AgentRun execution and implements deterministic delivery only for already admitted background terminal reports. There is no new scheduler, model timeout increase, retry-limit increase, public debug endpoint, persistence migration or multi-agent feature.

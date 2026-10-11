@@ -10,7 +10,8 @@ public enum TriggerCommandAuthorizationDecision
     Deny,
     Allow,
     Ambiguous,
-    ClassifierUnavailable
+    ClassifierUnavailable,
+    ClassifierInvalidOutput
 }
 
 public interface ITriggerCommandAuthorizer
@@ -59,11 +60,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
 
     private static readonly Regex EventAutomationCreate = new(@"\b(create|set up|enable)\b.{0,80}\b(automation|core event|review recent work|consolidate continuity|improve agent harness)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex AgentDirectedCreate = new(
-        @"\b(remind me|notify me|ping me|alert me|nudge me|wake me|set a reminder|schedule a\b|schedule\b.{0,80}\b(at|for|in)\b|every\s+\w+\s+remind|\bsay\b.{0,60}\bto me\b|\b(in|after)\s+\d+\s*(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs)\b.{0,40}\b(to me|me)\b)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
-
-    private static readonly Regex RecurringIntervalImperative = new(
-        @"\bevery\s+(\d+\s+)?(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs|day|days|week|weeks)\b\s*(,)?\s*\b(review|capture|consolidate|update|check|run|write|overwrite|refresh|sync|set|save|send|post|fetch|ping|execute|perform|create|modify|edit|append|replace|delete|remove)\b",
+        @"^(?:please\s+|i want you to\s+)?(remind me|notify me|ping me|alert me|nudge me|wake me|set a reminder|schedule a\b|schedule\b.{0,80}\b(at|for|in)\b|every\s+\w+\s+remind|\bsay\b.{0,60}\bto me\b|\b(in|after)\s+\d+\s*(second|seconds|sec|secs|minute|minutes|min|mins|hour|hours|hr|hrs)\b.{0,40}\b(to me|me)\b)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex AgentDirectedCreateVi = new(
@@ -86,17 +83,17 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         @"\b(cancel|delete|remove|drop|clear|stop)\b.{0,30}\b(that|the|this|it|reminder|schedule|automation)\b|\bdelete that reminder\b|\bcancel that reminder\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    private static readonly Regex TimedImperative = new(
-        @"^(?:please\s+|i want you to\s+)?(say|tell|send|message|check|wake|notify|ping|alert|nudge|remind)\b.{0,80}\b(in|after|every)\s+\d+\s*(s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?)\b|^(?:please\s+)?(in|after|every)\s+\d+\s*(s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?)\b\s*[,]?\s*(say|tell|send|message|check|wake|notify|ping|alert|nudge|remind)\b",
+    // A definite non-command must not become authorized by a classifier or a substring match.
+    internal static bool IsClearlyNonAuthorizing(string text, TriggerCommandAction action = TriggerCommandAction.Create) =>
+        IsExplicitlyNegated(text) || (action != TriggerCommandAction.List && NonCommandPrefix.IsMatch(text)) || InformationalFuture.IsMatch(text);
+
+    private static readonly Regex NonCommandPrefix = new(
+        @"^(?:please\s+)?(?:can you|could you|do you|would you|what|why|how|did|does|is it|yesterday|last\s+\w+|previously|earlier|i (?:asked|said|used|wanted)|you (?:said|used|were))\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     internal static bool IsExplicitlyNegated(string text) => Regex.IsMatch(text,
-        @"\b(don'?t|do not|never)\b.{0,60}\b(create|set|configure|update|edit|change|cancel|delete|remove|stop|say|tell|send|message|check|wake|notify|ping|alert|nudge|remind|schedule)\b",
+        @"\b(don['’]?t|do not|never)\b.{0,60}\b(create|set|configure|update|edit|change|cancel|delete|remove|stop|greet|say|tell|send|message|check|wake|notify|ping|alert|nudge|remind|schedule)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-    private static readonly Regex NegatedCreate = new(
-        @"\b(don'?t|do not|never)\b.{0,30}\b(create|remind|schedule|set)\b",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     public ValueTask<TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(
         string? currentUserText,
@@ -118,7 +115,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             return ValueTask.FromResult(TriggerCommandAuthorizationDecision.Deny);
         }
 
-        if (IsExplicitlyNegated(text))
+        if (IsClearlyNonAuthorizing(text, requestedAction))
             return ValueTask.FromResult(TriggerCommandAuthorizationDecision.Deny);
 
         var allowed = requestedAction switch
@@ -183,7 +180,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         ScheduleConversationContext? scheduleContext = null,
         ScheduleDraftContext? scheduleDraft = null)
     {
-        if (IsExplicitlyNegated(text)) return false;
+        if (IsClearlyNonAuthorizing(text)) return false;
 
         if (scheduleDraft is { IsActive: true }
             && ScheduleIntervalLanguage.IsIntervalOnlyCorrection(text, conversationLanguage))
@@ -191,7 +188,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             return true;
         }
 
-        if (NegatedCreate.IsMatch(text) || InformationalFuture.IsMatch(text) || CapabilityQuestion.IsMatch(text))
+        if (CapabilityQuestion.IsMatch(text))
         {
             return false;
         }
@@ -201,7 +198,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             return true;
         }
 
-        if (RecurringIntervalImperative.IsMatch(text))
+        if (TimedScheduleIntent.Matches(text))
         {
             return true;
         }
@@ -211,7 +208,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             return true;
         }
 
-        return TimedImperative.IsMatch(text) || AgentDirectedCreate.IsMatch(text) || Regex.IsMatch(text, @"\b(create|set up|configure)\b.{0,50}\bautomation\b|\bwhen\b.{0,40}\border\b.{0,40}\b(placed|created|arrives)\b.{0,80}\b(review|check|notify|run)\b", RegexOptions.IgnoreCase);
+        return AgentDirectedCreate.IsMatch(text) || Regex.IsMatch(text, @"\b(create|set up|configure)\b.{0,50}\bautomation\b|\bwhen\b.{0,40}\border\b.{0,40}\b(placed|created|arrives)\b.{0,80}\b(review|check|notify|run)\b", RegexOptions.IgnoreCase);
     }
 
     internal static bool MatchesList(string text, string? conversationLanguage) =>
@@ -266,7 +263,7 @@ public sealed class ModelTriggerCommandAuthorizer(
             return TriggerCommandAuthorizationDecision.Deny;
         }
 
-        if (HeuristicTriggerCommandAuthorizer.IsExplicitlyNegated(text))
+        if (HeuristicTriggerCommandAuthorizer.IsClearlyNonAuthorizing(text, requestedAction))
             return TriggerCommandAuthorizationDecision.Deny;
 
         var heuristicDecision = await heuristic.AuthorizeCurrentTurnAsync(
@@ -290,10 +287,11 @@ public sealed class ModelTriggerCommandAuthorizer(
             MaxOutputTokens: 64,
             Temperature: 0);
 
-        var raw = await ReadTextAsync(languageModel, request, cancellationToken).ConfigureAwait(false);
+        var (raw, failure) = await ReadTextAsync(languageModel, request, cancellationToken).ConfigureAwait(false);
+        if (failure is { } failedDecision) return failedDecision;
         if (!TryParseDecision(raw, out var decision))
         {
-            return TriggerCommandAuthorizationDecision.ClassifierUnavailable;
+            return TriggerCommandAuthorizationDecision.ClassifierInvalidOutput;
         }
 
         return decision;
@@ -365,7 +363,9 @@ public sealed class ModelTriggerCommandAuthorizer(
             }
 
             using var document = JsonDocument.Parse(raw[start..(end + 1)]);
-            if (!document.RootElement.TryGetProperty("decision", out var element))
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("decision", out var element)
+                || element.ValueKind != JsonValueKind.String)
             {
                 return false;
             }
@@ -386,21 +386,28 @@ public sealed class ModelTriggerCommandAuthorizer(
         }
     }
 
-    private static async Task<string> ReadTextAsync(
+    private static async Task<(string Text, TriggerCommandAuthorizationDecision? Failure)> ReadTextAsync(
         ILanguageModel model,
         ModelRequest request,
         CancellationToken cancellationToken)
     {
         var builder = new System.Text.StringBuilder();
+        var completed = false;
         await foreach (var item in model.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
         {
-            if (item is ModelFailed) return string.Empty;
+            if (item is ModelFailed failed)
+                return (string.Empty, failed.Failure.Code == ProviderErrorCode.InvalidResponse
+                    ? TriggerCommandAuthorizationDecision.ClassifierInvalidOutput
+                    : TriggerCommandAuthorizationDecision.ClassifierUnavailable);
+            if (item is ModelCompleted terminal) completed = terminal.Reason == ModelStopReason.Completed;
             if (item is ModelTextDelta delta)
             {
+                if (builder.Length + delta.Text.Length > 4096)
+                    return (string.Empty, TriggerCommandAuthorizationDecision.ClassifierInvalidOutput);
                 builder.Append(delta.Text);
             }
         }
 
-        return builder.ToString();
+        return (builder.ToString(), completed ? null : TriggerCommandAuthorizationDecision.ClassifierInvalidOutput);
     }
 }

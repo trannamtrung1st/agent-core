@@ -209,6 +209,17 @@ public static class TriggerScheduleCommands
                     clearProposal: false);
             }
 
+            if (authorization == TriggerCommandAuthorizationDecision.ClassifierInvalidOutput
+                && context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
+                    or TriggerAuthorizationClassification.UnrelatedUserTurn)
+            {
+                RuntimeTelemetry.RecordAutomation(operation, "authorization_classifier_invalid_output");
+                return Result(
+                    "authorization_classifier_invalid_output",
+                    "Schedule authorization returned an invalid classification. No schedule action was authorized; preserve the request and report the classification failure.",
+                    clearProposal: false);
+            }
+
             if (context.Classification is TriggerAuthorizationClassification.CurrentUserTurn
                 or TriggerAuthorizationClassification.UnrelatedUserTurn)
             {
