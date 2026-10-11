@@ -596,8 +596,7 @@ test("unified resource search keeps successful sources visible and retries a fai
   const picker = page.getByRole("dialog", { name: "Reference resource", exact: true });
   await expect(picker.getByRole("option").filter({ hasText: "Chat" })).toBeVisible();
   await expect(picker).toContainText("Some choices could not load");
-  await picker.getByRole("button", { name: "Load more", exact: true }).click();
-  await expect(picker.getByRole("button", { name: "Load more", exact: true })).toBeHidden();
+  await expect(picker.getByRole("button", { name: "Load more", exact: true })).toHaveCount(0);
   await expect(picker).toContainText("Some choices could not load");
   await expect(picker.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
   expect(skillRequests).toBe(1);
@@ -611,7 +610,7 @@ test("unified resource search keeps successful sources visible and retries a fai
 });
 
 
-test("bounded search explains remaining pages before reporting no matches", async ({ page }) => {
+test("bounded search automatically scans empty pages before reporting no matches", async ({ page }) => {
   await setup(page);
   await page.route("**/composer?**", async route => {
     const url = new URL(route.request().url());
@@ -621,11 +620,63 @@ test("bounded search explains remaining pages before reporting no matches", asyn
   });
   const editor = page.getByLabel("Message", { exact: true });
   await editor.pressSequentially("/bounded-needle");
-  await expect(page.getByText("More choices remain. Load more to continue searching.", { exact: true })).toBeVisible();
-  await expect(page.getByText("No matching choices", { exact: true })).toBeHidden();
   await expect(editor).not.toHaveAttribute("aria-activedescendant");
   const picker = page.getByRole("dialog", { name: "Use Skill", exact: true });
-  await picker.getByRole("button", { name: "Load more", exact: true }).click();
   await expect(page.getByText("No matching choices", { exact: true })).toBeVisible();
   await expect(picker.getByRole("button", { name: "Load more", exact: true })).toBeHidden();
 });
+
+
+for (const width of [1440, 768, 390]) {
+  for (const mode of ["invocation", "reference"] as const) {
+    test(`composer ${mode} auto-pages on scroll at ${width}px and recovers a failed page`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const { instanceId } = await setup(page);
+      let nextRequests = 0;
+      let fail = true;
+      const category = mode === "invocation" ? "invocation" : "skill";
+      const choice = (i: number) => ({ id: `instance:scroll-${i}`, label: `Scroll choice ${i} with a long descriptive title`,
+        description: "A long description that should truncate within the existing row", category,
+        ...(mode === "invocation" ? { skillKey: `instance:scroll-${i}` }
+          : { reference: { kind: "skill", agentInstanceId: instanceId, skillKey: `instance:scroll-${i}` } }) });
+      await page.route("**/composer?**", async route => {
+        const params = new URL(route.request().url()).searchParams;
+        if (params.get("category") !== category) return route.fulfill({ json: { items: [], nextCursor: null } });
+        if (!params.has("cursor")) return route.fulfill({ json: { items: Array.from({ length: 20 }, (_, i) => choice(i)), nextCursor: "page2" } });
+        nextRequests++;
+        if (fail) return route.fulfill({ status: 503, body: "Unavailable" });
+        await route.fulfill({ json: { items: [choice(20)], nextCursor: null } });
+      });
+      // Exercise the focused plus search as well as the typed caret trigger.
+      if (mode === "reference") {
+        await page.getByRole("button", { name: "Add content", exact: true }).click();
+        await page.getByRole("menuitem", { name: "Reference resource" }).click();
+      } else await page.getByLabel("Message", { exact: true }).pressSequentially("/");
+      const picker = page.getByRole("dialog", { name: mode === "invocation" ? "Use Skill" : "Reference resource", exact: true });
+      const list = picker.getByRole("listbox");
+      await expect(list.getByRole("option")).toHaveCount(20);
+      expect(nextRequests).toBe(0);
+      await expect(picker.getByRole("button", { name: "Load more", exact: true })).toHaveCount(0);
+      const bounds = await list.boundingBox();
+      await page.mouse.move(bounds!.x + bounds!.width / 2, bounds!.y + bounds!.height / 2);
+      if (width === 768 && mode === "invocation") {
+        for (let i = 0; i < 19; i++) await page.getByLabel("Message", { exact: true }).press("ArrowDown");
+      } else await page.mouse.wheel(0, 2000);
+      await expect(picker.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+      expect(nextRequests).toBe(1);
+      await page.mouse.wheel(0, 2000);
+      expect(nextRequests).toBe(1);
+      fail = false;
+      await picker.getByRole("button", { name: "Retry", exact: true }).click();
+      await expect(list.getByRole("option")).toHaveCount(21);
+      expect(nextRequests).toBe(2);
+      await expect(picker.getByRole("button", { name: "Retry", exact: true })).toHaveCount(0);
+      const focus = mode === "reference" ? picker.getByRole("combobox") : page.getByLabel("Message", { exact: true });
+      await expect(focus).toBeFocused();
+      await page.mouse.wheel(0, 2000);
+      await list.getByRole("option").last().click();
+      await expect(page.getByLabel("Message", { exact: true }).locator(`[data-composer-chip="${mode === "invocation" ? "invocation" : "reference"}"]`)).toHaveCount(1);
+      await expect(picker).toBeHidden();
+    });
+  }
+}

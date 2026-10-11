@@ -110,6 +110,8 @@ function Controller(props: Props) {
   const pickerRef = useRef(picker);
   pickerRef.current = picker;
   const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const pendingRequest = useRef<number | null>(null);
   const [items, setItems] = useState<ComposerChoice[]>([]);
   const [cursors, setCursors] = useState<ChoiceCursors>({});
   const [failed, setFailed] = useState<ChoiceCursors>({});
@@ -191,7 +193,7 @@ function Controller(props: Props) {
       if (!contains(event.target) || contains(event.relatedTarget)) return;
       if (event.relatedTarget) dismissRef.current();
       else {
-        // Removing a focused Retry/Load more control during loading is not an outside blur.
+        // Removing a focused Retry control during loading is not an outside blur.
         const target = event.target;
         requestAnimationFrame(() => {
           if (target instanceof Node && target.isConnected && !contains(document.activeElement)) dismissRef.current();
@@ -430,7 +432,7 @@ function Controller(props: Props) {
     panelRef.current?.querySelector(`[id="composer-choice-${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active]);
   function reloadChoices(next: ChoiceCursors) {
-    // Retry/Load more can disappear during loading. Keep focus on the stable
+    // Retry can disappear during loading. Keep focus on the stable
     // editing control so removing the button does not dismiss the picker.
     const search = panelRef.current?.querySelector<HTMLInputElement>('[aria-label="Search composer choices"]');
     if (search) search.focus();
@@ -445,7 +447,9 @@ function Controller(props: Props) {
       setLoading(false);
       return;
     }
+    if (pendingRequest.current === requestEpoch.current) return;
     const epoch = ++requestEpoch.current;
+    pendingRequest.current = epoch;
     setLoading(true);
     setError(null);
     const page = await loadComposerChoices(instance, p.mode, p.query, next);
@@ -465,6 +469,7 @@ function Controller(props: Props) {
     setFailed(remainingFailed);
     setError(Object.keys(remainingFailed).length ? "Some choices could not load. Retry to load the missing results." : null);
     if (!next) setActive(0);
+    pendingRequest.current = null;
     setLoading(false);
   }
   useEffect(() => {
@@ -472,6 +477,7 @@ function Controller(props: Props) {
       requestEpoch.current++;
       return;
     }
+    if (listRef.current) listRef.current.scrollTop = 0;
     setItems([]);
     setCursors({});
     setFailed({});
@@ -479,6 +485,23 @@ function Controller(props: Props) {
     const timer = window.setTimeout(() => void load(), 150);
     return () => { window.clearTimeout(timer); requestEpoch.current++; };
   }, [picker?.mode, picker?.query, props.instanceId]);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!picker || !list || loading || error || !Object.keys(cursors).length) return;
+    const loadAtBottom = () => {
+      // Also continue empty/short bounded pages, without requiring a scrollbar.
+      if (list.scrollHeight - list.scrollTop - list.clientHeight <= 1)
+        void load(cursors);
+    };
+    const observer = new ResizeObserver(loadAtBottom);
+    observer.observe(list);
+    list.addEventListener("scroll", loadAtBottom);
+    loadAtBottom();
+    return () => {
+      observer.disconnect();
+      list.removeEventListener("scroll", loadAtBottom);
+    };
+  }, [Boolean(picker), loading, error, cursors, items]);
   useEffect(
     () =>
       editor.registerCommand(
@@ -713,7 +736,9 @@ function Controller(props: Props) {
               : `${items.length} choices available. Use arrow keys and Enter to select.`}
           </span>
           <div
+            ref={listRef}
             id="composer-choices"
+            aria-busy={loading}
             role="listbox"
             aria-label="Composer choices"
             className="composer-picker-list"
@@ -746,10 +771,10 @@ function Controller(props: Props) {
           </div>
           {loading ? (
             <Spin size="small" />
-          ) : !items.length && !error ? (
+          ) : !items.length && !error && !Object.keys(cursors).length ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={Object.keys(cursors).length ? "More choices remain. Load more to continue searching." : "No matching choices"}
+              description="No matching choices"
             />
           ) : null}
           {error ? (
@@ -762,15 +787,6 @@ function Controller(props: Props) {
                 </Button>
               }
             />
-          ) : null}
-          {Object.keys(cursors).length ? (
-            <Button
-              size="small"
-              disabled={loading}
-              onClick={() => reloadChoices(cursors)}
-            >
-              Load more
-            </Button>
           ) : null}
         </div>
       ) : null}

@@ -12,7 +12,9 @@ export async function loadComposerChoices(instance: string, mode: "invocation" |
     const params = new URLSearchParams({ category, search, ...(cursor ? { cursor } : {}) });
     const response = await ownerFetch(`/api/v2/agent-instances/${instance}/composer?${params}`);
     if (!response.ok) throw new Error(category);
-    return await response.json() as { items: ComposerChoice[]; nextCursor: string | null };
+    const page = await response.json() as { items: ComposerChoice[]; nextCursor: string | null };
+    if (cursor && page.nextCursor === cursor) throw new Error(category);
+    return page;
   }));
   const items: ComposerChoice[] = [];
   const next: ChoiceCursors = {};

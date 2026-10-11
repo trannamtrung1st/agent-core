@@ -514,7 +514,7 @@ For supporting heading text, inspect title/metadata proximity and wrapping at 14
 
 ## Unified composer acceptance
 
-Partial-source discovery retains failed-source Retry state while another source is paged. Verify successful rows remain, unrelated failed sources are not queried by Load more, and Retry requests only the failed sources at their retained cursors.
+Partial-source discovery keeps successful rows and failed-source Retry state. Verify successful rows remain, automatic pagination pauses on a failed source, and Retry requests only the failed sources at their retained cursors. Exercise Skill and resource bottom scrolling at 1440/768/390px, focus retention, exhausted pages, automatic empty-page continuation and non-advancing cursor recovery without a Load more button.
 
 Include tall-draft popup bounds across desktop and short 390×320/320×240 viewports, insertion after resize, and arrow navigation through long result lists. Assert search remains within the picker, the active choice is visible, and row text stays inside its row. Geometry assertions await the existing resize-observer/render cycle rather than sampling stale bounds immediately after a viewport change.
 
@@ -523,6 +523,8 @@ Verify ordinary text and structured SendText over real MessagePack, changed-part
 Editor/browser checks cover multi-token insertion, keyboard/IME, atomic deletion, clipboard and undo, reference-only/Skill-only validation, plus discovery, new-chat scope, immutable Queue/Steer, lost ACK/reconnect/refresh, legacy history, Voice and attachment regressions. Capture actual Synthetic interactions at 1440/768/390px; runtime assertions establish behavior beyond screenshots. Record final implementation SHA and distinguish local, hosted and optional live-provider evidence.
 
 Skill-only acceptance covers one/multiple Skills, a normal response, preactivation before the first model call and readable chips after reload. Check mixed Skill/text/reference/attachment ordering, canonical deduplication and invalid/disabled/stale failures. Title tests retain slash context and manual renames without changing stored text. Compaction tests preserve relevant invocation/resource meaning, original durable rows and privacy filters; later ordinary turns retain historical context without reactivation. Deleting the final typed trigger must close its popup, while clearing a plus-picker search must not dismiss that explicit picker.
+
+Optional hosted Skill-content UAT uses `AGENTCORE_SKILL_CONTENT_LIVE=1` plus an explicitly configured model and provider credential. `MessagingSkillLiveUatTests.cs` exercises a canonical Say-only turn, a normal follow-up, seeded durable history at the real compaction threshold, hosted summarization and recall after reopen with empty active Skill pins. Its live gate is capped at four generations and skipped by default. The same UAT flow runs offline with a replay model to verify fixture mechanics, including delivery receipts before compaction, unchanged durable rows and empty Skill pins after reopen. Report the seeded history separately from actual model turns; this UAT tests observed summary quality for one configured model, not universal model quality or manual browser acceptance.
 
 ## Draft evaluation SQLite writer contention
 

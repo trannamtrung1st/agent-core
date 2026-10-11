@@ -30,6 +30,12 @@ describe("unified composer discovery", () => {
     expect(String(fetch.mock.calls[0][0])).toContain("category=artifact&search=&cursor=page2");
     expect(retry.next).toEqual({ artifact: "page4" });
   });
+  it("pauses a source whose cursor does not advance", async () => {
+    fetch.mockResolvedValue(new Response(JSON.stringify({ items: [], nextCursor: "same" })));
+    const page = await loadComposerChoices("instance", "invocation", "", { invocation: "same" });
+    expect(page.next).toEqual({});
+    expect(page.failed).toEqual({ invocation: "same" });
+  });
   it("loads slash Skills without querying reference sources", async () => {
     fetch.mockResolvedValue(new Response(JSON.stringify({ items: [], nextCursor: null })));
     await loadComposerChoices("instance", "invocation", "review");

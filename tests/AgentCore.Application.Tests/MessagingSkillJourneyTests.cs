@@ -17,7 +17,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
-public sealed class MessagingSkillJourneyTests
+public sealed partial class MessagingSkillJourneyTests
 {
     [Theory]
     [InlineData("retired")]
