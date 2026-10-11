@@ -38,6 +38,8 @@ public sealed class ModelTriggerCommandAuthorizerTests
 
     [Theory]
     [InlineData("maybe greet me every minute", "ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
+    [InlineData("say hello to me every minute if I return", "ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
+    [InlineData("say \"hello\" to me every minute", "ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
     [InlineData("the kettle is blue", "deny", TriggerCommandAuthorizationDecision.Deny)]
     [InlineData("another at 8:52", "allow", TriggerCommandAuthorizationDecision.Allow)]
     public async Task Genuine_ambiguity_still_uses_classifier(string text, string token, TriggerCommandAuthorizationDecision expected)

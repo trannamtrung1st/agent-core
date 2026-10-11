@@ -198,9 +198,11 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             return true;
         }
 
-        if (TimedScheduleIntent.Matches(text))
+        // Recognized timed requests have one gate: unsupported/qualified forms must
+        // reach classification instead of falling through a broader directive pattern.
+        if (TimedScheduleIntent.HasTiming(text))
         {
-            return true;
+            return TimedScheduleIntent.Matches(text);
         }
 
         if (PrefersVietnamese(conversationLanguage) && AgentDirectedCreateVi.IsMatch(text))

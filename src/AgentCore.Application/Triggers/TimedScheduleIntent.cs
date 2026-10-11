@@ -8,7 +8,7 @@ internal static class TimedScheduleIntent
 {
     private static readonly HashSet<string> Actions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "greet", "say", "tell", "send", "message", "wake", "notify", "ping", "alert", "nudge", "remind",
+        "schedule", "greet", "say", "tell", "send", "message", "wake", "notify", "ping", "alert", "nudge", "remind",
         "review", "capture", "consolidate", "update", "check", "run", "write", "overwrite", "refresh",
         "sync", "set", "save", "post", "fetch", "execute", "perform", "create", "modify", "edit",
         "append", "replace", "delete", "remove"
@@ -20,6 +20,8 @@ internal static class TimedScheduleIntent
     private static readonly Regex Qualification = new(
         @"\b(if|unless|maybe|perhaps|whether|hypothetically)\b|[?\r\n""“”]",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    internal static bool HasTiming(string text) => text.Length <= 512 && Timing.IsMatch(text);
 
     internal static bool Matches(string text)
     {
