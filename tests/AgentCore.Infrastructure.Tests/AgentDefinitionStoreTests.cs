@@ -24,12 +24,12 @@ public sealed class AgentDefinitionStoreTests
         Assert.NotNull(general);
         Assert.Equal("Riley", general!.Identity.Name);
         var latest = await store.GetAsync("general-assistant");
-        Assert.Equal(24, latest!.Version);
+        Assert.Equal(25, latest!.Version);
         // Retired browser instructions are absent from the executable catalog.
         Assert.Null(await store.GetAsync("general-assistant", 20));
         Assert.Null(await store.GetAsync("secretary", 7));
         Assert.NotNull(await store.GetAsync("secretary", 8));
-        Assert.Equal(9, (await store.GetAsync("secretary"))!.Version);
+        Assert.Equal(10, (await store.GetAsync("secretary"))!.Version);
         Assert.DoesNotContain("workspace.retain", latest.Environment!.ToolList);
         Assert.DoesNotContain("workspace.checkout", latest.Environment.ToolList);
         Assert.True(latest.Environment.ToolList.Count > 40);
@@ -54,7 +54,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.Contains(ToolCatalog.BrowserSnapshot, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClick, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserClose, environment.ToolList);
-        Assert.Equal(90, environment.ToolList.Count);
+        Assert.Equal(92, environment.ToolList.Count);
         Assert.Contains("automation.preferences.inspect", environment.ToolList);
         Assert.Contains("automation.preferences.patch", environment.ToolList);
         Assert.Contains(ToolCatalog.WorkspaceCwd, environment.ToolList);

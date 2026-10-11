@@ -9,7 +9,7 @@ export const INSTANCE_DEFINITIONS = {
 } as const;
 
 /** Provision an explicit fixture identity, then select it through Chat. */
-export async function selectInstanceIdentity(page: Page, definition: { id: string; version: number }, executionBudgets?: ExecutionBudgetPolicy): Promise<void> {
+export async function selectInstanceIdentity(page: Page, definition: { id: string; version: number }, executionBudgets?: ExecutionBudgetPolicy): Promise<string> {
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
   const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
   const created = await page.request.post("/api/v2/admin/agent-instances", {
@@ -34,4 +34,5 @@ export async function selectInstanceIdentity(page: Page, definition: { id: strin
   const option = page.locator(".ant-select-item-option").filter({ hasText: instanceId.replace(/-/g, "").slice(-8) });
   await expect(option).toBeVisible();
   await option.click();
+  return instanceId;
 }

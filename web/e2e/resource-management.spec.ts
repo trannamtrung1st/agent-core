@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test, type Page } from '@playwright/test';
 import { isCanceledDraftEvidenceRead } from './admin-definition-gate-helpers';
 
@@ -6,7 +7,9 @@ test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
   const failed: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  page.on('requestfailed', request => { if (!isCanceledDraftEvidenceRead(request)) failed.push(request.url()); });
+  page.on('requestfailed', request => {
+    if (isCanceledEmailAccountPoll(request)) return;
+    if (!isCanceledDraftEvidenceRead(request)) failed.push(request.url()); });
   browserEvidence.set(page, { errors, failed });
 });
 test.afterEach(async ({ page }) => {

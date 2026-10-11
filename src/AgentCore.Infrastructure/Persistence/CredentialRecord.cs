@@ -5,6 +5,8 @@ public sealed class CredentialRecord
     public string CredentialId { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public string Kind { get; set; } = "";
+    public string Purpose { get; set; } = "General";
+    public EmailAccountProfileRecord? EmailAccount { get; set; }
     public string Status { get; set; } = "";
     public string MetadataJson { get; set; } = "{}";
     public string AllowedOriginsJson { get; set; } = "[]";
@@ -23,4 +25,10 @@ public sealed class AgentCredentialBindingRecord
     public long Revision { get; set; }
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
+}
+
+public sealed class EmailAccountProfileRecord
+{
+    public string CredentialId { get; set; } = "";
+    public string ProfileJson { get; set; } = "{}";
 }

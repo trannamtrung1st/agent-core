@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
@@ -62,6 +63,7 @@ test("p7d managed instance persona form json chat archive and history", async ({
     }
   });
   page.on("requestfailed", (request) => {
+    if (isCanceledEmailAccountPoll(request)) return;
     if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`);
   });
 

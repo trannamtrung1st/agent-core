@@ -69,3 +69,7 @@ The original unified Automation cutover passed all five hosted Synthetic/Compose
 
 
 The approved Instance Skills migration replaces keyword activation and Harness Skill authoring with owner-local procedures, stable-id enabled state and full execution catalog snapshots. Historical P8/P8.5/P9.7 evidence remains unchanged; see [migration gates](18-implementation-plan.md#agent-instance-skills-full-migration-gate).
+
+## Account-scoped Email follow-on
+
+The bounded post-MVP Email slice adds typed protected accounts, IMAP/SMTP, durable dispatch and owner selection. It does not reopen historical P3 freezes or P10/P11. Current local evidence and deferred live/hosted gates belong to the [implementation plan](18-implementation-plan.md#account-scoped-email-follow-on) and [dated report](reports/email-account-verification-2026-10-12.md).

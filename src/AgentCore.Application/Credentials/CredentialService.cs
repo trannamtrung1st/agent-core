@@ -9,7 +9,8 @@ namespace AgentCore.Application.Credentials;
 
 public sealed record CredentialView(Guid CredentialId, string DisplayName, string Kind, string Status,
     IReadOnlyDictionary<string, string> Metadata, IReadOnlyList<string> AllowedOrigins, long Revision,
-    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, int BindingCount);
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, int BindingCount,
+    string Purpose = "General", EmailAccountProfile? EmailAccount = null);
 public sealed record CredentialBindingView(Guid BindingId, Guid CredentialId, string Reference, long Revision, CredentialView Credential);
 public sealed record BoundCredentialMetadata(string Reference, string DisplayName, string Kind, IReadOnlyDictionary<string, string> Metadata);
 
@@ -34,10 +35,32 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
         await store.SaveAsync(credential, 0, ct);
         return View(credential, 0);
     }
+    public async ValueTask<CredentialView> CreateEmailAccountAsync(string name, EmailAccountProfile profile, string value, CancellationToken ct = default)
+    {
+        profile = Validate(profile.Validate);
+        var displayName = Validate(() => CredentialRules.DisplayName(name));
+        Validate(() => { CredentialRules.ProtectedValue(value); return true; });
+        var id = ids.NewId(); var now = time.GetUtcNow();
+        var credential = new Credential(id, displayName, CredentialKind.Password, CredentialStatus.Active,
+            CredentialRules.Metadata(null), [], protector.Protect(id, 1, value), 1, 1, now, now,
+            CredentialPurpose.EmailAccount, profile);
+        await store.SaveAsync(credential, 0, ct);
+        return View(credential, 0);
+    }
+    public async ValueTask<CredentialView> UpdateEmailAccountAsync(Guid id, long revision, string name, string status,
+        EmailAccountProfile profile, CancellationToken ct = default)
+    {
+        var current = await RequireCredential(id, ct);
+        if (current.Purpose != CredentialPurpose.EmailAccount) throw AgentCoreErrors.Validation("Credential is not an Email Account.");
+        var updated = Validate(() => current with { DisplayName = CredentialRules.DisplayName(name), Status = Parse<CredentialStatus>(status),
+            EmailAccount = profile.Validate(), Revision = revision + 1, UpdatedAtUtc = time.GetUtcNow() });
+        await store.SaveAsync(updated, revision, ct); return await GetAsync(id, ct);
+    }
     public async ValueTask<CredentialView> UpdateAsync(Guid id, long revision, string name, string status,
         IReadOnlyDictionary<string, string>? metadata, IReadOnlyList<string>? origins, CancellationToken ct = default)
     {
         var current = await RequireCredential(id, ct);
+        if (current.Purpose == CredentialPurpose.EmailAccount && origins?.Count > 0) throw AgentCoreErrors.Validation("Email Accounts cannot have Browser origins.");
         var updated = Validate(() => current with { DisplayName = CredentialRules.DisplayName(name), Status = Parse<CredentialStatus>(status),
             Metadata = CredentialRules.Metadata(metadata), AllowedOrigins = CredentialRules.Origins(origins), Revision = revision + 1, UpdatedAtUtc = time.GetUtcNow() });
         await store.SaveAsync(updated, revision, ct); return await GetAsync(id, ct);
@@ -100,7 +123,7 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
         if (admittedBindings is not null && !admittedBindings.Any(b => b.BindingId == binding.BindingId && b.CredentialId == binding.CredentialId && b.Reference == binding.Reference && b.Revision == binding.Revision))
             throw AgentCoreErrors.Forbidden("This credential binding was not admitted for this Run; start a fresh owner turn.");
         var credential = await RequireCredential(binding.CredentialId, ct);
-        if (credential.Status != CredentialStatus.Active || credential.Kind != CredentialKind.Password
+        if (credential.Status != CredentialStatus.Active || credential.Kind != CredentialKind.Password || credential.Purpose != CredentialPurpose.General
             || !credential.AllowedOrigins.Contains(Validate(() => CredentialRules.Origin(origin)), StringComparer.Ordinal))
             throw AgentCoreErrors.Forbidden("Credential cannot be used for this password sink and origin.");
         return protector.Unprotect(credential.CredentialId, credential.ProtectionVersion, credential.ProtectedPayload);
@@ -114,7 +137,7 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
     private async ValueTask<Credential> RequireCredential(Guid id, CancellationToken ct) =>
         await store.GetAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Credential was not found.");
     private static CredentialView View(Credential c, int count) => new(c.CredentialId, c.DisplayName, c.Kind.ToString(), c.Status.ToString(),
-        c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, count);
+        c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, count, c.Purpose.ToString(), c.EmailAccount);
     private static T Parse<T>(string value) where T : struct, Enum =>
         Enum.TryParse<T>(value, false, out var kind) && Enum.IsDefined(kind) && Enum.GetNames<T>().Contains(value)
             ? kind : throw new ArgumentException("Unknown credential kind or status.");

@@ -419,3 +419,7 @@ Adoption is exact and explicit, with validated preview and atomic reconciliation
 ## Decision: unified structured composer
 
 The approved unified-composer proposal extends the existing Ant Design v6 Chat shell with one headless Lexical editor. Lexical owns selection, composition, history and atomic inline nodes; it supplies no component kit or visual tokens. AntD remains the only generic UI. Canonical ordered user-message parts, never editor JSON/HTML, cross the existing SendText transport. `/` selects explicit Skills, `@` selects owned contextual references, and `+` exposes the same discovery actions. This is an additive post-MVP initiative; P10/P11 and prior freezes remain unchanged.
+
+## Decision: account-scoped IMAP/SMTP Email
+
+Secret Kind describes material; immutable Purpose describes use. Email accounts reuse `Password` with `EmailAccount` purpose and one typed profile rather than metadata conventions or a second vault/grant domain. Account ID is Credential ID. MailKit 4.18.0 matches MimeKit 4.18.0 in Infrastructure. The first live account transport is verified-TLS IMAP/SMTP; Gmail is a controlled preset. General/Browser secrets cannot enter this sink. Gmail REST remains contract-tested but production-disabled until typed OAuth support; Graph/OAuth are deferred. SMTP dispatch is disabled by default and requires explicit host enablement after durable at-most-once verification. No automatic uncertain resend, true reply, provider Drafts sync, attachments, labels or bulk mail is included.

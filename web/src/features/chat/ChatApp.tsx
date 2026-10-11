@@ -52,6 +52,7 @@ import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
 import { AutomationDrawer } from "./AutomationDrawer";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
+import { EmailAccountPicker } from "./EmailAccountPicker";
 import { ApprovalModal } from "./ApprovalModal";
 import { SessionFailureAlert } from "./SessionFailureAlert";
 import { SessionRail } from "./SessionRail";
@@ -378,6 +379,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
             </Flex>
           </Header>
           <Content className="app-content">
+            <EmailAccountPicker sessionId={state.sessionId} connected={state.connection === "ready" && !readonly} />
             {state.routeNotice || state.connection === "failed" ? (
               <div className="conversation-column conversation-banners">
                 {state.routeNotice ? (

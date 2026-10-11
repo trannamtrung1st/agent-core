@@ -123,7 +123,9 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         {
             var sourceId = run.Admission.Activation.SourceAgentRunId?.ToString("D");
             var sourceRow = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(row => row.AgentRunId == sourceId, cancellationToken).ConfigureAwait(false);
-            AgentRunStoreMapping.ValidateConfigurationContinuation(run, sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow));
+            var selectionRow = await db.Set<EmailAccountSelectionRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.RequestId == sourceId, cancellationToken);
+            var selection = selectionRow is null ? null : System.Text.Json.JsonSerializer.Deserialize<AgentCore.Application.Ports.EmailAccountSelection>(selectionRow.SelectionJson);
+            AgentRunStoreMapping.ValidateConfigurationContinuation(run, sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow), selection);
         }
         if (run.Admission.Activation.Kind == ActivationKind.ImmediateBackground)
         {

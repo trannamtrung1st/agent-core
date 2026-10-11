@@ -27,6 +27,8 @@ public static class ToolCatalog
     public const string WebSearch = "web.search";
     public const string WebFetch = "web.fetch";
     public const string HttpRequest = "http.request";
+    public const string EmailAccounts = "email.accounts";
+    public const string EmailRequestAccount = "email.request_account";
     public const string EmailSearch = "email.search";
     public const string EmailRead = "email.read";
     public const string EmailCreateDraft = "email.create_draft";

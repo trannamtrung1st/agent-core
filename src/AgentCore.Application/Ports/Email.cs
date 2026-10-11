@@ -41,7 +41,9 @@ public sealed record EmailDraftSnapshot(
     IReadOnlyList<string> Cc,
     IReadOnlyList<string> Bcc,
     string Subject,
-    string Body);
+    string Body,
+    Guid? AccountId = null, string? AccountRef = null, string? Sender = null,
+    long Revision = 1, long AccountRevision = 0, Guid? BindingId = null, long BindingRevision = 0);
 
 public sealed record EmailDraftResult(EmailDraftSnapshot Draft);
 

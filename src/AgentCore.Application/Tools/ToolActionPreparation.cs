@@ -77,7 +77,7 @@ public static class ToolActionPreparation
 
         if (string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal))
         {
-            var prepared = await tools.PrepareEmailSendApprovalAsync(args, cancellationToken).ConfigureAwait(false);
+            var prepared = await tools.PrepareEmailSendApprovalAsync(args, cancellationToken, admission, sessionId).ConfigureAwait(false);
             if (prepared.Preparation is null)
             {
                 return (null, prepared.ErrorJson);

@@ -702,3 +702,19 @@ Registered tool names: `configuration.inspect/propose`, `management.inspect/poli
 Run inspection may report `activationKind: "ConfigurationContinuation"` for a bounded fresh admission following a committed diagnosed remedy. It uses a new Run/response identity, existing Chat events and fresh immutable pins; the original user entry is not duplicated. Its source task receipt remains private checkpoint evidence.
 
 Settings preview preparation checks the same Definition and host constraints as the commit. Invalid selections do not produce a confirmation. Policy-update receipts expose `changesApplyTo: "nextRun"` and `revocationsApplyTo: "immediate"`; approval copy distinguishes immediate authority removal from fresh-Run grants. The Admin Built-in catalog includes Core procedures with `missingCapabilities` even when runtime resolution excludes them.
+
+## Account-scoped Email contracts
+
+All routes require the existing owner capability. Safe `/api/v2/admin/credentials` list/detail adds `purpose` (`General` or `EmailAccount`) and nullable typed `emailAccount`: preset, emailAddress, imapUsername/smtpUsername, imapEndpoint/smtpEndpoint `{host,port,tlsMode}`. Password/ciphertext are never returned.
+
+| Route | Request / behavior |
+| --- | --- |
+| POST `/api/v2/admin/email-accounts` | `{displayName,profile,protectedValue}`; atomic Password/Profile creation, 201 safe Credential |
+| PATCH `/api/v2/admin/email-accounts/{id}` | `{expectedRevision,displayName,status,profile}`; typed safe update |
+| POST `/api/v2/admin/email-accounts/{id}/test` | `{expectedRevision,protocol:"imap"|"smtp"}`; safe `{protocol,status,observedAtUtc,error}`, authentication only |
+| PUT `/api/v2/admin/credentials/{id}/value` | Existing revisioned write-only rotation |
+| GET `/api/v2/admin/email-send-operations/{draftId}` | Safe immutable receipt; unfinished claim projects Indeterminate even after account disable/delete |
+| GET `/api/v2/sessions/{id}/email-account-request` | 204 or host-only `{requestId,expiresAtUtc,instanceId,agentName,expectedInstanceRevision,choices}` |
+| POST `/api/v2/sessions/{id}/email-account-request/decision` | `{requestId,accountId?,reference?,expectedInstanceRevision}`; null account cancels; Session mailbox validates/binds/continues |
+
+Existing Instance credential binding routes remain the only grant API. `email.accounts` accepts `{}` and returns only admitted active bound aliases/display names/addresses/provider; zero returns `no_eligible_account`. `email.request_account` accepts optional `target` among search/read/create_draft/send; only attached direct UserTurn can produce a pending chooser. Unattended calls return `needs_attention` plus `/admin/connections/credentials`. Search/read/create_draft/send accept optional `accountRef`; omit only when one eligible account exists. Search/read results identify the selected alias, reads label trust as `untrusted_email_content`, and Core drafts identify `storage:"core"`, sender and accountRef. Send keeps existing live approval events and the exact hash/content workflow. No new SignalR message family or secret-bearing payload is introduced.

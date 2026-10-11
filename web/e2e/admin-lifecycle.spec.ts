@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 /**
  * Frozen P7G §8 whole-phase deterministic Admin lifecycle (26 steps).
@@ -132,7 +133,8 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
     }
   });
   page.on("requestfailed", (request) => {
-    if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`);
+    if (isCanceledEmailAccountPoll(request)) return;
+    if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`);
   });
 
   const personaName = `P7G Persona ${Date.now()}`;

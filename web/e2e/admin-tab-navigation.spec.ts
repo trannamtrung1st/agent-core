@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { expect, test } from "@playwright/test";
 
@@ -6,7 +7,9 @@ for (const width of [1440, 390]) {
     const consoleErrors: string[] = [];
     const failedRequests: string[] = [];
     page.on("console", message => { if (message.type() === "error") consoleErrors.push(message.text()); });
-    page.on("requestfailed", request => { if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`); });
+    page.on("requestfailed", request => {
+    if (isCanceledEmailAccountPoll(request)) return;
+    if (!isCanceledDraftEvidenceRead(request)) failedRequests.push(`${request.method()} ${request.url()}`); });
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
     await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));

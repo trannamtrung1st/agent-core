@@ -1,10 +1,11 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test } from '@playwright/test';
 
 test('Skill summaries are bounded and row actions remain reachable while scrolling', async ({ page }) => {
   const errors: string[] = [];
   const failed: string[] = [];
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  page.on('requestfailed', request => failed.push(request.url()));
+  page.on('requestfailed', request => { if (!isCanceledEmailAccountPoll(request)) failed.push(request.url()); });
   await page.goto('/');
   await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));
   const token = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));

@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
 
@@ -27,6 +28,7 @@ test("vision incompatibility blocks send until Scripted Vision is selected", asy
     consoleErrors.push(text);
   });
   page.on("requestfailed", (request) => {
+    if (isCanceledEmailAccountPoll(request)) return;
     failedRequests.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`);
   });
 

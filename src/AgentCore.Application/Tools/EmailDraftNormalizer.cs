@@ -16,7 +16,8 @@ public static class EmailDraftNormalizer
             NormalizeAddresses(draft.Cc),
             NormalizeAddresses(draft.Bcc),
             NormalizeText(draft.Subject),
-            NormalizeBody(draft.Body));
+            NormalizeBody(draft.Body), draft.AccountId, draft.AccountRef, draft.Sender,
+            draft.Revision, draft.AccountRevision, draft.BindingId, draft.BindingRevision);
 
     public static string ComputeSendActionHash(EmailDraftSnapshot draft)
     {
@@ -26,6 +27,10 @@ public static class EmailDraftNormalizer
             [
                 ToolCatalog.EmailSend,
                 normalized.DraftId,
+                normalized.AccountId?.ToString("D") ?? "", normalized.AccountRef ?? "", normalized.Sender ?? "",
+                normalized.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                normalized.AccountRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                normalized.BindingId?.ToString("D") ?? "", normalized.BindingRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 SerializeAddresses(normalized.To),
                 SerializeAddresses(normalized.Cc),
                 SerializeAddresses(normalized.Bcc),
@@ -52,7 +57,7 @@ public static class EmailDraftNormalizer
         }
 
         list.Sort(StringComparer.Ordinal);
-        return list;
+        return list.AsReadOnly();
     }
 
     private static string NormalizeText(string value) =>

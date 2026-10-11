@@ -15,6 +15,11 @@ public sealed partial class SessionHost
         return accepted && result is not null ? result : throw AgentCoreErrors.Conflict("Session cannot accept this execution control.");
     }
 
+    public async ValueTask<bool> DecideEmailAccountAsync(Guid sessionId, Guid requestId, Guid? accountId, string? reference, long instanceRevision, CancellationToken ct)
+    {
+        if (!_live.TryGetValue(sessionId, out var live) || live.ConnectionId is null) throw AgentCoreErrors.Conflict("Reconnect to this Chat before choosing an account.");
+        return await DispatchIntoSessionAsync(sessionId, null, ct, operation: (runtime, token) => runtime.DecideEmailAccountAsync(requestId, accountId, reference, instanceRevision, token));
+    }
     public ValueTask<bool> ContinueInChatAsync(Guid sessionId, CancellationToken ct = default) =>
         DispatchIntoSessionAsync(sessionId, null, ct, continueInChat: true);
 

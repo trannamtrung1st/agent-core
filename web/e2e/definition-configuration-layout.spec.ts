@@ -1,3 +1,4 @@
+import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test } from '@playwright/test';
 import { draftEditorSection, openDefinitionSettings } from './admin-draft-editor-helpers';
 import { isCanceledDraftEvidenceRead } from './admin-definition-gate-helpers';
@@ -8,6 +9,7 @@ test('Definition configuration retains edits and navigation across shared sectio
   const failures: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('requestfailed', request => {
+    if (isCanceledEmailAccountPoll(request)) return;
     if (!isCanceledDraftEvidenceRead(request)) failures.push(request.url());
   });
   await page.goto('/');

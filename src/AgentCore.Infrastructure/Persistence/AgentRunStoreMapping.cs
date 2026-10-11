@@ -57,10 +57,19 @@ internal static class AgentRunStoreMapping
             throw AgentCoreErrors.Validation("This Activation requires its atomic, fenced admission method.");
     }
 
-    public static void ValidateConfigurationContinuation(AgentRun run, AgentRun? source)
+    public static void ValidateConfigurationContinuation(AgentRun run, AgentRun? source, AgentCore.Application.Ports.EmailAccountSelection? email = null)
     {
         if (run.Admission.Activation.Kind != ActivationKind.ConfigurationContinuation) return;
         var task = source is null ? null : ConfigurationPendingTask.ReadSafe(source);
+        using var evidence = JsonDocument.Parse(run.Admission.Activation.EvidenceJson ?? "{}");
+        var isEmail = evidence.RootElement.TryGetProperty("EnvironmentKind", out var environment) && environment.GetString() == "email-account";
+        if (isEmail)
+        {
+            if (source is null || email is not { Status: "allowed", InstanceRevision: { } revision }
+                || email.ExpiresAtUtc <= run.CreatedAtUtc || !AgentCore.Application.Email.EmailSelectionSafety.CanContinue(source, email))
+                throw AgentCoreErrors.Conflict("Email continuation requires confirmed, current owned account access.");
+            task = new(source.AgentRunId, email.Target, "Email account access", revision);
+        }
         if (source is null || task is null || source.Owner != run.Owner || source.SessionId != run.SessionId
             || run.Admission.Activation.SourceSessionId != source.SessionId || run.Admission.Activation.SourceEventId != source.ActivationId
             || run.Admission.Activation.DedupeKey != $"configuration-continuation:{source.AgentRunId:D}"

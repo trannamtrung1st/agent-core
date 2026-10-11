@@ -938,7 +938,7 @@ export async function resetAdminLearnedMemoryScope(
 export type SystemCredential = {
   credentialId: string; displayName: string; kind: string; status: string;
   metadata: Record<string, string>; allowedOrigins: string[]; revision: number;
-  createdAtUtc: string; updatedAtUtc: string; bindingCount: number;
+  createdAtUtc: string; updatedAtUtc: string; bindingCount: number; purpose?: "General" | "EmailAccount"; emailAccount?: EmailAccountProfile | null;
 };
 export type CredentialBinding = { bindingId: string; credentialId: string; reference: string; revision: number; credential: SystemCredential };
 export type CredentialInput = { displayName: string; kind: string; metadata: Record<string, string>; allowedOrigins: string[]; protectedValue: string };
@@ -1149,3 +1149,10 @@ export async function saveSelfManagement(instanceId: string, body: { expectedRev
   if (!response.ok) throw await adminProblemMessage(response, 'Self-management could not be saved. Your draft is retained.');
   return await response.json() as SelfManagementView;
 }
+
+export type MailEndpoint = { host: string; port: number; tlsMode: 'ImplicitTls' | 'StartTls' };
+export type EmailAccountProfile = { preset: 'Gmail' | 'Custom'; emailAddress: string; imapUsername: string; smtpUsername: string; imapEndpoint: MailEndpoint; smtpEndpoint: MailEndpoint };
+export type EmailConnectionTest = { protocol: 'imap' | 'smtp'; status: 'connected' | 'failed' | 'synthetic' | 'disabled'; observedAtUtc: string; error: string | null };
+export const createEmailAccount = (input: { displayName: string; profile: EmailAccountProfile; protectedValue: string }) => credentialRequest<SystemCredential>('email-accounts', 'POST', input);
+export const updateEmailAccount = (c: SystemCredential, input: { displayName: string; status: string; profile: EmailAccountProfile }) => credentialRequest<SystemCredential>(`email-accounts/${c.credentialId}`, 'PATCH', { ...input, expectedRevision: c.revision });
+export const testEmailAccount = (c: SystemCredential, protocol: 'imap' | 'smtp') => credentialRequest<EmailConnectionTest>(`email-accounts/${c.credentialId}/test`, 'POST', { protocol, expectedRevision: c.revision });
