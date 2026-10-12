@@ -1339,6 +1339,7 @@ export function reportCommittedEntries(
 
 function startReceipts(responseId: string): void {
   stopReceipts();
+  if (!chatSurfaceVisible) return;
   receiptTimer = window.setInterval(() => {
     void sendReceipt(false, responseId);
   }, 100);
@@ -1690,6 +1691,7 @@ export const realtimeTestHooks =
           outputGate.markStarted(responseId);
         },
         resetOutput() {
+          chatSurfaceVisible = true;
           attachLoop += 1;
           reconnectBudgetStarted = 0;
           lastReconnectCause = null;
