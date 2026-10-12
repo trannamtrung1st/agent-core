@@ -80,12 +80,22 @@ body,
 }
 
 .chat-header-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-width: 0;
   flex: 1 1 auto;
 }
 
 .chat-header-identity,
 .chat-header-copy {
+  min-width: 0;
+}
+
+.chat-header-copy {
+  flex: 1 1 0;
+}
+
+.chat-header-details {
   min-width: 0;
 }
 
@@ -119,13 +129,15 @@ body,
   white-space: nowrap;
 }
 
-.chat-header-subtitle {
-  display: block;
+.chat-header-details .chat-header-subtitle {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
   font-size: 12px;
 }
 
 .chat-header-actions {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
 }
 
@@ -162,10 +174,8 @@ body,
 }
 
 .chat-header-meta {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 .chat-header-admin.ant-btn {
@@ -183,7 +193,13 @@ body,
   font-size: 12px;
 }
 
+.chat-header-profile {
+  flex: 0 0 auto;
+}
+
 .chat-header-status {
+  flex: 0 1 auto;
+  min-width: 0;
   position: relative;
   padding-inline-start: var(--ac-space-default);
 }
@@ -208,13 +224,16 @@ body,
   background: var(--ac-color-error);
 }
 
-/* Cap the header meta text so a long value (for example a connection error)
-   ellipsizes instead of overflowing. Scoped under the meta row because Ant
-   Design's `.ant-typography-ellipsis` sets `max-width: 100%` at higher
-   specificity than these classes. */
-.chat-header-meta .chat-header-profile,
-.chat-header-meta .chat-header-status {
-  max-width: min(24rem, 40vw);
+/* The identity column absorbs changing status widths; actions never reflow
+   because of live text. Smaller viewports use a deliberate second row. */
+@media (max-width: 1199px) {
+  .chat-header-inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chat-header-actions {
+    justify-content: flex-end;
+  }
 }
 
 .app-content {

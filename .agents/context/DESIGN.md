@@ -160,7 +160,7 @@ The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation
 
 - Ant Design v6 imported directly in product components; `app.css` only sizes the shell, overflow, product layout, previews, and accessibility.
 - Compact / default / section spacing (8 / 12 / 16px) owns shells, docks, and sibling `gap`. Text-control inner padding is `{spacing.controlInner}` (8px, Ant Design `paddingXS`, same as a session-row body).
-- Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header owns identity, Speech locale, compact icon actions, and status metadata.
+- Composer owns Model (reasoning level inside the Model button when supported) with Attach/Voice and context-sensitive Stop/Queue/Send; header groups role, provider profile and live status beside identity, with Speech locale and compact icon actions in a stable trailing group.
 - Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.
 - Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).
 - Background Work lists Sessions; shared Run details serve both Chat history and Admin inspection. Operational drawers use quiet headers, open rows, filled icon-and-text status chips, bounded reading regions and inline recovery. Automations retain their elevated schedule inset.
@@ -211,7 +211,7 @@ Dark operate neutrals with one primary accent and one success accent for live mi
 One session: black rail + conversation column + sticky composer. Column is `min(100%, 52rem)` centered with 16px inline padding. Conversation list gap is section (16px); inside a turn, compact (8px) owns sibling stacks (meta → body: speech projection when present, then display).
 
 - Rail: 280px at 1200px+, 240px from 768–1199px, Drawer below 768px. Shared 16px left edge for New chat, Chats, session titles. Sections use title + gap, not dividing rules.
-- Header: 56px CSS minimum, container background, compact block padding, 16px inline. The minimum height and compact block inset are shared with Admin; content can increase the height when controls wrap. At 768px and 390px its Flex rows wrap intentionally according to available width; profile and connection status remain visible rather than being hidden.
+- Header: 56px CSS minimum, container background, compact block padding and 16px inline padding (12px below 768px). Name and timestamp lead; role, provider profile and live status share one secondary row with compact gaps. At 1200px and above, a shrinking identity column sits beside an intrinsic-width actions column with a default 12px gap. Below 1200px, actions occupy a deliberate second row aligned to the end. Changing status text never determines control placement. The minimum height and compact block inset remain shared with Admin.
 - Composer dock: 12px above, 16px below the shell. Toolbar min-height 32px (44px below 768px); wrap with 8px gap. On mobile, Model occupies the first row of the start group; input actions sit below it, and the trailing Send/Queue/Stop group aligns to that bottom row. Keep 44px composer icon hits.
 - Queued drafts sit above the message well in a 12px-radius elevated container. Rows use an icon / truncated content / actions grid, 8px rhythm, and a 12.5rem maximum expanded list height.
 - After a user send, leave about half the pane for the incoming reply; shrink as the reply grows. Historical turns stay compact.
@@ -278,6 +278,12 @@ Inline/control/surface radii map to Ant Design `borderRadiusSM`/`borderRadius`/`
 
 Ant Design owns control hover, pressed, disabled, loading and semantic states. Product text controls (Model chip/options, session links/actions and header icons) retain a shared 2px primary `:focus-visible` outline inside their hit area, including when hover resets remove default outlines. The composer shell retains its neutral border and the editor has no nested focus outline. Picker choices use the visible active/focus fill; the focused editor or picker search identifies the active choice. Ant Design search retains its normal focus state. Disabled controls do not gain active or focus styling. State meanings stay visible in text or accessible labels; color does not carry them alone.
 
+### Chat header
+
+The existing `ChatHeader` owns identity and action composition; `ChatApp` supplies the projected profile/status and Admin action. Name and timestamp remain the primary row. Role, profile and the labeled status dot use 12px secondary type and compact 8px sibling gaps beneath it. The role takes its natural width up to 40% of that row; status consumes remaining space. Long role/status labels ellipsize with full-text tooltips instead of pushing actions away. Missing role still leaves profile/status visible. Speech locale uses the existing small Ant Design Select; Background work, Automations, End and Admin retain the shared 32px icon hits, hover fill and inset keyboard outline.
+
+The header shell owns outer insets; the identity/actions grid owns the 12px major gap; secondary and action rows own their 8px gaps. Product CSS owns the fixed 1200px transition, shrinking columns and text containment. Preserve this stable grouping for empty, live, reconnecting, paused and ended chats; action availability remains governed by the frontend specification. [Header verification](../../docs/reports/chat-header-status-review.md) records local Synthetic interactions and 320–1440px geometry checks.
+
 ### Buttons
 - **Shape:** 6px radius; header icon actions are 32×32px. Composer Send/Attach/Voice are 32×32px and become 44px below 768px.
 - **Primary:** Send/Queue and Voice-on use `{colors.primary}`.
@@ -318,7 +324,7 @@ Structured chips preserve immutable presentation labels across draft, queue and 
 ### Navigation
 - Compact Chat list and row action menus omit unnecessary separators. Destructive items retain Ant Design danger styling and their existing confirmation. The Model overlay keeps its meaningful reasoning-footer boundary.
 - Session row hover, keyboard focus-within, and active state fill the whole row including overflow (24px icon, inside row padding, common right edge).
-- Header: identity (agent name, 12px timestamp, and role), Speech locale, compact icon actions, and status metadata. The 32×32px actions use a 6px radius and `{colors.fill}` hover. Background Work uses an 18px inbox icon plus an attention badge; Automations, Admin, and the direct confirmed End action use 16px icons. End opens the shared centered confirmation. Profile and conversation status remain visible. Credential inventory and binding controls belong in Admin; Chat has no application connection row. Header actions stay on the identity row. No Model appears in the live header.
+- Header: identity (agent name, 12px timestamp, and role), Speech locale, compact icon actions, and status metadata. The 32×32px actions use a 6px radius and `{colors.fill}` hover. Background Work uses an 18px inbox icon plus an attention badge; Automations, Admin, and the direct confirmed End action use 16px icons. End opens the shared centered confirmation. Profile and conversation status remain visible. Credential inventory and binding controls belong in Admin; Chat has no application connection row. At 1200px+, actions share the identity row; below 1200px, they use the stable trailing second row. No Model appears in the live header.
 
 ### Definition permission hierarchy
 

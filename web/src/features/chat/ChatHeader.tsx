@@ -8,6 +8,8 @@ export function ChatHeader({
   title,
   subtitle,
   timestamp,
+  status,
+  additionalActions,
   sessionsToggle,
   speechLocale,
   onSchedules,
@@ -19,6 +21,8 @@ export function ChatHeader({
   title: string;
   subtitle?: string | null;
   timestamp?: string | null;
+  status?: ReactNode;
+  additionalActions?: ReactNode;
   sessionsToggle?: ReactNode;
   speechLocale?: ReactNode;
   onSchedules?: () => void;
@@ -31,7 +35,7 @@ export function ChatHeader({
   const timeLabel = timestamp ? formatChatTime(timestamp) : null;
 
   return (
-    <Flex align="center" justify="space-between" gap={12} wrap="wrap" className="chat-header-inner">
+    <Flex align="center" justify="space-between" gap={12} className="chat-header-inner">
       <Flex align="center" gap={12} className="chat-header-identity">
         {sessionsToggle}
         <div className="chat-header-copy">
@@ -45,14 +49,19 @@ export function ChatHeader({
               </Typography.Text>
             ) : null}
           </Flex>
-          {subtitle ? (
-            <Typography.Text type="secondary" className="chat-header-subtitle">
-              {subtitle}
-            </Typography.Text>
+          {subtitle || status ? (
+            <Flex align="center" gap={8} className="chat-header-details">
+              {subtitle ? (
+                <Typography.Text type="secondary" className="chat-header-subtitle" ellipsis={{ tooltip: subtitle }}>
+                  {subtitle}
+                </Typography.Text>
+              ) : null}
+              {status}
+            </Flex>
           ) : null}
         </div>
       </Flex>
-      {speechLocale || inSession || onBackgroundWork ? (
+      {speechLocale || inSession || onBackgroundWork || additionalActions ? (
         <Flex align="center" gap={8} className="chat-header-actions">
           {speechLocale}
           {onBackgroundWork ? (
@@ -101,6 +110,7 @@ export function ChatHeader({
               />
             </Tooltip>
           ) : null}
+          {additionalActions}
         </Flex>
       ) : null}
     </Flex>

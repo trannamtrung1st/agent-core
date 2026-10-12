@@ -320,6 +320,40 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
               title={inSession ? state.agentName || "Agent" : "New chat"}
               subtitle={inSession ? state.agentRole : null}
               timestamp={headerTimestamp}
+              status={
+                <Flex align="center" gap={8} className="chat-header-meta">
+                  <Typography.Text
+                    data-testid="profile"
+                    aria-label={profileText}
+                    type="secondary"
+                    className="chat-header-profile"
+                    ellipsis={{ tooltip: profileText }}
+                  >
+                    {profile || "…"}
+                  </Typography.Text>
+                  <Typography.Text
+                    data-testid="connection"
+                    type={connectionTone === "alarm" ? "danger" : "secondary"}
+                    className={`chat-header-status chat-header-status-${connectionTone}`}
+                    ellipsis={{ tooltip: connectionText }}
+                  >
+                    {connectionText}
+                  </Typography.Text>
+                </Flex>
+              }
+              additionalActions={onOpenAdmin ? (
+                <Tooltip title="Admin">
+                  <Button
+                    type="text"
+                    size="small"
+                    className="chat-header-admin"
+                    icon={<SettingOutlined />}
+                    href={adminHomePath()}
+                    onClick={event => followAppLink(event, onOpenAdmin)}
+                    aria-label="Open Admin"
+                  />
+                </Tooltip>
+              ) : null}
               speechLocale={
                 inSession && !readonly ? (
                   <SpeechLocalePicker
@@ -352,38 +386,6 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
               attentionCount={attentionCount}
               onEnd={() => void hangUp()}
             />
-            <Flex align="center" gap={8} className="chat-header-meta">
-              {onOpenAdmin ? (
-                <Tooltip title="Admin">
-                  <Button
-                    type="text"
-                    size="small"
-                    className="chat-header-admin"
-                    icon={<SettingOutlined />}
-                    href={adminHomePath()}
-                    onClick={event => followAppLink(event, onOpenAdmin)}
-                    aria-label="Open Admin"
-                  />
-                </Tooltip>
-              ) : null}
-              <Typography.Text
-                data-testid="profile"
-                aria-label={profileText}
-                type="secondary"
-                className="chat-header-profile"
-                ellipsis={{ tooltip: profileText }}
-              >
-                {profile || "…"}
-              </Typography.Text>
-              <Typography.Text
-                data-testid="connection"
-                type={connectionTone === "alarm" ? "danger" : "secondary"}
-                className={`chat-header-status chat-header-status-${connectionTone}`}
-                ellipsis={{ tooltip: connectionText }}
-              >
-                {connectionText}
-              </Typography.Text>
-            </Flex>
           </Header>
           <Content className="app-content">
             <EmailAccountPicker sessionId={state.sessionId} connected={state.connection === "ready" && !readonly} />
