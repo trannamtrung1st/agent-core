@@ -104,7 +104,7 @@ internal static class SpeechFactory
 
             var http = provider.GetRequiredService<IHttpClientFactory>()
                 .CreateClient(OpenAiSpeechSynthesizer.HttpClientName);
-            var adapter = new OpenAiSpeechSynthesizer(http, options, provider.GetService<ILogger<OpenAiSpeechSynthesizer>>());
+            var adapter = new OpenAiSpeechSynthesizer(http, options, provider.GetService<ILogger<OpenAiSpeechSynthesizer>>(), provider.GetRequiredService<IDiagnosticIdSource>());
             return new ResolvedSynthesis(adapter, SpeechTransport.ServerAudio, true, adapter.Capabilities);
         }
 

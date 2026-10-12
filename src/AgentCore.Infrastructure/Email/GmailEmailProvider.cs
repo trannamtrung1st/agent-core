@@ -13,7 +13,7 @@ namespace AgentCore.Infrastructure.Email;
 public sealed class GmailEmailProvider(
     IConfiguration configuration,
     IHttpClientFactory httpClientFactory,
-    ILogger<GmailEmailProvider> logger) : IEmailProvider
+    ILogger<GmailEmailProvider> logger, IDiagnosticIdSource? diagnosticIds = null) : IEmailProvider
 {
     public const string HttpClientName = "GmailEmail";
 
@@ -224,7 +224,7 @@ public sealed class GmailEmailProvider(
         }
         catch (OperationCanceledException ex) when (dispatchStarted)
         {
-            HandledFailureLog.Warning(logger, ex, "email.send", "dispatch_unconfirmed", new DiagnosticContext(ProviderAlias: "gmail"));
+            HandledFailureLog.Warning(logger, ex, "email.send", "dispatch_unconfirmed", new DiagnosticContext(ProviderAlias: "gmail"), diagnostics: diagnosticIds);
             return new EmailSendResult(
                 EmailSendOutcome.Indeterminate,
                 null,
@@ -233,7 +233,7 @@ public sealed class GmailEmailProvider(
         }
         catch (HttpRequestException ex)
         {
-            HandledFailureLog.Warning(logger, ex, "email.send", "transport_error", new DiagnosticContext(ProviderAlias: "gmail"));
+            HandledFailureLog.Warning(logger, ex, "email.send", "transport_error", new DiagnosticContext(ProviderAlias: "gmail"), diagnostics: diagnosticIds);
             return new EmailSendResult(
                 EmailSendOutcome.Indeterminate,
                 null,

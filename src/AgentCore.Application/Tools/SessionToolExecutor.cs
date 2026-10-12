@@ -41,7 +41,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
     AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null)
+    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -538,8 +538,10 @@ public sealed partial class SessionToolExecutor(
         catch (AgentCoreException ex)
         {
             var failureId = ex.DiagnosticId ?? HandledFailureLog.Warning(logger, ex, call.Name, ex.Code,
-                new DiagnosticContext(SessionId: sessionId, AgentInstanceId: admission?.AgentInstanceId, AgentRunId: admission?.AgentRunId));
-            return FitResult(remainingOutputBytes, JsonSerializer.Serialize(new { error = ex.Code, message = ex.Message, diagnosticId = failureId }));
+                new DiagnosticContext(SessionId: sessionId, AgentInstanceId: admission?.AgentInstanceId, AgentRunId: admission?.AgentRunId), diagnostics: diagnosticIds);
+            return FitResult(remainingOutputBytes, failureId is Guid id
+                ? JsonSerializer.Serialize(new { error = ex.Code, message = ex.Message, diagnosticId = id })
+                : Error(ex.Code, ex.Message));
         }
     }
 

@@ -3706,10 +3706,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 CancellationToken.None)
                             .ConfigureAwait(false);
                         var toolTimedOut = overallCts.IsCancellationRequested;
-                        var toolDiagnosticId = _diagnostics.NewId();
-                        HandledFailureLog.Warning(_logger, ex, call.Name, toolTimedOut ? "runDeadline" : "toolTimeout",
+                        var toolDiagnosticId = HandledFailureLog.Warning(_logger, ex, call.Name, toolTimedOut ? "runDeadline" : "toolTimeout",
                             new DiagnosticContext(CorrelationId: cause.CorrelationId, SessionId: SessionId, ResponseId: request.ResponseId,
-                                AgentInstanceId: _snapshot.AgentInstanceId, AgentRunId: _boundAgentRun?.AgentRunId), toolDiagnosticId);
+                                AgentInstanceId: _snapshot.AgentInstanceId, AgentRunId: _boundAgentRun?.AgentRunId), diagnostics: _diagnostics);
                         await MailboxModelAsync(
                                 cause,
                                 request.ResponseId,
@@ -4773,7 +4772,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (exception is OperationCanceledException) return;
         HandledFailureLog.Warning(_logger, exception, operation, code,
-            new DiagnosticContext(SessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId), _diagnostics.NewId());
+            new DiagnosticContext(SessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId), diagnostics: _diagnostics);
     }
 
     private static Guid? CorrelationOrNull(EventContext context) =>

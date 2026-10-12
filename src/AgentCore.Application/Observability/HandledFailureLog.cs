@@ -1,24 +1,35 @@
 using System.Net.Sockets;
+using AgentCore.Application.Ports;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Observability;
 
-/// <summary>Logs a handled failure without rendering untrusted exception messages or Data.</summary>
+/// <summary>
+/// Stateless logging façade. Callers supply their logger and diagnostic ID source;
+/// no logger, service provider or mutable execution state is retained here.
+/// </summary>
 public static class HandledFailureLog
 {
     private const int MaxDepth = 8;
     private const int MaxCauses = 8;
     private const int MaxNodes = 32;
-    public static Guid Warning(ILogger? logger, Exception exception, string operation, string code,
-        DiagnosticContext context = default, Guid? diagnosticId = null)
+
+    /// <returns>The logged reference, or null when warnings are disabled. Trace failure status is always recorded.</returns>
+    public static Guid? Warning(ILogger? logger, Exception exception, string operation, string code,
+        DiagnosticContext context = default, Guid? diagnosticId = null, IDiagnosticIdSource? diagnostics = null)
     {
-        var id = diagnosticId ?? Guid.NewGuid();
-        if (logger is not null)
+        context = context with { ErrorCategory = context.ErrorCategory ?? "operation", ErrorCode = code, Operation = operation };
+        if (logger?.IsEnabled(LogLevel.Warning) != true)
         {
-            var remaining = MaxNodes;
-            DiagnosticLog.Warning(logger, Snapshot(exception, 0, ref remaining), id, "Handled operation failed.",
-                context with { ErrorCategory = context.ErrorCategory ?? "operation", ErrorCode = code, Operation = operation });
+            // Trace failure state is independent of log filtering. No log reference is
+            // created when no warning sink can receive it, and snapshot work is skipped.
+            DiagnosticLog.MarkActivity(context);
+            return null;
         }
+        var id = diagnosticId is Guid supplied && supplied != Guid.Empty ? supplied
+            : (diagnostics ?? FallbackDiagnosticIdSource.Instance).NewId();
+        var remaining = MaxNodes;
+        DiagnosticLog.Warning(logger, Snapshot(exception, 0, ref remaining), id, "Handled operation failed.", context);
         return id;
     }
 

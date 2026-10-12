@@ -54,7 +54,8 @@ public static class RuntimeTelemetry
     private static readonly Counter<long> ResponseRepairs = Meter.CreateCounter<long>("llm.response.repair");
 
     private static readonly ConcurrentQueue<TimelineEvent> Timeline = new();
-    private static readonly ConcurrentDictionary<string, List<double>> Samples = new(StringComparer.Ordinal);
+    private const int MaxSamplesPerStage = 1024;
+    private static readonly ConcurrentDictionary<string, Queue<double>> Samples = new(StringComparer.Ordinal);
     private static int _timelineLimit = 64;
     private static bool _contentLogging;
 
@@ -68,37 +69,21 @@ public static class RuntimeTelemetry
 
     public static double ElapsedMs(long started) => Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
-    public static void Record(string stage, double milliseconds, string? detail = null)
+    public static void Record(string stage, double milliseconds, string? detail = null) =>
+        RecordSample(stage, milliseconds, _contentLogging ? detail : null);
+
+    public static void RecordDiagnostic(string stage, double milliseconds, string? detail) =>
+        RecordSample(stage, milliseconds, detail);
+
+    private static void RecordSample(string stage, double milliseconds, string? detail)
     {
         StageMs.Record(milliseconds, new KeyValuePair<string, object?>("stage", stage));
-        Samples.AddOrUpdate(stage, _ => [milliseconds], (_, list) =>
+        var samples = Samples.GetOrAdd(stage, static _ => new Queue<double>());
+        lock (samples)
         {
-            lock (list)
-            {
-                list.Add(milliseconds);
-            }
-
-            return list;
-        });
-        Timeline.Enqueue(new TimelineEvent(stage, milliseconds, _contentLogging ? detail : null, DateTimeOffset.UtcNow));
-        while (Timeline.Count > _timelineLimit)
-        {
-            Timeline.TryDequeue(out _);
+            if (samples.Count == MaxSamplesPerStage) samples.Dequeue();
+            samples.Enqueue(milliseconds);
         }
-    }
-
-    public static void RecordDiagnostic(string stage, double milliseconds, string? detail)
-    {
-        StageMs.Record(milliseconds, new KeyValuePair<string, object?>("stage", stage));
-        Samples.AddOrUpdate(stage, _ => [milliseconds], (_, list) =>
-        {
-            lock (list)
-            {
-                list.Add(milliseconds);
-            }
-
-            return list;
-        });
         Timeline.Enqueue(new TimelineEvent(stage, milliseconds, detail, DateTimeOffset.UtcNow));
         while (Timeline.Count > _timelineLimit)
         {

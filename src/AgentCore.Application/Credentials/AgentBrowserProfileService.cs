@@ -6,7 +6,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Credentials;
 
-public sealed class AgentBrowserProfileService(IAgentInstanceStore instances, IBrowser browser, ILogger<AgentBrowserProfileService>? logger = null)
+public sealed class AgentBrowserProfileService(IAgentInstanceStore instances, IBrowser browser, ILogger<AgentBrowserProfileService>? logger = null, IDiagnosticIdSource? diagnosticIds = null)
 {
     public async ValueTask ResetAsync(Guid id, long expectedRevision, CancellationToken ct = default)
     {
@@ -17,7 +17,7 @@ public sealed class AgentBrowserProfileService(IAgentInstanceStore instances, IB
         try { await profiles.ResetPersistentProfileAsync(id, ct); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            var diagnosticId = HandledFailureLog.Warning(logger, ex, "browser.profile.reset", "profile_unavailable", new DiagnosticContext(AgentInstanceId: id));
+            var diagnosticId = HandledFailureLog.Warning(logger, ex, "browser.profile.reset", "profile_unavailable", new DiagnosticContext(AgentInstanceId: id), diagnostics: diagnosticIds);
             throw new AgentCoreException("profile_unavailable", "Browser profile could not be reset.", 503) { DiagnosticId = diagnosticId };
         }
     }

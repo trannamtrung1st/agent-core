@@ -9,7 +9,7 @@ using AgentCore.Domain.Definitions;
 namespace AgentCore.Application.Email;
 
 public sealed class EmailAccountService(ICredentialStore credentials, IAgentCredentialBindingStore bindings,
-    IAgentInstanceStore instances, IEmailProviderFactory providers, IEmailStore store, IIdGenerator ids, TimeProvider time, ILogger<EmailAccountService>? logger = null)
+    IAgentInstanceStore instances, IEmailProviderFactory providers, IEmailStore store, IIdGenerator ids, TimeProvider time, ILogger<EmailAccountService>? logger = null, IDiagnosticIdSource? diagnosticIds = null)
 {
     public DateTimeOffset UtcNow => time.GetUtcNow();
     public bool IsEnabled => providers.IsEnabled;
@@ -91,7 +91,7 @@ public sealed class EmailAccountService(ICredentialStore credentials, IAgentCred
         catch (Exception ex)
         {
             HandledFailureLog.Warning(logger, ex, "email.send", "dispatch_unconfirmed",
-                new DiagnosticContext(SessionId: sessionId, AgentInstanceId: account.AgentInstanceId, AgentRunId: admission.AgentRunId, CredentialId: account.AccountId));
+                new DiagnosticContext(SessionId: sessionId, AgentInstanceId: account.AgentInstanceId, AgentRunId: admission.AgentRunId, CredentialId: account.AccountId), diagnostics: diagnosticIds);
             result = new(EmailSendOutcome.Indeterminate, null, "dispatch_unconfirmed", "Delivery could not be confirmed. Create a new draft only if an intentional resend is required.");
         }
         // Cancellation after external acceptance must not discard a known durable receipt.

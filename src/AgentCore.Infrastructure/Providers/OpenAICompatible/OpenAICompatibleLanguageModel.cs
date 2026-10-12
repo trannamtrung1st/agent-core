@@ -27,6 +27,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
     private readonly TimeProvider _time;
     private readonly GenerationCircuitBreaker _breaker;
     private readonly ILogger<OpenAICompatibleLanguageModel>? _logger;
+    private readonly IDiagnosticIdSource? _diagnostics;
     private readonly Uri _completions;
     private int _requestCount;
 
@@ -35,13 +36,14 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
         LanguageModelProviderOptions options,
         TimeProvider? time = null,
         GenerationCircuitBreaker? breaker = null,
-        ILogger<OpenAICompatibleLanguageModel>? logger = null)
+        ILogger<OpenAICompatibleLanguageModel>? logger = null, IDiagnosticIdSource? diagnostics = null)
     {
         _http = http;
         _options = options;
         _time = time ?? TimeProvider.System;
         _breaker = breaker ?? new GenerationCircuitBreaker(_time);
         _logger = logger;
+        _diagnostics = diagnostics;
         _http.Timeout = Timeout.InfiniteTimeSpan;
         _completions = options.Transport == ModelInferenceTransport.Responses
             ? new Uri(JoinCompletions(options.BaseUrl), "../responses")
@@ -843,11 +845,9 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
 
     private ModelFailed LogFailure(ModelRequest request, Exception exception, string operation, ModelFailed failure)
     {
-        // Without an adapter logger the runtime must still mint/log its own failure reference.
-        if (_logger is null || !_logger.IsEnabled(LogLevel.Warning)) return failure;
         var id = HandledFailureLog.Warning(_logger, exception, operation, failure.Failure.Code.ToString(),
             new DiagnosticContext(ResponseId: request.ResponseId, ErrorCategory: "provider",
-                FailureReason: failure.Failure.FailureReason, ProviderResponseChannel: failure.Failure.ResponseChannel));
+                FailureReason: failure.Failure.FailureReason, ProviderResponseChannel: failure.Failure.ResponseChannel), diagnostics: _diagnostics);
         return failure with { DiagnosticId = id };
     }
 

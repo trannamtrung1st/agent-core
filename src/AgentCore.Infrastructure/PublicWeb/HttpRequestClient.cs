@@ -5,7 +5,7 @@ using AgentCore.Application.Tools;
 
 namespace AgentCore.Infrastructure.PublicWeb;
 
-internal sealed class HttpRequestClient(IPublicWebTransport transport, ILogger<HttpRequestClient>? logger = null) : IHttpRequestClient
+internal sealed class HttpRequestClient(IPublicWebTransport transport, ILogger<HttpRequestClient>? logger = null, IDiagnosticIdSource? diagnosticIds = null) : IHttpRequestClient
 {
     public async ValueTask<HttpToolResponse> SendAsync(
         HttpToolRequest request,
@@ -59,17 +59,17 @@ internal sealed class HttpRequestClient(IPublicWebTransport transport, ILogger<H
         }
         catch (PublicWebFetchException ex)
         {
-            HandledFailureLog.Warning(logger, ex, "http.request", ex.Code);
+            HandledFailureLog.Warning(logger, ex, "http.request", ex.Code, diagnostics: diagnosticIds);
             return Error(request.Url.ToString(), ex.Code, ex.Message);
         }
         catch (HttpRequestException ex)
         {
-            HandledFailureLog.Warning(logger, ex, "http.request", "transport_error");
+            HandledFailureLog.Warning(logger, ex, "http.request", "transport_error", diagnostics: diagnosticIds);
             return Error(request.Url.ToString(), "transport_error", "HTTP request failed before a response was received.");
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            HandledFailureLog.Warning(logger, ex, "http.request", "timeout");
+            HandledFailureLog.Warning(logger, ex, "http.request", "timeout", diagnostics: diagnosticIds);
             return Error(request.Url.ToString(), "timeout", "HTTP request timed out.");
         }
     }

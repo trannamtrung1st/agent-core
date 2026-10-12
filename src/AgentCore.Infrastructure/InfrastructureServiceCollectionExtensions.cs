@@ -383,7 +383,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(sp => new NativePlaywrightBrowser(
             sp.GetRequiredService<BrowserOptions>(),
             sp.GetService<ILoggerFactory>(), timeProvider: sp.GetRequiredService<TimeProvider>(),
-            privacy: sp.GetRequiredService<BrowserPrivacyService>()));
+            privacy: sp.GetRequiredService<BrowserPrivacyService>(), diagnostics: sp.GetRequiredService<IDiagnosticIdSource>()));
         services.TryAddSingleton<IBrowser>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.TryAddSingleton<IBrowserLease>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.AddHostedService(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
@@ -422,11 +422,11 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AgentInstanceSkillService>(),
             provider.GetRequiredService<ICoreEventStore>(),
             provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),
-            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>(), provider.GetService<ILogger<SessionToolExecutor>>()));
+            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>(), provider.GetService<ILogger<SessionToolExecutor>>(), provider.GetRequiredService<IDiagnosticIdSource>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),
-                provider.GetService<IArtifactStore>(), logger: provider.GetService<ILogger<DockerSandboxExecutor>>()));
+                provider.GetService<IArtifactStore>(), logger: provider.GetService<ILogger<DockerSandboxExecutor>>(), diagnosticIds: provider.GetRequiredService<IDiagnosticIdSource>()));
         services.TryAddSingleton(provider =>
         {
             var speech = provider.GetRequiredService<SpeechResolution>();

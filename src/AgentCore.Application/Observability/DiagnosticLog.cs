@@ -106,7 +106,7 @@ public static class DiagnosticLog
         logger.Log(level, default, record, exception, static (state, _) => state.ToString());
     }
 
-    private static void MarkActivity(DiagnosticContext context)
+    internal static void MarkActivity(DiagnosticContext context)
     {
         var activity = Activity.Current;
         if (activity is null)

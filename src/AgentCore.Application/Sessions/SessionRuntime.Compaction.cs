@@ -136,7 +136,7 @@ public sealed partial class SessionRuntime
                     CompactionOutcome outcome;
                     try
                     {
-                        outcome = await new ConversationCompactor(_store, _logger).TryCompactAsync(
+                        outcome = await new ConversationCompactor(_store, _logger, _diagnostics).TryCompactAsync(
                                 new CompactionCommand(
                                     sessionId,
                                     current.BaseSummary,

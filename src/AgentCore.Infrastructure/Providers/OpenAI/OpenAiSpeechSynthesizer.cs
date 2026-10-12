@@ -45,10 +45,12 @@ public sealed class OpenAiSpeechSynthesizer : ISpeechSynthesizer, ISpeechLocaleS
     private readonly SpeechSynthesisProviderOptions _options;
     private readonly Uri _speech;
     private readonly ILogger<OpenAiSpeechSynthesizer>? _logger;
+    private readonly IDiagnosticIdSource? _diagnostics;
 
-    public OpenAiSpeechSynthesizer(HttpClient http, SpeechSynthesisProviderOptions options, ILogger<OpenAiSpeechSynthesizer>? logger = null)
+    public OpenAiSpeechSynthesizer(HttpClient http, SpeechSynthesisProviderOptions options, ILogger<OpenAiSpeechSynthesizer>? logger = null, IDiagnosticIdSource? diagnostics = null)
     {
         _logger = logger;
+        _diagnostics = diagnostics;
         _http = http;
         _options = options;
         _speech = Join(options.BaseUrl);
@@ -120,8 +122,8 @@ public sealed class OpenAiSpeechSynthesizer : ISpeechSynthesizer, ISpeechLocaleS
         }
         catch (HttpRequestException ex)
         {
-            var diagnosticId = _logger?.IsEnabled(LogLevel.Warning) != true ? (Guid?)null : HandledFailureLog.Warning(_logger, ex, "tts.setup", nameof(ProviderErrorCode.Unavailable),
-                new DiagnosticContext(ResponseId: request.ResponseId, ErrorCategory: "provider"));
+            var diagnosticId = HandledFailureLog.Warning(_logger, ex, "tts.setup", nameof(ProviderErrorCode.Unavailable),
+                new DiagnosticContext(ResponseId: request.ResponseId, ErrorCategory: "provider"), diagnostics: _diagnostics);
             setupFailed = new SpeechSynthesisFailed(new ProviderFailure(ProviderErrorCode.Unavailable, "Speech synthesis is unavailable."), diagnosticId);
         }
 

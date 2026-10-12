@@ -10,7 +10,7 @@ namespace AgentCore.Infrastructure.Email;
 
 public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IAgentCredentialBindingStore bindings,
     ICredentialProtector protector, IAgentInstanceStore instances, EmailTransportOptions options, TimeProvider time,
-    bool synthetic, ILoggerFactory? loggerFactory = null) : IEmailProviderFactory
+    bool synthetic, ILoggerFactory? loggerFactory = null, IDiagnosticIdSource? diagnosticIds = null) : IEmailProviderFactory
 {
     private readonly ConcurrentDictionary<Guid, SyntheticEmailProvider> _synthetic = new();
     private readonly SemaphoreSlim _connections = new(4);
@@ -19,7 +19,7 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
     public bool IsSendEnabled => options.Enabled && (synthetic || options.SmtpEnabled);
     public IEmailProvider Create(EmailAccountContext account) => synthetic
         ? new ScopedSyntheticEmailProvider(account, _synthetic.GetOrAdd(account.AccountId, _ => new()), RecheckAsync)
-        : new ImapSmtpEmailProvider(account, options, _policy, _connections, ResolveSecretAsync, loggerFactory?.CreateLogger<ImapSmtpEmailProvider>());
+        : new ImapSmtpEmailProvider(account, options, _policy, _connections, ResolveSecretAsync, loggerFactory?.CreateLogger<ImapSmtpEmailProvider>(), diagnosticIds);
 
     private async ValueTask RecheckAsync(EmailAccountContext account, CancellationToken ct)
     {
@@ -61,7 +61,7 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
         {
             HandledFailureLog.Warning(loggerFactory?.CreateLogger<AccountEmailProviderFactory>(), ex,
                 protocol == "smtp" ? "email.test.smtp" : "email.test.imap", "mail_connection_failed",
-                new DiagnosticContext(ProviderAlias: "imap-smtp", CredentialId: accountId));
+                new DiagnosticContext(ProviderAlias: "imap-smtp", CredentialId: accountId), diagnostics: diagnosticIds);
             return new(protocol, "failed", time.GetUtcNow(), "TLS/authentication or endpoint validation failed. Check the account and operator allowlist, then retry.");
         }
     }

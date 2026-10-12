@@ -5,7 +5,7 @@ using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.PublicWeb;
 
-internal sealed class PublicWebFetcher(IPublicWebTransport transport, ILogger<PublicWebFetcher>? logger = null) : IPublicWebFetcher
+internal sealed class PublicWebFetcher(IPublicWebTransport transport, ILogger<PublicWebFetcher>? logger = null, IDiagnosticIdSource? diagnosticIds = null) : IPublicWebFetcher
 {
     public async ValueTask<PublicWebFetchResult> FetchAsync(
         PublicWebFetchRequest request,
@@ -57,12 +57,12 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport, ILogger<Pu
         }
         catch (PublicWebFetchException ex)
         {
-            HandledFailureLog.Warning(logger, ex, "web.fetch", ex.Code);
+            HandledFailureLog.Warning(logger, ex, "web.fetch", ex.Code, diagnostics: diagnosticIds);
             return Error(request.Url.ToString(), ex.Code, ex.Message);
         }
         catch (HttpRequestException ex)
         {
-            HandledFailureLog.Warning(logger, ex, "web.fetch", "transport_error");
+            HandledFailureLog.Warning(logger, ex, "web.fetch", "transport_error", diagnostics: diagnosticIds);
             return Error(
                 request.Url.ToString(),
                 "transport_error",
@@ -70,7 +70,7 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport, ILogger<Pu
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            HandledFailureLog.Warning(logger, ex, "web.fetch", "timeout");
+            HandledFailureLog.Warning(logger, ex, "web.fetch", "timeout", diagnostics: diagnosticIds);
             return Error(request.Url.ToString(), "timeout", "Public web fetch timed out.");
         }
     }

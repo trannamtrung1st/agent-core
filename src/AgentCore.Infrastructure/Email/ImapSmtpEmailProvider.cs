@@ -16,7 +16,7 @@ namespace AgentCore.Infrastructure.Email;
 
 public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTransportOptions options,
     MailTransportPolicy policy, SemaphoreSlim connections,
-    Func<EmailAccountContext, CancellationToken, ValueTask<string>> secret, ILogger<ImapSmtpEmailProvider>? logger = null) : IEmailProvider
+    Func<EmailAccountContext, CancellationToken, ValueTask<string>> secret, ILogger<ImapSmtpEmailProvider>? logger = null, IDiagnosticIdSource? diagnosticIds = null) : IEmailProvider
 {
     internal Func<CancellationToken, ValueTask<Socket>>? SocketFactory { get; init; }
     internal Action<MailService>? ConfigureClient { get; init; }
@@ -178,9 +178,9 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
         }
         finally { if (acquired) connections.Release(); }
     }
-    private Guid LogFailure(Exception ex, string operation, string code, string? reason = null) =>
+    private Guid? LogFailure(Exception ex, string operation, string code, string? reason = null) =>
         HandledFailureLog.Warning(logger, ex, operation, code,
-            new DiagnosticContext(AgentInstanceId: account.AgentInstanceId, ProviderAlias: "imap-smtp", FailureReason: reason, CredentialId: account.AccountId));
+            new DiagnosticContext(AgentInstanceId: account.AgentInstanceId, ProviderAlias: "imap-smtp", FailureReason: reason, CredentialId: account.AccountId), diagnostics: diagnosticIds);
 
     private static string Bound(string value, int limit) => value.Length <= limit ? value : value[..limit];
 }

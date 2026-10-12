@@ -5,7 +5,7 @@ namespace AgentCore.Api;
 
 /// <summary>Committed deletion receipts survive the commit-to-filesystem cleanup gap.</summary>
 public sealed class WorkspaceCleanupHostedService(
-    IServiceProvider services, ILogger<WorkspaceCleanupHostedService> logger) : BackgroundService
+    IServiceProvider services, ILogger<WorkspaceCleanupHostedService> logger, IDiagnosticIdSource? diagnosticIds = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -21,7 +21,7 @@ public sealed class WorkspaceCleanupHostedService(
             catch (Exception ex)
             {
                 // Avoid physical paths/provider contents in logs; the durable receipts remain retryable.
-                HandledFailureLog.Warning(logger, ex, "workspace.cleanup", "workspace_cleanup_failed");
+                HandledFailureLog.Warning(logger, ex, "workspace.cleanup", "workspace_cleanup_failed", diagnostics: diagnosticIds);
             }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }

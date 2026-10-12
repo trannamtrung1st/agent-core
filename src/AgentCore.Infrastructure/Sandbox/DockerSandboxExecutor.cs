@@ -12,7 +12,7 @@ public sealed class DockerSandboxExecutor(
     ISessionWorkspace workspace,
     IArtifactStore? artifacts = null,
     string dockerPath = "docker",
-    string image = SandboxLimits.Image, ILogger<DockerSandboxExecutor>? logger = null) : ISandboxExecutor
+    string image = SandboxLimits.Image, ILogger<DockerSandboxExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null) : ISandboxExecutor
 {
     public const string DockerNetworkMode = "none";
 
@@ -148,7 +148,7 @@ public sealed class DockerSandboxExecutor(
         }
         catch (Exception ex)
         {
-            HandledFailureLog.Warning(logger, ex, "sandbox.wait", "sandbox_wait_failed");
+            HandledFailureLog.Warning(logger, ex, "sandbox.wait", "sandbox_wait_failed", diagnostics: diagnosticIds);
             // Fall through to inspect.
         }
 
@@ -165,7 +165,7 @@ public sealed class DockerSandboxExecutor(
         }
         catch (Exception ex)
         {
-            HandledFailureLog.Warning(logger, ex, "sandbox.inspect", "sandbox_inspect_failed");
+            HandledFailureLog.Warning(logger, ex, "sandbox.inspect", "sandbox_inspect_failed", diagnostics: diagnosticIds);
             // The attach-client status is not the container's exit code.
         }
 
@@ -186,7 +186,7 @@ public sealed class DockerSandboxExecutor(
         }
         catch (Exception ex)
         {
-            HandledFailureLog.Warning(logger, ex, "sandbox.cleanup", "sandbox_cleanup_failed");
+            HandledFailureLog.Warning(logger, ex, "sandbox.cleanup", "sandbox_cleanup_failed", diagnostics: diagnosticIds);
             // Cleanup must not throw past the original result.
         }
     }

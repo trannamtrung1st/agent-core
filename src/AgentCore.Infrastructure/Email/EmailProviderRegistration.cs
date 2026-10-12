@@ -21,7 +21,7 @@ internal static class EmailProviderRegistration
             p.GetRequiredService<ICredentialStore>(), p.GetRequiredService<IAgentCredentialBindingStore>(),
             p.GetRequiredService<ICredentialProtector>(), p.GetRequiredService<IAgentInstanceStore>(),
             p.GetRequiredService<EmailTransportOptions>(), p.GetRequiredService<TimeProvider>(),
-            string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase), p.GetService<ILoggerFactory>()));
+            string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase), p.GetService<ILoggerFactory>(), p.GetRequiredService<IDiagnosticIdSource>()));
         services.TryAddSingleton<AgentCore.Application.Email.EmailAccountService>();
     }
 }

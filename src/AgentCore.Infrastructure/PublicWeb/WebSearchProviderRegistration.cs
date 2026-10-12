@@ -13,10 +13,10 @@ internal static class WebSearchProviderRegistration
         services.TryAddSingleton<IPublicWebDnsResolver, SystemPublicWebDnsResolver>();
         services.TryAddSingleton<IPublicWebTransport, SocketsPublicWebTransport>();
         services.TryAddSingleton<IPublicWebFetcher>(provider =>
-            string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase) ? new SyntheticHarnessWebFetcher(new PublicWebFetcher(provider.GetRequiredService<IPublicWebTransport>(), provider.GetService<ILogger<PublicWebFetcher>>()))
-                : new PublicWebFetcher(provider.GetRequiredService<IPublicWebTransport>(), provider.GetService<ILogger<PublicWebFetcher>>()));
+            string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase) ? new SyntheticHarnessWebFetcher(new PublicWebFetcher(provider.GetRequiredService<IPublicWebTransport>(), provider.GetService<ILogger<PublicWebFetcher>>(), provider.GetRequiredService<IDiagnosticIdSource>()))
+                : new PublicWebFetcher(provider.GetRequiredService<IPublicWebTransport>(), provider.GetService<ILogger<PublicWebFetcher>>(), provider.GetRequiredService<IDiagnosticIdSource>()));
         services.TryAddSingleton<IHttpRequestClient>(provider =>
-            new HttpRequestClient(provider.GetRequiredService<IPublicWebTransport>(), provider.GetService<ILogger<HttpRequestClient>>()));
+            new HttpRequestClient(provider.GetRequiredService<IPublicWebTransport>(), provider.GetService<ILogger<HttpRequestClient>>(), provider.GetRequiredService<IDiagnosticIdSource>()));
         services.AddHttpClient(BraveWebSearchProvider.HttpClientName, client =>
         {
             client.Timeout = TimeSpan.FromSeconds(PublicWebLimits.TotalTimeoutSeconds);

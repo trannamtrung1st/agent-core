@@ -3,11 +3,46 @@ using System.Net.Sockets;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Testing;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics;
 
 namespace AgentCore.Application.Tests;
 
 public sealed class HandledFailureLogTests
 {
+    [Fact]
+    public void Disabled_warnings_preserve_trace_failure_without_consuming_ids_or_snapshotting()
+    {
+        var id = Guid.NewGuid();
+        var diagnostics = new QueueDiagnosticIdSource([id]);
+        using var listener = DiagnosticActivity.Listen();
+        using var activity = RuntimeTelemetry.Activity.StartActivity("disabled-warning");
+        Assert.NotNull(activity);
+        Assert.Null(HandledFailureLog.Warning(NullLogger.Instance, new UnsnapshotableException(), "email.read", "mail_read_failed", diagnostics: diagnostics));
+        Assert.Null(HandledFailureLog.Warning(null, new UnsnapshotableException(), "email.read", "mail_read_failed", diagnostics: diagnostics));
+        Assert.Equal(id, diagnostics.NewId());
+        Assert.Equal(ActivityStatusCode.Error, activity.Status);
+        Assert.Equal("mail_read_failed", activity.GetTagItem("error.code"));
+    }
+
+    [Fact]
+    public void Explicit_id_or_injected_source_controls_the_log_reference()
+    {
+        var first = Guid.NewGuid();
+        var supplied = Guid.NewGuid();
+        var diagnostics = new QueueDiagnosticIdSource([first]);
+        var logs = new DiagnosticLogCapture<HandledFailureLogTests>();
+        Assert.Equal(supplied, HandledFailureLog.Warning(logs, new IOException(), "email.read", "mail_read_failed", diagnosticId: supplied, diagnostics: diagnostics));
+        Assert.Equal(first, HandledFailureLog.Warning(logs, new IOException(), "email.read", "mail_read_failed", diagnostics: diagnostics));
+        Assert.Equal(supplied, logs.Entries[0].Properties["DiagnosticId"]);
+        Assert.Equal(first, logs.Entries[1].Properties["DiagnosticId"]);
+    }
+
+    private sealed class UnsnapshotableException : Exception
+    {
+        public override string? StackTrace => throw new InvalidOperationException("Disabled logging must not inspect exception stacks.");
+    }
+
     [Fact]
     public void Aggregate_failures_retain_bounded_sibling_causes_without_their_messages()
     {

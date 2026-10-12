@@ -36,7 +36,7 @@ public sealed record CompactionRejected(string Reason) : CompactionOutcome;
 /// <summary>
 /// Builds a semantic summary candidate. The caller persists it; this service does not write history.
 /// </summary>
-public sealed class ConversationCompactor(IMemoryStore store, ILogger? logger = null)
+public sealed class ConversationCompactor(IMemoryStore store, ILogger? logger = null, IDiagnosticIdSource? diagnosticIds = null)
 {
     public const string Marker = "compaction-summary-v1";
 
@@ -117,7 +117,7 @@ public sealed class ConversationCompactor(IMemoryStore store, ILogger? logger = 
         }
         catch (Exception ex)
         {
-            HandledFailureLog.Warning(logger, ex, "compaction", "provider_failure");
+            HandledFailureLog.Warning(logger, ex, "compaction", "provider_failure", diagnostics: diagnosticIds);
             return new CompactionRejected(CompactionRejection.ProviderFailure);
         }
 
