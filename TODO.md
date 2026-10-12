@@ -1469,5 +1469,5 @@ Implementation extends the existing Instance owners and Harness policy record wi
 
 ## Gmail OAuth migration — 2026-10-12
 
-- Implemented candidate: per-account offline Google OAuth, REST messages, protected secret CAS, forward migration and owner lifecycle; Custom transport and exact send approval retained.
-- Full acceptance remains subject to the [evidence ledger](docs/reports/gmail-oauth-verification-2026-10-12.md). Real Google consent/restart/recipient delivery requires operator setup and explicit dedicated-mailbox UAT authorization; it remains deferred.
+- Implemented and verified for the non-live scope: per-account offline Google OAuth, REST messages, protected secret CAS, forward migration and owner lifecycle; Custom transport and exact send approval retained. All seven [exact-behavior hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/38236219853) passed on `498799fe`.
+- The [evidence ledger](docs/reports/gmail-oauth-verification-2026-10-12.md) records full local/hosted non-live acceptance. Real Google consent/restart/recipient delivery requires operator setup and explicit dedicated-mailbox UAT authorization; it remains deferred.

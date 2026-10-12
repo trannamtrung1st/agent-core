@@ -1,6 +1,6 @@
 # Gmail OAuth migration verification — 12 October 2026
 
-Status: implementation candidate; final exact-source hosted acceptance is pending. Draft [PR #11](https://github.com/trannamtrung1st/agent-core/pull/11) contains the reconciled implementation. Live Gmail UAT is **blocked/deferred**, not passed. No Google application configuration, dedicated mailbox or real-recipient send authorization was supplied. Synthetic consent/read/send evidence does not prove Google consent or delivery. P10/P11 and historical freezes remain unchanged.
+Status: implemented and verified for all required non-live gates at behavior commit `498799fee3b602a77529e627297777e67da5711c`. Draft [PR #11](https://github.com/trannamtrung1st/agent-core/pull/11) contains the reconciled implementation. Live Gmail UAT is **blocked/deferred**, not passed. No Google application configuration, dedicated mailbox or real-recipient send authorization was supplied. Synthetic consent/read/send evidence does not prove Google consent or delivery. P10/P11 and historical freezes remain unchanged.
 
 ## Baseline and scope
 
@@ -10,7 +10,7 @@ Gmail now uses owner Authorization Code + PKCE S256 + offline refresh, verified 
 
 ## Executed local evidence
 
-All commands ran in the repository unless stated otherwise. Frontend reruns explicitly prepend `/Users/trungtran/.nvm/versions/node/v22.18.0/bin` to PATH. Full broad checks below preceded the final main reconciliation; final exact-source hosted evidence will be recorded separately.
+All commands ran in the repository unless stated otherwise. Frontend reruns explicitly prepend `/Users/trungtran/.nvm/versions/node/v22.18.0/bin` to PATH. The initial broad pass preceded main reconciliation. Final rows cover the reconciled source; the exact behavior candidate is `498799fee3b602a77529e627297777e67da5711c`.
 
 | Check | Observed result |
 | --- | --- |
@@ -24,7 +24,10 @@ All commands ran in the repository unless stated otherwise. Frontend reruns expl
 | Final API/selection slice | 13 passed |
 | Custom approval compatibility + durable workflows | 22 passed |
 | Full .NET solution, initial broad pass | Domain 195, Application 1772, Infrastructure 1254, API 556, plugin 4 passed; 21 explicit live opt-in skips |
-| Full frontend, Node 22 / two workers | 116 files, 943 tests passed; final added recovery cases tested separately |
+| Initial full frontend, Node 22 / two workers | 116 files, 943 tests passed |
+| Final full frontend, Node 22 / two workers | 116 files, 945 tests passed, including recovery/storage cases |
+| Final reconciled backend suites | Domain 195 / Application 1801 / Infrastructure 1279 / API 559 / plugin 4 passed: 3838 passed, 21 explicit live opt-in skips. Infrastructure full rerun passed after fixture repair |
+| Model fixture reconciliation + transport diagnostics | 21 passed; required diagnostic source registered without changing assertions |
 | Final focused dialog recovery tests | 6 passed |
 | Reconciled email/transport diagnostics | 72 passed |
 | Reconciled OAuth/Gmail/Custom integration | 75 passed |
@@ -32,7 +35,7 @@ All commands ran in the repository unless stated otherwise. Frontend reruns expl
 | Reconciled Application diagnostics/attention/speech | 46 passed |
 | HTTPS callback + detached Automation runtime | 13 passed |
 | Frontend TypeScript/Vite build | Passed; existing large-bundle and SignalR annotation warnings retained |
-| Affected Playwright journeys | 8 passed, including 1440/768/390/320 Gmail lifecycle/chooser, exact-approved Synthetic send and adjacent Credentials |
+| Final reconciled affected Playwright journeys | 8 passed, including 1440/768/390/320 Gmail lifecycle/chooser, exact-approved Synthetic send and adjacent Credentials |
 | Isolated Compose SQLite/key-ring survival | Passed in `agent-core-gmail-oauth-verification`, port 5380; extended gate preserved connected Synthetic OAuth grant and non-sending check across recreation |
 | EF pending model changes | None; local EF tool 10.0.5 reports older than runtime 10.0.12 |
 | Event-storage monitor tests | 3 passed |
@@ -63,12 +66,16 @@ The detector overlay server timed out; its stop reported no running server. CLI 
 | --- | --- | --- |
 | 1440 × 900 | 640 / 640 / 640 | None |
 | 768 × 900 | 640 / 640 / 640 | None |
-| 390 × 900 | 374 / 374 / 374 | None |
+| 390 × 844 | 374 / 374 / 374 | None |
 | 320 × 900 | 304 / 304 / 304 | None |
 
-Long verified Synthetic address wrapping, semantic status, local scrolling and pinned footer were observed. Mobile buttons retained the shared 40px baseline. Root MCP checked the host health profile as Synthetic, performed actual consent/check/disconnect/reconnect and inspected console/network: zero errors/warnings; relevant connection reads/checks returned 200. Physical touch, screen-reader speech, 200% zoom, performance profiling and real Google UI are not claimed verified.
+Long verified Synthetic address wrapping, semantic status, local scrolling and pinned footer were observed. The exact 390 × 844 mobile probe recorded a 374 × 812 dialog at top 16 / bottom 828, a 40px Save action within the viewport, non-sending access check, disconnect/reconnect and Escape focus recovery. A post-redirect locator expected the original row to remain mounted and timed out; the intended Add email account fallback was then verified. A motion-settling probe matched a hidden modal and timed out; final geometry/screenshot came from the visible named dialog after motion completed. Mobile buttons retained the shared 40px baseline. Root MCP checked the host health profile as Synthetic, performed actual consent/check/disconnect/reconnect and inspected console/network: zero errors/warnings; relevant connection reads/checks returned 200. The final exact-height mobile probe also recorded zero console warnings/errors. Physical touch, screen-reader speech, 200% zoom, performance profiling and real Google UI are not claimed verified.
 
 Before: [existing email editor](assets/email-account/email-edit-1440.png), [existing mobile inventory](assets/email-account/email-admin-390.png), and existing chooser captures. After: [1440](assets/gmail-oauth/connected-1440.png), [768](assets/gmail-oauth/connected-768.png), [390](assets/gmail-oauth/connected-390.png), [320](assets/gmail-oauth/connected-320.png), [narrow action/focus state](assets/gmail-oauth/actions-320.png), [disconnected state](assets/gmail-oauth/disconnected-320.png). DESIGN/PRODUCT and the sanctioned schema-2 sidecar describe observed OAuth presentation; doctor returned no drift findings.
+
+## Exact-source hosted verification
+
+The existing seven-job Synthetic workflow was explicitly dispatched at `498799fee3b602a77529e627297777e67da5711c`: [run 38236219853](https://github.com/trannamtrung1st/agent-core/actions/runs/38236219853). The automatic PR run at `a5e661dd` was superseded and cancelled after the missing model-fixture diagnostics registration was corrected; it is not acceptance evidence. No automatically attached check run appeared for the corrected PR head, so the unchanged workflow was dispatched directly. All seven jobs passed. Hosted backend: Domain 195, Infrastructure 1273, Application 1801 and API 559 passed: 3828 passed and 27 skips (21 live-provider opt-in cases plus six Docker Sandbox availability cases). The six Docker cases passed locally; the separate hosted Compose job passed. Frontend shards: 537 + 408 = 945 tests across 116 files, with both builds passed. Core browser shards: 104 + 104 = 208 passed. The seven sequential acceptance projects passed 16 tests in total. Compose SQLite/key-ring/OAuth-grant recreation passed. The final documentation/evidence follow-up changes no runnable code, tests, migrations or configuration; those sources remain identical to this verified behavior commit.
 
 ## Acceptance mapping
 
@@ -87,9 +94,11 @@ Before: [existing email editor](assets/email-account/email-edit-1440.png), [exis
 | OA-23 | Safe API projections and known-value token checks; callback/named-client query/body logging disabled; diagnostic successor reconciliation passed with safe IDs and redacted provider snapshots |
 | OA-25, OA-26 | Four-width actual interaction/geometry plus explicit chooser/approval; verified sender/Bcc preview separate from connect |
 | OA-27 | Fixed configured HTTPS/loopback origin, same-origin Vite callback exercised; HTTPS callback fixture proves Secure cookie and rejects forwarded-host redirect poisoning. Deployed Real Google redirect remains deferred |
-| OA-28 | Final merged-source hosted jobs pending; no closure claim yet |
+| OA-28 | All seven exact-behavior hosted jobs passed at `498799fe`; full local backend/frontend and affected browser/Compose checks also passed |
 | OA-29, OA-30 | Canonical owners, design sidecar, report/screenshots and independent review/fixes; local links, anchors, fences and complete JSON examples checked |
 | OA-31 | **Blocked/deferred**: no configured real Google application, dedicated mailbox/recipient opt-in or delivery evidence |
+
+Disposable API/Vite hosts, temporary browser config and the isolated Compose volume were cleaned up after verification. No user process, catalog or database was reset. Known Synthetic access/refresh values and Bearer headers were absent from the final runtime log.
 
 ## Failure and fallback ledger
 
@@ -100,5 +109,5 @@ Before: [existing email editor](assets/email-account/email-edit-1440.png), [exis
 - Browser probes exposed a decorative icon accessible-name mismatch, lost modal focus, inaccessible/hidden-cloned filter controls and a pending-name restoration race. Fixed and checked with actual interaction plus repeatable tests. Some probe resets/request URL inputs also timed out or failed in the automation harness; corrected probes are recorded separately from passing product outcomes.
 - The Impeccable overlay launcher timed out; narrow detector/live DOM evidence was used and the failed overlay was not represented as successful.
 - A detached direct-read regression initially exposed an incorrect assumption about the flat Core error envelope; the trusted top-level classifier was corrected and all 11 runtime cases passed. Mailbox body content cannot set Run outcomes.
-- The first reconciled full backend run exposed two isolated model-catalog fixture containers missing the new main IDiagnosticIdSource dependency. That dependency was registered in the fixtures; production diagnostics and capability assertions remain unchanged. This is reconciliation of the newer diagnostics, not an OAuth transport failure.
+- The first reconciled full backend run exposed two isolated model-catalog fixture containers missing the new main IDiagnosticIdSource dependency. That dependency was registered in the fixtures; production diagnostics and capability assertions remain unchanged. The focused 21-case slice and full 1279-test Infrastructure rerun passed; the original failed attempt remains recorded. This is reconciliation of the newer diagnostics, not an OAuth transport failure.
 - Live Gmail and recipient delivery remain deferred. No real email was sent, no provider policy was bypassed and no existing database/credential catalog was reset.
