@@ -1,3 +1,5 @@
+import { followAppLink } from "../../app/appLink";
+import { adminInstancePath } from "../../app/appRoute";
 import { useEffect, useState } from "react";
 import { Alert, Button, Drawer, Empty, Flex, Spin, Table, Typography, theme } from "antd";
 import { getHealth, type HealthResponse, getInstanceAgentRun, listInstanceAgentRuns, type AgentRun } from "../../services/api";
@@ -39,7 +41,7 @@ export function InstanceRunsSection({ instanceId, open, wide = true, inline = fa
     return () => { current = false; generation++; window.clearInterval(timer); };
   }, [instanceId, selectedAgentRunId, open]);
   const content = detailsOnly ? <Flex vertical gap={token.padding}>
-    {selected?.automationId ? <Button onClick={() => onSource?.({ kind: "automation", automationId: selected.automationId! })}>View Automation</Button>
+    {selected?.automationId ? <Button href={`${adminInstancePath(instanceId, "automation", "automations")}?automation=${selected.automationId}`} onClick={event => followAppLink(event, onSource ? () => onSource({ kind: "automation", automationId: selected.automationId! }) : undefined)}>View Automation</Button>
       : selected?.experienceId ? <Button onClick={() => onSource?.({ kind: "experience", agentRunId: selected.agentRunId })}>View Experience</Button> : null}
     {error ? <Alert type="error" showIcon title={error} /> : selected ? <AgentRunDetails run={selected} onChange={setSelected} /> : <Spin aria-label="Loading run details" />}
   </Flex> : <Flex vertical gap={token.padding}>
@@ -55,7 +57,7 @@ export function InstanceRunsSection({ instanceId, open, wide = true, inline = fa
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={page.error ? "Runs could not be loaded. Retry below." : search ? "No matching loaded runs. Clear search or load older runs." : "No runs yet. Runs appear when this Agent takes a turn."} /> }}
       columns={[
         { title: "Run", key: "run", width: 300, render: (_, row) => <Flex vertical gap={token.paddingXS}>
-          <Button type="link" className="admin-collection-name" onClick={() => onRun?.(row.agentRunId)}>{runActivationLabel(row.activationKind)}</Button>
+          <Button type="link" className="admin-collection-name" href={`${adminInstancePath(instanceId, "activity", "runs")}?${new URLSearchParams({ ...(search ? { q: search } : {}), run: row.agentRunId })}`} onClick={event => followAppLink(event, onRun ? () => onRun(row.agentRunId) : undefined)}>{runActivationLabel(row.activationKind)}</Button>
           <Typography.Text type="secondary" className="admin-activity-id" copyable={{ text: row.agentRunId }} title={row.agentRunId}>ID {`${row.agentRunId.slice(0, 8)}…${row.agentRunId.slice(-8)}`}</Typography.Text>
           {row.outcome?.summary ? <Typography.Text type="secondary" ellipsis title={row.outcome.summary}>{row.outcome.summary}</Typography.Text> : null}
         </Flex> },

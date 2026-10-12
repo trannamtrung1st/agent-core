@@ -65,9 +65,14 @@ internal static class AgentRunStoreMapping
         var isEmail = evidence.RootElement.TryGetProperty("EnvironmentKind", out var environment) && environment.GetString() == "email-account";
         if (isEmail)
         {
-            if (source is null || email is not { Status: "allowed", InstanceRevision: { } revision }
+            if (source is null || email is not { Status: "allowed", InstanceRevision: { } revision, SelectedAccountId: { } accountId, SelectedAccountRef: { } accountRef }
                 || email.ExpiresAtUtc <= run.CreatedAtUtc || !AgentCore.Application.Email.EmailSelectionSafety.CanContinue(source, email))
                 throw AgentCoreErrors.Conflict("Email continuation requires confirmed, current owned account access.");
+            if (!evidence.RootElement.TryGetProperty("SelectedAccountId", out var selectedId) || !selectedId.TryGetGuid(out var id) || id != accountId
+                || !evidence.RootElement.TryGetProperty("SelectedAccountRef", out var selectedRef) || selectedRef.GetString() != accountRef
+                || run.Admission.Configuration is not { } configuration
+                || !configuration.CredentialBindings.Any(b => b.CredentialId == accountId && b.Reference == accountRef))
+                throw AgentCoreErrors.Conflict("Email continuation must retain the selected admitted account identity.");
             task = new(source.AgentRunId, email.Target, "Email account access", revision);
         }
         if (source is null || task is null || source.Owner != run.Owner || source.SessionId != run.SessionId

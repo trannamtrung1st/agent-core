@@ -106,12 +106,12 @@ test("completed sessions stay read-only after reload and do not reopen", async (
   await expect(page.getByText("History seed 30")).toBeVisible({ timeout: 15_000 });
   await expectReadOnly(page, "This conversation is completed.");
 
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
   const row = page.locator(".session-row").filter({ hasText: "· Completed" }).first();
   await expect(row).toBeVisible();
   reopenUrls.length = 0;
-  await row.getByRole("button", { name: "Hello", exact: true }).click();
+  await row.getByRole("link", { name: "Hello", exact: true }).click();
   await expect(page.getByTestId("connection")).toHaveText("Completed", { timeout: 15_000 });
   await expectReadOnly(page, "This conversation is completed.");
   expect(reopenUrls).toEqual([]);
@@ -127,7 +127,7 @@ test("expired and cancelled sessions stay inspectable without Resume", async ({ 
   await expect(page.getByText("Hello from synthetic.")).toBeVisible();
   await expectReadOnly(page, "This conversation has expired.");
 
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   const cancelledId = await createSession(page);
   await postLifecycle(page, cancelledId, "cancelled");
   await expect(page.getByTestId("connection")).toHaveText("Cancelled", { timeout: 15_000 });

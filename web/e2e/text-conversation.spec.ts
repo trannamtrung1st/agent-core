@@ -153,10 +153,10 @@ test("progress is visible, replaced, cleared on final, reload, disconnect, and s
   await expect(page.locator(".agent-activity")).toHaveCount(0);
   await expectHistoryOmitsProgress(page);
 
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".agent-activity")).toHaveCount(0);
-  await page.locator("button.session-row-open", { hasText: "Run the support case for order 91." }).click();
+  await page.locator("a.session-row-open", { hasText: "Run the support case for order 91." }).click();
   await expect(page.locator(".markdown-message strong").first()).toHaveText("Delayed", { timeout: 15_000 });
   await expect(page.locator(".agent-activity")).toHaveCount(0);
   await expectHistoryOmitsProgress(page);
@@ -591,9 +591,9 @@ test("markdown response renders and survives reopen", async ({ page }) => {
   await expect(page.locator(".markdown-message strong")).toHaveText("three", { timeout: 15_000 });
   await expect(page.locator(".agent-activity")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
-  await page.locator("button.session-row-open", { hasText: "Show markdown" }).click();
+  await page.locator("a.session-row-open", { hasText: "Show markdown" }).click();
   await expect(page.locator(".markdown-message strong")).toHaveText("three", { timeout: 15_000 });
 });
 

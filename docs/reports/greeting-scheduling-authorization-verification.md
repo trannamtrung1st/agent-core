@@ -60,3 +60,8 @@ Current review checks:
 - Playwright MCP separately selected the built-in Harness authoring Skill through the visible picker, submitted it as the only first-turn content and observed `/Harness authoring` in user history plus `Hello from synthetic.`. The 1200px picker has 40px rows, 8px gaps/padding, one row per choice and no page overflow. An initial stale-capability model-catalog read returned 401 when switching disposable deployments; bootstrap recovered, and the subsequent reload and submitted journey showed zero console errors and HTTP 200 for the resulting Session read.
 
 The full frontend run and final candidate CI are checked after these focused checks; delivery results must identify the actual pushed SHA. Historical freezes and P10/P11 remain unchanged. Real evidence above covers the earlier exact baseline; any new Real run must verify its loaded build separately. The prior generic classifier-format limitation and full live-catalog qualification remain outside this bounded evidence.
+
+
+## Scheduled-output consistency successor
+
+The historical negative-chat result above remains evidence of the original limitation. The [scheduled-output follow-up](scheduled-output-consistency-verification.md) adds a bounded history boundary and task-scope guidance, verifies actual greeting text despite intervening negative/unrelated Chat, and preserves authorized owner edit/disable behavior. Its successful bounded Real acceptance is on behavior `846e00ad`; CI waiting is separately waived for that successor.

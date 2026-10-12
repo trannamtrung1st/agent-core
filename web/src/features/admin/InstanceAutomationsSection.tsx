@@ -1,5 +1,6 @@
+import { followAppLink } from "../../app/appLink";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
-import { adminHomePath, navigateToAppPath } from "../../app/appRoute";
+import { adminHomePath, adminInstancePath } from "../../app/appRoute";
 import { AutomationEventFilter } from "./AutomationEventFilter";
 import type { AutomationPreset, AutomationChild, EventCatalogEntry, EventSourceReference } from "../../services/adminApi";
 import { EventsSection } from "./EventsSection";
@@ -229,7 +230,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reload()}>Reload automations</Button>} /> : null}
       {resourcesError ? <Alert type="error" showIcon title={<AdminErrorNotice message={resourcesError.message} diagnosticId={resourcesError.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reloadResources()}>Reload Events and models</Button>} /> : null}
       <Flex wrap gap={token.paddingXS}><Button type="primary" ref={newButton} disabled={busy} onClick={() => { editorOpener.current = newButton.current; setEditorError(null); resetDraft(blank()); setEditor("new"); setEditorOpen(true); }}>New automation</Button>
-        <Button disabled={busy} onClick={() => void reload()}>Refresh automations</Button><Button onClick={() => onWork()}>View runs</Button></Flex>
+        <Button disabled={busy} onClick={() => void reload()}>Refresh automations</Button><Button href={adminInstancePath(instanceId, "activity", "runs")} onClick={event => followAppLink(event, () => onWork())}>View runs</Button></Flex>
       <Drawer open={editorOpen && active} title={<Typography.Text strong id={editorTitleId}>{editorTitle}</Typography.Text>} aria-labelledby={editorTitleId}
         size={screens.md ? 640 : "100%"} getContainer={false} rootStyle={{ position: "fixed" }}
         rootClassName="admin-automation-drawer" styles={{ body: { padding: token.padding }, footer: { padding: token.padding } }}
@@ -427,7 +428,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             { title: "Last run", key: "execution", width: 240,
               filters: [...new Set(review.items.map(item => item.executionStatus ?? "Not yet"))].map(value => ({ text: runStatusLabel(value), value })),
               onFilter: (value, item) => (item.executionStatus ?? "Not yet") === value,
-              render: (_, item) => item.lastAgentRunId ? <Button type="link" size="small" aria-label={`View last run: ${item.name}`} onClick={() => onWork(item.lastAgentRunId!)}>{runStatusLabel(item.executionStatus ?? "View run")}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Button> : "Not yet" },
+              render: (_, item) => item.lastAgentRunId ? <Button type="link" size="small" aria-label={`View last run: ${item.name}`} href={`${adminInstancePath(instanceId, "activity", "runs")}?run=${item.lastAgentRunId}`} onClick={event => followAppLink(event, () => onWork(item.lastAgentRunId!))}>{runStatusLabel(item.executionStatus ?? "View run")}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Button> : "Not yet" },
             { title: "Model", key: "model", width: 180, ellipsis: true, render: (_, item) => item.effectiveModelKey ?? item.modelKey ?? "Unattended default" },
             { title: "Origin", key: "origin", width: 180,
               filters: [{ text: "Chat user request", value: "CurrentUserTurn" }, { text: "Admin owner", value: "AdminOwner" }],
@@ -441,7 +442,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             <Descriptions.Item label="Originally created from">{item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner"}{item.sourceSessionId ? <> · <ConversationDestination sessionId={item.sourceSessionId} /></> : null}</Descriptions.Item>
             <Descriptions.Item label="Destination"><Flex vertical gap={token.paddingXS}><AutomationDestination target={item.executionTarget} delivery={item.completionDelivery} /></Flex></Descriptions.Item>
             {item.suspensionReason ? <Descriptions.Item label="Unavailable">{item.suspensionReason}</Descriptions.Item> : null}
-            <Descriptions.Item label="When"><Flex vertical gap={token.paddingXS}>{item.triggers.map(t => t.kind === "schedule" ? <span key={t.triggerId}>{scheduleTimingLabel(t.schedule)}</span> : <Button key={t.triggerId} type="link" size="small" onClick={() => navigateToAppPath(`${adminHomePath("events")}?${t.source?.kind === "builtin" ? `builtin=${encodeURIComponent(t.source.key)}` : `event=${t.source?.eventId ?? ""}`}`)}>{childName(t)}{t.source.kind === "webhook" ? ` · ${catalog.find(e => eventSourceKey(e.source) === eventSourceKey(t.source))?.key ?? t.source.eventId}` : ""} · {t.enabled ? "Enabled" : "Disabled"}</Button>)}</Flex></Descriptions.Item>
+            <Descriptions.Item label="When"><Flex vertical gap={token.paddingXS}>{item.triggers.map(t => t.kind === "schedule" ? <span key={t.triggerId}>{scheduleTimingLabel(t.schedule)}</span> : <Button key={t.triggerId} type="link" size="small" href={`${adminHomePath("events")}?${t.source?.kind === "builtin" ? `builtin=${encodeURIComponent(t.source.key)}` : `event=${t.source?.eventId ?? ""}`}`} onClick={followAppLink}>{childName(t)}{t.source.kind === "webhook" ? ` · ${catalog.find(e => eventSourceKey(e.source) === eventSourceKey(t.source))?.key ?? t.source.eventId}` : ""} · {t.enabled ? "Enabled" : "Disabled"}</Button>)}</Flex></Descriptions.Item>
             <Descriptions.Item label="Model">{item.effectiveModelKey ?? item.modelKey ?? "Unattended default"}</Descriptions.Item>
             <Descriptions.Item label="Last run">{runStatusLabel(item.executionStatus)}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Descriptions.Item></Descriptions>
             <Flex wrap gap={token.paddingXS}><Button aria-label="Run automation now" aria-busy={item.automationId in pending} loading={item.automationId in pending}
@@ -458,7 +459,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
                   afterClose: () => { if (confirmed) requestAnimationFrame(() => newButton.current?.focus()); }
                 });
               }}>Delete automation</Button>
-              {item.lastAgentRunId ? <Button onClick={() => onWork(item.lastAgentRunId!)}>View last run</Button> : null}</Flex>
+              {item.lastAgentRunId ? <Button href={`${adminInstancePath(instanceId, "activity", "runs")}?run=${item.lastAgentRunId}`} onClick={event => followAppLink(event, () => onWork(item.lastAgentRunId!))}>View last run</Button> : null}</Flex>
             </Flex>
           }} />
         </> : null}

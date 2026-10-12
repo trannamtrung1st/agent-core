@@ -41,13 +41,15 @@ export function AppRouter() {
     return <AdminApp route={route} />;
   }
 
+  const returnPath = new URLSearchParams(window.location.search).get("returnTo");
+  const returnRoute = returnPath ? parseAppRoute(returnPath.split("?")[0]) : null;
+  const activityHref = returnPath && returnRoute?.area === "admin" && returnRoute.view === "instance" && returnRoute.tab === "activity"
+    ? returnPath : undefined;
+
   return (
     <ChatApp
-      returnToActivity={(() => {
-        const path = new URLSearchParams(window.location.search).get("returnTo");
-        const target = path ? parseAppRoute(path.split("?")[0]) : null;
-        return path && target?.area === "admin" && target.view === "instance" && target.tab === "activity" ? () => navigateToAppPath(path) : undefined;
-      })()}
+      returnToActivityHref={activityHref}
+      returnToActivity={activityHref ? () => navigateToAppPath(activityHref) : undefined}
       onOpenAdmin={() => {
         void (async () => {
           rememberChatUrl(window.location.pathname);

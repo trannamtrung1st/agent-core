@@ -14,9 +14,9 @@ describe("Instance Activity", () => {
     vi.mocked(listInstanceSessions).mockResolvedValue({ items: [row("session")], nextCursor: null, hasMore: false });
     vi.mocked(getInstanceSession).mockRejectedValueOnce(new Error("Session details are unavailable")).mockResolvedValueOnce(row("session"));
     render(<InstanceSessionsSection instanceId="instance" open />);
-    fireEvent.click(await screen.findByRole("button", { name: "Planning notes" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Planning notes" }));
     expect(await screen.findByText("Session details are unavailable")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Open conversation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open conversation" })).not.toBeInTheDocument();
     expect(screen.queryByText("History session")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry session" }));
     expect(await screen.findByText("History session")).toBeVisible();
@@ -25,34 +25,34 @@ describe("Instance Activity", () => {
   it("lists zero-run sessions by meaningful title and preserves IDs as secondary metadata", async () => {
     vi.mocked(listInstanceSessions).mockResolvedValue({ items: [row("session"), row("untitled", " "), row("task", "", "ManualBackground")], nextCursor: null, hasMore: false });
     render(<InstanceSessionsSection instanceId="instance" open />);
-    expect(await screen.findByRole("button", { name: "Planning notes" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Untitled conversation" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Untitled background task" })).toBeVisible();
+    expect(await screen.findByRole("link", { name: "Planning notes" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Untitled conversation" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Untitled background task" })).toBeVisible();
     expect(listInstanceSessions).toHaveBeenCalledWith("instance", undefined);
-    fireEvent.click(screen.getByRole("button", { name: "Planning notes" }));
+    fireEvent.click(screen.getByRole("link", { name: "Planning notes" }));
     expect(await screen.findByText("History session")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Open conversation" }));
+    fireEvent.click(screen.getByRole("link", { name: "Open conversation" }));
     expect(window.location.pathname).toBe("/c/session");
     expect(new URLSearchParams(window.location.search).get("returnTo")).toContain("/activity/sessions");
   });
   it("retains archived Instance inspection without offering a new attachment", async () => {
     vi.mocked(listInstanceSessions).mockResolvedValue({ items: [row("session")], nextCursor: null, hasMore: false });
     render(<InstanceSessionsSection instanceId="instance" open archived />);
-    fireEvent.click(await screen.findByRole("button", { name: "Planning notes" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Planning notes" }));
     expect(await screen.findByText("History session")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Open conversation" })).toBeDisabled();
+    expect(screen.getByText("Open conversation").closest("a")).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText(/Archived Agent Instance/)).toBeVisible();
   });
   it("deduplicates sessions across changing cursor pages and keeps search in the URL", async () => {
     vi.mocked(listInstanceSessions).mockResolvedValueOnce({ items: [row("session")], nextCursor: "older", hasMore: true }).mockResolvedValueOnce({ items: [row("session"), row("older", "Older work")], nextCursor: null, hasMore: false });
     render(<InstanceSessionsSection instanceId="instance" open />);
-    await screen.findByRole("button", { name: "Planning notes" });
+    await screen.findByRole("link", { name: "Planning notes" });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Load more" })); });
-    expect(screen.getAllByRole("button", { name: "Planning notes" })).toHaveLength(1);
+    expect(screen.getAllByRole("link", { name: "Planning notes" })).toHaveLength(1);
     fireEvent.change(screen.getByRole("textbox", { name: "Search loaded sessions" }), { target: { value: "Older" } });
     expect(window.location.search).toBe("?q=Older");
-    expect(screen.getByRole("button", { name: "Older work" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Planning notes" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Older work" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Planning notes" })).not.toBeInTheDocument();
   });
   it("loads an exact background deep link outside the current list page", async () => {
     window.history.replaceState(null, "", "/admin/instances/instance/activity/sessions?session=task");
@@ -66,7 +66,7 @@ describe("Instance Activity", () => {
     render(<InstanceSessionsSection instanceId="instance" open />);
     expect(await screen.findByText("Activity unavailable")).toBeVisible();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Try again" })); });
-    expect(await screen.findByRole("button", { name: "Planning notes" })).toBeVisible();
+    expect(await screen.findByRole("link", { name: "Planning notes" })).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "Search loaded sessions" }), { target: { value: "missing" } });
     expect(screen.getByText(/No matching loaded sessions/)).toBeVisible();
   });
@@ -77,14 +77,14 @@ describe("Instance Activity", () => {
     view.rerender(<InstanceSessionsSection instanceId="current" open />);
     await act(async () => { finish({ items: [row("foreign", "Foreign conversation")], nextCursor: null, hasMore: false }); });
     await waitFor(() => expect(listInstanceSessions).toHaveBeenCalledWith("current", undefined));
-    expect(screen.queryByRole("button", { name: "Foreign conversation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Foreign conversation" })).not.toBeInTheDocument();
   });
   it("keeps each run independently inspectable even with no conventional session metadata", async () => {
     const runs = ["UserTurn", "ScheduledWork", "ApplicationEvent", "ImmediateBackground"].map((activationKind, index) => ({ agentRunId: `run-${index}`, activationKind, sessionId: index === 3 ? "" : "shared-session", status: "completed", createdAt: "2026-10-09T00:00:00Z", updatedAt: "2026-10-09T01:00:00Z" } as AgentRun));
     vi.mocked(listInstanceAgentRuns).mockResolvedValue({ items: runs, nextCursor: null, hasMore: false });
     const onRun = vi.fn(); render(<InstanceRunsSection instanceId="instance" open inline onClose={vi.fn()} onRun={onRun} />);
-    await screen.findByRole("button", { name: "Chat turn" });
-    for (const [index, name] of ["Chat turn", "Scheduled task", "Application event", "Immediate task"].entries()) { fireEvent.click(screen.getByRole("button", { name })); expect(onRun).toHaveBeenLastCalledWith(`run-${index}`); }
+    await screen.findByRole("link", { name: "Chat turn" });
+    for (const [index, name] of ["Chat turn", "Scheduled task", "Application event", "Immediate task"].entries()) { fireEvent.click(screen.getByRole("link", { name })); expect(onRun).toHaveBeenLastCalledWith(`run-${index}`); }
     expect(screen.getByText("No session")).toBeVisible();
   });
 });

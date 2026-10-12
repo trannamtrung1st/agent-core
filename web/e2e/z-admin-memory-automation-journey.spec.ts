@@ -7,7 +7,7 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
   await startSyntheticChat(page);
   const { instance, firstSession } = await publishExaminerDraftAndCreateManagedInstance(page);
 
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await page.goto(`/admin/instances/${instance.instanceId}`);
   await expect(page.locator(".admin-instance-heading").getByText("Agent Instance", { exact: true })).toBeVisible();
 

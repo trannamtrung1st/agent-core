@@ -96,8 +96,9 @@ describe("realtime race handling", () => {
 
   it("keeps new agent output arriving in Admin while disarming voice capture", async () => {
     const stop = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
     hooks.setConnection({
-      invoke: vi.fn().mockResolvedValue({ accepted: true }), stop,
+      invoke, stop,
       start: vi.fn().mockResolvedValue(undefined), send: vi.fn()
     } as never);
     useSessionStore.setState({
@@ -138,10 +139,43 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().entries.find(e => e.responseId === "r2")?.status)
       .toBe("completed");
     expect(useSessionStore.getState().liveResponseId).toBeNull();
+    expect(invoke.mock.calls.some(([method]) => method === "ResponseReceived")).toBe(false);
 
     resumeLiveSessionForNavigation();
+    reportCommittedEntries(useSessionStore.getState().entries);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("ResponseReceived", expect.objectContaining({
+      responseId: "r2", payload: expect.objectContaining({ textEndExclusive: 13 })
+    })));
     expect(useSessionStore.getState().connection).toBe("ready");
     expect(stop).not.toHaveBeenCalled();
+  });
+
+  it("leaves server voice mode exactly once when Admin suspends playback", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1",
+      attachmentId: "a1", mode: "voice", liveResponseId: "r1" });
+    await suspendLiveSessionForNavigation();
+    await suspendLiveSessionForNavigation();
+    expect(invoke.mock.calls.filter(([method]) => method === "SetMode")).toEqual([
+      ["SetMode", expect.objectContaining({ payload: { mode: "text" } })]
+    ]);
+  });
+
+  it("releases microphone preflight that resolves after navigating to Admin", async () => {
+    let finish!: () => void;
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    vi.spyOn(capture, "preflight").mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
+    const release = vi.spyOn(capture, "release");
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", mode: "voice" });
+    const pending = resumeCapture();
+    await suspendLiveSessionForNavigation();
+    release.mockClear();
+    finish();
+    await pending;
+    expect(release).toHaveBeenCalled();
+    expect(useSessionStore.getState().preflightReady).toBe(false);
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
   });
 
   it("sequence gap aborts playback and reattaches before applying started side effects", async () => {

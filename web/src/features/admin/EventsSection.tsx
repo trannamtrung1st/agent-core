@@ -1,3 +1,4 @@
+import { followAppLink } from "../../app/appLink";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Alert, App, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Form, Grid, Input, Modal, Select, Spin, Table, Tag, Typography, theme } from "antd";
@@ -127,7 +128,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
     <Button size="small" disabled={busy} aria-label={`${credentialAction(item)} for ${item.displayName}`} onClick={e => { opener.current = e.currentTarget; confirmCredential(item); }}>{credentialAction(item)}</Button>
     {item.status === "Active" ? <Button size="small" danger aria-label={`Revoke ${item.displayName}`} disabled={busy} onClick={e => { opener.current = e.currentTarget; confirmRevoke(item); }}>Revoke Event</Button> : null}
   </Flex> : <Flex className="admin-table-actions" gap={token.paddingXS} align="center">
-    <Button size="small" onClick={e => { opener.current = e.currentTarget; openDetails(item.eventId); }} aria-label={`View details for ${item.displayName}`}>View</Button>
+    <Button size="small" href={embedded ? undefined : `${adminHomePath("events")}?event=${item.eventId}`} onClick={e => { const open = () => { opener.current = e.currentTarget; openDetails(item.eventId); }; if (embedded) open(); else followAppLink(e, open); }} aria-label={`View details for ${item.displayName}`}>View</Button>
     <Dropdown trigger={["click"]} menu={{ items: [
       { key: "rename", label: "Rename", disabled: busy },
       { key: "credential", label: credentialAction(item), disabled: busy },
@@ -136,7 +137,8 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
       <Button size="small" icon={<MoreOutlined aria-hidden />} aria-label={`More actions for ${item.displayName}`} disabled={busy} onClick={e => { opener.current = e.currentTarget; }} />
     </Dropdown>
   </Flex>;
-  const navigateSubscription = (instanceId: string, automationId: string) => navigateToAppPath(`${adminInstancePath(instanceId, "automation", "automations")}?automation=${automationId}`);
+  const subscriptionHref = (instanceId: string, automationId: string) => `${adminInstancePath(instanceId, "automation", "automations")}?automation=${automationId}`;
+  const eventHref = (source: EventSourceReference) => `${adminHomePath("events")}?${source.kind === "builtin" ? `builtin=${encodeURIComponent(source.key)}` : `event=${source.eventId}`}`;
   const nameError = /[\u0000-\u001f\u007f-\u009f]/.test(name) ? "Use a name without control characters." : null;
   return <AgentConfigurationPanel title="Events" label="Events"
     description="Browse read-only Built-in definitions and manage authenticated Webhook Events. Automations choose how each agent responds." bodyGap="section">
@@ -152,12 +154,12 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
       {loaded ? <Table<EventCatalogEntry> key={tableVersion} aria-label="Events table" className="admin-collection-table" rowKey={e => eventSourceKey(e.source)} size="small"
         dataSource={catalog.filter(e => (kind === "all" || e.source.kind === kind) && [e.name, e.key, e.description, e.state].some(value => value.toLowerCase().includes(search.trim().toLowerCase())))}
         pagination={pagination} scroll={{ x: 950 }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search || kind !== "webhook" ? "No matches. Clear search or filters to see all results." : "No Webhook Events yet. Create one to receive external signals."} /> }} columns={[
-          { title: "Name", key: "name", width: 230, ellipsis: true, sorter: (a,b) => a.name.localeCompare(b.name), render: (_, e) => <Button type="link" size="small" className="admin-collection-name" title={e.name} onClick={event => { opener.current = event.currentTarget; if (e.source.kind === "webhook") openDetails(e.source.eventId); else { setBuiltinKey(e.source.key); if (!embedded) navigateToAppPath(`${adminHomePath("events")}?builtin=${encodeURIComponent(e.source.key)}`); } }}>{e.name}</Button> },
+          { title: "Name", key: "name", width: 230, ellipsis: true, sorter: (a,b) => a.name.localeCompare(b.name), render: (_, e) => <Button type="link" size="small" className="admin-collection-name" title={e.name} href={embedded ? undefined : eventHref(e.source)} onClick={event => { const open = () => { opener.current = event.currentTarget; if (e.source.kind === "webhook") openDetails(e.source.eventId); else { setBuiltinKey(e.source.key); if (!embedded) navigateToAppPath(eventHref(e.source)); } }; if (embedded) open(); else followAppLink(event, open); }}>{e.name}</Button> },
           { title: "Type", width: 100, render: (_, e) => <Tag>{e.source.kind === "builtin" ? "Built-in" : "Webhook"}</Tag> },
           { title: "Description / key", width: 310, render: (_, e) => <Flex vertical gap={token.paddingXS}><Typography.Text>{e.description}</Typography.Text><Typography.Text type="secondary">{e.key}</Typography.Text></Flex> },
           { title: "State", width: 100, filters: [{ text: "Active", value: "Active" }, { text: "Revoked", value: "Revoked" }, { text: "Read-only", value: "Built-in" }], onFilter: (value, entry) => entry.state === value, render: (_, e) => e.source.kind === "builtin" ? "Read-only" : <Tag color={e.state === "Active" ? "success" : "default"}>{e.state}</Tag> },
           { title: "Subscriptions", width: 120, render: (_, e) => e.webhook ? `${e.webhook.activeSubscriberCount} active / ${e.webhook.subscriberCount} total` : "Instance-scoped" },
-          { title: "Actions", width: 130, render: (_, e) => e.webhook ? actions(e.webhook) : <Button size="small" aria-label={`View details for ${e.name}`} onClick={event => { opener.current = event.currentTarget; setBuiltinKey(e.key); if (!embedded) navigateToAppPath(`${adminHomePath("events")}?builtin=${encodeURIComponent(e.key)}`); }}>View</Button> }
+          { title: "Actions", width: 130, render: (_, e) => e.webhook ? actions(e.webhook) : <Button size="small" aria-label={`View details for ${e.name}`} href={embedded ? undefined : eventHref(e.source)} onClick={event => { const open = () => { opener.current = event.currentTarget; setBuiltinKey(e.key); if (!embedded) navigateToAppPath(eventHref(e.source)); }; if (embedded) open(); else followAppLink(event, open); }}>View</Button> }
         ]} /> : null}
       <Drawer open={!!builtinKey} aria-labelledby={`${formId}-builtin-title`} title={<span id={`${formId}-builtin-title`}>{builtinKey ?? "Built-in Event"}</span>} size={compact ? "100%" : 640} getContainer={false} rootStyle={{ position: "fixed" }} rootClassName="admin-automation-drawer"
         styles={{ body: { padding: token.padding } }} onClose={closeDetails} afterOpenChange={open => { if (!open) restoreFocus(); }}>
@@ -211,7 +213,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
             <Typography.Title level={5} style={{ margin: 0 }}>Subscribed Automations</Typography.Title>
             <Typography.Text type="secondary">Active subscriptions can receive new signals while the Event is active. Disabled subscriptions remain in the total. Admission still depends on agent policy and availability.</Typography.Text>
             {details.subscribers.length ? <Table size="small" rowKey="automationId" className="admin-collection-table" scroll={{ x: 500 }} pagination={false} dataSource={details.subscribers} columns={[
-              { title: "Automation", dataIndex: "name", render: (_,s) => <Button type="link" size="small" onClick={() => navigateSubscription(s.agentInstanceId,s.automationId)}>{s.name}</Button> },
+              { title: "Automation", dataIndex: "name", render: (_,s) => <Button type="link" size="small" href={subscriptionHref(s.agentInstanceId,s.automationId)} onClick={followAppLink}>{s.name}</Button> },
               { title: "Status", dataIndex: "status" }
             ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No subscriptions yet. Create an Event Automation on an Instance." />}
             </Flex>
@@ -227,7 +229,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
             <Typography.Text type="secondary">Per-subscriber admission for those signals. Admitted means durable work was created; execution results are available in the Automation’s Runs.</Typography.Text>
             {details.deliveries.length ? <Table size="small" rowKey={d => `${d.receiptId}:${d.triggerId ?? d.automationId}`} className="admin-collection-table" scroll={{ x: 600 }} pagination={{ pageSize: 10 }} dataSource={details.deliveries} columns={[
               { title: "Delivery ID", dataIndex: "sourceEventId", ellipsis: true }, { title: "Received", dataIndex: "receivedAt", render: timestamp },
-              { title: "Status", dataIndex: "status" }, { title: "Subscription", dataIndex: "triggerId" }, { title: "Automation", render: (_,d) => <Button type="link" size="small" onClick={() => navigateSubscription(d.agentInstanceId,d.automationId)}>View Automation</Button> }
+              { title: "Status", dataIndex: "status" }, { title: "Subscription", dataIndex: "triggerId" }, { title: "Automation", render: (_,d) => <Button type="link" size="small" href={subscriptionHref(d.agentInstanceId,d.automationId)} onClick={followAppLink}>View Automation</Button> }
             ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No Automation deliveries for recent signals. Only active subscriptions at receipt time can receive them." />}
             </Flex>
           </> : null}

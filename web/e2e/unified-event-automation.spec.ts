@@ -45,7 +45,7 @@ test('Completed Automation can be deleted while its quiet Run remains inspectabl
   await page.getByRole('tab', { name: 'Runs', exact: true }).click();
   await page.getByRole('table', { name: 'Runs table', exact: true }).getByRole('row')
     .filter({ has: page.getByTitle(work[0].agentRunId, { exact: true }) })
-    .getByRole('button', { name: 'Scheduled task', exact: true }).click();
+    .getByRole('link', { name: 'Scheduled task', exact: true }).click();
   const run = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(run.getByText('No action', { exact: true }).first()).toBeVisible();
   await expect(run.locator('.agent-run-details').getByText('No action', { exact: true })).toBeVisible();
@@ -113,10 +113,10 @@ test('Connections ingress activates configured Event instructions once and Runs 
   const work = (await (await page.request.get(path.replace('/admin/', '/') + '/agent-runs', { headers })).json()).items;
   expect(work).toHaveLength(1); expect(work[0].automationId).toBe(row.automationId);
   expect(work[0].sessionId).toBeTruthy(); expect(work[0].outcome.attentionRequired).toBe(false);
-  await automations.getByRole('button', { name: `View last run: ${name}`, exact: true }).click();
+  await automations.getByRole('link', { name: `View last run: ${name}`, exact: true }).click();
   const details = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(details.getByText('No action', { exact: true }).first()).toBeVisible();
-  await details.getByRole('button', { name: 'View Automation', exact: true }).click();
+  await details.getByRole('link', { name: 'View Automation', exact: true }).click();
   await expect(source).toBeFocused();
   await page.reload(); await source.click();
   await expect(automations.getByText(/Completed · No action/).first()).toBeVisible();

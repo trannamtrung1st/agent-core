@@ -9,6 +9,7 @@ public sealed record BoundEmailAccount(string AccountRef, string DisplayName, st
 public interface IEmailProviderFactory
 {
     bool IsEnabled { get; }
+    bool IsSendEnabled { get; }
     IEmailProvider Create(EmailAccountContext account);
     ValueTask<EmailConnectionTest> TestAsync(Guid accountId, long expectedRevision, string protocol, CancellationToken ct = default);
 }
@@ -17,7 +18,7 @@ public sealed record StoredEmailDraft(Guid AgentInstanceId, Guid SessionId, Emai
 public sealed record EmailSendOperation(string DraftId, Guid AccountId, long DraftRevision, Guid ApprovalId,
     string ActionHash, EmailSendResult? Result, DateTimeOffset ClaimedAtUtc);
 public sealed record EmailAccountSelection(Guid RequestId, Guid AgentInstanceId, Guid SessionId, Guid SourceRunId,
-    string Target, DateTimeOffset ExpiresAtUtc, string Status = "pending", long? InstanceRevision = null);
+    string Target, DateTimeOffset ExpiresAtUtc, string Status = "pending", long? InstanceRevision = null, Guid? SelectedAccountId = null, string? SelectedAccountRef = null);
 public interface IEmailStore
 {
     ValueTask CreateSelectionAsync(EmailAccountSelection request, CancellationToken ct = default);

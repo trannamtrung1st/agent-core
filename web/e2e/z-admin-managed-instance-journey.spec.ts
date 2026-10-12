@@ -82,7 +82,7 @@ test("p7d managed instance persona form json chat archive and history", async ({
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
   const firstChatUrl = page.url();
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await page.goto(`/admin/instances/${instance.instanceId}`);
   await expect(page.locator(".admin-instance-heading").getByText("Agent Instance", { exact: true })).toBeVisible();
 
@@ -113,8 +113,8 @@ test("p7d managed instance persona form json chat archive and history", async ({
   expect(afterPersonaEdits.persona.tone).toBe(jsonTone);
   expect(afterPersonaEdits.personaRevision).toBe(3);
 
-  await page.getByRole("button", { name: /Chat$/ }).click();
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: /Chat$/ }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
 
   const secondSessionPromise = page.waitForResponse(
@@ -154,8 +154,8 @@ test("p7d managed instance persona form json chat archive and history", async ({
   expect(deniedBody.title ?? deniedBody.code).toBe("ValidationError");
   expect(deniedBody.detail).toContain("Archived agent instances cannot start new sessions");
 
-  await page.getByRole("button", { name: /Chat$/ }).click();
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: /Chat$/ }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
   await expectManagedIdentityOptionAbsent(page, instance.instanceId);
 

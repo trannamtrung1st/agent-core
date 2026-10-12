@@ -23,8 +23,9 @@ public sealed class ToolConfigurationGate(
         {
             ToolCatalog.WebSearch => webSearch?.IsAvailable == true,
             ToolCatalog.WebFetch => publicWebFetcher is not null,
-            ToolCatalog.EmailAccounts or ToolCatalog.EmailRequestAccount or ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft or ToolCatalog.EmailSend
+            ToolCatalog.EmailAccounts or ToolCatalog.EmailRequestAccount or ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft
                 => emailFactory?.IsEnabled ?? emailProvider?.IsAvailable == true,
+            ToolCatalog.EmailSend => emailFactory?.IsSendEnabled ?? emailProvider?.IsAvailable == true,
             ToolCatalog.BrowserConfiguration => browserSession?.Provider.Supports(BrowserFeature.Configuration) == true,
             _ when ToolCatalog.IsBrowserTool(toolName) =>
                 browserEnabled

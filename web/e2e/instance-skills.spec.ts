@@ -9,7 +9,7 @@ async function choose(page: Page, name: string, text: string) {
   await page.locator('.ant-select-item-option').filter({ hasText: text }).last().click();
 }
 async function create(page: Page, name: string, definition = 'General Assistant · general-assistant') {
-  await page.goto('/'); await page.getByRole('button', { name: 'Open Admin' }).click();
+  await page.goto('/'); await page.getByRole('link', { name: 'Open Admin' }).click();
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   await choose(page, 'Definition', definition);
@@ -22,7 +22,7 @@ async function create(page: Page, name: string, definition = 'General Assistant 
   return new URL(page.url()).pathname.split('/')[3];
 }
 async function chat(page: Page, name: string) {
-  await page.locator('.admin-header').getByRole('button', { name: /Chat$/ }).first().click();
+  await page.locator('.admin-header').getByRole('link', { name: /Chat$/ }).first().click();
   await choose(page, 'Identity', name);
 }
 async function send(page: Page, text: string) {
@@ -46,7 +46,7 @@ test('Instance Skills: authorized Chat creation, next-turn load, owner editor an
   await send(page, 'Use my accounting Skill.');
   await expect(page.getByText('Accounting procedure loaded from the pinned Instance Skill.', { exact: true })).toBeVisible();
   const sessionUrl = page.url();
-  await page.getByRole('button', { name: 'Open Admin' }).click(); await page.goto(`/admin/instances/${id}/skills`);
+  await page.getByRole('link', { name: 'Open Admin' }).click(); await page.goto(`/admin/instances/${id}/skills`);
   const local = page.getByRole('region', { name: 'Instance Skills', exact: true });
   const definition = page.getByRole('region', { name: 'Definition Skills', exact: true });
   await expect(local.getByText('Accounting', { exact: true })).toBeVisible();
@@ -69,7 +69,7 @@ test('Instance Skills: authorized Chat creation, next-turn load, owner editor an
   await page.reload(); await expect(page.getByRole('switch', { name: 'Enable Instance Skill Accounting', exact: true })).not.toBeChecked();
   await page.goto(sessionUrl); await send(page, 'Use my accounting Skill.');
   await expect(page.getByText("Accounting is not present in this execution's pinned catalog.", { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Open Admin' }).click(); await page.goto(`/admin/instances/${id}/skills`);
+  await page.getByRole('link', { name: 'Open Admin' }).click(); await page.goto(`/admin/instances/${id}/skills`);
   const accounting = local.getByRole('row').filter({ hasText: 'Review an accounting entry' });
   await accounting.getByRole('button', { name: 'Delete', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete Skill', exact: true }).click();
@@ -87,7 +87,7 @@ test('A restricted Definition cannot grant itself Skill management', async ({ pa
   expect(policy.ok()).toBe(true);
   await chat(page, name); await send(page, 'Learn this accounting Skill.');
   await expect(page.getByText('Skill management is not authorized. Nothing was saved.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Open Admin' }).click(); await page.goto(`/admin/instances/${id}/skills`);
+  await page.getByRole('link', { name: 'Open Admin' }).click(); await page.goto(`/admin/instances/${id}/skills`);
   await expect(page.getByRole('region', { name: 'Instance Skills', exact: true }).getByText('Accounting', { exact: true })).toHaveCount(0);
 });
 

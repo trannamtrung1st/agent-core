@@ -68,7 +68,7 @@ test("long session opens on the newest page and load-older keeps the anchor", as
   });
 
   const sessionId = await createSession(page);
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
   seedTranscript(sessionId, 500);
   historyUrls.length = 0;
@@ -162,7 +162,7 @@ test("long session opens on the newest page and load-older keeps the anchor", as
 test("switching session ignores a delayed older-history page", async ({ page }) => {
   test.setTimeout(60_000);
   const firstId = await createSession(page);
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   seedTranscript(firstId, 120);
   await openSeededSession(page, firstId);
   await expect(page.getByRole("button", { name: "Load earlier messages" })).toBeVisible({ timeout: 15_000 });
@@ -205,7 +205,7 @@ test("switching session ignores a delayed older-history page", async ({ page }) 
   const loadOlder = page.getByRole("button", { name: "Load earlier messages" }).click();
   await olderRequestStarted;
   await loadOlder;
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
   releaseOlder?.();
   await expect(page.getByText("History seed 70", { exact: true })).toHaveCount(0);

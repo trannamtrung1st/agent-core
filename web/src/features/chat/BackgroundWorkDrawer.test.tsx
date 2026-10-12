@@ -217,7 +217,7 @@ describe("Background Sessions", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(close).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Open chat" }));
+    fireEvent.click(screen.getByRole("link", { name: "Open chat" }));
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
     expect(continueInChat).toHaveBeenCalledOnce();
     expect(screen.queryByText(message)).not.toBeInTheDocument();
@@ -235,7 +235,7 @@ describe("Background Sessions", () => {
     show();
     expect(await screen.findByRole("heading", { name: "Progress check" })).toBeVisible();
     expect(screen.getByText("Continued in chat")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Open chat" }));
+    fireEvent.click(screen.getByRole("link", { name: "Open chat" }));
     await waitFor(() => expect(openCatalogSession).toHaveBeenCalledWith(fixtureBackground.session));
     expect(continueInChat).not.toHaveBeenCalled();
   });
@@ -245,7 +245,7 @@ describe("Background Sessions", () => {
     render(<App><BackgroundWorkDrawer instanceId="instance-1" open wide onClose={close} /></App>);
     fireEvent.click(await screen.findByRole("button", { name: "Continue in chat" }));
     await screen.findByText("Session could not be refreshed.");
-    fireEvent.click(screen.getByRole("button", { name: "Open chat" }));
+    fireEvent.click(screen.getByRole("link", { name: "Open chat" }));
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
     expect(continueInChat).toHaveBeenCalledOnce();
   });

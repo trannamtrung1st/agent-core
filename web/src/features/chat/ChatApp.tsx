@@ -1,3 +1,5 @@
+import { followAppLink } from "../../app/appLink";
+import { adminHomePath } from "../../app/appRoute";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWorkReadState } from "./workReadState";
 import { messageTimestamp } from "./chatTime";
@@ -89,7 +91,7 @@ function useViewport() {
   return { isNarrow, siderWidth: isTablet ? 240 : 280 };
 }
 
-export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () => void; returnToActivity?: () => void }) {
+export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }: { onOpenAdmin?: () => void; returnToActivity?: () => void; returnToActivityHref?: string }) {
   const state = useSessionStore();
   const [profile, setProfile] = useState("");
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -334,7 +336,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
                 ) : null
               }
               sessionsToggle={<Flex gap={8}>
-                {returnToActivity ? <Tooltip title="Back to Activity"><Button type="text" aria-label="Back to Activity" icon={<ArrowLeftOutlined />} onClick={returnToActivity} /></Tooltip> : null}
+                {returnToActivity ? <Tooltip title="Back to Activity"><Button type="text" aria-label="Back to Activity" icon={<ArrowLeftOutlined />} href={returnToActivityHref} onClick={event => followAppLink(event, returnToActivity)} /></Tooltip> : null}
                 {isNarrow ? (
                   <Button
                     type="text"
@@ -358,7 +360,8 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
                     size="small"
                     className="chat-header-admin"
                     icon={<SettingOutlined />}
-                    onClick={onOpenAdmin}
+                    href={adminHomePath()}
+                    onClick={event => followAppLink(event, onOpenAdmin)}
                     aria-label="Open Admin"
                   />
                 </Tooltip>
@@ -569,7 +572,8 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
                 type="text"
                 aria-label="Start a new chat"
                 icon={<PlusOutlined />}
-                onClick={() => handleNewChat()}
+                href="/"
+                onClick={event => followAppLink(event, () => handleNewChat())}
                 disabled={state.catalogMutation != null}
               >
                 New chat

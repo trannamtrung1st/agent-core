@@ -86,7 +86,7 @@ test("immediate child reports once, then continues as the same Session with a ne
     await expect(original.getByRole("button", { name: "Download followup.md" })).toHaveCount(0);
     await expect.poll(() => original.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await page.screenshot({ path: `test-results/background-original-${width}.png`, fullPage: true });
-    await original.getByRole("button", { name: "Open chat", exact: true }).click();
+    await original.getByRole("link", { name: "Open chat", exact: true }).click();
     await expect(original).toBeHidden();
     await expect(page).toHaveURL(new RegExp(`/c/${child.session.sessionId}$`));
   }

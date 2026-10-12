@@ -139,7 +139,7 @@ describe("EventsSection", () => {
     const writeText = vi.fn().mockRejectedValueOnce(new Error("Denied")).mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     renderSection();
-    const view = await screen.findByRole("button", { name: "View details for Activity store" });
+    const view = await screen.findByRole("link", { name: "View details for Activity store" });
     await act(async () => { fireEvent.click(view); });
     const dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByText("Active subscribers")).toBeVisible();

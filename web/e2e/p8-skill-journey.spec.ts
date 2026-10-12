@@ -46,7 +46,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
 
   const definitionId = `p8-skills-${Date.now()}`;
   await startSyntheticChat(page);
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await page.getByRole("button", { name: "New definition" }).click();
   const definitionDialog = page.getByRole("dialog", { name: "New definition" });

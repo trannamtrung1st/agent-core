@@ -1,3 +1,4 @@
+import { followAppLink } from "../../app/appLink";
 import { useState, type ReactNode } from "react";
 import { Alert, App, Button, Dropdown, Empty, Flex, Input, Tooltip, Typography } from "antd";
 import { MoreOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
@@ -13,7 +14,7 @@ import {
   unarchiveCatalogItem
 } from "../../services/catalog";
 import { confirmAction } from "../../app/confirmAction";
-import { sameSessionId } from "../../app/sessionRoute";
+import { sessionPath, sameSessionId } from "../../app/sessionRoute";
 import { useSessionStore, type CatalogMutation } from "../../state/sessionStore";
 import { formatChatTime } from "./chatTime";
 import { lifecycleOutcomeLabel } from "./sessionLifecycle";
@@ -300,10 +301,11 @@ export function SessionRail({
           className="session-new-chat"
           aria-label="Start a new chat"
           icon={<PlusOutlined />}
-          onClick={() => {
+          href="/"
+          onClick={event => followAppLink(event, () => {
             setRenamingId(null);
             onNewChat();
-          }}
+          })}
           disabled={catalogBusy}
           block
         >
@@ -398,7 +400,8 @@ export function SessionRail({
                       className="session-row-open"
                       aria-label={item.title}
                       disabled={inactive || busy}
-                      onClick={() => onOpen(item)}
+                      href={sessionPath(item.sessionId)}
+                      onClick={event => followAppLink(event, () => onOpen(item))}
                     >
                       <Flex vertical align="flex-start" gap={0} className="session-row-copy">
                         <Flex align="baseline" gap={8} className="session-row-title">

@@ -32,10 +32,10 @@ test("Runs remain inspectable after another conversation is deleted", async ({ p
   const path = `/admin/instances/${instanceId}/activity/runs`;
   await page.goto(path);
   const table = page.getByRole("table", { name: "Runs table" });
-  await expect(table.getByRole("button", { name: "Chat turn", exact: true })).toHaveCount(1);
+  await expect(table.getByRole("link", { name: "Chat turn", exact: true })).toHaveCount(1);
   await expect(table).toContainText("Completed");
   await expect(page.getByText("AgentRun was not found.", { exact: true })).toHaveCount(0);
-  await table.getByRole("button", { name: "Chat turn", exact: true }).click();
+  await table.getByRole("link", { name: "Chat turn", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Run details", exact: true })).toContainText("Hello from synthetic.");
   expect((await page.request.delete(`/api/v2/sessions/${sessionIds[1]}`, { headers })).ok()).toBe(true);
   await page.goto(path);
@@ -61,24 +61,24 @@ test("Activity scopes and pages sessions, preserves multi-turn diagnostics and r
   await expect(table.locator("tbody .admin-collection-name")).toHaveCount(22);
   const search = page.getByRole("textbox", { name: "Search loaded sessions" });
   await search.fill("no-match"); await expect(table).toContainText("No matching loaded sessions");
-  await search.fill("Oldest"); await page.getByRole("button", { name: "Oldest conversation", exact: true }).click();
+  await search.fill("Oldest"); await page.getByRole("link", { name: "Oldest conversation", exact: true }).click();
   await page.reload();
   const drawer = page.getByRole("dialog", { name: "Oldest conversation", exact: true });
   await expect(drawer).toContainText("No runs yet");
-  await drawer.getByRole("button", { name: "Open conversation", exact: true }).click();
+  await drawer.getByRole("link", { name: "Open conversation", exact: true }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready");
   for (const [i, message] of ["First Activity turn", "Second Activity turn"].entries()) {
     await page.getByLabel("Message", { exact: true }).fill(message); await page.getByRole("button", { name: "Send", exact: true }).click();
     await expect.poll(async () => (await (await page.request.get(`/api/v2/sessions/${sessionId}/agent-runs`, { headers })).json()).items.filter((run: { status: string }) => run.status === "completed").length).toBe(i + 1);
   }
   await expect(page.locator(".conversation-scroll")).toContainText("Hello from synthetic.");
-  await page.getByRole("button", { name: "Back to Activity", exact: true }).click();
+  await page.getByRole("link", { name: "Back to Activity", exact: true }).click();
   await expect(search).toHaveValue("Oldest");
-  await expect(table.getByRole("button", { name: "Oldest conversation", exact: true })).toHaveCount(1);
+  await expect(table.getByRole("link", { name: "Oldest conversation", exact: true })).toHaveCount(1);
   await page.getByRole("tab", { name: "Runs", exact: true }).click();
   const runs = page.getByRole("table", { name: "Runs table" });
-  await expect(runs.getByRole("button", { name: "Chat turn", exact: true })).toHaveCount(2);
-  await runs.getByRole("button", { name: "Chat turn", exact: true }).first().click(); await page.reload();
+  await expect(runs.getByRole("link", { name: "Chat turn", exact: true })).toHaveCount(2);
+  await runs.getByRole("link", { name: "Chat turn", exact: true }).first().click(); await page.reload();
   await expect(page.getByRole("dialog", { name: "Run details", exact: true })).toContainText("Hello from synthetic.");
   await page.keyboard.press("Escape"); await expect(page.getByRole("dialog", { name: "Run details", exact: true })).toBeHidden();
   await page.goBack(); await expect(page.getByRole("tab", { name: "Runs", exact: true })).toHaveAttribute("aria-selected", "true");
@@ -117,8 +117,8 @@ test("Activity preserves the original background result and continues its exact 
   await drawer.getByRole("button", { name: "Continue in chat", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/c/${child.session.sessionId}\\?returnTo=`));
   await expect(page.getByTestId("connection")).toHaveText("Ready"); await expect(page.locator(".conversation-scroll")).toContainText("Result A:");
-  await page.getByRole("button", { name: "Back to Activity", exact: true }).click();
-  await expect(page.getByRole("table", { name: "Activity sessions table" }).getByRole("button", { name: "Background progress check", exact: true })).toHaveCount(1);
+  await page.getByRole("link", { name: "Back to Activity", exact: true }).click();
+  await expect(page.getByRole("table", { name: "Activity sessions table" }).getByRole("link", { name: "Background progress check", exact: true })).toHaveCount(1);
 });
 test("Activity recovers a failed read and contains long titles at wide and narrow widths", async ({ page }) => {
   const { headers, instanceId } = await setup(page);
@@ -139,8 +139,8 @@ test("Activity recovers a failed read and contains long titles at wide and narro
     ? route.fulfill({ status: 503, contentType: "application/problem+json", body: JSON.stringify({ detail: "Session details are temporarily unavailable" }) }) : route.continue());
   await link.click();
   await expect(page.getByText("Session details are temporarily unavailable", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open conversation", exact: true })).toBeHidden();
+  await expect(page.getByRole("link", { name: "Open conversation", exact: true })).toBeHidden();
   detailUnavailable = false; await page.getByRole("button", { name: "Retry session", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Open conversation", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open conversation", exact: true })).toBeVisible();
   await page.keyboard.press("Escape"); await expect(link).toBeFocused();
 });

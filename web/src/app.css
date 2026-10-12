@@ -2672,3 +2672,10 @@ body,
 @media (max-width: 767px) {
   .composer-picker .ant-btn, .composer-choice { min-height: 44px; }
 }
+.app-route-tab-link,
+.app-route-tab-link:hover,
+.app-route-tab-link:active,
+.app-route-tab-link:visited {
+  color: inherit;
+  text-decoration: none;
+}

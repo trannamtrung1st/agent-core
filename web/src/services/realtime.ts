@@ -1972,6 +1972,8 @@ async function applyRouteFromLocationInner(): Promise<void> {
 export async function suspendLiveSessionForNavigation(): Promise<void> {
   // Popstate, router effects and the Admin button may all request suspension.
   if (!chatSurfaceVisible) return;
+  const snapshot = useSessionStore.getState();
+  const leaveVoice = snapshot.mode === "voice" || snapshot.pendingMode === "voice" || voiceModeRequested;
   // AppRouter swaps ChatApp for AdminApp but the in-flight AgentRun and live
   // SignalR subscription belong to the SPA, not to the Chat component mount.
   // Disconnecting here loses incremental replies and forces an avoidable attach.
@@ -1989,6 +1991,12 @@ export async function suspendLiveSessionForNavigation(): Promise<void> {
     preflightReady: false,
     liveUserTranscript: null
   });
+  // Voice responses require truthful playback ACKs to finish. Once local media
+  // is suspended, leave Voice through the existing mode-change protocol rather
+  // than strand a Run or acknowledge audio the owner never heard.
+  if (leaveVoice && connection && snapshot.connection === "ready") {
+    await cancelVoice();
+  }
 }
 
 export function resumeLiveSessionForNavigation(): void {
@@ -3563,6 +3571,7 @@ export async function respondToApproval(decision: "approve" | "reject"): Promise
 }
 
 export async function requestVoice(): Promise<void> {
+  if (!chatSurfaceVisible) return;
   if (voiceRequest) {
     return voiceRequest;
   }
@@ -3709,10 +3718,11 @@ export async function requestVoice(): Promise<void> {
 
 export async function resumeCapture(): Promise<void> {
   const state = useSessionStore.getState();
-  if (state.mode !== "voice" || state.connection !== "ready") {
+  if (!chatSurfaceVisible || state.mode !== "voice" || state.connection !== "ready") {
     return;
   }
 
+  const epoch = voiceEpoch;
   setCaptureAuthorized(true);
   ensureSpeechAdapters();
   try {
@@ -3722,6 +3732,7 @@ export async function resumeCapture(): Promise<void> {
       await capture.preflight({ microphone, playback });
     }
   } catch (error) {
+    if (epoch !== voiceEpoch || !chatSurfaceVisible) return;
     setCaptureAuthorized(false);
     capture.release();
     useSessionStore.setState({
@@ -3731,8 +3742,11 @@ export async function resumeCapture(): Promise<void> {
     return;
   }
 
-  if (useSessionStore.getState().mode !== "voice") {
+  const current = useSessionStore.getState();
+  if (epoch !== voiceEpoch || !chatSurfaceVisible || current.mode !== "voice"
+    || current.sessionId !== state.sessionId || current.attachmentId !== state.attachmentId) {
     setCaptureAuthorized(false);
+    capture.release();
     return;
   }
 

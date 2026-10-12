@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using AgentCore.Domain.Conversation;
 using AgentCore.Application.Agents;
+using AgentCore.Application.Email;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -232,12 +233,18 @@ public sealed partial class SessionToolExecutor(
         if (policy == ToolPolicyDecision.Deny
             || string.IsNullOrWhiteSpace(call.Name))
         {
+            if (call.Name == ToolCatalog.EmailSend && emailAccounts is { IsSendEnabled: false })
+                return TextResult(Error("smtp_disabled", EmailAccountService.SendSetupGuidance));
+
             if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("forbidden", "Tool is not permitted for this role."));
         }
 
         if (policy == ToolPolicyDecision.RequireApproval)
         {
+            if (call.Name == ToolCatalog.EmailSend && emailAccounts is { IsSendEnabled: false })
+                return TextResult(Error("smtp_disabled", EmailAccountService.SendSetupGuidance));
+
             if (ToolCatalog.IsIdentityMaintenance(call.Name)) RecordMaintenanceRejection(call.Name);
             return TextResult(Error("approval_required", "Tool execution requires explicit approval."));
         }
@@ -1295,6 +1302,8 @@ public sealed partial class SessionToolExecutor(
         var target = TryString(args, "target", out var requested) ? requested : ToolCatalog.EmailSearch;
         if (target is not (ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft or ToolCatalog.EmailSend)
             || !AgentCore.Application.Agents.RolePermissions.AllowsTool(definition, target)) return Error("forbidden", "Requested email operation is not authorized.");
+        if (target == ToolCatalog.EmailSend && !emailAccounts.IsSendEnabled)
+            return Error("smtp_disabled", EmailAccountService.SendSetupGuidance);
         await emailStore.CreateSelectionAsync(new(runId, owner, sessionId, runId, target, emailAccounts.UtcNow.AddMinutes(10)), ct);
         return JsonSerializer.Serialize(new { status = "account_selection_requested", requestId = runId, message = "Choose an email account in the trusted owner UI, then continue in a fresh Run. Never enter a password in Chat." });
     }
@@ -1312,7 +1321,7 @@ public sealed partial class SessionToolExecutor(
     {
         if (emailAccounts is null || !emailAccounts.IsEnabled) return Error("provider_disabled", "Email capability is disabled.");
         var accounts = await emailAccounts.AccountsAsync(RequireMailAdmission(admission), ct);
-        return JsonSerializer.Serialize(new { accounts = accounts.Select(c => new { accountRef = c.AccountRef, displayName = c.DisplayName, emailAddress = c.EmailAddress, provider = c.Provider }), status = accounts.Count == 0 ? "no_eligible_account" : "available" });
+        return JsonSerializer.Serialize(new { accounts = accounts.Select(c => new { accountRef = c.AccountRef, displayName = c.DisplayName, emailAddress = c.EmailAddress, provider = c.Provider }), status = accounts.Count == 0 ? "no_eligible_account" : "available", sendAvailable = emailAccounts.IsSendEnabled, sendSetupGuidance = emailAccounts.IsSendEnabled ? null : EmailAccountService.SendSetupGuidance });
     }
 
     public async Task<EmailSendApprovalPrepareResult> PrepareEmailSendApprovalAsync(
@@ -1323,6 +1332,9 @@ public sealed partial class SessionToolExecutor(
         {
             return new EmailSendApprovalPrepareResult(null, Error("unavailable", "Email is not configured."));
         }
+
+        if (emailAccounts is { IsSendEnabled: false })
+            return new(null, Error("smtp_disabled", EmailAccountService.SendSetupGuidance));
 
         if (!TryString(args, "draftId", out var draftId))
         {
@@ -1370,15 +1382,18 @@ public sealed partial class SessionToolExecutor(
             return Error("unavailable", "Email is not configured.");
         }
 
-        if (!TryString(args, "query", out var query))
+        var query = "";
+        if (args.TryGetProperty("query", out var queryProperty))
         {
-            return Error("invalid", "query is required.");
+            if (queryProperty.ValueKind != JsonValueKind.String) return Error("invalid", "query must be a string.");
+            query = queryProperty.GetString()!;
         }
 
         if (query.Length > EmailToolLimits.MaxSearchQueryLength)
         {
             return Error("invalid", $"query must be at most {EmailToolLimits.MaxSearchQueryLength} characters.");
         }
+        query = query.Trim();
 
         var limit = EmailToolLimits.DefaultSearchLimit;
         if (args.TryGetProperty("limit", out var limitProperty))

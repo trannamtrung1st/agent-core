@@ -37,7 +37,7 @@ test("session model selection is isolated between chats", async ({ page }) => {
   await expect(page.getByLabel("Reasoning effort")).toHaveCount(0);
   const sessionA = page.url();
 
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Model", exact: true })).toBeVisible();
   await expect(page.locator(".model-picker")).toContainText("Default");

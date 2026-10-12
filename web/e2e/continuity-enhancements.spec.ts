@@ -44,7 +44,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
   await run.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
   await expect(automations.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
   expect(calls).toBe(1);
-  const runLink = automations.getByRole('button', { name: 'View last run: Review current orders', exact: true });
+  const runLink = automations.getByRole('link', { name: 'View last run: Review current orders', exact: true });
   await runLink.click();
   const details = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(details.getByText('No action', { exact: true }).first()).toBeVisible();
@@ -57,7 +57,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
     modelKey: row.modelKey, reasoningEffort: row.reasoningEffort, executionTarget: row.executionTarget, completionDelivery: row.completionDelivery
   } });
   expect(update.ok()).toBe(true);
-  await details.getByRole('button', { name: 'View Automation', exact: true }).click();
+  await details.getByRole('link', { name: 'View Automation', exact: true }).click();
   const updatedSource = automations.getByRole('button', { name: `View automation: ${updatedName}`, exact: true });
   await expect(updatedSource).toBeFocused();
   await page.getByRole('tab', { name: 'Activity', exact: true }).click();
@@ -70,7 +70,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
   expect(await history.text()).not.toContain('Future review instructions');
   const historyLink = runs.getByRole('row')
     .filter({ has: page.getByTitle(admitted.agentRunId, { exact: true }) })
-    .getByRole('button', { name: 'Manual task', exact: true });
+    .getByRole('link', { name: 'Manual task', exact: true });
   await historyLink.click();
   await expect(details.getByText('No action', { exact: true }).first()).toBeVisible();
   await details.getByRole('button', { name: 'Close', exact: true }).click();

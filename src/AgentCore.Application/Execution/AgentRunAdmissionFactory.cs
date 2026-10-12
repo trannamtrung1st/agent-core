@@ -26,17 +26,19 @@ public static class AgentRunAdmissionFactory
 
     public static AgentRun ForConfigurationContinuation(Guid activationId, Guid runId, Guid responseId,
         SessionSnapshot snapshot, AgentRun source, ConfigurationPendingTask task, DateTimeOffset now,
-        IReadOnlyList<EffectiveSkill> catalog, EffectiveExecutionBudget budget, AgentRunConfiguration configuration, bool emailContinuation = false)
+        IReadOnlyList<EffectiveSkill> catalog, EffectiveExecutionBudget budget, AgentRunConfiguration configuration, bool emailContinuation = false, EmailAccountSelection? emailSelection = null)
     {
         var text = $"Continue verified configuration task: {task.Goal}\nPending task: {source.AgentRunId:D}. "
             + $"The configuration change committed at Instance revision {task.InstanceRevision}. This is one bounded fresh Run. "
             + $"Use {task.Target} to finish only this diagnosed task. Do not repeat configuration changes or prior effects. Any write requires a new exact owner approval.";
         if (emailContinuation) text = $"Continue the owner's email task after confirmed account access: {task.Goal}\n"
             + $"Source Run: {source.AgentRunId:D}. This fresh Run uses newly admitted bindings. Use {task.Target} for this task only. "
-            + "Never repeat prior effects or configuration changes. Every write needs a new exact owner approval.";
+            + "Never repeat prior effects or configuration changes. Every write needs a new exact owner approval.\n"
+            + "Owner-selected account (JSON identity data): " + JsonSerializer.Serialize(new { accountRef = emailSelection?.SelectedAccountRef })
+            + "\nUse this accountRef for the email task. It is a selection hint only; Core still requires admitted bindings and live account authorization.";
         var activation = new Activation(activationId, snapshot.SessionId, ActivationKind.ConfigurationContinuation,
             [], source.ActivationId, null, snapshot.SessionId, source.AgentRunId,
-            $"configuration-continuation:{source.AgentRunId:D}", now, JsonSerializer.Serialize(new { TriggerKind = TriggerKind.UserTurn, Text = text, EnvironmentKind = emailContinuation ? "email-account" : "configuration", ContinuationTarget = task.Target }));
+            $"configuration-continuation:{source.AgentRunId:D}", now, JsonSerializer.Serialize(new { TriggerKind = TriggerKind.UserTurn, Text = text, EnvironmentKind = emailContinuation ? "email-account" : "configuration", ContinuationTarget = task.Target, SelectedAccountId = emailSelection?.SelectedAccountId, SelectedAccountRef = emailSelection?.SelectedAccountRef }));
         var selection = snapshot.ModelSelection ?? throw AgentCoreErrors.Validation("Continuation requires a resolved model.");
         return AgentRun.Create(runId, source.Owner, new(activation, configuration.Definition.Id, configuration.Definition.Version,
             snapshot.PinnedPersona!, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration),

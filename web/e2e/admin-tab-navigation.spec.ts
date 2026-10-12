@@ -83,7 +83,7 @@ for (const width of [1440, 390]) {
     await page.goto(`${base}/automation/controls`);
     await expect(page).toHaveURL(new URL(`${base}/identity`, page.url()).href);
     await expect(page.getByRole("tab", { name: "Identity & version", exact: true })).toHaveAttribute("aria-selected", "true");
-    await page.getByRole("button", { name: /Back to inventory/ }).click();
+    await page.getByRole("link", { name: /Back to inventory/ }).click();
     await expect(page).toHaveURL(/\/admin\/instances$/);
     expect(failedRequests).toEqual([]);
     expect(consoleErrors).toEqual([]);

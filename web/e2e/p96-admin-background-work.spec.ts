@@ -113,7 +113,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.getByRole("tab", { name: "Connections", exact: true }).click();
   await page.getByRole("tab", { name: "Events", exact: true }).click();
   const sourcesRegion = page.getByRole("region", { name: "Events" });
-  await expect(sourcesRegion.getByRole("button", { name: "run.completed", exact: true })).toBeVisible();
+  await expect(sourcesRegion.getByRole("link", { name: "run.completed", exact: true })).toBeVisible();
   await sourcesRegion.getByRole("combobox", { name: "Event type filter", exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: /^Webhook$/ }).click();
   await expect(sourcesRegion.getByText("No Webhook Events yet. Create one to receive external signals.")).toBeVisible();
@@ -148,7 +148,7 @@ test("background work lists scheduled and order-placed sources", async ({ page }
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await page.getByLabel("Message").fill("hello");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("button", { name: "Background work" })).toBeVisible({ timeout: 15_000 });

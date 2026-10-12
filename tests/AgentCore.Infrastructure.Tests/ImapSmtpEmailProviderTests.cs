@@ -53,6 +53,20 @@ public sealed class ImapSmtpEmailProviderTests
         Assert.DoesNotContain(stale.Commands, c => c.Contains("FETCH", StringComparison.Ordinal));
         await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() => Provider(stale, Context()).ReadAsync(new(id)).AsTask());
     }
+    [Theory]
+    [InlineData(1)]
+    [InlineData(600)]
+    public async Task IMAP_recent_inbox_without_UIDNEXT_uses_bounded_sequence_fallback(int count)
+    {
+        await using var server = new FakeMailServer(smtp: false, omitUidNext: true, count: count);
+        var result = await Provider(server, Context()).SearchAsync(new("", 10));
+        await server.Completed.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Single(result.Results);
+        Assert.Equal(count > 500, result.Truncated);
+        Assert.Contains(server.Commands, c => c == (count == 1 ? "FETCH 1 UID" : "FETCH 101:600 UID"));
+        Assert.Contains(server.Commands, c => c.Contains(count == 1 ? "UID SEARCH UID 7" : "UID SEARCH UID 6007", StringComparison.Ordinal));
+        Assert.DoesNotContain(server.Commands, c => c.Contains("429496", StringComparison.Ordinal));
+    }
     [Fact]
     public async Task TLS_certificate_rejection_and_SMTP_test_never_dispatches()
     {
@@ -93,14 +107,15 @@ public sealed class ImapSmtpEmailProviderTests
         public IPEndPoint Endpoint => (IPEndPoint)listener.LocalEndpoint;
         public List<string> Commands { get; } = []; public string Message { get; private set; } = "";
         public Task Completed { get; }
-        public FakeMailServer(bool smtp, bool dropAfterData = false, uint validity = 123, bool plaintext = false)
+        public FakeMailServer(bool smtp, bool dropAfterData = false, uint validity = 123, bool plaintext = false, bool omitUidNext = false, int count = 1)
         {
             using var key = RSA.Create(2048); var request = new CertificateRequest("CN=fixture-mail.test", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             Certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
-            listener.Start(); Completed = Run(smtp, dropAfterData, validity, plaintext);
+            listener.Start(); Completed = Run(smtp, dropAfterData, validity, plaintext, omitUidNext, count);
         }
-        private async Task Run(bool smtp, bool drop, uint validity, bool plaintext)
+        private async Task Run(bool smtp, bool drop, uint validity, bool plaintext, bool omitUidNext, int count)
         {
+            var messageUid = count > 1 ? 6007 : 7;
             try
             {
                 using var socket = await listener.AcceptTcpClientAsync(stop.Token);
@@ -132,14 +147,15 @@ public sealed class ImapSmtpEmailProviderTests
                         if (command == "CAPABILITY") await writer.WriteLineAsync("* CAPABILITY IMAP4rev1 AUTH=PLAIN SASL-IR");
                         else if (command.StartsWith("AUTHENTICATE", StringComparison.Ordinal) || command.StartsWith("LOGIN", StringComparison.Ordinal)) { await writer.WriteLineAsync(tag + " OK [CAPABILITY IMAP4rev1] Authenticated"); continue; }
                         else if (command.StartsWith("LIST", StringComparison.Ordinal)) await writer.WriteLineAsync("* LIST (\\Inbox) \"/\" \"INBOX\"");
-                        else if (command.StartsWith("EXAMINE", StringComparison.Ordinal)) await writer.WriteAsync($"* 1 EXISTS\r\n* 0 RECENT\r\n* FLAGS (\\Seen)\r\n* OK [UIDVALIDITY {validity}] valid\r\n* OK [UIDNEXT 8] next\r\n");
-                        else if (command.StartsWith("UID SEARCH", StringComparison.Ordinal)) await writer.WriteLineAsync("* SEARCH 7");
+                        else if (command.StartsWith("EXAMINE", StringComparison.Ordinal)) await writer.WriteAsync($"* {count} EXISTS\r\n* 0 RECENT\r\n* FLAGS (\\Seen)\r\n* OK [UIDVALIDITY {validity}] valid\r\n" + (omitUidNext ? "" : "* OK [UIDNEXT 8] next\r\n"));
+                        else if (command.StartsWith("FETCH ", StringComparison.Ordinal)) await writer.WriteLineAsync($"* {count} FETCH (UID {messageUid})");
+                        else if (command.StartsWith("UID SEARCH", StringComparison.Ordinal)) await writer.WriteLineAsync(command.Contains("429496", StringComparison.Ordinal) ? "* SEARCH" : $"* SEARCH {messageUid}");
                         else if (command.Contains("BODY.PEEK", StringComparison.Ordinal))
                         {
                             var mime = "From: sender@example.test\r\nTo: to@example.test\r\nSubject: Hello\r\nDate: Mon, 12 Oct 2026 00:00:00 +0000\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nExact body\r\n";
                             await writer.WriteAsync($"* 1 FETCH (UID 7 BODY[]<0> {{{Encoding.ASCII.GetByteCount(mime)}}}\r\n{mime})\r\n");
                         }
-                        else if (command.StartsWith("UID FETCH", StringComparison.Ordinal)) await writer.WriteLineAsync("* 1 FETCH (UID 7 INTERNALDATE \"12-Oct-2026 00:00:00 +0000\" ENVELOPE (\"Mon, 12 Oct 2026 00:00:00 +0000\" \"Hello\" ((NIL NIL \"sender\" \"example.test\")) NIL NIL ((NIL NIL \"to\" \"example.test\")) NIL NIL NIL \"<fixture@example.test>\"))");
+                        else if (command.StartsWith("UID FETCH", StringComparison.Ordinal)) await writer.WriteLineAsync($"* {count} FETCH (UID {messageUid} INTERNALDATE \"12-Oct-2026 00:00:00 +0000\" ENVELOPE (\"Mon, 12 Oct 2026 00:00:00 +0000\" \"Hello\" ((NIL NIL \"sender\" \"example.test\")) NIL NIL ((NIL NIL \"to\" \"example.test\")) NIL NIL NIL \"<fixture@example.test>\"))");
                         await writer.WriteLineAsync(tag + " OK " + (command.StartsWith("EXAMINE", StringComparison.Ordinal) ? "[READ-ONLY] " : "") + "done");
                     }
                 }

@@ -105,7 +105,7 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
   const work = await (await page.request.get(root.replace('/admin/', '/') + '/agent-runs', { headers })).json();
   const maintenance = work.items.filter((w: { activationKind: string; automationId?: string }) => w.activationKind === 'ManualBackground' && w.automationId);
   expect(maintenance).toHaveLength(2); expect(maintenance.every((w: { outcome: { attentionRequired: boolean } }) => !w.outcome.attentionRequired)).toBe(true);
-  await automations.getByRole('button', { name: 'View last run: synthetic-maintain-experience', exact: true }).click();
+  await automations.getByRole('link', { name: 'View last run: synthetic-maintain-experience', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Run details', exact: true }).getByText('Response', { exact: true }).first()).toBeVisible();
   await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('tab', { name: 'Continuity', exact: true }).click();

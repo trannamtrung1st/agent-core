@@ -50,7 +50,7 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   const personaName = "P76 Guide";
 
   await startSyntheticChat(page);
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole("heading", { name: "Agent inventory" })).toBeVisible();
 
@@ -129,7 +129,7 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await completeDefinitionDraftPublishGate(page, editor);
   await publishDraftFromInstructions(page, editor);
 
-  await page.getByRole("button", { name: "Back to inventory" }).click();
+  await page.getByRole("link", { name: "Back to inventory" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole("button", { name: "New instance" }).click();
@@ -177,11 +177,11 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
     }
   }
 
-  await page.getByRole("button", { name: "Back to inventory" }).click();
+  await page.getByRole("link", { name: "Back to inventory" }).click();
   const definitions = page.getByRole("region", { name: "Definitions", exact: true });
   await page.getByRole("tab", { name: "Definitions", exact: true }).click();
   await definitions.getByLabel("Search definitions", { exact: true }).fill(definitionId);
-  await definitions.getByRole("button", { name: new RegExp(definitionId) }).click();
+  await definitions.getByRole("link", { name: new RegExp(definitionId) }).click();
   await expect(definitionDraftsSection(page).getByRole("button", { name: "Start managed chat for v1" })).toBeEnabled();
   await definitionDraftsSection(page).getByRole("button", { name: "Start managed chat for v1" }).click();
   await expect(page).toHaveURL(/\/c\/[0-9a-f-]+/i, { timeout: 20_000 });

@@ -14,6 +14,7 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
     private readonly SemaphoreSlim _connections = new(4);
     private readonly MailTransportPolicy _policy = new(options);
     public bool IsEnabled => options.Enabled;
+    public bool IsSendEnabled => options.Enabled && (synthetic || options.SmtpEnabled);
     public IEmailProvider Create(EmailAccountContext account) => synthetic
         ? new ScopedSyntheticEmailProvider(account, _synthetic.GetOrAdd(account.AccountId, _ => new()), RecheckAsync)
         : new ImapSmtpEmailProvider(account, options, _policy, _connections, ResolveSecretAsync);

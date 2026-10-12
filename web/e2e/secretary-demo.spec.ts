@@ -28,7 +28,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
 
   async function newChat(page: Page) {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Start a new chat', exact: true }).click();
+    await page.getByRole('link', { name: 'Start a new chat', exact: true }).click();
     await selectManagedIdentityOption(page, instanceId);
   }
 
@@ -234,10 +234,10 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await expect(automations.getByRole('region', { name: 'Automation details', exact: true }).getByText('Admin owner', { exact: true })).toBeVisible();
     await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
     await expect(automations.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
-    await automations.getByRole('button', { name: 'View last run: Atlas follow-up review', exact: true }).click();
+    await automations.getByRole('link', { name: 'View last run: Atlas follow-up review', exact: true }).click();
     const work = page.getByRole('dialog', { name: 'Run details', exact: true });
     await expect(work.locator('.agent-run-details').getByText('No action', { exact: true })).toBeVisible();
-    await work.getByRole('button', { name: 'View Automation', exact: true }).click();
+    await work.getByRole('link', { name: 'View Automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Disable automation', exact: true }).click();
     const ownerHeaders = await headers(page);
     const profile = await (await page.request.get('/api/v2/profile', { headers: ownerHeaders })).json();
@@ -263,9 +263,9 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await automations.getByRole('button', { name: 'Save automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
     await expect(automations.getByText(/Completed · Needs attention/).first()).toBeVisible({ timeout: 30_000 });
-    await automations.getByRole('button', { name: 'View last run: Call John', exact: true }).click();
+    await automations.getByRole('link', { name: 'View last run: Call John', exact: true }).click();
     await expect(work.getByRole('region', { name: 'Needs attention', exact: true })).toContainText("An unresolved checkpoint needs the owner's attention.");
-    await work.getByRole('button', { name: 'View Automation', exact: true }).click();
+    await work.getByRole('link', { name: 'View Automation', exact: true }).click();
     await automations.getByRole('button', { name: 'Delete automation', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete automation', exact: true }).click();
     await expect(automations.getByRole('button', { name: 'View automation: Call John', exact: true })).toHaveCount(0);

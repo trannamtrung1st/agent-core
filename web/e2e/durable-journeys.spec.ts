@@ -167,7 +167,7 @@ test("a detached reminder completes in Background work and cancel survives reloa
   });
   // Catalog cleanup before a new chat: the /c/<id> path appears only after the first send.
   await releaseOtherLiveRuntimes(page, noActiveSession);
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
 

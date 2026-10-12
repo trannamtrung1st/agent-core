@@ -308,7 +308,7 @@ describe("AdminApp", () => {
       expect(within(screen.getByRole("region", { name: "Definitions" })).getByText("Examiner")).toBeInTheDocument();
     });
     expect(within(screen.getByRole("region", { name: "Definitions" })).getByText("examiner")).toBeInTheDocument();
-    const definitionRow = screen.getByRole("button", { name: "Examiner · examiner" }).closest("tr")!;
+    const definitionRow = screen.getByRole("link", { name: "Examiner · examiner" }).closest("tr")!;
     expect(within(definitionRow).getAllByText("v1")).toHaveLength(2);
     expect(within(definitionRow).getByText("Published")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
@@ -344,7 +344,7 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(within(definitions).getByText("Customer Support")).toBeInTheDocument();
     });
-    expect(within(definitions).getAllByRole("button", { name: "Customer Support · customer-support" })).toHaveLength(1);
+    expect(within(definitions).getAllByRole("link", { name: "Customer Support · customer-support" })).toHaveLength(1);
     expect(within(definitions).getByText("customer-support")).toBeInTheDocument();
     expect(within(definitions).getAllByText("v2")).toHaveLength(2);
     expect(within(definitions).getByRole("columnheader", { name: "Versions" })).toBeInTheDocument();

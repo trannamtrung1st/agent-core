@@ -63,19 +63,34 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
             using var client = new ImapClient(); await AuthenticateAsync(client, false, ct);
             var inbox = client.Inbox; await inbox.OpenAsync(FolderAccess.ReadOnly, ct);
             if (inbox.Count == 0) return new([], false);
-            var next = inbox.UidNext?.Id ?? uint.MaxValue;
-            var first = Math.Max(1, next > 500 ? next - 500 : 1);
-            SearchQuery query = SearchQuery.Uids(new UniqueIdRange(new UniqueId(first), UniqueId.MaxValue));
+            SearchQuery query;
+            bool scanTruncated;
+            if (inbox.UidNext is { } next)
+            {
+                var first = Math.Max(1, next.Id > 500 ? next.Id - 500 : 1);
+                query = SearchQuery.Uids(new UniqueIdRange(new UniqueId(first), UniqueId.MaxValue));
+                scanTruncated = first > 1;
+            }
+            else
+            {
+                // Sequence indexes bound the fallback even with sparse or unknown UIDs.
+                var firstIndex = Math.Max(0, inbox.Count - 500);
+                var recent = await inbox.FetchAsync(firstIndex, inbox.Count - 1, MessageSummaryItems.UniqueId, ct);
+                var recentIds = recent.Select(s => s.UniqueId).Where(id => id.IsValid).ToArray();
+                if (recentIds.Length == 0) return new([], firstIndex > 0);
+                query = SearchQuery.Uids(recentIds);
+                scanTruncated = firstIndex > 0;
+            }
             if (request.Query.Length > 0) query = query.And(SearchQuery.SubjectContains(request.Query)
                 .Or(SearchQuery.FromContains(request.Query)).Or(SearchQuery.BodyContains(request.Query)));
             var matches = await inbox.SearchAsync(query, ct);
             var limit = Math.Clamp(request.Limit, 1, EmailToolLimits.MaxSearchLimit);
             var ids = matches.Reverse().Take(limit).ToArray();
-            if (ids.Length == 0) return new([], matches.Count > limit || first > 1);
+            if (ids.Length == 0) return new([], matches.Count > limit || scanTruncated);
             var summaries = await inbox.FetchAsync(ids, MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope | MessageSummaryItems.InternalDate, ct);
             return new(summaries.OrderByDescending(s => s.UniqueId.Id).Select(s => new EmailSearchItem(
                 Reference(inbox.UidValidity, s.UniqueId.Id), "", Bound(s.Envelope?.From.ToString() ?? "", 512), Bound(s.Envelope?.Subject ?? "", 512),
-                s.InternalDate ?? DateTimeOffset.UnixEpoch, "")).ToArray(), matches.Count > limit || first > 1);
+                s.InternalDate ?? DateTimeOffset.UnixEpoch, "")).ToArray(), matches.Count > limit || scanTruncated);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (AgentCoreException) { throw; }

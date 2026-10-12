@@ -1,3 +1,4 @@
+import { followAppLink } from "../../app/appLink";
 import { Alert, Button, Collapse, Drawer, Empty, Flex, Spin, Table, Tag, Typography, theme } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { adminInstancePath, navigateToAppPath } from "../../app/appRoute";
@@ -48,9 +49,9 @@ export function InstanceSessionsSection({ instanceId, open, archived = false }: 
     navigateToAppPath(`${window.location.pathname}?${params}`);
   }
   function close() { navigateToAppPath(backPath, true); }
-  function openConversation(id: string) {
-    navigateToAppPath(`${sessionPath(id)}?${new URLSearchParams({ returnTo: backPath })}`);
-  }
+  const conversationHref = (id: string) => `${sessionPath(id)}?${new URLSearchParams({ returnTo: backPath })}`;
+  function openConversation(id: string) { navigateToAppPath(conversationHref(id)); }
+  const sessionHref = (id: string) => `${backPath}${search ? "&" : "?"}${new URLSearchParams({ session: id })}`;
   const rows = [...new Map(page.items.map(row => [row.session.sessionId, row])).values()].filter(row => `${activitySessionTitle(row)} ${row.session.sessionId} ${runOriginLabel(row.origin)} ${row.session.lifecycleStatus ?? row.session.status}`.toLowerCase().includes(search.toLowerCase()));
   return <Flex vertical gap={token.padding}>
     <Typography.Text type="secondary">Conversations and background work, most recently active first.</Typography.Text>
@@ -61,7 +62,7 @@ export function InstanceSessionsSection({ instanceId, open, archived = false }: 
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={page.error ? "Sessions could not be loaded. Retry below." : search ? "No matching loaded sessions. Clear search or load older sessions." : "No sessions yet. Start a conversation or background task."} /> }}
       columns={[
         { title: "Session", key: "title", width: 320, render: (_, row) => <Flex vertical gap={token.paddingXS}>
-          <Button type="link" className="admin-collection-name" title={activitySessionTitle(row)} onClick={() => inspect(row)}>{activitySessionTitle(row)}</Button>
+          <Button type="link" className="admin-collection-name" title={activitySessionTitle(row)} href={sessionHref(row.session.sessionId)} onClick={event => followAppLink(event, () => inspect(row))}>{activitySessionTitle(row)}</Button>
           <Typography.Text type="secondary" className="admin-activity-id" copyable={{ text: row.session.sessionId }} title={row.session.sessionId}>ID {`${row.session.sessionId.slice(0, 8)}…${row.session.sessionId.slice(-8)}`}</Typography.Text>
         </Flex> },
         { title: "Origin", key: "origin", width: 160, render: (_, row) => runOriginLabel(row.origin) },
@@ -70,12 +71,12 @@ export function InstanceSessionsSection({ instanceId, open, archived = false }: 
       ]} />
     <DrawerListFooter loadingMore={page.loadingMore} hasMore={page.hasMore} error={page.error} count={page.items.length} onLoadMore={() => void page.loadMore()} onRetry={() => void page.retry()} />
     {displayed?.surfaces.includes("BackgroundWork") ? <BackgroundWorkDrawer instanceId={instanceId} open={open && !!selectedId} wide initialSessionId={displayed.session.sessionId}
-      onOpenConversation={openConversation} onClose={close} afterClose={() => opener.current?.isConnected && opener.current.focus()} /> :
+      conversationHref={conversationHref} onOpenConversation={openConversation} onClose={close} afterClose={() => opener.current?.isConnected && opener.current.focus()} /> :
       <Drawer title={selectedTitle ? activitySessionTitle(selectedTitle) : "Session details"} open={open && !!selectedId} onClose={close}
         size="min(640px, 100vw)" className="background-work-drawer" afterOpenChange={visible => { if (!visible && opener.current?.isConnected) opener.current.focus(); }}>
         {selected ? <Flex vertical gap={token.padding}>
           <Typography.Text type="secondary" copyable>{selected.session.sessionId}</Typography.Text>
-          <Button style={{ alignSelf: "flex-start" }} disabled={archived || selected.session.archived} onClick={() => openConversation(selected.session.sessionId)}>Open conversation</Button>
+          <Button style={{ alignSelf: "flex-start" }} disabled={archived || selected.session.archived} href={conversationHref(selected.session.sessionId)} onClick={event => followAppLink(event, () => openConversation(selected.session.sessionId))}>Open conversation</Button>
           {archived ? <Typography.Text type="secondary">Archived Agent Instance. Unarchive it from Identity &amp; version to open this conversation.</Typography.Text> : null}
           {selected.session.archived ? <Typography.Text type="secondary">Archived conversation. Its history and files remain available here.</Typography.Text> : null}
           <Collapse defaultActiveKey={["runs"]} items={[{ key: "runs", label: "Runs", children: <SessionRunHistory sessionId={selected.session.sessionId} open={open} /> }]} />

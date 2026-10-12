@@ -1,5 +1,7 @@
+import { sessionPath } from "../../app/sessionRoute";
+import { followAppLink } from "../../app/appLink";
 import { CompletionDeliveryStatus } from "./AutomationDestination";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Alert, Button, Collapse, Drawer, Empty, Flex, Spin, Typography, theme } from "antd";
 import { ArrowLeftOutlined, BellOutlined, CheckOutlined, MessageOutlined } from "@ant-design/icons";
 import { getInstanceAgentRun, type AgentRun, continueInChat, getBackgroundSession, listBackgroundSessions, type BackgroundSession } from "../../services/api";
@@ -12,10 +14,10 @@ import { useWorkReadState } from "./workReadState";
 import { runOriginLabel } from "./runPresentation";
 import { formatChatTime } from "./chatTime";
 import { SessionArtifacts } from "./SessionArtifacts";
-import { adminInstancePath, navigateToAppPath } from "../../app/appRoute";
+import { adminInstancePath } from "../../app/appRoute";
 
-export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialSessionId, onOpenConversation, afterClose, onAddReference }: {
-  instanceId: string; open: boolean; wide: boolean; onClose: () => void; initialSessionId?: string; onOpenConversation?: (sessionId: string) => void; afterClose?: () => void; onAddReference?: (sessionId:string,label:string)=>void;
+export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialSessionId, onOpenConversation, conversationHref, afterClose, onAddReference }: {
+  instanceId: string; open: boolean; wide: boolean; onClose: () => void; initialSessionId?: string; onOpenConversation?: (sessionId: string) => void; conversationHref?: (sessionId: string) => string; afterClose?: () => void; onAddReference?: (sessionId:string,label:string)=>void;
 }) {
   const { token } = theme.useToken();
   const page = useCursorPages(instanceId, open && !initialSessionId, listBackgroundSessions);
@@ -116,7 +118,14 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
   function automationLink(item: BackgroundSession) {
     if (!item.origin.automationId) return null;
     const path = `${adminInstancePath(instanceId, "automation", "automations")}?automation=${encodeURIComponent(item.origin.automationId)}`;
-    return <Typography.Link href={path} onClick={event => { event.preventDefault(); navigateToAppPath(path); }}>View Automation</Typography.Link>;
+    return <Typography.Link href={path} onClick={followAppLink}>View Automation</Typography.Link>;
+  }
+  function chatHref(item: BackgroundSession) {
+    return item.surfaces.includes("ChatList") ? conversationHref?.(item.session.sessionId) ?? sessionPath(item.session.sessionId) : undefined;
+  }
+  function followChatLink(event: MouseEvent<HTMLElement>, item: BackgroundSession) {
+    if (chatHref(item)) followAppLink(event, () => void openChat(item));
+    else void openChat(item);
   }
   async function markAllRead() {
     if (actionPending.current) return;
@@ -165,7 +174,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
           {active.completionDelivery ? <CompletionDeliveryStatus delivery={active.completionDelivery} onInspect={id => void inspectHandlingRun(id)} /> : null}
         </Flex>
         {onAddReference ? <Button disabled={active.session.archived || active.session.lifecycleStatus === "Deleted"} onClick={() => { onAddReference(active.session.sessionId, active.originalTitle ?? "Background task"); onClose(); }}>Add to chat</Button> : null}
-        <Button type="primary" icon={<MessageOutlined aria-hidden />} loading={busy} disabled={busy || !active.canContinueInChat} onClick={() => void openChat(active)}>{active.surfaces.includes("ChatList") ? "Open chat" : "Continue in chat"}</Button>
+        <Button type="primary" icon={<MessageOutlined aria-hidden />} loading={busy} disabled={busy || !active.canContinueInChat} href={chatHref(active)} onClick={event => followChatLink(event, active)}>{active.surfaces.includes("ChatList") ? "Open chat" : "Continue in chat"}</Button>
         {!active.canContinueInChat ? <Typography.Text type="secondary">This Session or its Agent Instance is unavailable for continuation. Its run history remains available here.</Typography.Text> : null}
         {active.surfaces.includes("ChatList") ? <Typography.Text type="secondary">Continued in chat</Typography.Text> : null}
         {automationLink(active)}
@@ -203,7 +212,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
               {item.initialRun?.progress ? <Typography.Text className="background-work-progress">{item.initialRun.progress}</Typography.Text> : null}
               {item.initialRun && item.completionDelivery?.status !== "handled" && isUnread(item.initialRun) ? <Typography.Text><BellOutlined /> Unread · needs attention</Typography.Text> : null}
               <Flex wrap align="center" gap={token.paddingXS}><Button data-background-control="history" onClick={() => select(item, "history")}>View original result</Button>
-                <Button disabled={busy || !item.canContinueInChat} onClick={() => void openChat(item)}>{item.surfaces.includes("ChatList") ? "Open chat" : "Continue in chat"}</Button>{automationLink(item)}</Flex>
+                <Button disabled={busy || !item.canContinueInChat} href={chatHref(item)} onClick={event => followChatLink(event, item)}>{item.surfaces.includes("ChatList") ? "Open chat" : "Continue in chat"}</Button>{automationLink(item)}</Flex>
             </Flex>
           </li>)}
         </ul>

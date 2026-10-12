@@ -11,6 +11,8 @@ public sealed class EmailAccountService(ICredentialStore credentials, IAgentCred
 {
     public DateTimeOffset UtcNow => time.GetUtcNow();
     public bool IsEnabled => providers.IsEnabled;
+    public bool IsSendEnabled => providers.IsSendEnabled;
+    public const string SendSetupGuidance = "SMTP dispatch is disabled. Configure and verify outgoing mail in Connections → Credentials, then ask the operator to enable Email:SmtpEnabled. The draft can be kept for later approval.";
     public async ValueTask<IReadOnlyList<BoundEmailAccount>> AccountsAsync(ToolExecutionAdmission admission, CancellationToken ct)
     {
         var owner = await RequireOwner(admission, ct);
@@ -70,11 +72,13 @@ public sealed class EmailAccountService(ICredentialStore credentials, IAgentCred
     public async ValueTask<EmailSendResult> SendAsync(Guid sessionId, ToolExecutionAdmission admission, string draftId,
         string? reference, ToolApprovalGrant grant, CancellationToken ct)
     {
+        if (!IsSendEnabled) throw AgentCoreErrors.Validation("smtp_disabled: " + SendSetupGuidance);
         var draft = await DraftAsync(sessionId, admission, draftId, reference, ct);
         var hash = EmailDraftNormalizer.ComputeSendActionHash(draft);
         if (grant.ToolName != ToolCatalog.EmailSend || grant.ActionHash != hash) throw AgentCoreErrors.Forbidden("stale_approval: Approval does not match account and exact draft content.");
         var account = await ResolveAsync(admission, draft.AccountRef, ct);
         ct.ThrowIfCancellationRequested();
+        if (!IsSendEnabled) throw AgentCoreErrors.Validation("smtp_disabled: " + SendSetupGuidance);
         if (!await store.TryClaimSendAsync(new(draftId, account.AccountId, draft.Revision, grant.ApprovalId, hash, null, time.GetUtcNow()), ct))
         {
             var previous = await store.GetSendAsync(draftId, ct);
