@@ -22,10 +22,23 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
     private string? preparedToken;
     public async ValueTask PrepareSendAsync(CancellationToken ct)
     {
+        using var observation = new EmailOperationObservation("send.preflight", account.Profile.Synthetic, time, account.AccountId, ct);
         if (!sendEnabled() || !account.Profile.CanSend) throw AgentCoreErrors.Forbidden("email_send_disabled: Sending is disabled or Gmail send permission is missing.");
         await recheck(ct); preparedToken = await (freshToken ?? token)(ct); await recheck(ct);
+        observation.Complete();
     }
     public async ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest request, CancellationToken cancellationToken = default)
+    {
+        using var observation = new EmailOperationObservation("search", account.Profile.Synthetic, time, account.AccountId, cancellationToken);
+        try { var result = await SearchCoreAsync(request, cancellationToken); observation.Complete(); return result; }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested) { observation.Fail(ex); throw; }
+        catch (Exception ex)
+        {
+            var failure = EmailOperationObservation.Failure(ex, logger, diagnosticIds, "search", account.AccountId, account.AgentInstanceId);
+            observation.Fail(failure); throw failure;
+        }
+    }
+    private async ValueTask<EmailSearchResult> SearchCoreAsync(EmailSearchRequest request, CancellationToken cancellationToken)
     {
         var limit = Math.Clamp(request.Limit, 1, EmailToolLimits.MaxSearchLimit);
         var query = string.IsNullOrWhiteSpace(request.Query) ? "in:inbox" : request.Query;
@@ -45,6 +58,17 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
         return new(results, list.RootElement.TryGetProperty("nextPageToken", out _));
     }
     public async ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest request, CancellationToken cancellationToken = default)
+    {
+        using var observation = new EmailOperationObservation("read", account.Profile.Synthetic, time, account.AccountId, cancellationToken);
+        try { var result = await ReadCoreAsync(request, cancellationToken); observation.Complete(); return result; }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested) { observation.Fail(ex); throw; }
+        catch (Exception ex)
+        {
+            var failure = EmailOperationObservation.Failure(ex, logger, diagnosticIds, "read", account.AccountId, account.AgentInstanceId);
+            observation.Fail(failure); throw failure;
+        }
+    }
+    private async ValueTask<EmailMessageResult> ReadCoreAsync(EmailReadRequest request, CancellationToken cancellationToken)
     {
         if (!request.MessageId.StartsWith(Prefix, StringComparison.Ordinal) || request.MessageId.Length > 512)
             throw AgentCoreErrors.NotFound("Message reference is not in this account.");
@@ -75,7 +99,7 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
                     throw new AgentCoreException("email_oauth_reconnect_required", "Google rejected current authorization. Reconnect in Connections → Credentials.", 403);
                 }
             }
-            if (!response.IsSuccessStatusCode) throw new AgentCoreException("email_provider_unavailable", "Google mailbox is unavailable. Check access in Connections → Credentials.", 502);
+            if (!response.IsSuccessStatusCode) throw new HttpRequestException("Google mailbox is unavailable.", null, response.StatusCode);
             var json = await GoogleEmailOAuthService.ReadJson(response, 2 * 1024 * 1024, ct);
             try { await recheck(ct); return json; } catch { json.Dispose(); throw; }
         }
@@ -85,6 +109,7 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
     public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default) => throw new NotSupportedException("Core owns drafts.");
     public async ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default)
     {
+        using var observation = new EmailOperationObservation("send", account.Profile.Synthetic, time, account.AccountId, cancellationToken);
         var draft = request.ApprovedDraft;
         if (request.DraftId != draft.DraftId || draft.AccountId != account.AccountId || draft.Sender != account.Profile.EmailAddress
             || draft.AccountRevision != account.AccountRevision || draft.AuthEpoch != account.Profile.AuthEpoch)
@@ -103,17 +128,26 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
         try
         {
             using var response = await client.SendAsync(outbound, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            if (!response.IsSuccessStatusCode) logger?.LogWarning("Gmail send failed with status {StatusCode}; dispatch outcome {Outcome}", (int)response.StatusCode, (int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout ? "indeterminate" : "failed");
+            if (!response.IsSuccessStatusCode) HandledFailureLog.Warning(logger, new HttpRequestException("Google rejected email dispatch.", null, response.StatusCode),
+                "email.send", (int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout ? "email_send_indeterminate" : "email_send_rejected",
+                new DiagnosticContext(ProviderAlias: "gmail", AgentInstanceId: account.AgentInstanceId, CredentialId: account.AccountId), diagnostics: diagnosticIds);
             if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
+            {
+                observation.Complete("indeterminate");
                 return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google acceptance could not be confirmed. This draft will not be retried.");
+            }
             if (!response.IsSuccessStatusCode) return new(EmailSendOutcome.Failed, null, "email_send_rejected", "Google rejected the message.");
             using var json = await GoogleEmailOAuthService.ReadJson(response, 64 * 1024, cancellationToken);
-            return json.RootElement.TryGetProperty("id", out var id) && id.GetString() is { Length: > 0 } accepted
-                ? new(EmailSendOutcome.Sent, accepted, null, null)
-                : new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google response did not confirm a message ID. This draft will not be retried.");
+            if (json.RootElement.TryGetProperty("id", out var id) && id.GetString() is { Length: > 0 } accepted)
+            { observation.Complete(); return new(EmailSendOutcome.Sent, accepted, null, null); }
+            observation.Complete("indeterminate");
+            HandledFailureLog.Warning(logger, new InvalidDataException("Google response did not include a message ID."), "email.send", "email_send_indeterminate",
+                new DiagnosticContext(ProviderAlias: "gmail", AgentInstanceId: account.AgentInstanceId, CredentialId: account.AccountId, FailureReason: "missing_message_id"), diagnostics: diagnosticIds);
+            return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google response did not confirm a message ID. This draft will not be retried.");
         }
         catch (Exception ex)
         {
+            observation.Complete("indeterminate");
             HandledFailureLog.Warning(logger, ex, "email.send", "dispatch_unconfirmed", new DiagnosticContext(ProviderAlias: "gmail", AgentInstanceId: account.AgentInstanceId, CredentialId: account.AccountId), diagnostics: diagnosticIds);
             return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google acceptance could not be confirmed. This draft will not be retried.");
         }

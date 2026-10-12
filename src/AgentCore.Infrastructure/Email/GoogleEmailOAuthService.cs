@@ -86,6 +86,7 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
     }
     public async ValueTask<EmailOAuthStart> StartAsync(Guid id, long revision, Guid ownerId, CancellationToken ct)
     {
+        using var observation = new EmailOperationObservation("oauth.start", synthetic, time, id, ct);
         if (ownerId == Guid.Empty) throw AgentCoreErrors.Forbidden("Owner is required.");
         var c = await Account(id, revision, true, ct);
         if (!synthetic && !options.Configured) throw Failure("email_oauth_not_configured", "Google connection not configured. Ask the operator to configure GoogleEmailOAuth:ClientId, ClientSecret and PublicAppUrl.");
@@ -104,10 +105,12 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
                 ["include_granted_scopes"] = "false", ["access_type"] = "offline", ["prompt"] = "consent", ["state"] = state, ["nonce"] = nonce,
                 ["code_challenge"] = GmailMime.EncodeBase64Url(SHA256.HashData(Encoding.ASCII.GetBytes(pkce))), ["code_challenge_method"] = "S256"
             });
+        observation.Complete();
         return new(url, cookie, expires, options.AppUri?.Scheme == "https", synthetic);
     }
     public async ValueTask<Guid> CompleteAsync(string state, string? correlation, Guid ownerId, string? code, string? error, CancellationToken ct)
     {
+        using var observation = new EmailOperationObservation("oauth.connect", synthetic, time, Guid.Empty, ct);
         if (string.IsNullOrEmpty(state) || state.Length > 128 || correlation is null || correlation.Length > 128) throw Failure("email_oauth_state_invalid", "Connection attempt is invalid. Start again.");
         Attempt a;
         lock (pendingGate)
@@ -119,8 +122,9 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
             pending.Remove(key); // Consume before exchange, including denial and failed exchange.
         }
         var c = await Account(a.AccountId, a.Revision, true, ct);
+        observation.Correlate(c.CredentialId);
         if (c.EmailAccount!.AuthEpoch != a.Epoch) throw Failure("email_oauth_state_invalid", "Authorization changed. Start again.");
-        if (error is not null) { observations[a.AccountId] = Status(c, "email_oauth_denied: Google authorization was cancelled. Connect again when ready."); return a.AccountId; }
+        if (error is not null) { observations[a.AccountId] = Status(c, "email_oauth_denied: Google authorization was cancelled. Connect again when ready."); observation.Complete("denied"); return a.AccountId; }
         if (string.IsNullOrWhiteSpace(code) || code.Length > 4096) throw Failure("email_oauth_state_invalid", "Authorization code is missing. Start again.");
         var phase = "exchange";
         try
@@ -147,15 +151,18 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
             await credentials.SaveAsync(c with { EmailAccount = profile, ProtectedPayload = protector.Protect(c.CredentialId, c.ProtectionVersion, token.RefreshToken),
                 SecretRevision = c.SecretRevision + 1, Revision = c.Revision + 1, UpdatedAtUtc = time.GetUtcNow() }, c.Revision, ct, c.SecretRevision);
             cache.TryRemove(c.CredentialId, out _); observations.TryRemove(c.CredentialId, out _);
+            observation.Complete();
             return c.CredentialId;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException ex) when (ct.IsCancellationRequested) { observation.Fail(ex); throw; }
+        catch (Exception ex)
         {
-            var failure = ex as AgentCoreException ?? (phase == "identity" && ex is not HttpRequestException
+            var failure = ex as AgentCoreException ?? (phase == "identity" && ex is not (HttpRequestException or OperationCanceledException)
                 ? Failure("email_oauth_identity_mismatch", "Google identity validation failed. Connect the original account again.")
                 : Failure("email_oauth_temporary_failure", "Google connection could not be completed. Try again.", 502));
             var diagnostic = HandledFailureLog.Warning(logger, ex, "email.oauth.connect." + phase, failure.Code, new DiagnosticContext(ProviderAlias: "gmail", CredentialId: c.CredentialId), diagnostics: diagnosticIds);
             observations[c.CredentialId] = Status(c, failure.Code + ": " + failure.Message) with { DiagnosticId = diagnostic };
+            observation.Fail(failure);
             return c.CredentialId;
         }
     }
@@ -168,15 +175,18 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
     }
     internal async ValueTask<string> AccessTokenAsync(Guid id, long revision, CancellationToken ct, bool forceRefresh = false)
     {
-        var gate = refreshGates.GetOrAdd(id, _ => new(1)); await gate.WaitAsync(ct);
+        using var observation = new EmailOperationObservation("oauth.refresh", synthetic, time, id, ct);
+        var gate = refreshGates.GetOrAdd(id, _ => new(1));
+        try { await gate.WaitAsync(ct); }
+        catch (OperationCanceledException ex) { observation.Fail(ex); throw; }
         try
         {
             var c = await Account(id, revision, true, ct);
             if (c.EmailAccount is not { ConnectionStatus: EmailConnectionStatus.Connected } p || c.ProtectedPayload == "")
                 throw Failure("email_oauth_reconnect_required", "Reconnect this Gmail account in Connections → Credentials.", 403);
             if (p.Synthetic != synthetic) throw Failure("email_oauth_reconnect_required", "This authorization belongs to another provider profile. Reconnect.", 403);
-            if (!forceRefresh && cache.TryGetValue(id, out var access) && access.Revision == revision && access.Epoch == p.AuthEpoch && access.Expires > time.GetUtcNow().AddSeconds(60)) return access.Token;
-            if (synthetic) return "synthetic-access";
+            if (!forceRefresh && cache.TryGetValue(id, out var access) && access.Revision == revision && access.Epoch == p.AuthEpoch && access.Expires > time.GetUtcNow().AddSeconds(60)) { observation.Complete("cached"); return access.Token; }
+            if (synthetic) { observation.Complete(); return "synthetic-access"; }
             if (!options.Configured) throw Failure("email_oauth_not_configured", "Google connection not configured. Ask the operator to configure GoogleEmailOAuth.");
             Token token;
             try
@@ -187,7 +197,6 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
             }
             catch (AgentCoreException ex) when (ex.Code is "email_oauth_reconnect_required" or "email_oauth_scope_missing")
             {
-                HandledFailureLog.Warning(logger, ex, "email.oauth.refresh", ex.Code, new DiagnosticContext(ProviderAlias: "gmail", CredentialId: id), diagnostics: diagnosticIds);
                 cache.TryRemove(id, out _);
                 await credentials.SaveAsync(c with { ProtectedPayload = "", SecretRevision = c.SecretRevision + 1, Revision = c.Revision + 1,
                     EmailAccount = p with { ConnectionStatus = EmailConnectionStatus.ReconnectRequired, AuthEpoch = p.AuthEpoch + 1 }, UpdatedAtUtc = time.GetUtcNow() }, c.Revision, ct, c.SecretRevision);
@@ -198,7 +207,15 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
             // Also fence a disconnect/disable that raced a refresh without rotation.
             await Account(id, revision, true, ct);
             cache[id] = new(revision, p.AuthEpoch, token.AccessToken, time.GetUtcNow().AddSeconds(token.ExpiresSeconds));
+            observation.Complete();
             return token.AccessToken;
+        }
+        catch (OperationCanceledException ex) when (ct.IsCancellationRequested) { observation.Fail(ex); throw; }
+        catch (Exception ex)
+        {
+            var failure = EmailOperationObservation.Failure(ex, logger, diagnosticIds, "oauth.refresh", id);
+            observation.Fail(failure);
+            throw failure;
         }
         finally { gate.Release(); }
     }
@@ -211,31 +228,37 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
     }
     public async ValueTask<EmailOAuthConnection> CheckAsync(Guid id, long revision, CancellationToken ct)
     {
+        using var observation = new EmailOperationObservation("oauth.check", synthetic, time, id, ct);
         var c = await Account(id, revision, true, ct);
-        if (observations.TryGetValue(id, out var last) && last.LastCheckedAtUtc > time.GetUtcNow().AddSeconds(-5)) return await ConnectionAsync(id, ct);
+        if (observations.TryGetValue(id, out var last) && last.LastCheckedAtUtc > time.GetUtcNow().AddSeconds(-5)) { observation.Complete("throttled"); return await ConnectionAsync(id, ct); }
         try
         {
             var token = await AccessTokenAsync(id, revision, ct, forceRefresh: true);
             if (!synthetic) await VerifyMailbox(c.EmailAccount!.EmailAddress, token, ct);
             observations[id] = Status(c) with { LastCheckedAtUtc = time.GetUtcNow() };
+            observation.Complete();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException ex) when (ct.IsCancellationRequested) { observation.Fail(ex); throw; }
+        catch (Exception ex)
         {
             if (ex is AgentCoreException { Code: "email_oauth_identity_mismatch" or "email_oauth_reconnect_required" or "email_oauth_scope_missing" })
             { try { await RejectAuthorizationAsync(id, revision, ct); } catch (AgentCoreException) { /* A concurrent authority change already fences this check. */ } }
-            var diagnostic = HandledFailureLog.Warning(logger, ex, "email.oauth.check", ex is AgentCoreException failure ? failure.Code : "email_oauth_temporary_failure", new DiagnosticContext(ProviderAlias: "gmail", CredentialId: id), diagnostics: diagnosticIds);
-            observations[id] = Status(c, ex is AgentCoreException safe ? safe.Code + ": " + safe.Message : "email_oauth_temporary_failure: Google is temporarily unavailable. Retry check.") with { LastCheckedAtUtc = time.GetUtcNow(), DiagnosticId = diagnostic };
+            var failure = EmailOperationObservation.Failure(ex, logger, diagnosticIds, "oauth.check", id);
+            observation.Fail(failure);
+            observations[id] = Status(c, failure.Code + ": " + failure.Message) with { LastCheckedAtUtc = time.GetUtcNow(), DiagnosticId = failure.DiagnosticId };
         }
         return await ConnectionAsync(id, ct);
     }
     public async ValueTask<EmailOAuthConnection> DisconnectAsync(Guid id, long revision, CancellationToken ct)
     {
+        using var observation = new EmailOperationObservation("oauth.disconnect", synthetic, time, id, ct);
         var c = await Account(id, revision, false, ct); var p = c.EmailAccount!;
         await credentials.SaveAsync(c with { ProtectedPayload = "", SecretRevision = c.SecretRevision + 1, Revision = c.Revision + 1,
             EmailAccount = p with { ConnectionStatus = EmailConnectionStatus.Disconnected, AuthEpoch = p.AuthEpoch + 1 }, UpdatedAtUtc = time.GetUtcNow() }, revision, ct, c.SecretRevision);
         cache.TryRemove(id, out _);
         lock (pendingGate) foreach (var key in pending.Where(a => a.Value.AccountId == id).Select(a => a.Key).ToArray()) pending.Remove(key);
         var revoked = synthetic || c.ProtectedPayload == "";
+        Guid? diagnostic = null;
         if (!revoked)
         {
             try
@@ -243,10 +266,18 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
                 using var client = clients.CreateClient(HttpClientName);
                 using var response = await client.PostAsync("https://oauth2.googleapis.com/revoke", new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = protector.Unprotect(id, c.ProtectionVersion, c.ProtectedPayload) }), ct);
                 revoked = response.IsSuccessStatusCode;
+                if (!revoked) diagnostic = HandledFailureLog.Warning(logger, new HttpRequestException("Google revocation was not confirmed.", null, response.StatusCode),
+                    "email.oauth.disconnect", "revocation_unconfirmed", new DiagnosticContext(ProviderAlias: "gmail", CredentialId: id), diagnostics: diagnosticIds);
             }
-            catch (Exception) { /* Local disconnect remains committed even if provider revocation fails. */ }
+            catch (Exception ex)
+            {
+                // Local disconnect remains committed even if provider revocation fails or is cancelled.
+                diagnostic = HandledFailureLog.Warning(logger, ex, "email.oauth.disconnect", "revocation_unconfirmed",
+                    new DiagnosticContext(ProviderAlias: "gmail", CredentialId: id), diagnostics: diagnosticIds);
+            }
         }
-        observations[id] = new("Disconnected", synthetic || options.Configured, synthetic, revoked ? null : "Disconnected locally. Google revocation could not be confirmed. Remove access in your Google account settings.", ProviderRevoked: revoked);
+        observations[id] = new("Disconnected", synthetic || options.Configured, synthetic, revoked ? null : "Disconnected locally. Google revocation could not be confirmed. Remove access in your Google account settings.", ProviderRevoked: revoked, DiagnosticId: diagnostic);
+        observation.Complete(revoked ? "success" : "revocation_unconfirmed");
         return await ConnectionAsync(id, CancellationToken.None);
     }
     private async Task<Token> Exchange(Dictionary<string, string> fields, CancellationToken ct)

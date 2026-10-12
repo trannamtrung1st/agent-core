@@ -10,6 +10,9 @@ using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Time.Testing;
+using AgentCore.Application.Testing;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -163,15 +166,58 @@ public sealed class GoogleEmailOAuthTests
         Assert.Equal(expected, result.Status); Assert.NotNull(result.Error);
         Assert.Equal(expected == "Connected", (await f.Store.GetAsync(c.CredentialId))!.ProtectedPayload.Length > 0);
     }
+    [Theory]
+    [InlineData("invalid_grant", "ReconnectRequired")]
+    [InlineData("server_error", "Connected")]
+    public async Task Refresh_failure_reuses_one_safe_reference_in_owner_check_and_monitoring(string reason, string expectedStatus)
+    {
+        var id = Guid.NewGuid(); var unused = Guid.NewGuid(); var ids = new QueueDiagnosticIdSource([id, unused]);
+        var logs = new DiagnosticLogCapture<GoogleEmailOAuthService>(); using var metrics = RuntimeMetricProbe.Start();
+        using var f = new Fixture(logs, ids); var c = await f.Create(); await f.Complete(await f.Service.StartAsync(c.CredentialId, 1, f.Owner, default));
+        f.Transport.RefreshFailure = reason;
+        var result = await f.Service.CheckAsync(c.CredentialId, 2, default);
+        Assert.Equal(expectedStatus, result.Status); Assert.Equal(id, result.DiagnosticId); Assert.Equal(unused, ids.NewId());
+        var entry = Assert.Single(logs.Entries); Assert.Equal("email.oauth.refresh", entry.Properties["Operation"]);
+        Assert.Equal(id, entry.Properties["DiagnosticId"]); Assert.Equal(c.CredentialId, entry.Properties["CredentialId"]);
+        var rendered = entry.Message + entry.Exception;
+        Assert.DoesNotContain("known-client-secret", rendered); Assert.DoesNotContain("known-refresh", rendered); Assert.DoesNotContain("verified@example.test", rendered);
+        Assert.Contains(metrics.Tags, t => t.Instrument == "email.operations" && t.Key == "operation" && Equals(t.Value, "oauth.check"));
+        Assert.All(metrics.Tags.Where(t => t.Instrument.StartsWith("email.", StringComparison.Ordinal)), t => Assert.Contains(t.Key, new[] { "provider", "operation", "outcome", "profile" }));
+    }
+
+    [Fact]
+    public async Task Unconfirmed_remote_revocation_logs_reference_after_local_disconnect_commits()
+    {
+        var id = Guid.NewGuid(); var logs = new DiagnosticLogCapture<GoogleEmailOAuthService>();
+        using var f = new Fixture(logs, new QueueDiagnosticIdSource([id])); var c = await f.Create();
+        await f.Complete(await f.Service.StartAsync(c.CredentialId, 1, f.Owner, default)); f.Transport.RevokeFails = true;
+        var result = await f.Service.DisconnectAsync(c.CredentialId, 2, default);
+        Assert.Equal("Disconnected", result.Status); Assert.False(result.ProviderRevoked); Assert.Equal(id, result.DiagnosticId);
+        Assert.Equal("", (await f.Store.GetAsync(c.CredentialId))!.ProtectedPayload);
+        var entry = Assert.Single(logs.Entries); Assert.Equal("revocation_unconfirmed", entry.Properties["ErrorCode"]);
+        Assert.Contains("StatusCode=503", entry.Exception!.ToString()); Assert.DoesNotContain("known-refresh", entry.Exception.ToString());
+    }
+
+    [Fact]
+    public async Task Disabled_OAuth_logger_preserves_safe_failure_without_allocating_an_id()
+    {
+        var id = Guid.NewGuid(); var ids = new QueueDiagnosticIdSource([id]);
+        using var f = new Fixture(NullLogger<GoogleEmailOAuthService>.Instance, ids); var c = await f.Create();
+        await f.Complete(await f.Service.StartAsync(c.CredentialId, 1, f.Owner, default)); f.Transport.RefreshFailure = "invalid_grant";
+        var result = await f.Service.CheckAsync(c.CredentialId, 2, default);
+        Assert.Null(result.DiagnosticId); Assert.Equal(id, ids.NewId()); Assert.Equal("ReconnectRequired", result.Status);
+    }
+
     private sealed class Fixture : IDisposable
     {
         private readonly string root = Path.Combine(Path.GetTempPath(), "google-oauth-" + Guid.NewGuid().ToString("N"));
         public readonly Guid Owner = Guid.NewGuid(); public readonly FakeTimeProvider Time = new(DateTimeOffset.UtcNow);
         public readonly ICredentialStore Store; public readonly ICredentialProtector Protector; public readonly CredentialService Credentials;
         public readonly Transport Transport = new(); public readonly Verifier Verifier = new(); public readonly GoogleEmailOAuthService Service;
-        public Fixture()
-        { var instances = new InMemoryAgentInstanceStore(); var store = new InMemoryCredentialStore(instances); Store = store; Protector = new LocalCredentialProtector(root); Credentials = new(store, store, Protector, instances, new SystemIdGenerator(Time), Time); Service = NewService(); }
-        public GoogleEmailOAuthService NewService() => new(Store, Protector, Transport, new() { ClientId = "client", ClientSecret = "known-client-secret", PublicAppUrl = "https://app.example.test" }, Time, false, Verifier);
+        private readonly ILogger<GoogleEmailOAuthService>? logger; private readonly IDiagnosticIdSource? diagnosticIds;
+        public Fixture(ILogger<GoogleEmailOAuthService>? logger = null, IDiagnosticIdSource? diagnosticIds = null)
+        { this.logger = logger; this.diagnosticIds = diagnosticIds; var instances = new InMemoryAgentInstanceStore(); var store = new InMemoryCredentialStore(instances); Store = store; Protector = new LocalCredentialProtector(root); Credentials = new(store, store, Protector, instances, new SystemIdGenerator(Time), Time); Service = NewService(); }
+        public GoogleEmailOAuthService NewService() => new(Store, Protector, Transport, new() { ClientId = "client", ClientSecret = "known-client-secret", PublicAppUrl = "https://app.example.test" }, Time, false, Verifier, logger, diagnosticIds);
         public async Task<CredentialView> Create(string email = "") => await Credentials.CreateEmailAccountAsync("Gmail", EmailAccountProfile.Gmail(email), "");
         public string State(EmailOAuthStart start) => QueryHelpers.ParseQuery(new Uri(start.AuthorizationUrl).Query)["state"].ToString();
         public async Task Complete(EmailOAuthStart start) => await Service.CompleteAsync(State(start), start.Correlation, Owner, "code", null, default);

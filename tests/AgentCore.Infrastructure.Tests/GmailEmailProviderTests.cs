@@ -33,7 +33,7 @@ public sealed class GmailEmailProviderTests
         Assert.Equal("Exact subject", message.Subject); Assert.Equal("Exact body", message.TextBody!.TrimEnd('\r', '\n'));
         Assert.Equal(1, handler.Sends); Assert.DoesNotContain("drafts", handler.Path!);
         if (status == 200) Assert.Empty(logs.Entries);
-        else { var failure = Assert.Single(logs.Entries); Assert.Equal(LogLevel.Warning, failure.Level); Assert.Equal(status, failure.Properties["StatusCode"]); Assert.DoesNotContain("Exact body", failure.Message); }
+        else { var failure = Assert.Single(logs.Entries); Assert.Equal(LogLevel.Warning, failure.Level); Assert.Contains("StatusCode=" + status, failure.Exception!.ToString()); Assert.NotNull(failure.Properties["DiagnosticId"]); Assert.DoesNotContain("Exact body", failure.Message); }
     }
     [Fact]
     public async Task Lost_send_response_is_uncertain_and_never_retried_by_adapter()
@@ -77,13 +77,47 @@ public sealed class GmailEmailProviderTests
     }
     [Fact]
     public void Mime_roundtrip_does_not_turn_subject_newline_into_bcc_header() => Assert.Throws<AgentCoreException>(() => GmailMime.BuildRawMessage(["to@example.test"], [], [], "Hello\nBcc: evil@example.test", "Body"));
+    [Fact]
+    public async Task Successful_HTTP_without_acceptance_evidence_is_logged_and_never_retried()
+    {
+        var handler = new Transport { MissingSendId = true }; var account = Account(); var logs = new DiagnosticLogCapture<GmailEmailProvider>();
+        var result = await Provider(handler, account, logs).SendDraftAsync(new("core-draft-1", Draft(account)));
+        Assert.Equal(EmailSendOutcome.Indeterminate, result.Outcome); Assert.Equal(1, handler.Sends);
+        var entry = Assert.Single(logs.Entries); Assert.Equal("missing_message_id", entry.Properties["FailureReason"]);
+        Assert.DoesNotContain("Exact body", entry.Message + entry.Exception);
+    }
+    [Fact]
+    public async Task Read_transport_failure_is_correlated_and_excludes_query_tokens_and_mail_content()
+    {
+        var handler = new Transport { FailReads = true }; var account = Account(); var id = Guid.NewGuid();
+        var logs = new DiagnosticLogCapture<GmailEmailProvider>(); using var metrics = RuntimeMetricProbe.Start();
+        var provider = new GmailEmailProvider(account, handler, _ => ValueTask.FromResult("protected-access"), _ => ValueTask.CompletedTask,
+            () => true, TimeProvider.System, logs, new QueueDiagnosticIdSource([id]));
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() => provider.SearchAsync(new("private-mail@example.test private-body", 1)).AsTask());
+        Assert.Equal("email_provider_unavailable", error.Code); Assert.Equal(id, error.DiagnosticId);
+        var entry = Assert.Single(logs.Entries); Assert.Equal(id, entry.Properties["DiagnosticId"]); Assert.Equal("email.search", entry.Properties["Operation"]);
+        var output = entry.Message + entry.Exception;
+        Assert.DoesNotContain("private-mail", output); Assert.DoesNotContain("private-body", output); Assert.DoesNotContain("protected-access", output);
+        Assert.Contains(metrics.Tags, t => t.Instrument == "email.operations" && t.Key == "outcome" && Equals(t.Value, "temporary_failure"));
+    }
+    [Fact]
+    public async Task Cancelling_a_read_stays_quiet_and_does_not_allocate_a_failure_reference()
+    {
+        var handler = new Transport { HangReads = true }; var account = Account(); var id = Guid.NewGuid(); var ids = new QueueDiagnosticIdSource([id]);
+        var logs = new DiagnosticLogCapture<GmailEmailProvider>(); using var cancellation = new CancellationTokenSource();
+        var provider = new GmailEmailProvider(account, handler, _ => ValueTask.FromResult("protected-access"), _ => ValueTask.CompletedTask,
+            () => true, TimeProvider.System, logs, ids);
+        var read = provider.SearchAsync(new("", 1), cancellation.Token).AsTask(); await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await cancellation.CancelAsync(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => read);
+        Assert.Empty(logs.Entries); Assert.Equal(id, ids.NewId());
+    }
     private static EmailAccountContext Account() => new(Guid.NewGuid(), Guid.NewGuid(), "gmail", "Gmail", 2, Guid.NewGuid(), 1,
         EmailAccountProfile.Gmail("verified@example.test") with { AuthEpoch = 1, ConnectionStatus = EmailConnectionStatus.Connected, GoogleSubject = "verified-sub", GrantedScopes = [EmailAccountProfile.ReadScope, EmailAccountProfile.SendScope] });
     private static EmailDraftSnapshot Draft(EmailAccountContext a) => new("core-draft-1", ["to@example.test"], ["cc@example.test"], ["hidden@example.test"], "Exact subject", "Exact body", a.AccountId, a.AccountRef, a.Profile.EmailAddress, AccountRevision: a.AccountRevision, AuthEpoch: 1);
     private static GmailEmailProvider Provider(Transport handler, EmailAccountContext account, ILogger<GmailEmailProvider>? logger = null) => new(account, handler, _ => ValueTask.FromResult("protected-access"), _ => ValueTask.CompletedTask, () => true, TimeProvider.System, logger);
     private sealed class Transport : HttpMessageHandler, IHttpClientFactory
     {
-        public bool FailFirstList; public int Lists;
+        public bool FailFirstList, FailReads, HangReads, MissingSendId; public int Lists;
         public HttpStatusCode Status = HttpStatusCode.OK; public bool Hang; public string? Path, Body, SearchUri; public int Sends;
         public readonly TaskCompletionSource Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public HttpClient CreateClient(string name) => new(this, false);
@@ -91,7 +125,9 @@ public sealed class GmailEmailProviderTests
         {
             Assert.Equal("Bearer", request.Headers.Authorization!.Scheme); Assert.Equal("protected-access", request.Headers.Authorization.Parameter);
             Path = request.RequestUri!.AbsolutePath;
-            if (request.Method == HttpMethod.Post) { Sends++; Body = await request.Content!.ReadAsStringAsync(ct); Started.TrySetResult(); if (Hang) await Task.Delay(Timeout.Infinite, ct); return Json("{\"id\":\"accepted-id\"}", Status); }
+            if (request.Method == HttpMethod.Get && FailReads) throw new HttpRequestException("protected-access private-mail@example.test private-body");
+            if (request.Method == HttpMethod.Get && HangReads) { Started.TrySetResult(); await Task.Delay(Timeout.Infinite, ct); }
+            if (request.Method == HttpMethod.Post) { Sends++; Body = await request.Content!.ReadAsStringAsync(ct); Started.TrySetResult(); if (Hang) await Task.Delay(Timeout.Infinite, ct); return Json(MissingSendId ? "{}" : "{\"id\":\"accepted-id\"}", Status); }
             if (Path.EndsWith("/messages")) { Lists++; if (FailFirstList && Lists == 1) return Json("{}", HttpStatusCode.ServiceUnavailable); SearchUri = request.RequestUri.ToString(); return Json("{\"messages\":[{\"id\":\"m1\"}]}"); }
             return Json(JsonSerializer.Serialize(new { id = "m1", threadId = "t1", payload = new { mimeType = "multipart/alternative", headers = new[] { new { name = "Subject", value = "Subject" }, new { name = "From", value = "sender@example.test" } },
                 parts = new[] { new { mimeType = "text/plain", body = new { data = GmailMime.EncodeBase64Url(Encoding.UTF8.GetBytes("Plain body")) } }, new { mimeType = "text/html", body = new { data = GmailMime.EncodeBase64Url(Encoding.UTF8.GetBytes("<script>unsafe</script>")) } } } } }));
