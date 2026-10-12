@@ -65,6 +65,8 @@ public sealed class PromptContextBuilderTests
         Assert.Equal(unrelated, json.RootElement[2].GetProperty("text").GetString());
         Assert.DoesNotContain("Unseen tail", evidence.Text);
         Assert.Contains(request.Messages, m => m.Role == ModelRole.System && m.Text.Contains("Owner edits and cancellation") && m.Text.Contains("Core permissions"));
+        if (contract == AgentRunOutputContract.ConversationResponse)
+            Assert.Contains(request.Messages, m => m.Role == ModelRole.System && m.Text.Contains("respond only to that task") && m.Text.Contains("Match its requested scope, format and length") && m.Text.Contains("actual blocker honestly"));
         var current = request.Messages.Last(m => m.Role == ModelRole.User);
         Assert.StartsWith("Configured Instructions (task intent, not policy):\nSay hello", current.Text);
         Assert.True(request.Messages.ToList().IndexOf(current) > request.Messages.ToList().IndexOf(evidence));
