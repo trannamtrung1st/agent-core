@@ -11,7 +11,7 @@ import { capture } from "../audio/capture";
 import { encodePcm16Le } from "../audio/pcm";
 import { emptySession, useSessionStore, type ServerEvent } from "../state/sessionStore";
 import { listSessionMessages } from "./api";
-import { realtimeTestHooks, composerSendEnabled, composerStopEnabled, reportCommittedEntries, requestVoice, resumeCapture, sendDraft, cancelRenderedResponse, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
+import { realtimeTestHooks, composerSendEnabled, composerStopEnabled, reportCommittedEntries, requestVoice, resumeCapture, suspendLiveSessionForNavigation, resumeLiveSessionForNavigation, sendDraft, cancelRenderedResponse, setMuted, hangUp, cancelVoice, startConversation } from "./realtime";
 
 const hooks = realtimeTestHooks!;
 
@@ -34,6 +34,148 @@ describe("realtime race handling", () => {
     vi.unstubAllGlobals();
     delete window.__agentCoreSpeechTest;
     vi.useRealTimers();
+  });
+
+  it("keeps the same SignalR stream and durable response across Chat to Admin and back", async () => {
+    const stop = vi.fn().mockResolvedValue(undefined);
+    const start = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn(), stop, start } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready",
+      sessionId: "s1",
+      attachmentId: "a1",
+      status: "attached",
+      outputState: "agentGenerating",
+      lastServerSequence: 2,
+      liveResponseId: "r1",
+      agentRunId: "run1",
+      entries: [{
+        entryId: "assistant-1",
+        sequence: 2,
+        sourceEventId: null,
+        role: "assistant",
+        text: "Hello",
+        responseId: "r1",
+        status: "streaming",
+        deliveryMode: "text",
+        heardTextEndExclusive: 0,
+        receivedTextEndExclusive: 5,
+        createdAt: "2026-09-15T00:00:00.000Z"
+      }]
+    });
+
+    await suspendLiveSessionForNavigation();
+    expect(stop).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    expect(useSessionStore.getState()).toEqual(expect.objectContaining({
+      connection: "ready", outputState: "agentGenerating",
+      sessionId: "s1", attachmentId: "a1", liveResponseId: "r1", agentRunId: "run1"
+    }));
+
+    hooks.handleEvent({
+      protocolVersion: 1, sessionId: "s1", attachmentId: "a1", eventId: "delta",
+      sequence: 3, timestamp: "2026-09-15T00:00:01.000Z", correlationId: "c1",
+      causationId: null, responseId: "r1", type: "agent.text.delta",
+      payload: { textStart: 5, text: " world" }
+    });
+    expect(useSessionStore.getState().entries[0]?.text).toBe("Hello world");
+
+    resumeLiveSessionForNavigation();
+    reportCommittedEntries(useSessionStore.getState().entries);
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("ResponseReceived", expect.objectContaining({
+        type: "response.received", responseId: "r1",
+        payload: expect.objectContaining({ textEndExclusive: 11 })
+      }))
+    );
+    expect(invoke.mock.calls.some(([name]) => name === "Attach")).toBe(false);
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  it("keeps new agent output arriving in Admin while disarming voice capture", async () => {
+    const stop = vi.fn().mockResolvedValue(undefined);
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({
+      invoke, stop,
+      start: vi.fn().mockResolvedValue(undefined), send: vi.fn()
+    } as never);
+    useSessionStore.setState({
+      ...emptySession(),
+      connection: "ready", sessionId: "s1", attachmentId: "a1",
+      status: "attached", mode: "voice", captureLive: true,
+      lastServerSequence: 1, outputState: "idle"
+    });
+    await suspendLiveSessionForNavigation();
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
+    expect(useSessionStore.getState().captureLive).toBe(false);
+
+    hooks.handleEvent({
+      protocolVersion: 1, sessionId: "s1", attachmentId: "a1", eventId: "started",
+      sequence: 2, timestamp: "2026-09-15T00:00:02.000Z", correlationId: "c1",
+      causationId: null, responseId: "r2", type: "agent.response.started",
+      payload: { entryId: "assistant-2", entrySequence: 2 }
+    });
+    hooks.handleEvent({
+      protocolVersion: 1, sessionId: "s1", attachmentId: "a1", eventId: "delta",
+      sequence: 3, timestamp: "2026-09-15T00:00:03.000Z", correlationId: "c1",
+      causationId: null, responseId: "r2", type: "agent.text.delta",
+      payload: { textStart: 0, text: "Still working" }
+    });
+    expect(useSessionStore.getState().entries.find(e => e.responseId === "r2")?.text)
+      .toBe("Still working");
+    expect(useSessionStore.getState().connection).toBe("ready");
+    expect(stop).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
+
+    // The response can also finish before the user returns from Admin.
+    hooks.handleEvent({
+      protocolVersion: 1, sessionId: "s1", attachmentId: "a1", eventId: "completed",
+      sequence: 4, timestamp: "2026-09-15T00:00:04.000Z", correlationId: "c1",
+      causationId: null, responseId: "r2", type: "agent.response.completed",
+      payload: { status: "completed" }
+    });
+    expect(useSessionStore.getState().entries.find(e => e.responseId === "r2")?.status)
+      .toBe("completed");
+    expect(useSessionStore.getState().liveResponseId).toBeNull();
+    expect(invoke.mock.calls.some(([method]) => method === "ResponseReceived")).toBe(false);
+
+    resumeLiveSessionForNavigation();
+    reportCommittedEntries(useSessionStore.getState().entries);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("ResponseReceived", expect.objectContaining({
+      responseId: "r2", payload: expect.objectContaining({ textEndExclusive: 13 })
+    })));
+    expect(useSessionStore.getState().connection).toBe("ready");
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  it("leaves server voice mode exactly once when Admin suspends playback", async () => {
+    const invoke = vi.fn().mockResolvedValue({ accepted: true });
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1",
+      attachmentId: "a1", mode: "voice", liveResponseId: "r1" });
+    await suspendLiveSessionForNavigation();
+    await suspendLiveSessionForNavigation();
+    expect(invoke.mock.calls.filter(([method]) => method === "SetMode")).toEqual([
+      ["SetMode", expect.objectContaining({ payload: { mode: "text" } })]
+    ]);
+  });
+
+  it("releases microphone preflight that resolves after navigating to Admin", async () => {
+    let finish!: () => void;
+    vi.spyOn(capture, "isPrepared").mockReturnValue(false);
+    vi.spyOn(capture, "preflight").mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
+    const release = vi.spyOn(capture, "release");
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", mode: "voice" });
+    const pending = resumeCapture();
+    await suspendLiveSessionForNavigation();
+    release.mockClear();
+    finish();
+    await pending;
+    expect(release).toHaveBeenCalled();
+    expect(useSessionStore.getState().preflightReady).toBe(false);
+    expect(useSessionStore.getState().captureAuthorized).toBe(false);
   });
 
   it("sequence gap aborts playback and reattaches before applying started side effects", async () => {

@@ -89,6 +89,8 @@ let lastReceiptOffset = 0;
 let lastReceiptResponseId: string | null = null;
 let lastReceiptBlockSignature = "";
 let disposed = false;
+// Chat and Admin share this SPA. Hide media and render receipts outside Chat, not the live SignalR stream.
+let chatSurfaceVisible = true;
 let duckTimer: number | null = null;
 let flushing = false;
 let playbackInterrupt = Promise.resolve();
@@ -445,6 +447,7 @@ function clearVoiceInputHeldForAgentOutput(): void {
 }
 
 async function suspendClientTranscriptForAgentOutput(): Promise<void> {
+  if (!chatSurfaceVisible) return;
   const state = useSessionStore.getState();
   if (state.sttTransport !== "clientTranscript" || state.mode !== "voice") {
     return;
@@ -458,6 +461,10 @@ async function suspendClientTranscriptForAgentOutput(): Promise<void> {
 }
 
 async function tryResumeClientTranscriptAfterAgentOutput(): Promise<void> {
+  if (!chatSurfaceVisible) {
+    clearVoiceInputHeldForAgentOutput();
+    return;
+  }
   if (!clientTranscriptHeldForAgent) {
     return;
   }
@@ -807,7 +814,8 @@ function handleEvent(raw: ServerEvent): void {
 
   const next = applyServerEvent(prior, raw);
   if (
-    (prior.ttsTransport === "clientSpeech" || next.ttsTransport === "clientSpeech")
+    chatSurfaceVisible
+    && (prior.ttsTransport === "clientSpeech" || next.ttsTransport === "clientSpeech")
     && raw.responseId
     && (raw.type === "speech.output.segment" || raw.type === "speech.output.completed")
   ) {
@@ -978,7 +986,7 @@ function handleAudioOutput(dto: {
 }): void {
   audioOutputsReceived += 1;
   const responseId = dto.responseId ?? (dto as { ResponseId?: string }).ResponseId;
-  if (!responseId || !connection || isReadonlySession(useSessionStore.getState())) {
+  if (!chatSurfaceVisible || !responseId || !connection || isReadonlySession(useSessionStore.getState())) {
     return;
   }
 
@@ -1336,6 +1344,7 @@ export function reportCommittedEntries(
 
 function startReceipts(responseId: string): void {
   stopReceipts();
+  if (!chatSurfaceVisible) return;
   receiptTimer = window.setInterval(() => {
     void sendReceipt(false, responseId);
   }, 100);
@@ -1349,7 +1358,7 @@ function stopReceipts(): void {
 }
 
 async function sendReceipt(finalRender: boolean, responseId?: string): Promise<void> {
-  if (!connection) {
+  if (!connection || !chatSurfaceVisible) {
     return;
   }
 
@@ -1509,6 +1518,8 @@ function voicePlaybackHoldActive(): boolean {
 }
 
 function syncCapture(): void {
+  // A live text transport must never re-arm media while Admin owns the screen.
+  if (!chatSurfaceVisible) return;
   const state = useSessionStore.getState();
   if (state.connection !== "ready") {
     captureStreamId = null;
@@ -1687,6 +1698,7 @@ export const realtimeTestHooks =
           outputGate.markStarted(responseId);
         },
         resetOutput() {
+          chatSurfaceVisible = true;
           attachLoop += 1;
           reconnectBudgetStarted = 0;
           lastReconnectCause = null;
@@ -1958,25 +1970,44 @@ async function applyRouteFromLocationInner(): Promise<void> {
 }
 
 export async function suspendLiveSessionForNavigation(): Promise<void> {
+  // Popstate, router effects and the Admin button may all request suspension.
+  if (!chatSurfaceVisible) return;
   const snapshot = useSessionStore.getState();
-  if (!snapshot.sessionId || snapshot.connection === "idle") {
-    return;
-  }
-
-  disposed = true;
+  const leaveVoice = snapshot.mode === "voice" || snapshot.pendingMode === "voice" || voiceModeRequested;
+  // AppRouter swaps ChatApp for AdminApp but the in-flight AgentRun and live
+  // SignalR subscription belong to the SPA, not to the Chat component mount.
+  // Disconnecting here loses incremental replies and forces an avoidable attach.
+  chatSurfaceVisible = false;
+  voiceModeRequested = false;
+  clientOwnsVoice = false;
+  voiceEpoch += 1;
+  disarmCapture("explicit");
   abortPlayback();
-  await stopConnection();
   stopReceipts();
-  capture.release();
   void releaseClientSpeech();
-  disposed = false;
   useSessionStore.setState({
-    connection: "idle",
     captureLive: false,
-    outputState: "idle",
     pendingMode: null,
-    preflightReady: false
+    preflightReady: false,
+    liveUserTranscript: null
   });
+  // Voice responses require truthful playback ACKs to finish. Once local media
+  // is suspended, leave Voice through the existing mode-change protocol rather
+  // than strand a Run or acknowledge audio the owner never heard.
+  if (leaveVoice && connection && snapshot.connection === "ready") {
+    await cancelVoice();
+  }
+}
+
+export function resumeLiveSessionForNavigation(): void {
+  chatSurfaceVisible = true;
+  const snapshot = useSessionStore.getState();
+  if (connection && snapshot.connection === "ready" && snapshot.liveResponseId) {
+    // The unmounted Chat component could not acknowledge newly rendered text.
+    // ChatApp reports the committed entries again after mount.
+    startReceipts(snapshot.liveResponseId);
+  }
+  void sendReceipt(false);
 }
 
 export async function navigateFromBrowserHistory(): Promise<void> {
@@ -3540,6 +3571,7 @@ export async function respondToApproval(decision: "approve" | "reject"): Promise
 }
 
 export async function requestVoice(): Promise<void> {
+  if (!chatSurfaceVisible) return;
   if (voiceRequest) {
     return voiceRequest;
   }
@@ -3686,10 +3718,11 @@ export async function requestVoice(): Promise<void> {
 
 export async function resumeCapture(): Promise<void> {
   const state = useSessionStore.getState();
-  if (state.mode !== "voice" || state.connection !== "ready") {
+  if (!chatSurfaceVisible || state.mode !== "voice" || state.connection !== "ready") {
     return;
   }
 
+  const epoch = voiceEpoch;
   setCaptureAuthorized(true);
   ensureSpeechAdapters();
   try {
@@ -3699,6 +3732,7 @@ export async function resumeCapture(): Promise<void> {
       await capture.preflight({ microphone, playback });
     }
   } catch (error) {
+    if (epoch !== voiceEpoch || !chatSurfaceVisible) return;
     setCaptureAuthorized(false);
     capture.release();
     useSessionStore.setState({
@@ -3708,8 +3742,11 @@ export async function resumeCapture(): Promise<void> {
     return;
   }
 
-  if (useSessionStore.getState().mode !== "voice") {
+  const current = useSessionStore.getState();
+  if (epoch !== voiceEpoch || !chatSurfaceVisible || current.mode !== "voice"
+    || current.sessionId !== state.sessionId || current.attachmentId !== state.attachmentId) {
     setCaptureAuthorized(false);
+    capture.release();
     return;
   }
 
