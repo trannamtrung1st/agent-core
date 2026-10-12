@@ -20,12 +20,16 @@ namespace AgentCore.Api.Tests;
 public sealed class AutomationActivationJourneyTests
 {
     [Theory(Timeout = 60000)]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Exact_enable_request_lists_inspects_and_enables_without_classifier_or_duplicate(bool duplicate)
+    [InlineData(false, "enable the 60s hello schedule")]
+    [InlineData(true, "enable the 60s hello schedule")]
+    [InlineData(false, "enable the say hello to me 60s automation job again")]
+    [InlineData(true, "enable the say hello to me 60s automation job again")]
+    [InlineData(false, "enable my hello say 60s automation job again")]
+    [InlineData(false, "please enable the automation job to say hello to me every 60 seconds again, please")]
+    public async Task Exact_enable_request_lists_inspects_and_enables_without_classifier_or_duplicate(bool duplicate, string requestText)
     {
         var clock = new Clock(new DateTimeOffset(2026, 10, 12, 8, 0, 0, TimeSpan.Zero));
-        var model = new WorkflowModel();
+        var model = new WorkflowModel(requestText);
         var classifier = new UnavailableClassifier();
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"enable-chat-{Guid.NewGuid():N}.db"), model, clock,
             configure: services =>
@@ -38,10 +42,10 @@ public sealed class AutomationActivationJourneyTests
         var services = host.Services;
         var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 25);
         var authoring = services.GetRequiredService<AdminAutomationAuthoringService>();
-        var saved = await authoring.SaveAsync(instance.InstanceId, null, 0, false, "60s hello", "Say hello.",
+        var saved = await authoring.SaveAsync(instance.InstanceId, null, 0, false, "Say hello every 60s", "Say hello to me.",
             new ScheduleTrigger(new FixedIntervalSchedule(60, clock.GetUtcNow(), maxOccurrences: 3)), "scripted-alpha", null);
         if (duplicate)
-            await authoring.SaveAsync(instance.InstanceId, null, 0, false, "Another hello", "Different instructions.",
+            await authoring.SaveAsync(instance.InstanceId, null, 0, false, "Another hello", "Say hello to me.",
                 new ScheduleTrigger(new FixedIntervalSchedule(60, clock.GetUtcNow(), maxOccurrences: 3)), "scripted-alpha", null);
         var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
         await using var hub = new HubConnectionBuilder().WithUrl(new Uri(host.Server.BaseAddress, "/hubs/session"), options =>
@@ -66,7 +70,7 @@ public sealed class AutomationActivationJourneyTests
         Assert.True((await hub.InvokeAsync<CommandAck>("Attach", Command("session.attach", 0,
             new AttachPayload { OwnerCapability = TestOwnerCapability.Token(services) }))).Accepted);
         Assert.True((await hub.InvokeAsync<CommandAck>("SendText", Command("user.text", 1,
-            new UserTextPayload { Text = "enable the 60s hello schedule" }, await ready.Task.WaitAsync(TimeSpan.FromSeconds(20))))).Accepted);
+            new UserTextPayload { Text = requestText }, await ready.Task.WaitAsync(TimeSpan.FromSeconds(20))))).Accepted);
         await completed.Task.WaitAsync(TimeSpan.FromSeconds(20));
         Assert.Equal(0, classifier.Calls);
         Assert.Equal(new[] { ToolCatalog.AutomationList, ToolCatalog.AutomationInspect, ToolCatalog.AutomationUpdate }, model.Calls);
@@ -123,7 +127,7 @@ public sealed class AutomationActivationJourneyTests
         }
     }
 
-    private sealed class WorkflowModel : ILanguageModel
+    private sealed class WorkflowModel(string requestText) : ILanguageModel
     {
         private readonly ScriptedLanguageModel inner = new();
         public ModelCapabilities Capabilities => inner.Capabilities;
@@ -131,7 +135,7 @@ public sealed class AutomationActivationJourneyTests
         internal string LastResult = "";
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
-            if (request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text != "enable the 60s hello schedule")
+            if (request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text != requestText)
             {
                 await foreach (var item in inner.GenerateAsync(request, ct)) yield return item;
                 yield break;
