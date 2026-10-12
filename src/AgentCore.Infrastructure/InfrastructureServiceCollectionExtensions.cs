@@ -422,11 +422,11 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AgentInstanceSkillService>(),
             provider.GetRequiredService<ICoreEventStore>(),
             provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),
-            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>()));
+            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>(), provider.GetService<ILogger<SessionToolExecutor>>()));
         services.TryAddSingleton<ISandboxExecutor>(provider =>
             new DockerSandboxExecutor(
                 provider.GetRequiredService<ISessionWorkspace>(),
-                provider.GetService<IArtifactStore>()));
+                provider.GetService<IArtifactStore>(), logger: provider.GetService<ILogger<DockerSandboxExecutor>>()));
         services.TryAddSingleton(provider =>
         {
             var speech = provider.GetRequiredService<SpeechResolution>();

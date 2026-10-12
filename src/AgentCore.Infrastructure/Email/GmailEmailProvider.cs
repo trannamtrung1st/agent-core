@@ -1,3 +1,4 @@
+using AgentCore.Application.Observability;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -208,6 +209,8 @@ public sealed class GmailEmailProvider(
                 return new EmailSendResult(EmailSendOutcome.Sent, messageId, null, null);
             }
 
+            logger.LogWarning("Gmail send failed with status {StatusCode}; dispatch outcome {Outcome}",
+                (int)response.StatusCode, (int)response.StatusCode >= 500 ? "indeterminate" : "failed");
             if ((int)response.StatusCode >= 500)
             {
                 return new EmailSendResult(
@@ -219,9 +222,9 @@ public sealed class GmailEmailProvider(
 
             return new EmailSendResult(EmailSendOutcome.Failed, null, "provider", "Gmail send was rejected.");
         }
-        catch (OperationCanceledException) when (dispatchStarted)
+        catch (OperationCanceledException ex) when (dispatchStarted)
         {
-            logger.LogWarning("Gmail send cancelled after dispatch; treating as indeterminate");
+            HandledFailureLog.Warning(logger, ex, "email.send", "dispatch_unconfirmed", new DiagnosticContext(ProviderAlias: "gmail"));
             return new EmailSendResult(
                 EmailSendOutcome.Indeterminate,
                 null,
@@ -230,7 +233,7 @@ public sealed class GmailEmailProvider(
         }
         catch (HttpRequestException ex)
         {
-            logger.LogWarning(ex, "Gmail send transport failure");
+            HandledFailureLog.Warning(logger, ex, "email.send", "transport_error", new DiagnosticContext(ProviderAlias: "gmail"));
             return new EmailSendResult(
                 EmailSendOutcome.Indeterminate,
                 null,

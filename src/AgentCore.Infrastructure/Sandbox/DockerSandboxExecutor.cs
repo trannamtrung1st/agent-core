@@ -1,3 +1,5 @@
+using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
@@ -10,7 +12,7 @@ public sealed class DockerSandboxExecutor(
     ISessionWorkspace workspace,
     IArtifactStore? artifacts = null,
     string dockerPath = "docker",
-    string image = SandboxLimits.Image) : ISandboxExecutor
+    string image = SandboxLimits.Image, ILogger<DockerSandboxExecutor>? logger = null) : ISandboxExecutor
 {
     public const string DockerNetworkMode = "none";
 
@@ -144,8 +146,9 @@ public sealed class DockerSandboxExecutor(
         {
             await TryDockerAsync(["kill", name], CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            HandledFailureLog.Warning(logger, ex, "sandbox.wait", "sandbox_wait_failed");
             // Fall through to inspect.
         }
 
@@ -160,8 +163,9 @@ public sealed class DockerSandboxExecutor(
                 return inspected;
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            HandledFailureLog.Warning(logger, ex, "sandbox.inspect", "sandbox_inspect_failed");
             // The attach-client status is not the container's exit code.
         }
 
@@ -180,8 +184,9 @@ public sealed class DockerSandboxExecutor(
         {
             await DockerAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            HandledFailureLog.Warning(logger, ex, "sandbox.cleanup", "sandbox_cleanup_failed");
             // Cleanup must not throw past the original result.
         }
     }

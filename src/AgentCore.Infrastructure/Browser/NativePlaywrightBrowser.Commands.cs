@@ -80,9 +80,9 @@ public sealed partial class NativePlaywrightBrowser
             await FenceActionAsync();
             throw new OperationCanceledException(cancellationToken);
         }
-        catch (OperationCanceledException) { await FenceActionAsync(); return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
-        catch (RegexMatchTimeoutException) { return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
-        catch (TimeoutException) { return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        catch (OperationCanceledException ex) { LogBrowserException(ex, metadata.Feature.ToString(), "timeout"); await FenceActionAsync(); return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        catch (RegexMatchTimeoutException ex) { LogBrowserException(ex, metadata.Feature.ToString(), "timeout"); return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
+        catch (TimeoutException ex) { LogBrowserException(ex, metadata.Feature.ToString(), "timeout"); return new("timeout", EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
         catch (PlaywrightException ex) { return new((await FailAsync(session, metadata.Feature.ToString(), "interaction", ex)).ErrorCode, EffectAttempted: effectAttempted, EffectConfirmedBySdk: effectConfirmed); }
         finally { await EndCallAsync(session, session.OperationCall); session.Gate.Release(); }
 

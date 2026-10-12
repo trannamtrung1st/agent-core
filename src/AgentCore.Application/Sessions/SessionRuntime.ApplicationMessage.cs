@@ -45,8 +45,9 @@ public sealed partial class SessionRuntime
         {
             result = await AdmitApplicationMessageAsync(input, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            LogHandledRuntimeFailure(ex, "app.message.send", "application_message_failed");
             result = ApplicationMessageMailboxResult.Failed(
                 ApplicationMessageAdmission.Error("stale", "Application message is no longer owned by this execution."),
                 "stale");

@@ -2,12 +2,41 @@ using System.Text.Json;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
+using AgentCore.Application.Testing;
 
 namespace AgentCore.Application.Tests;
 
 [Collection("telemetry-global")]
 public sealed class SafeExecutionTraceTests
 {
+    [Theory]
+    [InlineData("{\"error\":\"smtp_rejected\"}", "smtp_rejected", LogLevel.Warning)]
+    [InlineData("{\"outcome\":\"indeterminate\",\"error\":null}", "indeterminate", LogLevel.Warning)]
+    [InlineData("{\"success\":false}", "failed", LogLevel.Warning)]
+    [InlineData("{\"status\":503}", "http_error", LogLevel.Warning)]
+    [InlineData("{\"statusCode\":429}", "http_error", LogLevel.Warning)]
+    [InlineData("{\"status\":200}", "ok", LogLevel.Information)]
+    [InlineData("{\"statusCode\":\"private-body\"}", "ok", LogLevel.Information)]
+    [InlineData("{\"status\":\"queued\"}", "queued", LogLevel.Information)]
+    [InlineData("{\"status\":\"Running\"}", "Running", LogLevel.Information)]
+    [InlineData("{\"status\":\"Failed\"}", "Failed", LogLevel.Information)]
+    [InlineData("{\"error\":\"Failed\"}", "error.Failed", LogLevel.Warning)]
+    [InlineData("{\"error\":\"ok\"}", "error.ok", LogLevel.Warning)]
+    [InlineData("{\"error\":\"account_selection_required\"}", "error.account_selection_required", LogLevel.Warning)]
+    [InlineData("{\"outcome\":\"indeterminate\",\"error\":\"cancelled\"}", "indeterminate", LogLevel.Warning)]
+    [InlineData("{\"error\":\"password=private-secret\"}", "tool_failed", LogLevel.Warning)]
+    public void Tool_failures_are_visible_at_warning_without_logging_payloads(string json, string expected, LogLevel level)
+    {
+        var logs = new DiagnosticLogCapture<SafeExecutionTraceTests>();
+        var outcome = SafeExecutionTrace.NormalizeToolOutcome(json);
+        Assert.Equal(expected, outcome);
+        SafeExecutionTrace.RecordToolStep(logs, Guid.NewGuid(), Guid.NewGuid(), 1, ToolCatalog.EmailSend, 1, outcome, null);
+        var entry = Assert.Single(logs.Entries);
+        Assert.Equal(level, entry.Level);
+        Assert.DoesNotContain("private", entry.Message);
+    }
+
     [Theory]
     [InlineData("[]")]
     [InlineData("[1,2]")]

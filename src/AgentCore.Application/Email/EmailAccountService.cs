@@ -1,3 +1,5 @@
+using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
@@ -7,7 +9,7 @@ using AgentCore.Domain.Definitions;
 namespace AgentCore.Application.Email;
 
 public sealed class EmailAccountService(ICredentialStore credentials, IAgentCredentialBindingStore bindings,
-    IAgentInstanceStore instances, IEmailProviderFactory providers, IEmailStore store, IIdGenerator ids, TimeProvider time)
+    IAgentInstanceStore instances, IEmailProviderFactory providers, IEmailStore store, IIdGenerator ids, TimeProvider time, ILogger<EmailAccountService>? logger = null)
 {
     public DateTimeOffset UtcNow => time.GetUtcNow();
     public bool IsEnabled => providers.IsEnabled;
@@ -86,7 +88,12 @@ public sealed class EmailAccountService(ICredentialStore credentials, IAgentCred
         }
         EmailSendResult result;
         try { result = await Provider(account).SendDraftAsync(new(draftId, draft), ct); }
-        catch (Exception) { result = new(EmailSendOutcome.Indeterminate, null, "dispatch_unconfirmed", "Delivery could not be confirmed. Create a new draft only if an intentional resend is required."); }
+        catch (Exception ex)
+        {
+            HandledFailureLog.Warning(logger, ex, "email.send", "dispatch_unconfirmed",
+                new DiagnosticContext(SessionId: sessionId, AgentInstanceId: account.AgentInstanceId, AgentRunId: admission.AgentRunId, CredentialId: account.AccountId));
+            result = new(EmailSendOutcome.Indeterminate, null, "dispatch_unconfirmed", "Delivery could not be confirmed. Create a new draft only if an intentional resend is required.");
+        }
         // Cancellation after external acceptance must not discard a known durable receipt.
         await store.CompleteSendAsync(draftId, result, CancellationToken.None);
         return result;

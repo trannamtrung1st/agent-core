@@ -15,11 +15,39 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using AgentCore.Application.Testing;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure.Tests;
 
 public sealed class EmailAccountIntegrationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handled_send_exception_is_diagnosable_and_durable_uncertainty_never_dispatches_again(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite);
+        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Gmail("sender@example.test"), "private-secret");
+        var admission = await f.Bind(f.A, account, "mail");
+        var session = Guid.NewGuid();
+        var draft = await f.Email.CreateDraftAsync(session, admission, null, new(["to@example.test"], [], [], "Private subject", "Private body"), default);
+        var approval = Grant(EmailDraftNormalizer.ComputeSendActionHash(draft));
+        f.Factory.SendFailure = new IOException("private-secret Private body sender@example.test");
+        var result = await f.Email.SendAsync(session, admission, draft.DraftId, null, approval, default);
+        Assert.Equal(EmailSendOutcome.Indeterminate, result.Outcome);
+        var entry = Assert.Single(f.Logs.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Equal(session, entry.Properties["SessionId"]);
+        Assert.Equal("dispatch_unconfirmed", entry.Properties["ErrorCode"]);
+        Assert.Contains(nameof(IOException), entry.Exception!.ToString());
+        Assert.DoesNotContain("private-secret", entry.Exception.ToString());
+        Assert.DoesNotContain("Private body", entry.Exception.ToString());
+        f.Reopen();
+        Assert.Equal(result, await f.Email.SendAsync(session, admission, draft.DraftId, null, approval, default));
+        Assert.Equal(1, f.Factory.Dispatches);
+        Assert.Single(f.Logs.Entries);
+    }
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -228,6 +256,7 @@ public sealed class EmailAccountIntegrationTests
         public AgentInstance A = NewInstance(), B = NewInstance(); public IAgentInstanceStore Owners = null!;
         public ICredentialStore Store = null!; public IAgentCredentialBindingStore Bindings = null!;
         public CredentialService Credentials = null!; public IEmailStore EmailStore = null!;
+        public DiagnosticLogCapture<EmailAccountService> Logs = new();
         public EmailAccountService Email = null!; public CountingFactory Factory = null!; private bool sqlite;
         public static async Task<Fixture> Create(bool sqlite)
         {
@@ -250,7 +279,7 @@ public sealed class EmailAccountIntegrationTests
             }
             Credentials = new(Store, Bindings, protector, Owners, ids, TimeProvider.System);
             Factory ??= new(new AccountEmailProviderFactory(Store, Bindings, protector, Owners, new(), TimeProvider.System, true));
-            Email = new(Store, Bindings, Owners, Factory, EmailStore, ids, TimeProvider.System);
+            Email = new(Store, Bindings, Owners, Factory, EmailStore, ids, TimeProvider.System, Logs);
         }
         public void Reopen() => Configure();
         public async Task<ToolExecutionAdmission> Bind(AgentInstance owner, CredentialView c, string alias)
@@ -263,6 +292,7 @@ public sealed class EmailAccountIntegrationTests
     }
     private sealed class CountingFactory(IEmailProviderFactory inner) : IEmailProviderFactory
     {
+        public Exception? SendFailure;
         public int Dispatches; public EmailSearchRequest? LastSearchRequest; public bool IsEnabled => inner.IsEnabled;
         public bool IsSendEnabled { get; set; } = inner.IsSendEnabled;
         public IEmailProvider Create(EmailAccountContext account) => new CountingProvider(inner.Create(account), this);
@@ -275,6 +305,6 @@ public sealed class EmailAccountIntegrationTests
         public ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest r, CancellationToken ct = default) => inner.ReadAsync(r, ct);
         public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest r, CancellationToken ct = default) => inner.CreateDraftAsync(r, ct);
         public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string id, CancellationToken ct = default) => inner.GetDraftAsync(id, ct);
-        public ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest r, CancellationToken ct = default) { Interlocked.Increment(ref owner.Dispatches); return inner.SendDraftAsync(r, ct); }
+        public ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest r, CancellationToken ct = default) { Interlocked.Increment(ref owner.Dispatches); if (owner.SendFailure is { } failure) throw failure; return inner.SendDraftAsync(r, ct); }
     }
 }

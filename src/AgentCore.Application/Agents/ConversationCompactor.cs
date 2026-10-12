@@ -1,3 +1,5 @@
+using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
@@ -34,7 +36,7 @@ public sealed record CompactionRejected(string Reason) : CompactionOutcome;
 /// <summary>
 /// Builds a semantic summary candidate. The caller persists it; this service does not write history.
 /// </summary>
-public sealed class ConversationCompactor(IMemoryStore store)
+public sealed class ConversationCompactor(IMemoryStore store, ILogger? logger = null)
 {
     public const string Marker = "compaction-summary-v1";
 
@@ -113,8 +115,9 @@ public sealed class ConversationCompactor(IMemoryStore store)
         {
             return new CompactionRejected(CompactionRejection.Cancelled);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            HandledFailureLog.Warning(logger, ex, "compaction", "provider_failure");
             return new CompactionRejected(CompactionRejection.ProviderFailure);
         }
 

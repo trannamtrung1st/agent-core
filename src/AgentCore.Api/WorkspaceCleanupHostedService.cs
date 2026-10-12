@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Observability;
 
 namespace AgentCore.Api;
 
@@ -17,10 +18,10 @@ public sealed class WorkspaceCleanupHostedService(
                 await services.GetRequiredService<IAdminLifecycleDeletion>().RecoverWorkspaceCleanupAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Avoid physical paths/provider contents in logs; the durable receipts remain retryable.
-                logger.LogWarning("Deleted-instance workspace cleanup failed; it will be retried.");
+                HandledFailureLog.Warning(logger, ex, "workspace.cleanup", "workspace_cleanup_failed");
             }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }

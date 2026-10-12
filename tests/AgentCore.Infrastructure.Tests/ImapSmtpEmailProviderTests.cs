@@ -8,6 +8,9 @@ using AgentCore.Application.Ports;
 using AgentCore.Domain.Credentials;
 using AgentCore.Infrastructure.Email;
 using MailKit;
+using AgentCore.Application.Testing;
+using AgentCore.Application.Sessions;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -20,7 +23,8 @@ public sealed class ImapSmtpEmailProviderTests
     {
         await using var server = new FakeMailServer(smtp: true, dropAfterData: drop);
         var account = Context();
-        var provider = Provider(server, account);
+        var logs = new DiagnosticLogCapture<ImapSmtpEmailProvider>();
+        var provider = Provider(server, account, logger: logs);
         var draft = new EmailDraftSnapshot("test", ["to@example.test"], ["cc@example.test"], ["hidden@example.test"], "Hello", "Exact body", account.AccountId, "mail", account.Profile.EmailAddress);
         var sent = await provider.SendDraftAsync(new("test", draft));
         Assert.Equal(expected, sent.Outcome);
@@ -31,6 +35,33 @@ public sealed class ImapSmtpEmailProviderTests
         Assert.DoesNotContain("hidden@example.test", server.Message);
         Assert.DoesNotContain("Bcc:", server.Message);
         if (!drop) Assert.NotNull(sent.ProviderMessageId);
+        if (drop)
+        {
+            var failure = Assert.Single(logs.Entries);
+            Assert.Equal(LogLevel.Warning, failure.Level);
+            Assert.Equal("dispatch_unconfirmed", failure.Properties["ErrorCode"]);
+            Assert.Equal("email.send", failure.Properties["Operation"]);
+            Assert.NotNull(failure.Exception);
+            Assert.DoesNotContain("Exact body", failure.Exception.ToString());
+            Assert.DoesNotContain("hidden@example.test", failure.Exception.ToString());
+        }
+        else Assert.Empty(logs.Entries);
+    }
+
+    [Fact]
+    public async Task IMAP_TLS_failure_logs_cause_and_returns_the_same_diagnostic_reference()
+    {
+        await using var denied = new FakeMailServer(smtp: false);
+        var logs = new DiagnosticLogCapture<ImapSmtpEmailProvider>();
+        var failure = await Assert.ThrowsAsync<AgentCoreException>(() => Provider(denied, Context(), trust: false, logger: logs).SearchAsync(new("private-query", 5)).AsTask());
+        Assert.Equal("ValidationError", failure.Code);
+        var entry = Assert.Single(logs.Entries);
+        Assert.Equal(failure.DiagnosticId, entry.Properties["DiagnosticId"]);
+        Assert.Equal("mail_read_failed", entry.Properties["ErrorCode"]);
+        Assert.Contains("SslHandshakeException", entry.Exception!.ToString());
+        Assert.DoesNotContain("private-query", entry.Exception.ToString());
+        Assert.DoesNotContain("sender@example.test", entry.Exception.ToString());
+        Assert.DoesNotContain("fixture-password", entry.Exception.ToString());
     }
     [Fact]
     public async Task IMAP_search_opaque_identity_PEEK_read_and_UIDVALIDITY_fence()
@@ -93,8 +124,8 @@ public sealed class ImapSmtpEmailProviderTests
         Assert.Equal(0, resolutions); Assert.Empty(server.Message);
     }
     private static EmailAccountContext Context() => new(Guid.NewGuid(), Guid.NewGuid(), "mail", "Test", 1, Guid.NewGuid(), 1, EmailAccountProfile.Gmail("sender@example.test"));
-    private static ImapSmtpEmailProvider Provider(FakeMailServer server, EmailAccountContext account, bool trust = true) => new(account,
-        new() { SmtpEnabled = true, TimeoutSeconds = 3 }, new(new()), new(4), (_, _) => ValueTask.FromResult("fixture-password"))
+    private static ImapSmtpEmailProvider Provider(FakeMailServer server, EmailAccountContext account, bool trust = true, ILogger<ImapSmtpEmailProvider>? logger = null) => new(account,
+        new() { SmtpEnabled = true, TimeoutSeconds = 3 }, new(new()), new(4), (_, _) => ValueTask.FromResult("fixture-password"), logger)
     {
         SocketFactory = async ct => { var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp); await socket.ConnectAsync(server.Endpoint, ct); return socket; },
         ConfigureClient = client => { if (trust) client.ServerCertificateValidationCallback = (_, certificate, _, _) => certificate?.GetCertHashString() == server.Certificate.GetCertHashString(); }

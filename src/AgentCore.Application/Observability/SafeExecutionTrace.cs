@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgentCore.Application.Tools;
+using AgentCore.Domain.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Observability;
@@ -28,14 +29,33 @@ public static class SafeExecutionTrace
                 && error.ValueKind == JsonValueKind.String
                 && error.GetString() is { Length: > 0 } code)
             {
-                return Clip(code, MaxOutcomeLength);
+                if (code == "cancelled" && document.RootElement.TryGetProperty("outcome", out var uncertain)
+                    && uncertain.ValueKind == JsonValueKind.String && uncertain.GetString() == "indeterminate") return "indeterminate";
+                var safeCode = SafeOutcome(code);
+                // An error is still a failure when its code happens to name a successful
+                // lifecycle state. Resource inspection status remains informational below.
+                return !IsFailureOutcome(safeCode) && safeCode is not ("cancelled" or "Cancelled")
+                    ? "error." + safeCode : safeCode;
             }
 
+            if (document.RootElement.TryGetProperty("outcome", out var sendOutcome)
+                && sendOutcome.ValueKind == JsonValueKind.String
+                && sendOutcome.GetString() is "failed" or "indeterminate")
+                return sendOutcome.GetString()!;
+            if (document.RootElement.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False)
+                return "failed";
+            if (document.RootElement.TryGetProperty("statusCode", out var httpStatus)
+                && httpStatus.ValueKind == JsonValueKind.Number && httpStatus.TryGetInt32(out var statusCode) && statusCode >= 400)
+                return "http_error";
+
+            if (document.RootElement.TryGetProperty("status", out var numericStatus)
+                && numericStatus.ValueKind == JsonValueKind.Number && numericStatus.TryGetInt32(out var httpCode) && httpCode >= 400)
+                return "http_error";
             if (document.RootElement.TryGetProperty("status", out var status)
                 && status.ValueKind == JsonValueKind.String
                 && status.GetString() is { Length: > 0 } statusValue)
             {
-                return Clip(statusValue, MaxOutcomeLength);
+                return SafeOutcome(statusValue);
             }
         }
         catch (JsonException)
@@ -50,7 +70,11 @@ public static class SafeExecutionTrace
     {
         if (!ToolCatalog.IsBrowserTool(toolName))
         {
-            return ScheduleFailureDetail(resultJson);
+            var schedule = ScheduleFailureDetail(resultJson);
+            if (TryReadProperty(resultJson, "diagnosticId", out var reference)
+                && reference.ValueKind == JsonValueKind.String && Guid.TryParse(reference.GetString(), out var id) && id != Guid.Empty)
+                return string.IsNullOrEmpty(schedule) ? $"diagnosticId={id:D}" : $"{schedule};diagnosticId={id:D}";
+            return schedule;
         }
 
         if (!BrowserToolCatalog.TryGet(toolName, out var feature)) return string.Empty;
@@ -71,15 +95,15 @@ public static class SafeExecutionTrace
         string outcome,
         string? detail)
     {
-        var safeTool = Clip(toolName, MaxToolNameLength);
-        var safeOutcome = Clip(outcome, MaxOutcomeLength);
+        var safeTool = SafeToolName(toolName);
+        var safeOutcome = SafeOutcome(outcome);
         var safeDetail = Clip(SafeLogRedactor.Redact(detail ?? string.Empty), MaxDetailLength);
         var correlation = $"sessionId={sessionId:D};responseId={responseId:D};step={stepNumber}";
         var payload = string.IsNullOrEmpty(safeDetail)
             ? $"{correlation};tool={safeTool};outcome={safeOutcome}"
             : $"{correlation};tool={safeTool};outcome={safeOutcome};{safeDetail}";
         RuntimeTelemetry.RecordDiagnostic(ToolStepStage, durationMs, payload);
-        logger.LogInformation(
+        logger.Log(IsFailureOutcome(safeOutcome) ? LogLevel.Warning : LogLevel.Information,
             "Tool step {SessionId} {ResponseId} step {Step} tool {Tool} outcome {Outcome} durationMs {DurationMs} detail {Detail}",
             sessionId,
             responseId,
@@ -89,6 +113,16 @@ public static class SafeExecutionTrace
             Math.Round(durationMs, 1),
             string.IsNullOrEmpty(safeDetail) ? "-" : safeDetail);
     }
+
+    public static bool IsFailureOutcome(string outcome) => outcome is not
+        ("ok" or "sent" or "success" or "succeeded" or "completed" or "accepted" or "queued" or "pending" or "waiting" or "suspended" or "ready" or "cancelled"
+        or "Queued" or "Running" or "Completed" or "Failed" or "Cancelled" or "WaitingForApproval" or "WaitingToRetry" or "WaitingForSignal"
+        or "Pending" or "Claimed" or "Handled" or "DeliveryQueued" or "Delivered" or "Skipped" or "account_selection_required" or "alreadyExists");
+
+    public static string SafeToolName(string name) => ToolRegistry.TryGet(name, out _) ? Clip(name, MaxToolNameLength) : "unknown";
+
+    private static string SafeOutcome(string outcome) => FailureReference.IsSafeToken(outcome)
+        && outcome.Length <= MaxOutcomeLength ? outcome : "tool_failed";
 
     public static void RecordGenerationTerminal(
         ILogger logger,
@@ -231,6 +265,10 @@ public static class SafeExecutionTrace
         try
         {
             using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
             if (!document.RootElement.TryGetProperty(propertyName, out var found))
             {
                 return false;

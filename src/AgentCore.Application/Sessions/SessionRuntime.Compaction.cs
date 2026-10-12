@@ -136,7 +136,7 @@ public sealed partial class SessionRuntime
                     CompactionOutcome outcome;
                     try
                     {
-                        outcome = await new ConversationCompactor(_store).TryCompactAsync(
+                        outcome = await new ConversationCompactor(_store, _logger).TryCompactAsync(
                                 new CompactionCommand(
                                     sessionId,
                                     current.BaseSummary,
@@ -152,8 +152,9 @@ public sealed partial class SessionRuntime
                     {
                         outcome = new CompactionRejected(CompactionRejection.Cancelled);
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
+                        LogHandledRuntimeFailure(ex, "compaction", "compaction_failed");
                         RuntimeTelemetry.RecordDropped("compaction_rejected");
                         return;
                     }

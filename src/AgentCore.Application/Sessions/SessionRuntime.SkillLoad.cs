@@ -40,8 +40,9 @@ public sealed partial class SessionRuntime
         {
             result = await AdmitSkillLoadAsync(input, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            LogHandledRuntimeFailure(ex, "skills.load", "skill_load_failed");
             result = SkillLoadMailboxResult.Failed(
                 SkillLoadAdmission.Error("stale", "Skill load is no longer owned by this execution."),
                 "stale");

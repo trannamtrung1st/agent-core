@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AgentCore.Application.Observability;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -357,6 +358,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         }
         catch (Exception ex) when (IsTimeout(ex))
         {
+            HandledFailureLog.Warning(_logger, ex, "browser.navigate", "timeout");
             LogBrowserFailure("navigate", "interaction", "timeout");
             return Outcome(Result("timeout"));
         }
@@ -364,8 +366,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         {
             return Outcome(Result(ex.Code));
         }
-        catch (BrowserLaunchException)
+        catch (BrowserLaunchException ex)
         {
+            HandledFailureLog.Warning(_logger, ex, "browser.launch", "provider_unavailable");
             LogBrowserFailure("navigate", "launch", "browserDisconnected");
             return Unavailable();
         }
@@ -742,6 +745,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         catch (PlaywrightException ex) when (BrowserFailureClassifier.IsTransientCapture(ex.Message))
         {
             LogBrowserFailure(operation, "capture", BrowserFailureClassifier.Classify(ex.Message).Reason);
+            LogBrowserException(ex, operation, "capture_retry");
             try
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
@@ -778,6 +782,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         var decision = BrowserFailureClassifier.Classify(exception.Message);
         var reportedStage = decision.Reason is "pageClosed" or "contextClosed" ? "lifecycle" : stage;
         LogBrowserFailure(operation, reportedStage, decision.Reason);
+        HandledFailureLog.Warning(_logger, exception, "browser." + operation, decision.Code,
+            new DiagnosticContext(FailureReason: decision.Reason));
         if (session is not null
             && decision.Reason is "pageClosed" or "contextClosed"
             && PageIsClosed(session))
@@ -807,6 +813,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             operation,
             stage,
             reason);
+
+    private void LogBrowserException(Exception exception, string operation, string code) =>
+        HandledFailureLog.Warning(_logger, exception, "browser." + operation, code);
 
     private static BrowserResult Unavailable() => Result("provider_unavailable");
 

@@ -110,7 +110,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
             RecordRequest(request, callNumber, callStarted, 0);
             setupFailed = Fail(ProviderErrorCode.Cancelled, "Generation cancelled.");
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             RecordRequest(request, callNumber, callStarted, 0);
             setupFailed = totalCts.IsCancellationRequested
@@ -118,20 +118,21 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                 : Fail(ProviderErrorCode.Timeout,
                     $"Provider did not return response headers within {Math.Max(1, _options.Timeouts.SetupSeconds)}s.",
                     ProviderFailureReason.SetupTimeout);
+            setupFailed = LogFailure(request, ex, "llm.setup", setupFailed);
         }
         catch (InvalidContinuationException error)
         {
-            setupFailed = Fail(ProviderErrorCode.InvalidRequest, error.Message);
+            setupFailed = LogFailure(request, error, "llm.continuation", Fail(ProviderErrorCode.InvalidRequest, error.Message));
         }
         catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            setupFailed = Fail(ProviderErrorCode.InvalidRequest, "Invalid language model continuation state.");
+            setupFailed = LogFailure(request, error, "llm.continuation", Fail(ProviderErrorCode.InvalidRequest, "Invalid language model continuation state."));
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
             _breaker.RecordFailure();
             RecordRequest(request, callNumber, callStarted, 0);
-            setupFailed = Fail(ProviderErrorCode.Unavailable, "Language model transport failed.", ProviderFailureReason.TransportFailure);
+            setupFailed = LogFailure(request, ex, "llm.setup", Fail(ProviderErrorCode.Unavailable, "Language model transport failed.", ProviderFailureReason.TransportFailure));
         }
 
         if (setupFailed is not null || response is null)
@@ -195,7 +196,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                 {
                     streamFailed = Fail(ProviderErrorCode.Cancelled, "Generation cancelled.");
                 }
-                catch (SseStreamIdleTimeoutException)
+                catch (SseStreamIdleTimeoutException ex)
                 {
                     if (emittedText)
                     {
@@ -208,8 +209,9 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                             ? "Language model stream ended unexpectedly."
                             : "Language model stream idle timeout.",
                         ProviderFailureReason.StreamIdle);
+                    streamFailed = LogFailure(request, ex, "llm.stream", streamFailed);
                 }
-                catch (SseStreamTotalTimeoutException)
+                catch (SseStreamTotalTimeoutException ex)
                 {
                     if (emittedText)
                     {
@@ -219,11 +221,12 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                     streamFailed = Fail(
                         ProviderErrorCode.Timeout,
                         "Language model response timed out.", ProviderFailureReason.TotalTimeout);
+                    streamFailed = LogFailure(request, ex, "llm.stream", streamFailed);
                 }
-                catch (InvalidOperationException)
+                catch (InvalidOperationException ex)
                 {
                     _breaker.RecordFailure();
-                    streamFailed = Fail(ProviderErrorCode.Unavailable, "Language model stream exceeded the event size limit.", ProviderFailureReason.StreamLimit);
+                    streamFailed = LogFailure(request, ex, "llm.stream", Fail(ProviderErrorCode.Unavailable, "Language model stream exceeded the event size limit.", ProviderFailureReason.StreamLimit));
                 }
 
                 if (streamFailed is not null)
@@ -262,7 +265,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                 catch (Exception error) when (error is JsonException or KeyNotFoundException or InvalidOperationException)
                 {
                     _breaker.RecordFailure();
-                    parseFailed = Fail(ProviderErrorCode.Unavailable, "Language model stream was malformed.", ProviderFailureReason.StreamMalformed);
+                    parseFailed = LogFailure(request, error, "llm.stream", Fail(ProviderErrorCode.Unavailable, "Language model stream was malformed.", ProviderFailureReason.StreamMalformed));
                 }
 
                 if (parseFailed is not null)
@@ -328,7 +331,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                 string? continuationToken = null;
                 ModelFailed? continuationFailure = null;
                 try { continuationToken = EncodeContinuation(continuation); }
-                catch (JsonException) { continuationFailure = Fail(ProviderErrorCode.InvalidResponse, "Language model continuation exceeded the size limit.", ProviderFailureReason.StreamLimit); }
+                catch (JsonException ex) { continuationFailure = LogFailure(request, ex, "llm.continuation", Fail(ProviderErrorCode.InvalidResponse, "Language model continuation exceeded the size limit.", ProviderFailureReason.StreamLimit)); }
                 if (continuationFailure is not null) { yield return continuationFailure; yield break; }
                 var firstDraft = true;
                 foreach (var draft in drafts.OrderBy(pair => pair.Key).Select(pair => pair.Value))
@@ -837,6 +840,16 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
 
     private static ITimer ScheduleCancel(TimeProvider time, CancellationTokenSource cts, TimeSpan delay) =>
         time.CreateTimer(static state => ((CancellationTokenSource)state!).Cancel(), cts, delay, Timeout.InfiniteTimeSpan);
+
+    private ModelFailed LogFailure(ModelRequest request, Exception exception, string operation, ModelFailed failure)
+    {
+        // Without an adapter logger the runtime must still mint/log its own failure reference.
+        if (_logger is null || !_logger.IsEnabled(LogLevel.Warning)) return failure;
+        var id = HandledFailureLog.Warning(_logger, exception, operation, failure.Failure.Code.ToString(),
+            new DiagnosticContext(ResponseId: request.ResponseId, ErrorCategory: "provider",
+                FailureReason: failure.Failure.FailureReason, ProviderResponseChannel: failure.Failure.ResponseChannel));
+        return failure with { DiagnosticId = id };
+    }
 
     private static ModelFailed Fail(
         ProviderErrorCode code,

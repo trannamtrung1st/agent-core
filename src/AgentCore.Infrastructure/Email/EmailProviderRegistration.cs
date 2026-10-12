@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -20,7 +21,7 @@ internal static class EmailProviderRegistration
             p.GetRequiredService<ICredentialStore>(), p.GetRequiredService<IAgentCredentialBindingStore>(),
             p.GetRequiredService<ICredentialProtector>(), p.GetRequiredService<IAgentInstanceStore>(),
             p.GetRequiredService<EmailTransportOptions>(), p.GetRequiredService<TimeProvider>(),
-            string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)));
+            string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase), p.GetService<ILoggerFactory>()));
         services.TryAddSingleton<AgentCore.Application.Email.EmailAccountService>();
     }
 }

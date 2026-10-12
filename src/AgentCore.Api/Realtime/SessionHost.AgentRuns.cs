@@ -53,7 +53,7 @@ public sealed partial class SessionHost
                     if (!_live.TryGetValue(sessionId, out live))
                     {
                         if (_live.Count >= Math.Max(1, _options.MaxActiveSessions)) return false;
-                        live = new Live(_factory.Create(snapshot, this));
+                        live = new Live(_factory.Create(snapshot, this), _logger);
                         _live[sessionId] = live;
                     }
                 }

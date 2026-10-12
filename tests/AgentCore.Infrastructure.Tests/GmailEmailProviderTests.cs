@@ -7,6 +7,8 @@ using AgentCore.Application.Sessions;
 using AgentCore.Infrastructure.Email;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
+using AgentCore.Application.Testing;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -119,7 +121,8 @@ public sealed class GmailEmailProviderTests
     public async Task Send_cancellation_after_dispatch_is_indeterminate()
     {
         var handler = new GmailScriptedHandler { HangSend = true };
-        var provider = CreateProvider(handler);
+        var logs = new DiagnosticLogCapture<GmailEmailProvider>();
+        var provider = CreateProvider(handler, logs);
         using var cts = new CancellationTokenSource();
         var approved = HarnessApprovedDraft();
         var sendTask = provider.SendDraftAsync(new EmailSendDraftRequest("draft-1", approved), cts.Token).AsTask();
@@ -129,6 +132,10 @@ public sealed class GmailEmailProviderTests
         Assert.Equal(EmailSendOutcome.Indeterminate, result.Outcome);
         Assert.Equal("cancelled", result.ErrorCode);
         Assert.Equal("/gmail/v1/users/me/drafts/send", handler.LastSendPath);
+        var failure = Assert.Single(logs.Entries);
+        Assert.Equal("dispatch_unconfirmed", failure.Properties["ErrorCode"]);
+        Assert.NotNull(failure.Exception);
+        Assert.DoesNotContain("Exact body", failure.Exception.ToString());
     }
 
     [Fact]
@@ -143,14 +150,21 @@ public sealed class GmailEmailProviderTests
         Assert.Null(handler.LastSendPath);
     }
 
-    [Fact]
-    public async Task Send_4xx_is_definite_failure()
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, EmailSendOutcome.Failed)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, EmailSendOutcome.Indeterminate)]
+    public async Task Send_http_failure_logs_status_and_preserves_dispatch_outcome(HttpStatusCode status, EmailSendOutcome expected)
     {
-        var handler = new GmailScriptedHandler { SendStatus = HttpStatusCode.BadRequest };
-        var provider = CreateProvider(handler);
+        var handler = new GmailScriptedHandler { SendStatus = status };
+        var logs = new DiagnosticLogCapture<GmailEmailProvider>();
+        var provider = CreateProvider(handler, logs);
         var result = await provider.SendDraftAsync(new EmailSendDraftRequest("draft-1", HarnessApprovedDraft()));
-        Assert.Equal(EmailSendOutcome.Failed, result.Outcome);
+        Assert.Equal(expected, result.Outcome);
         Assert.Equal("/gmail/v1/users/me/drafts/send", handler.LastSendPath);
+        var failure = Assert.Single(logs.Entries);
+        Assert.Equal(LogLevel.Warning, failure.Level);
+        Assert.Equal((int)status, failure.Properties["StatusCode"]);
+        Assert.DoesNotContain("Exact body", failure.Message);
     }
 
     [Fact]
@@ -173,7 +187,7 @@ public sealed class GmailEmailProviderTests
             "Exact subject",
             "Exact body");
 
-    private static GmailEmailProvider CreateProvider(GmailScriptedHandler handler)
+    private static GmailEmailProvider CreateProvider(GmailScriptedHandler handler, ILogger<GmailEmailProvider>? logger = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -186,7 +200,7 @@ public sealed class GmailEmailProviderTests
         return new GmailEmailProvider(
             configuration,
             new StubHttpClientFactory(handler),
-            NullLogger<GmailEmailProvider>.Instance);
+            logger ?? NullLogger<GmailEmailProvider>.Instance);
     }
 
     private sealed class StubHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory

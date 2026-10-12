@@ -1,4 +1,6 @@
 using System.Net.Sockets;
+using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
@@ -14,7 +16,7 @@ namespace AgentCore.Infrastructure.Email;
 
 public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTransportOptions options,
     MailTransportPolicy policy, SemaphoreSlim connections,
-    Func<EmailAccountContext, CancellationToken, ValueTask<string>> secret) : IEmailProvider
+    Func<EmailAccountContext, CancellationToken, ValueTask<string>> secret, ILogger<ImapSmtpEmailProvider>? logger = null) : IEmailProvider
 {
     internal Func<CancellationToken, ValueTask<Socket>>? SocketFactory { get; init; }
     internal Action<MailService>? ConfigureClient { get; init; }
@@ -57,9 +59,10 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
     public async ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest request, CancellationToken cancellationToken = default)
     {
         using var deadline = Deadline(cancellationToken); var ct = deadline.Token;
-        await connections.WaitAsync(ct);
+        var acquired = false;
         try
         {
+            await connections.WaitAsync(ct); acquired = true;
             using var client = new ImapClient(); await AuthenticateAsync(client, false, ct);
             var inbox = client.Inbox; await inbox.OpenAsync(FolderAccess.ReadOnly, ct);
             if (inbox.Count == 0) return new([], false);
@@ -94,8 +97,12 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (AgentCoreException) { throw; }
-        catch (Exception) { throw AgentCoreErrors.Validation("mail_read_failed: Mailbox TLS/authentication or bounded search failed."); }
-        finally { connections.Release(); }
+        catch (Exception ex)
+        {
+            var id = LogFailure(ex, "email.search", "mail_read_failed");
+            throw new AgentCoreException("ValidationError", "mail_read_failed: Mailbox TLS/authentication or bounded search failed.", 400) { DiagnosticId = id };
+        }
+        finally { if (acquired) connections.Release(); }
     }
     private string Reference(uint validity, uint uid) => $"imap-{account.AccountId:N}:{validity}:{uid}";
     public async ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest request, CancellationToken cancellationToken = default)
@@ -104,9 +111,10 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
         if (parts.Length != 3 || parts[0] != $"imap-{account.AccountId:N}" || !uint.TryParse(parts[1], out var validity)
             || !uint.TryParse(parts[2], out var uid) || uid == 0) throw AgentCoreErrors.NotFound("Message reference is not in this account.");
         using var deadline = Deadline(cancellationToken); var ct = deadline.Token;
-        await connections.WaitAsync(ct);
+        var acquired = false;
         try
         {
+            await connections.WaitAsync(ct); acquired = true;
             using var client = new ImapClient(); await AuthenticateAsync(client, false, ct);
             var inbox = client.Inbox; await inbox.OpenAsync(FolderAccess.ReadOnly, ct);
             if (inbox.UidValidity != validity) throw AgentCoreErrors.NotFound("Mailbox identity changed. Search again for a fresh message reference.");
@@ -121,8 +129,12 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (AgentCoreException) { throw; }
-        catch (Exception) { throw AgentCoreErrors.Validation("mail_read_failed: Message could not be safely read within mail limits."); }
-        finally { connections.Release(); }
+        catch (Exception ex)
+        {
+            var id = LogFailure(ex, "email.read", "mail_read_failed");
+            throw new AgentCoreException("ValidationError", "mail_read_failed: Message could not be safely read within mail limits.", 400) { DiagnosticId = id };
+        }
+        finally { if (acquired) connections.Release(); }
     }
     public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException("Core owns drafts.");
     public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default) => throw new NotSupportedException("Core owns drafts.");
@@ -152,13 +164,23 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
             await client.SendAsync(message, sender, recipients, ct);
             return new(EmailSendOutcome.Sent, message.MessageId, null, null);
         }
-        catch (SmtpCommandException) { return new(EmailSendOutcome.Failed, null, "smtp_rejected", "SMTP server rejected this dispatch. Create a new approved draft for an intentional retry."); }
-        catch (Exception)
+        catch (SmtpCommandException ex)
         {
+            LogFailure(ex, "email.send", "smtp_rejected", ex.StatusCode.ToString());
+            return new(EmailSendOutcome.Failed, null, "smtp_rejected", "SMTP server rejected this dispatch. Create a new approved draft for an intentional retry.");
+        }
+        catch (Exception ex)
+        {
+            if (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested || attempted)
+                LogFailure(ex, "email.send", attempted ? "dispatch_unconfirmed" : "mail_authentication_failed");
             return attempted ? new(EmailSendOutcome.Indeterminate, null, "dispatch_unconfirmed", "Delivery could not be confirmed. The message may have been sent; it will not be retried automatically.")
                 : new(EmailSendOutcome.Failed, null, "mail_authentication_failed", "Mail authorization, TLS, connection or authentication failed before dispatch.");
         }
         finally { if (acquired) connections.Release(); }
     }
+    private Guid LogFailure(Exception ex, string operation, string code, string? reason = null) =>
+        HandledFailureLog.Warning(logger, ex, operation, code,
+            new DiagnosticContext(AgentInstanceId: account.AgentInstanceId, ProviderAlias: "imap-smtp", FailureReason: reason, CredentialId: account.AccountId));
+
     private static string Bound(string value, int limit) => value.Length <= limit ? value : value[..limit];
 }

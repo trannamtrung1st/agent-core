@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Domain.Conversation;
@@ -40,7 +41,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
     AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null)
+    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -172,6 +173,8 @@ public sealed partial class SessionToolExecutor(
         TriggerCommandContext? triggerCommand = null,
         ToolExecutionAdmission? admission = null)
     {
+        using var scope = logger?.BeginScope("Tool={Tool} SessionId={SessionId} AgentInstanceId={AgentInstanceId} AgentRunId={AgentRunId}",
+            SafeExecutionTrace.SafeToolName(call.Name), sessionId, admission?.AgentInstanceId, admission?.AgentRunId);
         var result = await ExecuteCoreAsync(definition, sessionId, call, remainingOutputBytes,
             cancellationToken, approvalGrant, triggerCommand, admission).ConfigureAwait(false);
         // Discovery failures from admission/parsing must respect the budget too.
@@ -534,9 +537,9 @@ public sealed partial class SessionToolExecutor(
         { return FitResult(remainingOutputBytes, Error("invalid", "Consolidation content is malformed or exceeds its bounds.")); }
         catch (AgentCoreException ex)
         {
-            return FitResult(remainingOutputBytes, ex.DiagnosticId is { } diagnosticId
-                ? JsonSerializer.Serialize(new { error = ex.Code, message = ex.Message, diagnosticId })
-                : Error(ex.Code, ex.Message));
+            var failureId = ex.DiagnosticId ?? HandledFailureLog.Warning(logger, ex, call.Name, ex.Code,
+                new DiagnosticContext(SessionId: sessionId, AgentInstanceId: admission?.AgentInstanceId, AgentRunId: admission?.AgentRunId));
+            return FitResult(remainingOutputBytes, JsonSerializer.Serialize(new { error = ex.Code, message = ex.Message, diagnosticId = failureId }));
         }
     }
 

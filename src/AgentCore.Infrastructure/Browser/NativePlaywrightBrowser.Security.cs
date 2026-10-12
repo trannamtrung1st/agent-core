@@ -112,13 +112,14 @@ public sealed partial class NativePlaywrightBrowser
         }
         catch (BrowserTargetException ex) { return Outcome(Result(ex.Code)); }
         catch (BrowserTargetDeniedException) { return Outcome(Result("target_denied")); }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             if (active is { IsCompleted: false }) await FencePageAsync(session, sessionId);
             if (ct.IsCancellationRequested) throw new OperationCanceledException(ct);
+            LogBrowserException(ex, "credential", "timeout");
             return Outcome(Result("timeout"));
         }
-        catch (PlaywrightException ex) { return Outcome(Result(BrowserFailureClassifier.Classify(ex.Message).Code)); }
+        catch (PlaywrightException ex) { return Outcome(await FailAsync(session, "credential", "interaction", ex)); }
         finally { session.Gate.Release(); }
     }
 

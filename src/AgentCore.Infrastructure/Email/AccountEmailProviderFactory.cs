@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
@@ -8,7 +10,7 @@ namespace AgentCore.Infrastructure.Email;
 
 public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IAgentCredentialBindingStore bindings,
     ICredentialProtector protector, IAgentInstanceStore instances, EmailTransportOptions options, TimeProvider time,
-    bool synthetic) : IEmailProviderFactory
+    bool synthetic, ILoggerFactory? loggerFactory = null) : IEmailProviderFactory
 {
     private readonly ConcurrentDictionary<Guid, SyntheticEmailProvider> _synthetic = new();
     private readonly SemaphoreSlim _connections = new(4);
@@ -17,7 +19,7 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
     public bool IsSendEnabled => options.Enabled && (synthetic || options.SmtpEnabled);
     public IEmailProvider Create(EmailAccountContext account) => synthetic
         ? new ScopedSyntheticEmailProvider(account, _synthetic.GetOrAdd(account.AccountId, _ => new()), RecheckAsync)
-        : new ImapSmtpEmailProvider(account, options, _policy, _connections, ResolveSecretAsync);
+        : new ImapSmtpEmailProvider(account, options, _policy, _connections, ResolveSecretAsync, loggerFactory?.CreateLogger<ImapSmtpEmailProvider>());
 
     private async ValueTask RecheckAsync(EmailAccountContext account, CancellationToken ct)
     {
@@ -55,7 +57,13 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
         });
         try { await provider.TestAsync(protocol == "smtp", ct); return new(protocol, "connected", time.GetUtcNow(), null); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception) { return new(protocol, "failed", time.GetUtcNow(), "TLS/authentication or endpoint validation failed. Check the account and operator allowlist, then retry."); }
+        catch (Exception ex)
+        {
+            HandledFailureLog.Warning(loggerFactory?.CreateLogger<AccountEmailProviderFactory>(), ex,
+                protocol == "smtp" ? "email.test.smtp" : "email.test.imap", "mail_connection_failed",
+                new DiagnosticContext(ProviderAlias: "imap-smtp", CredentialId: accountId));
+            return new(protocol, "failed", time.GetUtcNow(), "TLS/authentication or endpoint validation failed. Check the account and operator allowlist, then retry.");
+        }
     }
 }
 internal sealed class ScopedSyntheticEmailProvider(EmailAccountContext account, SyntheticEmailProvider inner,

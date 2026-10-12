@@ -948,9 +948,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         catch (OperationCanceledException)
         {
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            _logger.LogWarning("Browser session release failed.");
+            LogHandledRuntimeFailure(ex, "browser.release", "browser_release_failed");
         }
     }
 
@@ -2066,8 +2066,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     return;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    LogHandledRuntimeFailure(ex, "completion.evaluate", "completion_evaluation_failed");
                     decision = new ContinueSession("Completion evaluation failed.");
                 }
 
@@ -2492,8 +2493,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             CountsTowardSilentCap: false);
                     }
                 }
-                catch (Exception) when (trigger.Kind != TriggerKind.UserTurn)
+                catch (Exception ex) when (trigger.Kind != TriggerKind.UserTurn)
                 {
+                    LogHandledRuntimeFailure(ex, "initiative.evaluate", "initiative_evaluation_failed");
                     decision = new StaySilent(
                         "Initiative evaluation failed.",
                         CountsTowardSilentCap: false);
@@ -2666,6 +2668,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         var started = Stopwatch.GetTimestamp();
         using var activity = RuntimeTelemetry.Activity.StartActivity("model");
+        using var modelScope = _logger.BeginScope(
+            "SessionId={SessionId} ResponseId={ResponseId} CorrelationId={CorrelationId} AgentInstanceId={AgentInstanceId} AgentRunId={AgentRunId} ProviderAlias={ProviderAlias}",
+            SessionId, request.ResponseId, cause.CorrelationId, _snapshot.AgentInstanceId, _boundAgentRun?.AgentRunId,
+            FailureReference.IsSafeToken(_snapshot.ModelSelection?.ProviderAlias) ? _snapshot.ModelSelection?.ProviderAlias : null);
         var checkpoint = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.Checkpoint : null;
         AgentRunToolCallCheckpoint.EnsureCurrentBrowserContract(checkpoint);
         var restored = AgentRunToolCallCheckpoint.TryRead(checkpoint, out var restoredMessages);
@@ -3298,6 +3304,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         """{"error":"invalid","message":"Tool execution failed."}""");
                     var refusedBlocked = false;
                     var toolStarted = Stopwatch.GetTimestamp();
+                    using var toolScope = _logger.BeginScope(
+                        "Tool={Tool} SessionId={SessionId} ResponseId={ResponseId} CorrelationId={CorrelationId} AgentInstanceId={AgentInstanceId} AgentRunId={AgentRunId}",
+                        SafeExecutionTrace.SafeToolName(call.Name), SessionId, request.ResponseId, cause.CorrelationId, _snapshot.AgentInstanceId, _boundAgentRun?.AgentRunId);
+                    using var toolActivity = RuntimeTelemetry.Activity.StartActivity("tool");
                     ToolApprovalGrant? approvalGrant = null;
                     var effectFenced = false;
                     string? effectHash = null;
@@ -3677,7 +3687,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             }
                         }
                     }
-                    catch (OperationCanceledException)
+                    catch (OperationCanceledException ex)
                     {
                         RuntimeTelemetry.Record("tools", RuntimeTelemetry.ElapsedMs(toolStarted), call.Name);
                         RuntimeTelemetry.RecordDropped("tools");
@@ -3696,13 +3706,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 CancellationToken.None)
                             .ConfigureAwait(false);
                         var toolTimedOut = overallCts.IsCancellationRequested;
+                        var toolDiagnosticId = _diagnostics.NewId();
+                        HandledFailureLog.Warning(_logger, ex, call.Name, toolTimedOut ? "runDeadline" : "toolTimeout",
+                            new DiagnosticContext(CorrelationId: cause.CorrelationId, SessionId: SessionId, ResponseId: request.ResponseId,
+                                AgentInstanceId: _snapshot.AgentInstanceId, AgentRunId: _boundAgentRun?.AgentRunId), toolDiagnosticId);
                         await MailboxModelAsync(
                                 cause,
                                 request.ResponseId,
                                 new ModelFailed(new ProviderFailure(
                                     ProviderErrorCode.Timeout,
                                     toolTimedOut ? "Run deadline reached." : "Tool execution timed out.",
-                                    FailureReason: toolTimedOut ? "runDeadline" : "toolTimeout")),
+                                    FailureReason: toolTimedOut ? "runDeadline" : "toolTimeout"), toolDiagnosticId),
                                 CancellationToken.None)
                             .ConfigureAwait(false);
                         return;
@@ -4755,6 +4769,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 FailureReason: failureReason,
                 ProviderResponseChannel: providerResponseChannel));
 
+    private void LogHandledRuntimeFailure(Exception exception, string operation, string code)
+    {
+        if (exception is OperationCanceledException) return;
+        HandledFailureLog.Warning(_logger, exception, operation, code,
+            new DiagnosticContext(SessionId: SessionId, AgentInstanceId: _snapshot.AgentInstanceId), _diagnostics.NewId());
+    }
+
     private static Guid? CorrelationOrNull(EventContext context) =>
         context.CorrelationId == Guid.Empty ? null : context.CorrelationId;
 
@@ -5772,8 +5793,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogHandledRuntimeFailure(ex, "speech.start", "recognition_start_failed");
                 await FailVoiceAsync(context, cancellationToken).ConfigureAwait(false);
                 return;
             }
