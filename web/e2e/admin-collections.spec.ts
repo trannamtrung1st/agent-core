@@ -140,9 +140,9 @@ test("Instance navigation ignores a delayed response for the previously opened i
   try {
     await page.goto(`/admin/instances/${ids[0]}`);
     await intercepted;
-    await page.getByRole("button", { name: /Back to inventory/ }).click();
+    await page.getByRole("link", { name: /Back to inventory/ }).click();
     await page.getByLabel("Search instances").fill(`${prefix}-Beta`);
-    await page.getByRole("button", { name: `${prefix}-Beta · examiner`, exact: true }).click();
+    await page.getByRole("link", { name: `${prefix}-Beta · examiner`, exact: true }).click();
     await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue(`${prefix}-Beta`);
     const oldResponse = page.waitForResponse(response => response.url().endsWith(`/instances/${ids[0]}/effective-config`));
     release();
@@ -291,7 +291,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await expect(details.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0);
   expect(await (await page.request.get("/api/v2/admin/definition-drafts", { headers })).json()).toEqual(draftsBefore);
   await page.getByRole("dialog", { name: "Version details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
-  await page.getByRole("button", { name: /Back to inventory/ }).click();
+  await page.getByRole("link", { name: /Back to inventory/ }).click();
   const definitionId = `polish-version-${Date.now()}`;
   await page.getByRole("button", { name: "New definition", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New definition", exact: true });
@@ -334,7 +334,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await expect.poll(() => goal.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
   await page.getByRole("dialog", { name: "Version details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.getByRole("button", { name: /Back to inventory/ }).click();
+  await page.getByRole("link", { name: /Back to inventory/ }).click();
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole("button", { name: "New instance", exact: true }).click();
   const instanceDialog = page.getByRole("dialog", { name: "New instance", exact: true });
@@ -365,7 +365,7 @@ test("Collection navigation and version drawer preserve context and keyboard foc
   await page.goto("/admin");
   const definitions = page.getByRole("region", { name: "Definitions", exact: true });
   await definitions.getByLabel("Search definitions").fill("examiner");
-  const row = definitions.getByRole("button", { name: "Examiner · examiner", exact: true });
+  const row = definitions.getByRole("link", { name: "Examiner · examiner", exact: true });
   const definitionRow = row.locator("xpath=ancestor::tr");
   await expect(definitions.getByRole("columnheader", { name: "Definition ID", exact: true })).toBeVisible();
   await expect(definitionRow.getByRole("cell", { name: "examiner", exact: true })).toBeVisible();
@@ -408,7 +408,7 @@ test("Collection navigation and version drawer preserve context and keyboard foc
   await expect(page.getByRole("region", { name: "Events", exact: true })).toBeVisible();
   await page.goto("/admin/instances");
   await page.locator(".admin-collection-name").first().click();
-  await page.getByRole("button", { name: /Back to inventory/ }).click();
+  await page.getByRole("link", { name: /Back to inventory/ }).click();
   await expect(page).toHaveURL(/\/admin\/instances$/);
   await expect(page.getByRole("tab", { name: "Instances", exact: true })).toHaveAttribute("aria-selected", "true");
 });

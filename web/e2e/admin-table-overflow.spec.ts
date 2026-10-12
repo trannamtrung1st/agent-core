@@ -43,7 +43,7 @@ test("collection links wrap without overlapping adjacent cells at desktop and mo
     await route.fulfill({ response, json: data });
   });
   await page.goto(`/admin/instances/${instanceId}/automation`);
-  const link = page.getByRole("button", { name: `View last run: ${name}`, exact: true });
+  const link = page.getByRole("link", { name: `View last run: ${name}`, exact: true });
   await expect(link).toHaveText("Completed · Needs attention");
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -89,7 +89,7 @@ test("Skill and event-source action buttons stay together across table widths", 
       await page.setViewportSize({ width, height: 900 });
       await expect.poll(() => cell.evaluate(element => {
         const bounds = element.getBoundingClientRect();
-        const buttons = [...element.querySelectorAll("button")].map(button => button.getBoundingClientRect());
+        const buttons = [...element.querySelectorAll("button, a.ant-btn")].map(button => button.getBoundingClientRect());
         const center = buttons[0]?.y + buttons[0]?.height / 2;
         return buttons.length > 1 && buttons.every(rect => Math.abs(rect.y + rect.height / 2 - center) < 1 && rect.left >= bounds.left && rect.right <= bounds.right);
       })).toBe(true);

@@ -73,10 +73,10 @@ async function reopenExaminerDraftByMarker(page: Page, marker: string) {
 
 /** P7G §8 steps 3–11: fork, resource, capability, memory policy, publish gate, managed instance. */
 export async function publishExaminerP7gFirstPublication(page: Page) {
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await page.getByRole("textbox", { name: "Search definitions" }).fill("examiner");
-  await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: /examiner/i }).first().click();
+  await page.locator('section[aria-label="Definitions"]').getByRole("link", { name: /examiner/i }).first().click();
 
   const forkResponsePromise = page.waitForResponse(
     (response) =>
@@ -168,10 +168,10 @@ export async function startSyntheticChat(page: Page) {
 }
 
 export async function publishExaminerDraftAndCreateManagedInstance(page: Page) {
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await page.getByRole("textbox", { name: "Search definitions" }).fill("examiner");
-  await page.locator('section[aria-label="Definitions"]').getByRole("button", { name: /examiner/i }).first().click();
+  await page.locator('section[aria-label="Definitions"]').getByRole("link", { name: /examiner/i }).first().click();
 
   const draftEditor = await forkBuiltInV1Draft(page);
   const marker = `p7d-managed-${Date.now()}`;

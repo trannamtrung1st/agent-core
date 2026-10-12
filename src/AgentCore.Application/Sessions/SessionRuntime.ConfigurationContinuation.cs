@@ -20,7 +20,7 @@ public sealed partial class SessionRuntime
         var latest = (await _agentRuns.ListPageAsync(RunOwner, SessionId, null, 1, ct).ConfigureAwait(false)).Items.FirstOrDefault();
         var task = latest is null ? null : ConfigurationPendingTask.ReadSafe(latest);
         var email = latest is null || _tools.EmailStore is null ? null : await _tools.EmailStore.GetSelectionAsync(latest.AgentRunId, ct);
-        var emailContinuation = latest is not null && email is { Status: "allowed", InstanceRevision: { } } && email.ExpiresAtUtc > _time.GetUtcNow()
+        var emailContinuation = latest is not null && email is { Status: "allowed", InstanceRevision: { }, SelectedAccountId: not null, SelectedAccountRef: not null } && email.ExpiresAtUtc > _time.GetUtcNow()
             && EmailSelectionSafety.CanContinue(latest, email);
         if (emailContinuation)
         {
@@ -34,6 +34,7 @@ public sealed partial class SessionRuntime
         var lastSource = entries.Max(e => e.Sequence);
         if (_snapshot.Entries.Any(e => e.Role == ConversationRole.User && e.Sequence > lastSource)) return false;
         var (projection, resolved) = await ResolveNewRunAsync(ct).ConfigureAwait(false);
+        if (emailContinuation && !resolved.Configuration.CredentialBindings.Any(b => b.CredentialId == email!.SelectedAccountId && b.Reference == email.SelectedAccountRef)) return false;
         if (resolved.Configuration.InstanceRevision != task.InstanceRevision
             || !emailContinuation && (resolved.Configuration.Definition.SelfManagement is not { } policy || !ManagementTools.Enabled(policy))
             || emailContinuation && !AgentCore.Application.Agents.RolePermissions.AllowsTool(resolved.Configuration.Definition, ToolCatalog.EmailRequestAccount)
@@ -41,7 +42,7 @@ public sealed partial class SessionRuntime
             || !_tools.ConfigurationGate.IsConfigured(task.Target)) return false;
         var run = AgentRunAdmissionFactory.ForConfigurationContinuation(_ids.NewId(), _ids.NewId(), _ids.NewId(), projection,
             latest, task, _time.GetUtcNow(), resolved.Skills,
-            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, true), resolved.Configuration, emailContinuation);
+            ExecutionBudgetResolver.Resolve(resolved.Configuration.Definition, resolved.InstanceBudgets, true), resolved.Configuration, emailContinuation, emailContinuation ? email : null);
         _agentRunAdmissionPending = true;
         RequestPersist(_snapshot, admittedRun: run, onAdmitted: admitted => run = admitted, then: async token =>
         {

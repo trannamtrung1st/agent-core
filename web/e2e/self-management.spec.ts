@@ -11,7 +11,7 @@ async function send(page: Page, message: string) {
 test('Admin enable, bounded save, exact rejection and approval, next Run readback, freeze and Admin unfreeze', async({page})=>{
   test.setTimeout(120000);
   const name = 'Self management UAT';
-  await page.goto('/');await page.getByRole('button',{name:'Open Admin'}).click();
+  await page.goto('/');await page.getByRole('link',{name:'Open Admin'}).click();
   await page.getByRole('tab',{name:'Instances',exact:true}).click();await page.getByRole('button',{name:'New instance',exact:true}).click();
   await select(page,'Definition','General Assistant · general-assistant',true);
   await select(page,'Published version','v23 · Built-in · Published',true);
@@ -29,7 +29,7 @@ test('Admin enable, bounded save, exact rejection and approval, next Run readbac
   await panel.getByRole('button',{name:'Customize automatic changes'}).click();
   await panel.getByRole('checkbox',{name:'Conversation preferences',exact:true}).check();
   await panel.getByRole('button',{name:'Save self-management'}).click();await expect(panel).toContainText('policy revision 2');
-  await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();await select(page,'Identity',name,true);
+  await page.locator('.admin-header').getByRole('link',{name:/Chat$/}).first().click();await select(page,'Identity',name,true);
   await send(page,'Always answer briefly.');await expect(page.getByText('Saved for my next Run. The current Run remains unchanged.',{exact:true}).last()).toBeVisible();
   const chat=page.url();
   const memory = () => page.evaluate(async instanceId => {
@@ -87,7 +87,7 @@ test('approval continues a diagnosed task automatically in exactly one fresh Run
     const saved=await fetch(url,{method:'PATCH',headers,body:JSON.stringify({expectedInstanceRevision:state.instanceRevision,set:{selected:state.effective.selected.filter((name:string)=>name!=='workspace.list')},clear:[]})});
     if(!saved.ok)throw new Error('Narrow setup failed');
   },id);
-  await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();await select(page,'Identity','Continuation UAT',true);
+  await page.locator('.admin-header').getByRole('link',{name:/Chat$/}).first().click();await select(page,'Identity','Continuation UAT',true);
   await send(page,'List my workspace after enabling workspace listing.');
   const approval=page.getByRole('dialog',{name:'Apply configuration to this Instance?',exact:true});
   await expect(approval).toContainText('workspace.list');await expect(approval).toContainText('capabilities');

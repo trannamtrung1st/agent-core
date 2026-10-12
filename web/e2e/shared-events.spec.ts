@@ -34,7 +34,7 @@ test("Event activity retains unsubscribed signals and reactivation requires expl
   expect((await page.request.post(hook, request)).status()).toBe(200);
   await page.reload();
   await page.getByRole("textbox", { name: "Search events", exact: true }).fill(name);
-  await page.getByRole("button", { name: "View details for " + name, exact: true }).click();
+  await page.getByRole("link", { name: "View details for " + name, exact: true }).click();
   const details = page.getByRole("dialog", { name, exact: true });
   await expect(details.getByRole("region", { name: "Received signals", exact: true }).getByText("no-subscribers", { exact: true })).toHaveCount(1);
   await expect(details.getByRole("region", { name: "Automation deliveries", exact: true })).toContainText("No Automation deliveries");
@@ -104,11 +104,11 @@ test("nested shared Event creation preserves Automation draft and lifecycle link
   const savedSource = page.getByRole("button", { name: `View automation: ${name}`, exact: true });
   if (await savedSource.getAttribute("aria-expanded") !== "true") await savedSource.click();
   const details = page.getByRole("region", { name: "Automation details", exact: true });
-  await details.getByRole("button", { name: `${eventName} · ${key} · Enabled`, exact: true }).click();
+  await details.getByRole("link", { name: `${eventName} · ${key} · Enabled`, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/connections/events\\?event=${event.eventId}$`));
   const eventDetails = page.getByRole("dialog", { name: eventName, exact: true });
   await expect(eventDetails.getByText(key, { exact: true })).toBeVisible();
-  await expect(eventDetails.getByRole("button", { name, exact: true })).toBeVisible();
+  await expect(eventDetails.getByRole("link", { name, exact: true })).toBeVisible();
   const generic = { eventId: `invoice-${Date.now()}`, data: { invoiceId: "1001", amount: 125, currency: "USD" } };
   const hook = `/api/v1/hooks/${key}`;
   expect((await page.request.post(hook, { headers: { Authorization: `Bearer ${event.token}` }, data: generic })).status()).toBe(202);
@@ -116,7 +116,7 @@ test("nested shared Event creation preserves Automation draft and lifecycle link
   await page.reload();
   await page.getByRole("textbox", { name: "Search events", exact: true }).fill(name);
   await expect(eventDetails.getByRole("region", { name: "Received signals", exact: true }).getByText(generic.eventId, { exact: true })).toBeVisible();
-  await eventDetails.getByRole("button", { name, exact: true }).click();
+  await eventDetails.getByRole("link", { name, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/automation/automations\\?automation=`));
   await expect(page.getByRole("button", { name: `View automation: ${name}`, exact: true })).toHaveAttribute("aria-expanded", "true");
   await page.goBack();

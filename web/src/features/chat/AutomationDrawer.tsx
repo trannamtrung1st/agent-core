@@ -1,4 +1,5 @@
-import { adminInstancePath, navigateToAppPath } from "../../app/appRoute";
+import { followAppLink } from "../../app/appLink";
+import { adminInstancePath } from "../../app/appRoute";
 import { AutomationDestination } from "./AutomationDestination";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -139,7 +140,7 @@ export function AutomationDrawer({
             />
           ) : null}
 
-          {item.agentInstanceId ? <Typography.Link href={`${adminInstancePath(item.agentInstanceId, "automation", "automations")}?automation=${item.automationId}`} onClick={event => { event.preventDefault(); navigateToAppPath(`${adminInstancePath(item.agentInstanceId!, "automation", "automations")}?automation=${item.automationId}`); }}>View automation settings</Typography.Link> : null}
+          {item.agentInstanceId ? <Typography.Link href={`${adminInstancePath(item.agentInstanceId, "automation", "automations")}?automation=${item.automationId}`} onClick={followAppLink}>View automation settings</Typography.Link> : null}
           {item.status === "active" ? (
             <Flex gap={token.paddingXS} wrap="wrap" justify="flex-end" className="schedule-actions">
               <Button

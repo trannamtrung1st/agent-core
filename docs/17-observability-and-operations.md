@@ -122,6 +122,8 @@ pnpm run build
 pnpm exec playwright test
 ```
 
+Use Node.js 22 for frontend verification, matching the Synthetic CI workflow, and check `node --version` from `web/` before running these commands. The [2026-10-12 review](reports/current-changes-review-2026-10-12.md) records a local Node 26/Vitest 3 jsdom storage incompatibility and the explicit Node 22 recheck.
+
 Demo/production-like packaging: Vite builds static SPA into web/dist; the Dockerfile publish stage copies it to Api wwwroot; ASP.NET serves SPA/static assets, REST and SignalR in one process. Route SPA fallback only for browser paths, never swallow /api, /hubs, /health or OpenAPI errors. Compose mounts a persistent SQLite volume at `/data`. Kubernetes is unnecessary.
 
 Bind loopback for local demos. For shared demo hosting use HTTPS with WebSocket upgrade forwarding, a single backend instance and a persistent SQLite volume. Do not horizontally replicate SessionManager against the same SQLite file. During shutdown the host stops admitting new sessions, interrupts live responses, detaches runtimes, and waits up to five seconds for mailbox drain. If process termination prevents a clean save, crash recovery semantics apply.

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-11T17:19:46.430848Z",
+  "generatedAt": "2026-10-12T01:34:55.973517Z",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -518,6 +518,11 @@
       {
         "name": "Agent self-management presentation",
         "body": "Reuse the single Identity & version → Settings authority panel and existing bounded configuration form. Off/Assisted/Managed, per-field inheritance/reset, allowed areas and explicitly delegated automatic categories must remain legible at 1440/768/390. Freeze is an Instance-local lock with explicit Admin unfreeze; retain choices/content and ordinary tasks. Definition Settings provides defaults through the shared draft/read-only editor. Built-in · Read-only · On demand management procedures use existing Skill rows/drawers, without content authoring controls; distinguish stored enabled choice from master suppression. Exact Chat approvals show target, complete before/source/after, revisions and next new Run timing; freeze states immediate revocation. Preserve stale drafts, explicit refresh, Escape, focus return and shared diagnostics. Behavioral authority remains docs/13 and docs/14; the successor report records runtime evidence and remaining acceptance.",
+        "section": "components"
+      },
+      {
+        "name": "Email Account presentation",
+        "body": "Observed account forms reuse the Credentials panel, table, safe expanded Descriptions and existing 640px bounded Admin dialog. Gmail endpoint summaries, masked App Password and setup guidance remain within the same dark Ant Design v6 world. Incoming/outgoing tests use inline semantic status and timestamps; Synthetic explicitly states no server connection. Controls use shared 8/12/16 spacing and responsive hit areas. The Chat account chooser uses explicit Radio choice, a stable action footer and wrapping safe names/addresses; consent/error/empty/recovery copy remains local. Distinct form IDs and fresh initial values prevent hidden-form collisions. After closing, focus returns to the trigger or decision receipt. Responsive evidence lives in docs/reports/email-account-verification-2026-10-12.md; `/docs` owns authority and continuation rules.",
         "section": "components"
       }
     ],

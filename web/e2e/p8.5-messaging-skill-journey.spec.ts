@@ -41,7 +41,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
 
   const definitionId = `p85-journey-${Date.now()}`;
   await startSyntheticChat(page);
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await page.getByRole("button", { name: "New definition" }).click();
   const definitionDialog = page.getByRole("dialog", { name: "New definition" });

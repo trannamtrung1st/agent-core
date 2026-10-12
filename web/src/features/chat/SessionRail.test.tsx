@@ -94,7 +94,7 @@ describe("SessionRail", () => {
       onOpen: vi.fn()
     });
     expect(screen.getByText("No chats yet.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Start a new chat" }));
+    fireEvent.click(screen.getByRole("link", { name: "Start a new chat" }));
     expect(onNewChat).toHaveBeenCalled();
   });
 
@@ -114,7 +114,7 @@ describe("SessionRail", () => {
       onOpen: vi.fn()
     });
     expect(screen.queryByText("Chats")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Start a new chat" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Start a new chat" })).not.toBeInTheDocument();
     expect(screen.getByText("No chats yet.")).toBeInTheDocument();
   });
 
@@ -158,11 +158,11 @@ describe("SessionRail", () => {
     expect(screen.getAllByText(/Alex · Examiner/).length).toBe(2);
     expect(screen.queryByText("secret")).not.toBeInTheDocument();
     expect(screen.getByText(/· Ended/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Planning notes" }).querySelector("time")).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Planning notes" }).querySelector("time")).toHaveAttribute(
       "dateTime",
       live.updatedAt
     );
-    const endedButton = screen.getByRole("button", { name: "Closed exam" });
+    const endedButton = screen.getByRole("link", { name: "Closed exam" });
     expect(endedButton).toBeEnabled();
     fireEvent.click(endedButton);
     expect(onOpen).toHaveBeenCalledWith(ended);

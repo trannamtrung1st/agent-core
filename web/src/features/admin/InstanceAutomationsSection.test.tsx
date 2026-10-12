@@ -125,7 +125,7 @@ describe("Owner schedule authoring", () => {
     fireEvent.click(await screen.findByRole("button", { name: `View automation: ${row.name}` }));
     const details = within(screen.getByRole("region", { name: "Automation details" }));
     expect(details.getByRole("button", { name: "Run automation now" })).toBeDisabled();
-    expect(details.getByRole("button", { name: "View last run" })).toBeEnabled();
+    expect(details.getByRole("link", { name: "View last run" })).toBeEnabled();
     fireEvent.click(details.getByRole("button", { name: "Delete automation" }));
     const confirmation = await screen.findByRole("dialog");
     fireEvent.click(within(confirmation).getByRole("button", { name: "Delete automation" }));
@@ -268,7 +268,7 @@ describe("Owner schedule authoring", () => {
     expect(section.getByLabelText("Search automations")).toHaveValue("");
     const details = within(section.getByRole("region", { name: "Automation details", hidden: true }));
     expect(details.getByText("Originally created from")).toBeVisible();
-    fireEvent.click(details.getByText("View last run", { exact: true }).closest("button")!);
+    fireEvent.click(details.getByRole("link", { name: "View last run" }));
     expect(onWork).toHaveBeenCalledWith("run-11");
   });
 

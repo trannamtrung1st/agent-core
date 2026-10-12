@@ -30,7 +30,7 @@ async function startSyntheticChat(page: import("@playwright/test").Page) {
 }
 
 async function openFirstInstanceEffectiveConfig(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
   await expect.poll(async () => (await readTransport(page)).hub).toBe(false);
@@ -41,7 +41,7 @@ async function openFirstInstanceEffectiveConfig(page: import("@playwright/test")
   await page.getByRole("tab", { name: "Instances", exact: true }).click();
   const instances = page.locator('section[aria-label="Instances"]');
   await instances.getByLabel("Search instances", { exact: true }).fill("examiner");
-  const instanceLink = instances.getByRole("button", { name: /examiner/i }).first();
+  const instanceLink = instances.getByRole("link", { name: /examiner/i }).first();
   await expect(instanceLink).toBeVisible({ timeout: 15_000 });
   await instanceLink.click();
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
@@ -71,7 +71,7 @@ test("chat to admin effective config and back with a new turn", async ({ page })
   await expect(page.getByRole("region", { name: "Effective configuration" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Automation", exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Return to last chat" }).click();
+  await page.getByRole("link", { name: "Return to last chat" }).click();
   await expect(page).toHaveURL(chatUrl);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect.poll(async () => (await readTransport(page)).hub).toBe(true);
@@ -91,7 +91,7 @@ test("admin effective config at narrow width", async ({ page }) => {
   await startSyntheticChat(page);
   await openFirstInstanceEffectiveConfig(page);
   await expect(page.getByText("Harness references")).toBeVisible();
-  await page.getByRole("button", { name: "Return to last chat" }).click();
+  await page.getByRole("link", { name: "Return to last chat" }).click();
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await expect.poll(async () => (await readTransport(page)).captureLive).toBe(false);
 });

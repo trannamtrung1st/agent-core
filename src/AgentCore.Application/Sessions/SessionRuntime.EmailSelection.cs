@@ -48,12 +48,12 @@ public sealed partial class SessionRuntime
                     var account = await credentials.GetAsync(accountId, ct);
                     if (account.Purpose != "EmailAccount" || account.Status != "Active") throw AgentCoreErrors.Forbidden("Choose an active Email Account.");
                     var binding = (await credentials.BindingsAsync(_snapshot.AgentInstanceId, ct)).FirstOrDefault(b => b.CredentialId == accountId);
-                    if (binding is null) await credentials.BindAsync(_snapshot.AgentInstanceId, accountId, input.Reference ?? "email", input.InstanceRevision, ct);
+                    if (binding is null) binding = await credentials.BindAsync(_snapshot.AgentInstanceId, accountId, input.Reference ?? "email", input.InstanceRevision, ct);
                     var (_, resolved) = await ResolveNewRunAsync(ct);
                     if (!AgentCore.Application.Agents.RolePermissions.AllowsTool(resolved.Configuration.Definition, request.Target)
                         || !AgentCore.Application.Agents.RolePermissions.AllowsTool(resolved.Configuration.Definition, ToolCatalog.EmailRequestAccount))
                         throw AgentCoreErrors.Forbidden("Email capability is no longer authorized. Binding grants no tools.");
-                    await store.UpdateSelectionAsync(next with { Status = "allowed", InstanceRevision = resolved.Configuration.InstanceRevision }, "deciding", ct);
+                    await store.UpdateSelectionAsync(next with { Status = "allowed", InstanceRevision = resolved.Configuration.InstanceRevision, SelectedAccountId = accountId, SelectedAccountRef = binding.Reference }, "deciding", ct);
                     await TryStartConfigurationContinuationAsync(input.Context, ct);
                 }
                 catch

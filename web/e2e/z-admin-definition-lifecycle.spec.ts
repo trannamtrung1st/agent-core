@@ -31,12 +31,12 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
   const marker = `e2e-p7b-marker-${Date.now()}`;
   await startSyntheticChat(page);
 
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
 
   const definitions = page.getByRole("region", { name: "Definitions", exact: true });
   await definitions.getByRole("textbox", { name: "Search definitions" }).fill("examiner");
-  await definitions.getByRole("button", { name: "Examiner · examiner", exact: true }).click();
+  await definitions.getByRole("link", { name: "Examiner · examiner", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/definitions\/examiner$/i);
 
   const draftEditor = await forkBuiltInV1Draft(page);

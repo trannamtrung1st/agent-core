@@ -7,7 +7,7 @@ async function select(page: Page, label: string, text: string) {
 }
 async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowledge & resources') {
   await page.goto('/');
-  await page.getByRole('button',{name:'Open Admin'}).click();
+  await page.getByRole('link',{name:'Open Admin'}).click();
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button',{name:'New instance',exact:true}).click();
   await select(page,'Definition','General Assistant · general-assistant');
@@ -25,7 +25,7 @@ async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowl
   await d.getByRole('button',{name:'Create instance',exact:true}).click();
   await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   const id=new URL(page.url()).pathname.split('/')[3];
-  await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();
+  await page.locator('.admin-header').getByRole('link',{name:/Chat$/}).first().click();
   await select(page,'Identity',name);
   return id;
 }
@@ -39,8 +39,8 @@ async function review(page: Page, id: string) {
   expect(response.ok()).toBe(true);return response.json();
 }
 async function fresh(page: Page, name: string) {
-  if (!(await page.getByRole('button',{name:'Start a new chat'}).isVisible())) await page.getByRole('button',{name:'Open chats'}).click();
-  await page.getByRole('button',{name:'Start a new chat'}).click();
+  if (!(await page.getByRole('link',{name:'Start a new chat'}).isVisible())) await page.getByRole('button',{name:'Open chats'}).click();
+  await page.getByRole('link',{name:'Start a new chat'}).click();
   await select(page,'Identity',name);
 }
 const learn='Learn this order policy for future conversations: https://example.test/p97/order-policy';
@@ -85,11 +85,11 @@ test('Managed tool and instruction proposals require exact Chat approval',async(
 
 test('Freeze blocks durable Chat learning while normal Chat still works',async({page})=>{
   const id=await create(page,'Frozen learning');
-  await page.getByRole('button',{name:'Open Admin'}).click();await page.goto(`/admin/instances/${id}`);
+  await page.getByRole('link',{name:'Open Admin'}).click();await page.goto(`/admin/instances/${id}`);
   await page.goto('/admin/instances/'+id+'/identity/settings');
   await page.getByRole('button',{name:'Freeze self-management',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:'Freeze self-management',exact:true}).click();
-  await expect(page.getByText('Frozen',{exact:true})).toBeVisible();await page.locator('.admin-header').getByRole('button',{name:/Chat$/}).first().click();await select(page,'Identity','Frozen learning');
+  await expect(page.getByText('Frozen',{exact:true})).toBeVisible();await page.locator('.admin-header').getByRole('link',{name:/Chat$/}).first().click();await select(page,'Identity','Frozen learning');
   await send(page,learn);await expect(page.getByText(/cannot save a durable harness change/).last()).toBeVisible();
   expect((await review(page,id)).activeVersion).toBe(21);await send(page,'Hello');await expect(page.getByText('Hello from synthetic.',{exact:true}).last()).toBeVisible();
 });

@@ -31,9 +31,9 @@ describe("Built-in subscriber scope and recovery", () => {
     const rendered = render(view("first"));
     await waitFor(() => expect(instanceContinuityRequest).toHaveBeenCalledWith("first", "automations"));
     rendered.rerender(view("second"));
-    const second = await screen.findByRole("button", { name: "Second automation" });
+    const second = await screen.findByRole("link", { name: "Second automation" });
     await act(async () => release(review("First automation")));
-    expect(screen.queryByRole("button", { name: "First automation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "First automation" })).not.toBeInTheDocument();
     fireEvent.click(second);
     expect(navigateToAppPath).toHaveBeenCalledWith("/admin/instances/second/automation/automations?automation=Second automation");
     expect(listAdminInstances).not.toHaveBeenCalled();
@@ -42,7 +42,7 @@ describe("Built-in subscriber scope and recovery", () => {
     vi.mocked(instanceContinuityRequest).mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(review("Recovered"));
     render(view("owner"));
     fireEvent.click(await screen.findByRole("button", { name: "Retry subscribers" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Recovered" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Recovered" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(navigateToAppPath).toHaveBeenCalledWith("/admin/instances/owner/automation/automations?automation=Recovered");
   });

@@ -1,3 +1,4 @@
+import { followAppLink, routeTabLabel } from "../../app/appLink";
 import { AgentConfigurationPanel, AgentIdentitySections, AgentSkillsResourcesSections } from "./AgentConfigurationLayout";
 import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 import { automationTriggerPermissionSummary } from "./AutomationTriggerPermissions";
@@ -412,11 +413,11 @@ function AdminAppContent({ route }: { route: AdminRoute }) {
             <Typography.Title level={3} className="admin-title">
               Admin
             </Typography.Title>
-            <Button type="text" icon={<MessageOutlined />} onClick={openChat}>
+            <Button type="text" icon={<MessageOutlined />} href="/" onClick={event => followAppLink(event, openChat)}>
               Chat
             </Button>
           </Flex>
-          <Button icon={<ArrowLeftOutlined />} onClick={returnToChat} aria-label="Return to last chat">
+          <Button icon={<ArrowLeftOutlined />} href={lastChatUrl()} onClick={event => followAppLink(event, returnToChat)} aria-label="Return to last chat">
             <span className="admin-return-label-wide">Return to last chat</span>
             <span className="admin-return-label-compact">Return</span>
           </Button>
@@ -446,7 +447,7 @@ function AdminAppContent({ route }: { route: AdminRoute }) {
                 navigateToAppPath(adminHomePath(next));
               }}
               items={[
-              { key: "definitions", label: "Definitions", children: <InventorySection
+              { key: "definitions", label: routeTabLabel("Definitions", adminHomePath()), children: <InventorySection
                 title="Definitions"
                 countLabel={definitions.kind === "ready"
                   ? `${definitionGroups.length} ${definitionGroups.length === 1 ? "definition" : "definitions"}`
@@ -470,12 +471,12 @@ function AdminAppContent({ route }: { route: AdminRoute }) {
                         detail: formatDefinitionInventoryCounts(group),
                         tag: group.draftOnly ? "Draft" : formatInventoryStatus(group.latestStatus),
                         version: group.latestVersion,
-                        onClick: () => navigateToAppPath(adminDefinitionPath(group.definitionId))
+                        href: adminDefinitionPath(group.definitionId)
                       }))
                     : []
                 }
               /> },
-              { key: "instances", label: "Instances", children: <InventorySection
+              { key: "instances", label: routeTabLabel("Instances", adminHomePath("instances")), children: <InventorySection
                 title="Instances"
                 countLabel={instances.kind === "ready"
                   ? `${instances.data.length} ${instances.data.length === 1 ? "instance" : "instances"}`
@@ -500,15 +501,15 @@ function AdminAppContent({ route }: { route: AdminRoute }) {
                         status: item.lifecycle,
                         detail: `Updated ${formatAdminTimestamp(item.updatedAt)}`,
                         updatedAt: item.updatedAt,
-                        onClick: () => navigateToAppPath(adminInstancePath(item.instanceId))
+                        href: adminInstancePath(item.instanceId)
                       }))
                     : []
                 }
               /> },
-              { key: "connections", label: "Connections", children: <Tabs aria-label="Global connection resources" activeKey={connectionCollection}
+              { key: "connections", label: routeTabLabel("Connections", adminHomePath(connectionCollection)), children: <Tabs aria-label="Global connection resources" activeKey={connectionCollection}
                 onChange={key => { setConnectionCollection(key as "events" | "credentials"); setCollection(key as AdminCollection); navigateToAppPath(adminHomePath(key as AdminCollection)); }} items={[
-                  { key: "credentials", label: "Credentials", children: <CredentialsSection /> },
-                  { key: "events", label: "Events", children: <EventsSection /> }
+                  { key: "credentials", label: routeTabLabel("Credentials", adminHomePath("credentials")), children: <CredentialsSection /> },
+                  { key: "events", label: routeTabLabel("Events", adminHomePath("events")), children: <EventsSection /> }
                 ]} /> }
               ]}
             />
@@ -889,7 +890,7 @@ function InventorySection({
     detail?: string;
     tag?: string;
     status?: string;
-    onClick: () => void;
+    href: string;
   }>;
 }) {
   const { search, setSearch, pagination } = useAdminCollectionSearch();
@@ -925,7 +926,7 @@ function InventorySection({
               sorter: (a, b) => a.title.localeCompare(b.title),
               render: (_, item) => <Button type="link" size="small" className="admin-collection-name"
                 title={item.name ?? item.title}
-                aria-label={title === "Definitions" ? `${item.title} · ${item.secondary}` : item.title} onClick={item.onClick}>
+                aria-label={title === "Definitions" ? `${item.title} · ${item.secondary}` : item.title} href={item.href} onClick={followAppLink}>
                 <span>{item.name ?? item.title}</span>
               </Button> },
             { title: title === "Definitions" ? "Definition ID" : "Instance ID", dataIndex: "secondary", width: title === "Definitions" ? 230 : 340, ellipsis: true },
@@ -1372,7 +1373,7 @@ function DefinitionDetail({
 
   return (
     <Flex vertical gap={16}>
-      <Button type="text" icon={<ArrowLeftOutlined />} className="admin-back-button" onClick={onBack}>
+      <Button type="text" icon={<ArrowLeftOutlined />} className="admin-back-button" href={adminHomePath()} onClick={event => followAppLink(event, onBack)}>
         Back to inventory
       </Button>
       {group ? (
@@ -1532,7 +1533,7 @@ function DefinitionDetail({
               {lifecycleLoading ? <Spin className="admin-draft-status" /> : null}
               <Tabs className="admin-draft-tabs" activeKey={detailTab}
                 onChange={key => setDetailTab(key as AdminDefinitionTab)} items={[
-                  { key: "versions", label: "Versions", children: <>
+                  { key: "versions", label: routeTabLabel("Versions", adminDefinitionPath(definitionId, "versions"), () => setDetailTab("versions")), children: <>
                     {group && !group.draftOnly ? (
                       <DefinitionVersionsTable key={definitionId}
                         rows={group.versions} publications={publications} busy={busy}
@@ -1547,7 +1548,7 @@ function DefinitionDetail({
                     ) : null}
                     {group?.draftOnly ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No published versions yet." /> : null}
                   </> },
-                  { key: "drafts", label: "Drafts", children: <>
+                  { key: "drafts", label: routeTabLabel("Drafts", adminDefinitionPath(definitionId, "drafts"), () => setDetailTab("drafts")), children: <>
                     {!lifecycleLoading && draftSummaries.length > 0 ? (
                       <div className="admin-draft-list">
                         <Flex align="baseline" wrap gap="var(--ac-space-compact)" className="admin-draft-list-heading">
@@ -2534,8 +2535,13 @@ export function InstanceDetail({
     const params = new URLSearchParams(window.location.search); params.delete("run");
     navigateToAppPath(`${window.location.pathname}${params.size ? `?${params}` : ""}`, true);
   };
+  const instanceTabSection = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => selectedSection
+    ?? (next === "activity" ? activityTab : next === "continuity" ? continuityTab : next === "automation" ? automationTab
+      : next === "skills" ? resourceTab : next === "identity" && identityTab !== "profile" ? identityTab : undefined);
+  const instanceTabPath = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) =>
+    adminInstancePath(instanceId, next, instanceTabSection(next, selectedSection) as AdminInstanceSection | undefined);
   const setActiveTab = (next: AdminInstanceTab, selectedSection?: AdminInstanceSection) => {
-    const nextSection = selectedSection ?? (next === "activity" ? activityTab : next === "continuity" ? continuityTab : next === "automation" ? automationTab : next === "skills" ? resourceTab : next === "identity" ? identityTab === "profile" ? undefined : identityTab : undefined);
+    const nextSection = instanceTabSection(next, selectedSection);
     updateActiveTab(next);
     if (next === "activity") setActivityTab(nextSection ?? "sessions");
     if (next === "continuity" && nextSection) setContinuityTab(nextSection);
@@ -2596,7 +2602,7 @@ export function InstanceDetail({
         type="text"
         icon={<ArrowLeftOutlined />}
         className="admin-back-button"
-        onClick={onBack}
+        href={adminHomePath("instances")} onClick={event => followAppLink(event, onBack)}
       >
         Back to inventory
       </Button>
@@ -2626,50 +2632,50 @@ export function InstanceDetail({
             items={[
               ...([{
                 key: "identity",
-                label: "Identity & version",
-                children: <AgentIdentitySections activeKey={identityTab} onChange={key => setActiveTab("identity", key as AdminInstanceSection)}
+                label: routeTabLabel("Identity & version", instanceTabPath("identity"), () => setActiveTab("identity")),
+                children: <AgentIdentitySections sectionHref={key => instanceTabPath("identity", key as AdminInstanceSection)} activeKey={identityTab} onChange={key => setActiveTab("identity", key as AdminInstanceSection)}
                   profile={<InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={onInstanceDeleted} />}
                   settings={<Flex vertical gap={token.padding}><SelfManagementSection instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} onUpdated={onInstanceChanged} /><InstanceSettingsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "identity" && identityTab === "settings"} onUpdated={onInstanceChanged} />{resolved.instanceLifecycle === "Active" && <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />}</Flex>}
                   workspace={<InstanceWorkspaceSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} />}
                 />
               }]),
               ...([{
-                key: "skills", label: "Skills & resources", children: <AgentSkillsResourcesSections activeKey={resourceTab} onChange={key => setActiveTab("skills", key as AdminInstanceSection)}
+                key: "skills", label: routeTabLabel("Skills & resources", instanceTabPath("skills"), () => setActiveTab("skills")), children: <AgentSkillsResourcesSections sectionHref={key => instanceTabPath("skills", key as AdminInstanceSection)} activeKey={resourceTab} onChange={key => setActiveTab("skills", key as AdminInstanceSection)}
                   skills={<InstanceSkillsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "skills" && resourceTab === "skills"} onUpdated={onInstanceChanged} />}
                   resources={<InstanceResourcesSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} active={activeTab === "skills" && resourceTab === "resources"} onUpdated={onInstanceChanged} />}
                 />
               },
               {
-                key: "continuity", label: "Continuity",
+                key: "continuity", label: routeTabLabel("Continuity", instanceTabPath("continuity"), () => setActiveTab("continuity")),
                 children: <Flex vertical gap={token.padding}>{resolved.instanceLifecycle === "Active" ? <IdentityMaintenanceSection instanceId={instanceId} /> : null}<Tabs activeKey={continuityTab} onChange={key => setActiveTab("continuity", key as AdminInstanceSection)} aria-label="Continuity sections" items={[
-                  { key: "memory", label: "Memory", children: <InstanceMemoryAutomationPanel config={resolved} section="memory" /> },
-                  { key: "experience", label: "Experience", children: resolved.instanceLifecycle === "Active" ? <ExperienceSection instanceId={instanceId} active={activeTab === "continuity" && continuityTab === "experience"} onWork={viewRun} selection={activeTab === "continuity" && continuityTab === "experience" ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Experience is available when this instance is active" description="Unarchive the instance from Identity & version to inspect its experience." /> }
+                  { key: "memory", label: routeTabLabel("Memory", instanceTabPath("continuity", "memory"), () => setActiveTab("continuity", "memory")), children: <InstanceMemoryAutomationPanel config={resolved} section="memory" /> },
+                  { key: "experience", label: routeTabLabel("Experience", instanceTabPath("continuity", "experience"), () => setActiveTab("continuity", "experience")), children: resolved.instanceLifecycle === "Active" ? <ExperienceSection instanceId={instanceId} active={activeTab === "continuity" && continuityTab === "experience"} onWork={viewRun} selection={activeTab === "continuity" && continuityTab === "experience" ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Experience is available when this instance is active" description="Unarchive the instance from Identity & version to inspect its experience." /> }
                 ]} /></Flex>
               }]),
               ...(resolved.instanceLifecycle === "Active" ? [{
-                key: "automation", label: "Automation",
+                key: "automation", label: routeTabLabel("Automation", instanceTabPath("automation"), () => setActiveTab("automation")),
                 children: <Flex vertical gap={token.padding}>
                   <Typography.Text type="secondary">An Automation produces a Run when its trigger fires or you choose Run now.</Typography.Text>
                   <Tabs activeKey={automationTab} onChange={key => setActiveTab("automation", key as AdminInstanceSection)} aria-label="Automation sections" items={[
-                    { key: "automations", label: "Triggers", children: <InstanceAutomationsSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "automations"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
-                    { key: "controls", label: "Policies & models", children: <Flex vertical gap={token.padding}>
+                    { key: "automations", label: routeTabLabel("Triggers", instanceTabPath("automation", "automations"), () => setActiveTab("automation", "automations")), children: <InstanceAutomationsSection instanceId={instanceId} active={activeTab === "automation" && automationTab === "automations"} onWork={viewRun} selection={activeTab === "automation" ? sourceSelection : undefined} /> },
+                    { key: "controls", label: routeTabLabel("Policies & models", instanceTabPath("automation", "controls"), () => setActiveTab("automation", "controls")), children: <Flex vertical gap={token.padding}>
                       <InstanceMemoryAutomationPanel config={resolved} section="automation" />
                     </Flex> }
                   ]} />
                 </Flex>
               }] : []),
-              { key: "activity", label: "Activity", children: <Tabs activeKey={activityTab} aria-label="Activity views"
+              { key: "activity", label: routeTabLabel("Activity", instanceTabPath("activity"), () => setActiveTab("activity")), children: <Tabs activeKey={activityTab} aria-label="Activity views"
                 onChange={key => setActiveTab("activity", key as AdminInstanceSection)} items={[
-                  { key: "sessions", label: "Sessions", children: <InstanceSessionsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} open={activeTab === "activity" && activityTab === "sessions"} /> },
-                  { key: "runs", label: "Runs", children: <InstanceRunsSection instanceId={instanceId} open={activeTab === "activity" && activityTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("activity", "sessions")} /> }
+                  { key: "sessions", label: routeTabLabel("Sessions", instanceTabPath("activity", "sessions"), () => setActiveTab("activity", "sessions")), children: <InstanceSessionsSection key={instanceId} instanceId={instanceId} archived={resolved.instanceLifecycle !== "Active"} open={activeTab === "activity" && activityTab === "sessions"} /> },
+                  { key: "runs", label: routeTabLabel("Runs", instanceTabPath("activity", "runs"), () => setActiveTab("activity", "runs")), children: <InstanceRunsSection instanceId={instanceId} open={activeTab === "activity" && activityTab === "runs"} inline onRun={viewRun} onClose={() => setActiveTab("activity", "sessions")} /> }
                 ]} /> },
               {
-                key: "credentials", label: "Credentials",
+                key: "credentials", label: routeTabLabel("Credentials", instanceTabPath("credentials"), () => setActiveTab("credentials")),
                 children: <InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={resolved.instanceLifecycle !== "Active"} onUpdated={onInstanceChanged} />
               },
             {
               key: "effective",
-              label: "Effective configuration",
+              label: routeTabLabel("Effective configuration", instanceTabPath("effective"), () => setActiveTab("effective")),
               children: (
                 <AgentConfigurationPanel title="Effective configuration" label="Effective configuration"
                   description="Resolved Definition and Instance values, with global Browser privacy controls below.">

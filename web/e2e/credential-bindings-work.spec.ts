@@ -23,7 +23,7 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await page.waitForFunction(() => window.localStorage.getItem("agent-core.owner-capability"));
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await page.getByLabel("Message").fill("hello");
   await page.getByRole("button", { name: "Send" }).click();

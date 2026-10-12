@@ -153,7 +153,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
 
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await page.goto(`/admin/instances/${instance.instanceId}`);
 
   await page.getByLabel("Persona name").fill(personaName);
@@ -209,8 +209,8 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   await page.getByRole("dialog").getByRole("button", { name: "Delete automation", exact: true }).click();
   await expect(automations.getByText(/No automations yet/)).toBeVisible({ timeout: 15_000 });
 
-  await page.getByRole("button", { name: /Chat$/ }).click();
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: /Chat$/ }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
 
   const secondSessionPromise = page.waitForResponse(
@@ -280,8 +280,8 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   expect(historical).toBeTruthy();
   expect(historical?.status).toBe("completed");
 
-  await page.getByRole("button", { name: /Chat$/ }).click();
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: /Chat$/ }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await expect(page.getByRole("combobox", { name: "Identity" })).toBeEnabled({ timeout: 15_000 });
   await expectManagedIdentityOptionAbsent(page, instance.instanceId);
 

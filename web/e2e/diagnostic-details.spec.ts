@@ -139,7 +139,7 @@ test("native sign-out confirmation completes before closure and final reply", as
   expect(budget).toMatchObject({ logoutRequested: true, closureRequested: true, logoutVerified: false,
     closureConfirmed: true, cleanupBlocked: false, cleanupStatus: "partial" });
   await page.goto(`/admin/instances/${session.agentInstanceId}/activity/runs`);
-  await page.getByRole('table', { name: 'Runs table' }).getByRole('button', { name: 'Chat turn', exact: true }).click();
+  await page.getByRole('table', { name: 'Runs table' }).getByRole('link', { name: 'Chat turn', exact: true }).click();
   const details = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(details).toContainText('Partially completed');
   await expect(details).toContainText('Requested · Unverified. Observed evidence remains in the result');
@@ -188,7 +188,7 @@ test("admin inventory keeps a server diagnostic id", async ({ page }) => {
       })
     });
   });
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   const definitions = page.locator('section[aria-label="Definitions"]');
   await expect(definitions.getByText("The request could not be completed.")).toBeVisible({ timeout: 15_000 });
   await definitions.getByRole("button", { name: "Error details" }).click();
@@ -199,7 +199,7 @@ async function openNewDraftForm(page: import("@playwright/test").Page, definitio
   await page.goto("/");
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
-  await page.getByRole("button", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Open Admin" }).click();
   await page.getByRole("button", { name: "New definition" }).click();
   await page.getByRole("textbox", { name: "Definition ID" }).fill(definitionId);
   await page.getByRole("button", { name: "Create draft" }).click();

@@ -27,6 +27,35 @@ public sealed class EmailToolTests
             ToolCatalog.For(definition, context, gate).Select(tool => tool.Name));
     }
 
+    [Theory]
+    [InlineData("{\"limit\":10}")]
+    [InlineData("{\"query\":\"\",\"limit\":10}")]
+    [InlineData("""{"query":"   ","limit":10}""")]
+    public async Task Show_latest_ten_emails_runs_the_search_tool_without_a_query(string arguments)
+    {
+        var executor = CreateExecutor(new SyntheticEmailProvider());
+        var definition = Definition(4, [ToolCatalog.EmailSearch]);
+        var result = await executor.ExecuteAsync(definition, Guid.NewGuid(),
+            new("latest", ToolCatalog.EmailSearch, arguments), ToolLimits.MaxOutputBytes);
+        using var json = JsonDocument.Parse(result.Text);
+        var items = json.RootElement.GetProperty("results").EnumerateArray().ToArray();
+        Assert.NotEmpty(items); Assert.True(items.Length <= 10);
+        var dates = items.Select(item => item.GetProperty("date").GetDateTimeOffset()).ToArray();
+        Assert.Equal(dates.OrderByDescending(d => d), dates);
+        var descriptor = ToolRegistry.All.Single(t => t.Name == ToolCatalog.EmailSearch);
+        Assert.DoesNotContain("required", descriptor.ModelDefinition.ParametersJson);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("42")]
+    public async Task Non_string_email_query_is_rejected(string query)
+    {
+        var result = await CreateExecutor(new SyntheticEmailProvider()).ExecuteAsync(Definition(4, [ToolCatalog.EmailSearch]),
+            Guid.NewGuid(), new("bad-query", ToolCatalog.EmailSearch, "{\"query\":" + query + "}"), ToolLimits.MaxOutputBytes);
+        Assert.Contains("query must be a string", result.Text);
+    }
+
     [Fact]
     public async Task Email_search_read_and_create_draft_flow()
     {

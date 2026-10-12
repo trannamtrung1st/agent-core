@@ -39,7 +39,7 @@ test("create a schedule in chat, refresh the list, and cancel it", async ({ page
       throw new Error(await patched.text());
     }
   });
-  await page.getByRole("button", { name: "Start a new chat" }).click();
+  await page.getByRole("link", { name: "Start a new chat" }).click();
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByLabel("Message").fill("remind me tomorrow");

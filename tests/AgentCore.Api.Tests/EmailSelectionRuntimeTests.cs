@@ -20,6 +20,7 @@ public sealed class EmailSelectionRuntimeTests
 {
     [Theory]
     [InlineData("allow")]
+    [InlineData("alreadyBound")]
     [InlineData("cancel")]
     [InlineData("newerInput")]
     [InlineData("foreignSession")]
@@ -32,9 +33,19 @@ public sealed class EmailSelectionRuntimeTests
         await using var host = new ExperienceHost(db, model); var s = host.Services;
         var owner = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 25);
         var account = await s.GetRequiredService<CredentialService>().CreateEmailAccountAsync("Selected mail", EmailAccountProfile.Gmail("demo@example.test"), "protected-fixture-4821");
+        if (decision == "alreadyBound")
+        {
+            var credentials = s.GetRequiredService<CredentialService>();
+            var other = await credentials.CreateEmailAccountAsync("Other mail", EmailAccountProfile.Gmail("other@example.test"), "other-fixture-password");
+            await credentials.BindAsync(owner.InstanceId, other.CredentialId, "primary", owner.Revision);
+            owner = (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(owner.InstanceId))!;
+            await credentials.BindAsync(owner.InstanceId, account.CredentialId, "secondary", owner.Revision);
+            owner = (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(owner.InstanceId))!;
+            model.SelectedAlias = "secondary";
+        }
         var snapshot = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(owner.InstanceId, SessionMode.Text);
         await using var runtime = s.GetRequiredService<SessionRuntimeFactory>().Create(snapshot, new Output());
-        await runtime.AttachAsync(); Assert.True(await runtime.SubmitUserTextAsync("Inspect email after account selection"));
+        await runtime.AttachAsync(); Assert.True(await runtime.SubmitUserTextAsync("Show my latest 10 emails"));
         await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
         var source = Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListForSessionAsync(new(owner.InstanceId, LocalUserProfile.Id), snapshot.SessionId));
         var request = await s.GetRequiredService<IEmailStore>().GetSelectionAsync(source.AgentRunId);
@@ -67,19 +78,24 @@ public sealed class EmailSelectionRuntimeTests
         }
         else
         {
-            Assert.True(await runtime.DecideEmailAccountAsync(request.RequestId, decision == "allow" ? account.CredentialId : null, "mail", owner.Revision, default));
+            Assert.True(await runtime.DecideEmailAccountAsync(request.RequestId, decision is "allow" or "alreadyBound" ? account.CredentialId : null, "mail", owner.Revision, default));
             await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
             await Assert.ThrowsAsync<AgentCoreException>(() => runtime.DecideEmailAccountAsync(request.RequestId, account.CredentialId, "mail", owner.Revision, default));
         }
         var runs = await s.GetRequiredService<IAgentRunStore>().ListForSessionAsync(new(owner.InstanceId, LocalUserProfile.Id), snapshot.SessionId);
-        if (decision == "allow")
+        if (decision is "allow" or "alreadyBound")
         {
             Assert.True(runs.Count == 2, System.Text.Json.JsonSerializer.Serialize(new { source.Admission.Activation.SourceEntryIds, Source = runtime.Snapshot.Entries.Select(e => new { e.EntryId, e.Sequence, e.Role }), Selection = await s.GetRequiredService<IEmailStore>().GetSelectionAsync(request.RequestId), Safe = AgentCore.Application.Email.EmailSelectionSafety.CanContinue(source, request), Configured = s.GetRequiredService<IToolConfigurationGate>().IsConfigured(ToolCatalog.EmailSearch) }));
             var continuation = Assert.Single(runs, r => r.Admission.Activation.Kind == ActivationKind.ConfigurationContinuation);
             Assert.Equal(AgentRunStatus.Completed, continuation.Status);
             Assert.Equal(source.AgentRunId, continuation.Admission.Activation.SourceAgentRunId); Assert.Empty(continuation.Admission.Activation.SourceEntryIds);
-            Assert.NotEqual(source.ResponseId, continuation.ResponseId); Assert.Empty(source.Admission.Configuration!.CredentialBindings);
-            Assert.Equal(account.CredentialId, Assert.Single(continuation.Admission.Configuration!.CredentialBindings).CredentialId);
+            Assert.NotEqual(source.ResponseId, continuation.ResponseId);
+            Assert.Equal(decision == "alreadyBound" ? 2 : 0, source.Admission.Configuration!.CredentialBindings.Count);
+            Assert.Contains(continuation.Admission.Configuration!.CredentialBindings, b => b.CredentialId == account.CredentialId && b.Reference == model.SelectedAlias);
+            var receipt = await s.GetRequiredService<IEmailStore>().GetSelectionAsync(request.RequestId);
+            Assert.Equal(account.CredentialId, receipt!.SelectedAccountId); Assert.Equal(model.SelectedAlias, receipt.SelectedAccountRef);
+            Assert.Contains(model.Requests, r => r.Messages.Any(m => m.Text.Contains("Owner-selected account (JSON identity data): {\"accountRef\":\"" + model.SelectedAlias + "\"}")));
+            Assert.Contains(model.Requests, r => r.Messages.Any(m => m.Role == ModelRole.Tool && m.Name == ToolCatalog.EmailSearch && m.Text.Contains("\"accountRef\":\"" + model.SelectedAlias + "\"")));
             Assert.Contains(runtime.Snapshot.Entries, e => e.Text == "Email inspected with the selected account.");
         }
         else Assert.DoesNotContain(runs, r => r.Admission.Activation.Kind == ActivationKind.ConfigurationContinuation);
@@ -105,14 +121,23 @@ public sealed class EmailSelectionRuntimeTests
     {
         public ModelCapabilities Capabilities => new ScriptedLanguageModel().Capabilities;
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
+        public string SelectedAlias { get; set; } = "mail";
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
             Requests.Enqueue(request); await Task.Yield(); ct.ThrowIfCancellationRequested();
             var continuation = request.Messages.Any(m => m.Text.Contains("Continue the owner's email task", StringComparison.Ordinal));
             var hasResult = request.Messages.Any(m => m.Role == ModelRole.Tool);
+            const string marker = "Owner-selected account (JSON identity data): ";
+            var selectionLine = request.Messages.SelectMany(m => m.Text.Split('\n')).FirstOrDefault(line => line.StartsWith(marker, StringComparison.Ordinal));
+            string? selectedAlias = null;
+            if (selectionLine is not null)
+            {
+                using var hint = System.Text.Json.JsonDocument.Parse(selectionLine[marker.Length..]);
+                selectedAlias = hint.RootElement.GetProperty("accountRef").GetString();
+            }
             if (!hasResult && request.Tools?.Any(t => t.Name == (continuation ? ToolCatalog.EmailSearch : ToolCatalog.EmailRequestAccount)) == true)
                 yield return new ModelToolCallEvent(new("email-select", continuation ? ToolCatalog.EmailSearch : ToolCatalog.EmailRequestAccount,
-                    continuation ? """{"query":"harness"}""" : "{}"));
+                    continuation ? System.Text.Json.JsonSerializer.Serialize(new { accountRef = selectedAlias, limit = 10 }) : "{}"));
             else yield return new ModelTextDelta(continuation ? "Email inspected with the selected account." : "Select an account in the trusted owner UI.");
             yield return new ModelCompleted(!hasResult ? ModelStopReason.ToolCalls : ModelStopReason.Completed);
         }

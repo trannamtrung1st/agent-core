@@ -1,3 +1,4 @@
+import { followAppLink } from "../../app/appLink";
 import { EmailAccountDialog } from "./EmailAccountDialog";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useState } from "react";
@@ -5,7 +6,7 @@ import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, Modal, Sele
 import { MinusCircleOutlined, PlusOutlined } from "@ant-design/icons";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { confirmAction } from "../../app/confirmAction";
-import { adminHomePath, navigateToAppPath } from "../../app/appRoute";
+import { adminHomePath } from "../../app/appRoute";
 import { bindCredential, createCredential, deleteCredential, listCredentialBindings, listCredentials,
   testEmailAccount, type EmailConnectionTest, replaceCredentialValue, resetBrowserProfile, unbindCredential, updateCredential,
   type CredentialBinding, type SystemCredential } from "../../services/adminApi";
@@ -204,7 +205,7 @@ export function InstanceCredentialsSection({ instanceId, revision, archived, onU
   }
   return <Flex vertical gap={token.padding}>
     <AgentConfigurationPanel title="Credential bindings" label="Credential bindings"
-      extra={<Flex gap={token.paddingXS} wrap><Button onClick={() => navigateToAppPath(adminHomePath("credentials"))}>Manage system credentials</Button><Button type="primary" disabled={archived || busy || loading || !loaded} onClick={() => { setBindingError(undefined); setOpen(true); }}>Bind credential</Button></Flex>} bodyGap="default">
+      extra={<Flex gap={token.paddingXS} wrap><Button href={adminHomePath("credentials")} onClick={followAppLink}>Manage system credentials</Button><Button type="primary" disabled={archived || busy || loading || !loaded} onClick={() => { setBindingError(undefined); setOpen(true); }}>Bind credential</Button></Flex>} bodyGap="default">
     {archived && <Alert type="info" title="Archived instance bindings are read-only and cannot be used." />}
     {error && <Alert type="error" title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} showIcon action={<Button onClick={() => void load()}>Retry</Button>} />}
     {loading ? <Spin aria-label="Loading credential bindings" /> : loaded && <>

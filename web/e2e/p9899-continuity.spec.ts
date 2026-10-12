@@ -22,7 +22,7 @@ test('Experience informs Chat while unattended Skill management stays unavailabl
   await page.goto('/');
   await send(page, 'Hello');
   await expect(page.getByText('Hello from synthetic.', { exact: true }).last()).toBeVisible();
-  await page.getByRole('button', { name: 'Open Admin' }).click();
+  await page.getByRole('link', { name: 'Open Admin' }).click();
   await page.getByRole('tab', { name: 'Instances', exact: true }).click();
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   await select(page, 'Definition', 'General Assistant · general-assistant');
@@ -43,9 +43,9 @@ test('Experience informs Chat while unattended Skill management stays unavailabl
   await expect(experience.getByText('No experience yet. Enable experience and retrospect a completed task.')).toBeVisible();
   await experience.getByRole('switch', { name: 'Enable experience', exact: true }).click();
   await expect(experience.getByText('Enabled · completed work may be retrospected')).toBeVisible();
-  await page.locator('.admin-header').getByRole('button', { name: /Chat$/ }).first().click();
+  await page.locator('.admin-header').getByRole('link', { name: /Chat$/ }).first().click();
   // Returning from Admin preserves the last conversation; choose a new one for this reviewer.
-  await page.getByRole('button', { name: 'Start a new chat', exact: true }).click();
+  await page.getByRole('link', { name: 'Start a new chat', exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'Identity', exact: true })).toBeEnabled();
   await select(page, 'Identity', reviewerName);
   await send(page, 'synthetic-fail-turn');
@@ -59,7 +59,7 @@ test('Experience informs Chat while unattended Skill management stays unavailabl
   const paused = await page.request.post(`/api/v2/sessions/${sessionId}/deactivate`, { headers: { 'X-AgentCore-Owner-Capability': ownerToken! } });
   expect(paused.ok()).toBe(true);
   await expect(page.getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Open Admin' }).click();
+  await page.getByRole('link', { name: 'Open Admin' }).click();
   await page.goto(`/admin/instances/${id}`);
   await page.getByRole("tab", { name: "Continuity", exact: true }).click();
   await page.getByRole("tab", { name: "Experience", exact: true }).click();
@@ -75,12 +75,12 @@ test('Experience informs Chat while unattended Skill management stays unavailabl
   await expect(experience.getByText('The user supplied a correction', { exact: true })).toBeVisible();
   await experience.getByRole('button', { name: 'Retrospect now', exact: true }).click();
   await expect(experience.getByRole('button', { name: 'View experience: Review observable completed work', exact: true })).toHaveCount(1);
-  await page.locator('.admin-header').getByRole('button', { name: /Chat$/ }).first().click();
-  await page.getByRole('button', { name: 'Start a new chat', exact: true }).click();
+  await page.locator('.admin-header').getByRole('link', { name: /Chat$/ }).first().click();
+  await page.getByRole('link', { name: 'Start a new chat', exact: true }).click();
   await select(page, 'Identity', reviewerName);
   await send(page, 'Use my recent experience before acting.');
   await expect(page.getByText('I will observe current page state before acting, based on earlier experience. Current policy still controls every action.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Open Admin' }).click();
+  await page.getByRole('link', { name: 'Open Admin' }).click();
   await page.goto(`/admin/instances/${id}`);
   await page.getByRole("tab", { name: "Continuity", exact: true }).click();
   await page.getByRole("tab", { name: "Experience", exact: true }).click();
@@ -126,13 +126,13 @@ test('Experience informs Chat while unattended Skill management stays unavailabl
   await expect(initiative.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
   expect(runRequests).toBe(1);
   await page.unroute(runPattern);
-  await initiative.getByRole('button', { name: 'View last run: Review recent experience', exact: true }).click();
+  await initiative.getByRole('link', { name: 'View last run: Review recent experience', exact: true }).click();
   const work = page.getByRole('dialog', { name: 'Run details', exact: true });
   await expect(work.locator('.agent-run-details').getByText('No action', { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(work).toContainText('Skill management is unavailable; no change was made.');
   await expect(work.getByRole('button', { name: 'Approve Automation · Manual', exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('automation-management-boundary-desktop.png'), fullPage: true });
-  await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('button', { name: 'View Automation', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('link', { name: 'View Automation', exact: true }).click();
   await page.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
   await page.getByRole('tab', { name: 'Skills', exact: true }).click();
   const skills = page.getByRole('region', { name: 'Instance Skills', exact: true });

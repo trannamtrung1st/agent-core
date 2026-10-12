@@ -1,3 +1,4 @@
+import { routeTabLabel } from "../../app/appLink";
 import type { ReactNode } from 'react';
 import { Flex, Tabs, Typography, theme } from 'antd';
 
@@ -24,30 +25,32 @@ export function AgentConfigurationPanel({ title, description, label, extra, chil
 }
 
 /** Shared configuration navigation; each owner supplies its own forms and commands. */
-export function AgentIdentitySections({ profile, settings, workspace, activeKey, onChange }: {
+export function AgentIdentitySections({ profile, settings, workspace, activeKey, onChange, sectionHref }: {
   profile: ReactNode;
   settings: ReactNode;
   workspace?: ReactNode;
   activeKey?: string;
   onChange?: (key: string) => void;
+  sectionHref?: (key: string) => string;
 }) {
   return <Tabs className="admin-draft-tabs admin-configuration-sections" aria-label="Identity sections"
     activeKey={activeKey} onChange={onChange} items={[
-      { key: 'profile', label: 'Profile', children: profile },
-      { key: 'settings', label: 'Settings', children: settings },
-      ...(workspace !== undefined ? [{ key: 'workspace', label: 'Workspace', children: workspace }] : [])
+      { key: 'profile', label: sectionHref ? routeTabLabel('Profile', sectionHref('profile'), () => onChange?.('profile')) : 'Profile', children: profile },
+      { key: 'settings', label: sectionHref ? routeTabLabel('Settings', sectionHref('settings'), () => onChange?.('settings')) : 'Settings', children: settings },
+      ...(workspace !== undefined ? [{ key: 'workspace', label: sectionHref ? routeTabLabel('Workspace', sectionHref('workspace'), () => onChange?.('workspace')) : 'Workspace', children: workspace }] : [])
     ]} />;
 }
 
-export function AgentSkillsResourcesSections({ skills, resources, activeKey, onChange }: {
+export function AgentSkillsResourcesSections({ skills, resources, activeKey, onChange, sectionHref }: {
   skills: ReactNode;
   resources: ReactNode;
   activeKey?: string;
   onChange?: (key: string) => void;
+  sectionHref?: (key: string) => string;
 }) {
   return <Tabs className="admin-draft-tabs admin-configuration-sections" aria-label="Skills and resources sections"
     activeKey={activeKey} onChange={onChange} items={[
-      { key: 'skills', label: 'Skills', children: skills },
-      { key: 'resources', label: 'Resources', children: resources }
+      { key: 'skills', label: sectionHref ? routeTabLabel('Skills', sectionHref('skills'), () => onChange?.('skills')) : 'Skills', children: skills },
+      { key: 'resources', label: sectionHref ? routeTabLabel('Resources', sectionHref('resources'), () => onChange?.('resources')) : 'Resources', children: resources }
     ]} />;
 }

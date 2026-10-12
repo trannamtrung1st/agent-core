@@ -939,9 +939,9 @@ describe("ChatApp narrow session drawer", () => {
     expect(within(rail).queryByText("Chats")).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Chats" })).toBeInTheDocument();
     expect(within(rail).getByRole("button", { name: "Chat list options" })).toBeInTheDocument();
-    expect(within(rail).queryByRole("button", { name: "Start a new chat" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Planning notes" })).toBeEnabled();
+    expect(within(rail).queryByRole("link", { name: "Start a new chat" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Start a new chat" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Planning notes" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Actions for Planning notes" }));
     await waitFor(() => {
       expect(screen.getByRole("menuitem", { name: "Rename" })).toBeInTheDocument();
@@ -982,7 +982,7 @@ describe("ChatApp tablet session rail", () => {
     expect(sider).toHaveStyle({ width: "240px" });
     expect(screen.getByRole("navigation", { name: "Chats" })).toBeInTheDocument();
     expect(screen.getByText("Chats")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start a new chat" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Start a new chat" })).toBeInTheDocument();
   });
 
   it("keeps background work available for live, paused, and ended sessions without a transcript result", async () => {

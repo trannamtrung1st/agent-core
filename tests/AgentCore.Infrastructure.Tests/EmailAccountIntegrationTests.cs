@@ -156,6 +156,66 @@ public sealed class EmailAccountIntegrationTests
         Assert.Null(approval.Preparation); Assert.Contains("Validation", approval.ErrorJson!);
         Assert.Equal(0, f.Factory.Dispatches);
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Recent_inbox_tool_is_account_scoped_and_disabled_SMTP_does_not_claim_the_draft(bool sqlite)
+    {
+        await using var f = await Fixture.Create(sqlite);
+        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Gmail("sender@example.test"), "protected-fixture");
+        var admission = await f.Bind(f.A, account, "mail"); var session = Guid.NewGuid();
+        var definition = new AgentDefinition(1, "general-assistant", 25, new("Test", "Assistant", "Test", "neutral"), [], "instructions",
+            new("answerNewTurn", true, true), new("balanced", false, "en", 2048), new(false, 60_000, 120_000, 1, ["longSilence"], 0),
+            new(false, "default", 1), new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
+            new(ToolAllowlist: [ToolCatalog.EmailAccounts, ToolCatalog.EmailRequestAccount, ToolCatalog.EmailSearch, ToolCatalog.EmailCreateDraft, ToolCatalog.EmailSend]));
+        var gate = new AgentCore.Infrastructure.Tools.ToolConfigurationGate(null, null, null, emailFactory: f.Factory);
+        var executor = new SessionToolExecutor(emailAccounts: f.Email, emailStore: f.EmailStore, configurationGate: gate);
+        var search = await executor.ExecuteAsync(definition, session, new("latest-ten", ToolCatalog.EmailSearch, """{"limit":10}"""), ToolLimits.MaxOutputBytes, admission: admission);
+        using var results = JsonDocument.Parse(search.Text);
+        Assert.Equal("mail", results.RootElement.GetProperty("accountRef").GetString());
+        Assert.Equal(new EmailSearchRequest("", 10), f.Factory.LastSearchRequest);
+        Assert.NotEmpty(results.RootElement.GetProperty("results").EnumerateArray());
+        var draft = await f.Email.CreateDraftAsync(session, admission, "mail", new(["to@example.test"], [], [], "Subject", "Body"), default);
+        var args = JsonSerializer.SerializeToElement(new { draftId = draft.DraftId });
+        var approved = await executor.PrepareEmailSendApprovalAsync(args, default, admission, session);
+        f.Factory.IsSendEnabled = false;
+        Assert.True(gate.IsConfigured(ToolCatalog.EmailSearch)); Assert.True(gate.IsConfigured(ToolCatalog.EmailCreateDraft));
+        Assert.False(gate.IsConfigured(ToolCatalog.EmailSend));
+        var inventory = await executor.ExecuteAsync(definition, session, new("accounts", ToolCatalog.EmailAccounts, "{}"), ToolLimits.MaxOutputBytes, admission: admission);
+        using var inventoryJson = JsonDocument.Parse(inventory.Text);
+        Assert.False(inventoryJson.RootElement.GetProperty("sendAvailable").GetBoolean());
+        Assert.Contains("Email:SmtpEnabled", inventoryJson.RootElement.GetProperty("sendSetupGuidance").GetString()!);
+        var requestAdmission = admission with { AgentRunId = Guid.NewGuid() };
+        var request = await executor.ExecuteAsync(definition, session, new("send-account", ToolCatalog.EmailRequestAccount, """{"target":"email.send"}"""), ToolLimits.MaxOutputBytes, admission: requestAdmission);
+        Assert.Contains("smtp_disabled", request.Text);
+        Assert.Null(await f.EmailStore.GetSelectionAsync(requestAdmission.AgentRunId!.Value));
+        var context = new AgentContext(definition, [], "", null, AgentCore.Domain.Conversation.SessionMode.Text, null, false, null,
+            new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "send email"), ModelSupportsTools: true);
+        Assert.DoesNotContain(ToolCatalog.For(definition, context, gate), tool => tool.Name == ToolCatalog.EmailSend);
+        var blocked = await executor.PrepareEmailSendApprovalAsync(args, default, admission, session);
+        Assert.Null(blocked.Preparation); Assert.Contains("smtp_disabled", blocked.ErrorJson!); Assert.Contains("Email:SmtpEnabled", blocked.ErrorJson!);
+        var dispatched = await executor.ExecuteAsync(definition, session, new("blocked", ToolCatalog.EmailSend, args.GetRawText()), ToolLimits.MaxOutputBytes,
+            approvalGrant: Grant(approved.Preparation!.ActionHash), admission: admission);
+        Assert.Contains("smtp_disabled", dispatched.Text);
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.SendAsync(session, admission, draft.DraftId, "mail", Grant(approved.Preparation.ActionHash), default).AsTask());
+        f.Reopen();
+        Assert.Null(await f.EmailStore.GetSendAsync(draft.DraftId)); Assert.Equal(0, f.Factory.Dispatches);
+        f.Factory.IsSendEnabled = true;
+        var fresh = await executor.PrepareEmailSendApprovalAsync(args, default, admission, session);
+        var sent = await f.Email.SendAsync(session, admission, draft.DraftId, "mail", Grant(fresh.Preparation!.ActionHash), default);
+        Assert.Equal(EmailSendOutcome.Sent, sent.Outcome); Assert.Equal(1, f.Factory.Dispatches);
+    }
+
+    [Fact]
+    public async Task Real_SMTP_requires_opt_in_while_Synthetic_dispatch_remains_key_free()
+    {
+        await using var f = await Fixture.Create(false);
+        var options = new EmailTransportOptions();
+        var real = new AccountEmailProviderFactory(f.Store, f.Bindings, new LocalCredentialProtector(f.Root + "/keys"), f.Owners, options, TimeProvider.System, false);
+        Assert.True(real.IsEnabled); Assert.False(real.IsSendEnabled); Assert.True(f.Factory.IsSendEnabled);
+        options.SmtpEnabled = true; Assert.True(real.IsSendEnabled);
+        options.Enabled = false; Assert.False(real.IsSendEnabled); Assert.False(real.IsEnabled);
+    }
     private sealed class DbFactory(string root) : IDbContextFactory<AgentCoreDbContext>
     {
         public DbContextOptions<AgentCoreDbContext> Options => new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/email.db").Options;
@@ -202,14 +262,15 @@ public sealed class EmailAccountIntegrationTests
     }
     private sealed class CountingFactory(IEmailProviderFactory inner) : IEmailProviderFactory
     {
-        public int Dispatches; public bool IsEnabled => inner.IsEnabled;
+        public int Dispatches; public EmailSearchRequest? LastSearchRequest; public bool IsEnabled => inner.IsEnabled;
+        public bool IsSendEnabled { get; set; } = inner.IsSendEnabled;
         public IEmailProvider Create(EmailAccountContext account) => new CountingProvider(inner.Create(account), this);
         public ValueTask<EmailConnectionTest> TestAsync(Guid id, long revision, string protocol, CancellationToken ct = default) => inner.TestAsync(id, revision, protocol, ct);
     }
     private sealed class CountingProvider(IEmailProvider inner, CountingFactory owner) : IEmailProvider
     {
         public bool IsAvailable => true;
-        public ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest r, CancellationToken ct = default) => inner.SearchAsync(r, ct);
+        public ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest r, CancellationToken ct = default) { owner.LastSearchRequest = r; return inner.SearchAsync(r, ct); }
         public ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest r, CancellationToken ct = default) => inner.ReadAsync(r, ct);
         public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest r, CancellationToken ct = default) => inner.CreateDraftAsync(r, ct);
         public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string id, CancellationToken ct = default) => inner.GetDraftAsync(id, ct);
