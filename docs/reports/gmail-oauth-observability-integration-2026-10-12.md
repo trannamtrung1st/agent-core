@@ -1,6 +1,6 @@
 # Gmail OAuth and main observability integration — 12 October 2026
 
-Behavior commit: `947177e2cce6380b49e546fccde05561806a3b72`. Local integrated verification passed. The required hosted gate is the seven-job [PR #11 check set](https://github.com/trannamtrung1st/agent-core/pull/11/checks); the final PR description records its exact run, commit and outcomes. The evidence follow-up changes documentation only, with executable/test/configuration source parity checked against this behavior commit.
+Behavior commit: `c8c82f6947eb675cd9988630ca27c284a7327c3a`. Local integrated verification passed. The required hosted gate is the seven-job [PR #11 check set](https://github.com/trannamtrung1st/agent-core/pull/11/checks); the final PR description records its exact run, commit and outcomes. The evidence follow-up changes documentation only, with executable/test/configuration source parity checked against this behavior commit.
 
 ## Main synchronization
 
@@ -24,7 +24,7 @@ dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --filter 'Fully
 ```
 
 - The InMemory/SQLite workflow connects, binds two agents, reopens the original protected key ring, refreshes without changing the approval hash, reads, sends one exact-approved message, replays its receipt without another dispatch, and disconnects every binding. Expected results/state effects were observed.
-- Permanent refresh rejection produces ReconnectRequired; temporary rejection keeps the grant. The owner check receives the originating refresh diagnostic ID with one warning and no second ID allocation. Disabled warnings allocate no ID.
+- Original token/profile HTTP status survives normalization in the shared snapshot. Permanent refresh rejection produces ReconnectRequired; temporary rejection keeps the grant. The owner check receives the originating refresh diagnostic ID with one warning and no second ID allocation. Disabled warnings allocate no ID.
 - A transport exception containing known token/address/body strings becomes a safe Gmail error with the same warning reference. Those strings are absent from the snapshot and metric labels. Caller-cancelled reads propagate cancellation quietly.
 - Failed remote revocation logs a safe status/reference after local disconnect clears the protected grant. The response truthfully says revocation is unconfirmed and does not restore authorization.
 - HTTP rejection retains its machine status in the shared snapshot. HTTP success without an accepted message ID is logged as missing_message_id, stays Indeterminate, and makes one send attempt. Custom SMTP and durable uncertainty/replay assertions still pass.
