@@ -1,4 +1,4 @@
-import { Alert, Modal, Tag, Typography, theme } from "antd";
+import { Alert, Descriptions, Modal, Tag, Typography, theme } from "antd";
 import type { PendingApproval } from "../../state/sessionStore";
 
 type ApprovalModalProps = {
@@ -64,14 +64,28 @@ export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalPr
           ) : null}
           {content.length > 0 ? (
             <div key={approval.approvalId} className="chat-approval-details" role="region" aria-label="Approval details" tabIndex={0}>
-              <ul className="chat-approval-list">
-                {content.map(([key, value]) => (
-                  <li className={`chat-approval-detail${key === "Change" ? " chat-approval-change" : ""}`} style={key === "Change" ? { borderRadius: token.borderRadiusLG } : undefined} key={key}>
-                    <Typography.Text strong>{key}{": "}</Typography.Text>
-                    {key === "Change" ? <ProposalText value={value} /> : <Typography.Text className="chat-approval-value">{value}</Typography.Text>}
-                  </li>
-                ))}
-              </ul>
+              {!semantic ? (
+                <Descriptions
+                  className="chat-approval-fields"
+                  size="small"
+                  column={1}
+                  styles={{ label: { color: token.colorTextSecondary }, content: { whiteSpace: "pre-wrap", overflowWrap: "anywhere" } }}
+                  items={content.map(([key, value]) => ({
+                    key,
+                    label: key,
+                    children: value.length > 0 ? value : <Typography.Text type="secondary" aria-label="Not provided">—</Typography.Text>
+                  }))}
+                />
+              ) : (
+                <ul className="chat-approval-list">
+                  {content.map(([key, value]) => (
+                    <li className={`chat-approval-detail${key === "Change" ? " chat-approval-change" : ""}`} style={key === "Change" ? { borderRadius: token.borderRadiusLG } : undefined} key={key}>
+                      <Typography.Text strong>{key}{": "}</Typography.Text>
+                      {key === "Change" ? <ProposalText value={value} /> : <Typography.Text className="chat-approval-value">{value}</Typography.Text>}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ) : null}
         </>

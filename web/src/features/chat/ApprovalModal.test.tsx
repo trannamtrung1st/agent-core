@@ -52,6 +52,18 @@ describe("ApprovalModal", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("preserves complete email text and identifies empty recipient fields", () => {
+    const body = "Hello\n\n<b>This stays plain text</b>\nLast line";
+    render(<ApprovalModal approval={{ ...approval, toolName: "email.send", details: {
+      To: "recipient@example.test", Cc: "", Bcc: "", Subject: "Hello", Body: body
+    } }} onApprove={vi.fn()} onReject={vi.fn()} />);
+    const details = screen.getByRole("region", { name: "Approval details" });
+    expect(within(details).getByText("recipient@example.test")).toBeInTheDocument();
+    expect(within(details).getAllByLabelText("Not provided")).toHaveLength(2);
+    expect(details.querySelector("b")).toBeNull();
+    expect(within(details).getByText(/This stays plain text/).textContent).toBe(body);
+  });
+
   it("starts a replacement approval at its opening line after a previous proposal was scrolled", () => {
     const view = render(<ApprovalModal approval={approval} onApprove={vi.fn()} onReject={vi.fn()} />);
     const oldRegion = screen.getByRole("region", { name: "Approval details" });

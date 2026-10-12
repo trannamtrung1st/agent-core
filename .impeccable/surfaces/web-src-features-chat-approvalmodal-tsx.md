@@ -22,3 +22,7 @@ FINISH: Desktop, 768px and 390px checks cover exact proposal, automatic receipt,
 ## Self-management exact decisions (2026-10-11)
 
 Apply to this Instance shows complete bounded before/source/after with Instance and policy revisions. Freeze self-management confirms immediate revocation once and keeps ordinary Chat available. Keep the approval review region, Escape/focus return, wrapping actions and 1440/768/390 viewport checks. A configuration approval is distinct from approval of the original sensitive task. Deliberate next owner turn is the current safe continuation fallback; do not imply an automatic resume.
+
+## Ordinary sensitive approval refinement (2026-10-12)
+
+Ordinary sensitive fields use small one-column Ant Design Descriptions with a shared 6rem secondary label column. Supplied empty values stay explicit as a muted dash; email addresses, subject and body retain complete escaped text and newlines. Preserve the existing 520px dialog, focusable review region, footer and exact decisions; semantic proposals retain their larger stacked layout. [Verification](../../docs/reports/sensitive-approval-polish-verification.md) records the actual Synthetic demo approval, rejection/refresh/keyboard regressions, long email presentation and 320px/short landscape checks. No Real email was sent.

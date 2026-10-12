@@ -2438,6 +2438,12 @@ body,
   overflow-wrap: anywhere;
 }
 .chat-approval-value { white-space: pre-wrap; }
+.chat-approval-fields .ant-descriptions-item-label {
+  flex: 0 0 6rem;
+  min-width: 0;
+  white-space: normal;
+}
+.chat-approval-fields .ant-descriptions-item-content { min-width: 0; }
 .chat-approval-change {
   padding: var(--ac-space-default);
   background: var(--ac-color-fill);
