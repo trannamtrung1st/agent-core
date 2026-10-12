@@ -6,10 +6,18 @@ async function openInNewTab(page: Page, link: Locator, gesture: "modifier" | "mi
   const source = page.url();
   const href = await link.getAttribute("href");
   expect(href).toBeTruthy();
-  const [opened] = await Promise.all([
-    page.context().waitForEvent("page"),
-    link.click(gesture === "middle" ? { button: "middle" } : { modifiers: ["ControlOrMeta"] })
-  ]);
+  let opened: Page | null = null;
+  // Main CI observed no tab after the first native background-tab gesture.
+  // Retry the actual gesture, bounded by a short popup wait, while requiring the
+  // source to remain unchanged. Never replace it with scripted window.open.
+  for (let attempt = 0; attempt < 2 && !opened; attempt += 1) {
+    const popup = page.context().waitForEvent("page", { timeout: 5_000 }).catch(() => null);
+    await link.click(gesture === "middle" ? { button: "middle" } : { modifiers: ["ControlOrMeta"] });
+    opened = await popup;
+    await expect(page).toHaveURL(source);
+  }
+  expect(opened, `Native ${gesture} activation of ${href} must open a tab`).not.toBeNull();
+  if (!opened) throw new Error(`Native ${gesture} activation of ${href} did not open a tab`);
   await opened.bringToFront();
   await opened.waitForURL(new URL(href!, source).href, { waitUntil: "domcontentloaded", timeout: 15_000 });
   await expect(opened).toHaveURL(new URL(href!, source).href);

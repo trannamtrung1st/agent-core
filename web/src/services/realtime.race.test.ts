@@ -178,6 +178,40 @@ describe("realtime race handling", () => {
     expect(useSessionStore.getState().captureAuthorized).toBe(false);
   });
 
+  for (const failure of ["rejected", "transport"] as const) {
+    it(`detaches safely when Admin Voice shutdown is ${failure}`, async () => {
+      const invoke = failure === "rejected"
+        ? vi.fn().mockResolvedValue({ accepted: false, error: { message: "Try again." } })
+        : vi.fn().mockRejectedValue(new Error("Connection lost."));
+      const stop = vi.fn().mockResolvedValue(undefined);
+      hooks.setConnection({ invoke, send: vi.fn(), off: vi.fn(), stop } as never);
+      useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1",
+        attachmentId: "a1", mode: "voice", liveResponseId: "r1", agentRunId: "run1" });
+      await suspendLiveSessionForNavigation();
+      expect(stop).toHaveBeenCalledTimes(1);
+      expect(useSessionStore.getState()).toEqual(expect.objectContaining({
+        sessionId: "s1", connection: "failed", attachmentId: null,
+        captureLive: false, captureAuthorized: false, preflightReady: false, errorFatal: false
+      }));
+      expect(useSessionStore.getState().error).toBeTruthy();
+      expect(invoke.mock.calls.some(([method]) => method === "PlaybackCompleted")).toBe(false);
+    });
+  }
+
+  it("ignores a late Voice cancellation rejection after switching conversations", async () => {
+    let finish!: (ack: { accepted: boolean; error: { message: string } }) => void;
+    const invoke = vi.fn().mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    hooks.setConnection({ invoke, send: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), sessionId: "s1", attachmentId: "a1", mode: "voice" });
+    const pending = cancelVoice();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalled());
+    useSessionStore.setState({ ...emptySession(), sessionId: "s2", attachmentId: "a2", connection: "ready" });
+    finish({ accepted: false, error: { message: "Obsolete Voice error" } });
+    await pending;
+    expect(useSessionStore.getState().error).toBeNull();
+    expect(useSessionStore.getState().sessionId).toBe("s2");
+  });
+
   it("sequence gap aborts playback and reattaches before applying started side effects", async () => {
     const flush = vi.spyOn(capture, "flushPlayback").mockResolvedValue(0);
     const stop = vi.fn().mockResolvedValue(undefined);

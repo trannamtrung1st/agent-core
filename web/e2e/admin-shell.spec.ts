@@ -150,3 +150,97 @@ test("Admin leaves Voice and terminalizes playback without reconnecting", async 
   await expect(page.locator(".chat-message-assistant").last()).toContainText("Hello from synthetic.");
   await waitForResponseSettled(page);
 });
+
+test("Admin Chat opens an empty root while Return preserves the live conversation", async ({ page }) => {
+  await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
+  await page.getByLabel("Message").fill("[test:durable-stream] Both Admin destinations");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".chat-message-assistant .assistant-body")).toHaveText("Hello", { timeout: 15_000 });
+  const chatUrl = page.url();
+  const before = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+  await page.getByRole("link", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: "Return to last chat" }).click();
+  expect(await page.evaluate(() => window.__agentCore?.conversationExecution?.())).toEqual(before);
+  await expect(page).toHaveURL(chatUrl);
+  await page.getByRole("link", { name: "Open Admin" }).click();
+  await page.getByRole("link", { name: /Chat$/ }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator(".chat-message-assistant, .chat-message-user")).toHaveCount(0);
+  await expect.poll(async () => (await readTransport(page)).hub).toBe(false);
+  expect(await page.evaluate(() => window.__agentCore?.conversationExecution?.().responseId)).toBeNull();
+  // Clearing the surface detaches, never deletes the accepted durable Run.
+  await page.goto(chatUrl);
+  await expect(page.locator(".chat-message-assistant .assistant-body")).toHaveText("Hello from synthetic.", { timeout: 20_000 });
+  await expect(page.locator(".chat-message-assistant")).toHaveCount(1);
+});
+
+test("unexpected hub close in Admin recovers the same streamed text Run", async ({ page }) => {
+  const sockets: import("@playwright/test").WebSocketRoute[] = [];
+  await page.routeWebSocket("**/hubs/session", socket => {
+    socket.connectToServer();
+    sockets.push(socket);
+  });
+  await page.goto("/");
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
+  await page.getByLabel("Message").fill("[test:durable-stream] Recover while hidden");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".chat-message-assistant .assistant-body")).toHaveText("Hello", { timeout: 15_000 });
+  const before = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+  await page.getByRole("link", { name: "Open Admin" }).click();
+  sockets.at(-1)!.close({ code: 1011, reason: "Synthetic unexpected disconnect" });
+  await expect.poll(() => sockets.length).toBeGreaterThan(1);
+  await expect.poll(async () => (await readTransport(page)).connection).toBe("ready");
+  expect((await readTransport(page)).captureLive).toBe(false);
+  await page.getByRole("link", { name: "Return to last chat" }).click();
+  expect(await page.evaluate(() => window.__agentCore?.conversationExecution?.().executionId)).toBe(before?.executionId);
+  await expect(page.locator(".chat-message-assistant .assistant-body")).toHaveText("Hello from synthetic.", { timeout: 20_000 });
+  await waitForResponseSettled(page);
+  await expect(page.locator(".chat-message-assistant")).toHaveCount(1);
+});
+
+for (const rejectionCount of [1, 2]) test(`a rejected Admin Voice mode change recovers after ${rejectionCount} rejection(s)`, async ({ page }) => {
+  await startSyntheticChat(page);
+  const chatUrl = page.url();
+  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await expect.poll(async () => (await readTransport(page)).streaming).toBe(true);
+  await page.getByLabel("Message").fill("[test:durable-stream] Finish after failed mode change");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__agentCore?.conversationExecution?.().responseId)).toBeTruthy();
+  // Fault-inject one hub rejection through the actual SignalR client. No server
+  // debug endpoint or application test hook is needed for this failure boundary.
+  await page.evaluate(async (remaining) => {
+    const bundle = performance.getEntriesByType("resource").find(entry => /\/@microsoft_signalr\.js/.test(entry.name))?.name;
+    if (!bundle) throw new Error("SignalR client bundle was not loaded");
+    const { HubConnection } = await import(/* @vite-ignore */ bundle);
+    const original = HubConnection.prototype.invoke;
+    HubConnection.prototype.invoke = function(method: string, ...args: [{ payload?: { mode?: string } }]) {
+      if (method === "SetMode" && args[0]?.payload?.mode === "text") {
+        if (--remaining === 0) HubConnection.prototype.invoke = original;
+        return Promise.resolve({ accepted: false, error: {
+          category: "Session", code: "SessionBusy", message: "Synthetic mode change rejection.", fatal: false
+        } });
+      }
+      return original.apply(this, [method, ...args]);
+    };
+  }, rejectionCount);
+  await page.getByRole("link", { name: "Open Admin" }).click();
+  await expect.poll(async () => (await readTransport(page)).connection).toBe("failed");
+  expect((await readTransport(page)).hub).toBe(false);
+  expect((await readTransport(page)).captureLive).toBe(false);
+  await page.getByRole("link", { name: "Return to last chat" }).click();
+  await expect(page).toHaveURL(chatUrl);
+  if (rejectionCount === 2) {
+    await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(chatUrl);
+    expect((await readTransport(page)).captureLive).toBe(false);
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+  }
+  await expect.poll(async () => (await readTransport(page)).connection, { timeout: 15_000 }).toBe("ready");
+  await expect(page.getByRole("button", { name: "Voice", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await waitForResponseSettled(page);
+  await page.getByLabel("Message").fill("Recovered text turn");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".chat-message-assistant").last()).toContainText("Hello from synthetic.", { timeout: 20_000 });
+  await waitForResponseSettled(page);
+});

@@ -91,6 +91,7 @@ let lastReceiptBlockSignature = "";
 let disposed = false;
 // Chat and Admin share this SPA. Hide media and render receipts outside Chat, not the live SignalR stream.
 let chatSurfaceVisible = true;
+let navigationVoiceResetSessionId: string | null = null;
 let duckTimer: number | null = null;
 let flushing = false;
 let playbackInterrupt = Promise.resolve();
@@ -1699,6 +1700,7 @@ export const realtimeTestHooks =
         },
         resetOutput() {
           chatSurfaceVisible = true;
+          navigationVoiceResetSessionId = null;
           attachLoop += 1;
           reconnectBudgetStarted = 0;
           lastReconnectCause = null;
@@ -1829,6 +1831,19 @@ async function startConnection(
   try {
     await connection.start();
     await attachWithBusyRetry(null);
+    if (chatSurfaceVisible && navigationVoiceResetSessionId === sessionId
+      && useSessionStore.getState().connection === "ready") {
+      const resetEpoch = voiceEpoch + 1;
+      const cancelled = await cancelVoice();
+      if (resetEpoch === voiceEpoch && sameSessionId(sessionId, useSessionStore.getState().sessionId)) {
+        if (cancelled) {
+          navigationVoiceResetSessionId = null;
+        } else {
+          await stopConnection();
+          dropLiveTransport("failed");
+        }
+      }
+    }
   } catch (error) {
     markConnectionFailed(error instanceof Error ? error.message : "Attach failed.", { force: true });
   }
@@ -1919,6 +1934,12 @@ export function reloadChatAgentInstances(): Promise<void> {
 async function bootstrapInner(): Promise<string> {
   const requestedSession = parseSessionIdFromPath(window.location.pathname);
   const initial = useSessionStore.getState();
+  if (window.location.pathname === "/" && initial.sessionId) {
+    // Chat's root route always means New Chat, including a mount from Admin.
+    // A /c/{id} mount must keep the SPA-owned transport and live Run intact.
+    useSessionStore.setState({ connection: "connecting" });
+    await beginNewChat({ syncUrl: false });
+  }
   if (requestedSession && (!sameSessionId(initial.sessionId, requestedSession) || !isOpenSession(initial))) {
     // Resolve a deep link before presenting a sendable default-identity chat.
     useSessionStore.setState({ connection: "connecting" });
@@ -1964,6 +1985,11 @@ async function applyRouteFromLocationInner(): Promise<void> {
 
   const result = await openSessionById(sessionId, { syncUrl: false });
   if (result === "failed" && !isReadonlySession(useSessionStore.getState())) {
+    if (navigationVoiceResetSessionId === sessionId && useSessionStore.getState().connection === "failed") {
+      // This known Session is recoverable via Retry. Keep its /c identity rather
+      // than presenting its history under the New Chat route.
+      return;
+    }
     syncBrowserSessionPath(null, "replace");
     useSessionStore.setState({ routeNotice: "That conversation is unavailable." });
   }
@@ -1995,7 +2021,17 @@ export async function suspendLiveSessionForNavigation(): Promise<void> {
   // is suspended, leave Voice through the existing mode-change protocol rather
   // than strand a Run or acknowledge audio the owner never heard.
   if (leaveVoice && connection && snapshot.connection === "ready") {
-    await cancelVoice();
+    const epoch = voiceEpoch + 1; // cancelVoice invalidates pending media setup.
+    const cancelled = await cancelVoice();
+    if (!cancelled && epoch === voiceEpoch
+      && sameSessionId(snapshot.sessionId, useSessionStore.getState().sessionId)) {
+      // Failed mode change cannot leave an attached Voice Run waiting for media
+      // we have released. Detach permits the existing headless completion path;
+      // keep the error recoverable and let Chat reopen this same Session.
+      navigationVoiceResetSessionId = snapshot.sessionId;
+      await stopConnection();
+      dropLiveTransport("failed");
+    }
   }
 }
 
@@ -2301,6 +2337,10 @@ export async function openCatalogSession(
     await refreshCatalog(true);
     if (useSessionStore.getState().connection === "ready") {
       return "ready";
+    }
+
+    if (navigationVoiceResetSessionId === item.sessionId) {
+      return "failed";
     }
 
     const ended = await openEndedIfTerminal(item.sessionId);
@@ -3754,15 +3794,20 @@ export async function resumeCapture(): Promise<void> {
   syncCapture();
 }
 
-export async function cancelVoice(): Promise<void> {
+export async function cancelVoice(): Promise<boolean> {
+  const snapshot = useSessionStore.getState();
   voiceModeRequested = false;
   clientOwnsVoice = false;
   setCaptureAuthorized(false);
-  voiceEpoch += 1;
+  const epoch = ++voiceEpoch;
+  const isCurrent = () => epoch === voiceEpoch
+    && sameSessionId(snapshot.sessionId, useSessionStore.getState().sessionId)
+    && snapshot.attachmentId === useSessionStore.getState().attachmentId;
   try {
     const ack = await dispatchHubCommand((sequence) =>
       invoke("SetMode", "session.mode.set", { mode: "text" }, sequence)
     );
+    if (!isCurrent()) return false;
     if (!ack?.accepted) {
       capture.release();
       void releaseClientSpeech();
@@ -3775,9 +3820,10 @@ export async function cancelVoice(): Promise<void> {
           code: "VoiceCancelFailed"
         })
       });
-      return;
+      return false;
     }
   } catch (error) {
+    if (!isCurrent()) return false;
     capture.release();
     void releaseClientSpeech();
     useSessionStore.setState({
@@ -3788,12 +3834,13 @@ export async function cancelVoice(): Promise<void> {
         code: "VoiceCancelFailed"
       })
     });
-    return;
+    return false;
   }
 
   capture.release();
   void releaseClientSpeech();
   useSessionStore.setState({ preflightReady: false, muted: false, ...clearSessionFailure() });
+  return true;
 }
 
 export async function setMuted(muted: boolean): Promise<void> {
