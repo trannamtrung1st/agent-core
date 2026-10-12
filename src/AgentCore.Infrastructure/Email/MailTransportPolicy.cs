@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Email;
 public sealed class EmailTransportOptions
 {
     public bool Enabled { get; set; } = true;
-    public bool SmtpEnabled { get; set; }
+    public bool SmtpEnabled { get; set; } = true;
     public string[] AllowedCustomEndpoints { get; set; } = [];
     public int TimeoutSeconds { get; set; } = 20;
 }

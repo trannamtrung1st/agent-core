@@ -207,12 +207,13 @@ public sealed class EmailAccountIntegrationTests
     }
 
     [Fact]
-    public async Task Real_SMTP_requires_opt_in_while_Synthetic_dispatch_remains_key_free()
+    public async Task Real_SMTP_defaults_enabled_with_explicit_disable_while_Synthetic_remains_key_free()
     {
         await using var f = await Fixture.Create(false);
         var options = new EmailTransportOptions();
         var real = new AccountEmailProviderFactory(f.Store, f.Bindings, new LocalCredentialProtector(f.Root + "/keys"), f.Owners, options, TimeProvider.System, false);
-        Assert.True(real.IsEnabled); Assert.False(real.IsSendEnabled); Assert.True(f.Factory.IsSendEnabled);
+        Assert.True(real.IsEnabled); Assert.True(real.IsSendEnabled); Assert.True(f.Factory.IsSendEnabled);
+        options.SmtpEnabled = false; Assert.False(real.IsSendEnabled); Assert.True(real.IsEnabled);
         options.SmtpEnabled = true; Assert.True(real.IsSendEnabled);
         options.Enabled = false; Assert.False(real.IsSendEnabled); Assert.False(real.IsEnabled);
     }
