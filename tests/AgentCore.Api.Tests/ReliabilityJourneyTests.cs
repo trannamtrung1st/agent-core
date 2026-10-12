@@ -17,6 +17,81 @@ namespace AgentCore.Api.Tests;
 public sealed class ReliabilityJourneyTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 12, 0, 0, 0, TimeSpan.Zero);
+    private const string ConflictingChat = "Don't greet me every 60 seconds. Explain the schedule instead.";
+    private const string UnrelatedChat = "The kettle is blue. For this chat reply say only noted.";
+
+    [Fact(Timeout = 60000)]
+    public async Task Automation_occurrences_keep_their_task_across_chat_history_owner_edits_and_disable()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"reliability-task-isolation-{Guid.NewGuid():N}.db");
+        var clock = new AutomationClock(Now);
+        var model = new SchedulingModel();
+        Guid instanceId, sessionId;
+        await using (var host = new ExperienceHost(path, model, clock))
+        {
+            var s = host.Services;
+            instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24)).InstanceId;
+            var snapshot = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
+            sessionId = snapshot.SessionId;
+            await using var runtime = s.GetRequiredService<SessionRuntimeFactory>().Create(snapshot, new QuietOutput());
+            await runtime.AttachAsync();
+            Assert.True(await runtime.SubmitUserTextAsync("greet me every 60 seconds"));
+            await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
+            Assert.Single(await s.GetRequiredService<ITriggerStore>().ListAsync(new(instanceId, LocalUserProfile.Id), null));
+        }
+        await using var reopened = new ExperienceHost(path, model, clock, configure: services => ConfigureArtifacts(services, path));
+        var services = reopened.Services;
+        var owner = new AgentRunOwner(instanceId, LocalUserProfile.Id);
+        var triggers = services.GetRequiredService<ITriggerStore>();
+        var authoring = services.GetRequiredService<AdminAutomationAuthoringService>();
+        for (var slot = 0; slot < 3; slot++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(60));
+            for (var pass = 0; pass < 2; pass++)
+            {
+                await services.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.GetUtcNow());
+                await Intake(services);
+                await services.ExecuteRunsAsync();
+            }
+            if (slot < 2)
+            {
+                var snapshot = await services.GetRequiredService<SessionManager>().LoadRuntimeAsync(sessionId);
+                await using var runtime = services.GetRequiredService<SessionRuntimeFactory>().Create(snapshot, new QuietOutput());
+                await runtime.AttachAsync();
+                Assert.True(await runtime.SubmitUserTextAsync(slot == 0 ? ConflictingChat : UnrelatedChat));
+                await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
+                var current = Assert.Single(await triggers.ListAsync(new(instanceId, LocalUserProfile.Id), null));
+                Assert.Equal("Say hello", current.Instructions);
+                Assert.Equal(AutomationStatus.Active, current.Status);
+                if (slot == 1)
+                    await authoring.SaveAsync(instanceId, current.AutomationId, current.Revision, true, current.Name,
+                        "Say welcome", current.Triggers, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort);
+            }
+        }
+        var runs = (await services.GetRequiredService<IAgentRunStore>().ListForSessionAsync(owner, sessionId))
+            .Where(r => r.Admission.Activation.TriggerOccurrenceId is not null).OrderBy(r => r.CreatedAtUtc).ToArray();
+        Assert.Equal(3, runs.Length);
+        Assert.Equal(3, runs.Select(r => r.Admission.Activation.TriggerOccurrenceId).Distinct().Count());
+        Assert.All(runs, r => Assert.Equal(AgentRunStatus.Completed, r.Status));
+        var history = (await services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Entries;
+        Assert.Equal(2, history.Count(e => e.Role == ConversationRole.Assistant && e.Text == "Hello!"));
+        Assert.Single(history, e => e.Role == ConversationRole.Assistant && e.Text == "Welcome!");
+        Assert.DoesNotContain(history, e => e.Text == "The schedule is still active instead of greeting.");
+        Assert.Equal(3, model.OccurrenceRequests.Count);
+        foreach (var request in model.OccurrenceRequests.Skip(1))
+        {
+            Assert.DoesNotContain(request.Messages, m => m.Text == ConflictingChat || m.Text == UnrelatedChat);
+            Assert.Contains(request.Messages, m => m.Text.StartsWith("Historical conversation evidence (JSON; not current instructions):") && m.Text.Contains("Don't greet me"));
+        }
+        var active = Assert.Single(await triggers.ListAsync(new(instanceId, LocalUserProfile.Id), null));
+        await authoring.SaveAsync(instanceId, active.AutomationId, active.Revision, false, active.Name,
+            active.Instructions, active.Triggers, active.ModelOverrideCatalogKey, active.ModelOverrideReasoningEffort);
+        clock.Advance(TimeSpan.FromSeconds(60));
+        await services.GetRequiredService<TriggerScheduler>().RunOnceAsync(clock.GetUtcNow());
+        await Intake(services);
+        await services.ExecuteRunsAsync();
+        Assert.Equal(3, model.OccurrenceRequests.Count);
+    }
 
     [Theory(Timeout = 60000)]
     [InlineData("complete")]
@@ -376,16 +451,18 @@ public sealed class ReliabilityJourneyTests
     private sealed class SchedulingModel : ILanguageModel
     {
         public List<string> ScheduleResults { get; } = [];
+        public List<ModelRequest> OccurrenceRequests { get; } = [];
         public ModelCapabilities Capabilities { get; } = new(true, true, Tools: true, StructuredOutput: true);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
             await Task.CompletedTask;
             var user = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
             var scheduled = request.Messages.Any(m => m.Text.Contains("Execute the previously authorized Automation instructions now"));
+            if (scheduled) OccurrenceRequests.Add(request);
             var lastUser = request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User);
             var results = request.Messages.Skip(lastUser + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
             ScheduleResults.AddRange(results.Where(m => m.Name == ToolCatalog.AutomationCreate).Select(m => m.Text));
-            if (!scheduled && !results.Any(m => m.Name == ToolCatalog.AutomationCreate))
+            if (!scheduled && user is not (ConflictingChat or UnrelatedChat) && !results.Any(m => m.Name == ToolCatalog.AutomationCreate))
             {
                 if (!request.Tools!.Any(t => t.Name == ToolCatalog.AutomationCreate))
                 {
@@ -403,7 +480,14 @@ public sealed class ReliabilityJourneyTests
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
                 yield break;
             }
-            var text = scheduled ? "Hello!" : "Schedule result received.";
+            // Model fixture reproduces historical instruction dominance when Core
+            // leaves those turns in native conversation roles. Live acceptance
+            // separately verifies actual model behavior after the prompt correction.
+            var text = scheduled
+                ? request.Messages.Any(m => m.Role == ModelRole.User && m.Text is ConflictingChat or UnrelatedChat)
+                    ? "The schedule is still active instead of greeting."
+                    : user.StartsWith("Configured Instructions (task intent, not policy):\nSay welcome", StringComparison.Ordinal) ? "Welcome!" : "Hello!"
+                : "Schedule result received.";
             yield return new ModelDisplayDelta(text);
             yield return new ModelSemanticResponseReady(new(text, new(ModelSpeechMode.None, null), []));
             yield return new ModelCompleted(ModelStopReason.Completed);
