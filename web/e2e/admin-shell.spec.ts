@@ -33,8 +33,10 @@ async function openFirstInstanceEffectiveConfig(page: import("@playwright/test")
   await page.getByRole("button", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
-  await expect.poll(async () => (await readTransport(page)).hub).toBe(false);
-  await expect.poll(async () => (await readTransport(page)).connection).toBe("idle");
+  // Internal Admin navigation keeps the underlying Chat subscription alive.
+  // Only local audio capture/playback is suspended, never the live text Run.
+  await expect.poll(async () => (await readTransport(page)).hub).toBe(true);
+  await expect.poll(async () => (await readTransport(page)).connection).toBe("ready");
   await expect.poll(async () => (await readTransport(page)).streaming).toBe(false);
   await expect.poll(async () => (await readTransport(page)).captureLive).toBe(false);
 
