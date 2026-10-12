@@ -128,8 +128,19 @@ describe("realtime race handling", () => {
     expect(stop).not.toHaveBeenCalled();
     expect(useSessionStore.getState().captureAuthorized).toBe(false);
 
+    // The response can also finish before the user returns from Admin.
+    hooks.handleEvent({
+      protocolVersion: 1, sessionId: "s1", attachmentId: "a1", eventId: "completed",
+      sequence: 4, timestamp: "2026-09-15T00:00:04.000Z", correlationId: "c1",
+      causationId: null, responseId: "r2", type: "agent.response.completed",
+      payload: { status: "completed" }
+    });
+    expect(useSessionStore.getState().entries.find(e => e.responseId === "r2")?.status)
+      .toBe("completed");
+    expect(useSessionStore.getState().liveResponseId).toBeNull();
+
     resumeLiveSessionForNavigation();
-    expect(useSessionStore.getState().liveResponseId).toBe("r2");
+    expect(useSessionStore.getState().connection).toBe("ready");
     expect(stop).not.toHaveBeenCalled();
   });
 
