@@ -89,6 +89,8 @@ let lastReceiptOffset = 0;
 let lastReceiptResponseId: string | null = null;
 let lastReceiptBlockSignature = "";
 let disposed = false;
+// Chat and Admin share this SPA. Hide media and render receipts outside Chat, not the live SignalR stream.
+let chatSurfaceVisible = true;
 let duckTimer: number | null = null;
 let flushing = false;
 let playbackInterrupt = Promise.resolve();
@@ -807,7 +809,8 @@ function handleEvent(raw: ServerEvent): void {
 
   const next = applyServerEvent(prior, raw);
   if (
-    (prior.ttsTransport === "clientSpeech" || next.ttsTransport === "clientSpeech")
+    chatSurfaceVisible
+    && (prior.ttsTransport === "clientSpeech" || next.ttsTransport === "clientSpeech")
     && raw.responseId
     && (raw.type === "speech.output.segment" || raw.type === "speech.output.completed")
   ) {
@@ -978,7 +981,7 @@ function handleAudioOutput(dto: {
 }): void {
   audioOutputsReceived += 1;
   const responseId = dto.responseId ?? (dto as { ResponseId?: string }).ResponseId;
-  if (!responseId || !connection || isReadonlySession(useSessionStore.getState())) {
+  if (!chatSurfaceVisible || !responseId || !connection || isReadonlySession(useSessionStore.getState())) {
     return;
   }
 
@@ -1349,7 +1352,7 @@ function stopReceipts(): void {
 }
 
 async function sendReceipt(finalRender: boolean, responseId?: string): Promise<void> {
-  if (!connection) {
+  if (!connection || !chatSurfaceVisible) {
     return;
   }
 
@@ -1958,25 +1961,34 @@ async function applyRouteFromLocationInner(): Promise<void> {
 }
 
 export async function suspendLiveSessionForNavigation(): Promise<void> {
-  const snapshot = useSessionStore.getState();
-  if (!snapshot.sessionId || snapshot.connection === "idle") {
-    return;
-  }
-
-  disposed = true;
+  // AppRouter swaps ChatApp for AdminApp but the in-flight AgentRun and live
+  // SignalR subscription belong to the SPA, not to the Chat component mount.
+  // Disconnecting here loses incremental replies and forces an avoidable attach.
+  chatSurfaceVisible = false;
+  voiceModeRequested = false;
+  clientOwnsVoice = false;
+  voiceEpoch += 1;
+  disarmCapture("explicit");
   abortPlayback();
-  await stopConnection();
   stopReceipts();
-  capture.release();
   void releaseClientSpeech();
-  disposed = false;
   useSessionStore.setState({
-    connection: "idle",
     captureLive: false,
-    outputState: "idle",
     pendingMode: null,
-    preflightReady: false
+    preflightReady: false,
+    liveUserTranscript: null
   });
+}
+
+export function resumeLiveSessionForNavigation(): void {
+  chatSurfaceVisible = true;
+  const snapshot = useSessionStore.getState();
+  if (connection && snapshot.connection === "ready" && snapshot.liveResponseId) {
+    // The unmounted Chat component could not acknowledge newly rendered text.
+    // ChatApp reports the committed entries again after mount.
+    startReceipts(snapshot.liveResponseId);
+  }
+  void sendReceipt(false);
 }
 
 export async function navigateFromBrowserHistory(): Promise<void> {
