@@ -1970,6 +1970,8 @@ async function applyRouteFromLocationInner(): Promise<void> {
 }
 
 export async function suspendLiveSessionForNavigation(): Promise<void> {
+  // Popstate, router effects and the Admin button may all request suspension.
+  if (!chatSurfaceVisible) return;
   // AppRouter swaps ChatApp for AdminApp but the in-flight AgentRun and live
   // SignalR subscription belong to the SPA, not to the Chat component mount.
   // Disconnecting here loses incremental replies and forces an avoidable attach.
