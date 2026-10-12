@@ -10,6 +10,8 @@ public sealed class EmailTransportOptions
 {
     public bool Enabled { get; set; } = true;
     public bool SmtpEnabled { get; set; } = true;
+    public bool? SendEnabled { get; set; }
+    public bool EffectiveSendEnabled => SendEnabled ?? SmtpEnabled;
     public string[] AllowedCustomEndpoints { get; set; } = [];
     public int TimeoutSeconds { get; set; } = 20;
 }
@@ -18,7 +20,7 @@ public sealed class MailTransportPolicy(EmailTransportOptions options)
     public void ValidateEndpoint(EmailAccountProfile profile, bool smtp)
     {
         profile.Validate();
-        var endpoint = smtp ? profile.SmtpEndpoint : profile.ImapEndpoint;
+        var endpoint = smtp ? profile.SmtpEndpoint! : profile.ImapEndpoint!;
         if (profile.Preset == EmailProviderPreset.Custom && !options.AllowedCustomEndpoints.Contains($"{endpoint.Host}:{endpoint.Port}", StringComparer.OrdinalIgnoreCase))
             throw AgentCoreErrors.Forbidden("mail_endpoint_denied: Operator allowlist must authorize this endpoint.");
         if (!PublicNetworkPolicy.IsAllowedHostName(endpoint.Host)) throw AgentCoreErrors.Forbidden("mail_endpoint_denied: Public mail hostname is required.");
@@ -31,7 +33,7 @@ public sealed class MailTransportPolicy(EmailTransportOptions options)
     internal async ValueTask<Socket> ConnectAsync(EmailAccountProfile profile, bool smtp, CancellationToken ct)
     {
         ValidateEndpoint(profile, smtp);
-        var endpoint = smtp ? profile.SmtpEndpoint : profile.ImapEndpoint;
+        var endpoint = smtp ? profile.SmtpEndpoint! : profile.ImapEndpoint!;
         var addresses = await Dns.GetHostAddressesAsync(endpoint.Host, ct);
         ValidateAddresses(addresses);
         // Connect to the checked address itself. MailKit receives the original hostname for SNI/certificate validation.

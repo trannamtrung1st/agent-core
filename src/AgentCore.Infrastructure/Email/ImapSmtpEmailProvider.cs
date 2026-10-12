@@ -30,7 +30,7 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
         ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
     private async Task AuthenticateAsync(MailService client, bool smtp, CancellationToken ct)
     {
-        var endpoint = smtp ? account.Profile.SmtpEndpoint : account.Profile.ImapEndpoint;
+        var endpoint = smtp ? account.Profile.SmtpEndpoint! : account.Profile.ImapEndpoint!;
         policy.ValidateEndpoint(account.Profile, smtp);
         var socket = SocketFactory is null ? await policy.ConnectAsync(account.Profile, smtp, ct) : await SocketFactory(ct);
         ConfigureClient?.Invoke(client);

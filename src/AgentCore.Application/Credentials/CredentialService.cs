@@ -39,10 +39,12 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
     {
         profile = Validate(profile.Validate);
         var displayName = Validate(() => CredentialRules.DisplayName(name));
-        Validate(() => { CredentialRules.ProtectedValue(value); return true; });
+        if (profile.AuthMethod == EmailAuthMethod.Password) Validate(() => { CredentialRules.ProtectedValue(value); return true; });
+        else if (!string.IsNullOrEmpty(value) || profile.GoogleSubject is not null || profile.ConnectionStatus != EmailConnectionStatus.NotConnected)
+            throw AgentCoreErrors.Validation("Google authorization is owner-connected, never supplied as a protected value.");
         var id = ids.NewId(); var now = time.GetUtcNow();
-        var credential = new Credential(id, displayName, CredentialKind.Password, CredentialStatus.Active,
-            CredentialRules.Metadata(null), [], protector.Protect(id, 1, value), 1, 1, now, now,
+        var credential = new Credential(id, displayName, profile.AuthMethod == EmailAuthMethod.Password ? CredentialKind.Password : CredentialKind.Token, CredentialStatus.Active,
+            CredentialRules.Metadata(null), [], profile.AuthMethod == EmailAuthMethod.Password ? protector.Protect(id, 1, value) : "", 1, 1, now, now,
             CredentialPurpose.EmailAccount, profile);
         await store.SaveAsync(credential, 0, ct);
         return View(credential, 0);
@@ -52,9 +54,12 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
     {
         var current = await RequireCredential(id, ct);
         if (current.Purpose != CredentialPurpose.EmailAccount) throw AgentCoreErrors.Validation("Credential is not an Email Account.");
+        if (current.EmailAccount!.AuthMethod != profile.AuthMethod || current.EmailAccount.Preset != profile.Preset)
+            throw AgentCoreErrors.Validation("Account authentication method is immutable.");
+        if (current.EmailAccount.AuthMethod == EmailAuthMethod.GoogleOAuth2) profile = current.EmailAccount;
         var updated = Validate(() => current with { DisplayName = CredentialRules.DisplayName(name), Status = Parse<CredentialStatus>(status),
             EmailAccount = profile.Validate(), Revision = revision + 1, UpdatedAtUtc = time.GetUtcNow() });
-        await store.SaveAsync(updated, revision, ct); return await GetAsync(id, ct);
+        await store.SaveAsync(updated, revision, ct, current.SecretRevision); return await GetAsync(id, ct);
     }
     public async ValueTask<CredentialView> UpdateAsync(Guid id, long revision, string name, string status,
         IReadOnlyDictionary<string, string>? metadata, IReadOnlyList<string>? origins, CancellationToken ct = default)
@@ -63,14 +68,15 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
         if (current.Purpose == CredentialPurpose.EmailAccount && origins?.Count > 0) throw AgentCoreErrors.Validation("Email Accounts cannot have Browser origins.");
         var updated = Validate(() => current with { DisplayName = CredentialRules.DisplayName(name), Status = Parse<CredentialStatus>(status),
             Metadata = CredentialRules.Metadata(metadata), AllowedOrigins = CredentialRules.Origins(origins), Revision = revision + 1, UpdatedAtUtc = time.GetUtcNow() });
-        await store.SaveAsync(updated, revision, ct); return await GetAsync(id, ct);
+        await store.SaveAsync(updated, revision, ct, current.SecretRevision); return await GetAsync(id, ct);
     }
     public async ValueTask<CredentialView> ReplaceAsync(Guid id, long revision, string value, CancellationToken ct = default)
     {
         Validate(() => { CredentialRules.ProtectedValue(value); return true; });
         var current = await RequireCredential(id, ct);
+        if (current.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2) throw AgentCoreErrors.Validation("Use Connect with Google to replace authorization.");
         await store.SaveAsync(current with { ProtectedPayload = protector.Protect(id, current.ProtectionVersion, value),
-            Revision = revision + 1, UpdatedAtUtc = time.GetUtcNow() }, revision, ct);
+            Revision = revision + 1, UpdatedAtUtc = time.GetUtcNow() }, revision, ct, current.SecretRevision);
         return await GetAsync(id, ct);
     }
     public ValueTask DeleteAsync(Guid id, long revision, CancellationToken ct = default) => store.DeleteAsync(id, revision, ct);

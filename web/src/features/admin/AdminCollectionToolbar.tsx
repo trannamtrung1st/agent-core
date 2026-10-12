@@ -1,16 +1,19 @@
 import { useCallback, useState } from "react";
-import { Input, Typography } from "antd";
+import { Flex, Input, Typography, theme } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 
 /** Shared collection search; the enclosing collection owns outer insets and gaps. */
-export function AdminCollectionToolbar({ label, value, onChange }: {
+export function AdminCollectionToolbar({ label, value, onChange, filters }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  filters?: React.ReactNode;
 }) {
+  const { token } = theme.useToken();
   return (
     <div className="admin-collection-toolbar">
-      <Input
+      <Flex align="center" gap={token.paddingXS} wrap>
+      <Input style={{ flex: "1 1 auto", minWidth: 0 }}
         aria-label={`Search ${label}`}
         placeholder={`Search ${label}`}
         prefix={<SearchOutlined />}
@@ -18,6 +21,8 @@ export function AdminCollectionToolbar({ label, value, onChange }: {
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
+      {filters}
+      </Flex>
       <Typography.Text type="secondary" className="admin-table-scroll-hint">Scroll horizontally for more columns.</Typography.Text>
     </div>
   );

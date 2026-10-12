@@ -231,3 +231,7 @@ Create a General Assistant v23 Instance. In Identity & version → Settings, ver
 ## Account-scoped Email demo
 
 Use a dedicated mailbox and intended test recipient. Add an Email Account in Connections → Credentials; in Synthetic, separate tests truthfully report no server connection. Bind it to an authorized Instance (general-assistant v25 or secretary v10), or leave unbound to exercise explicit Chat selection. Ask to search/read and summarize mail, create a Core draft, then send after inspecting sender/account/To/Cc/Bcc/subject/full body in approval. Observe one immutable Sent/Failed/Indeterminate receipt. Reload/restart preserves account, binding, draft and send fence. Disable/unbind and confirm stale access fails. Unattended work points to Admin instead of opening a chooser. No live demo is claimed without configured Real setup and observed recipient delivery.
+
+## Owner-connected Gmail
+
+Configure the deployment OAuth client once, then connect one dedicated Gmail mailbox from Connections → Credentials. Verify its identity, bind it to General Assistant, request recent inbox/read, create a Core draft and inspect verified From plus To/Cc/Bcc/subject/body before exact approval. Provider accepted ID and recipient delivery are separate evidence. Disconnect globally, verify access denial, and reconnect only to the original account. Synthetic runs the same owner journey with an explicit offline label and no Google delivery; live UAT status belongs to the [OAuth report](reports/gmail-oauth-verification-2026-10-12.md).

@@ -705,22 +705,27 @@ Settings preview preparation checks the same Definition and host constraints as 
 
 ## Account-scoped Email contracts
 
-All routes require the existing owner capability. Safe `/api/v2/admin/credentials` list/detail adds `purpose` (`General` or `EmailAccount`) and nullable typed `emailAccount`: preset, emailAddress, imapUsername/smtpUsername, imapEndpoint/smtpEndpoint `{host,port,tlsMode}`. Password/ciphertext are never returned.
+Owner capability is required for Admin CRUD, connection status/check/start/disconnect and trusted chooser routes. The public callback instead requires a valid single-use transaction and its same-browser HttpOnly/SameSite=Lax correlation cookie; normal owner headers are never required by Google redirects. All OAuth responses use no-store/no-referrer. Secure cookies apply on configured HTTPS; loopback HTTP supports the local Vite proxy.
 
-| Route | Request / behavior |
+Safe Credential projection adds `emailAccount.authMethod`, `googleSubject`, `grantedScopes`, `connectionStatus`, `authEpoch`, `connectedAtUtc`, and `synthetic`; Gmail has null endpoints and no mailbox usernames. No token, code, cookie, verifier or ciphertext is returned. Gmail identity fields cannot be edited through CRUD.
+
+| Route | Request / result |
 | --- | --- |
-| POST `/api/v2/admin/email-accounts` | `{displayName,profile,protectedValue}`; atomic Password/Profile creation, 201 safe Credential |
-| PATCH `/api/v2/admin/email-accounts/{id}` | `{expectedRevision,displayName,status,profile}`; typed safe update |
-| POST `/api/v2/admin/email-accounts/{id}/test` | `{expectedRevision,protocol:"imap"|"smtp"}`; safe `{protocol,status,observedAtUtc,error}`, authentication only |
-| PUT `/api/v2/admin/credentials/{id}/value` | Existing revisioned write-only rotation |
-| GET `/api/v2/admin/email-send-operations/{draftId}` | Safe immutable receipt; unfinished claim projects Indeterminate even after account disable/delete |
-| GET `/api/v2/sessions/{id}/email-account-request` | 204 or host-only `{requestId,expiresAtUtc,instanceId,agentName,expectedInstanceRevision,choices}` |
-| POST `/api/v2/sessions/{id}/email-account-request/decision` | `{requestId,accountId?,reference?,expectedInstanceRevision}`; null account cancels; Session mailbox validates/binds/continues |
+| POST `/api/v2/admin/email-accounts` | `{displayName,profile:{preset:"Gmail"}}` creates unconnected Token; Custom supplies typed endpoints, sender/usernames and protectedValue |
+| PATCH `/api/v2/admin/email-accounts/{id}` | `{expectedRevision,displayName,status,profile}`; Gmail profile/identity remains server-owned |
+| GET `/api/v2/admin/email-accounts/oauth/configuration` | `{configured,synthetic}` safe setup readiness |
+| POST `/api/v2/admin/email-accounts/{id}/oauth/start` | `{expectedRevision}`; `{authorizationUrl,expiresAtUtc,synthetic}` plus correlation cookie |
+| GET `/api/v2/integrations/google-email/oauth/callback` | validated state/cookie/code or denial; 303 to fixed Credentials route with safe emailAccount ID |
+| GET/POST `/api/v2/integrations/google-email/oauth/synthetic` | Synthetic-only labeled offline consent, consuming the same correlated transaction |
+| GET `/api/v2/admin/email-accounts/{id}/connection` | `{status,configured,synthetic,error,lastCheckedAtUtc,providerRevoked}`; safe and secret-free |
+| POST `/api/v2/admin/email-accounts/{id}/connection/check` | `{expectedRevision}`; non-sending check, five-second observation throttle |
+| POST `/api/v2/admin/email-accounts/{id}/oauth/disconnect` | `{expectedRevision,confirm:true}`; local disconnect plus separate provider revocation result |
+| POST `/api/v2/admin/email-accounts/{id}/test` | Custom only; `{expectedRevision,protocol:"imap"|"smtp"}` |
+| GET `/api/v2/admin/email-send-operations/{draftId}` | immutable safe receipt; unfinished claim remains Indeterminate |
 
-Existing Instance credential binding routes remain the only grant API. `email.accounts` accepts `{}` and returns only admitted active bound aliases/display names/addresses/provider; zero returns `no_eligible_account`. Its result also reports `sendAvailable` and safe `sendSetupGuidance` when dispatch is disabled. `email.request_account` accepts optional `target` among search/read/create_draft/send; only attached direct UserTurn can produce a pending chooser. Unattended calls return `needs_attention` plus `/admin/connections/credentials`. Search/read/create_draft/send accept optional `accountRef`; omit only when one eligible account exists. `email.search` accepts an omitted or empty string `query` for recent inbox messages, newest first. Non-string queries remain invalid; existing query/limit bounds apply. IMAP scans at most the last 500 UID values when UIDNEXT is available, or fetches UIDs from at most the last 500 message positions when it is absent. Search/read results identify the selected alias, reads label trust as `untrusted_email_content`, and Core drafts identify `storage:"core"`, sender and accountRef. Send keeps existing live approval events and the exact hash/content workflow. No new SignalR message family or secret-bearing payload is introduced.
+Existing Credential binding and same-Session request/decision routes remain unchanged. `email.accounts` lists admitted usable aliases plus provider/authentication/connection/readAvailable/sendAvailable. `email.request_account` is an interactive owner chooser only; unattended requests retain NeedsAttention recovery. Accounts/bindings never grant tools. Search/read/Core drafts/send retain their schemas and optional accountRef. Empty search means recent inbox. Read output remains `untrusted_email_content`; drafts remain `storage:"core"` and exact approvals include From/To/Cc/Bcc/subject/body. No new SignalR envelope is introduced.
 
-Email selection receipts retain the chosen account ID and its actual binding alias, including when two accounts are already bound. The fresh Run carries that alias with new configuration pins; it never substitutes the receipt for current credential/binding authorization. Legacy allowed receipts without selected identity require a new request. When Real SMTP is disabled, `email.send` is absent from tool availability; send-target account requests, approval preparation and dispatch reject with `smtp_disabled` and outgoing-mail setup guidance before a durable send claim. Search/read/Core drafts remain available when SMTP is explicitly disabled. SMTP defaults enabled; account binding, tool authorization and exact draft approval still govern dispatch.
-
+OAuth errors distinguish `email_oauth_not_configured`, `email_oauth_state_invalid`, `email_oauth_denied`, `email_oauth_refresh_missing`, `email_oauth_scope_missing`, `email_oauth_identity_mismatch`, `email_oauth_reconnect_required`, and `email_oauth_temporary_failure`; safe descriptions contain recovery guidance. Duplicate identities use revision/unique conflict. Existing global-disable errors retain smtp_disabled for backward-compatible tool envelopes, with provider-neutral guidance; per-account scope/policy denial uses email_send_disabled. Unknown provider acceptance uses email_send_indeterminate and never auto-retries.
 
 ## Existing Automation activation tool contract
 

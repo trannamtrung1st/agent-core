@@ -1,7 +1,8 @@
 import { followAppLink } from "../../app/appLink";
+import { EmailConnectionTag, GmailConnectionPanel } from "./GmailConnectionPanel";
 import { EmailAccountDialog } from "./EmailAccountDialog";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, Modal, Select, Spin, Table, Tag, Typography, theme } from "antd";
 import { MinusCircleOutlined, PlusOutlined } from "@ant-design/icons";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
@@ -50,14 +51,14 @@ function CredentialFields({ create }: { create: boolean }) {
 
 function matchesCredential(credential: SystemCredential, search: string) {
   return [credential.displayName, credential.kind, credential.status,
-    credential.purpose ?? "General", credential.emailAccount?.emailAddress ?? "", credential.emailAccount?.preset ?? "", ...Object.entries(credential.metadata).flat(), ...credential.allowedOrigins]
+    credential.purpose ?? "General", credential.emailAccount?.emailAddress ?? "", credential.emailAccount?.preset ?? "", credential.emailAccount?.connectionStatus ?? "", ...Object.entries(credential.metadata).flat(), ...credential.allowedOrigins]
     .join(" ").toLowerCase().includes(search.trim().toLowerCase());
 }
 
 function CredentialPolicySummary({ credential }: { credential: SystemCredential }) {
   if (credential.emailAccount) return <Flex vertical style={{ minWidth: 0 }}>
     <Typography.Text ellipsis title={credential.emailAccount.emailAddress}>{credential.emailAccount.emailAddress}</Typography.Text>
-    <Typography.Text type="secondary">{credential.emailAccount.preset} · IMAP/SMTP</Typography.Text>
+    <Typography.Text type="secondary">{credential.emailAccount.preset} · {credential.emailAccount.preset === "Gmail" ? "Google OAuth" : "IMAP/SMTP"}</Typography.Text>
   </Flex>;
   const entries = Object.entries(credential.metadata);
   const more = [entries.length > 2 ? `${entries.length - 2} more metadata ${entries.length === 3 ? "field" : "fields"}` : "",
@@ -70,7 +71,7 @@ function CredentialPolicySummary({ credential }: { credential: SystemCredential 
   </Flex>;
 }
 
-function CredentialDetails({ credential }: { credential: SystemCredential }) {
+function CredentialDetails({ credential, onChanged }: { credential: SystemCredential; onChanged?: () => Promise<void> }) {
   const detailLayout = useAdminDetailLayout(); const { token } = theme.useToken();
   const [tests, setTests] = useState<Partial<Record<'imap' | 'smtp', EmailConnectionTest>>>({});
   const [testing, setTesting] = useState<'imap' | 'smtp'>(); const [testError, setTestError] = useState<AdminFailureNotice>();
@@ -84,17 +85,18 @@ function CredentialDetails({ credential }: { credential: SystemCredential }) {
   return <div role="region" aria-label={`Details for ${credential.displayName}`} style={{ whiteSpace: "normal" }}>
     <Descriptions bordered column={1} size="small" {...detailLayout} items={[
       { key: "kind", label: "Kind / purpose", children: `${credential.kind} · ${credential.purpose === 'EmailAccount' ? 'Email account' : 'General'}` },
-      ...(credential.emailAccount ? [
+      ...(credential.emailAccount?.preset === "Custom" ? [
         { key: 'sender', label: 'Sender', children: credential.emailAccount.emailAddress },
-        { key: 'incoming', label: 'Incoming', children: `${credential.emailAccount.imapEndpoint.host}:${credential.emailAccount.imapEndpoint.port} · ${credential.emailAccount.imapEndpoint.tlsMode}` },
-        { key: 'outgoing', label: 'Outgoing', children: `${credential.emailAccount.smtpEndpoint.host}:${credential.emailAccount.smtpEndpoint.port} · ${credential.emailAccount.smtpEndpoint.tlsMode}` }
+        { key: 'incoming', label: 'Incoming', children: `${credential.emailAccount.imapEndpoint!.host}:${credential.emailAccount.imapEndpoint!.port} · ${credential.emailAccount.imapEndpoint!.tlsMode}` },
+        { key: 'outgoing', label: 'Outgoing', children: `${credential.emailAccount.smtpEndpoint!.host}:${credential.emailAccount.smtpEndpoint!.port} · ${credential.emailAccount.smtpEndpoint!.tlsMode}` }
       ] : []),
       { key: "metadata", label: "Metadata", children: Object.keys(credential.metadata).length
         ? <Flex vertical>{Object.entries(credential.metadata).map(([key, value]) => <Typography.Text key={key}>{key}: {value}</Typography.Text>)}</Flex> : "None" },
       { key: "origins", label: "Allowed origins", children: credential.allowedOrigins.length
         ? <Flex vertical>{credential.allowedOrigins.map(origin => <Typography.Text key={origin}>{origin}</Typography.Text>)}</Flex> : "None configured" }
     ]} />
-    {credential.emailAccount && <Flex vertical gap={token.paddingXS} style={{ paddingBlockStart: token.paddingSM }}>
+    {credential.emailAccount?.preset === "Gmail" && <GmailConnectionPanel account={credential} onChanged={onChanged} />}
+    {credential.emailAccount?.preset === "Custom" && <Flex vertical gap={token.paddingXS} style={{ paddingBlockStart: token.paddingSM }}>
       <Typography.Text type="secondary">Connection tests authenticate without sending mail. A configured account has not been tested.</Typography.Text>
       {testError && <Alert type="error" showIcon title={<AdminErrorNotice message={testError.message} diagnosticId={testError.diagnosticId} showDetailsLabel />} />}
       {(['imap', 'smtp'] as const).map(protocol => <Flex key={protocol} align="center" wrap gap={token.paddingXS}>
@@ -107,14 +109,16 @@ function CredentialDetails({ credential }: { credential: SystemCredential }) {
   </div>;
 }
 function ProtectedValueField({ email = false }: { email?: boolean }) {
-  return <Form.Item name="protectedValue" label={email ? "App Password" : "Protected value"} rules={[{ required: true }]} extra="Protected values cannot be read back. Replace the value if it changes.">
+  return <Form.Item name="protectedValue" label={email ? "Password" : "Protected value"} rules={[{ required: true }]} extra="Protected values cannot be read back. Replace the value if it changes.">
     <Input.Password visibilityToggle={false} autoComplete="new-password" spellCheck={false} />
   </Form.Item>;
 }
 
 export function CredentialsSection() {
   const { token } = theme.useToken(); const { modal, message } = App.useApp();
+  const emailTrigger = useRef<HTMLElement | null>(null); const emailTriggerAccount = useRef<string | undefined>(undefined); const addEmailTrigger = useRef<HTMLButtonElement | null>(null);
   const [emailDialog, setEmailDialog] = useState<{ account?: SystemCredential }>();
+  const [statusFilter, setStatusFilter] = useState("All");
   const [items, setItems] = useState<SystemCredential[]>([]); const [loading, setLoading] = useState(true); const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<AdminFailureNotice>(); const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<{ kind: "create" | "edit" | "replace"; item?: SystemCredential }>();
@@ -122,7 +126,7 @@ export function CredentialsSection() {
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const [expanded, setExpanded] = useState<React.Key[]>([]);
   const load = useCallback(async () => { setLoading(true); setError(undefined);
-    try { setItems(await listCredentials()); setLoaded(true); } catch (e) { setError(describeAdminError(e, "Unable to load credentials.")); }
+    try { const fresh = await listCredentials(); setItems(fresh); setEmailDialog(d => d?.account ? { account: fresh.find(c => c.credentialId === d.account!.credentialId) ?? d.account } : d); setLoaded(true); } catch (e) { setError(describeAdminError(e, "Unable to load credentials.")); }
     finally { setLoading(false); } }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -146,33 +150,39 @@ export function CredentialsSection() {
     } catch (e) { setDialogError(describeAdminError(e, "Credential could not be saved. Enter the protected value again to retry.")); }
     finally { form.setFieldValue("protectedValue", undefined); setBusy(false); }
   }
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('emailAccount');
+    const account = items.find(c => c.credentialId === id && c.emailAccount?.preset === 'Gmail');
+    if (loaded && account) { setEmailDialog({ account }); window.history.replaceState(null, '', window.location.pathname); }
+  }, [items, loaded]);
+  function openEmail(account: SystemCredential | undefined, trigger: HTMLElement) { emailTrigger.current = trigger; emailTriggerAccount.current = account?.credentialId; setEmailDialog({ account }); }
   async function remove(item: SystemCredential) {
     setBusy(true); try { await deleteCredential(item); await load(); }
     catch (e) { setError(describeAdminError(e, "Credential could not be deleted.")); } finally { setBusy(false); }
   }
   return <AgentConfigurationPanel title="System credentials" label="System credentials"
     description="Reusable protected values. Agents receive access through explicit bindings; bindings do not grant tools."
-    extra={<Flex gap={token.paddingXS} wrap><Button disabled={busy || loading || !loaded} onClick={() => setEmailDialog({})}>Add email account</Button><Button type="primary" disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button></Flex>} bodyGap="default">
+    extra={<Flex gap={token.paddingXS} wrap><Button disabled={busy || loading || !loaded} ref={addEmailTrigger} onClick={event => openEmail(undefined, event.currentTarget)}>Add email account</Button><Button type="primary" disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button></Flex>} bodyGap="default">
     {error && <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void load()}>Retry</Button>} />}
     {loading ? <Spin aria-label="Loading credentials" /> : loaded && <>
-      <AdminCollectionToolbar label="credentials" value={search} onChange={setSearch} />
+      <AdminCollectionToolbar label="credentials" value={search} onChange={setSearch} filters={<Select aria-label="Credential status filter" value={statusFilter} onChange={value => { setStatusFilter(value); setSearch(search); }} options={[{ value: "All", label: "All statuses" }, { value: "Active", label: "Active" }, { value: "Disabled", label: "Disabled" }]} />} />
       <Table<SystemCredential> aria-label="System credentials table" className="admin-collection-table" size="small" rowKey="credentialId" scroll={{ x: 1200 }} pagination={pagination}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search.trim() || items.length > 0 ? "No matches. Clear search or filters to see all results." : "No credentials yet"} /> }}
-        dataSource={items.filter(c => matchesCredential(c, search))}
-        expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, c) => setExpanded(open ? [c.credentialId] : []), expandedRowRender: c => <CredentialDetails credential={c} /> }}
+        dataSource={items.filter(c => (statusFilter === "All" || c.status === statusFilter) && matchesCredential(c, search))}
+        expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, c) => setExpanded(open ? [c.credentialId] : []), expandedRowRender: c => <CredentialDetails credential={c} onChanged={load} /> }}
         columns={[
-          { title: "Credential", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a, b) => a.displayName.localeCompare(b.displayName), render: (name, c) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={name}>{name}</Typography.Text><Typography.Text type="secondary">{c.kind} · {c.purpose === "EmailAccount" ? "Email account" : "General"}</Typography.Text></Flex> },
-          { title: "Status", dataIndex: "status", width: 100, filters: [{ text: "Active", value: "Active" }, { text: "Disabled", value: "Disabled" }], onFilter: (status, c) => c.status === status, render: s => <Tag>{s}</Tag> },
+          { title: "Credential", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a, b) => a.displayName.localeCompare(b.displayName), render: (name, c) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={name}>{name}</Typography.Text><Typography.Text type="secondary">{c.kind} · {c.purpose === "EmailAccount" ? "Email account" : "General"}</Typography.Text>{c.emailAccount && <EmailConnectionTag account={c} />}</Flex> },
+          { title: "Status", dataIndex: "status", width: 100, render: s => <Tag>{s}</Tag> },
           { title: "Metadata & origins", width: 280, render: (_, c) => <CredentialPolicySummary credential={c} /> },
           { title: "Bindings", dataIndex: "bindingCount", width: 80, align: "right" },
           { title: "Updated", width: 180, render: (_, c) => <time dateTime={c.updatedAtUtc}>{new Date(c.updatedAtUtc).toLocaleString()}</time> },
           { title: "Actions", width: 300, render: (_, c) => <Flex className="admin-table-actions" gap={token.paddingXS}>
-            <Button disabled={busy} onClick={() => c.purpose === "EmailAccount" ? setEmailDialog({ account: c }) : open("edit", c)}>Edit</Button><Button disabled={busy} onClick={() => open("replace", c)}>Replace value</Button>
+            <Button data-email-account-trigger={c.credentialId} disabled={busy} onClick={event => c.purpose === "EmailAccount" ? openEmail(c, event.currentTarget) : open("edit", c)}>Edit</Button>{c.emailAccount?.preset !== "Gmail" && <Button disabled={busy} onClick={() => open("replace", c)}>Replace value</Button>}
             <Button danger disabled={busy || c.bindingCount > 0} onClick={() => confirmAction(modal, { title: `Delete ${c.displayName}?`, content: "This permanently removes the credential. Unbind all agents first.", okText: "Delete credential", danger: true, onOk: () => remove(c) })}>Delete</Button>
           </Flex> }
         ]} />
     </>}
-    {emailDialog && <EmailAccountDialog open account={emailDialog.account} onClose={() => setEmailDialog(undefined)} onSaved={load} />}
+    <EmailAccountDialog open={!!emailDialog} account={emailDialog?.account} onClose={() => setEmailDialog(undefined)} onClosed={() => (emailTrigger.current?.isConnected ? emailTrigger.current : emailTriggerAccount.current ? document.querySelector<HTMLButtonElement>(`button[data-email-account-trigger="${emailTriggerAccount.current}"]`) ?? addEmailTrigger.current : addEmailTrigger.current)?.focus()} onSaved={load} />
     <Modal className="admin-credential-dialog" centered width={dialog?.kind === "replace" ? 520 : 640} open={!!dialog} title={dialog?.kind === "create" ? "Create credential" : dialog?.kind === "replace" ? "Replace protected value" : "Edit credential"}
       onCancel={close} onOk={() => void save().catch(() => {})} confirmLoading={busy} closable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }} okText="Save credential" okButtonProps={{ disabled: busy, "aria-label": "Save credential" }} mask={{ closable: false }} forceRender>
       <Flex vertical gap={token.padding}>
@@ -213,7 +223,7 @@ export function InstanceCredentialsSection({ instanceId, revision, archived, onU
     <Table<CredentialBinding> aria-label="Credential bindings table" className="admin-collection-table" size="small" rowKey="bindingId" pagination={pagination} scroll={{ x: 920 }}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search.trim() || bindings.length > 0 ? "No matches. Clear search or filters to see all results." : "No credentials bound"} /> }}
       dataSource={bindings.filter(b => b.reference.toLowerCase().includes(search.trim().toLowerCase()) || matchesCredential(b.credential, search))}
-      expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, b) => setExpanded(open ? [b.bindingId] : []), expandedRowRender: b => <CredentialDetails credential={b.credential} /> }} columns={[
+      expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, b) => setExpanded(open ? [b.bindingId] : []), expandedRowRender: b => <CredentialDetails credential={b.credential} onChanged={load} /> }} columns={[
       { title: "Reference", dataIndex: "reference", width: 180, ellipsis: true, sorter: (a, b) => a.reference.localeCompare(b.reference) },
       { title: "Credential", width: 240, ellipsis: true, render: (_, b) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={b.credential.displayName}>{b.credential.displayName}</Typography.Text><Typography.Text type="secondary">{b.credential.kind} · {b.credential.status}</Typography.Text></Flex> },
       { title: "Metadata & origins", width: 320, render: (_, b) => <CredentialPolicySummary credential={b.credential} /> },

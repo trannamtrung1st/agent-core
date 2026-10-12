@@ -8,11 +8,16 @@ test("email harness approval modal approves synthetic send", async ({ page }) =>
   const token = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': token! };
   const account = await page.request.post('/api/v2/admin/email-accounts', { headers, data: {
-    displayName: 'Synthetic harness account', protectedValue: 'offline-fixture-password', profile: { preset: 'Gmail', emailAddress: 'assistant@example.test',
-      imapUsername: 'assistant@example.test', smtpUsername: 'assistant@example.test', imapEndpoint: { host: 'imap.gmail.com', port: 993, tlsMode: 'ImplicitTls' }, smtpEndpoint: { host: 'smtp.gmail.com', port: 465, tlsMode: 'ImplicitTls' } }
+    displayName: 'Synthetic harness account', profile: { preset: 'Gmail', emailAddress: 'assistant@example.test',
+      imapUsername: '', smtpUsername: '', imapEndpoint: null, smtpEndpoint: null }
   } });
   expect(account.ok(), await account.text()).toBe(true);
   const created = await account.json();
+  const started = await page.request.post(`/api/v2/admin/email-accounts/${created.credentialId}/oauth/start`, { headers, data: { expectedRevision: 1 } });
+  expect(started.ok()).toBe(true);
+  const auth = await started.json(); const state = new URL(auth.authorizationUrl, 'http://localhost').searchParams.get('state');
+  const callback = await page.request.get(`/api/v2/integrations/google-email/oauth/callback?state=${encodeURIComponent(state!)}&code=synthetic-consent`);
+  expect(callback.ok()).toBe(true);
   const grant = await page.request.post(`/api/v2/admin/agent-instances/${owner}/credential-bindings`, { headers, data: { credentialId: created.credentialId, reference: 'harness-mail', expectedInstanceRevision: 1 } });
   expect(grant.ok(), await grant.text()).toBe(true);
 

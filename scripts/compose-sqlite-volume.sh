@@ -285,6 +285,30 @@ json.dump(admin_state, open("/tmp/agent-core-admin.json", "w"))
 print("admin", instance["instanceId"], managed["sessionId"], pub_version)
 
 open("/tmp/agent-core-owner-token.txt", "w").write(token)
+# Same owner/correlation flow, visibly Synthetic and no provider network.
+import http.cookiejar
+jar = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+def oauth_request(path, method="GET", data=None, headers=None):
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=json.dumps(data).encode() if data is not None else None, headers=headers or {}, method=method)
+    try:
+        with opener.open(req) as response:
+            body = response.read()
+            return response.status, json.loads(body) if response.headers.get_content_type() == "application/json" else None
+    except urllib.error.HTTPError as error:
+        raise SystemExit(f"Synthetic OAuth request failed ({method}, status {error.code})") from None
+_, gmail = oauth_request("/api/v2/admin/email-accounts", "POST", {"displayName": "Compose Synthetic OAuth", "profile": {"preset": "Gmail"}}, owner_headers)
+_, started = oauth_request(f"/api/v2/admin/email-accounts/{gmail['credentialId']}/oauth/start", "POST", {"expectedRevision": gmail['revision']}, owner_headers)
+assert started["synthetic"] is True
+state = urllib.parse.parse_qs(urllib.parse.urlsplit(started["authorizationUrl"]).query)["state"][0]
+oauth_request("/api/v2/integrations/google-email/oauth/callback?" + urllib.parse.urlencode({"state": state, "code": "synthetic-consent"}))
+_, connected = oauth_request(f"/api/v2/admin/credentials/{gmail['credentialId']}", headers=owner_headers)
+assert connected["kind"] == "Token" and connected["emailAccount"]["connectionStatus"] == "Connected" and connected["emailAccount"]["synthetic"] is True
+assert "synthetic-refresh" not in json.dumps(connected)
+with open("/tmp/agent-core-gmail-oauth-account.json", "w") as output:
+    json.dump({"id": connected["credentialId"], "revision": connected["revision"], "email": connected["emailAccount"]["emailAddress"]}, output)
+print("Synthetic OAuth account connected with safe projection")
+
 PY
 
 session_id="$(python3 -c 'import json; print(json.load(open("/tmp/agent-core-session.json"))["sessionId"])')"
@@ -568,6 +592,17 @@ assert "compose-private-value-7b3f" not in safe_credential
 status, grants = get(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{credential['instanceId']}/credential-bindings")
 assert status == 200 and any(item["bindingId"] == credential["bindingId"] and item["reference"] == "store-admin" for item in json.loads(grants)["items"])
 print("credential and binding survived with safe projection", credential["credentialId"])
+
+gmail = json.load(open("/tmp/agent-core-gmail-oauth-account.json"))
+_, body = get(f"http://127.0.0.1:{port}/api/v2/admin/credentials/{gmail['id']}")
+account = json.loads(body)
+assert account["revision"] == gmail["revision"] and account["emailAccount"]["emailAddress"] == gmail["email"]
+assert account["emailAccount"]["connectionStatus"] == "Connected" and account["emailAccount"]["synthetic"] is True
+req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v2/admin/email-accounts/{gmail['id']}/connection/check", method="POST", data=json.dumps({"expectedRevision": gmail["revision"]}).encode(), headers={"Content-Type": "application/json", "X-AgentCore-Owner-Capability": token})
+with urllib.request.urlopen(req) as response:
+    checked = response.read()
+assert json.loads(checked)["status"] == "Connected"
+print("Synthetic OAuth grant and non-sending check survived container recreation")
 
 PY
 

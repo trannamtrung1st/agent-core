@@ -46,7 +46,7 @@ public sealed partial class SessionRuntime
                 try
                 {
                     var account = await credentials.GetAsync(accountId, ct);
-                    if (account.Purpose != "EmailAccount" || account.Status != "Active") throw AgentCoreErrors.Forbidden("Choose an active Email Account.");
+                    if (account.Purpose != "EmailAccount" || account.Status != "Active" || account.EmailAccount is not { IsUsable: true }) throw AgentCoreErrors.Forbidden("Choose an active Email Account.");
                     var binding = (await credentials.BindingsAsync(_snapshot.AgentInstanceId, ct)).FirstOrDefault(b => b.CredentialId == accountId);
                     if (binding is null) binding = await credentials.BindAsync(_snapshot.AgentInstanceId, accountId, input.Reference ?? "email", input.InstanceRevision, ct);
                     var (_, resolved) = await ResolveNewRunAsync(ct);

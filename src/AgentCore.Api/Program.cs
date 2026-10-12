@@ -15,6 +15,8 @@ using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.AspNetCore.Http.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+// Hosting request diagnostics include raw query strings. OAuth codes/state must never enter logs.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 
 builder.Services.Configure<JsonOptions>(options =>
 {
@@ -123,6 +125,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapHub<SessionHub>("/hubs/session");
 AdminEndpoints.Map(app);
+GoogleEmailOAuthEndpoints.Map(app);
 HookEndpoints.Map(app);
 SessionCatalogEndpoints.Map(app);
 EmailSelectionEndpoints.Map(app);

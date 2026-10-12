@@ -14,7 +14,7 @@ public sealed class EmailAccountApiTests : IClassFixture<AgentCoreApiFactory>
     public async Task Owner_creates_typed_account_tests_separately_edits_and_rotates_without_readback()
     {
         using var owner = TestOwnerCapability.CreateOwnerClient(factory);
-        var profile = new EmailAccountProfileDto("Gmail", "demo@example.test", "demo@example.test", "demo@example.test",
+        var profile = new EmailAccountProfileDto("Custom", "demo@example.test", "demo@example.test", "demo@example.test",
             new("imap.gmail.com", 993, "ImplicitTls"), new("smtp.gmail.com", 465, "ImplicitTls"));
         var create = await owner.PostAsJsonAsync("/api/v2/admin/email-accounts", new AdminCreateEmailAccountRequest("Demo email", profile, "protected-app-password-73821"));
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);

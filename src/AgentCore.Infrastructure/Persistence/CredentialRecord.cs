@@ -12,6 +12,7 @@ public sealed class CredentialRecord
     public string AllowedOriginsJson { get; set; } = "[]";
     public string ProtectedPayload { get; set; } = "";
     public int ProtectionVersion { get; set; }
+    public long SecretRevision { get; set; }
     public long Revision { get; set; }
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
@@ -31,4 +32,5 @@ public sealed class EmailAccountProfileRecord
 {
     public string CredentialId { get; set; } = "";
     public string ProfileJson { get; set; } = "{}";
+    public string? GoogleSubject { get; set; }
 }

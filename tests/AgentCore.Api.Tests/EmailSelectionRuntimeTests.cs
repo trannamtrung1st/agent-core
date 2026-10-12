@@ -32,11 +32,11 @@ public sealed class EmailSelectionRuntimeTests
         var model = new SelectionModel(); var db = Path.Combine(Path.GetTempPath(), $"email-selection-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db, model); var s = host.Services;
         var owner = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 25);
-        var account = await s.GetRequiredService<CredentialService>().CreateEmailAccountAsync("Selected mail", EmailAccountProfile.Gmail("demo@example.test"), "protected-fixture-4821");
+        var account = await s.GetRequiredService<CredentialService>().CreateEmailAccountAsync("Selected mail", EmailAccountProfile.Custom("demo@example.test"), "protected-fixture-4821");
         if (decision == "alreadyBound")
         {
             var credentials = s.GetRequiredService<CredentialService>();
-            var other = await credentials.CreateEmailAccountAsync("Other mail", EmailAccountProfile.Gmail("other@example.test"), "other-fixture-password");
+            var other = await credentials.CreateEmailAccountAsync("Other mail", EmailAccountProfile.Custom("other@example.test"), "other-fixture-password");
             await credentials.BindAsync(owner.InstanceId, other.CredentialId, "primary", owner.Revision);
             owner = (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(owner.InstanceId))!;
             await credentials.BindAsync(owner.InstanceId, account.CredentialId, "secondary", owner.Revision);

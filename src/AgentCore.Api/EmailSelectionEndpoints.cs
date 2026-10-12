@@ -17,7 +17,7 @@ public static class EmailSelectionEndpoints
     {
         var group = app.MapGroup("/api/v2/sessions/{sessionId:guid}/email-account-request").AddEndpointFilter<OwnerCapabilityFilter>();
         group.MapGet("", (Guid sessionId, SessionManager sessions, ILocalUserProfileService profiles, IAgentRunStore runs,
-            IAgentInstanceStore instances, IEmailStore store, [FromServices] CredentialService credentials, TimeProvider time, CancellationToken ct) => Safe(async () =>
+            IAgentInstanceStore instances, IEmailStore store, IEmailProviderFactory providers, [FromServices] CredentialService credentials, TimeProvider time, CancellationToken ct) => Safe(async () =>
         {
             var session = await RequireSession(sessionId, sessions, profiles, ct);
             var source = (await runs.ListPageAsync(new(session.AgentInstanceId, session.ProfileId!.Value), sessionId, null, 1, ct)).Items.FirstOrDefault();
@@ -29,7 +29,7 @@ public static class EmailSelectionEndpoints
             var instance = await instances.FindAsync(session.AgentInstanceId, ct);
             if (instance is not { Lifecycle: AgentInstanceLifecycle.Active }) return Results.NoContent();
             var bound = await credentials.BindingsAsync(session.AgentInstanceId, ct);
-            var choices = (await credentials.ListAsync(ct)).Where(c => c.Purpose == "EmailAccount" && c.Status == "Active" && c.EmailAccount is not null)
+            var choices = (await credentials.ListAsync(ct)).Where(c => c.Purpose == "EmailAccount" && c.Status == "Active" && c.EmailAccount is { IsUsable: true } && providers.CanUse(c.EmailAccount) && (request.Target != "email.send" || c.EmailAccount.CanSend))
                 .Select(c => new { accountId = c.CredentialId, c.DisplayName, emailAddress = c.EmailAccount!.EmailAddress,
                     preset = c.EmailAccount.Preset.ToString(), accountRef = bound.FirstOrDefault(b => b.CredentialId == c.CredentialId)?.Reference });
             return Results.Json(new { request.RequestId, request.ExpiresAtUtc, instanceId = instance.InstanceId, agentName = instance.Persona.Name,

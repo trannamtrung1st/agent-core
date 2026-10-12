@@ -71,7 +71,7 @@ export function EmailAccountPicker({ sessionId, connected }: { sessionId: string
       <Flex vertical gap={token.paddingSM}>
         <Typography.Paragraph>Allow {request?.agentName ?? 'this agent'} to use one account for authorized email tools. Account access does not enable additional tools.</Typography.Paragraph>
         {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy} onClick={() => void refresh()}>Refresh</Button>} />}
-        {request?.choices.length === 0 ? <Alert type="info" showIcon title="No active email accounts" description={<Flex vertical gap={token.paddingXS}><span>Add or enable an account in Connections → Credentials, then choose it here.</span><Button href={adminHomePath('credentials')} onClick={followAppLink}>Manage credentials</Button></Flex>} /> :
+        {request?.choices.length === 0 ? <Alert type="info" showIcon title="No connected email accounts" description={<Flex vertical gap={token.paddingXS}><span>Connect Gmail with Google or configure a Custom account in Connections → Credentials, then choose it here.</span><Button href={adminHomePath('credentials')} onClick={followAppLink}>Manage credentials</Button></Flex>} /> :
           <Radio.Group value={selected} disabled={busy} onChange={e => setSelected(e.target.value as string)} aria-label="Email account">
             <Flex vertical gap={token.paddingSM}>{request?.choices.map(c => <Radio key={c.accountId} value={c.accountId}><Flex vertical style={{ overflowWrap: 'anywhere' }}>
               <Typography.Text strong>{c.displayName}</Typography.Text><Typography.Text>{c.emailAddress}</Typography.Text>
