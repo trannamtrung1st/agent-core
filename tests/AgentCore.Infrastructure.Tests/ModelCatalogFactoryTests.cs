@@ -1,4 +1,5 @@
 using AgentCore.Application.Ports;
+using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
@@ -109,6 +110,7 @@ public sealed class ModelCatalogFactoryTests
         var services = new ServiceCollection();
         services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory());
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IDiagnosticIdSource, SystemDiagnosticIdSource>();
         var catalog = ModelCatalogFactory.Real();
         var resolver = new LanguageModelResolver(
             services.BuildServiceProvider(),
@@ -358,6 +360,7 @@ public sealed class ModelCatalogFactoryTests
         var services = new ServiceCollection();
         services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory());
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IDiagnosticIdSource, SystemDiagnosticIdSource>();
         var catalog = ModelCatalogFactory.Real();
         var primary = new LanguageModelProviderOptions
         {
