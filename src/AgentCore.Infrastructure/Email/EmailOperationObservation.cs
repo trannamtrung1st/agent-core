@@ -12,22 +12,28 @@ internal sealed class EmailOperationObservation(string operation, bool synthetic
     private readonly long started = time.GetTimestamp();
     private readonly Activity? activity = StartActivity(operation, synthetic, accountId);
     private string outcome = "failed";
+    private bool completed;
 
-    public void Complete(string result = "success") => outcome = result;
+    public void Complete(string result = "success") { completed = true; outcome = result; }
     public void Correlate(Guid id) => activity?.SetTag("credential.id", id);
-    public void Fail(Exception exception) => outcome = exception switch
+    public void Fail(Exception exception)
     {
-        OperationCanceledException => "cancelled",
-        AgentCoreException { Code: "email_oauth_reconnect_required" or "email_oauth_scope_missing" } => "reconnect_required",
-        AgentCoreException { Code: "email_oauth_temporary_failure" or "email_provider_unavailable" } => "temporary_failure",
-        _ => "failed"
-    };
+        completed = true;
+        outcome = exception switch
+        {
+            OperationCanceledException => "cancelled",
+            AgentCoreException { Code: "email_oauth_reconnect_required" or "email_oauth_scope_missing" } => "reconnect_required",
+            AgentCoreException { Code: "email_oauth_temporary_failure" or "email_provider_unavailable" } => "temporary_failure",
+            _ => "failed"
+        };
+    }
 
     public void Dispose()
     {
-        if (outcome == "failed" && cancellation.IsCancellationRequested) outcome = "cancelled";
+        if (!completed && cancellation.IsCancellationRequested) outcome = "cancelled";
         activity?.SetTag("email.outcome", outcome);
-        activity?.SetStatus(outcome is "success" or "cached" or "throttled" or "denied" or "cancelled" ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
+        if (activity?.Status != ActivityStatusCode.Error)
+            activity?.SetStatus(outcome is "success" or "cached" or "throttled" or "denied" or "cancelled" ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
         RuntimeTelemetry.RecordEmailOperation("gmail", operation, outcome, synthetic, time.GetElapsedTime(started).TotalMilliseconds);
         activity?.Dispose();
     }

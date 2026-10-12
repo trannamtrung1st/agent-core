@@ -136,7 +136,7 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
                 observation.Complete("indeterminate");
                 return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google acceptance could not be confirmed. This draft will not be retried.");
             }
-            if (!response.IsSuccessStatusCode) return new(EmailSendOutcome.Failed, null, "email_send_rejected", "Google rejected the message.");
+            if (!response.IsSuccessStatusCode) { observation.Complete("failed"); return new(EmailSendOutcome.Failed, null, "email_send_rejected", "Google rejected the message."); }
             using var json = await GoogleEmailOAuthService.ReadJson(response, 64 * 1024, cancellationToken);
             if (json.RootElement.TryGetProperty("id", out var id) && id.GetString() is { Length: > 0 } accepted)
             { observation.Complete(); return new(EmailSendOutcome.Sent, accepted, null, null); }
