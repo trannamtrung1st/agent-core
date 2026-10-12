@@ -100,6 +100,18 @@ public sealed class AutomationDestinationJourneyTests
         if (recurring) Assert.Equal(AutomationStatus.SuspendedPolicy, (await s.GetRequiredService<ITriggerStore>().GetAsync(automation.Owner, automation.AutomationId))!.Status);
         Assert.Empty((await s.GetRequiredService<IMemoryStore>().ListBackgroundSessionsAsync(new(instance.InstanceId, LocalUserProfile.Id), null, 50, false)).Items);
         var current = (await s.GetRequiredService<ITriggerStore>().GetAsync(automation.Owner, automation.AutomationId))!;
+        if (!recurring)
+        {
+            Assert.Equal(AutomationStatus.Completed, current.Status);
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() => authoring.SaveAsync(instance.InstanceId,
+                current.AutomationId, current.Revision, false, current.Name, current.Instructions,
+                current.Triggers, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort).AsTask());
+            Assert.Equal(400, error.StatusCode);
+            var retained = (await s.GetRequiredService<ITriggerStore>().GetAsync(current.Owner, current.AutomationId))!;
+            Assert.Equal(current.Status, retained.Status);
+            Assert.Equal(current.Revision, retained.Revision);
+            return;
+        }
         var disabled = await authoring.SaveAsync(instance.InstanceId, current.AutomationId, current.Revision, false,
             current.Name, current.Instructions, current.Triggers, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort);
         Assert.Equal(AutomationStatus.Disabled, disabled.Status);

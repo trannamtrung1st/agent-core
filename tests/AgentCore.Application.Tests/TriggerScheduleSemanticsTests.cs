@@ -130,6 +130,36 @@ public sealed class TriggerScheduleSemanticsTests
     }
 
     [Fact]
+    public async Task Confirmed_update_with_enabled_requires_shared_authoring_without_partial_content_write()
+    {
+        var definition = await LoadAsync(10);
+        var store = new InMemoryTriggerStore();
+        var registrations = new AutomationService(store, Ids(), new FakeTimeProvider(Now));
+        var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
+        using var createArgs = JsonDocument.Parse(
+            """{"instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":60}""");
+        await TriggerScheduleCommands.ExecuteAsync(definition, registrations, ToolCatalog.AutomationCreate,
+            createArgs.RootElement, AuthorizedContext(owner, "every minute say hello to me", TriggerCommandAction.Create),
+            CancellationToken.None, new HeuristicTriggerCommandAuthorizer());
+        var current = Assert.Single(await store.ListAsync(owner, null));
+        var payload = JsonSerializer.Serialize(new { automationId = current.AutomationId, expectedRevision = current.Revision,
+            enabled = false, instructions = "Changed instructions" });
+        var context = AuthorizedContext(owner, "yes", TriggerCommandAction.Update) with
+        {
+            ExecutePendingProposal = true,
+            PendingProposal = new(ToolCatalog.AutomationUpdate, payload)
+        };
+        using var args = JsonDocument.Parse(payload);
+        var result = await TriggerScheduleCommands.ExecuteAsync(definition, registrations, ToolCatalog.AutomationUpdate,
+            args.RootElement, context, CancellationToken.None, new HeuristicTriggerCommandAuthorizer());
+        Assert.Contains("\"error\":\"unavailable\"", result.Text);
+        var retained = Assert.Single(await store.ListAsync(owner, null));
+        Assert.Equal(current.Instructions, retained.Instructions);
+        Assert.Equal(current.Status, retained.Status);
+        Assert.Equal(current.Revision, retained.Revision);
+    }
+
+    [Fact]
     public async Task Fixed_interval_update_changes_interval_max_occurrences_and_cancels()
     {
         var definition = await LoadAsync(10);

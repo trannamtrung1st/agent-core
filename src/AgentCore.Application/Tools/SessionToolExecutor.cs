@@ -382,25 +382,28 @@ public sealed partial class SessionToolExecutor(
                 projection["coverage"] = JsonSerializer.SerializeToNode(coverage, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                 return FitResult(remainingOutputBytes, projection.ToJsonString());
             }
-            if (call.Name is ToolCatalog.AutomationRun or ToolCatalog.AutomationDisable)
+            if (call.Name is ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable)
+            {
+                if (admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }
+                    || triggerCommand?.Owner is not AgentCore.Domain.Triggers.TriggerOwner activationOwner
+                    || admission.AgentInstanceId != activationOwner.AgentInstanceId)
+                    return TextResult(Error("forbidden", "Automation activation requires the current owned user turn."));
+                triggerCommand = triggerCommand with { CurrentUserText = admission.OwnerTurnText ?? triggerCommand.CurrentUserText };
+            }
+            if (call.Name == ToolCatalog.AutomationRun)
             {
                 if (automationAuthoring is null || triggerRegistrations is null || admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }
                     || triggerCommand?.Owner is not AgentCore.Domain.Triggers.TriggerOwner owner || admission.AgentInstanceId != owner.AgentInstanceId)
                     return TextResult(Error("forbidden", "Automation management requires the current owned user turn."));
                 var text = admission.OwnerTurnText ?? triggerCommand.CurrentUserText ?? "";
-                var authorized = call.Name == ToolCatalog.AutomationDisable
-                        ? System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(disable|stop|pause)\b.{0,40}\b(automation|schedule|reminder|this|that|it)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-                        : System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(run|execute|start)\b.{0,40}\b(automation|schedule|reminder|this|that|it)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var authorized = System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(run|execute|start)\b.{0,40}\b(automation|schedule|reminder|this|that|it)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(don'?t|do not|never)\b.{0,30}\b(disable|stop|pause|run|execute|start)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) authorized = false;
                 if (!authorized) return TextResult(Error("forbidden", "The current user message does not authorize this Automation action."));
                 var automationId = Guid.Parse(args.GetProperty("automationId").GetString() ?? "");
                 var current = await triggerRegistrations.GetAsync(owner, automationId, cancellationToken)
                     ?? throw AgentCoreErrors.NotFound("Automation was not found.");
                 var revision = args.GetProperty("expectedRevision").GetInt64();
-                if (call.Name == ToolCatalog.AutomationRun)
-                    return TextResult(JsonSerializer.Serialize(new { occurrenceId = (await automationAuthoring.RunNowAsync(owner.AgentInstanceId, automationId, revision, cancellationToken)).OccurrenceId }));
-                return TextResult(TriggerScheduleCommands.RegistrationJson(await automationAuthoring.SaveAsync(owner.AgentInstanceId, automationId, revision, false,
-                    current.Name, current.Instructions, current.Triggers, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort, cancellationToken)));
+                return TextResult(JsonSerializer.Serialize(new { occurrenceId = (await automationAuthoring.RunNowAsync(owner.AgentInstanceId, automationId, revision, cancellationToken)).OccurrenceId }));
             }
             if (call.Name == AgentCore.Application.Experience.ExperienceService.RecordTool)
             {
@@ -502,7 +505,7 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.EmailSend => TextResult(
                     await SendEmailDraftAsync(args, approvalGrant, cancellationToken, admission, sessionId).ConfigureAwait(false)),
                 ToolCatalog.AutomationCreate or ToolCatalog.AutomationList
-                    or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationDelete => await TriggerScheduleCommands.ExecuteAsync(
+                    or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationDelete or ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable => await TriggerScheduleCommands.ExecuteAsync(
                         definition,
                         triggerRegistrations,
                         call.Name,

@@ -30,7 +30,9 @@ public enum TriggerCommandAction
     Create = 1,
     List = 2,
     Update = 4,
-    Cancel = 8
+    Cancel = 8,
+    Enable = 16,
+    Disable = 32
 }
 
 public readonly record struct TriggerAuthorizationResult(
@@ -109,6 +111,8 @@ public static class TriggerAuthorization
 
     public static TriggerCommandAction ActionForTool(string toolName) => toolName switch
     {
+        ToolCatalog.AutomationEnable => TriggerCommandAction.Enable,
+        ToolCatalog.AutomationDisable => TriggerCommandAction.Disable,
         ToolCatalog.AutomationList => TriggerCommandAction.List,
         ToolCatalog.AutomationUpdate => TriggerCommandAction.Update,
         ToolCatalog.AutomationDelete => TriggerCommandAction.Cancel,
@@ -176,7 +180,19 @@ public static class TriggerScheduleCommands
         }
 
         var required = TriggerAuthorization.ActionForTool(effectiveName);
-        var authorization = await ResolveAuthorizationAsync(context, authorizer, required, cancellationToken).ConfigureAwait(false);
+        var activationUpdate = effectiveName == ToolCatalog.AutomationUpdate && effectiveArguments.TryGetProperty("enabled", out _);
+        if (activationUpdate && effectiveArguments.GetProperty("enabled").ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            return Result("validation", "enabled must be a boolean.", clearProposal: false);
+        var enabledOnly = activationUpdate && effectiveArguments.EnumerateObject().All(p => p.Name is "automationId" or "expectedRevision" or "enabled");
+        if (effectiveName == ToolCatalog.AutomationUpdate && !enabledOnly && !context.ExecutePendingProposal
+            && (AutomationActivation.Matches(context.CurrentUserText ?? "", true) || AutomationActivation.Matches(context.CurrentUserText ?? "", false)))
+            return Result("authorization_denied", "An activation request may only change enabled state. Use enable/disable or an enabled-only update; preserve other settings.", clearProposal: false);
+        var activationAction = activationUpdate
+            ? effectiveArguments.GetProperty("enabled").GetBoolean() ? TriggerCommandAction.Enable : TriggerCommandAction.Disable
+            : required;
+        if (enabledOnly) required = activationAction;
+        var verdict = await ResolveAuthorizationDetailsAsync(context, authorizer, required, cancellationToken).ConfigureAwait(false);
+        var authorization = verdict.Decision;
         if (required == TriggerCommandAction.None || authorization != TriggerCommandAuthorizationDecision.Allow)
         {
             if (context.Classification is TriggerAuthorizationClassification.Initiative or TriggerAuthorizationClassification.Environment
@@ -203,9 +219,12 @@ public static class TriggerScheduleCommands
                     or TriggerAuthorizationClassification.UnrelatedUserTurn)
             {
                 RuntimeTelemetry.RecordAutomation(operation, "authorization_classifier_unavailable");
+                if (verdict.FailureReason is { } reason)
+                    return new ToolExecutionResult(JsonSerializer.Serialize(new { error = "authorization_classifier_unavailable",
+                        classifierFailureReason = reason.ToString(), message = "The authorization provider reported a failure. No mutation was made; the user can retry." }));
                 return Result(
                     "authorization_classifier_unavailable",
-                    "Schedule authorization is temporarily unavailable. Preserve the request and explain that it can be retried when the provider recovers.",
+                    "Schedule authorization could not be completed. Preserve the request; ask the user to retry or restate it explicitly. No mutation was made.",
                     clearProposal: false);
             }
 
@@ -214,6 +233,9 @@ public static class TriggerScheduleCommands
                     or TriggerAuthorizationClassification.UnrelatedUserTurn)
             {
                 RuntimeTelemetry.RecordAutomation(operation, "authorization_classifier_invalid_output");
+                if (verdict.FailureReason is { } reason)
+                    return new ToolExecutionResult(JsonSerializer.Serialize(new { error = "authorization_classifier_invalid_output",
+                        classifierFailureReason = reason.ToString(), message = "The authorization classifier did not return a valid decision. This does not establish a provider outage. Clarify the request; no mutation was made." }));
                 return Result(
                     "authorization_classifier_invalid_output",
                     "Schedule authorization returned an invalid classification. No schedule action was authorized; preserve the request and report the classification failure.",
@@ -242,6 +264,18 @@ public static class TriggerScheduleCommands
             return Result("validation", "Schedule owner is required.", clearProposal: true);
         }
 
+        if (activationUpdate && !enabledOnly)
+        {
+            var activationAuthorization = await ResolveAuthorizationAsync(context, authorizer, activationAction, cancellationToken).ConfigureAwait(false);
+            if (activationAuthorization != TriggerCommandAuthorizationDecision.Allow)
+                return Result("authorization_denied", "Changing enabled state also requires explicit activation/deactivation authority in this turn.", clearProposal: false);
+        }
+        if (!context.ExecutePendingProposal && (required is TriggerCommandAction.Enable or TriggerCommandAction.Disable || activationUpdate))
+        {
+            try { await AutomationActivation.RequireTargetAsync(registrations, owner, context, RequireId(effectiveArguments), cancellationToken).ConfigureAwait(false); }
+            catch (TriggerScheduleCommandException ex) { return Result(ex.ErrorCode, ex.Message, clearProposal: false); }
+            catch (ArgumentException ex) { return Result("validation", ex.Message, clearProposal: false); }
+        }
         var policyDefinition = definition;
         var existing = required == TriggerCommandAction.Update
             ? await registrations.GetAsync(owner, RequireId(effectiveArguments), cancellationToken) : null;
@@ -310,6 +344,8 @@ public static class TriggerScheduleCommands
                     : await CreateOnceAsync(policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.AutomationList => await ListAsync(
                     policyDefinition, registrations, owner, effectiveArguments, cancellationToken).ConfigureAwait(false),
+                ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable => await SetEnabledAsync(registrations, owner, context, effectiveArguments,
+                    effectiveName == ToolCatalog.AutomationEnable, automationAuthoring, cancellationToken).ConfigureAwait(false),
                 ToolCatalog.AutomationUpdate => await UpdateAsync(
                     policyDefinition, registrations, owner, context, effectiveArguments, cancellationToken, automationAuthoring).ConfigureAwait(false),
                 ToolCatalog.AutomationDelete => await CancelAsync(
@@ -527,6 +563,19 @@ public static class TriggerScheduleCommands
     private static EventDispatch ReadDispatch(JsonElement args, EventDispatch? current) => args.TryGetProperty("dispatchMode", out var mode)
         ? mode.GetString() switch { "everyMatch" => new(), "coalesceLatest" => new(EventDispatchMode.CoalesceLatest, args.GetProperty("windowSeconds").GetInt32()), _ => throw new ArgumentException("Dispatch mode is invalid.") } : current ?? new();
 
+    private static async Task<string> SetEnabledAsync(IAutomationService registrations, TriggerOwner owner,
+        TriggerCommandContext context, JsonElement arguments, bool enabled, AdminAutomationAuthoringService? authoring, CancellationToken ct)
+    {
+        if (authoring is null) return Error("unavailable", "Automation authoring is unavailable.");
+        var id = RequireId(arguments);
+        var current = await registrations.GetAsync(owner, id, ct).ConfigureAwait(false)
+            ?? throw AgentCoreErrors.NotFound("Automation was not found.");
+        return RegistrationJson(await authoring.SaveAsync(owner.AgentInstanceId, id, ResolveExpectedRevision(arguments, context, current), enabled,
+            current.Name, current.Instructions, current.Triggers, current.ModelOverrideCatalogKey, current.ModelOverrideReasoningEffort, ct,
+            executionTarget: current.ExecutionTarget, completionDelivery: current.CompletionDelivery,
+            requiresTools: current.RequiresTools, requiresVision: current.RequiresVision).ConfigureAwait(false));
+    }
+
     private static async Task<string> UpdateAsync(
         AgentDefinition definition,
         IAutomationService registrations,
@@ -536,6 +585,11 @@ public static class TriggerScheduleCommands
         CancellationToken cancellationToken,
         AdminAutomationAuthoringService? authoring)
     {
+        if (arguments.TryGetProperty("enabled", out _) && authoring is null)
+            return Error("unavailable", "Automation authoring is unavailable.");
+        if (arguments.TryGetProperty("enabled", out var requestedEnabled)
+            && arguments.EnumerateObject().All(p => p.Name is "automationId" or "expectedRevision" or "enabled"))
+            return await SetEnabledAsync(registrations, owner, context, arguments, requestedEnabled.GetBoolean(), authoring, cancellationToken).ConfigureAwait(false);
         var policy = definition.TriggerPolicy ?? throw new ArgumentException("Automation is disabled.");
         var id = RequireId(arguments);
         var current = await registrations.GetAsync(owner, id, cancellationToken).ConfigureAwait(false)
@@ -580,7 +634,7 @@ public static class TriggerScheduleCommands
             var model = arguments.TryGetProperty("modelKey", out var m) ? m.GetString() : current.ModelOverrideCatalogKey;
             var effort = arguments.TryGetProperty("reasoningEffort", out var e) ? e.GetString() : current.ModelOverrideReasoningEffort;
             return RegistrationJson(await authoring.SaveAsync(owner.AgentInstanceId, id, expected,
-                current.Status == AutomationStatus.Active, name, instructions, trigger, model, effort, cancellationToken,
+                arguments.TryGetProperty("enabled", out var state) ? state.GetBoolean() : current.Status == AutomationStatus.Active, name, instructions, trigger, model, effort, cancellationToken,
                 executionTarget: ChatTarget(arguments, context, current), completionDelivery: ChatDelivery(arguments, context, current), requiresTools: OptionalRequirement(arguments, "requiresTools"), requiresVision: OptionalRequirement(arguments, "requiresVision")));
         }
         AutomationChange change;
@@ -1300,13 +1354,19 @@ public static class TriggerScheduleCommands
 
     private static string Operation(string toolName) => toolName switch
     {
+        ToolCatalog.AutomationEnable => "enable",
+        ToolCatalog.AutomationDisable => "disable",
         ToolCatalog.AutomationUpdate => "update",
         ToolCatalog.AutomationDelete => "cancel",
         ToolCatalog.AutomationList => "list",
         _ => "create"
     };
 
-    private static async ValueTask<TriggerCommandAuthorizationDecision> ResolveAuthorizationAsync(
+    private static async ValueTask<TriggerCommandAuthorizationDecision> ResolveAuthorizationAsync(TriggerCommandContext context,
+        ITriggerCommandAuthorizer authorizer, TriggerCommandAction required, CancellationToken ct) =>
+        (await ResolveAuthorizationDetailsAsync(context, authorizer, required, ct).ConfigureAwait(false)).Decision;
+
+    private static async ValueTask<TriggerCommandAuthorizationVerdict> ResolveAuthorizationDetailsAsync(
         TriggerCommandContext context,
         ITriggerCommandAuthorizer authorizer,
         TriggerCommandAction required,
@@ -1316,18 +1376,29 @@ public static class TriggerScheduleCommands
         {
             if (context.PendingProposal is null)
             {
-                return TriggerCommandAuthorizationDecision.Deny;
+                return new(TriggerCommandAuthorizationDecision.Deny);
             }
 
-            return TriggerAuthorization.ActionForTool(context.PendingProposal.ToolName) == required
+            var proposalAction = TriggerAuthorization.ActionForTool(context.PendingProposal.ToolName);
+            if (context.PendingProposal.ToolName == ToolCatalog.AutomationUpdate && required is TriggerCommandAction.Enable or TriggerCommandAction.Disable)
+            {
+                try
+                {
+                    using var json = JsonDocument.Parse(context.PendingProposal.ArgumentsJson);
+                    if (json.RootElement.TryGetProperty("enabled", out var enabled) && enabled.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                        proposalAction = enabled.GetBoolean() ? TriggerCommandAction.Enable : TriggerCommandAction.Disable;
+                }
+                catch (JsonException) { return new(TriggerCommandAuthorizationDecision.Deny); }
+            }
+            return new(proposalAction == required
                 ? TriggerCommandAuthorizationDecision.Allow
-                : TriggerCommandAuthorizationDecision.Deny;
+                : TriggerCommandAuthorizationDecision.Deny);
         }
 
         if (context.Classification == TriggerAuthorizationClassification.CurrentUserTurn
             || context.Classification == TriggerAuthorizationClassification.UnrelatedUserTurn)
         {
-            return await authorizer.AuthorizeCurrentTurnAsync(
+            return await authorizer.AuthorizeWithDetailsAsync(
                 context.CurrentUserText,
                 context.ConversationLanguage,
                 required,
@@ -1336,7 +1407,7 @@ public static class TriggerScheduleCommands
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return TriggerCommandAuthorizationDecision.Deny;
+        return new(TriggerCommandAuthorizationDecision.Deny);
     }
 
     private static ToolExecutionResult Confirmation(string toolName, JsonElement arguments)

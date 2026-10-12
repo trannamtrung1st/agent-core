@@ -36,6 +36,11 @@ public sealed class AdminAutomationAuthoringService(ITriggerStore store, Experie
         var current = automationId is Guid id ? await store.GetAsync(owner, id, ct) : null;
         if (automationId is not null && current is null) throw AgentCoreErrors.NotFound("Automation was not found.");
         if ((current?.Revision ?? 0) != expectedRevision) throw AgentCoreErrors.Conflict("Automation revision is stale.");
+        if (current?.Status is AutomationStatus.Cancelled or AutomationStatus.Completed or AutomationStatus.Expired)
+            throw AgentCoreErrors.Validation("A terminal Automation cannot be re-authored as active or disabled. Create a new Automation only on an explicit new request.");
+        if (enabled && current is not null && (current.ExpiresAtUtc <= time.GetUtcNow()
+            || current.Triggers.Any(t => t.Configuration is ScheduleTrigger schedule && OccurrenceLimit(schedule.Schedule) is { } maximum && current.OccurrenceCount >= maximum)))
+            throw AgentCoreErrors.Validation("A terminal or exhausted Automation cannot be enabled. Create a new Automation only on an explicit new request.");
         var target = executionTarget ?? current?.ExecutionTarget ?? AutomationExecutionTarget.Background;
         var delivery = completionDelivery ?? current?.CompletionDelivery ?? AutomationCompletionDelivery.None;
         delivery.ValidateFor(target);
@@ -114,6 +119,15 @@ public sealed class AdminAutomationAuthoringService(ITriggerStore store, Experie
         var deleted = current.WithCancellation(revision + 1, time.GetUtcNow());
         await store.SaveAutomationAsync(deleted, revision, History(deleted, "delete"), ct);
     }
+
+    private static int? OccurrenceLimit(TriggerSchedule schedule) => schedule switch
+    {
+        FixedIntervalSchedule fixedInterval => fixedInterval.MaxOccurrences,
+        DailySchedule daily => daily.MaxOccurrences,
+        WeeklySchedule weekly => weekly.MaxOccurrences,
+        OneShotSchedule => 1,
+        _ => null
+    };
 
     public async ValueTask<TriggerOccurrence> RunNowAsync(Guid instanceId, Guid automationId, long revision, CancellationToken ct = default)
     {

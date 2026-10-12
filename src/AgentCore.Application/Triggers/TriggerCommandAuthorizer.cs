@@ -14,6 +14,13 @@ public enum TriggerCommandAuthorizationDecision
     ClassifierInvalidOutput
 }
 
+public enum TriggerAuthorizationFailureReason
+{
+    MalformedJson, InvalidDecision, TruncatedOutput, IncompleteOutput, InvalidResponseChannel, OversizedOutput, ProviderInvalidResponse, ProviderFailure
+}
+
+public sealed record TriggerCommandAuthorizationVerdict(TriggerCommandAuthorizationDecision Decision, TriggerAuthorizationFailureReason? FailureReason = null);
+
 public interface ITriggerCommandAuthorizer
 {
     ValueTask<TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(
@@ -23,6 +30,11 @@ public interface ITriggerCommandAuthorizer
         ScheduleConversationContext? scheduleContext = null,
         ScheduleDraftContext? scheduleDraft = null,
         CancellationToken cancellationToken = default);
+
+    async ValueTask<TriggerCommandAuthorizationVerdict> AuthorizeWithDetailsAsync(string? currentUserText, string? conversationLanguage,
+        TriggerCommandAction requestedAction, ScheduleConversationContext? scheduleContext = null, ScheduleDraftContext? scheduleDraft = null,
+        CancellationToken cancellationToken = default) => new(await AuthorizeCurrentTurnAsync(currentUserText, conversationLanguage,
+            requestedAction, scheduleContext, scheduleDraft, cancellationToken).ConfigureAwait(false));
 
     bool IsScheduleConfirmation(string? currentUserText, string? conversationLanguage);
 }
@@ -85,14 +97,15 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
 
     // A definite non-command must not become authorized by a classifier or a substring match.
     internal static bool IsClearlyNonAuthorizing(string text, TriggerCommandAction action = TriggerCommandAction.Create) =>
-        IsExplicitlyNegated(text) || (action != TriggerCommandAction.List && NonCommandPrefix.IsMatch(text)) || InformationalFuture.IsMatch(text);
+        IsExplicitlyNegated(text) || (action != TriggerCommandAction.List && NonCommandPrefix.IsMatch(text)) || InformationalFuture.IsMatch(text)
+        || action == TriggerCommandAction.Create && AutomationActivation.IsActivationDirective(text);
 
     private static readonly Regex NonCommandPrefix = new(
         @"^(?:please\s+)?(?:can you|could you|do you|would you|what|why|how|did|does|is it|yesterday|last\s+\w+|previously|earlier|i (?:asked|said|used|wanted)|you (?:said|used|were))\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     internal static bool IsExplicitlyNegated(string text) => Regex.IsMatch(text,
-        @"\b(don['’]?t|do not|never)\b.{0,60}\b(create|set|configure|update|edit|change|cancel|delete|remove|stop|greet|say|tell|send|message|check|wake|notify|ping|alert|nudge|remind|schedule)\b",
+        @"\b(don['’]?t|do not|never)\b.{0,60}\b(enable|activate|resume|unpause|turn on|disable|deactivate|pause|turn off|create|set|configure|update|edit|change|cancel|delete|remove|stop|greet|say|tell|send|message|check|wake|notify|ping|alert|nudge|remind|schedule)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public ValueTask<TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(
@@ -121,9 +134,11 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         var allowed = requestedAction switch
         {
             TriggerCommandAction.Create => MatchesCreate(text, conversationLanguage, scheduleContext, scheduleDraft),
-            TriggerCommandAction.List => MatchesList(text, conversationLanguage),
+            TriggerCommandAction.List => MatchesList(text, conversationLanguage, scheduleContext),
             TriggerCommandAction.Update => MatchesUpdate(text, conversationLanguage, scheduleContext),
             TriggerCommandAction.Cancel => MatchesCancel(text, conversationLanguage, scheduleContext),
+            TriggerCommandAction.Enable => AutomationActivation.Matches(text, true, scheduleContext),
+            TriggerCommandAction.Disable => AutomationActivation.Matches(text, false, scheduleContext),
             _ => false
         };
 
@@ -214,8 +229,11 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
             || Regex.IsMatch(text, @"^(?:please\s+)?when\b.{0,40}\border\b.{0,40}\b(placed|created|arrives)\b.{0,80}\b(review|check|notify|run)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
-    internal static bool MatchesList(string text, string? conversationLanguage) =>
-        ListIntent.IsMatch(text) || (PrefersVietnamese(conversationLanguage) && ListIntentVi.IsMatch(text));
+    internal static bool MatchesList(string text, string? conversationLanguage, ScheduleConversationContext? context = null) =>
+        ListIntent.IsMatch(text) || (PrefersVietnamese(conversationLanguage) && ListIntentVi.IsMatch(text))
+        || AutomationActivation.Matches(text, true, context) || AutomationActivation.Matches(text, false, context)
+        || (context is { IsReferentAvailable: true } || Regex.IsMatch(text, @"\b(automation|schedule|reminder)s?\b", RegexOptions.IgnoreCase))
+            && (MatchesUpdate(text, conversationLanguage, context) || MatchesCancel(text, conversationLanguage, context));
 
     internal static bool MatchesUpdate(
         string text,
@@ -245,7 +263,12 @@ public sealed class ModelTriggerCommandAuthorizer(
     ILanguageModel languageModel,
     HeuristicTriggerCommandAuthorizer heuristic) : ITriggerCommandAuthorizer
 {
-    public async ValueTask<TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(
+    public async ValueTask<TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(string? currentUserText, string? conversationLanguage,
+        TriggerCommandAction requestedAction, ScheduleConversationContext? scheduleContext = null, ScheduleDraftContext? scheduleDraft = null,
+        CancellationToken cancellationToken = default) => (await AuthorizeWithDetailsAsync(currentUserText, conversationLanguage,
+            requestedAction, scheduleContext, scheduleDraft, cancellationToken).ConfigureAwait(false)).Decision;
+
+    public async ValueTask<TriggerCommandAuthorizationVerdict> AuthorizeWithDetailsAsync(
         string? currentUserText,
         string? conversationLanguage,
         TriggerCommandAction requestedAction,
@@ -255,17 +278,17 @@ public sealed class ModelTriggerCommandAuthorizer(
     {
         if (string.IsNullOrWhiteSpace(currentUserText))
         {
-            return TriggerCommandAuthorizationDecision.Deny;
+            return new(TriggerCommandAuthorizationDecision.Deny);
         }
 
         var text = HeuristicTriggerCommandAuthorizer.NormalizeTurn(currentUserText);
         if (string.IsNullOrWhiteSpace(text))
         {
-            return TriggerCommandAuthorizationDecision.Deny;
+            return new(TriggerCommandAuthorizationDecision.Deny);
         }
 
         if (HeuristicTriggerCommandAuthorizer.IsClearlyNonAuthorizing(text, requestedAction))
-            return TriggerCommandAuthorizationDecision.Deny;
+            return new(TriggerCommandAuthorizationDecision.Deny);
 
         var heuristicDecision = await heuristic.AuthorizeCurrentTurnAsync(
             text,
@@ -276,7 +299,7 @@ public sealed class ModelTriggerCommandAuthorizer(
             cancellationToken).ConfigureAwait(false);
         if (heuristicDecision == TriggerCommandAuthorizationDecision.Allow)
         {
-            return heuristicDecision;
+            return new(heuristicDecision);
         }
 
         var request = new ModelRequest(
@@ -290,12 +313,12 @@ public sealed class ModelTriggerCommandAuthorizer(
 
         var (raw, failure) = await ReadTextAsync(languageModel, request, cancellationToken).ConfigureAwait(false);
         if (failure is { } failedDecision) return failedDecision;
-        if (!TryParseDecision(raw, out var decision))
+        if (!TryParseDecision(raw, out var decision, out var reason))
         {
-            return TriggerCommandAuthorizationDecision.ClassifierInvalidOutput;
+            return new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, reason);
         }
 
-        return decision;
+        return new(decision);
     }
 
     public bool IsScheduleConfirmation(string? currentUserText, string? conversationLanguage) =>
@@ -313,6 +336,8 @@ public sealed class ModelTriggerCommandAuthorizer(
             TriggerCommandAction.List => "list the user's schedules or reminders",
             TriggerCommandAction.Update => "update an existing schedule or reminder",
             TriggerCommandAction.Cancel => "cancel an existing schedule or reminder",
+            TriggerCommandAction.Enable => "enable an existing Automation without changing its settings",
+            TriggerCommandAction.Disable => "disable an existing Automation without deleting it",
             _ => "perform a schedule management action"
         };
 
@@ -346,9 +371,10 @@ public sealed class ModelTriggerCommandAuthorizer(
             """;
     }
 
-    private static bool TryParseDecision(string raw, out TriggerCommandAuthorizationDecision decision)
+    private static bool TryParseDecision(string raw, out TriggerCommandAuthorizationDecision decision, out TriggerAuthorizationFailureReason reason)
     {
         decision = TriggerCommandAuthorizationDecision.Ambiguous;
+        reason = TriggerAuthorizationFailureReason.InvalidDecision;
         if (string.IsNullOrWhiteSpace(raw))
         {
             return false;
@@ -358,12 +384,7 @@ public sealed class ModelTriggerCommandAuthorizer(
         {
             var start = raw.IndexOf('{');
             var end = raw.LastIndexOf('}');
-            if (start < 0 || end <= start)
-            {
-                return false;
-            }
-
-            using var document = JsonDocument.Parse(raw[start..(end + 1)]);
+            using var document = JsonDocument.Parse(start >= 0 && end > start ? raw[start..(end + 1)] : raw);
             if (document.RootElement.ValueKind != JsonValueKind.Object
                 || document.RootElement.EnumerateObject().Count(property => property.NameEquals("decision")) != 1
                 || !document.RootElement.TryGetProperty("decision", out var element)
@@ -384,11 +405,12 @@ public sealed class ModelTriggerCommandAuthorizer(
         }
         catch (JsonException)
         {
+            reason = TriggerAuthorizationFailureReason.MalformedJson;
             return false;
         }
     }
 
-    private static async Task<(string Text, TriggerCommandAuthorizationDecision? Failure)> ReadTextAsync(
+    private static async Task<(string Text, TriggerCommandAuthorizationVerdict? Failure)> ReadTextAsync(
         ILanguageModel model,
         ModelRequest request,
         CancellationToken cancellationToken)
@@ -399,17 +421,25 @@ public sealed class ModelTriggerCommandAuthorizer(
         {
             if (item is ModelFailed failed)
                 return (string.Empty, failed.Failure.Code == ProviderErrorCode.InvalidResponse
-                    ? TriggerCommandAuthorizationDecision.ClassifierInvalidOutput
-                    : TriggerCommandAuthorizationDecision.ClassifierUnavailable);
-            if (item is ModelCompleted terminal) completed = terminal.Reason == ModelStopReason.Completed;
+                    ? new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.ProviderInvalidResponse)
+                    : new(TriggerCommandAuthorizationDecision.ClassifierUnavailable, TriggerAuthorizationFailureReason.ProviderFailure));
+            if (item is ModelToolCallEvent)
+                return (string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.InvalidResponseChannel));
+            if (item is ModelCompleted terminal)
+            {
+                if (terminal.Reason != ModelStopReason.Completed)
+                    return (string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput,
+                        terminal.Reason == ModelStopReason.LengthLimit ? TriggerAuthorizationFailureReason.TruncatedOutput : TriggerAuthorizationFailureReason.InvalidResponseChannel));
+                completed = true;
+            }
             if (item is ModelTextDelta delta)
             {
                 if (builder.Length + delta.Text.Length > 4096)
-                    return (string.Empty, TriggerCommandAuthorizationDecision.ClassifierInvalidOutput);
+                    return (string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.OversizedOutput));
                 builder.Append(delta.Text);
             }
         }
 
-        return (builder.ToString(), completed ? null : TriggerCommandAuthorizationDecision.ClassifierInvalidOutput);
+        return (builder.ToString(), completed ? null : new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.IncompleteOutput));
     }
 }

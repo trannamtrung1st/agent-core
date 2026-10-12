@@ -13,7 +13,7 @@ public static class ToolResources
     public static bool IsTriggerWrite(string toolName) =>
         toolName is ToolCatalog.AutomationCreate
             or ToolCatalog.AutomationUpdate
-            or ToolCatalog.AutomationDelete or ToolCatalog.AutomationRun or ToolCatalog.AutomationDisable;
+            or ToolCatalog.AutomationDelete or ToolCatalog.AutomationRun or ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable;
 }
 
 public enum ToolResourceScope

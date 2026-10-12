@@ -7,6 +7,76 @@ namespace AgentCore.Application.Tests;
 public sealed class ModelTriggerCommandAuthorizerTests
 {
     [Theory]
+    [InlineData("enable the 60s hello schedule", TriggerCommandAction.Enable)]
+    [InlineData("enable the 60s hello schedule", TriggerCommandAction.List)]
+    [InlineData("activate the hello automation", TriggerCommandAction.Enable)]
+    [InlineData("enable core event review recent work", TriggerCommandAction.Enable)]
+    [InlineData("enable the review recent work preset", TriggerCommandAction.Enable)]
+    [InlineData("turn on the hello schedule", TriggerCommandAction.Enable)]
+    [InlineData("pause the hello schedule", TriggerCommandAction.Disable)]
+    [InlineData("turn off the hello automation", TriggerCommandAction.Disable)]
+    [InlineData("disable the hello schedule", TriggerCommandAction.List)]
+    [InlineData("update the hello schedule", TriggerCommandAction.List)]
+    public async Task Explicit_management_and_supporting_reads_do_not_call_classifier(string text, TriggerCommandAction action)
+    {
+        var model = new StubLanguageModel("invalid classifier output");
+        Assert.Equal(TriggerCommandAuthorizationDecision.Allow,
+            await new ModelTriggerCommandAuthorizer(model, new()).AuthorizeCurrentTurnAsync(text, "en", action));
+        Assert.Equal(0, model.Calls);
+    }
+
+    [Theory]
+    [InlineData("do not enable the hello schedule")]
+    [InlineData("never activate the hello automation")]
+    [InlineData("could you enable the hello schedule")]
+    [InlineData("yesterday I enabled the hello schedule")]
+    public async Task Non_commands_cannot_gain_activation_authority_from_classifier(string text)
+    {
+        var model = new StubLanguageModel("{\"decision\":\"allow\"}");
+        Assert.Equal(TriggerCommandAuthorizationDecision.Deny,
+            await new ModelTriggerCommandAuthorizer(model, new()).AuthorizeCurrentTurnAsync(text, "en", TriggerCommandAction.Enable));
+        Assert.Equal(0, model.Calls);
+    }
+
+    [Theory]
+    [InlineData("enable the 60s hello schedule")]
+    [InlineData("enable the hello automation")]
+    [InlineData("disable this automation")]
+    public async Task Managing_existing_automation_never_authorizes_creating_a_replacement(string text)
+    {
+        var model = new StubLanguageModel("{\"decision\":\"allow\"}");
+        Assert.Equal(TriggerCommandAuthorizationDecision.Deny,
+            await new ModelTriggerCommandAuthorizer(model, new()).AuthorizeCurrentTurnAsync(text, "en", TriggerCommandAction.Create));
+        Assert.Equal(0, model.Calls);
+    }
+
+    [Theory]
+    [InlineData("truncated", TriggerAuthorizationFailureReason.TruncatedOutput)]
+    [InlineData("missing-terminal", TriggerAuthorizationFailureReason.IncompleteOutput)]
+    [InlineData("invalid-response", TriggerAuthorizationFailureReason.ProviderInvalidResponse)]
+    [InlineData("unavailable", TriggerAuthorizationFailureReason.ProviderFailure)]
+    [InlineData("oversized", TriggerAuthorizationFailureReason.OversizedOutput)]
+    [InlineData("tool-channel", TriggerAuthorizationFailureReason.InvalidResponseChannel)]
+    public async Task Failure_details_are_bounded_and_distinguish_provider_and_output_failures(string mode, TriggerAuthorizationFailureReason reason)
+    {
+        var result = await new ModelTriggerCommandAuthorizer(new InvalidStreamModel(mode), new())
+            .AuthorizeWithDetailsAsync("maybe greet me later", "en", TriggerCommandAction.Create);
+        Assert.Equal(reason, result.FailureReason);
+        Assert.NotEqual(TriggerCommandAuthorizationDecision.Allow, result.Decision);
+    }
+
+    [Theory]
+    [InlineData("not json", TriggerAuthorizationFailureReason.MalformedJson)]
+    [InlineData("{\"decision\":42}", TriggerAuthorizationFailureReason.InvalidDecision)]
+    public async Task Json_failure_details_do_not_claim_a_provider_outage(string output, TriggerAuthorizationFailureReason reason)
+    {
+        var result = await new ModelTriggerCommandAuthorizer(new StubLanguageModel(output), new())
+            .AuthorizeWithDetailsAsync("maybe greet me later", "en", TriggerCommandAction.Create);
+        Assert.Equal(reason, result.FailureReason);
+        Assert.Equal(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, result.Decision);
+    }
+
+    [Theory]
     [InlineData("""{"decision":"allow"}""", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("""prefix {"decision":"deny"} suffix""", TriggerCommandAuthorizationDecision.Deny)]
     [InlineData("""{"decision":"ambiguous"}""", TriggerCommandAuthorizationDecision.Ambiguous)]
@@ -105,7 +175,7 @@ public sealed class ModelTriggerCommandAuthorizerTests
     [InlineData("check the oven in 1 minute for me", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("create an automation to greet me every minute", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("please configure an automation", TriggerCommandAuthorizationDecision.Allow)]
-    [InlineData("enable core event review recent work", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("enable core event review recent work", TriggerCommandAuthorizationDecision.Deny)]
     [InlineData("in 1 minute, check the oven for me", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("greet me every 60 seconds", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("every 60 seconds, greet me", TriggerCommandAuthorizationDecision.Allow)]
@@ -162,6 +232,12 @@ public sealed class ModelTriggerCommandAuthorizerTests
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
             await Task.CompletedTask;
+            if (mode == "tool-channel")
+            {
+                yield return new ModelToolCallEvent(new("unexpected", "automation.create", "{}"));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+                yield break;
+            }
             yield return new ModelTextDelta(mode == "oversized" ? new string(' ', 4097) : "{\"decision\":\"allow\"}");
             if (mode == "missing-terminal") yield break;
             if (mode is "invalid-response" or "unavailable")

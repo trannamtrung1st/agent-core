@@ -38,6 +38,7 @@ public static class ToolCatalog
     public const string AutomationList = "automation.list";
     public const string AutomationInspect = "automation.inspect";
     public const string AutomationRun = "automation.run";
+    public const string AutomationEnable = "automation.enable";
     public const string AutomationDisable = "automation.disable";
     public const string AutomationUpdate = "automation.update";
     public const string AutomationDelete = "automation.delete";

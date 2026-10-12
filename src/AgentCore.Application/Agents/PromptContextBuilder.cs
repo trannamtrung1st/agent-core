@@ -374,6 +374,11 @@ public sealed class PromptContextBuilder(
             "Use automation.create relativeDelaySeconds for in/after N minutes or hours without doing clock arithmetic.");
         lines.Add(
             "Ask the user to restate missing schedule details explicitly. Only ask for yes/no confirmation when the schedule tool returned confirmation_required and a pending proposal exists.");
+        if (RolePermissions.AllowsTool(context.Definition, ToolCatalog.AutomationEnable))
+            lines.Add("For an explicit request to enable an existing Automation, list and inspect owned candidates, then use automation.enable with its ID and expectedRevision. Preserve all settings; never create a replacement.");
+        else if (RolePermissions.AllowsTool(context.Definition, ToolCatalog.AutomationUpdate))
+            lines.Add("For an explicit request to enable or disable an existing Automation, list and inspect owned candidates, then use automation.update with only automationId, expectedRevision and enabled. Preserve all other settings; never create a replacement.");
+        lines.Add("Zero matching Automations means not found; multiple matches require the user to identify one. Never pick the first. Classifier invalid output is not proof of an outage: explain the bounded classifierFailureReason when supplied. Do not promise to retry later without an actual scheduled retry.");
         lines.Add(
             "If a schedule tool returned authorization_ambiguous or authorization_denied, do not retry with different time argument shapes.");
         lines.Add(
