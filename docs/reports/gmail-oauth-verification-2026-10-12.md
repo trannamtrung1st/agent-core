@@ -1,6 +1,6 @@
 # Gmail OAuth migration verification — 12 October 2026
 
-Status: implementation candidate; final merged-source/hosted acceptance is pending. Live Gmail UAT is **blocked/deferred**, not passed. No Google application configuration, dedicated mailbox or real-recipient send authorization was supplied. Synthetic consent/read/send evidence does not prove Google consent or delivery. P10/P11 and historical freezes remain unchanged.
+Status: implementation candidate; final exact-source hosted acceptance is pending. Draft [PR #11](https://github.com/trannamtrung1st/agent-core/pull/11) contains the reconciled implementation. Live Gmail UAT is **blocked/deferred**, not passed. No Google application configuration, dedicated mailbox or real-recipient send authorization was supplied. Synthetic consent/read/send evidence does not prove Google consent or delivery. P10/P11 and historical freezes remain unchanged.
 
 ## Baseline and scope
 
@@ -35,6 +35,8 @@ All commands ran in the repository unless stated otherwise. Frontend reruns expl
 | Affected Playwright journeys | 8 passed, including 1440/768/390/320 Gmail lifecycle/chooser, exact-approved Synthetic send and adjacent Credentials |
 | Isolated Compose SQLite/key-ring survival | Passed in `agent-core-gmail-oauth-verification`, port 5380; extended gate preserved connected Synthetic OAuth grant and non-sending check across recreation |
 | EF pending model changes | None; local EF tool 10.0.5 reports older than runtime 10.0.12 |
+| Event-storage monitor tests | 3 passed |
+| Documentation consistency | 16 changed Markdown files, 217 anchors, 14 complete JSON examples and design sidecar passed |
 | Impeccable doctor | Empty findings; sidecar JSON schema 2 parses |
 | Diff whitespace | `git diff --check` passed |
 
@@ -98,4 +100,5 @@ Before: [existing email editor](assets/email-account/email-edit-1440.png), [exis
 - Browser probes exposed a decorative icon accessible-name mismatch, lost modal focus, inaccessible/hidden-cloned filter controls and a pending-name restoration race. Fixed and checked with actual interaction plus repeatable tests. Some probe resets/request URL inputs also timed out or failed in the automation harness; corrected probes are recorded separately from passing product outcomes.
 - The Impeccable overlay launcher timed out; narrow detector/live DOM evidence was used and the failed overlay was not represented as successful.
 - A detached direct-read regression initially exposed an incorrect assumption about the flat Core error envelope; the trusted top-level classifier was corrected and all 11 runtime cases passed. Mailbox body content cannot set Run outcomes.
+- The first reconciled full backend run exposed two isolated model-catalog fixture containers missing the new main IDiagnosticIdSource dependency. That dependency was registered in the fixtures; production diagnostics and capability assertions remain unchanged. This is reconciliation of the newer diagnostics, not an OAuth transport failure.
 - Live Gmail and recipient delivery remain deferred. No real email was sent, no provider policy was bypassed and no existing database/credential catalog was reset.

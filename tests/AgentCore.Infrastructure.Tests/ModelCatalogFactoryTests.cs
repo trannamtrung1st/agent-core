@@ -109,6 +109,7 @@ public sealed class ModelCatalogFactoryTests
         var services = new ServiceCollection();
         services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory());
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IDiagnosticIdSource, AgentCore.Infrastructure.Identity.SystemDiagnosticIdSource>();
         var catalog = ModelCatalogFactory.Real();
         var resolver = new LanguageModelResolver(
             services.BuildServiceProvider(),
@@ -358,6 +359,7 @@ public sealed class ModelCatalogFactoryTests
         var services = new ServiceCollection();
         services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory());
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IDiagnosticIdSource, AgentCore.Infrastructure.Identity.SystemDiagnosticIdSource>();
         var catalog = ModelCatalogFactory.Real();
         var primary = new LanguageModelProviderOptions
         {
