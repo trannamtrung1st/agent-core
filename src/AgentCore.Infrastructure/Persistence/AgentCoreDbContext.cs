@@ -666,6 +666,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         {
             entity.ToTable("Credentials"); entity.HasKey(c => c.CredentialId);
             entity.Property(c => c.Purpose).HasDefaultValue("General");
+            entity.Property(c => c.SecretRevision).IsConcurrencyToken();
             entity.Property(c => c.Revision).IsConcurrencyToken();
             entity.Property(c => c.DisplayName).HasMaxLength(120).IsRequired();
             entity.Property(c => c.MetadataJson).HasMaxLength(16384).IsRequired();
@@ -673,7 +674,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<EmailAccountProfileRecord>(entity =>
         {
-            entity.ToTable("EmailAccountProfiles"); entity.HasKey(c => c.CredentialId);
+            entity.ToTable("EmailAccountProfiles");
+            entity.HasIndex(c => c.GoogleSubject).IsUnique(); entity.HasKey(c => c.CredentialId);
             entity.HasOne<CredentialRecord>().WithOne(c => c.EmailAccount).HasForeignKey<EmailAccountProfileRecord>(c => c.CredentialId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<AgentCredentialBindingRecord>(entity =>

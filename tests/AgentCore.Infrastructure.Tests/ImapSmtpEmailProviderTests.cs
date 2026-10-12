@@ -116,16 +116,16 @@ public sealed class ImapSmtpEmailProviderTests
         var account = Context();
         account = account with { Profile = account.Profile with { SmtpEndpoint = new("smtp.gmail.com", 587, MailTlsMode.StartTls) } };
         var resolutions = 0;
-        var provider = new ImapSmtpEmailProvider(account, new(), new(new()), new(4), (_, _) => { resolutions++; return ValueTask.FromResult("fixture-password"); })
+        var provider = new ImapSmtpEmailProvider(account, new(), new(new() { AllowedCustomEndpoints = ["mail.example.test:993", "mail.example.test:465", "smtp.gmail.com:587"] }), new(4), (_, _) => { resolutions++; return ValueTask.FromResult("fixture-password"); })
         {
             SocketFactory = async ct => { var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp); await socket.ConnectAsync(server.Endpoint, ct); return socket; }
         };
         await Assert.ThrowsAnyAsync<Exception>(() => provider.TestAsync(true, default).AsTask());
         Assert.Equal(0, resolutions); Assert.Empty(server.Message);
     }
-    private static EmailAccountContext Context() => new(Guid.NewGuid(), Guid.NewGuid(), "mail", "Test", 1, Guid.NewGuid(), 1, EmailAccountProfile.Gmail("sender@example.test"));
+    private static EmailAccountContext Context() => new(Guid.NewGuid(), Guid.NewGuid(), "mail", "Test", 1, Guid.NewGuid(), 1, EmailAccountProfile.Custom("sender@example.test"));
     private static ImapSmtpEmailProvider Provider(FakeMailServer server, EmailAccountContext account, bool trust = true, ILogger<ImapSmtpEmailProvider>? logger = null) => new(account,
-        new() { SmtpEnabled = true, TimeoutSeconds = 3 }, new(new()), new(4), (_, _) => ValueTask.FromResult("fixture-password"), logger)
+        new() { SmtpEnabled = true, TimeoutSeconds = 3 }, new(new() { AllowedCustomEndpoints = ["mail.example.test:993", "mail.example.test:465", "smtp.gmail.com:587"] }), new(4), (_, _) => ValueTask.FromResult("fixture-password"), logger)
     {
         SocketFactory = async ct => { var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp); await socket.ConnectAsync(server.Endpoint, ct); return socket; },
         ConfigureClient = client => { if (trust) client.ServerCertificateValidationCallback = (_, certificate, _, _) => certificate?.GetCertHashString() == server.Certificate.GetCertHashString(); }

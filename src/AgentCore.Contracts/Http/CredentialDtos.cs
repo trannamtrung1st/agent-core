@@ -11,8 +11,12 @@ public sealed record AdminBindCredentialRequest(Guid CredentialId, string Refere
 public sealed record AdminResetBrowserProfileRequest(long ExpectedInstanceRevision, bool Confirm);
 
 public sealed record MailEndpointDto(string Host, int Port, string TlsMode);
-public sealed record EmailAccountProfileDto(string Preset, string EmailAddress, string ImapUsername, string SmtpUsername,
-    MailEndpointDto ImapEndpoint, MailEndpointDto SmtpEndpoint);
-public sealed record AdminCreateEmailAccountRequest(string DisplayName, EmailAccountProfileDto Profile, string ProtectedValue);
+public sealed record EmailAccountProfileDto(string Preset, string EmailAddress = "", string ImapUsername = "", string SmtpUsername = "",
+    MailEndpointDto? ImapEndpoint = null, MailEndpointDto? SmtpEndpoint = null,
+    string? AuthMethod = null, string? GoogleSubject = null, IReadOnlyList<string>? GrantedScopes = null,
+    string ConnectionStatus = "NotConnected", long AuthEpoch = 0, DateTimeOffset? ConnectedAtUtc = null, bool Synthetic = false);
+public sealed record AdminCreateEmailAccountRequest(string DisplayName, EmailAccountProfileDto Profile, string ProtectedValue = "");
 public sealed record AdminUpdateEmailAccountRequest(long ExpectedRevision, string DisplayName, string Status, EmailAccountProfileDto Profile);
 public sealed record AdminTestEmailAccountRequest(long ExpectedRevision, string Protocol);
+
+public sealed record AdminEmailOAuthRequest(long ExpectedRevision, bool Confirm = false);

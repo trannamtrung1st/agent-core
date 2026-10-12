@@ -16,6 +16,10 @@ services:
   agent-core:
     environment:
       AgentCore__Profile: Real
+      GoogleEmailOAuth__ClientId: ${GOOGLE_EMAIL_OAUTH_CLIENT_ID:-}
+      GoogleEmailOAuth__ClientSecret: ${GOOGLE_EMAIL_OAUTH_CLIENT_SECRET:-}
+      GoogleEmailOAuth__PublicAppUrl: ${GOOGLE_EMAIL_OAUTH_PUBLIC_APP_URL:-}
+      Email__SendEnabled: ${AGENTCORE_EMAIL_SEND_ENABLED:-${AGENTCORE_EMAIL_SMTP_ENABLED:-true}}
       Email__SmtpEnabled: ${AGENTCORE_EMAIL_SMTP_ENABLED:-true}
       Providers__LanguageModels__primary-llm__Adapter: OpenAICompatible
       Providers__LanguageModels__primary-llm__BaseUrl: https://openrouter.ai/api/v1/

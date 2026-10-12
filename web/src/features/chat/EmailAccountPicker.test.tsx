@@ -35,7 +35,7 @@ it('removes a revoked account from the current request and requires a new explic
   const dialog = within(await screen.findByRole('dialog', { name: 'Choose an email account' }));
   fireEvent.click(dialog.getByRole('radio'));
   expect(dialog.getByRole('button', { name: 'Allow account' })).toBeEnabled();
-  expect(await screen.findByText('No active email accounts', {}, { timeout: 3500 })).toBeInTheDocument();
+  expect(await screen.findByText('No connected email accounts', {}, { timeout: 3500 })).toBeInTheDocument();
   expect(dialog.getByRole('button', { name: 'Allow account' })).toBeDisabled();
   expect(dialog.queryByRole('radio')).toBeNull();
   expect(api.decideEmailAccount).not.toHaveBeenCalled();

@@ -1329,7 +1329,7 @@ public sealed partial class SessionToolExecutor(
     {
         if (emailAccounts is null || !emailAccounts.IsEnabled) return Error("provider_disabled", "Email capability is disabled.");
         var accounts = await emailAccounts.AccountsAsync(RequireMailAdmission(admission), ct);
-        return JsonSerializer.Serialize(new { accounts = accounts.Select(c => new { accountRef = c.AccountRef, displayName = c.DisplayName, emailAddress = c.EmailAddress, provider = c.Provider }), status = accounts.Count == 0 ? "no_eligible_account" : "available", sendAvailable = emailAccounts.IsSendEnabled, sendSetupGuidance = emailAccounts.IsSendEnabled ? null : EmailAccountService.SendSetupGuidance });
+        return JsonSerializer.Serialize(new { accounts = accounts.Select(c => new { accountRef = c.AccountRef, displayName = c.DisplayName, emailAddress = c.EmailAddress, provider = c.Provider, authentication = c.Authentication, connection = c.Connection, readAvailable = c.ReadAvailable, sendAvailable = c.SendAvailable }), status = accounts.Count == 0 ? "no_eligible_account" : "available", sendAvailable = accounts.Any(c => c.SendAvailable), sendSetupGuidance = !emailAccounts.IsSendEnabled ? EmailAccountService.SendSetupGuidance : accounts.Any(c => c.SendAvailable) ? null : "Connect and bind an account with send permission in Connections → Credentials." });
     }
 
     public async Task<EmailSendApprovalPrepareResult> PrepareEmailSendApprovalAsync(
@@ -1351,7 +1351,8 @@ public sealed partial class SessionToolExecutor(
 
         EmailDraftSnapshot? draft;
         try { draft = emailAccounts is null ? await emailProvider!.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false)
-            : await emailAccounts.DraftAsync(sessionId, RequireMailAdmission(admission), draftId, AccountRef(args), cancellationToken); }
+            : await emailAccounts.DraftAsync(sessionId, RequireMailAdmission(admission), draftId, AccountRef(args), cancellationToken);
+            if (emailAccounts is not null) emailAccounts.RequireSendEnabled(await emailAccounts.ResolveAsync(RequireMailAdmission(admission), draft!.AccountRef, cancellationToken)); }
         catch (AgentCoreException ex) { return new(null, Error(ex.Code, ex.Message)); }
         if (draft is null)
         {

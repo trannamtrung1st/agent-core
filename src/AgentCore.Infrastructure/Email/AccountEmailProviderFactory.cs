@@ -10,15 +10,23 @@ namespace AgentCore.Infrastructure.Email;
 
 public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IAgentCredentialBindingStore bindings,
     ICredentialProtector protector, IAgentInstanceStore instances, EmailTransportOptions options, TimeProvider time,
-    bool synthetic, ILoggerFactory? loggerFactory = null, IDiagnosticIdSource? diagnosticIds = null) : IEmailProviderFactory
+    bool synthetic, GoogleEmailOAuthService? oauth = null, IHttpClientFactory? clients = null, ILoggerFactory? loggerFactory = null, IDiagnosticIdSource? diagnosticIds = null) : IEmailProviderFactory
 {
     private readonly ConcurrentDictionary<Guid, SyntheticEmailProvider> _synthetic = new();
     private readonly SemaphoreSlim _connections = new(4);
     private readonly MailTransportPolicy _policy = new(options);
     public bool IsEnabled => options.Enabled;
-    public bool IsSendEnabled => options.Enabled && (synthetic || options.SmtpEnabled);
+    public bool IsSendEnabled => options.Enabled && (synthetic ? options.SendEnabled != false : options.EffectiveSendEnabled);
+    public bool CanUse(EmailAccountProfile profile) => profile.IsUsable && (profile.AuthMethod != EmailAuthMethod.GoogleOAuth2 || profile.Synthetic == synthetic);
+    public bool CanSend(EmailAccountContext account) => IsSendEnabled && CanUse(account.Profile) && account.Profile.CanSend && (synthetic || account.Profile.AuthMethod == EmailAuthMethod.GoogleOAuth2 || options.SmtpEnabled);
     public IEmailProvider Create(EmailAccountContext account) => synthetic
         ? new ScopedSyntheticEmailProvider(account, _synthetic.GetOrAdd(account.AccountId, _ => new()), RecheckAsync)
+        : account.Profile.AuthMethod == EmailAuthMethod.GoogleOAuth2
+        ? new GmailEmailProvider(account, clients ?? throw new InvalidOperationException("Google HTTP client is unavailable."),
+            ct => (oauth ?? throw new InvalidOperationException("Google OAuth is unavailable.")).AccessTokenAsync(account.AccountId, account.AccountRevision, ct),
+            ct => RecheckAsync(account, ct), () => CanSend(account), time, loggerFactory?.CreateLogger<GmailEmailProvider>(), diagnosticIds,
+            ct => oauth!.AccessTokenAsync(account.AccountId, account.AccountRevision, ct, forceRefresh: true),
+            ct => oauth!.RejectAuthorizationAsync(account.AccountId, account.AccountRevision, ct))
         : new ImapSmtpEmailProvider(account, options, _policy, _connections, ResolveSecretAsync, loggerFactory?.CreateLogger<ImapSmtpEmailProvider>(), diagnosticIds);
 
     private async ValueTask RecheckAsync(EmailAccountContext account, CancellationToken ct)
@@ -32,8 +40,8 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
     private async ValueTask<Credential> RequireCredential(Guid id, long revision, CancellationToken ct)
     {
         var credential = await credentials.GetAsync(id, ct);
-        if (credential is not { Purpose: CredentialPurpose.EmailAccount, Kind: CredentialKind.Password, Status: CredentialStatus.Active, EmailAccount: not null }
-            || credential.Revision != revision) throw AgentCoreErrors.Forbidden("mail_authority_revoked: Email account changed or is disabled.");
+        if (credential is not { Purpose: CredentialPurpose.EmailAccount, Status: CredentialStatus.Active, EmailAccount: not null }
+            || credential.Revision != revision || !CanUse(credential.EmailAccount)) throw AgentCoreErrors.Forbidden("mail_authority_revoked: Email account changed or is disabled.");
         return credential;
     }
     private async ValueTask<string> ResolveSecretAsync(EmailAccountContext account, CancellationToken ct)
@@ -44,6 +52,7 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
     }
     public async ValueTask<EmailConnectionTest> TestAsync(Guid accountId, long expectedRevision, string protocol, CancellationToken ct = default)
     {
+        if ((await credentials.GetAsync(accountId, ct))?.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2) throw AgentCoreErrors.Validation("Use Test access for Gmail OAuth.");
         if (protocol is not ("imap" or "smtp")) throw AgentCoreErrors.Validation("Protocol must be imap or smtp.");
         var credential = await RequireCredential(accountId, expectedRevision, ct);
         if (!options.Enabled) return new(protocol, "disabled", time.GetUtcNow(), "Email transport is disabled.");

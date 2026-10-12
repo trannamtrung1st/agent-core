@@ -28,7 +28,7 @@ public sealed class EmailAccountIntegrationTests
     public async Task Handled_send_exception_is_diagnosable_and_durable_uncertainty_never_dispatches_again(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite);
-        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Gmail("sender@example.test"), "private-secret");
+        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Custom("sender@example.test"), "private-secret");
         var admission = await f.Bind(f.A, account, "mail");
         var session = Guid.NewGuid();
         var draft = await f.Email.CreateDraftAsync(session, admission, null, new(["to@example.test"], [], [], "Private subject", "Private body"), default);
@@ -54,7 +54,7 @@ public sealed class EmailAccountIntegrationTests
     public async Task Bound_account_search_read_draft_exact_approval_dispatch_replay_and_reopen(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite);
-        var account = await f.Credentials.CreateEmailAccountAsync("Demo", EmailAccountProfile.Gmail("sender@example.test"), "never-model-visible");
+        var account = await f.Credentials.CreateEmailAccountAsync("Demo", EmailAccountProfile.Custom("sender@example.test"), "never-model-visible");
         var a = await f.Bind(f.A, account, "primary"); var b = await f.Bind(f.B, account, "other");
         Assert.Equal("primary", Assert.Single(await f.Email.AccountsAsync(a, default)).AccountRef);
         Assert.Equal("other", Assert.Single(await f.Email.AccountsAsync(b, default)).AccountRef);
@@ -63,7 +63,7 @@ public sealed class EmailAccountIntegrationTests
         var results = await f.Email.Provider(resolved).SearchAsync(new("harness", 5));
         var message = await f.Email.Provider(resolved).ReadAsync(new(Assert.Single(results.Results).MessageId));
         Assert.Contains("deterministic", message.Body);
-        var second = await f.Credentials.CreateEmailAccountAsync("Other", EmailAccountProfile.Gmail("other@example.test"), "other-secret");
+        var second = await f.Credentials.CreateEmailAccountAsync("Other", EmailAccountProfile.Custom("other@example.test"), "other-secret");
         var b2 = await f.Bind(f.B, second, "secondary");
         await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.ResolveAsync(b2, null, default).AsTask());
         var foreign = await f.Email.ResolveAsync(b2, "secondary", default);
@@ -102,7 +102,7 @@ public sealed class EmailAccountIntegrationTests
     public async Task Rotation_disable_unbind_and_old_pins_prevent_dispatch_and_unknown_claim_never_retries(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite);
-        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Gmail("sender@example.test"), "protected-value");
+        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Custom("sender@example.test"), "protected-value");
         var a = await f.Bind(f.A, account, "mail"); var session = Guid.NewGuid();
         async Task<EmailDraftSnapshot> Draft() => await f.Email.CreateDraftAsync(session, a, null, new(["to@example.test"], [], [], "Subject", "Body"), default);
         var draft = await Draft(); var hash = EmailDraftNormalizer.ComputeSendActionHash(draft);
@@ -137,11 +137,11 @@ public sealed class EmailAccountIntegrationTests
     [Fact]
     public void Custom_endpoints_require_explicit_allowlist_and_TLS_enums_are_validated()
     {
-        var profile = EmailAccountProfile.Gmail("sender@example.test") with { Preset = EmailProviderPreset.Custom, ImapEndpoint = new("mail.example.test", 993, MailTlsMode.ImplicitTls) };
+        var profile = EmailAccountProfile.Custom("sender@example.test") with { Preset = EmailProviderPreset.Custom, ImapEndpoint = new("mail.example.test", 993, MailTlsMode.ImplicitTls) };
         Assert.Throws<AgentCoreException>(() => new MailTransportPolicy(new()).ValidateEndpoint(profile, false));
         new MailTransportPolicy(new() { AllowedCustomEndpoints = ["mail.example.test:993"] }).ValidateEndpoint(profile, false);
         Assert.Throws<ArgumentException>(() => (profile with { ImapEndpoint = new("mail.example.test", 993, (MailTlsMode)3) }).Validate());
-        Assert.Throws<ArgumentException>(() => EmailAccountProfile.Gmail("forged\r\nTo: someone@example.test").Validate());
+        Assert.Throws<ArgumentException>(() => EmailAccountProfile.Custom("forged\r\nTo: someone@example.test").Validate());
     }
     [Fact]
     public async Task Upgrade_preserves_existing_general_credentials_and_ciphertext()
@@ -150,7 +150,7 @@ public sealed class EmailAccountIntegrationTests
         try
         {
             var factory = new DbFactory(root); var id = Guid.NewGuid().ToString("D");
-            var previous = new AgentCoreDbContext(factory.Options).Database.GetMigrations().Last(m => !m.EndsWith("AccountScopedEmail"));
+            var previous = new AgentCoreDbContext(factory.Options).Database.GetMigrations().Last(m => string.CompareOrdinal(m, "20261011182635_AccountScopedEmail") < 0);
             await using (var db = factory.CreateDbContext())
             {
                 await db.GetService<IMigrator>().MigrateAsync(previous);
@@ -169,7 +169,7 @@ public sealed class EmailAccountIntegrationTests
     public async Task Malformed_account_alias_returns_safe_tool_and_approval_errors(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite);
-        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Gmail("sender@example.test"), "protected-fixture");
+        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Custom("sender@example.test"), "protected-fixture");
         var admission = await f.Bind(f.A, account, "mail"); var session = Guid.NewGuid();
         var draft = await f.Email.CreateDraftAsync(session, admission, "mail", new(["to@example.test"], [], [], "Subject", "Body"), default);
         var definition = new AgentDefinition(1, "general-assistant", 25, new("Test", "Assistant", "Test", "neutral"), [], "instructions",
@@ -190,7 +190,7 @@ public sealed class EmailAccountIntegrationTests
     public async Task Recent_inbox_tool_is_account_scoped_and_disabled_SMTP_does_not_claim_the_draft(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite);
-        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Gmail("sender@example.test"), "protected-fixture");
+        var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Custom("sender@example.test"), "protected-fixture");
         var admission = await f.Bind(f.A, account, "mail"); var session = Guid.NewGuid();
         var definition = new AgentDefinition(1, "general-assistant", 25, new("Test", "Assistant", "Test", "neutral"), [], "instructions",
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048), new(false, 60_000, 120_000, 1, ["longSilence"], 0),
@@ -243,6 +243,13 @@ public sealed class EmailAccountIntegrationTests
         Assert.True(real.IsEnabled); Assert.True(real.IsSendEnabled); Assert.True(f.Factory.IsSendEnabled);
         options.SmtpEnabled = false; Assert.False(real.IsSendEnabled); Assert.True(real.IsEnabled);
         options.SmtpEnabled = true; Assert.True(real.IsSendEnabled);
+        options.SmtpEnabled = false; options.SendEnabled = true; Assert.True(real.IsSendEnabled);
+        var custom = new EmailAccountContext(Guid.NewGuid(), Guid.NewGuid(), "custom", "Custom", 1, Guid.NewGuid(), 1, EmailAccountProfile.Custom("sender@example.test"));
+        Assert.False(real.CanSend(custom));
+        options.SendEnabled = false; options.SmtpEnabled = true; Assert.False(real.IsSendEnabled);
+        var synthetic = new AccountEmailProviderFactory(f.Store, f.Bindings, new LocalCredentialProtector(f.Root + "/keys"), f.Owners, options, TimeProvider.System, true);
+        Assert.False(synthetic.IsSendEnabled);
+        options.SendEnabled = null;
         options.Enabled = false; Assert.False(real.IsSendEnabled); Assert.False(real.IsEnabled);
     }
     private sealed class DbFactory(string root) : IDbContextFactory<AgentCoreDbContext>

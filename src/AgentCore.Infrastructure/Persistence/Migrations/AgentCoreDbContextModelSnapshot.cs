@@ -1273,6 +1273,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
+                    b.Property<long>("SecretRevision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1290,11 +1294,17 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<string>("CredentialId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("GoogleSubject")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ProfileJson")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.HasKey("CredentialId");
+
+                    b.HasIndex("GoogleSubject")
+                        .IsUnique();
 
                     b.ToTable("EmailAccountProfiles", (string)null);
                 });

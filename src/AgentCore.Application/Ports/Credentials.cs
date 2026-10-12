@@ -7,7 +7,10 @@ public interface ICredentialStore
 {
     ValueTask<IReadOnlyList<Credential>> ListAsync(CancellationToken ct = default);
     ValueTask<Credential?> GetAsync(Guid id, CancellationToken ct = default);
-    ValueTask SaveAsync(Credential credential, long expectedRevision, CancellationToken ct = default);
+    ValueTask SaveAsync(Credential credential, long expectedRevision, CancellationToken ct = default, long? expectedSecretRevision = null);
+    // Rotation is independent of the logical account revision; never restores a stale grant.
+    ValueTask<bool> TryRotateOAuthSecretAsync(Guid id, long expectedRevision, long expectedSecretRevision,
+        string protectedPayload, CancellationToken ct = default);
     ValueTask DeleteAsync(Guid id, long expectedRevision, CancellationToken ct = default);
 }
 public interface IAgentCredentialBindingStore

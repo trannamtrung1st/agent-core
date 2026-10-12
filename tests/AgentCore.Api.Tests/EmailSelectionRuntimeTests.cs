@@ -32,11 +32,11 @@ public sealed class EmailSelectionRuntimeTests
         var model = new SelectionModel(); var db = Path.Combine(Path.GetTempPath(), $"email-selection-{Guid.NewGuid():N}.db");
         await using var host = new ExperienceHost(db, model); var s = host.Services;
         var owner = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 25);
-        var account = await s.GetRequiredService<CredentialService>().CreateEmailAccountAsync("Selected mail", EmailAccountProfile.Gmail("demo@example.test"), "protected-fixture-4821");
+        var account = await s.GetRequiredService<CredentialService>().CreateEmailAccountAsync("Selected mail", EmailAccountProfile.Custom("demo@example.test"), "protected-fixture-4821");
         if (decision == "alreadyBound")
         {
             var credentials = s.GetRequiredService<CredentialService>();
-            var other = await credentials.CreateEmailAccountAsync("Other mail", EmailAccountProfile.Gmail("other@example.test"), "other-fixture-password");
+            var other = await credentials.CreateEmailAccountAsync("Other mail", EmailAccountProfile.Custom("other@example.test"), "other-fixture-password");
             await credentials.BindAsync(owner.InstanceId, other.CredentialId, "primary", owner.Revision);
             owner = (await s.GetRequiredService<IAgentInstanceStore>().FindAsync(owner.InstanceId))!;
             await credentials.BindAsync(owner.InstanceId, account.CredentialId, "secondary", owner.Revision);
@@ -115,6 +115,32 @@ public sealed class EmailSelectionRuntimeTests
         Assert.Equal(AgentRunOutcomeKind.NeedsAttention, run.Result!.OutcomeKind);
         Assert.Contains("/admin/connections/credentials", run.Result.Text);
         Assert.Null(await s.GetRequiredService<IEmailStore>().GetSelectionAsync(run.AgentRunId));
+    }
+    [Theory]
+    [InlineData(ToolCatalog.EmailSearch)]
+    [InlineData(ToolCatalog.EmailAccounts)]
+    public async Task Unattended_disconnected_Gmail_read_or_inventory_terminalizes_attention_without_consent(string tool)
+    {
+        var db = Path.Combine(Path.GetTempPath(), $"gmail-unattended-{Guid.NewGuid():N}.db");
+        await using var host = new ExperienceHost(db, new DirectEmailModel(tool)); var services = host.Services;
+        var owner = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 25);
+        var credentials = services.GetRequiredService<CredentialService>();
+        var account = await credentials.CreateEmailAccountAsync("Disconnected Gmail", EmailAccountProfile.Gmail(), "");
+        await credentials.BindAsync(owner.InstanceId, account.CredentialId, "mail", owner.Revision);
+        var automation = await services.GetRequiredService<AdminAutomationAuthoringService>().SaveAsync(owner.InstanceId, null, 0, true, 3600, "Inspect the bound Gmail account", null, null);
+        await services.GetRequiredService<AdminAutomationAuthoringService>().RunNowAsync(owner.InstanceId, automation.AutomationId, automation.Revision);
+        await AutomationJourneyTests.Intake(services); await services.ExecuteRunsAsync(100);
+        var run = Assert.Single(await services.GetRequiredService<IAgentRunStore>().ListAsync(new(owner.InstanceId, LocalUserProfile.Id), 100));
+        Assert.Equal(AgentRunStatus.Completed, run.Status); Assert.Equal(AgentRunOutcomeKind.NeedsAttention, run.Result!.OutcomeKind);
+        Assert.Contains("/admin/connections/credentials", run.Result.Text);
+        Assert.Null(await services.GetRequiredService<IEmailStore>().GetSelectionAsync(run.AgentRunId));
+        Assert.Equal("NotConnected", (await services.GetRequiredService<IEmailOAuthService>().ConnectionAsync(account.CredentialId, default)).Status);
+    }
+    private sealed class DirectEmailModel(string tool) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities => new ScriptedLanguageModel().Capabilities;
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
+        { await Task.Yield(); ct.ThrowIfCancellationRequested(); yield return new ModelToolCallEvent(new("mail", tool, tool == ToolCatalog.EmailSearch ? "{\"accountRef\":\"mail\"}" : "{}")); yield return new ModelCompleted(ModelStopReason.ToolCalls); }
     }
     private sealed class Output : ISessionOutput { public ValueTask PublishAsync(SessionOutput output, CancellationToken ct = default) => ValueTask.CompletedTask; }
     private sealed class SelectionModel : ILanguageModel

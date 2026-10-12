@@ -16,6 +16,23 @@ public static class RuntimeTelemetry
 
     private static readonly Histogram<double> StageMs = Meter.CreateHistogram<double>("stage_duration_ms");
     private static readonly Histogram<double> BrowserOperationMs = Meter.CreateHistogram<double>("browser.operation.duration_ms");
+    private static readonly Counter<long> EmailOperations = Meter.CreateCounter<long>("email.operations");
+    private static readonly Histogram<double> EmailOperationMs = Meter.CreateHistogram<double>("email.operation.duration_ms", "ms");
+
+    public static void RecordEmailOperation(string provider, string operation, string outcome, bool synthetic, double milliseconds)
+    {
+        var boundedProvider = provider is "gmail" or "imap-smtp" or "synthetic" ? provider : "other";
+        var boundedOperation = operation is "oauth.start" or "oauth.connect" or "oauth.refresh" or "oauth.check" or "oauth.disconnect"
+            or "search" or "read" or "send" or "send.preflight" ? operation : "other";
+        var boundedOutcome = outcome is "success" or "cached" or "throttled" or "denied" or "reconnect_required"
+            or "temporary_failure" or "revocation_unconfirmed" or "cancelled" or "indeterminate" or "failed" ? outcome : "other";
+        var duration = double.IsFinite(milliseconds) ? Math.Max(0, milliseconds) : 0;
+        var profile = synthetic ? "synthetic" : "real";
+        var tags = new TagList { { "provider", boundedProvider }, { "operation", boundedOperation }, { "outcome", boundedOutcome }, { "profile", profile } };
+        EmailOperations.Add(1, tags);
+        EmailOperationMs.Record(duration, tags);
+        RecordDiagnostic("email", duration, $"provider={boundedProvider};operation={boundedOperation};outcome={boundedOutcome};profile={profile}");
+    }
     private static readonly Counter<long> Dropped = Meter.CreateCounter<long>("dropped_items");
     private static readonly Counter<long> MemoryRetrieval = Meter.CreateCounter<long>("memory_retrieval");
     private static readonly Counter<long> TriggerSchedulerEvents = Meter.CreateCounter<long>("trigger_scheduler_events");

@@ -123,3 +123,5 @@ Presentation follow-up: section counts, revisions, IDs and status/attention labe
 ## Observed Email Account journey
 
 Operators create/edit/test/rotate protected mail accounts under Connections → Credentials and bind them under Instance → Credentials. Authorized Chat can request a trusted account chooser, explicitly grant one account, then continue in a fresh Run. A separate exact-content approval confirms sender/account/recipients/body before send. Synthetic uses explicit fixture accounts and no live mail connection; Real setup remains deferred. This context describes UI; docs/13, docs/14 and the dated email evidence report own behavior and verification.
+
+Current Gmail owner journey uses one explicit Google consent in global Credentials, protected backend refresh, verified mailbox and connect/check/reconnect/disconnect. Custom mail remains the advanced TLS/password choice. Synthetic clearly identifies offline authorization and no real delivery; binding and exact send approval stay separate. See docs/13 and the OAuth verification report for canonical behavior and acceptance.

@@ -17,7 +17,7 @@ public static class EmailDraftNormalizer
             NormalizeAddresses(draft.Bcc),
             NormalizeText(draft.Subject),
             NormalizeBody(draft.Body), draft.AccountId, draft.AccountRef, draft.Sender,
-            draft.Revision, draft.AccountRevision, draft.BindingId, draft.BindingRevision);
+            draft.Revision, draft.AccountRevision, draft.BindingId, draft.BindingRevision, draft.AuthEpoch);
 
     public static string ComputeSendActionHash(EmailDraftSnapshot draft)
     {
@@ -37,6 +37,8 @@ public static class EmailDraftNormalizer
                 normalized.Subject,
                 normalized.Body
             ]);
+        // Preserve persisted Custom/legacy approval hashes (epoch zero). OAuth grants add a typed epoch fence.
+        if (normalized.AuthEpoch != 0) payload += "\nauthEpoch:" + normalized.AuthEpoch.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
         return Convert.ToHexString(hash).ToLowerInvariant();
     }

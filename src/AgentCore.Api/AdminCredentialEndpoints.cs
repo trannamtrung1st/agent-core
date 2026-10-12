@@ -12,6 +12,20 @@ internal static class AdminCredentialEndpoints
 {
     internal static void MapCredentials(this RouteGroupBuilder group)
     {
+        group.MapGet("/email-accounts/oauth/configuration", (IEmailOAuthService oauth) => Results.Json(new { configured = oauth.IsConfigured, synthetic = oauth.IsSynthetic }));
+        group.MapGet("/email-accounts/{credentialId:guid}/connection", (Guid credentialId, IEmailOAuthService oauth, CancellationToken ct) => Run(async () => Results.Json(await oauth.ConnectionAsync(credentialId, ct))));
+        group.MapPost("/email-accounts/{credentialId:guid}/oauth/start", (Guid credentialId, AdminEmailOAuthRequest request, HttpContext http, IEmailOAuthService oauth, ILocalUserProfileService profiles, CancellationToken ct) => Run(async () =>
+        {
+            Positive(request.ExpectedRevision);
+            var start = await oauth.StartAsync(credentialId, request.ExpectedRevision, (await profiles.GetLocalProfileAsync(ct)).ProfileId, ct);
+            http.Response.Headers.CacheControl = "no-store";
+            http.Response.Cookies.Append(GoogleEmailOAuthEndpoints.CookieName, start.Correlation, GoogleEmailOAuthEndpoints.Cookie(start.SecureCookie, start.ExpiresAtUtc));
+            return Results.Json(new { start.AuthorizationUrl, start.ExpiresAtUtc, start.Synthetic });
+        }));
+        group.MapPost("/email-accounts/{credentialId:guid}/connection/check", (Guid credentialId, AdminEmailOAuthRequest request, IEmailOAuthService oauth, CancellationToken ct) => Run(async () =>
+        { Positive(request.ExpectedRevision); return Results.Json(await oauth.CheckAsync(credentialId, request.ExpectedRevision, ct)); }));
+        group.MapPost("/email-accounts/{credentialId:guid}/oauth/disconnect", (Guid credentialId, AdminEmailOAuthRequest request, IEmailOAuthService oauth, CancellationToken ct) => Run(async () =>
+        { Positive(request.ExpectedRevision); if (!request.Confirm) throw AgentCoreErrors.Validation("Explicit disconnect confirmation is required."); return Results.Json(await oauth.DisconnectAsync(credentialId, request.ExpectedRevision, ct)); }));
         group.MapPost("/email-accounts", (AdminCreateEmailAccountRequest request, [FromServices] CredentialService service, CancellationToken ct) => Run(async () =>
             Results.Json(Map(await service.CreateEmailAccountAsync(request.DisplayName, Profile(request.Profile), request.ProtectedValue, ct)), statusCode: 201)));
         group.MapPatch("/email-accounts/{credentialId:guid}", (Guid credentialId, AdminUpdateEmailAccountRequest request, [FromServices] CredentialService service, CancellationToken ct) => Run(async () =>
@@ -53,14 +67,18 @@ internal static class AdminCredentialEndpoints
         && Enum.IsDefined(parsed) && Enum.GetNames<T>().Contains(value) ? parsed : throw AgentCoreErrors.Validation("Unknown email preset or TLS mode.");
     private static EmailAccountProfile Profile(EmailAccountProfileDto value)
     {
-        if (value is null || value.ImapEndpoint is null || value.SmtpEndpoint is null) throw AgentCoreErrors.Validation("Typed mail endpoints are required.");
-        return new(Parse<EmailProviderPreset>(value.Preset), value.EmailAddress, value.ImapUsername, value.SmtpUsername,
+        if (value is null) throw AgentCoreErrors.Validation("Account profile is required.");
+        var preset = Parse<EmailProviderPreset>(value.Preset);
+        if (preset == EmailProviderPreset.Gmail) return EmailAccountProfile.Gmail(value.EmailAddress);
+        if (value.ImapEndpoint is null || value.SmtpEndpoint is null) throw AgentCoreErrors.Validation("Typed Custom mail endpoints are required.");
+        return new(preset, value.EmailAddress, value.ImapUsername, value.SmtpUsername,
             new(value.ImapEndpoint.Host, value.ImapEndpoint.Port, Parse<MailTlsMode>(value.ImapEndpoint.TlsMode)),
             new(value.SmtpEndpoint.Host, value.SmtpEndpoint.Port, Parse<MailTlsMode>(value.SmtpEndpoint.TlsMode)));
     }
     private static EmailAccountProfileDto Map(EmailAccountProfile value) => new(value.Preset.ToString(), value.EmailAddress,
-        value.ImapUsername, value.SmtpUsername, new(value.ImapEndpoint.Host, value.ImapEndpoint.Port, value.ImapEndpoint.TlsMode.ToString()),
-        new(value.SmtpEndpoint.Host, value.SmtpEndpoint.Port, value.SmtpEndpoint.TlsMode.ToString()));
+        value.ImapUsername, value.SmtpUsername, value.ImapEndpoint is { } imap ? new(imap.Host, imap.Port, imap.TlsMode.ToString()) : null,
+        value.SmtpEndpoint is { } smtp ? new(smtp.Host, smtp.Port, smtp.TlsMode.ToString()) : null, value.AuthMethod.ToString(),
+        value.GoogleSubject, value.GrantedScopes, value.ConnectionStatus.ToString(), value.AuthEpoch, value.ConnectedAtUtc, value.Synthetic);
     private static void Positive(long revision) { if (revision < 1) throw AgentCoreErrors.Validation("Expected revision must be positive."); }
     private static async Task<IResult> Run(Func<Task<IResult>> action) { try { return await action(); } catch (AgentCoreException ex) { return ProblemResults.From(ex); } }
     private static AdminCredentialResponse Map(CredentialView c) => new(c.CredentialId, c.DisplayName, c.Kind, c.Status, c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, c.BindingCount, c.Purpose, c.EmailAccount is null ? null : Map(c.EmailAccount));

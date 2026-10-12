@@ -43,7 +43,7 @@ public sealed record EmailDraftSnapshot(
     string Subject,
     string Body,
     Guid? AccountId = null, string? AccountRef = null, string? Sender = null,
-    long Revision = 1, long AccountRevision = 0, Guid? BindingId = null, long BindingRevision = 0);
+    long Revision = 1, long AccountRevision = 0, Guid? BindingId = null, long BindingRevision = 0, long AuthEpoch = 0);
 
 public sealed record EmailDraftResult(EmailDraftSnapshot Draft);
 

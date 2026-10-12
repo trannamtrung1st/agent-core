@@ -1151,8 +1151,17 @@ export async function saveSelfManagement(instanceId: string, body: { expectedRev
 }
 
 export type MailEndpoint = { host: string; port: number; tlsMode: 'ImplicitTls' | 'StartTls' };
-export type EmailAccountProfile = { preset: 'Gmail' | 'Custom'; emailAddress: string; imapUsername: string; smtpUsername: string; imapEndpoint: MailEndpoint; smtpEndpoint: MailEndpoint };
+export type EmailAccountProfile = { preset: 'Gmail' | 'Custom'; emailAddress: string; imapUsername: string; smtpUsername: string; imapEndpoint: MailEndpoint | null; smtpEndpoint: MailEndpoint | null;
+  authMethod?: 'Password' | 'GoogleOAuth2'; googleSubject?: string | null; grantedScopes?: string[] | null;
+  connectionStatus?: 'NotConnected' | 'Connected' | 'ReconnectRequired' | 'Disconnected'; authEpoch?: number; connectedAtUtc?: string | null; synthetic?: boolean };
 export type EmailConnectionTest = { protocol: 'imap' | 'smtp'; status: 'connected' | 'failed' | 'synthetic' | 'disabled'; observedAtUtc: string; error: string | null };
-export const createEmailAccount = (input: { displayName: string; profile: EmailAccountProfile; protectedValue: string }) => credentialRequest<SystemCredential>('email-accounts', 'POST', input);
+export const createEmailAccount = (input: { displayName: string; profile: EmailAccountProfile; protectedValue?: string }) => credentialRequest<SystemCredential>('email-accounts', 'POST', input);
 export const updateEmailAccount = (c: SystemCredential, input: { displayName: string; status: string; profile: EmailAccountProfile }) => credentialRequest<SystemCredential>(`email-accounts/${c.credentialId}`, 'PATCH', { ...input, expectedRevision: c.revision });
 export const testEmailAccount = (c: SystemCredential, protocol: 'imap' | 'smtp') => credentialRequest<EmailConnectionTest>(`email-accounts/${c.credentialId}/test`, 'POST', { protocol, expectedRevision: c.revision });
+
+export type EmailOAuthConnection = { status: string; configured: boolean; synthetic: boolean; error: string | null; lastCheckedAtUtc?: string | null; providerRevoked?: boolean | null; diagnosticId?: string | null };
+export const emailOAuthConfiguration = () => credentialRequest<{ configured: boolean; synthetic: boolean }>('email-accounts/oauth/configuration', 'GET');
+export const getEmailConnection = (c: SystemCredential) => credentialRequest<EmailOAuthConnection>(`email-accounts/${c.credentialId}/connection`, 'GET');
+export const startEmailOAuth = (c: SystemCredential) => credentialRequest<{ authorizationUrl: string; expiresAtUtc: string; synthetic: boolean }>(`email-accounts/${c.credentialId}/oauth/start`, 'POST', { expectedRevision: c.revision });
+export const checkEmailConnection = (c: SystemCredential) => credentialRequest<EmailOAuthConnection>(`email-accounts/${c.credentialId}/connection/check`, 'POST', { expectedRevision: c.revision });
+export const disconnectEmailOAuth = (c: SystemCredential) => credentialRequest<EmailOAuthConnection>(`email-accounts/${c.credentialId}/oauth/disconnect`, 'POST', { expectedRevision: c.revision, confirm: true });

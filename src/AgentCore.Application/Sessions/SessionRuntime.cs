@@ -3824,15 +3824,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         ToolCallId: call.Id,
                         Name: call.Name));
                     await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
-                    if (IsInitialBackgroundRun && call.Name == ToolCatalog.EmailRequestAccount
-                        && executionResult.Text.Contains("\"needs_attention\"", StringComparison.Ordinal))
+                    if (effectFenced)
+                        await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
+                    if (IsInitialBackgroundRun && AgentCore.Application.Email.EmailAttentionSafety.RequiresOwnerAttention(call.Name, executionResult.Text))
                     {
                         await RequestRunOutcomeAsync(cause, request.ResponseId, AgentRunOutcomeKind.NeedsAttention,
                             "Email account access needs owner action. Configure Connections → Credentials (/admin/connections/credentials), then start new work.", generateToken).ConfigureAwait(false);
                         return;
                     }
-                    if (effectFenced)
-                        await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                     if (call.Name.StartsWith("browser.", StringComparison.Ordinal) && BrowserDialogPending(executionResult.Text)
                         && ExecutionDefinition.Environment?.Capabilities is not null)
                     {

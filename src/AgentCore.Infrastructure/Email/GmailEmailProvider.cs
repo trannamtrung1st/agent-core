@@ -1,336 +1,157 @@
+using System.Net;
 using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
+using MimeKit;
 
 namespace AgentCore.Infrastructure.Email;
 
-public sealed class GmailEmailProvider(
-    IConfiguration configuration,
-    IHttpClientFactory httpClientFactory,
-    ILogger<GmailEmailProvider> logger, IDiagnosticIdSource? diagnosticIds = null) : IEmailProvider
+// One admitted account; Core owns drafts. No process-global credential or provider Draft fallback.
+public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientFactory clients,
+    Func<CancellationToken, ValueTask<string>> token, Func<CancellationToken, ValueTask> recheck,
+    Func<bool> sendEnabled, TimeProvider time, ILogger<GmailEmailProvider>? logger = null, IDiagnosticIdSource? diagnosticIds = null, Func<CancellationToken, ValueTask<string>>? freshToken = null, Func<CancellationToken, ValueTask>? rejectAuthorization = null) : IEmailProvider, IEmailSendPreflight
 {
     public const string HttpClientName = "GmailEmail";
-
-    public bool IsAvailable =>
-        !string.IsNullOrWhiteSpace(ClientId)
-        && !string.IsNullOrWhiteSpace(ClientSecret)
-        && !string.IsNullOrWhiteSpace(RefreshToken);
-
-    private string? ClientId =>
-        configuration["Gmail:ClientId"] ?? configuration["GMAIL_CLIENT_ID"];
-
-    private string? ClientSecret =>
-        configuration["Gmail:ClientSecret"] ?? configuration["GMAIL_CLIENT_SECRET"];
-
-    private string? RefreshToken =>
-        configuration["Gmail:RefreshToken"] ?? configuration["GMAIL_REFRESH_TOKEN"];
-
+    public bool IsAvailable => account.Profile.IsUsable;
+    private string Prefix => "gmail-" + account.AccountId.ToString("N") + ":";
+    private string? preparedToken;
+    public async ValueTask PrepareSendAsync(CancellationToken ct)
+    {
+        using var observation = new EmailOperationObservation("send.preflight", account.Profile.Synthetic, time, account.AccountId, ct);
+        if (!sendEnabled() || !account.Profile.CanSend) throw AgentCoreErrors.Forbidden("email_send_disabled: Sending is disabled or Gmail send permission is missing.");
+        await recheck(ct); preparedToken = await (freshToken ?? token)(ct); await recheck(ct);
+        observation.Complete();
+    }
     public async ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest request, CancellationToken cancellationToken = default)
     {
-        var accessToken = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var limit = Math.Clamp(request.Limit, 1, EmailToolLimits.MaxSearchLimit);
-        var query = Uri.EscapeDataString(request.Query);
-        var client = httpClientFactory.CreateClient(HttpClientName);
-        using var httpRequest = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"https://gmail.googleapis.com/gmail/v1/users/me/messages?q={query}&maxResults={limit}");
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        using var observation = new EmailOperationObservation("search", account.Profile.Synthetic, time, account.AccountId, cancellationToken);
+        try { var result = await SearchCoreAsync(request, cancellationToken); observation.Complete(); return result; }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested) { observation.Fail(ex); throw; }
+        catch (Exception ex)
         {
-            logger.LogWarning("Gmail search failed with status {StatusCode}", (int)response.StatusCode);
-            throw new AgentCoreException("provider", "Gmail search failed.", 502);
+            var failure = EmailOperationObservation.Failure(ex, logger, diagnosticIds, "search", account.AccountId, account.AgentInstanceId);
+            observation.Fail(failure); throw failure;
         }
-
-        using var document = JsonDocument.Parse(body);
-        var results = new List<EmailSearchItem>();
-        if (document.RootElement.TryGetProperty("messages", out var messages) && messages.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var entry in messages.EnumerateArray())
-            {
-                if (!entry.TryGetProperty("id", out var idNode))
-                {
-                    continue;
-                }
-
-                var messageId = idNode.GetString() ?? "";
-                if (messageId.Length == 0)
-                {
-                    continue;
-                }
-
-                var summary = await ReadMessageSummaryAsync(client, accessToken, messageId, cancellationToken)
-                    .ConfigureAwait(false);
-                if (summary is not null)
-                {
-                    results.Add(summary);
-                }
-            }
-        }
-
-        return new EmailSearchResult(results, false);
     }
-
+    private async ValueTask<EmailSearchResult> SearchCoreAsync(EmailSearchRequest request, CancellationToken cancellationToken)
+    {
+        var limit = Math.Clamp(request.Limit, 1, EmailToolLimits.MaxSearchLimit);
+        var query = string.IsNullOrWhiteSpace(request.Query) ? "in:inbox" : request.Query;
+        using var list = await Get("messages?maxResults=" + limit + "&q=" + Uri.EscapeDataString(query), cancellationToken);
+        var results = new List<EmailSearchItem>();
+        if (list.RootElement.TryGetProperty("messages", out var messages))
+        foreach (var item in messages.EnumerateArray().Take(limit))
+        {
+            var id = item.GetProperty("id").GetString()!;
+            using var json = await Get("messages/" + Uri.EscapeDataString(id) + "?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date", cancellationToken);
+            var root = json.RootElement; var headers = root.GetProperty("payload").GetProperty("headers");
+            results.Add(new(Prefix + id, root.TryGetProperty("threadId", out var thread) ? Prefix + thread.GetString() : "",
+                ReadHeader(headers, "From") ?? "", ReadHeader(headers, "Subject") ?? "",
+                DateTimeOffset.TryParse(ReadHeader(headers, "Date"), out var date) ? date : time.GetUtcNow(),
+                root.TryGetProperty("snippet", out var snippet) ? snippet.GetString() ?? "" : ""));
+        }
+        return new(results, list.RootElement.TryGetProperty("nextPageToken", out _));
+    }
     public async ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest request, CancellationToken cancellationToken = default)
     {
-        var accessToken = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var client = httpClientFactory.CreateClient(HttpClientName);
-        using var httpRequest = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"https://gmail.googleapis.com/gmail/v1/users/me/messages/{Uri.EscapeDataString(request.MessageId)}?format=full");
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        using var observation = new EmailOperationObservation("read", account.Profile.Synthetic, time, account.AccountId, cancellationToken);
+        try { var result = await ReadCoreAsync(request, cancellationToken); observation.Complete(); return result; }
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested) { observation.Fail(ex); throw; }
+        catch (Exception ex)
         {
-            logger.LogWarning("Gmail read failed with status {StatusCode}", (int)response.StatusCode);
-            throw AgentCoreErrors.NotFound("Message was not found.");
+            var failure = EmailOperationObservation.Failure(ex, logger, diagnosticIds, "read", account.AccountId, account.AgentInstanceId);
+            observation.Fail(failure); throw failure;
         }
-
-        using var document = JsonDocument.Parse(body);
-        return ParseMessage(document.RootElement);
     }
-
-    public async ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default)
+    private async ValueTask<EmailMessageResult> ReadCoreAsync(EmailReadRequest request, CancellationToken cancellationToken)
     {
-        var raw = GmailMime.BuildRawMessage(request.To, request.Cc, request.Bcc, request.Subject, request.Body);
-        var accessToken = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var payload = JsonSerializer.Serialize(new { message = new { raw } });
-        var client = httpClientFactory.CreateClient(HttpClientName);
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://gmail.googleapis.com/gmail/v1/users/me/drafts")
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            logger.LogWarning("Gmail create draft failed with status {StatusCode}", (int)response.StatusCode);
-            throw new AgentCoreException("provider", "Gmail draft creation failed.", 502);
-        }
-
-        using var document = JsonDocument.Parse(body);
-        var draftId = document.RootElement.TryGetProperty("id", out var idNode) ? idNode.GetString() ?? "" : "";
-        if (draftId.Length == 0)
-        {
-            throw new AgentCoreException("provider", "Gmail draft creation returned no id.", 502);
-        }
-
-        var snapshot = await GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false)
-            ?? new EmailDraftSnapshot(draftId, request.To, request.Cc, request.Bcc, request.Subject, request.Body);
-        return new EmailDraftResult(snapshot);
+        if (!request.MessageId.StartsWith(Prefix, StringComparison.Ordinal) || request.MessageId.Length > 512)
+            throw AgentCoreErrors.NotFound("Message reference is not in this account.");
+        using var json = await Get("messages/" + Uri.EscapeDataString(request.MessageId[Prefix.Length..]) + "?format=full", cancellationToken);
+        var root = json.RootElement; var payload = root.GetProperty("payload"); var headers = payload.GetProperty("headers");
+        var body = ExtractBody(root); var truncated = body.Length > EmailToolLimits.MaxBodyLength;
+        return new(request.MessageId, root.TryGetProperty("threadId", out var thread) ? Prefix + thread.GetString() : "",
+            ReadHeader(headers, "From") ?? "", SplitAddresses(ReadHeader(headers, "To")), SplitAddresses(ReadHeader(headers, "Cc")),
+            DateTimeOffset.TryParse(ReadHeader(headers, "Date"), out var date) ? date : time.GetUtcNow(), ReadHeader(headers, "Subject") ?? "",
+            truncated ? body[..EmailToolLimits.MaxBodyLength] : body, truncated, []);
     }
-
-    public async ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default)
+    private async Task<JsonDocument> Get(string path, CancellationToken ct)
     {
-        var accessToken = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var client = httpClientFactory.CreateClient(HttpClientName);
-        using var httpRequest = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"https://gmail.googleapis.com/gmail/v1/users/me/drafts/{Uri.EscapeDataString(draftId)}?format=raw");
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            logger.LogWarning("Gmail get draft failed with status {StatusCode}", (int)response.StatusCode);
-            return null;
-        }
-
-        using var document = JsonDocument.Parse(body);
-        if (!document.RootElement.TryGetProperty("message", out var message)
-            || !message.TryGetProperty("raw", out var rawNode)
-            || rawNode.GetString() is not { Length: > 0 } raw)
-        {
-            return null;
-        }
-
+        await recheck(ct); var access = await token(ct); await recheck(ct);
+        using var client = clients.CreateClient(HttpClientName);
+        HttpRequestMessage Request(string value)
+        { var request = new HttpRequestMessage(HttpMethod.Get, "https://gmail.googleapis.com/gmail/v1/users/me/" + path); request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", value); return request; }
+        var response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct);
         try
         {
-            return GmailMime.ParseDraft(draftId, GmailMime.DecodeBase64Url(raw));
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                response.Dispose(); access = await (freshToken ?? token)(ct); await recheck(ct);
+                response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct);
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    if (rejectAuthorization is not null) await rejectAuthorization(ct);
+                    throw new AgentCoreException("email_oauth_reconnect_required", "Google rejected current authorization. Reconnect in Connections → Credentials.", 403);
+                }
+            }
+            if (!response.IsSuccessStatusCode) throw new HttpRequestException("Google mailbox is unavailable.", null, response.StatusCode);
+            var json = await GoogleEmailOAuthService.ReadJson(response, 2 * 1024 * 1024, ct);
+            try { await recheck(ct); return json; } catch { json.Dispose(); throw; }
         }
-        catch (FormatException)
-        {
-            return null;
-        }
+        finally { response.Dispose(); }
     }
-
+    public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException("Core owns drafts.");
+    public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default) => throw new NotSupportedException("Core owns drafts.");
     public async ValueTask<EmailSendResult> SendDraftAsync(EmailSendDraftRequest request, CancellationToken cancellationToken = default)
     {
-        var approved = request.ApprovedDraft;
-        if (!string.Equals(request.DraftId, approved.DraftId, StringComparison.Ordinal))
-        {
-            throw AgentCoreErrors.Validation("Draft id does not match the approved snapshot.");
-        }
-
-        var raw = GmailMime.BuildRawMessage(
-            approved.To,
-            approved.Cc,
-            approved.Bcc,
-            approved.Subject,
-            approved.Body);
-        var payload = JsonSerializer.Serialize(new
-        {
-            id = request.DraftId,
-            message = new { raw }
-        });
-        var accessToken = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var client = httpClientFactory.CreateClient(HttpClientName);
-        using var httpRequest = new HttpRequestMessage(
-            HttpMethod.Post,
-            "https://gmail.googleapis.com/gmail/v1/users/me/drafts/send")
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        var dispatchStarted = false;
+        using var observation = new EmailOperationObservation("send", account.Profile.Synthetic, time, account.AccountId, cancellationToken);
+        var draft = request.ApprovedDraft;
+        if (request.DraftId != draft.DraftId || draft.AccountId != account.AccountId || draft.Sender != account.Profile.EmailAddress
+            || draft.AccountRevision != account.AccountRevision || draft.AuthEpoch != account.Profile.AuthEpoch)
+            throw AgentCoreErrors.Forbidden("Draft identity or authorization does not match the approved Gmail account.");
+        using var message = GmailMime.BuildMessage(draft.To, draft.Cc, draft.Bcc, draft.Subject, draft.Body);
+        message.From.Add(MailboxAddress.Parse(account.Profile.EmailAddress));
+        using var stream = new MemoryStream(); message.WriteTo(stream);
+        var raw = GmailMime.EncodeBase64Url(stream.ToArray());
+        if (preparedToken is null) await PrepareSendAsync(cancellationToken);
+        await recheck(cancellationToken);
+        if (!sendEnabled()) return new(EmailSendOutcome.Failed, null, "email_send_disabled", "Sending was disabled before dispatch.");
+        using var client = clients.CreateClient(HttpClientName);
+        using var outbound = new HttpRequestMessage(HttpMethod.Post, "https://gmail.googleapis.com/gmail/v1/users/me/messages/send")
+        { Content = new StringContent(JsonSerializer.Serialize(new { raw }), Encoding.UTF8, "application/json") };
+        outbound.Headers.Authorization = new AuthenticationHeaderValue("Bearer", preparedToken);
         try
         {
-            dispatchStarted = true;
-            using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            if (response.IsSuccessStatusCode)
+            using var response = await client.SendAsync(outbound, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (!response.IsSuccessStatusCode) HandledFailureLog.Warning(logger, new HttpRequestException("Google rejected email dispatch.", null, response.StatusCode),
+                "email.send", (int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout ? "email_send_indeterminate" : "email_send_rejected",
+                new DiagnosticContext(ProviderAlias: "gmail", AgentInstanceId: account.AgentInstanceId, CredentialId: account.AccountId), diagnostics: diagnosticIds);
+            if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
             {
-                using var document = JsonDocument.Parse(body);
-                var messageId = document.RootElement.TryGetProperty("id", out var idNode) ? idNode.GetString() : null;
-                return new EmailSendResult(EmailSendOutcome.Sent, messageId, null, null);
+                observation.Complete("indeterminate");
+                return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google acceptance could not be confirmed. This draft will not be retried.");
             }
-
-            logger.LogWarning("Gmail send failed with status {StatusCode}; dispatch outcome {Outcome}",
-                (int)response.StatusCode, (int)response.StatusCode >= 500 ? "indeterminate" : "failed");
-            if ((int)response.StatusCode >= 500)
-            {
-                return new EmailSendResult(
-                    EmailSendOutcome.Indeterminate,
-                    null,
-                    "provider",
-                    "Gmail send outcome is unknown after a server error.");
-            }
-
-            return new EmailSendResult(EmailSendOutcome.Failed, null, "provider", "Gmail send was rejected.");
+            if (!response.IsSuccessStatusCode) { observation.Complete("failed"); return new(EmailSendOutcome.Failed, null, "email_send_rejected", "Google rejected the message."); }
+            using var json = await GoogleEmailOAuthService.ReadJson(response, 64 * 1024, cancellationToken);
+            if (json.RootElement.TryGetProperty("id", out var id) && id.GetString() is { Length: > 0 } accepted)
+            { observation.Complete(); return new(EmailSendOutcome.Sent, accepted, null, null); }
+            observation.Complete("indeterminate");
+            HandledFailureLog.Warning(logger, new InvalidDataException("Google response did not include a message ID."), "email.send", "email_send_indeterminate",
+                new DiagnosticContext(ProviderAlias: "gmail", AgentInstanceId: account.AgentInstanceId, CredentialId: account.AccountId, FailureReason: "missing_message_id"), diagnostics: diagnosticIds);
+            return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google response did not confirm a message ID. This draft will not be retried.");
         }
-        catch (OperationCanceledException ex) when (dispatchStarted)
+        catch (Exception ex)
         {
-            HandledFailureLog.Warning(logger, ex, "email.send", "dispatch_unconfirmed", new DiagnosticContext(ProviderAlias: "gmail"), diagnostics: diagnosticIds);
-            return new EmailSendResult(
-                EmailSendOutcome.Indeterminate,
-                null,
-                "cancelled",
-                "Gmail send outcome is unknown after cancellation.");
-        }
-        catch (HttpRequestException ex)
-        {
-            HandledFailureLog.Warning(logger, ex, "email.send", "transport_error", new DiagnosticContext(ProviderAlias: "gmail"), diagnostics: diagnosticIds);
-            return new EmailSendResult(
-                EmailSendOutcome.Indeterminate,
-                null,
-                "transport",
-                "Gmail send outcome is unknown after a transport failure.");
+            observation.Complete("indeterminate");
+            HandledFailureLog.Warning(logger, ex, "email.send", "dispatch_unconfirmed", new DiagnosticContext(ProviderAlias: "gmail", AgentInstanceId: account.AgentInstanceId, CredentialId: account.AccountId), diagnostics: diagnosticIds);
+            return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google acceptance could not be confirmed. This draft will not be retried.");
         }
     }
-
-    private async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken)
-    {
-        var client = httpClientFactory.CreateClient(HttpClientName);
-        using var request = new HttpRequestMessage(HttpMethod.Post, "https://oauth2.googleapis.com/token")
-        {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["client_id"] = ClientId!,
-                ["client_secret"] = ClientSecret!,
-                ["refresh_token"] = RefreshToken!,
-                ["grant_type"] = "refresh_token"
-            })
-        };
-        using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        // Parse the provider JSON before any log redaction so token/MIME payloads stay intact.
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            logger.LogWarning("Gmail token refresh failed with status {StatusCode}", (int)response.StatusCode);
-            throw new AgentCoreException("provider", "Gmail credentials are not valid.", 502);
-        }
-
-        using var document = JsonDocument.Parse(body);
-        return document.RootElement.TryGetProperty("access_token", out var tokenNode)
-            ? tokenNode.GetString() ?? throw new AgentCoreException("provider", "Gmail token response was empty.", 502)
-            : throw new AgentCoreException("provider", "Gmail token response was empty.", 502);
-    }
-
-    private async Task<EmailSearchItem?> ReadMessageSummaryAsync(
-        HttpClient client,
-        string accessToken,
-        string messageId,
-        CancellationToken cancellationToken)
-    {
-        using var httpRequest = new HttpRequestMessage(
-            HttpMethod.Get,
-            $"https://gmail.googleapis.com/gmail/v1/users/me/messages/{Uri.EscapeDataString(messageId)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date");
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        using var response = await client.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        using var document = JsonDocument.Parse(body);
-        var root = document.RootElement;
-        var subject = ReadHeader(root, "Subject") ?? "(no subject)";
-        var from = ReadHeader(root, "From") ?? "";
-        var dateText = ReadHeader(root, "Date");
-        var date = DateTimeOffset.TryParse(dateText, out var parsed) ? parsed : DateTimeOffset.UtcNow;
-        var snippet = root.TryGetProperty("snippet", out var snippetNode) ? snippetNode.GetString() ?? "" : "";
-        var threadId = root.TryGetProperty("threadId", out var threadNode) ? threadNode.GetString() ?? "" : "";
-        return new EmailSearchItem(messageId, threadId, from, subject, date, snippet);
-    }
-
-    private static EmailMessageResult ParseMessage(JsonElement message)
-    {
-        var messageId = message.TryGetProperty("id", out var idNode) ? idNode.GetString() ?? "" : "";
-        var threadId = message.TryGetProperty("threadId", out var threadNode) ? threadNode.GetString() ?? "" : "";
-        var headers = message.TryGetProperty("payload", out var payload) && payload.TryGetProperty("headers", out var headersNode)
-            ? headersNode
-            : default;
-        var subject = ReadHeader(headers, "Subject") ?? "";
-        var from = ReadHeader(headers, "From") ?? "";
-        var to = SplitAddresses(ReadHeader(headers, "To"));
-        var cc = SplitAddresses(ReadHeader(headers, "Cc"));
-        var dateText = ReadHeader(headers, "Date");
-        var date = DateTimeOffset.TryParse(dateText, out var parsed) ? parsed : DateTimeOffset.UtcNow;
-        var body = ExtractBody(message);
-        var truncated = body.Length > EmailToolLimits.MaxBodyLength;
-        if (truncated)
-        {
-            body = body[..EmailToolLimits.MaxBodyLength];
-        }
-
-        return new EmailMessageResult(
-            messageId,
-            threadId,
-            from,
-            to,
-            cc,
-            date,
-            subject,
-            body,
-            truncated,
-            []);
-    }
-
     private static string? ReadHeader(JsonElement messageOrHeaders, string name)
     {
         if (messageOrHeaders.ValueKind == JsonValueKind.Object && messageOrHeaders.TryGetProperty("headers", out var headers))
@@ -356,10 +177,8 @@ public sealed class GmailEmailProvider(
         return null;
     }
 
-    private static IReadOnlyList<string> SplitAddresses(string? value) =>
-        string.IsNullOrWhiteSpace(value)
-            ? []
-            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    private static IReadOnlyList<string> SplitAddresses(string? value) => InternetAddressList.TryParse(value ?? "", out var addresses)
+        ? addresses.Mailboxes.Select(m => m.Address).ToArray() : [];
 
     private static string ExtractBody(JsonElement message)
     {
@@ -375,7 +194,9 @@ public sealed class GmailEmailProvider(
 
     private static void CollectBody(JsonElement payload, StringBuilder builder)
     {
-        if (payload.TryGetProperty("body", out var body)
+        if (builder.Length > EmailToolLimits.MaxBodyLength) return;
+        if (payload.TryGetProperty("mimeType", out var mime) && mime.GetString() == "text/plain"
+            && payload.TryGetProperty("body", out var body)
             && body.TryGetProperty("data", out var dataNode)
             && dataNode.GetString() is { Length: > 0 } data)
         {
