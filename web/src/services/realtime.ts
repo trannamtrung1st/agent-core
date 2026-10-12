@@ -447,6 +447,7 @@ function clearVoiceInputHeldForAgentOutput(): void {
 }
 
 async function suspendClientTranscriptForAgentOutput(): Promise<void> {
+  if (!chatSurfaceVisible) return;
   const state = useSessionStore.getState();
   if (state.sttTransport !== "clientTranscript" || state.mode !== "voice") {
     return;
@@ -460,6 +461,10 @@ async function suspendClientTranscriptForAgentOutput(): Promise<void> {
 }
 
 async function tryResumeClientTranscriptAfterAgentOutput(): Promise<void> {
+  if (!chatSurfaceVisible) {
+    clearVoiceInputHeldForAgentOutput();
+    return;
+  }
   if (!clientTranscriptHeldForAgent) {
     return;
   }
@@ -1513,6 +1518,8 @@ function voicePlaybackHoldActive(): boolean {
 }
 
 function syncCapture(): void {
+  // A live text transport must never re-arm media while Admin owns the screen.
+  if (!chatSurfaceVisible) return;
   const state = useSessionStore.getState();
   if (state.connection !== "ready") {
     captureStreamId = null;
