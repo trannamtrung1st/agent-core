@@ -179,6 +179,7 @@ public sealed class GoogleEmailOAuthTests
         Assert.Equal(expectedStatus, result.Status); Assert.Equal(id, result.DiagnosticId); Assert.Equal(unused, ids.NewId());
         var entry = Assert.Single(logs.Entries); Assert.Equal("email.oauth.refresh", entry.Properties["Operation"]);
         Assert.Equal(id, entry.Properties["DiagnosticId"]); Assert.Equal(c.CredentialId, entry.Properties["CredentialId"]);
+        Assert.Contains("StatusCode=400", entry.Exception!.ToString());
         var rendered = entry.Message + entry.Exception;
         Assert.DoesNotContain("known-client-secret", rendered); Assert.DoesNotContain("known-refresh", rendered); Assert.DoesNotContain("verified@example.test", rendered);
         Assert.Contains(metrics.Tags, t => t.Instrument == "email.operations" && t.Key == "operation" && Equals(t.Value, "oauth.check"));

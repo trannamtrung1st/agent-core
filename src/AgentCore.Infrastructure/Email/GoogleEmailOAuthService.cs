@@ -131,7 +131,7 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
         {
             var token = synthetic ? new Token("synthetic-access", "synthetic-refresh", null, [EmailAccountProfile.ReadScope, EmailAccountProfile.SendScope], 3600)
                 : await Exchange(new() { ["grant_type"] = "authorization_code", ["code"] = code, ["code_verifier"] = a.Verifier,
-                    ["redirect_uri"] = new Uri(options.AppUri!, GoogleEmailOAuthOptions.CallbackPath).AbsoluteUri }, ct);
+                    ["redirect_uri"] = new Uri(options.AppUri!, GoogleEmailOAuthOptions.CallbackPath).AbsoluteUri }, c.CredentialId, "oauth.connect.exchange", ct);
             phase = "identity";
             var identity = synthetic ? new GoogleEmailIdentity("synthetic-" + c.CredentialId.ToString("N"), c.EmailAccount.EmailAddress == "" ? "synthetic-" + c.CredentialId.ToString("N")[..8] + "@example.test" : c.EmailAccount.EmailAddress)
                 : await verifier.VerifyAsync(token.IdToken ?? "", options.ClientId!, a.Nonce, ct);
@@ -142,7 +142,7 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
                 throw Failure("email_oauth_scope_missing", "Grant both mailbox read and send permissions, then connect again.");
             if (string.IsNullOrWhiteSpace(token.RefreshToken)) throw Failure("email_oauth_refresh_missing", "Google did not supply offline authorization. Reconnect with consent.");
             phase = "profile";
-            if (!synthetic) await VerifyMailbox(identity.Email, token.AccessToken, ct);
+            if (!synthetic) await VerifyMailbox(identity.Email, token.AccessToken, c.CredentialId, "oauth.connect.profile", ct);
             var profile = c.EmailAccount with { EmailAddress = identity.Email, GoogleSubject = identity.Subject, GrantedScopes = token.Scopes,
                 ConnectionStatus = EmailConnectionStatus.Connected, AuthEpoch = a.Epoch + 1, ConnectedAtUtc = time.GetUtcNow(), Synthetic = synthetic };
             profile.Validate();
@@ -160,7 +160,7 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
             var failure = ex as AgentCoreException ?? (phase == "identity" && ex is not (HttpRequestException or OperationCanceledException)
                 ? Failure("email_oauth_identity_mismatch", "Google identity validation failed. Connect the original account again.")
                 : Failure("email_oauth_temporary_failure", "Google connection could not be completed. Try again.", 502));
-            var diagnostic = HandledFailureLog.Warning(logger, ex, "email.oauth.connect." + phase, failure.Code, new DiagnosticContext(ProviderAlias: "gmail", CredentialId: c.CredentialId), diagnostics: diagnosticIds);
+            var diagnostic = failure.DiagnosticId ?? HandledFailureLog.Warning(logger, ex, "email.oauth.connect." + phase, failure.Code, new DiagnosticContext(ProviderAlias: "gmail", CredentialId: c.CredentialId), diagnostics: diagnosticIds);
             observations[c.CredentialId] = Status(c, failure.Code + ": " + failure.Message) with { DiagnosticId = diagnostic };
             observation.Fail(failure);
             return c.CredentialId;
@@ -191,7 +191,7 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
             Token token;
             try
             {
-                token = await Exchange(new() { ["grant_type"] = "refresh_token", ["refresh_token"] = protector.Unprotect(id, c.ProtectionVersion, c.ProtectedPayload) }, ct);
+                token = await Exchange(new() { ["grant_type"] = "refresh_token", ["refresh_token"] = protector.Unprotect(id, c.ProtectionVersion, c.ProtectedPayload) }, id, "oauth.refresh", ct);
                 if (token.Scopes.Length > 0 && (!token.Scopes.Contains(EmailAccountProfile.ReadScope) || !token.Scopes.Contains(EmailAccountProfile.SendScope)))
                     throw Failure("email_oauth_scope_missing", "Google authorization lacks required permissions. Reconnect.", 403);
             }
@@ -234,7 +234,7 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
         try
         {
             var token = await AccessTokenAsync(id, revision, ct, forceRefresh: true);
-            if (!synthetic) await VerifyMailbox(c.EmailAccount!.EmailAddress, token, ct);
+            if (!synthetic) await VerifyMailbox(c.EmailAccount!.EmailAddress, token, id, "oauth.check", ct);
             observations[id] = Status(c) with { LastCheckedAtUtc = time.GetUtcNow() };
             observation.Complete();
         }
@@ -280,7 +280,7 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
         observation.Complete(revoked ? "success" : "revocation_unconfirmed");
         return await ConnectionAsync(id, CancellationToken.None);
     }
-    private async Task<Token> Exchange(Dictionary<string, string> fields, CancellationToken ct)
+    private async Task<Token> Exchange(Dictionary<string, string> fields, Guid id, string operation, CancellationToken ct)
     {
         fields["client_id"] = options.ClientId!; fields["client_secret"] = options.ClientSecret!;
         using var client = clients.CreateClient(HttpClientName);
@@ -290,9 +290,13 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
         using var json = await ReadJson(response, 64 * 1024, ct);
         var root = json.RootElement;
         if (!response.IsSuccessStatusCode)
-            throw root.TryGetProperty("error", out var e) && e.GetString() == "invalid_grant"
+        {
+            var failure = root.TryGetProperty("error", out var e) && e.GetString() == "invalid_grant"
                 ? Failure("email_oauth_reconnect_required", "Google authorization is no longer valid. Reconnect.", 403)
                 : Failure("email_oauth_temporary_failure", "Google authorization is temporarily unavailable. Try again.", 502);
+            throw EmailOperationObservation.Failure(new HttpRequestException("Google token request was rejected.", null, response.StatusCode),
+                logger, diagnosticIds, operation, id, normalized: failure);
+        }
         var access = root.TryGetProperty("access_token", out var a) ? a.GetString() : null;
         if (string.IsNullOrWhiteSpace(access)) throw Failure("email_oauth_temporary_failure", "Google returned incomplete authorization. Try again.", 502);
         return new(access, root.TryGetProperty("refresh_token", out var r) ? r.GetString() : null,
@@ -300,7 +304,7 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
             root.TryGetProperty("scope", out var s) ? (s.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries) : [],
             root.TryGetProperty("expires_in", out var expiry) && expiry.TryGetInt32(out var seconds) ? Math.Clamp(seconds, 60, 86400) : 3600);
     }
-    private async Task VerifyMailbox(string expected, string access, CancellationToken ct)
+    private async Task VerifyMailbox(string expected, string access, Guid id, string operation, CancellationToken ct)
     {
         using var client = clients.CreateClient(HttpClientName); using var request = new HttpRequestMessage(HttpMethod.Get, "https://gmail.googleapis.com/gmail/v1/users/me/profile");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", access);
@@ -311,9 +315,13 @@ public sealed class GoogleEmailOAuthService : IEmailOAuthService
             var quota = json.RootElement.TryGetProperty("error", out var problem) && problem.ValueKind == JsonValueKind.Object
                 && problem.TryGetProperty("errors", out var causes) && causes.ValueKind == JsonValueKind.Array
                 && causes.EnumerateArray().Any(item => item.TryGetProperty("reason", out var reason) && reason.GetString() is "rateLimitExceeded" or "userRateLimitExceeded" or "dailyLimitExceeded" or "quotaExceeded");
-            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw Failure("email_oauth_reconnect_required", "Google rejected authorization. Reconnect the original account.", 403);
-            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden && !quota) throw Failure("email_oauth_scope_missing", "Google denied mailbox permissions. Reconnect or review operator setup.", 403);
-            throw Failure("email_oauth_temporary_failure", "Google mailbox verification is temporarily unavailable. Retry check.", 502);
+            var failure = response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                ? Failure("email_oauth_reconnect_required", "Google rejected authorization. Reconnect the original account.", 403)
+                : response.StatusCode == System.Net.HttpStatusCode.Forbidden && !quota
+                    ? Failure("email_oauth_scope_missing", "Google denied mailbox permissions. Reconnect or review operator setup.", 403)
+                    : Failure("email_oauth_temporary_failure", "Google mailbox verification is temporarily unavailable. Retry check.", 502);
+            throw EmailOperationObservation.Failure(new HttpRequestException("Google mailbox verification was rejected.", null, response.StatusCode),
+                logger, diagnosticIds, operation, id, normalized: failure);
         }
         if (!json.RootElement.TryGetProperty("emailAddress", out var email) || !string.Equals(expected, email.GetString(), StringComparison.OrdinalIgnoreCase))
             throw Failure("email_oauth_identity_mismatch", "Gmail mailbox verification failed. Reconnect the original account.", 403);

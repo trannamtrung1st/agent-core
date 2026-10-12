@@ -42,9 +42,9 @@ internal sealed class EmailOperationObservation(string operation, bool synthetic
     }
 
     internal static AgentCoreException Failure(Exception exception, ILogger? logger, IDiagnosticIdSource? ids,
-        string operation, Guid accountId, Guid? agentId = null)
+        string operation, Guid accountId, Guid? agentId = null, AgentCoreException? normalized = null)
     {
-        var safe = exception as AgentCoreException ?? new AgentCoreException("email_provider_unavailable", "Google email is temporarily unavailable. Check access in Connections → Credentials.", 502);
+        var safe = normalized ?? exception as AgentCoreException ?? new AgentCoreException("email_provider_unavailable", "Google email is temporarily unavailable. Check access in Connections → Credentials.", 502);
         if (safe.DiagnosticId is not null) return safe; // Preserve the originating reference across nested refresh/read/check boundaries.
         var diagnostic = HandledFailureLog.Warning(logger, exception, "email." + operation, safe.Code,
             new DiagnosticContext(ProviderAlias: "gmail", CredentialId: accountId, AgentInstanceId: agentId), diagnostics: ids);
