@@ -1,10 +1,11 @@
 using AgentCore.Application.Ports;
+using AgentCore.Application.Observability;
 
 namespace AgentCore.Api;
 
 /// <summary>Committed deletion receipts survive the commit-to-filesystem cleanup gap.</summary>
 public sealed class WorkspaceCleanupHostedService(
-    IServiceProvider services, ILogger<WorkspaceCleanupHostedService> logger) : BackgroundService
+    IServiceProvider services, ILogger<WorkspaceCleanupHostedService> logger, IDiagnosticIdSource? diagnosticIds = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -17,10 +18,10 @@ public sealed class WorkspaceCleanupHostedService(
                 await services.GetRequiredService<IAdminLifecycleDeletion>().RecoverWorkspaceCleanupAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Avoid physical paths/provider contents in logs; the durable receipts remain retryable.
-                logger.LogWarning("Deleted-instance workspace cleanup failed; it will be retried.");
+                HandledFailureLog.Warning(logger, ex, "workspace.cleanup", "workspace_cleanup_failed", diagnostics: diagnosticIds);
             }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }

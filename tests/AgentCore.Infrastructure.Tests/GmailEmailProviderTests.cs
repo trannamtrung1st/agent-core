@@ -6,6 +6,8 @@ using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
 using AgentCore.Infrastructure.Email;
 using MimeKit;
+using AgentCore.Application.Testing;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -18,7 +20,7 @@ public sealed class GmailEmailProviderTests
     [InlineData(408, EmailSendOutcome.Indeterminate)]
     public async Task Messages_send_uses_exact_Core_snapshot_verified_From_and_Bcc(int status, EmailSendOutcome outcome)
     {
-        var handler = new Transport { Status = (HttpStatusCode)status }; var account = Account(); var provider = Provider(handler, account);
+        var handler = new Transport { Status = (HttpStatusCode)status }; var account = Account(); var logs = new DiagnosticLogCapture<GmailEmailProvider>(); var provider = Provider(handler, account, logs);
         var draft = Draft(account); await provider.PrepareSendAsync(default);
         var result = await provider.SendDraftAsync(new(draft.DraftId, draft)); Assert.Equal(outcome, result.Outcome);
         Assert.Equal("/gmail/v1/users/me/messages/send", handler.Path);
@@ -30,14 +32,17 @@ public sealed class GmailEmailProviderTests
         Assert.Equal("to@example.test", Assert.Single(message.To.Mailboxes).Address); Assert.Equal("cc@example.test", Assert.Single(message.Cc.Mailboxes).Address);
         Assert.Equal("Exact subject", message.Subject); Assert.Equal("Exact body", message.TextBody!.TrimEnd('\r', '\n'));
         Assert.Equal(1, handler.Sends); Assert.DoesNotContain("drafts", handler.Path!);
+        if (status == 200) Assert.Empty(logs.Entries);
+        else { var failure = Assert.Single(logs.Entries); Assert.Equal(LogLevel.Warning, failure.Level); Assert.Equal(status, failure.Properties["StatusCode"]); Assert.DoesNotContain("Exact body", failure.Message); }
     }
     [Fact]
     public async Task Lost_send_response_is_uncertain_and_never_retried_by_adapter()
     {
-        var handler = new Transport { Hang = true }; var account = Account(); var provider = Provider(handler, account); using var ct = new CancellationTokenSource();
+        var handler = new Transport { Hang = true }; var account = Account(); var logs = new DiagnosticLogCapture<GmailEmailProvider>(); var provider = Provider(handler, account, logs); using var ct = new CancellationTokenSource();
         var draft = Draft(account); var sending = provider.SendDraftAsync(new(draft.DraftId, draft), ct.Token).AsTask();
         await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5)); await ct.CancelAsync();
         Assert.Equal(EmailSendOutcome.Indeterminate, (await sending).Outcome); Assert.Equal(1, handler.Sends);
+        var failure = Assert.Single(logs.Entries); Assert.Equal("dispatch_unconfirmed", failure.Properties["ErrorCode"]); Assert.NotNull(failure.Exception); Assert.DoesNotContain("Exact body", failure.Exception.ToString());
     }
     [Theory]
     [InlineData("sender")]
@@ -75,7 +80,7 @@ public sealed class GmailEmailProviderTests
     private static EmailAccountContext Account() => new(Guid.NewGuid(), Guid.NewGuid(), "gmail", "Gmail", 2, Guid.NewGuid(), 1,
         EmailAccountProfile.Gmail("verified@example.test") with { AuthEpoch = 1, ConnectionStatus = EmailConnectionStatus.Connected, GoogleSubject = "verified-sub", GrantedScopes = [EmailAccountProfile.ReadScope, EmailAccountProfile.SendScope] });
     private static EmailDraftSnapshot Draft(EmailAccountContext a) => new("core-draft-1", ["to@example.test"], ["cc@example.test"], ["hidden@example.test"], "Exact subject", "Exact body", a.AccountId, a.AccountRef, a.Profile.EmailAddress, AccountRevision: a.AccountRevision, AuthEpoch: 1);
-    private static GmailEmailProvider Provider(Transport handler, EmailAccountContext account) => new(account, handler, _ => ValueTask.FromResult("protected-access"), _ => ValueTask.CompletedTask, () => true, TimeProvider.System);
+    private static GmailEmailProvider Provider(Transport handler, EmailAccountContext account, ILogger<GmailEmailProvider>? logger = null) => new(account, handler, _ => ValueTask.FromResult("protected-access"), _ => ValueTask.CompletedTask, () => true, TimeProvider.System, logger);
     private sealed class Transport : HttpMessageHandler, IHttpClientFactory
     {
         public bool FailFirstList; public int Lists;

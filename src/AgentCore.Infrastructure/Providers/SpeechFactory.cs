@@ -4,6 +4,7 @@ using AgentCore.Infrastructure.Providers.OpenAI;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using AgentCore.Infrastructure.Providers.Synthetic;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure.Providers;
 
@@ -103,7 +104,7 @@ internal static class SpeechFactory
 
             var http = provider.GetRequiredService<IHttpClientFactory>()
                 .CreateClient(OpenAiSpeechSynthesizer.HttpClientName);
-            var adapter = new OpenAiSpeechSynthesizer(http, options);
+            var adapter = new OpenAiSpeechSynthesizer(http, options, provider.GetService<ILogger<OpenAiSpeechSynthesizer>>(), provider.GetRequiredService<IDiagnosticIdSource>());
             return new ResolvedSynthesis(adapter, SpeechTransport.ServerAudio, true, adapter.Capabilities);
         }
 

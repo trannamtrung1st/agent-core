@@ -4,7 +4,7 @@ Status: implementation candidate; final merged-source/hosted acceptance is pendi
 
 ## Baseline and scope
 
-Started on `974159eb348b68188e34dfb602824f15db096d51`, matching origin/main after fetch. During the work, main advanced through diagnostics commits `d7febd4b` and `9e730081`; those changes must be reconciled before the final candidate is accepted. The earlier baseline Synthetic run [38219185415](https://github.com/trannamtrung1st/agent-core/actions/runs/38219185415) failed `SpeechIngressTests.Typed_user_text_in_voice_abandons_in_progress_speech_input`. Its focused rerun passed without changing the assertion; this is not an OAuth fix claim.
+Started on `974159eb348b68188e34dfb602824f15db096d51`, matching origin/main after fetch. During the work, main advanced through diagnostics commits `d7febd4b` and `9e730081`; both were reconciled into the candidate, preserving safe handled-failure diagnostics and adding OAuth diagnostic IDs. The earlier baseline Synthetic run [38219185415](https://github.com/trannamtrung1st/agent-core/actions/runs/38219185415) failed `SpeechIngressTests.Typed_user_text_in_voice_abandons_in_progress_speech_input`. Its focused rerun passed without changing the assertion; this is not an OAuth fix claim.
 
 Gmail now uses owner Authorization Code + PKCE S256 + offline refresh, verified Google identity and account-scoped Gmail REST. Custom TLS/password transport remains independent. Account IDs/bindings, exact content approval, Core drafts, immutable send claims and key-free Synthetic behavior remain. There is no provider Draft sync, global mailbox-token fallback, new email tool family, new UI kit or destructive database reset.
 
@@ -26,6 +26,11 @@ All commands ran in the repository unless stated otherwise. Frontend reruns expl
 | Full .NET solution, initial broad pass | Domain 195, Application 1772, Infrastructure 1254, API 556, plugin 4 passed; 21 explicit live opt-in skips |
 | Full frontend, Node 22 / two workers | 116 files, 943 tests passed; final added recovery cases tested separately |
 | Final focused dialog recovery tests | 6 passed |
+| Reconciled email/transport diagnostics | 72 passed |
+| Reconciled OAuth/Gmail/Custom integration | 75 passed |
+| Extended grant lifecycle security | 31 passed; consent expiry during identity verification, unsafe origins, transient profile failure versus revocation |
+| Reconciled Application diagnostics/attention/speech | 46 passed |
+| HTTPS callback + detached Automation runtime | 13 passed |
 | Frontend TypeScript/Vite build | Passed; existing large-bundle and SignalR annotation warnings retained |
 | Affected Playwright journeys | 8 passed, including 1440/768/390/320 Gmail lifecycle/chooser, exact-approved Synthetic send and adjacent Credentials |
 | Isolated Compose SQLite/key-ring survival | Passed in `agent-core-gmail-oauth-verification`, port 5380; extended gate preserved connected Synthetic OAuth grant and non-sending check across recreation |
@@ -75,13 +80,13 @@ Before: [existing email editor](assets/email-account/email-edit-1440.png), [exis
 | OA-12, OA-13 | Durable replay/reopen and uncertainty tests, token preflight/global policy before claim |
 | OA-14, OA-15 | Custom loopback TLS/PEEK/UID/SMTP suites and Browser secret isolation regressions |
 | OA-16, OA-17 | Live eligibility/profile fencing and owner chooser API/runtime/browser tests |
-| OA-18 | Existing detached restrictions remain; refresh does not require interactive consent. Additional final merged-runtime evidence required before complete acceptance |
+| OA-18 | Synthetic Automation runtime tests prove missing inventory/direct disconnected reads durably become NeedsAttention without browser consent; 11 selection-runtime cases passed |
 | OA-19–OA-22 | Global disconnect, retained two bindings/receipt, original subject reconnect, forward migration and store/reopen CAS parity |
-| OA-23 | Safe API projections and known-value token checks; callback/named-client query/body logging disabled; diagnostic successor reconciliation remains required |
+| OA-23 | Safe API projections and known-value token checks; callback/named-client query/body logging disabled; diagnostic successor reconciliation passed with safe IDs and redacted provider snapshots |
 | OA-25, OA-26 | Four-width actual interaction/geometry plus explicit chooser/approval; verified sender/Bcc preview separate from connect |
-| OA-27 | Fixed configured HTTPS/loopback origin, same-origin Vite callback exercised; a deployed Real HTTPS/Google redirect remains unverified without operator setup |
+| OA-27 | Fixed configured HTTPS/loopback origin, same-origin Vite callback exercised; HTTPS callback fixture proves Secure cookie and rejects forwarded-host redirect poisoning. Deployed Real Google redirect remains deferred |
 | OA-28 | Final merged-source hosted jobs pending; no closure claim yet |
-| OA-29, OA-30 | Canonical owners, design sidecar, report/screenshots and independent review/fixes; final link/doc checks pending |
+| OA-29, OA-30 | Canonical owners, design sidecar, report/screenshots and independent review/fixes; local links, anchors, fences and complete JSON examples checked |
 | OA-31 | **Blocked/deferred**: no configured real Google application, dedicated mailbox/recipient opt-in or delivery evidence |
 
 ## Failure and fallback ledger
@@ -92,4 +97,5 @@ Before: [existing email editor](assets/email-account/email-edit-1440.png), [exis
 - TypeScript verification caught invalid RTL exact options and a missing React useRef initial argument; corrected and rebuilt. An initial Compose build failed those checks. The extended Compose proof then caught a script helper NameError; corrected, rerun, and OAuth/grant/key-ring survival passed. Failed attempts are not counted as passes.
 - Browser probes exposed a decorative icon accessible-name mismatch, lost modal focus, inaccessible/hidden-cloned filter controls and a pending-name restoration race. Fixed and checked with actual interaction plus repeatable tests. Some probe resets/request URL inputs also timed out or failed in the automation harness; corrected probes are recorded separately from passing product outcomes.
 - The Impeccable overlay launcher timed out; narrow detector/live DOM evidence was used and the failed overlay was not represented as successful.
+- A detached direct-read regression initially exposed an incorrect assumption about the flat Core error envelope; the trusted top-level classifier was corrected and all 11 runtime cases passed. Mailbox body content cannot set Run outcomes.
 - Live Gmail and recipient delivery remain deferred. No real email was sent, no provider policy was bypassed and no existing database/credential catalog was reset.

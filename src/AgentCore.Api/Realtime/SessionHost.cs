@@ -313,7 +313,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                                     5000);
                             }
 
-                            live = new Live(_factory.Create(snapshot, this));
+                            live = new Live(_factory.Create(snapshot, this), _logger, _diagnostics);
                             live.ConnectionId = connectionId;
                             live.LastAttachEventId = command.EventId;
                             live.LastAttachFingerprint = fingerprint;
@@ -2255,8 +2255,14 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
         private readonly CancellationTokenSource _dispatchLifetime = new();
         private long _serverSequence;
 
-        public Live(SessionRuntime runtime)
+        private readonly ILogger<SessionHost> _logger;
+
+        private readonly IDiagnosticIdSource _diagnostics;
+
+        public Live(SessionRuntime runtime, ILogger<SessionHost> logger, IDiagnosticIdSource diagnostics)
         {
+            _logger = logger;
+            _diagnostics = diagnostics;
             Runtime = runtime;
             Dispatcher = Task.Run(DispatchAsync);
         }
@@ -2492,8 +2498,11 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                     await FinishAdmitAsync(this, work.Command, ack, CancellationToken.None).ConfigureAwait(false);
                     work.Completed.TrySetResult(ack);
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    if (ex is not OperationCanceledException)
+                        HandledFailureLog.Warning(_logger, ex, "session.command.dispatch", "command_failed",
+                            new DiagnosticContext(SessionId: Runtime.SessionId), diagnostics: _diagnostics);
                     if (!work.Completed.Task.IsCompleted)
                     {
                         var failed = Reject(work.Command.EventId, "Session", "Unavailable", "Command failed.", false, 1000);

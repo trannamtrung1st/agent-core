@@ -2,7 +2,7 @@ namespace AgentCore.Application.Ports;
 
 public sealed record EmailOAuthStart(string AuthorizationUrl, string Correlation, DateTimeOffset ExpiresAtUtc, bool SecureCookie, bool Synthetic);
 public sealed record EmailOAuthConnection(string Status, bool Configured, bool Synthetic, string? Error,
-    DateTimeOffset? LastCheckedAtUtc = null, bool? ProviderRevoked = null);
+    DateTimeOffset? LastCheckedAtUtc = null, bool? ProviderRevoked = null, Guid? DiagnosticId = null);
 public interface IEmailOAuthService
 {
     ValueTask<EmailOAuthStart> StartAsync(Guid accountId, long revision, Guid ownerId, CancellationToken ct);

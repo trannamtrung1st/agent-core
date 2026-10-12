@@ -138,6 +138,31 @@ public sealed class GoogleEmailOAuthTests
     [Fact]
     public async Task Production_ID_verifier_rejects_malformed_JWT_without_identity_claims()
     { await Assert.ThrowsAnyAsync<Exception>(() => new GoogleEmailIdentityVerifier().VerifyAsync("forged-token", "client", "nonce", default)); }
+    [Theory]
+    [InlineData("http://public.example.test/")]
+    [InlineData("https://trusted.example.test/other")]
+    [InlineData("https://user@trusted.example.test/")]
+    [InlineData("https://trusted.example.test/?returnUrl=https://evil.example")]
+    [InlineData("https://trusted.example.test/#fragment")]
+    public void OAuth_public_origin_rejects_unsafe_or_ambiguous_configuration(string value)
+    { Assert.False(new GoogleEmailOAuthOptions { ClientId = "client", ClientSecret = "secret", PublicAppUrl = value }.Configured); }
+    [Fact]
+    public async Task Callback_expiring_during_identity_verification_never_commits_grant()
+    {
+        using var f = new Fixture(); var c = await f.Create(); var start = await f.Service.StartAsync(c.CredentialId, 1, f.Owner, default);
+        f.Verifier.BeforeReturn = () => f.Time.Advance(TimeSpan.FromMinutes(6)); await f.Complete(start);
+        Assert.Contains("state_invalid", (await f.Service.ConnectionAsync(c.CredentialId, default)).Error!); Assert.Equal("", (await f.Store.GetAsync(c.CredentialId))!.ProtectedPayload);
+    }
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "Connected")]
+    [InlineData(HttpStatusCode.Unauthorized, "ReconnectRequired")]
+    public async Task Mailbox_check_distinguishes_temporary_provider_failure_from_revoked_authorization(HttpStatusCode status, string expected)
+    {
+        using var f = new Fixture(); var c = await f.Create(); await f.Complete(await f.Service.StartAsync(c.CredentialId, 1, f.Owner, default));
+        f.Transport.ProfileFailure = status; var result = await f.Service.CheckAsync(c.CredentialId, 2, default);
+        Assert.Equal(expected, result.Status); Assert.NotNull(result.Error);
+        Assert.Equal(expected == "Connected", (await f.Store.GetAsync(c.CredentialId))!.ProtectedPayload.Length > 0);
+    }
     private sealed class Fixture : IDisposable
     {
         private readonly string root = Path.Combine(Path.GetTempPath(), "google-oauth-" + Guid.NewGuid().ToString("N"));
@@ -154,19 +179,20 @@ public sealed class GoogleEmailOAuthTests
     }
     private sealed class Verifier : IGoogleEmailIdentityVerifier
     {
-        public string Email = "verified@example.test", Subject = "verified-sub"; public string? ExpectedNonce; public bool Reject;
+        public string Email = "verified@example.test", Subject = "verified-sub"; public string? ExpectedNonce; public bool Reject; public Action? BeforeReturn;
         public Task<GoogleEmailIdentity> VerifyAsync(string token, string client, string nonce, CancellationToken ct)
-        { Assert.Equal("client", client); if (ExpectedNonce is not null) Assert.Equal(ExpectedNonce, nonce); if (Reject) throw new InvalidOperationException("invalid nonce"); return Task.FromResult(new GoogleEmailIdentity(Subject, Email)); }
+        { Assert.Equal("client", client); if (ExpectedNonce is not null) Assert.Equal(ExpectedNonce, nonce); if (Reject) throw new InvalidOperationException("invalid nonce"); BeforeReturn?.Invoke(); return Task.FromResult(new GoogleEmailIdentity(Subject, Email)); }
     }
     private sealed class Transport : HttpMessageHandler, IHttpClientFactory
     {
         public readonly TaskCompletionSource RefreshStarted = new(TaskCreationOptions.RunContinuationsAsynchronously), ReleaseRefresh = new(TaskCreationOptions.RunContinuationsAsynchronously); public bool PauseRefresh;
+        public HttpStatusCode? ProfileFailure;
         public int Exchanges, Refreshes; public bool MissingRefresh, MissingScope, RevokeFails; public string? RefreshFailure; public string ExchangeBody = "";
         public HttpClient CreateClient(string name) => new(this, false);
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             if (request.RequestUri!.AbsolutePath == "/revoke") return new(RevokeFails ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK);
-            if (request.RequestUri.AbsolutePath.EndsWith("/profile")) return Json(new { emailAddress = "verified@example.test" });
+            if (request.RequestUri.AbsolutePath.EndsWith("/profile")) return ProfileFailure is { } failed ? Json(new { error = "safe-error" }, failed) : Json(new { emailAddress = "verified@example.test" });
             var body = await request.Content!.ReadAsStringAsync(ct);
             if (body.Contains("grant_type=refresh_token")) { Interlocked.Increment(ref Refreshes); if (PauseRefresh) { RefreshStarted.TrySetResult(); await ReleaseRefresh.Task.WaitAsync(ct); } if (RefreshFailure is not null) return Json(new { error = RefreshFailure }, HttpStatusCode.BadRequest); }
             else { Exchanges++; ExchangeBody = body; }

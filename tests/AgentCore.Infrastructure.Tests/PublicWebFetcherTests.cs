@@ -3,6 +3,8 @@ using System.Net.Http;
 using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.PublicWeb;
+using AgentCore.Application.Testing;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -142,10 +144,16 @@ public sealed class PublicWebFetcherTests
     [Fact]
     public async Task Fetch_maps_generic_transport_failure_to_transport_error()
     {
-        IPublicWebFetcher fetcher = new PublicWebFetcher(new ThrowingTransport());
+        var logs = new DiagnosticLogCapture<PublicWebFetcher>();
+        IPublicWebFetcher fetcher = new PublicWebFetcher(new ThrowingTransport(), logs);
         var result = await fetcher.FetchAsync(new PublicWebFetchRequest(new Uri("https://example.com/")));
         Assert.Equal("transport_error", result.ErrorCode);
         Assert.NotEqual("forbidden_host", result.ErrorCode);
+        var entry = Assert.Single(logs.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Contains(nameof(HttpRequestException), entry.Exception!.ToString());
+        Assert.DoesNotContain("connection reset", entry.Exception.ToString());
+        Assert.Equal("web.fetch", entry.Properties["Operation"]);
     }
 
     [Fact]

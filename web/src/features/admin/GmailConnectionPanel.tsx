@@ -44,7 +44,7 @@ export function GmailConnectionPanel({ account, onChanged, showCredentialStatus 
       ]} />
       {connection?.synthetic && <Alert type="info" showIcon title="Synthetic — no Google connection" description="This offline authorization exercises the owner journey. No real mailbox is accessed or email delivered." />}
       {!connection?.configured && <Alert type="warning" showIcon title="Google connection not configured" description={<span>Ask the operator to complete <a href={googleSetupUrl} target="_blank" rel="noreferrer">Google OAuth setup</a>.</span>} />}
-      {connection?.error && <Alert type="warning" showIcon title={connection.error} />}
+      {connection?.error && <Alert type="warning" showIcon title={<AdminErrorNotice message={connection.error} diagnosticId={connection.diagnosticId ?? undefined} showDetailsLabel />} />}
       <Typography.Text type="secondary">Connection actions take effect immediately. Test access checks authorization only and never sends email. Disconnect blocks this account for all bound agents. Instance bindings remain. Unbind removes only one agent’s access.</Typography.Text>
       {connection?.lastCheckedAtUtc && !connection.error && connected && <Typography.Text type="success" role="status">Access verified · no email sent</Typography.Text>}
       {connected && <Typography.Text type="secondary">To use this account, grant access in an <a href="/admin/instances" onClick={followAppLink}>agent’s Credentials section</a>.</Typography.Text>}

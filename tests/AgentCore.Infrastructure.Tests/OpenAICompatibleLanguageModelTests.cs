@@ -277,6 +277,7 @@ public sealed class OpenAICompatibleLanguageModelTests
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero));
         var idleHandler = new ScriptedHandler([], holdOpen: true);
         var setupHandler = new SetupTimeoutThenAnswerHandler();
+        var providerLogs = new DiagnosticLogCapture<OpenAICompatibleLanguageModel>();
         HttpMessageHandler handler = recoverSetup ? setupHandler : idleHandler;
         var output = new CapturingSessionOutput();
         var ids = new DeterministicIdGenerator(
@@ -306,7 +307,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             Create(
                 handler,
                 time: recoverSetup ? time : null,
-                timeouts: new ProviderTimeoutOptions { SetupSeconds = 10, StreamIdleSeconds = 1, TotalSeconds = 120 }),
+                timeouts: new ProviderTimeoutOptions { SetupSeconds = 10, StreamIdleSeconds = 1, TotalSeconds = 120 }, logger: providerLogs),
             new DefaultAgentBrain(new PromptContextBuilder()),
             store,
             output,
@@ -339,6 +340,10 @@ public sealed class OpenAICompatibleLanguageModelTests
         {
             Assert.Equal(EntryStatus.Failed, assistant.Status);
             Assert.Equal(ProviderFailureReason.StreamIdle, assistant.Failure!.FailureReason);
+            var diagnosed = Assert.Single(providerLogs.Entries, entry => entry.Properties.TryGetValue("DiagnosticId", out var id)
+                && Equals(id, assistant.Failure.DiagnosticId));
+            Assert.NotNull(diagnosed.Exception);
+            Assert.Equal(assistant.Failure.Code, diagnosed.Properties["ErrorCode"]);
         }
         Assert.Equal(recoverSetup ? 2 : 3, recoverSetup ? setupHandler.PostCount : idleHandler.PostCount);
     }
@@ -1689,7 +1694,8 @@ public sealed class OpenAICompatibleLanguageModelTests
         bool vision = false,
         bool reasoningObject = false,
         FakeTimeProvider? time = null,
-        ProviderTimeoutOptions? timeouts = null) =>
+        ProviderTimeoutOptions? timeouts = null,
+        ILogger<OpenAICompatibleLanguageModel>? logger = null) =>
         new(
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
@@ -1705,7 +1711,7 @@ public sealed class OpenAICompatibleLanguageModelTests
                 ExcludeVisibleReasoning = reasoningObject,
                 Timeouts = timeouts ?? new ProviderTimeoutOptions()
             },
-            time);
+            time, logger: logger);
 
     private static ModelRequest Request() =>
         new(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")]);

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AgentCore.Application.Observability;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -36,6 +37,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
     private readonly AsyncLocal<UnattendedLease?> _unattendedOwner = new();
     private readonly ConcurrentBag<IPlaywright> _retiredDrivers = [];
     private readonly TimeProvider _time;
+    private readonly IDiagnosticIdSource? _diagnostics;
     private readonly ConcurrentDictionary<(bool Agent, Guid Id), Lazy<BrowserDestinationProxy>> _ownerProxies = new();
     private BrowserDestinationProxy? _destinationProxy;
     private IPlaywright? _playwright;
@@ -59,8 +61,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         BrowserOptions options,
         ILoggerFactory? loggerFactory,
         Func<CancellationToken, Task<bool>>? chromiumProbe = null, TimeProvider? timeProvider = null,
-        BrowserPrivacyService? privacy = null)
+        BrowserPrivacyService? privacy = null, IDiagnosticIdSource? diagnostics = null)
     {
+        _diagnostics = diagnostics;
         options.Limits.Validate();
         var authority = options.PrivacyAuthority();
         _privacy = privacy;
@@ -357,6 +360,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         }
         catch (Exception ex) when (IsTimeout(ex))
         {
+            HandledFailureLog.Warning(_logger, ex, "browser.navigate", "timeout", diagnostics: _diagnostics);
             LogBrowserFailure("navigate", "interaction", "timeout");
             return Outcome(Result("timeout"));
         }
@@ -364,8 +368,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         {
             return Outcome(Result(ex.Code));
         }
-        catch (BrowserLaunchException)
+        catch (BrowserLaunchException ex)
         {
+            HandledFailureLog.Warning(_logger, ex, "browser.launch", "provider_unavailable", diagnostics: _diagnostics);
             LogBrowserFailure("navigate", "launch", "browserDisconnected");
             return Unavailable();
         }
@@ -742,6 +747,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         catch (PlaywrightException ex) when (BrowserFailureClassifier.IsTransientCapture(ex.Message))
         {
             LogBrowserFailure(operation, "capture", BrowserFailureClassifier.Classify(ex.Message).Reason);
+            LogBrowserException(ex, operation, "capture_retry");
             try
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken).ConfigureAwait(false);
@@ -778,6 +784,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         var decision = BrowserFailureClassifier.Classify(exception.Message);
         var reportedStage = decision.Reason is "pageClosed" or "contextClosed" ? "lifecycle" : stage;
         LogBrowserFailure(operation, reportedStage, decision.Reason);
+        HandledFailureLog.Warning(_logger, exception, "browser." + operation, decision.Code,
+            new DiagnosticContext(FailureReason: decision.Reason), diagnostics: _diagnostics);
         if (session is not null
             && decision.Reason is "pageClosed" or "contextClosed"
             && PageIsClosed(session))
@@ -807,6 +815,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             operation,
             stage,
             reason);
+
+    private void LogBrowserException(Exception exception, string operation, string code) =>
+        HandledFailureLog.Warning(_logger, exception, "browser." + operation, code, diagnostics: _diagnostics);
 
     private static BrowserResult Unavailable() => Result("provider_unavailable");
 

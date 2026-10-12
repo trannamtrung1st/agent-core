@@ -53,9 +53,21 @@ public sealed class GmailOAuthWorkflowTests
     {
         await using var f = await Fixture.Create(true); var c = await f.Credentials.CreateEmailAccountAsync("Gmail", EmailAccountProfile.Gmail(), ""); await f.Connect(c.CredentialId, 1);
         var a = await f.Bind(f.A, c.CredentialId, "gmail"); var session = Guid.NewGuid(); var draft = await f.Email.CreateDraftAsync(session, a, "gmail", new(["to@example.test"], [], [], "subject", "body"), default);
+        await f.Email.Provider(await f.Email.ResolveAsync(a, "gmail", default)).SearchAsync(new("", 1));
         if (disable) f.Options.SendEnabled = false; else f.Http.InvalidGrant = true;
         var grant = new ToolApprovalGrant(Guid.NewGuid(), ToolCatalog.EmailSend, EmailDraftNormalizer.ComputeSendActionHash(draft), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.SendAsync(session, a, draft.DraftId, "gmail", grant, default).AsTask()); Assert.Null(await f.MailStore.GetSendAsync(draft.DraftId)); Assert.Equal(0, f.Http.Sends);
+    }
+    [Fact]
+    public async Task Provider_revocation_of_a_cached_token_blocks_reads_and_requires_reconnect()
+    {
+        await using var f = await Fixture.Create(true); var c = await f.Credentials.CreateEmailAccountAsync("Gmail", EmailAccountProfile.Gmail(), ""); await f.Connect(c.CredentialId, 1);
+        var a = await f.Bind(f.A, c.CredentialId, "gmail"); var account = await f.Email.ResolveAsync(a, "gmail", default);
+        await f.Email.Provider(account).SearchAsync(new("", 1)); f.Http.InvalidGrant = true;
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() => f.Email.Provider(account).SearchAsync(new("", 1)).AsTask());
+        Assert.Equal("email_oauth_reconnect_required", error.Code);
+        Assert.Equal("ReconnectRequired", (await f.OAuth.ConnectionAsync(c.CredentialId, default)).Status);
+        Assert.Empty(await f.Email.AccountsAsync(a, default)); Assert.Equal("", (await f.Store.GetAsync(c.CredentialId))!.ProtectedPayload);
     }
     [Fact]
     public void Legacy_Custom_approval_hash_is_preserved_and_OAuth_epoch_is_bound()
@@ -101,6 +113,7 @@ public sealed class GmailOAuthWorkflowTests
             if (path == "/token") { var body = await request.Content!.ReadAsStringAsync(ct); if (InvalidGrant && body.Contains("grant_type=refresh_token")) return Json(new { error = "invalid_grant" }, HttpStatusCode.BadRequest); return Json(new { access_token = "known-access", refresh_token = "known-refresh", id_token = "known-id", expires_in = 3600, scope = EmailAccountProfile.ReadScope + " " + EmailAccountProfile.SendScope }); }
             if (path == "/revoke") return Json(new { });
             if (path.EndsWith("/profile")) return Json(new { emailAddress = "verified@example.test" });
+            if (InvalidGrant) return Json(new { error = "invalidCredentials" }, HttpStatusCode.Unauthorized);
             Assert.Equal("Bearer", request.Headers.Authorization!.Scheme); Assert.Equal("known-access", request.Headers.Authorization.Parameter);
             if (path.EndsWith("/messages/send")) { Sends++; using var json = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct)); Mime = Encoding.UTF8.GetString(GmailMime.DecodeBase64Url(json.RootElement.GetProperty("raw").GetString()!)); return Json(new { id = "accepted-message" }); }
             if (path.EndsWith("/messages")) return Json(new { messages = new[] { new { id = "m1" } } });

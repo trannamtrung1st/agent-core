@@ -46,5 +46,28 @@ public sealed class GoogleEmailOAuthApiTests : IClassFixture<AgentCoreApiFactory
         Assert.Contains("Disconnected", await owner.GetStringAsync(path + "/connection"));
         var retry = await owner.PostAsJsonAsync(path + "/oauth/start", new AdminEmailOAuthRequest(c.Revision + 1)); Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
         Assert.DoesNotContain("injected-secret", await owner.GetStringAsync("/api/v2/admin/credentials"));
+    }    [Fact]
+    public async Task HTTPS_configured_return_and_secure_cookie_ignore_poisoned_host_headers()
+    {
+        await using var host = new HttpsFactory();
+        using var owner = TestOwnerCapability.CreateOwnerClient(host);
+        var response = await owner.PostAsJsonAsync("/api/v2/admin/email-accounts", new AdminCreateEmailAccountRequest("HTTPS fixture", new("Gmail")));
+        var account = (await response.Content.ReadFromJsonAsync<AdminCredentialResponse>())!;
+        var started = await owner.PostAsJsonAsync($"/api/v2/admin/email-accounts/{account.CredentialId}/oauth/start", new AdminEmailOAuthRequest(1));
+        var setCookie = Assert.Single(started.Headers.GetValues("Set-Cookie")); Assert.Contains("secure", setCookie, StringComparison.OrdinalIgnoreCase);
+        using var body = JsonDocument.Parse(await started.Content.ReadAsStringAsync()); var uri = body.RootElement.GetProperty("authorizationUrl").GetString()!;
+        var state = QueryHelpers.ParseQuery(uri[uri.IndexOf('?')..])["state"].ToString();
+        using var browser = host.CreateClient(new() { AllowAutoRedirect = false, HandleCookies = false });
+        using var callback = new HttpRequestMessage(HttpMethod.Get, "/api/v2/integrations/google-email/oauth/callback?state=" + Uri.EscapeDataString(state) + "&code=synthetic-consent&returnUrl=https://evil.example/");
+        callback.Headers.Add("Cookie", setCookie.Split(';')[0]); callback.Headers.Host = "evil.example"; callback.Headers.Add("X-Forwarded-Host", "evil.example");
+        var completed = await browser.SendAsync(callback);
+        Assert.Equal(HttpStatusCode.SeeOther, completed.StatusCode);
+        Assert.StartsWith("https://trusted.example.test/admin/connections/credentials?emailAccount=", completed.Headers.Location!.ToString());
+        Assert.DoesNotContain("evil", completed.Headers.Location.ToString());
     }
+    private sealed class HttpsFactory : AgentCoreApiFactory
+    {
+        protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => new Dictionary<string, string?> { ["GoogleEmailOAuth:PublicAppUrl"] = "https://trusted.example.test/" };
+    }
+
 }

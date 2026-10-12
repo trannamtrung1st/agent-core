@@ -1,9 +1,11 @@
+using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
 using System.Net.Http;
 using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.PublicWeb;
 
-internal sealed class PublicWebFetcher(IPublicWebTransport transport) : IPublicWebFetcher
+internal sealed class PublicWebFetcher(IPublicWebTransport transport, ILogger<PublicWebFetcher>? logger = null, IDiagnosticIdSource? diagnosticIds = null) : IPublicWebFetcher
 {
     public async ValueTask<PublicWebFetchResult> FetchAsync(
         PublicWebFetchRequest request,
@@ -55,17 +57,20 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport) : IPublicW
         }
         catch (PublicWebFetchException ex)
         {
+            HandledFailureLog.Warning(logger, ex, "web.fetch", ex.Code, diagnostics: diagnosticIds);
             return Error(request.Url.ToString(), ex.Code, ex.Message);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
+            HandledFailureLog.Warning(logger, ex, "web.fetch", "transport_error", diagnostics: diagnosticIds);
             return Error(
                 request.Url.ToString(),
                 "transport_error",
                 "Public web fetch failed before a response was received.");
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
+            HandledFailureLog.Warning(logger, ex, "web.fetch", "timeout", diagnostics: diagnosticIds);
             return Error(request.Url.ToString(), "timeout", "Public web fetch timed out.");
         }
     }

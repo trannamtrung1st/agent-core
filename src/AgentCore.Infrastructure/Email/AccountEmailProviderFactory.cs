@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
@@ -8,7 +10,7 @@ namespace AgentCore.Infrastructure.Email;
 
 public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IAgentCredentialBindingStore bindings,
     ICredentialProtector protector, IAgentInstanceStore instances, EmailTransportOptions options, TimeProvider time,
-    bool synthetic, GoogleEmailOAuthService? oauth = null, IHttpClientFactory? clients = null) : IEmailProviderFactory
+    bool synthetic, GoogleEmailOAuthService? oauth = null, IHttpClientFactory? clients = null, ILoggerFactory? loggerFactory = null, IDiagnosticIdSource? diagnosticIds = null) : IEmailProviderFactory
 {
     private readonly ConcurrentDictionary<Guid, SyntheticEmailProvider> _synthetic = new();
     private readonly SemaphoreSlim _connections = new(4);
@@ -22,8 +24,10 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
         : account.Profile.AuthMethod == EmailAuthMethod.GoogleOAuth2
         ? new GmailEmailProvider(account, clients ?? throw new InvalidOperationException("Google HTTP client is unavailable."),
             ct => (oauth ?? throw new InvalidOperationException("Google OAuth is unavailable.")).AccessTokenAsync(account.AccountId, account.AccountRevision, ct),
-            ct => RecheckAsync(account, ct), () => CanSend(account), time)
-        : new ImapSmtpEmailProvider(account, options, _policy, _connections, ResolveSecretAsync);
+            ct => RecheckAsync(account, ct), () => CanSend(account), time, loggerFactory?.CreateLogger<GmailEmailProvider>(), diagnosticIds,
+            ct => oauth!.AccessTokenAsync(account.AccountId, account.AccountRevision, ct, forceRefresh: true),
+            ct => oauth!.RejectAuthorizationAsync(account.AccountId, account.AccountRevision, ct))
+        : new ImapSmtpEmailProvider(account, options, _policy, _connections, ResolveSecretAsync, loggerFactory?.CreateLogger<ImapSmtpEmailProvider>(), diagnosticIds);
 
     private async ValueTask RecheckAsync(EmailAccountContext account, CancellationToken ct)
     {
@@ -62,7 +66,13 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
         });
         try { await provider.TestAsync(protocol == "smtp", ct); return new(protocol, "connected", time.GetUtcNow(), null); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception) { return new(protocol, "failed", time.GetUtcNow(), "TLS/authentication or endpoint validation failed. Check the account and operator allowlist, then retry."); }
+        catch (Exception ex)
+        {
+            HandledFailureLog.Warning(loggerFactory?.CreateLogger<AccountEmailProviderFactory>(), ex,
+                protocol == "smtp" ? "email.test.smtp" : "email.test.imap", "mail_connection_failed",
+                new DiagnosticContext(ProviderAlias: "imap-smtp", CredentialId: accountId), diagnostics: diagnosticIds);
+            return new(protocol, "failed", time.GetUtcNow(), "TLS/authentication or endpoint validation failed. Check the account and operator allowlist, then retry.");
+        }
     }
 }
 internal sealed class ScopedSyntheticEmailProvider(EmailAccountContext account, SyntheticEmailProvider inner,

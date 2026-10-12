@@ -18,7 +18,9 @@ public readonly record struct DiagnosticContext(
     string? ErrorCode = null,
     string? ProviderAlias = null,
     string? FailureReason = null,
-    string? ProviderResponseChannel = null)
+    string? ProviderResponseChannel = null,
+    string? Operation = null,
+    Guid? CredentialId = null)
 {
     public IReadOnlyList<KeyValuePair<string, object?>> ToFields(Guid diagnosticId, string? traceId)
     {
@@ -39,6 +41,8 @@ public readonly record struct DiagnosticContext(
         AddToken(items, "ProviderAlias", ProviderAlias);
         AddToken(items, "FailureReason", FailureReason);
         AddToken(items, "ProviderResponseChannel", ProviderResponseChannel);
+        AddToken(items, "Operation", Operation);
+        AddGuid(items, "CredentialId", CredentialId);
         return items;
     }
 
@@ -102,7 +106,7 @@ public static class DiagnosticLog
         logger.Log(level, default, record, exception, static (state, _) => state.ToString());
     }
 
-    private static void MarkActivity(DiagnosticContext context)
+    internal static void MarkActivity(DiagnosticContext context)
     {
         var activity = Activity.Current;
         if (activity is null)

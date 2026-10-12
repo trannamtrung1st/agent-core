@@ -1159,7 +1159,7 @@ export const createEmailAccount = (input: { displayName: string; profile: EmailA
 export const updateEmailAccount = (c: SystemCredential, input: { displayName: string; status: string; profile: EmailAccountProfile }) => credentialRequest<SystemCredential>(`email-accounts/${c.credentialId}`, 'PATCH', { ...input, expectedRevision: c.revision });
 export const testEmailAccount = (c: SystemCredential, protocol: 'imap' | 'smtp') => credentialRequest<EmailConnectionTest>(`email-accounts/${c.credentialId}/test`, 'POST', { protocol, expectedRevision: c.revision });
 
-export type EmailOAuthConnection = { status: string; configured: boolean; synthetic: boolean; error: string | null; lastCheckedAtUtc?: string | null; providerRevoked?: boolean | null };
+export type EmailOAuthConnection = { status: string; configured: boolean; synthetic: boolean; error: string | null; lastCheckedAtUtc?: string | null; providerRevoked?: boolean | null; diagnosticId?: string | null };
 export const emailOAuthConfiguration = () => credentialRequest<{ configured: boolean; synthetic: boolean }>('email-accounts/oauth/configuration', 'GET');
 export const getEmailConnection = (c: SystemCredential) => credentialRequest<EmailOAuthConnection>(`email-accounts/${c.credentialId}/connection`, 'GET');
 export const startEmailOAuth = (c: SystemCredential) => credentialRequest<{ authorizationUrl: string; expiresAtUtc: string; synthetic: boolean }>(`email-accounts/${c.credentialId}/oauth/start`, 'POST', { expectedRevision: c.revision });

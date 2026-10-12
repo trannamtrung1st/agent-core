@@ -1,4 +1,6 @@
 using System.Net;
+using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -12,7 +14,7 @@ namespace AgentCore.Infrastructure.Email;
 // One admitted account; Core owns drafts. No process-global credential or provider Draft fallback.
 public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientFactory clients,
     Func<CancellationToken, ValueTask<string>> token, Func<CancellationToken, ValueTask> recheck,
-    Func<bool> sendEnabled, TimeProvider time) : IEmailProvider, IEmailSendPreflight
+    Func<bool> sendEnabled, TimeProvider time, ILogger<GmailEmailProvider>? logger = null, IDiagnosticIdSource? diagnosticIds = null, Func<CancellationToken, ValueTask<string>>? freshToken = null, Func<CancellationToken, ValueTask>? rejectAuthorization = null) : IEmailProvider, IEmailSendPreflight
 {
     public const string HttpClientName = "GmailEmail";
     public bool IsAvailable => account.Profile.IsUsable;
@@ -21,7 +23,7 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
     public async ValueTask PrepareSendAsync(CancellationToken ct)
     {
         if (!sendEnabled() || !account.Profile.CanSend) throw AgentCoreErrors.Forbidden("email_send_disabled: Sending is disabled or Gmail send permission is missing.");
-        await recheck(ct); preparedToken = await token(ct); await recheck(ct);
+        await recheck(ct); preparedToken = await (freshToken ?? token)(ct); await recheck(ct);
     }
     public async ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest request, CancellationToken cancellationToken = default)
     {
@@ -58,11 +60,26 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
     {
         await recheck(ct); var access = await token(ct); await recheck(ct);
         using var client = clients.CreateClient(HttpClientName);
-        using var response = await GoogleEmailOAuthService.SendBoundedAsync(client, () =>
-        { var request = new HttpRequestMessage(HttpMethod.Get, "https://gmail.googleapis.com/gmail/v1/users/me/" + path); request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", access); return request; }, true, time, ct);
-        if (!response.IsSuccessStatusCode) throw new AgentCoreException("email_provider_unavailable", "Google mailbox is unavailable. Check access in Connections → Credentials.", 502);
-        var json = await GoogleEmailOAuthService.ReadJson(response, 2 * 1024 * 1024, ct);
-        try { await recheck(ct); return json; } catch { json.Dispose(); throw; }
+        HttpRequestMessage Request(string value)
+        { var request = new HttpRequestMessage(HttpMethod.Get, "https://gmail.googleapis.com/gmail/v1/users/me/" + path); request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", value); return request; }
+        var response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct);
+        try
+        {
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                response.Dispose(); access = await (freshToken ?? token)(ct); await recheck(ct);
+                response = await GoogleEmailOAuthService.SendBoundedAsync(client, () => Request(access), true, time, ct);
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    if (rejectAuthorization is not null) await rejectAuthorization(ct);
+                    throw new AgentCoreException("email_oauth_reconnect_required", "Google rejected current authorization. Reconnect in Connections → Credentials.", 403);
+                }
+            }
+            if (!response.IsSuccessStatusCode) throw new AgentCoreException("email_provider_unavailable", "Google mailbox is unavailable. Check access in Connections → Credentials.", 502);
+            var json = await GoogleEmailOAuthService.ReadJson(response, 2 * 1024 * 1024, ct);
+            try { await recheck(ct); return json; } catch { json.Dispose(); throw; }
+        }
+        finally { response.Dispose(); }
     }
     public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException("Core owns drafts.");
     public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default) => throw new NotSupportedException("Core owns drafts.");
@@ -86,6 +103,7 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
         try
         {
             using var response = await client.SendAsync(outbound, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (!response.IsSuccessStatusCode) logger?.LogWarning("Gmail send failed with status {StatusCode}; dispatch outcome {Outcome}", (int)response.StatusCode, (int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout ? "indeterminate" : "failed");
             if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.RequestTimeout)
                 return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google acceptance could not be confirmed. This draft will not be retried.");
             if (!response.IsSuccessStatusCode) return new(EmailSendOutcome.Failed, null, "email_send_rejected", "Google rejected the message.");
@@ -94,7 +112,11 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
                 ? new(EmailSendOutcome.Sent, accepted, null, null)
                 : new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google response did not confirm a message ID. This draft will not be retried.");
         }
-        catch (Exception) { return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google acceptance could not be confirmed. This draft will not be retried."); }
+        catch (Exception ex)
+        {
+            HandledFailureLog.Warning(logger, ex, "email.send", "dispatch_unconfirmed", new DiagnosticContext(ProviderAlias: "gmail", AgentInstanceId: account.AgentInstanceId, CredentialId: account.AccountId), diagnostics: diagnosticIds);
+            return new(EmailSendOutcome.Indeterminate, null, "email_send_indeterminate", "Google acceptance could not be confirmed. This draft will not be retried.");
+        }
     }
     private static string? ReadHeader(JsonElement messageOrHeaders, string name)
     {

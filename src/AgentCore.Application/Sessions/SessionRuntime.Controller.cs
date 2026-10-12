@@ -119,8 +119,9 @@ public sealed partial class SessionRuntime
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogHandledRuntimeFailure(ex, "speech.start", "recognition_start_failed");
                 await FailVoiceAsync(input.Context, cancellationToken).ConfigureAwait(false);
                 input.Attached.TrySetResult(false);
                 return;
@@ -380,8 +381,9 @@ public sealed partial class SessionRuntime
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogHandledRuntimeFailure(ex, "speech.start", "recognition_start_failed");
                 await FailVoiceAsync(NewContext(), cancellationToken).ConfigureAwait(false);
                 return;
             }
@@ -769,8 +771,9 @@ public sealed partial class SessionRuntime
             {
                 throw;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                LogHandledRuntimeFailure(ex, "speech.start", "recognition_start_failed");
                 await FailVoiceAsync(input.Context, cancellationToken).ConfigureAwait(false);
                 return;
             }
