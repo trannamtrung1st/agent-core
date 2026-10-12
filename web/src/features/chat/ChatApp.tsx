@@ -18,6 +18,7 @@ import {
   reportCommittedEntries,
   requestVoice,
   resumeCapture,
+  resumeLiveSessionForNavigation,
   retryConnection,
   resumePausedSession,
   reloadChatAgentInstances,
@@ -145,6 +146,9 @@ export function ChatApp({ onOpenAdmin, returnToActivity }: { onOpenAdmin?: () =>
   }, [schedulesOpen, state.outputState]);
 
   useEffect(() => {
+    // Internal route changes unmount ChatApp, not its running Session transport.
+    // Restore visible-text receipts without reattaching or restarting a Run.
+    resumeLiveSessionForNavigation();
     void bootstrap()
       .then(setProfile)
       .catch(() => undefined);
