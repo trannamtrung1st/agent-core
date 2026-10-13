@@ -1,6 +1,6 @@
 # Agent Core MVP
 
-Email Account monitoring is being verified as a bounded successor: explicit per-account enablement, one central watcher, Gmail History/Custom IMAP UIDs, and durable owned `email.message.received` Events through existing Automations. Polling never sends mail or grants tools. See [monitoring verification](docs/reports/email-monitoring-verification-2026-10-13.md) for actual gates and separate Real UAT status.
+Email Account monitoring is implemented locally as a bounded successor: explicit per-account enablement, one central watcher, Gmail History/Custom IMAP UIDs, and durable owned `email.message.received` Events through existing Automations. Polling never sends mail or grants tools. See [monitoring verification](docs/reports/email-monitoring-verification-2026-10-13.md) for actual gates and separate Real UAT status.
 
 Session-first Agent Instance Activity is closed/frozen on behavior `5fda69c47ec1b8274ef1f3cc4e3f7fce539281d5` (2026-10-09), with all five hosted Synthetic/Compose gates [green](https://github.com/trannamtrung1st/agent-core/actions/runs/37879102751). Sessions are the primary durable context; Runs remain independent diagnostics. Background inspection preserves original results and fences stale actions after failed reads or Session changes. See [verification and demo handoff](docs/reports/agent-instance-activity-ux-verification.md#closure-and-demo-handoff).
 
