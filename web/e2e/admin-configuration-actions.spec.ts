@@ -10,6 +10,23 @@ async function fixture(page: Page) {
 async function select(page: Page, name: string, label: string) {
   await page.getByRole('combobox', { name, exact: true }).click(); await page.locator('.ant-select-item-option:visible').filter({ hasText: new RegExp('^' + label + '$') }).click();
 }
+test('archived unattended navigation recovers to Lifecycle and clears its warning after unarchive', async ({ page }) => {
+  const { instanceId } = await fixture(page);
+  await navigateAdmin(page, 'Lifecycle');
+  await page.getByRole('button', { name: 'Archive instance', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Archive', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Unarchive instance', exact: true })).toBeVisible();
+  await page.goto(`/admin/instances/${instanceId}/unattended`);
+  await expect(page).toHaveURL(new RegExp(`/lifecycle\\?notice=archived-automations$`));
+  const warning = page.getByRole('alert').filter({ hasText: 'Automations are unavailable for this archived Instance' });
+  await expect(warning).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save configuration', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Unarchive instance', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Archive instance', exact: true })).toBeVisible();
+  await expect(warning).toHaveCount(0);
+  await navigateAdmin(page, 'Unattended model');
+  await expect(page.getByRole('heading', { name: 'Unattended model', level: 2, exact: true })).toBeVisible();
+});
 test('one save persists persona, sparse settings, budgets, policy and unattended edits with current revisions', async ({ page }) => {
   const { instanceId, api, headers } = await fixture(page);
   await page.getByLabel('Persona name', { exact: true }).fill('Shared configuration save');
