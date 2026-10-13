@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { navigateAdmin } from './support/admin-navigation';
+test.use({ trace: 'retain-on-failure' });
 async function openInNewTab(page: Page, link: Locator, gesture: 'modifier' | 'middle' = 'modifier') {
   const source = page.url(); const href = await link.getAttribute('href'); expect(href).toBeTruthy();
   const popup = page.context().waitForEvent('page');
@@ -8,7 +9,21 @@ async function openInNewTab(page: Page, link: Locator, gesture: 'modifier' | 'mi
   // A modifier-click opens a background tab; select it before asserting its hydrated UI.
   await opened.bringToFront();
   await opened.waitForLoadState('domcontentloaded');
-  await expect(opened.locator('.admin-layout')).toBeVisible();
+  const bootstrapStarted = Date.now();
+  try {
+    // Cold popup documents load Vite's module graph before the page-content assertions begin.
+    await expect(opened.locator('.admin-layout')).toBeVisible({ timeout: 15_000 });
+    console.log(`Native popup bootstrap: ${Date.now() - bootstrapStarted}ms`);
+  } catch (error) {
+    const diagnostic = await opened.context().newCDPSession(opened);
+    const state = await diagnostic.send('Runtime.evaluate', {
+      expression: 'JSON.stringify({url:location.href,readyState:document.readyState,title:document.title,rootChildren:document.getElementById("root")?.children.length})',
+      returnByValue: true
+    });
+    console.log('Native popup document state:', state.result.value);
+    await diagnostic.detach();
+    throw error;
+  }
   await expect(page).toHaveURL(source); return opened;
 }
 for (const width of [1440, 390]) test(`native canonical links preserve source drafts at ${width}px`, async ({ page }) => {
