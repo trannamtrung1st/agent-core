@@ -205,8 +205,13 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await expect(published.getByRole("row").filter({ hasText: "Refund" }).getByRole("button", { name: "Details", exact: true })).toBeFocused();
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
+    // The native media event updates the React rail after the viewport command returns.
+    // Check the settled layout with the same overflow bound used before the page split.
+    if (width >= 1024) await expect(page.locator('.admin-sidebar')).toBeVisible();
+    else await expect(page.locator('.admin-sidebar')).toBeHidden();
     await expect(published.getByRole("row").filter({ hasText: "Refund" })).toContainText("chat.respond");
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
+      { message: `Immutable Skill inspector fits the ${width}px viewport` }).toBeLessThanOrEqual(1);
   }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole("dialog", { name: "Version details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();

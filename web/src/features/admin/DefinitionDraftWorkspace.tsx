@@ -171,7 +171,7 @@ export function DefinitionDraftWorkspace({
       ? "Review Execution budgets in Models & execution. Values must be whole numbers within the host limits."
       : "Execution limits are unavailable. Retry Execution budgets in Models & execution before saving budget values."
     : numberErrors.length > 0
-      ? `Review Trigger restrictions in Policies. ${numberErrors[0].message}`
+      ? `Review the Trigger restrictions page. ${numberErrors[0].message}`
       : toolRegistryError
         ? "The capability catalog is unavailable. Open Capabilities and choose Retry tool registry, or use Advanced JSON."
         : "The capability catalog is loading. Wait before saving or use Advanced JSON.";

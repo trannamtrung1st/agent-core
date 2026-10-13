@@ -26,7 +26,7 @@ test('Definition configuration retains edits and navigation across shared sectio
   await navigateAdmin(page, 'Identity & goals');
   await editor.getByLabel('Definition name').fill('A long Definition name that must wrap without moving the configuration controls outside the viewport');
   await openDefinitionSettings(editor);
-  await expect(editor.getByRole('button', { name: 'Conversation', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await expect(editor.getByRole('button', { name: 'Operating instructions', exact: true })).toHaveAttribute('aria-expanded', 'true');
   await editor.getByLabel('System instructions').fill('Retain this instruction across every configuration view.');
   await openDefinitionSettings(editor, 'Conversation');
   const questionSwitch = editor.getByRole('switch', { name: 'Ask one question at a time', exact: true });
@@ -44,7 +44,7 @@ test('Definition configuration retains edits and navigation across shared sectio
   await editor.getByRole('button', { name: /Trigger restrictions/ }).click();
   await expect(editor.getByText('Needs attention', { exact: true })).toBeVisible();
   await navigateAdmin(editor, 'Profile');
-  await expect(editor.getByText(/Review Trigger restrictions in Policies/)).toBeVisible();
+  await expect(editor.getByText(/Review the Trigger restrictions page/)).toBeVisible();
   await openDefinitionSettings(editor, 'Trigger restrictions');
   await editor.getByLabel('Minimum recurrence days').fill('2');
   await expect(editor.getByText('Needs attention', { exact: true })).toHaveCount(0);
@@ -72,6 +72,7 @@ test('Definition configuration retains edits and navigation across shared sectio
   await expect(editor.getByLabel('System instructions')).toHaveValue('Retain this instruction across every configuration view.');
   for (const width of [1440, 768, 767, 390]) {
     await page.setViewportSize({ width, height: 900 });
+    await openDefinitionSettings(editor, 'Conversation');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     const field = await editor.getByLabel('Max output tokens').boundingBox();
     expect(field!.width).toBeLessThanOrEqual(192);
@@ -83,6 +84,7 @@ test('Definition configuration retains edits and navigation across shared sectio
         return Math.abs(toggle.bottom - field.bottom);
       })).toBeLessThanOrEqual(1);
     }
+    await openDefinitionSettings(editor);
     await editor.getByLabel('System instructions').scrollIntoViewIfNeeded();
     const instructions = await editor.getByLabel('System instructions').boundingBox();
     const instructionsSection = await editor.getByRole('region', { name: 'Instructions', exact: true }).boundingBox();

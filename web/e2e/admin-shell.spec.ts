@@ -35,7 +35,8 @@ async function startSyntheticChat(page: import("@playwright/test").Page) {
 async function openFirstInstanceEffectiveConfig(page: import("@playwright/test").Page) {
   await page.getByRole("link", { name: "Open Admin" }).click();
   await expect(page).toHaveURL(/\/admin\/instances$/);
-  await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
+  await expect(page.locator('.admin-header').getByRole("heading", { name: "Agent Core", exact: true })).toBeVisible();
+  await expect(page.locator('.admin-header').getByText('Admin', { exact: true })).toBeVisible();
   // Internal Admin navigation keeps the underlying Chat subscription alive.
   // Only local audio capture/playback is suspended, never the live text Run.
   await expect.poll(async () => (await readTransport(page)).hub).toBe(true);
