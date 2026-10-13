@@ -315,7 +315,7 @@ describe("AdminApp", () => {
     const definitionRow = screen.getByRole("link", { name: "Examiner · examiner" }).closest("tr")!;
     expect(within(definitionRow).getAllByText("v1")).toHaveLength(2);
     expect(within(definitionRow).getByText("Published")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!);
+    await act(async () => fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!));
     expect(await within(screen.getByRole("region", { name: "Instances" })).findByText("1 instance")).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Instances" })).getByText("v1")).toBeInTheDocument();
     expect(screen.queryByText("Compatibility", { exact: true })).not.toBeInTheDocument();
@@ -383,7 +383,7 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(screen.getByText("Draft")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!);
+    await act(async () => fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!));
     await waitFor(() => expect(screen.getByRole("button", { name: "New instance" })).toBeEnabled());
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "New instance" })));
     const dialog = await screen.findByRole("dialog");
@@ -474,7 +474,7 @@ describe("AdminApp", () => {
     await waitFor(() => {
       expect(within(screen.getByRole("region", { name: "Definitions" })).getByText("Examiner")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!);
+    await act(async () => fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!));
     expect(await screen.findByText(/Instances unavailable/)).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("region", { name: "Instances" })).getByRole("button", { name: "Retry" }));
     await waitFor(() => {
@@ -1460,7 +1460,7 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "home", collection: "definitions" }} />);
     });
-    fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!);
+    await act(async () => fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!));
     await waitFor(() => expect(screen.getByRole("button", { name: "New instance" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "New instance" }));
     const dialog = await screen.findByRole("dialog");
