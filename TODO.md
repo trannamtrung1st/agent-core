@@ -12,6 +12,7 @@ P10 (Sandbox evolution) and P11 (Multi-user and production infrastructure) remai
 
 ## Open work and acceptance gaps
 
+- [ ] **Environment instructions**: for all agents working in same context? [TBD]
 - [ ] **Original Background Work results:** reconcile the remaining exact-source hosted acceptance after follow-up fixture/native-browser corrections. Local checks and earlier green runs are recorded in the [verification ledger](docs/reports/background-original-result-verification.md); preserve the distinction between earlier acceptance and later edits.
 - [ ] **Core Events stabilization:** establish and record exact-source hosted acceptance for the stabilization and subsequent recovery/resource-hygiene follow-ups. Preserve the documented SDK fallback and execution-time timeout/cancellation coverage limits. See [verification](docs/reports/core-events-automation-presets-verification.md).
 - [ ] **Event recovery operations:** observe deployed exhaustion/backlog trends and set alert baselines using the [operator runbook](docs/17-observability-and-operations.md#observing-event-recovery-pressure). Synthetic load results do not establish production rates.
