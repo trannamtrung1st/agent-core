@@ -1034,7 +1034,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_AutomationTriggers_Identity", "length(TriggerId) = 36 AND TriggerId <> '00000000-0000-0000-0000-000000000000' AND Revision >= 1");
 
-                            t.HasCheckConstraint("CK_AutomationTriggers_Source", "(Kind = 0 AND ScheduleJson IS NOT NULL AND EventId IS NULL AND CoreEventKey IS NULL AND FilterExpression IS NULL AND DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (Kind = 1 AND ScheduleJson IS NULL AND EventId IS NOT NULL AND CoreEventKey IS NULL) OR (Kind = 2 AND ScheduleJson IS NULL AND EventId IS NULL AND CoreEventKey IN ('run.completed','run.failed','session.completed','session.ended','instance.config_changed','harness.definition_adopted'))");
+                            t.HasCheckConstraint("CK_AutomationTriggers_Source", "(Kind = 0 AND ScheduleJson IS NOT NULL AND EventId IS NULL AND CoreEventKey IS NULL AND FilterExpression IS NULL AND DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (Kind = 1 AND ScheduleJson IS NULL AND EventId IS NOT NULL AND CoreEventKey IS NULL) OR (Kind = 2 AND ScheduleJson IS NULL AND EventId IS NULL AND CoreEventKey IN ('run.completed','run.failed','session.completed','session.ended','instance.config_changed','harness.definition_adopted','email.message.received'))");
                         });
                 });
 
@@ -1381,6 +1381,46 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasKey("DraftId");
 
                     b.ToTable("EmailSendOperations", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailWatchEventRecord", b =>
+                {
+                    b.Property<string>("EventId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AuthorityJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("EventId");
+
+                    b.ToTable("EmailWatchEvents");
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailWatchRecord", b =>
+                {
+                    b.Property<string>("AccountId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("NextCheckAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("RuntimeRevision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("AccountId");
+
+                    b.HasIndex("Enabled", "NextCheckAtUtc");
+
+                    b.ToTable("EmailWatches");
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EntryRecord", b =>
@@ -2312,6 +2352,24 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithOne()
                         .HasForeignKey("AgentCore.Infrastructure.Persistence.EmailSendOperationRecord", "DraftId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailWatchEventRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.CoreEventRecord", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailWatchRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.CredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

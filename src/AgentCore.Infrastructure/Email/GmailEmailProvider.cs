@@ -18,7 +18,7 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
 {
     public const string HttpClientName = "GmailEmail";
     public bool IsAvailable => account.Profile.IsUsable;
-    private string Prefix => "gmail-" + account.AccountId.ToString("N") + ":";
+    private string Prefix => EmailMessageReferences.GmailPrefix(account.AccountId);
     private string? preparedToken;
     public async ValueTask PrepareSendAsync(CancellationToken ct)
     {
@@ -80,7 +80,7 @@ public sealed class GmailEmailProvider(EmailAccountContext account, IHttpClientF
             DateTimeOffset.TryParse(ReadHeader(headers, "Date"), out var date) ? date : time.GetUtcNow(), ReadHeader(headers, "Subject") ?? "",
             truncated ? body[..EmailToolLimits.MaxBodyLength] : body, truncated, []);
     }
-    private async Task<JsonDocument> Get(string path, CancellationToken ct)
+    internal async Task<JsonDocument> Get(string path, CancellationToken ct)
     {
         await recheck(ct); var access = await token(ct); await recheck(ct);
         using var client = clients.CreateClient(HttpClientName);

@@ -38,6 +38,7 @@ it('Custom keeps typed TLS endpoints, protected password, and failure clears onl
   vi.mocked(api.createEmailAccount).mockRejectedValue(new Error('Revision conflict')); show();
   const dialog = within(await screen.findByRole('dialog', { name: 'Add email account' }));
   fireEvent.mouseDown(dialog.getByLabelText('Provider')); fireEvent.click(await screen.findByText('Custom IMAP/SMTP · Advanced'));
+  expect(await dialog.findByLabelText('IMAP port')).toHaveValue('993'); expect(dialog.getByLabelText('SMTP port')).toHaveValue('465');
   fireEvent.change(await dialog.findByLabelText('Sender email address'), { target: { value: 'demo@example.test' } });
   for (const label of ['IMAP username', 'SMTP username']) fireEvent.change(dialog.getByLabelText(label), { target: { value: 'demo@example.test' } });
   for (const label of ['IMAP host', 'SMTP host']) fireEvent.change(dialog.getByLabelText(label), { target: { value: 'mail.example.test' } });

@@ -325,12 +325,16 @@ public sealed class InMemoryTriggerStore : ITriggerStore
         }
     }
 
+    internal object? EmailAdmissionGate { get; set; }
+    internal Func<TriggerOccurrence, bool>? EmailNeedsFence { get; set; }
+    internal Func<TriggerOccurrence, bool>? EmailCanAdmit { get; set; }
     public ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(
         TriggerOccurrence occurrence,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
         RequireFreshOccurrence(occurrence);
+        lock (EmailNeedsFence?.Invoke(occurrence) == true ? EmailAdmissionGate ?? _state.Gate : _state.Gate)
         lock (_state.Gate)
         {
             if (_state.DedupeKeys.TryGetValue(Dedupe(occurrence.Owner, occurrence.DedupeKey), out var existingId))
@@ -352,6 +356,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
                 throw AgentCoreErrors.Conflict("Occurrence identifier is already in use.");
             }
 
+            if (EmailCanAdmit?.Invoke(occurrence) == false) throw AgentCoreErrors.Conflict("Email source authority was revoked before admission.");
             _state.Occurrences[occurrence.OccurrenceId] = occurrence;
             _state.DedupeKeys[Dedupe(occurrence.Owner, occurrence.DedupeKey)] = occurrence.OccurrenceId;
             return ValueTask.FromResult(new TriggerOccurrenceAdmitResult(

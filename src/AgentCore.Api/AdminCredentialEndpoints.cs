@@ -1,6 +1,7 @@
 using AgentCore.Api.Http;
 using Microsoft.AspNetCore.Mvc;
 using AgentCore.Application.Credentials;
+using AgentCore.Application.Email;
 using AgentCore.Application.Sessions;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Credentials;
@@ -12,6 +13,12 @@ internal static class AdminCredentialEndpoints
 {
     internal static void MapCredentials(this RouteGroupBuilder group)
     {
+        group.MapGet("/email-accounts/{credentialId:guid}/monitoring", (Guid credentialId, HttpContext http, EmailMonitoringService monitoring, CancellationToken ct) => Run(async () =>
+        { http.Response.Headers.CacheControl = "no-store"; return Results.Json(await monitoring.GetAsync(credentialId, ct)); }));
+        group.MapPut("/email-accounts/{credentialId:guid}/monitoring", (Guid credentialId, AdminEmailMonitoringRequest request, EmailMonitoringService monitoring, CancellationToken ct) => Run(async () =>
+            Results.Json(await monitoring.ConfigureAsync(credentialId, request.ExpectedRevision, request.Enabled, request.IntervalSeconds, ct))));
+        group.MapPost("/email-accounts/{credentialId:guid}/monitoring/check", (Guid credentialId, AdminEmailMonitoringCheckRequest request, EmailMonitoringService monitoring, CancellationToken ct) => Run(async () =>
+            Results.Json(await monitoring.CheckAsync(credentialId, request.ExpectedRevision, ct), statusCode: 202)));
         group.MapGet("/email-accounts/oauth/configuration", (IEmailOAuthService oauth) => Results.Json(new { configured = oauth.IsConfigured, synthetic = oauth.IsSynthetic }));
         group.MapGet("/email-accounts/{credentialId:guid}/connection", (Guid credentialId, IEmailOAuthService oauth, CancellationToken ct) => Run(async () => Results.Json(await oauth.ConnectionAsync(credentialId, ct))));
         group.MapPost("/email-accounts/{credentialId:guid}/oauth/start", (Guid credentialId, AdminEmailOAuthRequest request, HttpContext http, IEmailOAuthService oauth, ILocalUserProfileService profiles, CancellationToken ct) => Run(async () =>

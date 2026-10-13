@@ -17,6 +17,8 @@ public sealed class SyntheticEmailProvider : IEmailProvider
         SeedMessages();
     }
 
+    internal void AddMessage(EmailMessageResult message) => _messages[message.MessageId] = message;
+
     public bool IsAvailable => true;
 
     public ValueTask<EmailSearchResult> SearchAsync(EmailSearchRequest request, CancellationToken cancellationToken = default)

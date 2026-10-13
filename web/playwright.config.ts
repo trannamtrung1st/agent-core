@@ -131,6 +131,7 @@ export default defineConfig({
       env: {
         ASPNETCORE_ENVIRONMENT: "Development",
         AgentCore__Profile: "Synthetic",
+        GoogleEmailOAuth__PublicAppUrl: browserSttWebUrl,
         Persistence__Provider: "InMemory",
         Providers__Speech__Recognition__Adapter: "Browser",
         AGENTCORE_LIVE_PROVIDER_TESTS: "0",
@@ -165,6 +166,7 @@ export default defineConfig({
       env: {
         ASPNETCORE_ENVIRONMENT: "Development",
         AgentCore__Profile: "Synthetic",
+        GoogleEmailOAuth__PublicAppUrl: browserBrowserWebUrl,
         Persistence__Provider: "InMemory",
         Providers__Speech__Recognition__Adapter: "Browser",
         Providers__Speech__Synthesis__Adapter: "Browser",

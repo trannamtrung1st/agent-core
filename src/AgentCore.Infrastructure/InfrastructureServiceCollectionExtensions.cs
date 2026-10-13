@@ -163,6 +163,7 @@ public static class InfrastructureServiceCollectionExtensions
                     provider.GetRequiredService<IIdGenerator>(),
                     provider.GetRequiredService<TimeProvider>()));
             services.AddSingleton<IEmailStore, SqliteEmailStore>();
+            services.AddSingleton<IEmailWatchStore, SqliteEmailWatchStore>();
             services.AddSingleton<SqliteCredentialStore>();
             services.AddSingleton<ICredentialStore>(p => p.GetRequiredService<SqliteCredentialStore>());
             services.AddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<SqliteCredentialStore>());
@@ -200,6 +201,7 @@ public static class InfrastructureServiceCollectionExtensions
                 provider.GetRequiredService<InMemoryMemoryStore>(),
                 provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<InMemoryTriggerStore>(), provider.GetRequiredService<InMemoryAgentInstanceStore>(), provider.GetRequiredService<IEmailStore>()));
             services.TryAddSingleton<IEmailStore, InMemoryEmailStore>();
+            services.TryAddSingleton<IEmailWatchStore, InMemoryEmailWatchStore>();
             services.TryAddSingleton<InMemoryCredentialStore>();
             services.TryAddSingleton<ICredentialStore>(p => p.GetRequiredService<InMemoryCredentialStore>());
             services.TryAddSingleton<IAgentCredentialBindingStore>(p => p.GetRequiredService<InMemoryCredentialStore>());

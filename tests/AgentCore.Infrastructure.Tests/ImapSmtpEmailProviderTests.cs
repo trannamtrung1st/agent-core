@@ -16,6 +16,36 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class ImapSmtpEmailProviderTests
 {
+    [Fact]
+    public async Task Watch_unknown_UIDNEXT_truncation_discloses_gap_and_deleted_recent_mail_does_not_replay()
+    {
+        var account = Context();
+        await using var missing = new FakeMailServer(smtp: false, omitUidNext: true, count: 600);
+        var gap = await Provider(missing, account).WatchAsync(new(AgentCore.Domain.Email.EmailWatchCursorKind.ImapUid, UidValidity: 123, LastUid: 7), default);
+        Assert.True(gap.CursorGap); Assert.Empty(gap.MessageRefs); Assert.Equal(6007u, gap.NextCursor.LastUid);
+        await using var empty = new FakeMailServer(smtp: false, count: 0);
+        var batch = await Provider(empty, account).WatchAsync(new(AgentCore.Domain.Email.EmailWatchCursorKind.ImapUid, UidValidity: 123, LastUid: 6), default);
+        Assert.Empty(batch.MessageRefs); Assert.Equal(7u, batch.NextCursor.LastUid);
+        Assert.DoesNotContain(empty.Commands, c => c.Contains("BODY") || c.Contains("STORE"));
+    }
+
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Watch_baseline_and_UID_scan_never_fetch_body_or_mark_seen(bool missingUidNext)
+    {
+        var account = Context();
+        await using var baseline = new FakeMailServer(smtp: false, omitUidNext: missingUidNext);
+        var start = await Provider(baseline, account).WatchAsync(null, default);
+        Assert.Empty(start.MessageRefs); Assert.Equal(123u, start.NextCursor.UidValidity);
+        await using var poll = new FakeMailServer(smtp: false, omitUidNext: missingUidNext);
+        var changes = await Provider(poll, account).WatchAsync(start.NextCursor with { LastUid = 6 }, default);
+        Assert.Equal($"imap-{account.AccountId:N}:123:7", Assert.Single(changes.MessageRefs));
+        Assert.Contains(poll.Commands, c => c.StartsWith("EXAMINE"));
+        Assert.DoesNotContain(poll.Commands, c => c.Contains("BODY") || c.Contains("STORE") || c.Contains("ENVELOPE"));
+        await using var rollover = new FakeMailServer(smtp: false, validity: 124, omitUidNext: missingUidNext);
+        var gap = await Provider(rollover, account).WatchAsync(start.NextCursor, default);
+        Assert.True(gap.CursorGap); Assert.Empty(gap.MessageRefs);
+    }
+
     [Theory]
     [InlineData(false, EmailSendOutcome.Sent)]
     [InlineData(true, EmailSendOutcome.Indeterminate)]

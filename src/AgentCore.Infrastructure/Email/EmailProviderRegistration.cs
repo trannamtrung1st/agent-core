@@ -26,11 +26,17 @@ internal static class EmailProviderRegistration
         services.TryAddSingleton<IEmailOAuthService>(p => p.GetRequiredService<GoogleEmailOAuthService>());
         services.TryAddSingleton<EmailTransportOptions>(p => p.GetService<Microsoft.Extensions.Configuration.IConfiguration>()?
             .GetSection("Email").Get<EmailTransportOptions>() ?? new());
-        services.TryAddSingleton<IEmailProviderFactory>(p => new AccountEmailProviderFactory(
+        services.TryAddSingleton<AccountEmailProviderFactory>(p => new AccountEmailProviderFactory(
             p.GetRequiredService<ICredentialStore>(), p.GetRequiredService<IAgentCredentialBindingStore>(),
             p.GetRequiredService<ICredentialProtector>(), p.GetRequiredService<IAgentInstanceStore>(),
             p.GetRequiredService<EmailTransportOptions>(), p.GetRequiredService<TimeProvider>(),
             string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase), p.GetRequiredService<GoogleEmailOAuthService>(), p.GetRequiredService<IHttpClientFactory>(), p.GetRequiredService<ILoggerFactory>(), p.GetRequiredService<IDiagnosticIdSource>()));
+        services.TryAddSingleton<IEmailProviderFactory>(p => p.GetRequiredService<AccountEmailProviderFactory>());
+        services.TryAddSingleton<AgentCore.Application.Email.EmailMonitoringOptions>(p => p.GetService<IConfiguration>()?.GetSection("EmailMonitoring").Get<AgentCore.Application.Email.EmailMonitoringOptions>() ?? new());
+        services.TryAddSingleton<IEmailChangeFeed>(p => new AccountEmailChangeFeed(p.GetRequiredService<ICredentialStore>(), p.GetRequiredService<ICredentialProtector>(),
+            p.GetRequiredService<EmailTransportOptions>(), p.GetRequiredService<GoogleEmailOAuthService>(), p.GetRequiredService<IHttpClientFactory>(),
+            p.GetRequiredService<TimeProvider>(), p.GetRequiredService<AccountEmailProviderFactory>(), string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)));
+        services.TryAddSingleton<AgentCore.Application.Email.EmailMonitoringService>();
         services.TryAddSingleton<AgentCore.Application.Email.EmailAccountService>();
     }
 }

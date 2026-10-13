@@ -2219,6 +2219,16 @@ body,
     min-height: 40px;
   }
 
+  .admin-email-monitor-controls .ant-select,
+  .admin-email-monitor-controls label {
+    min-height: 40px;
+  }
+
+  .admin-email-monitor-controls label {
+    display: flex;
+    align-items: center;
+  }
+
   .admin-instance-version-actions .ant-select {
     width: 100%;
     min-height: 40px;
@@ -2705,6 +2715,9 @@ body,
   text-decoration: none;
 }
 
+/* Expanded Credential details stay within the collection viewport while the table scrolls. */
+.admin-collection-table { container-type: inline-size; }
+.admin-credential-details { overflow-wrap: anywhere; }
 /* Admin shell owns navigation geometry; panels keep their existing single inset. */
 .admin-layout { height: 100dvh; min-height: 0; }
 .admin-workspace { display: flex; flex: 1; min-height: 0; min-width: 0; }

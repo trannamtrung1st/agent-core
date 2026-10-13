@@ -1,5 +1,17 @@
 # TODO
 
+## Email monitoring follow-up (2026-10-13)
+
+- [x] Independent watch configuration/CAS, additive migrations and InMemory/SQLite baseline/lease/reopen proof.
+- [x] Gmail History and shared verified-TLS read-only IMAP UID feeds; central worker and atomic owner Event handoff.
+- [x] Existing Automation/Run → authorized original email.read, duplicate/failure/multi-Instance and revocation evidence.
+- [x] Owner HTTP and existing Credential detail saved Monitoring controls; four responsive Synthetic browser journeys.
+- [x] Isolated Compose SQLite/key-ring and monitoring cursor/generation recreation checks.
+- [x] Full frozen-source local gates: 3,889 backend passes / 21 opt-in skips, 951 frontend passes, 212 Synthetic browser passes, build and both Compose restart checks. See [the evidence report](docs/reports/email-monitoring-verification-2026-10-13.md).
+- [x] Explicit owner authorization to commit/push this payload to the public repository, 2026-10-13.
+- [x] Final review corrections and public push; behavior `bcfa7a7e7b602f35e635765c262d4f2a35ca6015` accepted with all seven [hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38359505594) green. Final local backend 3,889 passes / 21 opt-in skips, frontend 955 passes, focused browser 11 passes and build are green. Dedicated Real UAT remains separate.
+- [ ] Separate dedicated-mailbox Real Gmail/IMAP UAT, only after explicit owner opt-in. No live acceptance is claimed.
+
 ## Stable original Background Work results (2026-10-09)
 
 - [x] Non-UI CI fixture repairs on main: arrange direct-store B/C before foregrounding, project authorized Secretary Automation schemas and align the bootstrap capability expectation. Local checks: 3 API, 27 Application and 6 Synthetic browser journeys passed; UI selector repairs remain owned by the other session.

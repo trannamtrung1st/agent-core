@@ -47,6 +47,7 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
   const dirty = settingsDirty || Object.values(editorDirty).some(Boolean);
   const releaseConsumedInstance = useAdminUnsavedChanges(`instance:${instanceId}`, dirty);
   const reportDirty = useCallback((key: string, value: boolean) => setEditorDirty(current => current[key] === value ? current : { ...current, [key]: value }), []);
+  const reportCredentialDirty = useCallback((value: boolean) => reportDirty('credentials', value), [reportDirty]);
   const runOpener = useRef<HTMLElement | null>(null);
   const restoreRunFocus = useRef(false);
   useEffect(() => {
@@ -109,7 +110,7 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
         <RetainedAdminPage active={page === 'skills'}><InstanceSkillsSection instanceId={instanceId} archived={archived} active={page === 'skills'} onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('skills', value)} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'resources'}><InstanceResourcesSection instanceId={instanceId} archived={archived} active={page === 'resources'} onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('resources', value)} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'workspace'}><InstanceWorkspaceSection instanceId={instanceId} archived={archived} /></RetainedAdminPage>
-        <RetainedAdminPage active={page === 'credentials'}><section id="credentials" tabIndex={-1} className="admin-settings-anchor"><InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={archived} onUpdated={onInstanceChanged} /></section></RetainedAdminPage>
+        <RetainedAdminPage active={page === 'credentials'}><section id="credentials" tabIndex={-1} className="admin-settings-anchor"><InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={archived} onUpdated={onInstanceChanged} onDirtyChange={reportCredentialDirty} /></section></RetainedAdminPage>
         <RetainedAdminPage active={page === 'self-management'}><Flex vertical gap={token.padding}><SelfManagementSection instanceId={instanceId} archived={archived} onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('management', value)} />{!archived && <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />}</Flex></RetainedAdminPage>
         <RetainedAdminPage active={page === 'automations'}>{!archived ? <Flex vertical gap={token.padding}>
           <section id="registrations" tabIndex={-1}><InstanceAutomationsSection instanceId={instanceId} active={page === 'automations'} onWork={viewRun} selection={page === 'automations' ? sourceSelection : undefined} onDirtyChange={value => reportDirty('automations', value)} /></section>

@@ -5,7 +5,8 @@ import { forkBuiltInV1Draft, openDefinitionSettings } from "./admin-draft-editor
 import { completeDefinitionDraftPublishGate, publishDraftFromInstructions, isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 
 async function view(editor: Locator, name: "Form" | "Advanced JSON") {
-  await navigateAdmin(editor, name === "Form" ? "Policies" : "Advanced JSON");
+  if (name === "Form") await openDefinitionSettings(editor, "Trigger restrictions");
+  else await navigateAdmin(editor, "Advanced JSON");
 }
 async function save(page: Page, editor: Locator, kinds: string[]) {
   const [response] = await Promise.all([

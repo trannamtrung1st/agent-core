@@ -29,6 +29,24 @@ public sealed class AccountEmailProviderFactory(ICredentialStore credentials, IA
             ct => oauth!.RejectAuthorizationAsync(account.AccountId, account.AccountRevision, ct))
         : new ImapSmtpEmailProvider(account, options, _policy, _connections, ResolveSecretAsync, loggerFactory?.CreateLogger<ImapSmtpEmailProvider>(), diagnosticIds);
 
+    internal ImapSmtpEmailProvider CreateWatcher(Credential c, Func<CancellationToken, ValueTask<string>> secret) => new(
+        new(Guid.Empty, c.CredentialId, "", c.DisplayName, c.Revision, Guid.Empty, 0, c.EmailAccount!), options, _policy, _connections, (_, ct) => secret(ct));
+    private readonly ConcurrentDictionary<Guid, List<string>> arrivals = new();
+    internal void AddSyntheticArrival(Guid accountId, EmailMessageResult message)
+    {
+        if (!synthetic) throw new InvalidOperationException("Synthetic fixture only.");
+        _synthetic.GetOrAdd(accountId, _ => new()).AddMessage(message);
+        var list = arrivals.GetOrAdd(accountId, _ => []); lock (list) list.Add(message.MessageId);
+    }
+    internal AgentCore.Domain.Email.EmailWatchCursor SyntheticBaseline(Guid id)
+    { var list = arrivals.GetOrAdd(id, _ => []); lock (list) return new(AgentCore.Domain.Email.EmailWatchCursorKind.Synthetic, Offset: list.Count); }
+    internal EmailWatchBatch SyntheticPoll(Guid id, AgentCore.Domain.Email.EmailWatchCursor cursor)
+    {
+        var list = arrivals.GetOrAdd(id, _ => []); lock (list)
+        { var refs = list.Skip(cursor.Offset).Take(25).Select(m => $"syn-{id:N}:{m}").ToArray();
+            return new(refs, cursor with { Offset = cursor.Offset + refs.Length }, cursor.Offset + refs.Length < list.Count); }
+    }
+
     private async ValueTask RecheckAsync(EmailAccountContext account, CancellationToken ct)
     {
         if (await instances.FindAsync(account.AgentInstanceId, ct) is not { Lifecycle: AgentInstanceLifecycle.Active }

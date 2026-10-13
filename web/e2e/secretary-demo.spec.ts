@@ -101,8 +101,11 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await openDefinitionSettings(editor);
     await editor.getByLabel('System instructions', { exact: true }).fill('You are Morgan. Organize Atlas follow-ups, use relevant Memory and Experience, put blockers first, and obey current policy and approvals.');
     await openDefinitionSettings(editor, 'Memory policy');
+    for (const label of ['Session memory', 'Identity user promotion', 'Identity user retrieval']) {
+      await editor.getByRole('switch', { name: label, exact: true }).click();
+    }
     await openDefinitionSettings(editor, 'Trigger restrictions');
-    for (const label of ['Session memory', 'Identity user promotion', 'Identity user retrieval', 'Automation enabled',
+    for (const label of ['Automation enabled',
       'Allow user scheduling', 'Allow one-shot', 'Allow daily', 'Allow weekly', 'Allow fixed interval']) {
       await editor.getByRole('switch', { name: label, exact: true }).click();
     }

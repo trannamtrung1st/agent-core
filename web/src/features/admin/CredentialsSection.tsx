@@ -1,5 +1,6 @@
 import { followAppLink } from "../../app/appLink";
 import { EmailConnectionTag, GmailConnectionPanel } from "./GmailConnectionPanel";
+import { EmailMonitoringSection } from "./EmailMonitoringSection";
 import { EmailAccountDialog } from "./EmailAccountDialog";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -71,7 +72,8 @@ function CredentialPolicySummary({ credential }: { credential: SystemCredential 
   </Flex>;
 }
 
-function CredentialDetails({ credential, onChanged }: { credential: SystemCredential; onChanged?: () => Promise<void> }) {
+function CredentialDetails({ credential, onChanged, instanceId, onMonitoringDirtyChange }: { credential: SystemCredential; onChanged?: () => Promise<void>; instanceId?: string; onMonitoringDirtyChange?: (id: string, dirty: boolean) => void }) {
+  const reportMonitoringDirty = useCallback((dirty: boolean) => onMonitoringDirtyChange?.(credential.credentialId, dirty), [credential.credentialId, onMonitoringDirtyChange]);
   const detailLayout = useAdminDetailLayout(); const { token } = theme.useToken();
   const [tests, setTests] = useState<Partial<Record<'imap' | 'smtp', EmailConnectionTest>>>({});
   const [testing, setTesting] = useState<'imap' | 'smtp'>(); const [testError, setTestError] = useState<AdminFailureNotice>();
@@ -82,7 +84,7 @@ function CredentialDetails({ credential, onChanged }: { credential: SystemCreden
     catch (e) { setTestError(describeAdminError(e, 'Connection test failed. Refresh the account and retry.')); }
     finally { setTesting(undefined); }
   }
-  return <div role="region" aria-label={`Details for ${credential.displayName}`} style={{ whiteSpace: "normal" }}>
+  return <Flex vertical gap={token.padding} className="admin-credential-details" role="region" aria-label={`Details for ${credential.displayName}`} style={{ whiteSpace: "normal", maxInlineSize: `calc(100cqi - ${token.padding * 2}px)` }}>
     <Descriptions bordered column={1} size="small" {...detailLayout} items={[
       { key: "kind", label: "Kind / purpose", children: `${credential.kind} · ${credential.purpose === 'EmailAccount' ? 'Email account' : 'General'}` },
       ...(credential.emailAccount?.preset === "Custom" ? [
@@ -95,8 +97,8 @@ function CredentialDetails({ credential, onChanged }: { credential: SystemCreden
       { key: "origins", label: "Allowed origins", children: credential.allowedOrigins.length
         ? <Flex vertical>{credential.allowedOrigins.map(origin => <Typography.Text key={origin}>{origin}</Typography.Text>)}</Flex> : "None configured" }
     ]} />
-    {credential.emailAccount?.preset === "Gmail" && <GmailConnectionPanel account={credential} onChanged={onChanged} />}
-    {credential.emailAccount?.preset === "Custom" && <Flex vertical gap={token.paddingXS} style={{ paddingBlockStart: token.paddingSM }}>
+    {credential.emailAccount?.preset === "Gmail" && <GmailConnectionPanel account={credential} onChanged={onChanged} instanceId={instanceId} />}
+    {credential.emailAccount?.preset === "Custom" && <Flex vertical gap={token.paddingXS}>
       <Typography.Text type="secondary">Connection tests authenticate without sending mail. A configured account has not been tested.</Typography.Text>
       {testError && <Alert type="error" showIcon title={<AdminErrorNotice message={testError.message} diagnosticId={testError.diagnosticId} showDetailsLabel />} />}
       {(['imap', 'smtp'] as const).map(protocol => <Flex key={protocol} align="center" wrap gap={token.paddingXS}>
@@ -106,7 +108,8 @@ function CredentialDetails({ credential, onChanged }: { credential: SystemCreden
         {tests[protocol]?.error && <Typography.Text type="danger">{tests[protocol]!.error}</Typography.Text>}
       </Flex>)}
     </Flex>}
-  </div>;
+    {credential.emailAccount && <EmailMonitoringSection account={credential} instanceId={instanceId} onDirtyChange={reportMonitoringDirty} />}
+  </Flex>;
 }
 function ProtectedValueField({ email = false }: { email?: boolean }) {
   return <Form.Item name="protectedValue" label={email ? "Password" : "Protected value"} rules={[{ required: true }]} extra="Protected values cannot be read back. Replace the value if it changes.">
@@ -155,7 +158,8 @@ export function CredentialsSection() {
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('emailAccount');
     const account = items.find(c => c.credentialId === id && c.emailAccount?.preset === 'Gmail');
-    if (loaded && account) { setEmailDialog({ account }); window.history.replaceState(null, '', window.location.pathname); }
+    if (loaded && account) { setEmailDialog({ account }); const params = new URLSearchParams(window.location.search); params.delete('emailAccount');
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}${window.location.hash}`); }
   }, [items, loaded]);
   function openEmail(account: SystemCredential | undefined, trigger: HTMLElement) { emailTrigger.current = trigger; emailTriggerAccount.current = account?.credentialId; setEmailDialog({ account }); }
   async function remove(item: SystemCredential) {
@@ -166,9 +170,9 @@ export function CredentialsSection() {
     description="Reusable protected values. Agents receive access through explicit bindings; bindings do not grant tools."
     extra={<Flex gap={token.paddingXS} wrap><Button disabled={busy || loading || !loaded} ref={addEmailTrigger} onClick={event => openEmail(undefined, event.currentTarget)}>Add email account</Button><Button type="primary" ref={createOpener} disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button></Flex>} bodyGap="default">
     {error && <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void load()}>Retry</Button>} />}
-    {loading ? <Spin aria-label="Loading credentials" /> : loaded && <>
+    {!loaded && loading ? <Spin aria-label="Loading credentials" /> : loaded && <>
       <AdminCollectionToolbar label="credentials" value={search} onChange={setSearch} filters={<Select aria-label="Credential status filter" value={statusFilter} onChange={value => { setStatusFilter(value); setSearch(search); }} options={[{ value: "All", label: "All statuses" }, { value: "Active", label: "Active" }, { value: "Disabled", label: "Disabled" }]} />} />
-      <Table<SystemCredential> aria-label="System credentials table" className="admin-collection-table" size="small" rowKey="credentialId" scroll={{ x: 1200 }} pagination={pagination}
+      <Table<SystemCredential> aria-label="System credentials table" loading={loading} className="admin-collection-table" size="small" rowKey="credentialId" scroll={{ x: 1200 }} pagination={pagination}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search.trim() || items.length > 0 ? "No matches. Clear search or filters to see all results." : "No credentials yet"} /> }}
         dataSource={items.filter(c => (statusFilter === "All" || c.status === statusFilter) && matchesCredential(c, search))}
         expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, c) => setExpanded(open ? [c.credentialId] : []), expandedRowRender: c => <CredentialDetails credential={c} onChanged={load} /> }}
@@ -198,8 +202,12 @@ export function CredentialsSection() {
     </Modal></AgentConfigurationPanel>;
 }
 
-export function InstanceCredentialsSection({ instanceId, revision, archived, onUpdated }: { instanceId: string; revision: number; archived: boolean; onUpdated?: () => void | Promise<void> }) {
+export function InstanceCredentialsSection({ instanceId, revision, archived, onUpdated, onDirtyChange }: { instanceId: string; revision: number; archived: boolean; onUpdated?: () => void | Promise<void>; onDirtyChange?: (dirty: boolean) => void }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
+  const [monitoringDirty, setMonitoringDirty] = useState<Record<string, boolean>>({});
+  const reportMonitoringDirty = useCallback((id: string, dirty: boolean) => setMonitoringDirty(current => current[id] === dirty ? current : { ...current, [id]: dirty }), []);
+  const dirty = Object.values(monitoringDirty).some(Boolean);
+  useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
   const [bindings, setBindings] = useState<CredentialBinding[]>([]); const [choices, setChoices] = useState<SystemCredential[]>([]);
   const [loading, setLoading] = useState(true); const [loaded, setLoaded] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<AdminFailureNotice>();
   const [bindingError, setBindingError] = useState<AdminFailureNotice>();
@@ -222,12 +230,12 @@ export function InstanceCredentialsSection({ instanceId, revision, archived, onU
       extra={<Flex gap={token.paddingXS} wrap><Button href={adminHomePath("credentials")} onClick={followAppLink}>Manage system credentials</Button><Button type="primary" disabled={archived || busy || loading || !loaded} onClick={() => { setBindingError(undefined); setOpen(true); }}>Bind credential</Button></Flex>} bodyGap="default">
     {archived && <Alert type="info" title="Archived instance bindings are read-only and cannot be used." />}
     {error && <Alert type="error" title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} showIcon action={<Button onClick={() => void load()}>Retry</Button>} />}
-    {loading ? <Spin aria-label="Loading credential bindings" /> : loaded && <>
+    {!loaded && loading ? <Spin aria-label="Loading credential bindings" /> : loaded && <>
     <AdminCollectionToolbar label="credential bindings" value={search} onChange={setSearch} />
-    <Table<CredentialBinding> aria-label="Credential bindings table" className="admin-collection-table" size="small" rowKey="bindingId" pagination={pagination} scroll={{ x: 920 }}
+    <Table<CredentialBinding> aria-label="Credential bindings table" loading={loading} className="admin-collection-table" size="small" rowKey="bindingId" pagination={pagination} scroll={{ x: 920 }}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search.trim() || bindings.length > 0 ? "No matches. Clear search or filters to see all results." : "No credentials bound"} /> }}
       dataSource={bindings.filter(b => b.reference.toLowerCase().includes(search.trim().toLowerCase()) || matchesCredential(b.credential, search))}
-      expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, b) => setExpanded(open ? [b.bindingId] : []), expandedRowRender: b => <CredentialDetails credential={b.credential} onChanged={load} /> }} columns={[
+      expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, b) => setExpanded(open ? [b.bindingId] : []), expandedRowRender: b => <CredentialDetails credential={b.credential} onChanged={load} instanceId={instanceId} onMonitoringDirtyChange={reportMonitoringDirty} /> }} columns={[
       { title: "Reference", dataIndex: "reference", width: 180, ellipsis: true, sorter: (a, b) => a.reference.localeCompare(b.reference) },
       { title: "Credential", width: 240, ellipsis: true, render: (_, b) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={b.credential.displayName}>{b.credential.displayName}</Typography.Text><Typography.Text type="secondary">{b.credential.kind} · {b.credential.status}</Typography.Text></Flex> },
       { title: "Metadata & origins", width: 320, render: (_, b) => <CredentialPolicySummary credential={b.credential} /> },

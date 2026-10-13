@@ -5,7 +5,7 @@ namespace AgentCore.Domain.Events;
 public static class CoreEventCatalog
 {
     public static IReadOnlyList<string> Keys { get; } = Array.AsReadOnly(new[]
-    { "run.completed", "run.failed", "session.completed", "session.ended", "instance.config_changed", "harness.definition_adopted" });
+    { "run.completed", "run.failed", "session.completed", "session.ended", "instance.config_changed", "harness.definition_adopted", "email.message.received" });
 }
 
 public sealed record CoreEventOccurrence(Guid EventId, string DedupeKey, TriggerOwner Owner, string Key,

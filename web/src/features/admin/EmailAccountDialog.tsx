@@ -78,8 +78,8 @@ export function EmailAccountDialog({ open, account, onClose, onSaved, onClosed }
             <Typography.Text strong>{protocol === 'imap' ? 'Incoming (IMAP)' : 'Outgoing (SMTP)'}</Typography.Text>
             <Form.Item name={['profile', `${protocol}Username`]} label={`${protocol.toUpperCase()} username`} rules={[{ required: true, max: 254 }]}><Input /></Form.Item>
             <Form.Item name={['profile', `${protocol}Endpoint`, 'host']} label={`${protocol.toUpperCase()} host`} rules={[{ required: true, max: 253 }]}><Input /></Form.Item>
-            <Form.Item name={['profile', `${protocol}Endpoint`, 'port']} label={`${protocol.toUpperCase()} port`} rules={[{ required: true }]}><InputNumber min={1} max={65535} /></Form.Item>
-            <Form.Item name={['profile', `${protocol}Endpoint`, 'tlsMode']} label={`${protocol.toUpperCase()} TLS`} rules={[{ required: true }]}><Select options={[{ value: 'ImplicitTls', label: 'Required implicit TLS' }, { value: 'StartTls', label: 'Required STARTTLS' }]} /></Form.Item>
+            <Form.Item name={['profile', `${protocol}Endpoint`, 'port']} initialValue={account ? undefined : custom[`${protocol}Endpoint`]?.port} label={`${protocol.toUpperCase()} port`} rules={[{ required: true }]}><InputNumber min={1} max={65535} /></Form.Item>
+            <Form.Item name={['profile', `${protocol}Endpoint`, 'tlsMode']} initialValue={account ? undefined : custom[`${protocol}Endpoint`]?.tlsMode} label={`${protocol.toUpperCase()} TLS`} rules={[{ required: true }]}><Select options={[{ value: 'ImplicitTls', label: 'Required implicit TLS' }, { value: 'StartTls', label: 'Required STARTTLS' }]} /></Form.Item>
           </Flex>)}
           {!account && <Form.Item name="protectedValue" label="Password" rules={[{ required: true }]} extra="Encrypted on the server. Never read back or shared with the agent."><Input.Password visibilityToggle={false} autoComplete="new-password" spellCheck={false} /></Form.Item>}
         </>}

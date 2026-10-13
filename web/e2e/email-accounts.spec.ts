@@ -85,3 +85,42 @@ for (const width of [1440, 768, 390, 320]) test(`email account editor, tests and
   await expect(receipt).toBeVisible(); await expect(receipt.locator('..')).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
 });
+
+test('Custom account defaults survive provider mounting and saved endpoints reopen unchanged', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto('/admin/connections/credentials');
+  await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));
+  const name = `Custom defaults ${Date.now()}`;
+  await page.getByRole('button', { name: 'Add email account', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add email account', exact: true });
+  await dialog.getByLabel('Provider', { exact: true }).click();
+  await page.getByText('Custom IMAP/SMTP · Advanced', { exact: true }).click();
+  await expect(dialog.getByLabel('IMAP port', { exact: true })).toHaveValue('993');
+  await expect(dialog.getByLabel('SMTP port', { exact: true })).toHaveValue('465');
+  await expect(dialog.getByText('Required implicit TLS', { exact: true })).toHaveCount(2);
+  await dialog.getByLabel('Display name', { exact: true }).fill(name);
+  await dialog.getByLabel('Sender email address', { exact: true }).fill('custom@example.test');
+  for (const protocol of ['IMAP', 'SMTP']) {
+    await dialog.getByLabel(`${protocol} username`, { exact: true }).fill('custom@example.test');
+    await dialog.getByLabel(`${protocol} host`, { exact: true }).fill(`${protocol.toLowerCase()}.gmail.com`);
+  }
+  await dialog.getByLabel('SMTP port', { exact: true }).fill('587');
+  await dialog.getByLabel('SMTP TLS', { exact: true }).click();
+  await page.locator('.ant-select-dropdown:visible').getByText('Required STARTTLS', { exact: true }).click();
+  await dialog.getByLabel('Password', { exact: true }).fill('disposable-synthetic-fixture');
+  await dialog.getByRole('button', { name: 'Save email account', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole('textbox', { name: 'Search credentials', exact: true }).fill(name);
+  const row = page.getByRole('row').filter({ hasText: name });
+  await row.getByRole('button', { name: 'Expand row', exact: true }).click();
+  const details = page.getByRole('region', { name: `Details for ${name}`, exact: true });
+  await details.getByRole('button', { name: 'Test incoming', exact: true }).click();
+  await expect(details.getByText('Synthetic — no server connection', { exact: true })).toBeVisible();
+  await expect(details.getByText('Monitoring Off', { exact: true })).toBeVisible();
+  await row.getByRole('button', { name: 'Edit', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit email account', exact: true });
+  await expect(edit.getByLabel('SMTP port', { exact: true })).toHaveValue('587');
+  await expect(edit.getByText('Required STARTTLS', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await edit.getByRole('button', { name: 'Cancel', exact: true }).click();
+});

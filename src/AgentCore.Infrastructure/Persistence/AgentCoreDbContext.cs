@@ -239,8 +239,20 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<AgentInstanceSkillRecord> AgentInstanceSkills => Set<AgentInstanceSkillRecord>();
     public DbSet<AgentInstanceResourceRecord> AgentInstanceResources => Set<AgentInstanceResourceRecord>();
     public DbSet<AgentDefinitionResourceStateRecord> AgentDefinitionResourceStates => Set<AgentDefinitionResourceStateRecord>();
+    public DbSet<EmailWatchRecord> EmailWatches => Set<EmailWatchRecord>();
+    public DbSet<EmailWatchEventRecord> EmailWatchEvents => Set<EmailWatchEventRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<EmailWatchRecord>(e =>
+        {
+            e.HasKey(r => r.AccountId);
+            e.Property(r => r.RuntimeRevision).IsConcurrencyToken();
+            e.HasIndex(r => new { r.Enabled, r.NextCheckAtUtc });
+            e.HasOne<CredentialRecord>().WithMany().HasForeignKey(r => r.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<EmailWatchEventRecord>().HasKey(r => r.EventId);
+        modelBuilder.Entity<EmailWatchEventRecord>().HasOne<CoreEventRecord>().WithMany().HasForeignKey(r => r.EventId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<AgentInstanceResourceRecord>(e => {
             e.ToTable("AgentInstanceResources"); e.HasKey(r => new { r.InstanceId, r.ResourceId });
             e.Property(r => r.InstanceId).HasMaxLength(36); e.Property(r => r.ResourceId).HasMaxLength(36);
@@ -505,7 +517,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         {
             entity.ToTable("AutomationTriggers", table => {
                 table.HasCheckConstraint("CK_AutomationTriggers_Identity", "length(TriggerId) = 36 AND TriggerId <> '00000000-0000-0000-0000-000000000000' AND Revision >= 1");
-                table.HasCheckConstraint("CK_AutomationTriggers_Source", "(Kind = 0 AND ScheduleJson IS NOT NULL AND EventId IS NULL AND CoreEventKey IS NULL AND FilterExpression IS NULL AND DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (Kind = 1 AND ScheduleJson IS NULL AND EventId IS NOT NULL AND CoreEventKey IS NULL) OR (Kind = 2 AND ScheduleJson IS NULL AND EventId IS NULL AND CoreEventKey IN ('run.completed','run.failed','session.completed','session.ended','instance.config_changed','harness.definition_adopted'))");
+                table.HasCheckConstraint("CK_AutomationTriggers_Source", "(Kind = 0 AND ScheduleJson IS NOT NULL AND EventId IS NULL AND CoreEventKey IS NULL AND FilterExpression IS NULL AND DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (Kind = 1 AND ScheduleJson IS NULL AND EventId IS NOT NULL AND CoreEventKey IS NULL) OR (Kind = 2 AND ScheduleJson IS NULL AND EventId IS NULL AND CoreEventKey IN ('run.completed','run.failed','session.completed','session.ended','instance.config_changed','harness.definition_adopted','email.message.received'))");
                 table.HasCheckConstraint("CK_AutomationTriggers_Dispatch", "(DispatchMode = 0 AND DispatchWindowSeconds IS NULL) OR (DispatchMode = 1 AND DispatchWindowSeconds BETWEEN 60 AND 3600)");
             });
             entity.HasKey(t => t.TriggerId);

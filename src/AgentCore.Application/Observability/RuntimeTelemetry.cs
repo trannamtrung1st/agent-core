@@ -23,7 +23,7 @@ public static class RuntimeTelemetry
     {
         var boundedProvider = provider is "gmail" or "imap-smtp" or "synthetic" ? provider : "other";
         var boundedOperation = operation is "oauth.start" or "oauth.connect" or "oauth.refresh" or "oauth.check" or "oauth.disconnect"
-            or "search" or "read" or "send" or "send.preflight" ? operation : "other";
+            or "search" or "read" or "send" or "send.preflight" or "watch.baseline" or "watch.poll" or "watch.commit" or "watch.gap" ? operation : "other";
         var boundedOutcome = outcome is "success" or "cached" or "throttled" or "denied" or "reconnect_required"
             or "temporary_failure" or "revocation_unconfirmed" or "cancelled" or "indeterminate" or "failed" ? outcome : "other";
         var duration = double.IsFinite(milliseconds) ? Math.Max(0, milliseconds) : 0;
