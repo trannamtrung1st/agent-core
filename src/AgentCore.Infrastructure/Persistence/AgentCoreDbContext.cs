@@ -690,6 +690,23 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(c => c.GoogleSubject).IsUnique(); entity.HasKey(c => c.CredentialId);
             entity.HasOne<CredentialRecord>().WithOne(c => c.EmailAccount).HasForeignKey<EmailAccountProfileRecord>(c => c.CredentialId).OnDelete(DeleteBehavior.Cascade);
         });
+        modelBuilder.Entity<DriveOperationRecord>(entity =>
+        {
+            entity.ToTable("DriveOperations"); entity.HasKey(r => r.OperationId); entity.Property(r => r.Revision).IsConcurrencyToken();
+            entity.HasIndex(r => new { r.AgentInstanceId, r.CredentialId, r.EffectHash }).IsUnique().HasFilter("State IN ('Planned','Dispatched','Indeterminate')");
+            entity.HasOne<AgentInstanceRecord>().WithMany().HasForeignKey(r => r.AgentInstanceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<CredentialRecord>().WithMany().HasForeignKey(r => r.CredentialId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<SyntheticDriveFileRecord>(entity =>
+        {
+            entity.ToTable("SyntheticDriveFiles"); entity.HasKey(r => new { r.CredentialId, r.FileId }); entity.Property(r => r.Version).IsConcurrencyToken();
+            entity.HasOne<CredentialRecord>().WithMany().HasForeignKey(r => r.CredentialId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<DriveAccountProfileRecord>(entity =>
+        {
+            entity.ToTable("DriveAccountProfiles"); entity.HasKey(c => c.CredentialId); entity.HasIndex(c => c.GoogleSubject).IsUnique();
+            entity.HasOne<CredentialRecord>().WithOne(c => c.DriveAccount).HasForeignKey<DriveAccountProfileRecord>(c => c.CredentialId).OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<AgentCredentialBindingRecord>(entity =>
         {
             entity.ToTable("AgentCredentialBindings"); entity.HasKey(b => b.BindingId);

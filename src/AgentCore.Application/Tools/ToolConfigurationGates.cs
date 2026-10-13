@@ -3,7 +3,8 @@ namespace AgentCore.Application.Tools;
 public static class ToolConfigurationGates
 {
     public static IToolConfigurationGate Unconfigured { get; } = new DelegatingToolConfigurationGate(toolName =>
-        toolName != ToolCatalog.WebSearch
+        !toolName.StartsWith("drive.", StringComparison.Ordinal)
+        && toolName != ToolCatalog.WebSearch
         && toolName is not (
             ToolCatalog.EmailSearch
             or ToolCatalog.EmailRead

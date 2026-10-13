@@ -7,6 +7,7 @@ const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:50
 export default defineConfig({
   appType: "spa",
   plugins: [react()],
+  worker: { format: "es" },
   server: {
     port: Number(process.env.VITE_DEV_PORT ?? 5173),
     proxy: {

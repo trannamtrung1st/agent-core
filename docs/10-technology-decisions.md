@@ -433,3 +433,43 @@ Gmail uses Authorization Code + PKCE S256, offline access and server-side Google
 ## Decision: account-owned Email monitoring
 
 Use one watch per Credential and one central API worker, Gmail History and Custom read-only IMAP UIDs, with an additive SQLite table and InMemory parity. Reuse the Core Event outbox transaction and existing Automations; introduce no Pub/Sub, webhook bridge, queue or polling in the one-second TriggerScheduler. Owner enablement is explicit and starts from now. Watch settings do not change Credential revisions. Current account, binding, Instance and Definition authority remain independent from event discovery and send approval.
+
+
+## Office productivity, preview and Drive decisions
+
+Open XML SDK 3.5.1 and ClosedXML 0.105.1 produce real OOXML in Infrastructure. ClosedXML.Parser 2.0.0, ExcelNumberFormat 1.1.0, RBush.Signed 4.0.0 and System.IO.Packaging 10.0.2 use MIT; the pinned SixLabors.Fonts 1.0.0 package uses Apache-2.0 (not the license of newer Fonts releases). Keep these exact versions and review license terms before upgrades. No paid document service or conversion middleware is used.
+
+Papa Parse 5.7.0 keeps CSV typing disabled. Shiki 4.5.0 uses a JavaScript regex engine and imports only javascript/typescript/jsx/tsx/json/yaml/toml/xml/csharp/python/sql/css and github-dark; themes/grammar copyright notices remain required beyond the Shiki MIT wrapper. Its release pins tm-grammars 1.32.22 / tm-themes 1.12.12. Retain selected upstream MIT/TextMate permissive terms in [shipped notices](../web/public/notices/shiki-grammars-themes.txt). No other grammar is imported. docx-preview 0.4.1 uses Apache-2.0, DOMPurify 3.4.17 chooses its Apache-2.0 option, JSZip 3.10.2 chooses MIT, and pako 1.0.11 retains MIT/Zlib terms. [Frontend notices](../web/public/notices/office-preview-frontend.txt) and [backend notices](../src/AgentCore.Infrastructure/Notices/office-dependencies.txt) ship with their respective build outputs.
+
+Drive uses official direct REST, a separate Google Drive Account purpose/profile/grant/cookie/callback and only openid/email + drive.file. Stateless PKCE/identity proof primitives can be shared with Gmail; account authorization is never shared. Existing owner grants, tool policy, Session execution and key ring remain authoritative. Persistent generated-ID receipts are required before creates; uncertain completion only reconciles the known ID. Use resumable upload, no overwrite/conversion. Remote rename/move/trash preconditions are best effort, with exact approval and no atomic remote-write claim.
+
+Ant Design v6 remains the only generic UI. PDF, LibreOffice, PowerPoint, legacy Office, macros, WYSIWYG editing, native Google editing/export, Shared Drives, Picker, broad Drive scopes, sync/watchers and paid middleware remain deferred. [The plan](18-implementation-plan.md#office-file-preview-and-drive-successor) owns exact-final-source acceptance.
+
+Exact new frontend production package inventory:
+
+| Package | Version | License expression |
+|---|---|---|
+| @shikijs/core | 4.5.0 | MIT |
+| @shikijs/engine-javascript | 4.5.0 | MIT |
+| @shikijs/engine-oniguruma | 4.5.0 | MIT |
+| @shikijs/langs | 4.5.0 | MIT |
+| @shikijs/primitive | 4.5.0 | MIT |
+| @shikijs/themes | 4.5.0 | MIT |
+| @shikijs/types | 4.5.0 | MIT |
+| @shikijs/vscode-textmate | 10.0.2 | MIT |
+| docx-preview | 0.4.1 | Apache-2.0 |
+| dompurify | 3.4.17 | (MPL-2.0 OR Apache-2.0) |
+| immediate | 3.0.6 | MIT |
+| jszip | 3.10.2 | (MIT OR GPL-3.0-or-later) |
+| lie | 3.3.0 | MIT |
+| oniguruma-parser | 0.12.2 | MIT |
+| oniguruma-to-es | 4.3.6 | MIT |
+| pako | 1.0.11 | (MIT AND Zlib) |
+| papaparse | 5.7.0 | MIT |
+| regex | 6.1.0 | MIT |
+| regex-recursion | 6.0.2 | MIT |
+| regex-utilities | 2.3.0 | MIT |
+| saxes | 6.0.0 | ISC |
+| setimmediate | 1.0.5 | MIT |
+| shiki | 4.5.0 | MIT |
+| xmlchars | 2.2.0 | MIT |

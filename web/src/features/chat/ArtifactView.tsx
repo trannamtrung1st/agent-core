@@ -1,7 +1,10 @@
+import { SaveToDriveButton } from '../filePreview/SaveToDriveButton';
 import { useEffect, useRef, useState } from "react";
 import { Button, Typography } from "antd";
 import { DownloadOutlined, FileOutlined } from "@ant-design/icons";
 import { artifactKind, artifactSize, downloadArtifact, getArtifact, type ArtifactMetadata } from "../../services/artifacts";
+
+import { FilePreviewButton } from "../filePreview/FilePreview";
 
 export function ArtifactView({ sessionId, artifactId }: { sessionId: string | null; artifactId: string }) {
   const [file, setFile] = useState<ArtifactMetadata | null>(null);
@@ -62,10 +65,14 @@ export function ArtifactView({ sessionId, artifactId }: { sessionId: string | nu
           {metadataFailed ? "File unavailable" : "Preparing file…"}
         </Typography.Text>}
       </div>
+      <div className="artifact-actions">
+      {file && sessionId ? <FilePreviewButton file={{ kind: "artifact", sessionId, artifactId }} label={`Preview ${file.displayName}`} /> : null}
+      {file && sessionId ? <SaveToDriveButton file={{ kind: "artifact", sessionId, artifactId }} displayName={file.displayName} /> : null}
       {file ? <Button type="text" icon={<DownloadOutlined />} loading={downloading} disabled={downloading}
         aria-label={`${downloadFailed ? "Retry download" : "Download"} ${file.displayName}`} onClick={() => void startDownload()}>
         {downloading ? "Downloading…" : downloadFailed ? "Retry" : "Download"}
       </Button> : metadataFailed && sessionId ? <Button type="text" aria-label="Retry file" onClick={() => setAttempt(value => value + 1)}>Retry</Button> : null}
+      </div>
     </div>
   );
 }

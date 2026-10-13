@@ -84,3 +84,10 @@ Domain/Triggers/AutomationDestination.cs owns validated execution/delivery value
 ## Admin workspace composition
 
 `web/src/features/admin/AdminApp.tsx` composes page-scoped reads and the unified `AdminShell`. `adminNavigation.ts` owns typed destinations/search metadata; `app/appRoute.ts` owns parsing, legacy replacement and guarded history. `AdminGlobalPages`, `DefinitionDetail`, `DefinitionDraftWorkspace`, `InstanceDetail`, `InstanceProfile`, `InstanceOverview` and `EffectiveConfigView` separate inventory, owner lifecycle, singular candidate state and read-only inspection. `adminPresentation` contains shared presentation helpers; `AdminRecordSummaries` retains immutable resources and identity summaries. Existing feature editors/API services retain command ownership. `/docs/13` owns behavior and `.agents/context/DESIGN.md` owns presentation.
+
+
+## Office and file preview modules
+
+Application/Ports/Office.cs owns processor records; Application/Office owns closed schemas; SessionToolExecutor.Office.cs extends the existing executor. Infrastructure/Office contains package guards and vendor adapters. Application/Drive and Ports/Drive*.cs own authorization, effects, receipts and safe provider contracts. Infrastructure/Drive owns direct REST/OAuth and Synthetic adapters; Infrastructure/Credentials/GoogleOAuthProof.cs shares stateless identity/PKCE primitives with Gmail, without sharing account authorization. Persistence/DriveRecords and DriveStore adapters use the existing DbContext and one additive migration.
+
+web/src/features/filePreview owns the shared dialog, source adapters, limits, renderers and cancellable workers. Chat/Admin source actions consume it. Admin's DriveAccountDialog, DriveConnectionPanel and DriveFiles extend existing Credentials pages; services/drive.ts owns protected requests. App CSS owns preview sizing/overflow; AntD tokens own presentation. web/public/notices and Infrastructure/Notices retain exact dependency notices. No project or second UI kit is added.

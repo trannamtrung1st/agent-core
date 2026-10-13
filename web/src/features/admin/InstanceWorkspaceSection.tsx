@@ -1,3 +1,4 @@
+import { SaveToDriveButton } from '../filePreview/SaveToDriveButton';
 import { DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { AdminErrorNotice } from "./adminFailure";
@@ -9,6 +10,8 @@ import { deleteAgentWorkspaceItem, downloadAgentWorkspaceItem, listAgentWorkspac
 import { artifactKind, artifactSize } from "../../services/artifacts";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
+
+import { FilePreviewButton } from "../filePreview/FilePreview";
 
 export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId: string; archived: boolean }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
@@ -70,7 +73,9 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
             { title: "Size", dataIndex: "byteSize", align: "right", width: 90, render: artifactSize },
             { title: "Updated", dataIndex: "updatedAt", width: 165, render: (value: string) => <time dateTime={value}>{new Date(value).toLocaleString()}</time> },
             { title: "Source", dataIndex: "sourceSessionId", ellipsis: true, width: 140, render: (value: string | null) => value ? <span title={`Conversation ${value}`}>Conversation {value}</span> : "—" },
-            { title: "Actions", width: 112, render: (_, item) => <Flex className="admin-table-actions" gap={token.paddingXS}>
+            { title: "Actions", width: 208, render: (_, item) => <Flex className="admin-table-actions" gap={token.paddingXS}>
+              {!item.directory && <FilePreviewButton iconOnly file={{ kind: "home", instanceId, itemId: item.itemId, metadata: { displayName: item.logicalPath.split("/").pop()!, contentType: item.contentType, byteSize: item.byteSize, sha256: item.sha256Hex } }} />}
+              {!archived && !item.directory && <SaveToDriveButton iconOnly displayName={item.logicalPath} file={{ kind: 'home', instanceId, itemId: item.itemId, metadata: { displayName: item.logicalPath.split('/').pop()!, contentType: item.contentType, byteSize: item.byteSize, sha256: item.sha256Hex } }} />}
               <Tooltip title="Download"><Button icon={<DownloadOutlined aria-hidden />} aria-label={`Download ${item.logicalPath}`} disabled={!!busy || item.directory} onClick={() => void save(item)} /></Tooltip>
               <Tooltip title="Delete"><Button icon={<DeleteOutlined aria-hidden />} danger aria-label={`Delete ${item.logicalPath}`} disabled={archived || !!busy || loading} onClick={() => confirmAction(modal, {
                 title: item.directory ? "Delete empty folder?" : "Delete workspace file?", content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,

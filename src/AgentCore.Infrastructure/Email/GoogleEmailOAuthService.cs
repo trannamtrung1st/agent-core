@@ -32,13 +32,12 @@ internal sealed class GoogleEmailIdentityVerifier : IGoogleEmailIdentityVerifier
 {
     public async Task<GoogleEmailIdentity> VerifyAsync(string token, string clientId, string nonce, CancellationToken ct)
     {
-        var identity = await GoogleJsonWebSignature.ValidateAsync(token, new GoogleJsonWebSignature.ValidationSettings { Audience = [clientId] }).WaitAsync(ct);
-        // Only inspect nonce after library signature/issuer/audience/lifetime validation.
-        using var body = JsonDocument.Parse(GmailMime.DecodeBase64Url(token.Split('.')[1]));
-        if (!identity.EmailVerified || string.IsNullOrWhiteSpace(identity.Subject)
-            || !body.RootElement.TryGetProperty("nonce", out var n) || n.GetString() != nonce)
-            throw Failure("email_oauth_identity_mismatch", "Google identity validation failed. Connect again.");
-        return new(identity.Subject, identity.Email);
+        try
+        {
+            var identity = await AgentCore.Infrastructure.Credentials.GoogleOAuthProof.VerifyIdentity(token, clientId, nonce, ct);
+            return new(identity.Subject, identity.Email);
+        }
+        catch (AgentCoreException) { throw Failure("email_oauth_identity_mismatch", "Google identity validation failed. Connect again."); }
     }
     private static AgentCoreException Failure(string code, string message) => new(code, message, 400);
 }

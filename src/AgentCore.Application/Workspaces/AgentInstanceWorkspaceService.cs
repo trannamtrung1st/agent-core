@@ -24,6 +24,9 @@ public sealed class AgentInstanceWorkspaceService(
             return await store.ListAsync(owner, AgentHomePath.Normalize(prefix, false), afterPath is null ? null : AgentHomePath.Normalize(afterPath), limit, ct);
         }, cancellationToken);
 
+    public ValueTask<AgentWorkspaceContent> InspectAsync(Guid owner, Guid itemId, int maxBytes = 0, CancellationToken cancellationToken = default) =>
+        lifecycle.WithInstanceAsync(owner, async ct => { await RequireAsync(owner, false, ct); return await store.InspectAsync(owner, itemId, maxBytes, ct); }, cancellationToken);
+
     public ValueTask<AgentWorkspaceContent> ReadAsync(Guid owner, Guid? itemId = null, string? path = null, CancellationToken cancellationToken = default) =>
         lifecycle.WithInstanceAsync(owner, async ct =>
         {
@@ -67,6 +70,26 @@ public sealed class AgentInstanceWorkspaceService(
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
             return await store.WriteFileAsync(owner, path, contentType, bytes, sessionId, expectedRevision, expectedSha256, ct);
+        }, cancellationToken);
+    }
+
+    public async ValueTask CommitBinaryAsync(Guid sessionId, string path, string contentType, ReadOnlyMemory<byte> bytes,
+        string? expectedSha256, CancellationToken cancellationToken = default)
+    {
+        var snapshot = await SessionAsync(sessionId, true, cancellationToken);
+        var owner = snapshot.AgentInstanceId;
+        path = WorkspaceLogicalPath.Resolve(path, sessionId); ValidateExpected(null, expectedSha256);
+        if (!AgentHomePath.IsHome(path) && !path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal))
+            throw AgentCoreErrors.Forbidden("Binary output requires /home or current Session /working.");
+        await lifecycle.WithInstanceAsync(owner, async ct =>
+        {
+            await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
+            if (AgentHomePath.IsHome(path)) await store.WriteFileAsync(owner, path, contentType, bytes, sessionId, null, expectedSha256, ct);
+            else
+            {
+                await scratch.EnsureAsync(sessionId, snapshot.Definition, ct);
+                await scratch.ImportAsync(sessionId, path, new WorkspaceTransfer([new("", false, contentType, bytes.ToArray())]), null, expectedSha256, ct);
+            }
         }, cancellationToken);
     }
 

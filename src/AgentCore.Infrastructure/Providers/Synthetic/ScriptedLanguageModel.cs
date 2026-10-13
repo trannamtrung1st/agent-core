@@ -145,6 +145,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in structureEvents) yield return item;
             yield break;
         }
+        if (OfficeScript.Generate(request) is { } officeEvents)
+        {
+            foreach (var item in officeEvents) yield return item;
+            yield break;
+        }
         if (AgentWorkspaceScript.Generate(request) is { } workspaceEvents)
         {
             foreach (var item in workspaceEvents) yield return item;

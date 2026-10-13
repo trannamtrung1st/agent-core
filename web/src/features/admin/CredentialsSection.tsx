@@ -1,3 +1,6 @@
+import { DriveAccountDialog } from './DriveAccountDialog';
+import { DriveConnectionPanel } from './DriveConnectionPanel';
+import { DriveFilesButton } from './DriveFiles';
 import { followAppLink } from "../../app/appLink";
 import { EmailConnectionTag, GmailConnectionPanel } from "./GmailConnectionPanel";
 import { EmailMonitoringSection } from "./EmailMonitoringSection";
@@ -52,11 +55,12 @@ function CredentialFields({ create }: { create: boolean }) {
 
 function matchesCredential(credential: SystemCredential, search: string) {
   return [credential.displayName, credential.kind, credential.status,
-    credential.purpose ?? "General", credential.emailAccount?.emailAddress ?? "", credential.emailAccount?.preset ?? "", credential.emailAccount?.connectionStatus ?? "", ...Object.entries(credential.metadata).flat(), ...credential.allowedOrigins]
+    credential.purpose ?? "General", credential.driveAccount?.emailAddress ?? "", credential.driveAccount?.connectionStatus ?? "", credential.emailAccount?.emailAddress ?? "", credential.emailAccount?.preset ?? "", credential.emailAccount?.connectionStatus ?? "", ...Object.entries(credential.metadata).flat(), ...credential.allowedOrigins]
     .join(" ").toLowerCase().includes(search.trim().toLowerCase());
 }
 
 function CredentialPolicySummary({ credential }: { credential: SystemCredential }) {
+  if (credential.driveAccount) return <Flex vertical style={{ minWidth: 0 }}><Typography.Text ellipsis title={credential.driveAccount.emailAddress}>{credential.driveAccount.emailAddress || 'Google Drive Account'}</Typography.Text><Typography.Text type="secondary">{credential.driveAccount.connectionStatus} · app-authorized files{credential.driveAccount.synthetic ? ' · Synthetic' : ''}</Typography.Text></Flex>;
   if (credential.emailAccount) return <Flex vertical style={{ minWidth: 0 }}>
     <Typography.Text ellipsis title={credential.emailAccount.emailAddress}>{credential.emailAccount.emailAddress}</Typography.Text>
     <Typography.Text type="secondary">{credential.emailAccount.preset} · {credential.emailAccount.preset === "Gmail" ? "Google OAuth" : "IMAP/SMTP"}</Typography.Text>
@@ -72,7 +76,7 @@ function CredentialPolicySummary({ credential }: { credential: SystemCredential 
   </Flex>;
 }
 
-function CredentialDetails({ credential, onChanged, instanceId, onMonitoringDirtyChange }: { credential: SystemCredential; onChanged?: () => Promise<void>; instanceId?: string; onMonitoringDirtyChange?: (id: string, dirty: boolean) => void }) {
+function CredentialDetails({ credential, onChanged, instanceId, onMonitoringDirtyChange, accountRef, archived = false }: { credential: SystemCredential; onChanged?: () => Promise<void>; instanceId?: string; accountRef?: string; archived?: boolean; onMonitoringDirtyChange?: (id: string, dirty: boolean) => void }) {
   const reportMonitoringDirty = useCallback((dirty: boolean) => onMonitoringDirtyChange?.(credential.credentialId, dirty), [credential.credentialId, onMonitoringDirtyChange]);
   const detailLayout = useAdminDetailLayout(); const { token } = theme.useToken();
   const [tests, setTests] = useState<Partial<Record<'imap' | 'smtp', EmailConnectionTest>>>({});
@@ -86,7 +90,7 @@ function CredentialDetails({ credential, onChanged, instanceId, onMonitoringDirt
   }
   return <Flex vertical gap={token.padding} className="admin-credential-details" role="region" aria-label={`Details for ${credential.displayName}`} style={{ whiteSpace: "normal", maxInlineSize: `calc(100cqi - ${token.padding * 2}px)` }}>
     <Descriptions bordered column={1} size="small" {...detailLayout} items={[
-      { key: "kind", label: "Kind / purpose", children: `${credential.kind} · ${credential.purpose === 'EmailAccount' ? 'Email account' : 'General'}` },
+      { key: "kind", label: "Kind / purpose", children: `${credential.kind} · ${credential.purpose === 'GoogleDriveAccount' ? 'Google Drive Account' : credential.purpose === 'EmailAccount' ? 'Email account' : 'General'}` },
       ...(credential.emailAccount?.preset === "Custom" ? [
         { key: 'sender', label: 'Sender', children: credential.emailAccount.emailAddress },
         { key: 'incoming', label: 'Incoming', children: `${credential.emailAccount.imapEndpoint!.host}:${credential.emailAccount.imapEndpoint!.port} · ${credential.emailAccount.imapEndpoint!.tlsMode}` },
@@ -97,6 +101,7 @@ function CredentialDetails({ credential, onChanged, instanceId, onMonitoringDirt
       { key: "origins", label: "Allowed origins", children: credential.allowedOrigins.length
         ? <Flex vertical>{credential.allowedOrigins.map(origin => <Typography.Text key={origin}>{origin}</Typography.Text>)}</Flex> : "None configured" }
     ]} />
+    {credential.driveAccount && <><DriveConnectionPanel account={credential} onChanged={onChanged} />{instanceId && accountRef && <DriveFilesButton instanceId={instanceId} accountRef={accountRef} disabled={archived || credential.status !== 'Active' || credential.driveAccount.connectionStatus !== 'Connected'} />}</>}
     {credential.emailAccount?.preset === "Gmail" && <GmailConnectionPanel account={credential} onChanged={onChanged} instanceId={instanceId} />}
     {credential.emailAccount?.preset === "Custom" && <Flex vertical gap={token.paddingXS}>
       <Typography.Text type="secondary">Connection tests authenticate without sending mail. A configured account has not been tested.</Typography.Text>
@@ -121,6 +126,7 @@ export function CredentialsSection() {
   const { token } = theme.useToken(); const { modal, message } = App.useApp();
   const menuOpener = useRef<HTMLElement | null>(null); const credentialOpener = useRef<HTMLElement | null>(null); const createOpener = useRef<HTMLButtonElement | null>(null);
   const emailTrigger = useRef<HTMLElement | null>(null); const emailTriggerAccount = useRef<string | undefined>(undefined); const addEmailTrigger = useRef<HTMLButtonElement | null>(null);
+  const [driveDialog, setDriveDialog] = useState<{ account?: SystemCredential }>();
   const [emailDialog, setEmailDialog] = useState<{ account?: SystemCredential }>();
   const [statusFilter, setStatusFilter] = useState("All");
   const [items, setItems] = useState<SystemCredential[]>([]); const [loading, setLoading] = useState(true); const [loaded, setLoaded] = useState(false);
@@ -158,6 +164,8 @@ export function CredentialsSection() {
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('emailAccount');
     const account = items.find(c => c.credentialId === id && c.emailAccount?.preset === 'Gmail');
+    const driveId = new URLSearchParams(window.location.search).get('driveAccount');
+    if (loaded && items.some(c => c.credentialId === driveId && c.driveAccount)) { setExpanded([driveId!]); const params = new URLSearchParams(window.location.search); params.delete('driveAccount'); window.history.replaceState(window.history.state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}${window.location.hash}`); }
     if (loaded && account) { setEmailDialog({ account }); const params = new URLSearchParams(window.location.search); params.delete('emailAccount');
       window.history.replaceState(window.history.state, '', `${window.location.pathname}${params.size ? `?${params}` : ''}${window.location.hash}`); }
   }, [items, loaded]);
@@ -168,7 +176,7 @@ export function CredentialsSection() {
   }
   return <AgentConfigurationPanel title="System credentials" label="System credentials"
     description="Reusable protected values. Agents receive access through explicit bindings; bindings do not grant tools."
-    extra={<Flex gap={token.paddingXS} wrap><Button disabled={busy || loading || !loaded} ref={addEmailTrigger} onClick={event => openEmail(undefined, event.currentTarget)}>Add email account</Button><Button type="primary" ref={createOpener} disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button></Flex>} bodyGap="default">
+    extra={<Flex gap={token.paddingXS} wrap><Button disabled={busy || loading || !loaded} onClick={() => setDriveDialog({})}>Add Google Drive Account</Button><Button disabled={busy || loading || !loaded} ref={addEmailTrigger} onClick={event => openEmail(undefined, event.currentTarget)}>Add email account</Button><Button type="primary" ref={createOpener} disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button></Flex>} bodyGap="default">
     {error && <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void load()}>Retry</Button>} />}
     {!loaded && loading ? <Spin aria-label="Loading credentials" /> : loaded && <>
       <AdminCollectionToolbar label="credentials" value={search} onChange={setSearch} filters={<Select aria-label="Credential status filter" value={statusFilter} onChange={value => { setStatusFilter(value); setSearch(search); }} options={[{ value: "All", label: "All statuses" }, { value: "Active", label: "Active" }, { value: "Disabled", label: "Disabled" }]} />} />
@@ -177,21 +185,22 @@ export function CredentialsSection() {
         dataSource={items.filter(c => (statusFilter === "All" || c.status === statusFilter) && matchesCredential(c, search))}
         expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, c) => setExpanded(open ? [c.credentialId] : []), expandedRowRender: c => <CredentialDetails credential={c} onChanged={load} /> }}
         columns={[
-          { title: "Credential", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a, b) => a.displayName.localeCompare(b.displayName), render: (name, c) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={name}>{name}</Typography.Text><Typography.Text type="secondary">{c.kind} · {c.purpose === "EmailAccount" ? "Email account" : "General"}</Typography.Text></Flex> },
+          { title: "Credential", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a, b) => a.displayName.localeCompare(b.displayName), render: (name, c) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={name}>{name}</Typography.Text><Typography.Text type="secondary">{c.kind} · {c.purpose === "GoogleDriveAccount" ? "Google Drive Account" : c.purpose === "EmailAccount" ? "Email account" : "General"}</Typography.Text></Flex> },
           { title: "Status", dataIndex: "status", width: 180, render: (s, c) => <Flex vertical align="start" gap={token.paddingXS}><Tag>{s}</Tag>{c.emailAccount && <EmailConnectionTag account={c} />}</Flex> },
           { title: "Metadata & origins", width: 280, render: (_, c) => <CredentialPolicySummary credential={c} /> },
           { title: "Bindings", dataIndex: "bindingCount", width: 80, align: "right" },
           { title: "Updated", width: 180, render: (_, c) => <time dateTime={c.updatedAtUtc}>{new Date(c.updatedAtUtc).toLocaleString()}</time> },
           { title: "Actions", width: 112, render: (_, c) => <Flex className="admin-table-actions" gap={token.paddingXS}>
-            <Tooltip title="Edit"><Button icon={<EditOutlined aria-hidden />} aria-label="Edit" data-email-account-trigger={c.credentialId} disabled={busy} onClick={event => c.purpose === "EmailAccount" ? openEmail(c, event.currentTarget) : open("edit", c)} /></Tooltip>
-            <Dropdown trigger={['click']} menu={{ items: [ ...(c.emailAccount?.preset !== 'Gmail' ? [{ key: 'replace', label: 'Replace value', icon: <KeyOutlined aria-hidden />, disabled: busy }] : []), { key: 'delete', label: 'Delete', icon: <DeleteOutlined aria-hidden />, danger: true, disabled: busy || c.bindingCount > 0 } ], onClick: ({ key }) => {
+            <Tooltip title="Edit"><Button icon={<EditOutlined aria-hidden />} aria-label="Edit" data-email-account-trigger={c.credentialId} disabled={busy} onClick={event => c.purpose === "GoogleDriveAccount" ? setDriveDialog({ account: c }) : c.purpose === "EmailAccount" ? openEmail(c, event.currentTarget) : open("edit", c)} /></Tooltip>
+            <Dropdown trigger={['click']} menu={{ items: [ ...(c.purpose !== 'GoogleDriveAccount' && c.emailAccount?.preset !== 'Gmail' ? [{ key: 'replace', label: 'Replace value', icon: <KeyOutlined aria-hidden />, disabled: busy }] : []), { key: 'delete', label: 'Delete', icon: <DeleteOutlined aria-hidden />, danger: true, disabled: busy || c.bindingCount > 0 } ], onClick: ({ key }) => {
               if (key === 'replace') open('replace', c, menuOpener.current ?? undefined); else confirmAction(modal, { title: `Delete ${c.displayName}?`, content: "This permanently removes the credential. Unbind all agents first.", okText: "Delete credential", danger: true, afterClose: () => (menuOpener.current?.isConnected ? menuOpener.current : createOpener.current)?.focus(), onOk: () => remove(c) });
             } }}><Button icon={<MoreOutlined aria-hidden />} aria-label={`More actions for ${c.displayName}`} disabled={busy} onClick={event => { menuOpener.current = event.currentTarget; }} /></Dropdown>
           </Flex> }
         ]} />
     </>}
+    <DriveAccountDialog open={!!driveDialog} account={driveDialog?.account} onClose={() => setDriveDialog(undefined)} onSaved={load} />
     <EmailAccountDialog open={!!emailDialog} account={emailDialog?.account} onClose={() => setEmailDialog(undefined)} onClosed={() => (emailTrigger.current?.isConnected ? emailTrigger.current : emailTriggerAccount.current ? document.querySelector<HTMLButtonElement>(`button[data-email-account-trigger="${emailTriggerAccount.current}"]`) ?? addEmailTrigger.current : addEmailTrigger.current)?.focus()} onSaved={load} />
-    <Modal className="admin-credential-dialog" centered width={dialog?.kind === "replace" ? 520 : 640} open={!!dialog} title={dialog?.kind === "create" ? "Create credential" : dialog?.kind === "replace" ? "Replace protected value" : "Edit credential"}
+    <Modal aria-label={dialog?.kind === "create" ? "Create credential" : dialog?.kind === "replace" ? "Replace protected value" : "Edit credential"} className="admin-credential-dialog" centered width={dialog?.kind === "replace" ? 520 : 640} open={!!dialog} title={dialog?.kind === "create" ? "Create credential" : dialog?.kind === "replace" ? "Replace protected value" : "Edit credential"}
       focusable={{ trap: !!dialog, focusTriggerAfterClose: false }} afterClose={() => (credentialOpener.current?.isConnected ? credentialOpener.current : createOpener.current)?.focus()} onCancel={close} onOk={() => void save().catch(() => {})} confirmLoading={busy} closable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }} okText="Save credential" okButtonProps={{ disabled: busy, "aria-label": "Save credential" }} mask={{ closable: false }} forceRender>
       <Flex vertical gap={token.padding}>
       {dialog?.kind === "replace" && <Flex align="center" gap={token.paddingXS} wrap><Typography.Text strong style={{ overflowWrap: "anywhere" }}>{dialog.item?.displayName}</Typography.Text><Tag>{dialog.item?.kind}</Tag></Flex>}
@@ -235,7 +244,7 @@ export function InstanceCredentialsSection({ instanceId, revision, archived, onU
     <Table<CredentialBinding> aria-label="Credential bindings table" loading={loading} className="admin-collection-table" size="small" rowKey="bindingId" pagination={pagination} scroll={{ x: 920 }}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search.trim() || bindings.length > 0 ? "No matches. Clear search or filters to see all results." : "No credentials bound"} /> }}
       dataSource={bindings.filter(b => b.reference.toLowerCase().includes(search.trim().toLowerCase()) || matchesCredential(b.credential, search))}
-      expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, b) => setExpanded(open ? [b.bindingId] : []), expandedRowRender: b => <CredentialDetails credential={b.credential} onChanged={load} instanceId={instanceId} onMonitoringDirtyChange={reportMonitoringDirty} /> }} columns={[
+      expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, b) => setExpanded(open ? [b.bindingId] : []), expandedRowRender: b => <CredentialDetails credential={b.credential} onChanged={load} instanceId={instanceId} accountRef={b.reference} archived={archived} onMonitoringDirtyChange={reportMonitoringDirty} /> }} columns={[
       { title: "Reference", dataIndex: "reference", width: 180, ellipsis: true, sorter: (a, b) => a.reference.localeCompare(b.reference) },
       { title: "Credential", width: 240, ellipsis: true, render: (_, b) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={b.credential.displayName}>{b.credential.displayName}</Typography.Text><Typography.Text type="secondary">{b.credential.kind} · {b.credential.status}</Typography.Text></Flex> },
       { title: "Metadata & origins", width: 320, render: (_, b) => <CredentialPolicySummary credential={b.credential} /> },

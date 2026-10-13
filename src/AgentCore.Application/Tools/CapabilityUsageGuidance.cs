@@ -22,7 +22,7 @@ public static class CapabilityUsageGuidance
             .Where(t => !projected.Contains(t.Name) && ToolRegistry.Get(t.Name).Discoverable && !ManagementTools.IsManagement(t.Name))
             .Select(t => ToolRegistry.Get(t.Name)).GroupBy(t => t.Category)
             .OrderBy(g => g.Key, StringComparer.Ordinal)
-            .Select(g => g.OrderBy(t => t.Name, StringComparer.Ordinal).ToArray()).ToArray();
+            .Select(g => g.OrderBy(t => t.Name is ToolCatalog.WorkspaceWrite or ToolCatalog.BrowserFillCredential ? 0 : 1).ThenBy(t => t.Name, StringComparer.Ordinal).ToArray()).ToArray();
         if (groups.Length == 0) return string.Empty;
 
         var text = new StringBuilder(CatalogPrefix);

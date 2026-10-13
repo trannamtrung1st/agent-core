@@ -25,6 +25,8 @@ import { RetainedAdminPage } from './RetainedAdminPage';
 import { adminCollectionPagination } from "./AdminCollectionToolbar";
 
 import { formatAdminTimestamp, formatDraftSource } from './adminPresentation';
+import { FilePreviewButton } from "../filePreview/FilePreview";
+
 const RESOURCE_KINDS = ["Knowledge", "Reference", "Template", "StaticAsset", "EvalFixture"] as const;
 
 function knowledgeBackingLabel(identity: string, resourcePath: string) {
@@ -536,7 +538,7 @@ export function DefinitionDraftWorkspace({
                       { title: 'Media type', dataIndex: 'mediaType', width: 240 },
                       { title: 'Size (bytes)', dataIndex: 'byteLength', width: 130, align: 'right', render: (bytes: number) => bytes.toLocaleString() },
                       { title: 'Content hash', dataIndex: 'contentSha256', width: 200, ellipsis: true, render: (hash: string) => <Typography.Text type="secondary" title={hash}>{hash.slice(0, 12)}…</Typography.Text> },
-                      { title: 'Actions', width: 64, render: (_, item) => <Tooltip title="Remove resource"><Button type="text" danger icon={<DeleteOutlined aria-hidden />} aria-label="Remove" disabled={busy || resourcesLoading || !resourcesReady} onClick={() => confirmResourceDeletion([item])} /></Tooltip> }
+                      { title: 'Actions', width: 112, render: (_, item) => <Flex gap={token.paddingXS}><FilePreviewButton iconOnly disabled={busy || resourcesLoading || !resourcesReady || page !== 'resources'} file={{ kind: 'draftResource', draftId: activeDraft.draftId, resourceId: item.resourceId, metadata: { displayName: item.logicalPath.split('/').at(-1)!, contentType: item.mediaType, byteSize: item.byteLength, sha256: item.contentSha256 } }} /><Tooltip title="Remove resource"><Button type="text" danger icon={<DeleteOutlined aria-hidden />} aria-label="Remove" disabled={busy || resourcesLoading || !resourcesReady} onClick={() => confirmResourceDeletion([item])} /></Tooltip></Flex> }
                     ]}
                   />
                 ) : null}

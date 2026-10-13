@@ -7,6 +7,7 @@ public sealed class CredentialRecord
     public string Kind { get; set; } = "";
     public string Purpose { get; set; } = "General";
     public EmailAccountProfileRecord? EmailAccount { get; set; }
+    public DriveAccountProfileRecord? DriveAccount { get; set; }
     public string Status { get; set; } = "";
     public string MetadataJson { get; set; } = "{}";
     public string AllowedOriginsJson { get; set; } = "[]";
@@ -29,6 +30,13 @@ public sealed class AgentCredentialBindingRecord
 }
 
 public sealed class EmailAccountProfileRecord
+{
+    public string CredentialId { get; set; } = "";
+    public string ProfileJson { get; set; } = "{}";
+    public string? GoogleSubject { get; set; }
+}
+
+public sealed class DriveAccountProfileRecord
 {
     public string CredentialId { get; set; } = "";
     public string ProfileJson { get; set; } = "{}";

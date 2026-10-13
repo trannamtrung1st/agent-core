@@ -4,6 +4,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
+export AGENTCORE_DRIVE_ENABLED=true
 export AGENTCORE_COMPOSE_PORT="${AGENTCORE_COMPOSE_PORT:-5080}"
 compose=(docker compose)
 "${compose[@]}" up --build -d
@@ -309,6 +310,23 @@ with open("/tmp/agent-core-gmail-oauth-account.json", "w") as output:
     json.dump({"id": connected["credentialId"], "revision": connected["revision"], "email": connected["emailAccount"]["emailAddress"]}, output)
 print("Synthetic OAuth account connected with safe projection")
 
+# Drive has its own account/grant/correlation, and a durable verified upload receipt.
+_, drive = oauth_request("/api/v2/admin/credentials/google-drive", "POST", {"displayName": "Compose Synthetic Drive"}, owner_headers)
+_, start = oauth_request(f"/api/v2/admin/credentials/{drive['credentialId']}/drive-connect", "POST", {"expectedRevision": drive['revision']}, owner_headers)
+state = urllib.parse.parse_qs(urllib.parse.urlsplit(start["authorizationUrl"]).query)["state"][0]
+oauth_request("/api/v2/integrations/google-drive/oauth/callback?" + urllib.parse.urlencode({"state":state,"code":"synthetic-consent"}))
+_, connected_drive = oauth_request(f"/api/v2/admin/credentials/{drive['credentialId']}", headers=owner_headers)
+assert connected_drive["purpose"] == "GoogleDriveAccount" and connected_drive["driveAccount"]["connectionStatus"] == "Connected"
+_, current_owner = oauth_request(f"/api/v2/admin/instances/{v2_owner}/effective-config", headers=owner_headers)
+_, drive_binding = oauth_request(f"/api/v2/admin/agent-instances/{v2_owner}/credential-bindings", "POST", {"credentialId":drive['credentialId'],"reference":"compose-drive","expectedInstanceRevision":current_owner['instanceRevision']}, owner_headers)
+_, home_page = oauth_request(f"/api/v2/agent-instances/{v2_owner}/workspace", headers=owner_headers)
+source = next(item for item in home_page['items'] if item['logicalPath'] == '/home/binary.dat')
+operation_id = str(uuid.uuid4())
+_, receipt = oauth_request(f"/api/v2/agent-instances/{v2_owner}/workspace/{source['itemId']}/drive-upload", "POST", {"accountRef":"compose-drive","authEpoch":connected_drive['driveAccount']['authEpoch'],"bindingId":drive_binding['bindingId'],"expectedSha256":source['sha256Hex'],"operationId":operation_id,"folderId":"root","name":"compose-binary.dat"}, owner_headers)
+assert receipt['status'] == 'Succeeded' and receipt['synthetic'] is True
+json.dump({"accountId":drive['credentialId'],"revision":connected_drive['revision'],"epoch":connected_drive['driveAccount']['authEpoch'],"instanceId":v2_owner,"operationId":operation_id,"file":receipt['file'],"bindingId":drive_binding['bindingId'],"sourceSha":source['sha256Hex']}, open('/tmp/agent-core-drive-survival.json','w'))
+print('Synthetic Drive separate grant, exact bytes and verified receipt created')
+
 PY
 
 session_id="$(python3 -c 'import json; print(json.load(open("/tmp/agent-core-session.json"))["sessionId"])')"
@@ -603,6 +621,21 @@ with urllib.request.urlopen(req) as response:
     checked = response.read()
 assert json.loads(checked)["status"] == "Connected"
 print("Synthetic OAuth grant and non-sending check survived container recreation")
+
+drive = json.load(open('/tmp/agent-core-drive-survival.json'))
+_, safe_drive = get(f"http://127.0.0.1:{port}/api/v2/admin/credentials/{drive['accountId']}")
+assert json.loads(safe_drive)['driveAccount']['authEpoch'] == drive['epoch']
+assert 'synthetic-drive-refresh' not in safe_drive
+url = f"http://127.0.0.1:{port}/api/v2/agent-instances/{drive['instanceId']}/drive/accounts/compose-drive"
+_, recovered = get(url + '/operations/' + drive['operationId'])
+assert json.loads(recovered)['status'] == 'Succeeded' and json.loads(recovered)['file']['id'] == drive['file']['id']
+content = urllib.request.Request(url + '/files/' + drive['file']['id'] + '/content?' + urllib.parse.urlencode({'expectedVersion':drive['file']['version'],'authEpoch':drive['epoch'],'bindingId':drive['bindingId']}), headers={'X-AgentCore-Owner-Capability':token})
+with urllib.request.urlopen(content) as response:
+    exact = response.read()
+assert exact == bytes([0,255,128,13,10])
+import hashlib
+assert hashlib.sha256(exact).hexdigest() == drive['sourceSha']
+print('Drive grant, binding, remote bytes and same verified operation ID survived recreation')
 
 PY
 

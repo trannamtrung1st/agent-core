@@ -5,13 +5,13 @@ using System.Text.Json;
 namespace AgentCore.Domain.Credentials;
 
 public enum CredentialKind { Password, ApiKey, Token, Certificate, PrivateKey, Generic }
-public enum CredentialPurpose { General, EmailAccount }
+public enum CredentialPurpose { General, EmailAccount, GoogleDriveAccount }
 public enum CredentialStatus { Active, Disabled }
 
 public sealed record Credential(Guid CredentialId, string DisplayName, CredentialKind Kind,
     CredentialStatus Status, IReadOnlyDictionary<string, string> Metadata, IReadOnlyList<string> AllowedOrigins,
     string ProtectedPayload, int ProtectionVersion, long Revision, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc,
-    CredentialPurpose Purpose = CredentialPurpose.General, EmailAccountProfile? EmailAccount = null, long SecretRevision = 0);
+    CredentialPurpose Purpose = CredentialPurpose.General, EmailAccountProfile? EmailAccount = null, long SecretRevision = 0, DriveAccountProfile? DriveAccount = null);
 public sealed record AgentCredentialBinding(Guid BindingId, Guid AgentInstanceId, Guid CredentialId,
     string Reference, long Revision, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
 

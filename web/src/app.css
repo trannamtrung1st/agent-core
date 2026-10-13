@@ -615,9 +615,12 @@ body,
 }
 
 .artifact-card {
+  flex-wrap: wrap;
   width: min(100%, 32rem);
   box-sizing: border-box;
 }
+
+.artifact-actions { display: flex; flex-wrap: wrap; gap: var(--ac-space-compact); width: 100%; }
 
 .artifact-card > .anticon,
 .artifact-card > .ant-btn {
@@ -2797,3 +2800,32 @@ body,
   .admin-header .admin-header-inner { column-gap: var(--ac-space-tight) !important; }
   .admin-header .admin-header-actions { gap: var(--ac-space-tight) !important; }
 }
+
+/* FilePreview owns the shared preview and remote-file browser canvas. */
+.file-preview-modal { max-width: 1440px; }
+.file-preview-shell { height: min(80dvh, 900px); min-width: 0; }
+.file-preview-actions { flex: 0 0 auto; min-width: 0; }
+.file-preview-actions > .ant-typography { flex: 1 1 200px; overflow-wrap: anywhere; }
+.file-preview-content { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.file-preview-code { margin: 0; padding: var(--ac-space-default); overflow: auto; background: var(--ac-color-container); tab-size: 4; }
+.file-preview-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.file-preview-line-number { display: inline-block; width: 5ch; padding-inline-end: 1ch; color: var(--ac-color-text-secondary); user-select: none; }
+.file-preview-grid { min-width: 0; }
+.file-preview-grid .ant-table-cell { vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
+.file-preview-image { overflow: auto; height: min(55vh, 600px); min-height: 120px; max-width: 100%; cursor: grab; touch-action: pan-x pan-y; }
+.file-preview-image:active { cursor: grabbing; }
+.file-preview-image img { display: block; height: auto; margin-inline: auto; }
+.file-preview-media { display: block; width: 100%; max-height: 100%; }
+@media (max-width: 767px) {
+  .ant-modal.file-preview-modal { width: 100vw !important; max-width: 100vw; margin: 0; padding-bottom: 0; }
+  .file-preview-modal .ant-modal-container { height: 100dvh; display: flex; flex-direction: column; border-radius: 0; padding: var(--ac-space-default); }
+  .file-preview-modal .ant-modal-body { flex: 1; min-height: 0; }
+  .file-preview-shell { height: 100%; }
+  .file-preview-actions .ant-btn, .file-preview-content .ant-segmented-item-label { min-height: 40px; }
+}
+.file-preview-code mark { background: var(--ac-color-primary-bg); color: var(--ac-color-text); }
+.history-file-actions { min-width: 0; }
+.history-file-actions .file-chip { max-width: 100%; overflow-wrap: anywhere; }
+.file-preview-word { height: 100%; min-height: 0; }
+.file-preview-word-frame { flex: 1; width: 100%; min-height: 300px; border: 0; }
+.file-preview-cell { width: 100%; height: auto; min-height: 32px; text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; }

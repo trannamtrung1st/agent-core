@@ -7,22 +7,23 @@ import { confirmAction } from '../../app/confirmAction';
 import { AdminCollectionToolbar, useAdminCollectionSearch } from './AdminCollectionToolbar';
 import { useAdminDetailLayout } from './useAdminDetailLayout';
 import { ResourceFilePicker, ResourceImportPreview } from './ResourceImportFields';
-import { isTextualResource, RESOURCE_FILE_HELP, RESOURCE_KINDS, createPreviewItem, resourceBatchLimitProblem, resourceMediaType, resourcePreviewProblem, type ResourcePreviewItem } from './resourcePreview';
+import { RESOURCE_FILE_HELP, RESOURCE_KINDS, createPreviewItem, resourceBatchLimitProblem, resourceMediaType, resourcePreviewProblem, type ResourcePreviewItem } from './resourcePreview';
 import { describeAdminError } from './adminErrors';
 import { listInstanceResources, copyInstanceResource, uploadInstanceResource, toggleInstanceResource, deleteInstanceResource, downloadInstanceResource, readInstanceResourceFile, type InstanceResource, type ResourceCatalog } from '../../services/instanceConfiguration';
 const kinds = [{ value: 1, label: 'Knowledge' }, { value: 2, label: 'Reference' }, { value: 3, label: 'Template' }, { value: 4, label: 'Static asset' }];
+import { FilePreviewButton } from "../filePreview/FilePreview";
+
 type Editor = { resource: InstanceResource | null; logicalPath: string; kind: number; enabled: boolean; file: File | null; items: ResourcePreviewItem[]; readOnly: boolean };
 export function InstanceResourcesSection({ instanceId, archived, active = true, onUpdated, onDirtyChange }: { instanceId: string; archived: boolean; active?: boolean; onDirtyChange?: (dirty: boolean) => void; onUpdated: () => void }) {
   const detailLayout = useAdminDetailLayout(); const { token } = theme.useToken(); const { modal } = App.useApp(); const compact = !Grid.useBreakpoint().md;
   const [selectedResources, setSelectedResources] = useState<React.Key[]>([]);
-  const [preview, setPreview] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<ResourceCatalog | null>(null); const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null); const [editor, setEditor] = useState<Editor | null>(null); const [kind, setKind] = useState<number>();
   useEffect(() => { onDirtyChange?.(!!editor && !editor.readOnly); }, [editor, onDirtyChange]);
   const [progress, setProgress] = useState<string | null>(null);
   const { search, setSearch, pagination } = useAdminCollectionSearch(); const epoch = useRef(0); const owner = useRef(instanceId); owner.current = instanceId;
   const menuOpener = useRef<HTMLElement | null>(null); const createOpener = useRef<HTMLButtonElement | null>(null);
-  const previewEpoch = useRef(0); const opener = useRef<HTMLElement | null>(null); const drawerVisible = useRef(false);
+  const opener = useRef<HTMLElement | null>(null); const drawerVisible = useRef(false);
   useEffect(() => { epoch.current++; setCatalog(null); setSelectedResources([]); setEditor(null); setError(null); setBusy(false); return () => { epoch.current++; }; }, [instanceId]);
   const reload = useCallback(async () => {
     const request = ++epoch.current; setLoading(true); setError(null); setSelectedResources([]); setCatalog(null);
@@ -72,7 +73,6 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
   }
   function open(resource: InstanceResource | null, readOnly = false, trigger?: HTMLElement) {
     opener.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-    previewEpoch.current++; setPreview(null);
     setError(null); setProgress(null);
     setEditor({ resource, logicalPath: resource?.logicalPath ?? '', kind: resource?.kind ?? 1, enabled: resource?.enabled ?? true, file: null, items: [], readOnly });
   }
@@ -157,7 +157,7 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
           </Flex> }
          ]} /></AgentConfigurationPanel>)}
     </>}
-    <Drawer styles={{ body: { padding: token.padding }, footer: { padding: token.padding }, wrapper: { maxWidth: "100vw" } }} title={editor?.readOnly ? 'Resource details' : editor?.resource ? 'Edit Instance resource' : 'Add Instance resources'} open={!!editor && active} size={compact ? '100%' : editor?.resource || editor?.readOnly ? 640 : 880} onClose={() => { if (!busy) { previewEpoch.current++; setEditor(null); } }} afterOpenChange={open => { drawerVisible.current = open; if (!open && opener.current?.isConnected) opener.current.focus(); }} footer={editor && !editor.readOnly ? <Flex vertical gap={token.paddingXS}>
+    <Drawer styles={{ body: { padding: token.padding }, footer: { padding: token.padding }, wrapper: { maxWidth: "100vw" } }} title={editor?.readOnly ? 'Resource details' : editor?.resource ? 'Edit Instance resource' : 'Add Instance resources'} open={!!editor && active} size={compact ? '100%' : editor?.resource || editor?.readOnly ? 640 : 880} onClose={() => { if (!busy) { setEditor(null); } }} afterOpenChange={open => { drawerVisible.current = open; if (!open && opener.current?.isConnected) opener.current.focus(); }} footer={editor && !editor.readOnly ? <Flex vertical gap={token.paddingXS}>
       {progress && <Typography.Text role="status">{progress}</Typography.Text>}
       <Flex wrap gap={token.paddingXS}>
         <Button type="primary" loading={busy} disabled={!ready || (editor.resource ? !!editProblem : importBlocked)} onClick={() => void (editor.resource ? save() : importResources())}>
@@ -215,12 +215,7 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
           </Flex>
         </Form>}
         {editor.readOnly && editor.resource && <>
-          <Button style={{ alignSelf: "flex-start" }} onClick={async () => {
-            const request = epoch.current; const selection = previewEpoch.current; const resource = editor.resource!;
-            try { const file = await readInstanceResourceFile(instanceId, resource); const text = isTextualResource(file.type) ? (await file.text()).slice(0, 12000) : 'Binary content: use Download to inspect the exact bytes.'; if (request === epoch.current && selection === previewEpoch.current && owner.current === instanceId) setPreview(text); }
-            catch (e) { if (request === epoch.current) setError(describeAdminError(e, 'Unable to preview content. Retry.').message); }
-          }}>Preview content</Button>
-          {preview !== null && <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview}</Typography.Paragraph>}
+          <FilePreviewButton disabled={!active} file={{ kind: 'resource', instanceId, resourceKey: editor.resource.key, metadata: { displayName: editor.resource.logicalPath.split('/').at(-1)!, contentType: editor.resource.mediaType, byteSize: editor.resource.byteLength, sha256: editor.resource.contentSha256 } }} />
         </>}
       </Flex>}
     </Drawer>

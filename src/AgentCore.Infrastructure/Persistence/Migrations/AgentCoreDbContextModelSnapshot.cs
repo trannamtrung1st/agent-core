@@ -1289,6 +1289,86 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("Credentials", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.DriveAccountProfileRecord", b =>
+                {
+                    b.Property<string>("CredentialId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GoogleSubject")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProfileJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("CredentialId");
+
+                    b.HasIndex("GoogleSubject")
+                        .IsUnique();
+
+                    b.ToTable("DriveAccountProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.DriveOperationRecord", b =>
+                {
+                    b.Property<string>("OperationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("AuthEpoch")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CredentialId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EffectHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProtectedUploadSession")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tool")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("OperationId");
+
+                    b.HasIndex("CredentialId");
+
+                    b.HasIndex("AgentInstanceId", "CredentialId", "EffectHash")
+                        .IsUnique()
+                        .HasFilter("State IN ('Planned','Dispatched','Indeterminate')");
+
+                    b.ToTable("DriveOperations", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailAccountProfileRecord", b =>
                 {
                     b.Property<string>("CredentialId")
@@ -2039,6 +2119,32 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("StructuredMemories", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SyntheticDriveFileRecord", b =>
+                {
+                    b.Property<string>("CredentialId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Bytes")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("MetadataJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("CredentialId", "FileId");
+
+                    b.ToTable("SyntheticDriveFiles", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.TriggerOccurrenceRecord", b =>
                 {
                     b.Property<string>("OccurrenceId")
@@ -2337,6 +2443,30 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.DriveAccountProfileRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.CredentialRecord", null)
+                        .WithOne("DriveAccount")
+                        .HasForeignKey("AgentCore.Infrastructure.Persistence.DriveAccountProfileRecord", "CredentialId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.DriveOperationRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.CredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CredentialId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailAccountProfileRecord", b =>
                 {
                     b.HasOne("AgentCore.Infrastructure.Persistence.CredentialRecord", null)
@@ -2395,6 +2525,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Navigation("Session");
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SyntheticDriveFileRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.CredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("CredentialId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.TriggerOccurrenceRecord", b =>
                 {
                     b.HasOne("AgentCore.Infrastructure.Persistence.AgentRunRecord", null)
@@ -2420,6 +2559,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.CredentialRecord", b =>
                 {
+                    b.Navigation("DriveAccount");
+
                     b.Navigation("EmailAccount");
                 });
 

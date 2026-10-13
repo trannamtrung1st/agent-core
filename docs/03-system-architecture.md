@@ -392,3 +392,12 @@ Email execution resolves an active System Credential with immutable `EmailAccoun
 ## Account-owned Email monitoring
 
 Approved bounded successor: an independent watch aggregate belongs to each Email Account/Credential. One central API hosted worker scans due watches and uses Infrastructure Gmail History or read-only IMAP UID feeds. Persisted leases, runtime CAS, generations and current authorization fence stale scans. Cursor progress, owner-scoped `email.message.received` Core Event receipts and their existing child subscription snapshots commit in the same transaction; the existing dispatcher and Automation/Session execution path consume them. Monitoring never grants bindings/tools, calls a model, or approves a send. This is a single-host mailbox observer, not a horizontally scaled ingestion service. Implementation gates are tracked in [the plan](18-implementation-plan.md#email-monitoring-follow-up).
+
+
+## Office files and source-owned preview
+
+File preview is a read-only browser composition over the existing owner-protected Attachment, Artifact, Agent Workspace, Resource and explicitly bound Drive routes. A closed `FileRef` identifies one source; no shared file registry, persisted preview copy or model grant is introduced. The shell owns cancellation and temporary Blob URLs.
+
+`IOfficeProcessor` is an Application port for semantic DOCX/XLSX processing. Open XML SDK and ClosedXML remain in Infrastructure. The existing SessionToolExecutor dispatches Office and Drive tools; `AgentInstanceWorkspaceService.CommitBinaryAsync` rechecks Session/Instance lifecycle under existing exclusion and uses existing home/scratch CAS ports. Processed copies commit only after validation.
+
+Drive uses a separate Google Drive Account purpose in the current credential aggregate, independent OAuth grant and explicit Instance alias bindings. `DriveService` resolves live/pinned grants and intersects host/profile/epoch policy. Infrastructure alone resolves protected tokens and direct Google HTTP. Backend operation receipts precede remote dispatch, retain generated IDs and reconcile uncertain creates without another write. Receipts are execution metadata, not a second file or Run authority. Synthetic remote fixtures live in the existing SQLite/InMemory provider. No sync daemon, mailbox, job scheduler, new service or new binary root is introduced.

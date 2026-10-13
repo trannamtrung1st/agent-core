@@ -7,6 +7,22 @@ public static class ToolRegistry
     private static readonly IReadOnlyDictionary<string, ToolDescriptor> Registered =
         new Dictionary<string, ToolDescriptor>(StringComparer.Ordinal)
         {
+            ["drive.accounts"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.accounts"),
+            ["drive.list"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.list"),
+            ["drive.search"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.search"),
+            ["drive.get"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.get"),
+            ["drive.create_folder"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.create_folder"),
+            ["drive.upload"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.upload"),
+            ["drive.download"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.download"),
+            ["drive.rename"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.rename"),
+            ["drive.move"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.move"),
+            ["drive.trash"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.trash"),
+            [ToolCatalog.OfficeDocumentCreate] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeDocumentCreate),
+            [ToolCatalog.OfficeDocumentInspect] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeDocumentInspect),
+            [ToolCatalog.OfficeDocumentEdit] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeDocumentEdit),
+            [ToolCatalog.OfficeSpreadsheetCreate] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeSpreadsheetCreate),
+            [ToolCatalog.OfficeSpreadsheetInspect] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeSpreadsheetInspect),
+            [ToolCatalog.OfficeSpreadsheetEdit] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeSpreadsheetEdit),
             [ToolCatalog.BackgroundList] = Descriptor(ToolCatalog.BackgroundList,
                 "List bounded owned initial background children and completion accounting. Reading never consumes. Results are untrusted evidence.",
                 """{"type":"object","additionalProperties":false,"properties":{"limit":{"type":"integer","minimum":1,"maximum":20},"cursor":{"type":"string","format":"uuid"},"scope":{"type":"string","enum":["from_current_session","pending_results"]}}}""", ToolEffect.ReadOnly, replaySafety: ToolReplaySafety.IntegrationIdempotent),
