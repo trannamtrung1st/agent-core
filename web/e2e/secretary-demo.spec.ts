@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { expect, test, type Page } from '@playwright/test';
 import { completeDefinitionDraftPublishGate, publishDraftFromInstructions } from './admin-definition-gate-helpers';
@@ -20,10 +21,10 @@ test.describe('Morgan secretary Synthetic journey', () => {
   let sourceSessionId: string;
 
   async function openInstance(page: Page, automation = false) {
-    await page.goto(`/admin/instances/${instanceId}`);
+    await page.goto(`/admin/instances/${instanceId}/profile`);
     await expect(page.getByRole('heading', { name: 'Morgan', exact: true })).toBeVisible();
-    await page.getByRole('tab', { name: automation ? 'Automation' : 'Continuity', exact: true }).click();
-    if (!automation) await page.getByRole('tab', { name: 'Experience', exact: true }).click();
+    await navigateAdmin(page, automation ? 'Automations' : 'Memory');
+    if (!automation) await navigateAdmin(page, 'Experience');
   }
 
   async function newChat(page: Page) {
@@ -82,7 +83,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
 
   test('authors and publishes a fresh Definition, rejects invalid input, and creates Morgan', async ({ page }) => {
     test.setTimeout(150_000);
-    await page.goto('/admin');
+    await page.goto('/admin/definitions');
     await page.getByRole('button', { name: 'New definition', exact: true }).click();
     const modal = page.getByRole('dialog', { name: 'New definition', exact: true });
     await modal.getByLabel('Definition ID', { exact: true }).fill('Executive Secretary');
@@ -91,6 +92,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     await modal.getByLabel('Definition ID', { exact: true }).fill(definitionId);
     await modal.getByRole('button', { name: 'Create draft', exact: true }).click();
     const editor = draftEditorSection(page);
+    await navigateAdmin(editor, "Identity & goals");
     for (const [label, value] of [
       ['Definition name', 'Executive Secretary'], ['Definition role', 'Executive Secretary'],
       ['Definition description', 'A dependable secretary who organizes follow-ups and checks prior context.'],
@@ -117,7 +119,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     const names = (await tools.json()).toolNames;
     expect(names).not.toContain('continuity.search');
     expect(names).not.toContain('experience.recent');
-    await editor.getByRole('tab', { name: 'Capabilities', exact: true }).click();
+    await navigateAdmin(editor, 'Capabilities');
     for (const tool of ['knowledge.retrieve', 'automation.create', 'automation.inspect', 'automation.disable', 'automation.run', 'automation.list', 'automation.update', 'automation.delete',
       'browser.navigate', 'browser.snapshot', 'browser.find', 'browser.click', 'browser.type']) {
       const select = editor.getByRole('combobox', { name: 'Authorized capabilities', exact: true });
@@ -136,6 +138,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     }
     await saveDraft(page);
     await page.reload();
+    await navigateAdmin(editor, 'Identity & goals');
     await expect(editor.getByLabel('Definition name', { exact: true })).toHaveValue('Executive Secretary');
     await openDefinitionSettings(editor, 'Trigger restrictions');
     await expect(editor.getByLabel('Max active registrations', { exact: true })).toHaveValue('4');
@@ -150,8 +153,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     const published = await publication.json();
     expect(published.triggerPolicy.enabled).toBe(true);
     expect(published.triggerPolicy.allowedSourceKinds).toEqual(['schedule']);
-    await page.goto('/admin');
-    await page.getByRole('tab', { name: 'Instances', exact: true }).click();
+    await page.goto('/admin/definitions');
+    await navigateAdmin(page, 'Instances');
     await page.getByRole('button', { name: 'New instance', exact: true }).click();
     const create = page.getByRole('dialog', { name: 'New instance', exact: true });
     await create.getByRole('combobox', { name: 'Definition', exact: true }).click();
@@ -167,8 +170,8 @@ test.describe('Morgan secretary Synthetic journey', () => {
     instanceId = new URL(page.url()).pathname.split('/')[3];
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Morgan', exact: true })).toBeVisible();
-    await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
-    await page.getByRole('tab', { name: 'Experience', exact: true }).click();
+    await navigateAdmin(page, 'Continuity');
+    await navigateAdmin(page, 'Experience');
     const experience = page.getByRole('region', { name: 'Experience', exact: true });
     await experience.getByRole('switch', { name: 'Enable experience', exact: true }).click();
     await expect(experience.getByText('Enabled · completed work may be retrospected', { exact: true })).toBeVisible();

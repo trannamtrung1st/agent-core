@@ -1,17 +1,18 @@
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Empty, Flex, Grid, Table, Tag, Tooltip, Typography, theme } from 'antd';
 import { readSkills, writeSkills, skillIdFromName, type DefinitionCandidate } from './definitionCandidate';
 import { SkillDrawer, type SkillDrawerValue } from './SkillDrawer';
 
-export function DefinitionSkillsSection({ candidate, busy, readOnly, onChange }: {
-  candidate: DefinitionCandidate; busy: boolean; readOnly: boolean; onChange: (candidate: DefinitionCandidate) => void;
+export function DefinitionSkillsSection({ candidate, busy, readOnly, onChange, active = true, onDirtyChange }: {
+  active?: boolean; onDirtyChange?: (dirty: boolean) => void; candidate: DefinitionCandidate; busy: boolean; readOnly: boolean; onChange: (candidate: DefinitionCandidate) => void;
 }) {
   const { token } = theme.useToken();
   const skills = readSkills(candidate);
   const compact = !Grid.useBreakpoint().md;
   const [selected, setSelected] = useState<{ index: number | null; details: boolean; value: SkillDrawerValue } | null>(null);
+  useEffect(() => { onDirtyChange?.(!!selected && !selected.details); }, [selected, onDirtyChange]);
   function open(index: number | null, details = false) {
     const skill = index === null ? null : skills[index];
     setSelected({ index, details, value: skill ? { ...skill, enabled: skill.defaultEnabled, capabilities: skill.requiredCapabilities } : {
@@ -56,7 +57,7 @@ export function DefinitionSkillsSection({ candidate, busy, readOnly, onChange }:
             <Tooltip title={compact ? 'Remove' : undefined}><Button icon={compact ? <DeleteOutlined /> : undefined} danger disabled={busy} aria-label={`Remove skill ${skill.index + 1}`} onClick={() => remove(skill.index)}>{compact ? null : 'Remove'}</Button></Tooltip></>}
         </Flex> }
       ]} />
-    <SkillDrawer open={Boolean(selected)} definition value={selected?.value ?? null}
+    <SkillDrawer open={Boolean(selected) && active} definition value={selected?.value ?? null}
       title={selected?.details ? 'Definition Skill details' : selected?.index === null ? 'New Definition Skill' : 'Edit Definition Skill'}
       readOnly={readOnly || selected?.details} busy={busy} contentLabel="Definition Skill content"
       context={selected?.details || readOnly ? 'Reusable procedure for this Definition. Required capabilities do not grant authority.' : 'Save the Skill to this draft, then save the draft before using Test & Publish.'}

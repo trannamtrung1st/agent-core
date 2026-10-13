@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, App, Button, Typography } from "antd";
 import { ResourceFilePicker, ResourceImportPreview } from "./ResourceImportFields";
 import {
@@ -23,6 +23,7 @@ export function ResourceImportPanel({
   existingBytes,
   disabled,
   onBusyChange,
+  onDirtyChange,
   onBound,
   onError
 }: {
@@ -33,11 +34,13 @@ export function ResourceImportPanel({
   existingBytes: number;
   disabled: boolean;
   onBusyChange?: (busy: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onBound: () => Promise<void> | void;
   onError: (message: string | null, diagnosticId?: string | null) => void;
 }) {
   const { message } = App.useApp();
   const [items, setItems] = useState<ResourcePreviewItem[]>([]);
+  useEffect(() => { onDirtyChange?.(items.length > 0); }, [items.length, onDirtyChange]);
   const [binding, setBinding] = useState(false);
   const limitProblem = resourceBatchLimitProblem(items, existingCount, existingBytes);
   const itemProblems = items.map((item) =>

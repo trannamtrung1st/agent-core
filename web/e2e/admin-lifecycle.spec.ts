@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 /**
@@ -154,7 +155,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   await expect(page.getByText("Hello from synthetic.")).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await page.goto(`/admin/instances/${instance.instanceId}`);
+  await page.goto(`/admin/instances/${instance.instanceId}/profile`);
 
   await page.getByLabel("Persona name").fill(personaName);
   await savePersonaAndAwaitPatch(page, instance.instanceId);
@@ -188,9 +189,9 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
     scheduleIntent
   );
 
-  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
-  const memoryAutomation = page.locator(".admin-instance-tabs");
-  await memoryAutomation.getByRole("tab", { name: "Memory" }).click();
+  await navigateAdmin(page, "Continuity");
+  const memoryAutomation = page.locator(".admin-content");
+  await navigateAdmin(memoryAutomation, "Memory");
   await memoryAutomation.getByRole("combobox", { name: "Memory scope" }).click();
   await page.locator(".ant-select-item-option", { hasText: "IdentityUser" }).click();
   await memoryAutomation.getByRole("button", { name: "Load items" }).click();
@@ -201,8 +202,8 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
     timeout: 15_000
   });
 
-  await page.getByRole("tab", { name: "Automation", exact: true }).click();
-  await page.getByRole("tab", { name: "Triggers", exact: true }).click();
+  await navigateAdmin(page, "Automation");
+  await navigateAdmin(page, "Triggers");
   const automations = page.getByRole("region", { name: "Automations", exact: true });
   await automations.getByRole("button", { name: `View automation: ${scheduleIntent}`, exact: true }).click();
   await automations.getByRole("button", { name: "Delete automation", exact: true }).click();
@@ -237,7 +238,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
 
   const historicalAgentRunId = seedCompletedHistoricalAgentRun(instance.instanceId, firstSession.sessionId);
 
-  await page.goto(`/admin/instances/${instance.instanceId}`);
+  await page.goto(`/admin/instances/${instance.instanceId}/profile`);
   await page.getByLabel("Target definition version").click();
   await page.getByText(new RegExp(`v${versionTwo}\\b`)).first().click();
   await page.getByRole("button", { name: `Upgrade to v${versionTwo}` }).click(); await page.getByRole("button", {name:"Adopt version",exact:true}).click();
@@ -253,7 +254,7 @@ test("p7g whole-phase admin lifecycle per frozen contract section 8", async ({ p
   await page.getByRole("dialog").getByRole("button", { name: "Deprecate", exact: true }).click();
   await expect(page.getByText(`Publication v${versionTwo} deprecated.`)).toBeVisible({ timeout: 15_000 });
 
-  await page.goto(`/admin/instances/${instance.instanceId}`);
+  await page.goto(`/admin/instances/${instance.instanceId}/profile`);
   await page.getByRole("button", { name: "Archive instance" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByText("Instance archived.")).toBeVisible({ timeout: 15_000 });

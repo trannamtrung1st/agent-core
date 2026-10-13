@@ -1,16 +1,26 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, type Page, type Locator } from "@playwright/test";
 
 export async function openDefinitionSettings(editor: Locator, section = "Operating instructions") {
-  await editor.getByRole("tab", { name: "Identity & version", exact: true }).click();
-  await editor.locator(".admin-draft-view-switch").getByText("Form", { exact: true }).click();
-  await editor.getByRole("tab", { name: "Settings", exact: true }).click();
+  const page = editor.page();
+  const local = editor.getByRole('tab', { name: 'Settings', exact: true });
+  if (await editor.getAttribute('role') === 'dialog' || await editor.locator('xpath=ancestor::*[@role="dialog"]').count()) {
+    await local.waitFor({ state: 'visible' });
+    await local.click();
+    const header = editor.getByRole('button', { name: section, exact: true });
+    if (await header.getAttribute('aria-expanded') === 'false') await header.click();
+    return;
+  }
+  const owner = section === 'Model defaults' || section === 'Provider preferences' || section === 'Execution budgets' ? 'Models & execution'
+    : section === 'Memory policy' || section === 'Trigger restrictions' || section === 'Agent self-management defaults' || section === 'Advanced / metadata' ? 'Policies' : 'Instructions & behavior';
+  await navigateAdmin(page, owner);
   const header = editor.getByRole("button", { name: section, exact: true });
   if (await header.getAttribute("aria-expanded") === "false") await header.click();
 }
 
 export async function openDefinitionResources(editor: Locator) {
-  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
-  await editor.getByRole("tab", { name: "Resources", exact: true }).click();
+  await navigateAdmin(editor, "Skills & resources");
+  await navigateAdmin(editor, "Resources");
 }
 
 /** Draft list, fork controls, and durable publications (editor closed). */

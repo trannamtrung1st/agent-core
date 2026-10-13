@@ -31,7 +31,7 @@ const supportedTimeZones = [...new Set([localZone, "UTC", ...Intl.supportedValue
 const blank = (): AutomationDraft => ({ executionTarget: { kind: "backgroundSession" }, completionDelivery: { kind: "none" }, expectedRevision: 0, enabled: false, name: "", instructions: "", modelKey: null, reasoningEffort: null,
   triggers: [{ triggerId: crypto.randomUUID(), enabled: true, revision: 1, kind: "schedule", schedule: defaultTiming() }] });
 
-export function InstanceAutomationsSection({ instanceId, onWork, selection, active = true }: { instanceId: string; active?: boolean; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
+export function InstanceAutomationsSection({ instanceId, onWork, selection, active = true, onDirtyChange }: { instanceId: string; active?: boolean; onDirtyChange?: (dirty: boolean) => void; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const screens = Grid.useBreakpoint();
@@ -77,6 +77,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
   const [draft, setDraft] = useState<AutomationDraft>(blank);
   const [editor, setEditor] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  useEffect(() => { onDirtyChange?.(editor !== null); }, [editor, onDirtyChange]);
   const [error, setError] = useState<AdminFailureNotice | null>(null);
   const [resourcesError, setResourcesError] = useState<AdminFailureNotice | null>(null);
   const [catalogReady, setCatalogReady] = useState({ builtin: false, webhook: false });
@@ -230,7 +231,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reload()}>Reload automations</Button>} /> : null}
       {resourcesError ? <Alert type="error" showIcon title={<AdminErrorNotice message={resourcesError.message} diagnosticId={resourcesError.diagnosticId} showDetailsLabel />} action={<Button disabled={busy} onClick={() => void reloadResources()}>Reload Events and models</Button>} /> : null}
       <Flex wrap gap={token.paddingXS}><Button type="primary" ref={newButton} disabled={busy} onClick={() => { editorOpener.current = newButton.current; setEditorError(null); resetDraft(blank()); setEditor("new"); setEditorOpen(true); }}>New automation</Button>
-        <Button disabled={busy} onClick={() => void reload()}>Refresh automations</Button><Button href={adminInstancePath(instanceId, "activity", "runs")} onClick={event => followAppLink(event, () => onWork())}>View runs</Button></Flex>
+        <Button disabled={busy} onClick={() => void reload()}>Refresh automations</Button><Button href={adminInstancePath(instanceId, "runs")} onClick={event => followAppLink(event, () => onWork())}>View runs</Button></Flex>
       <Drawer open={editorOpen && active} title={<Typography.Text strong id={editorTitleId}>{editorTitle}</Typography.Text>} aria-labelledby={editorTitleId}
         size={screens.md ? 640 : "100%"} getContainer={false} rootStyle={{ position: "fixed" }}
         rootClassName="admin-automation-drawer" styles={{ body: { padding: token.padding }, footer: { padding: token.padding } }}
@@ -392,7 +393,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       </Form> : null}
       </Drawer>
       <Drawer open={managingEvents && active} title="Global Events" size={screens.md ? 640 : "100%"} getContainer={false} rootStyle={{ position: "fixed" }}
-        rootClassName="admin-automation-drawer" styles={{ body: { padding: token.padding } }} onClose={() => setManagingEvents(false)}
+        rootClassName="admin-automation-drawer" focusable={{ trap: managingEvents && active, focusTriggerAfterClose: false }} styles={{ body: { padding: token.padding } }} onClose={() => setManagingEvents(false)}
         afterOpenChange={open => { if (!open) (eventOpener.current?.isConnected ? eventOpener.current : nameInput.current?.input)?.focus(); }}>
         <EventsSection embedded instanceId={instanceId} initialSource={viewingSource} onChanged={events => { setSources(events); void reloadResources(); }} onCreated={eventId => { const source: EventSourceReference = { kind: "webhook", eventId }; if (managingTrigger.current) { const triggerId = crypto.randomUUID(); setDraft(current => ({ ...current, triggers: current.triggers.map(t => t.triggerId === managingTrigger.current ? { ...t, triggerId, revision: 1, kind: "event", source } : t) })); setExpandedEvents([triggerId]); managingTrigger.current = triggerId; } else addEvent(source); }} />
       </Drawer>
@@ -428,7 +429,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             { title: "Last run", key: "execution", width: 240,
               filters: [...new Set(review.items.map(item => item.executionStatus ?? "Not yet"))].map(value => ({ text: runStatusLabel(value), value })),
               onFilter: (value, item) => (item.executionStatus ?? "Not yet") === value,
-              render: (_, item) => item.lastAgentRunId ? <Button type="link" size="small" aria-label={`View last run: ${item.name}`} href={`${adminInstancePath(instanceId, "activity", "runs")}?run=${item.lastAgentRunId}`} onClick={event => followAppLink(event, () => onWork(item.lastAgentRunId!))}>{runStatusLabel(item.executionStatus ?? "View run")}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Button> : "Not yet" },
+              render: (_, item) => item.lastAgentRunId ? <Button type="link" size="small" aria-label={`View last run: ${item.name}`} href={`${adminInstancePath(instanceId, "runs")}?run=${item.lastAgentRunId}`} onClick={event => followAppLink(event, () => onWork(item.lastAgentRunId!))}>{runStatusLabel(item.executionStatus ?? "View run")}{item.outcome ? ` · ${runOutcomeLabel(item.outcome)}` : ""}</Button> : "Not yet" },
             { title: "Model", key: "model", width: 180, ellipsis: true, render: (_, item) => item.effectiveModelKey ?? item.modelKey ?? "Unattended default" },
             { title: "Origin", key: "origin", width: 180,
               filters: [{ text: "Chat user request", value: "CurrentUserTurn" }, { text: "Admin owner", value: "AdminOwner" }],
@@ -459,7 +460,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
                   afterClose: () => { if (confirmed) requestAnimationFrame(() => newButton.current?.focus()); }
                 });
               }}>Delete automation</Button>
-              {item.lastAgentRunId ? <Button href={`${adminInstancePath(instanceId, "activity", "runs")}?run=${item.lastAgentRunId}`} onClick={event => followAppLink(event, () => onWork(item.lastAgentRunId!))}>View last run</Button> : null}</Flex>
+              {item.lastAgentRunId ? <Button href={`${adminInstancePath(instanceId, "runs")}?run=${item.lastAgentRunId}`} onClick={event => followAppLink(event, () => onWork(item.lastAgentRunId!))}>View last run</Button> : null}</Flex>
             </Flex>
           }} />
         </> : null}

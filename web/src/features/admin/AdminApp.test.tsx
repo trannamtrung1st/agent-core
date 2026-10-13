@@ -1,8 +1,12 @@
+function expandSection(name: string) {
+  const header = screen.getByRole('button', { name });
+  if (header.getAttribute('aria-expanded') === 'false') fireEvent.click(header);
+}
+import { AdminTestWorkspace as AdminApp } from "../../test/AdminTestWorkspace";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OwnerCapabilityError } from "../../services/api";
 import {
-  AdminApp,
   InstanceManagedControls,
   EffectiveConfigView,
   PublicationResourcesSummary,
@@ -302,7 +306,7 @@ describe("AdminApp", () => {
     ]);
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+      render(<AdminApp route={{ area: "admin", view: "home", collection: "definitions" }} />);
     });
     await waitFor(() => {
       expect(within(screen.getByRole("region", { name: "Definitions" })).getByText("Examiner")).toBeInTheDocument();
@@ -311,8 +315,8 @@ describe("AdminApp", () => {
     const definitionRow = screen.getByRole("link", { name: "Examiner · examiner" }).closest("tr")!;
     expect(within(definitionRow).getAllByText("v1")).toHaveLength(2);
     expect(within(definitionRow).getByText("Published")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
-    expect(within(screen.getByRole("region", { name: "Instances" })).getByText("1 instance")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!);
+    expect(await within(screen.getByRole("region", { name: "Instances" })).findByText("1 instance")).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Instances" })).getByText("v1")).toBeInTheDocument();
     expect(screen.queryByText("Compatibility", { exact: true })).not.toBeInTheDocument();
   });
@@ -337,7 +341,7 @@ describe("AdminApp", () => {
     vi.mocked(listAdminInstances).mockResolvedValue([]);
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+      render(<AdminApp route={{ area: "admin", view: "home", collection: "definitions" }} />);
     });
 
     const definitions = screen.getByRole("region", { name: "Definitions" });
@@ -374,15 +378,16 @@ describe("AdminApp", () => {
     vi.mocked(listAdminInstances).mockResolvedValue([]);
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+      render(<AdminApp route={{ area: "admin", view: "home", collection: "definitions" }} />);
     });
     await waitFor(() => {
       expect(screen.getByText("Draft")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
-    fireEvent.click(screen.getByRole("button", { name: "New instance" }));
+    fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!);
+    await waitFor(() => expect(screen.getByRole("button", { name: "New instance" })).toBeEnabled());
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "New instance" })));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Examiner · examiner")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Examiner · examiner")).toBeInTheDocument();
     expect(within(dialog).queryByText(/aaa-new-agent/)).not.toBeInTheDocument();
     expect(within(dialog).getByText(/v1 · Built-in · Published/)).toBeInTheDocument();
   });
@@ -428,11 +433,11 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
-    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Drafts" }));
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Draft rev 3/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Draft rev 3/ })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: /Draft rev 3/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Draft rev 3/ }));
     await waitFor(() => {
       expect(screen.getByLabelText("Draft editor")).toBeInTheDocument();
     });
@@ -464,13 +469,13 @@ describe("AdminApp", () => {
     vi.mocked(listAdminInstances).mockResolvedValueOnce([]);
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+      render(<AdminApp route={{ area: "admin", view: "home", collection: "definitions" }} />);
     });
     await waitFor(() => {
       expect(within(screen.getByRole("region", { name: "Definitions" })).getByText("Examiner")).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
-    expect(screen.getByText(/Instances unavailable/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!);
+    expect(await screen.findByText(/Instances unavailable/)).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("region", { name: "Instances" })).getByRole("button", { name: "Retry" }));
     await waitFor(() => {
       expect(screen.getByText("No instances yet.")).toBeInTheDocument();
@@ -482,14 +487,14 @@ describe("AdminApp", () => {
     vi.mocked(listAdminInstances).mockResolvedValue([]);
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+      render(<AdminApp route={{ area: "admin", view: "home", collection: "definitions" }} />);
     });
     await waitFor(() => {
       expect(screen.getByText(/Owner capability is missing or invalid/)).toBeInTheDocument();
     });
   });
 
-  it("renders effective configuration with global privacy authoring and other sections read-only", async () => {
+  it("renders read-only effective configuration with a link to the global privacy owner", async () => {
     await act(async () => { render(<EffectiveConfigView config={{ ...sampleEffective, browser: {
       providerId: "subset", displayName: "Test browser", engine: "chromium", enabled: true, ready: false,
       profileMode: "EphemeralSession", policyMode: "Restricted", supportedFeatures: ["Navigate", "Snapshot", "Click"],
@@ -522,9 +527,9 @@ describe("AdminApp", () => {
       expect(within(section as HTMLElement).queryByRole("combobox")).not.toBeInTheDocument();
       expect(within(section as HTMLElement).queryByRole("switch")).not.toBeInTheDocument();
     }
-    const privacy = within(browser).getByRole("region", { name: "Screenshot privacy" });
-    expect(within(privacy).getByLabelText("Saved screenshot privacy mode")).toBeInTheDocument();
-    expect(within(privacy).getByRole("button", { name: "Save screenshot privacy" })).toBeInTheDocument();
+    expect(within(browser).getByRole('link', { name: /Manage global Browser privacy/ })).toHaveAttribute('href', '/admin/platform/browser-privacy');
+    expect(within(browser).queryByRole('region', { name: 'Screenshot privacy' })).not.toBeInTheDocument();
+
   });
 
   it("saves visible instructions before publishing a draft", async () => {
@@ -607,25 +612,21 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
-    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Drafts" }));
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Draft rev 2/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Draft rev 2/ })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: /Draft rev 2/ }));
-    await screen.findByRole("tab", { name: "Settings" });
-    const draftTabs = within(document.querySelector(".admin-draft-tabs > .ant-tabs-nav")! as HTMLElement);
-    const identityTab = draftTabs.getByRole("tab", { name: "Identity & version" });
-    const publishTab = draftTabs.getByRole("tab", { name: "Test & Publish" });
+    fireEvent.click(screen.getByRole("link", { name: /Draft rev 2/ }));
+    await screen.findByRole("link", { name: "Instructions & behavior" });
+    const draftTabs = within(screen.getByRole("navigation", { name: "Admin navigation" }));
+    const identityTab = draftTabs.getByRole("link", { name: "Instructions & behavior" });
+    const publishTab = draftTabs.getByRole("link", { name: "Test & Publish" });
     const actions = within(document.querySelector(".admin-draft-actions")! as HTMLElement);
     const save = actions.getByRole("button", { name: "Save draft" });
     const publish = actions.getByRole("button", { name: "Publish…" });
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "Operating instructions" }));
-    fireEvent.click(screen.getByRole("button", { name: "Provider preferences" }));
-    await waitFor(() => {
-      expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
-      expect(screen.getByRole("combobox", { name: "Language-model provider" })).toBeInTheDocument();
-    });
+    fireEvent.click(screen.getByRole("link", { name: "Instructions & behavior" }));
+    expandSection("Operating instructions");
+    await waitFor(() => expect(screen.getByLabelText("System instructions")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("System instructions"), {
       target: { value: "Visible publish body" }
     });
@@ -732,17 +733,17 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
-    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Drafts" }));
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
-    await screen.findByRole("tab", { name: "Settings" });
-    const draftTabs = within(document.querySelector(".admin-draft-tabs > .ant-tabs-nav")! as HTMLElement);
-    const identityTab = draftTabs.getByRole("tab", { name: "Identity & version" });
-    const resourcesTab = draftTabs.getByRole("tab", { name: "Skills & resources" });
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "Operating instructions" }));
+    fireEvent.click(screen.getByRole("link", { name: /Draft rev 1/ }));
+    await screen.findByRole("link", { name: "Instructions & behavior" });
+    const draftTabs = within(screen.getByRole("navigation", { name: "Admin navigation" }));
+    const identityTab = draftTabs.getByRole("link", { name: "Instructions & behavior" });
+    const resourcesTab = draftTabs.getByRole("link", { name: "Skills" });
+    fireEvent.click(screen.getByRole("link", { name: "Instructions & behavior" }));
+    expandSection("Operating instructions");
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
     });
@@ -750,7 +751,7 @@ describe("AdminApp", () => {
       target: { value: "Unsaved instruction edit" }
     });
     fireEvent.click(resourcesTab);
-    fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
+    fireEvent.click(screen.getByRole("link", { name: "Resources" }));
     const resources = within(document.querySelector('[aria-label="Draft resources"]')! as HTMLElement);
     const remove = await resources.findByRole("button", { name: "Remove" });
     expect(remove).toBeInTheDocument();
@@ -897,16 +898,16 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
-    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Drafts" }));
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Draft rev 1/ }));
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Skills & resources" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Skills" })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Skills & resources" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Resources" }));
+    fireEvent.click(screen.getByRole("link", { name: "Skills" }));
+    fireEvent.click(screen.getByRole("link", { name: "Resources" }));
     await waitFor(() => {
       expect(screen.getByText(/knowledge\/policy\.md/)).toBeInTheDocument();
     });
@@ -965,15 +966,15 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
-    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Drafts" }));
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Draft rev 1/ }));
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Capabilities" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Capabilities" })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Capabilities" }));
+    fireEvent.click(screen.getByRole("link", { name: "Capabilities" }));
     fireEvent.change(screen.getByLabelText("Workspace template id"), {
       target: { value: "examiner-default" }
     });
@@ -1060,9 +1061,9 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
-    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Draft rev 1/ }));
-    fireEvent.click(await screen.findByRole("tab", { name: "Capabilities" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Drafts" }));
+    fireEvent.click(await screen.findByRole("link", { name: /Draft rev 1/ }));
+    fireEvent.click(await screen.findByRole("link", { name: "Capabilities" }));
     expect((await screen.findAllByText("Legacy fallback: knowledge/policy")).length).toBeGreaterThan(0);
     fireEvent.mouseDown(screen.getByLabelText("Knowledge resource 1"));
     const option = await waitFor(() => {
@@ -1133,15 +1134,15 @@ describe("AdminApp", () => {
     await act(async () => {
       render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
     });
-    fireEvent.click(await screen.findByRole("tab", { name: "Drafts" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Drafts" }));
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Draft rev 1/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: /Draft rev 1/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Draft rev 1/ }));
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Capabilities" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Capabilities" })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Capabilities" }));
+    fireEvent.click(screen.getByRole("link", { name: "Capabilities" }));
     await waitFor(() => {
       expect(screen.getByText("Registry unavailable")).toBeInTheDocument();
     });
@@ -1161,7 +1162,7 @@ describe("AdminApp", () => {
     vi.mocked(getAdminEffectiveConfig).mockResolvedValue(sampleEffective);
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+      render(<AdminApp route={{ area: "admin", view: "instance", page: "profile", instanceId }} />);
     });
 
     await waitFor(() => {
@@ -1181,9 +1182,9 @@ describe("AdminApp", () => {
     const delayed = new Promise<AdminEffectiveConfiguration>((yes, no) => { resolve = yes; reject = no; });
     const other = { ...sampleEffective, instanceId: "other-instance", persona: { ...sampleEffective.persona, name: "Beta" } };
     vi.mocked(getAdminEffectiveConfig).mockImplementation(id => id === instanceId ? delayed : Promise.resolve(other));
-    const view = render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+    const view = render(<AdminApp route={{ area: "admin", view: "instance", page: "profile", instanceId }} />);
     await waitFor(() => expect(getAdminEffectiveConfig).toHaveBeenCalledWith(instanceId));
-    view.rerender(<AdminApp route={{ area: "admin", view: "instance", instanceId: other.instanceId }} />);
+    view.rerender(<AdminApp route={{ area: "admin", view: "instance", page: "profile", instanceId: other.instanceId }} />);
     expect(await screen.findByRole("heading", { name: "Beta" })).toBeInTheDocument();
     await act(async () => { if (outcome === "success") resolve(sampleEffective); else reject(new Error("Stale instance error")); });
     expect(screen.getByRole("heading", { name: "Beta" })).toBeInTheDocument();
@@ -1361,7 +1362,7 @@ describe("AdminApp", () => {
     ]);
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+      render(<AdminApp route={{ area: "admin", view: "instance", page: "profile", instanceId }} />);
     });
 
     await waitFor(() => {
@@ -1391,7 +1392,7 @@ describe("AdminApp", () => {
     });
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+      render(<AdminApp route={{ area: "admin", view: "instance", page: "profile", instanceId }} />);
     });
 
     await waitFor(() => {
@@ -1457,10 +1458,11 @@ describe("AdminApp", () => {
     ]);
     vi.mocked(listAdminInstances).mockResolvedValue([]);
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+      render(<AdminApp route={{ area: "admin", view: "home", collection: "definitions" }} />);
     });
-    fireEvent.click(screen.getByRole("tab", { name: "Instances" }));
-    fireEvent.click(await screen.findByRole("button", { name: "New instance" }));
+    fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!);
+    await waitFor(() => expect(screen.getByRole("button", { name: "New instance" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "New instance" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("New instance", { exact: true })).toBeInTheDocument();
     fireEvent.mouseDown(within(dialog).getByLabelText("Published version"));
@@ -1605,7 +1607,7 @@ describe("AdminApp", () => {
     });
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "instance", instanceId }} />);
+      render(<AdminApp route={{ area: "admin", view: "instance", page: "profile", instanceId }} />);
     });
 
     await waitFor(() => {
@@ -1649,7 +1651,7 @@ describe("AdminApp", () => {
     });
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "home" }} />);
+      render(<AdminApp route={{ area: "admin", view: "home", collection: "definitions" }} />);
     });
     fireEvent.click(screen.getByRole("button", { name: "New definition" }));
     expect(screen.getByText("Lowercase letters, digits, and hyphens, up to 64 characters.")).toBeInTheDocument();
@@ -1876,12 +1878,12 @@ describe("AdminApp", () => {
     });
 
     await act(async () => {
-      render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "field-guide" }} />);
+      render(<AdminApp route={{ area: "admin", view: "draft", definitionId: "field-guide", draftId, page: "behavior" }} />);
     });
 
-    await screen.findByRole("tab", { name: "Settings" });
-    fireEvent.click(screen.getByRole("tab", { name: "Settings" }));
-    fireEvent.click(screen.getByRole("button", { name: "Operating instructions" }));
+    await screen.findByRole("link", { name: "Instructions & behavior" });
+    fireEvent.click(screen.getByRole("link", { name: "Instructions & behavior" }));
+    expandSection("Operating instructions");
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toHaveValue("Stored starter instructions");
     });

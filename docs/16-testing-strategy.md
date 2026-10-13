@@ -591,3 +591,21 @@ Browser acceptance exercises Add/connect/check/disconnect/reconnect and the trus
 `ImapSmtpEmailProviderTests` uses a loopback TLS mail server: rejected TLS search produces a safe error with the exact log diagnostic ID; dropped SMTP acceptance remains indeterminate and logs its cause without recipient/body content. `EmailAccountIntegrationTests` injects an unexpected send exception after exact draft approval, checks the durable indeterminate receipt and warning, reopens InMemory/SQLite stores, and proves one provider dispatch only. `PublicWebFetcherTests` and `ProviderTransportDiagnosticsTests` assert public web, model and TTS transport failures retain safe normalized results and exception diagnostics. Provider transport tests compare emitted and logged IDs, including the production model factory using an injected deterministic source; the owned runtime timeout/retry integration checks the terminal history ID against the exact exception log after retries. `GmailEmailProviderTests` covers compatibility HTTP 4xx/5xx outcomes and exception diagnostics for cancellation after dispatch. Default tests remain offline; these fixtures do not prove live account authentication or delivery.
 
 `RuntimeTelemetrySurfaceTests` verifies the recent 1,024-sample stage window across ordinary/diagnostic recording, percentile values after old samples are evicted, and concurrent recording. `TwentyTurnDemoTests` exercises the same statistics through Synthetic text/voice conversations. Local statistics are recent-window observations; lifetime measurement remains owned by the Meter.
+
+
+## Admin information architecture reorganization
+
+Verify against an isolated key-free Synthetic host without resetting operator data. This is a frontend follow-up; previous milestone freezes and P10/P11 status remain unchanged.
+
+| Area | Required observed scenario |
+| --- | --- |
+| Routing | Every registry destination, `/admin` default, exact draft reload, all legacy mappings with query/hash, malformed/deleted owners, Back/Forward and native modified/middle-click |
+| Draft state | Two Instance section edits, navigate/return, Save one only, conflict and committed-save/failed-refresh retry, field/section reset, other-owner departure Stay/Discard, unload, invalid JSON retained/repaired |
+| Authority | Saved/draft/effective sources, next new Run timing, Definition lock, budgets and reasoning order, interactive versus unattended ownership, protected binding independent from grants |
+| Governance | Freeze/unfreeze and reviewed shared promotion; revisioned validation/evaluation/publish, immutable inspection, resource and Skill operations |
+| Operations | Event/Schedule authoring, exact `?automation=` / `?run=` source navigation, Memory/Experience, distinct Session/Run details, archived operation recovery |
+| Privacy | One global Browser editor, Protected/Unmasked/Disabled, confidentiality acknowledgement/cancellation, deployment ceilings, saved/effective revision and restart notice |
+| Conversation | Active Text/Voice → Admin, suspension, exact Return to last chat continuity, fresh-root Chat, Activity return source/filter |
+| Presentation | 1440/1024/768/767/390/320, sidebar and mobile Drawer, keyboard/focus/Escape, long content, empty/read failure, zero document overflow and table-local scroll |
+
+Run route/router and affected component suites, full frontend unit/build and applicable Synthetic browser regressions. Playwright MCP interactions supplement repeatable E2E coverage. Capture one batched Impeccable Operate round and at most one visual confirmation round. Record exact source, commands/counts/actions, screenshots and failures in [the new report](reports/admin-information-architecture-reorganization-verification.md); local success does not imply hosted CI acceptance.

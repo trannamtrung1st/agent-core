@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test, type Page } from '@playwright/test';
 import { isCanceledDraftEvidenceRead } from './admin-definition-gate-helpers';
@@ -19,8 +20,8 @@ test.afterEach(async ({ page }) => {
 });
 
 async function capability(page: import('@playwright/test').Page) {
-  await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: 'Agent inventory' })).toBeVisible();
+  await page.goto('/admin/definitions');
+  await expect(page.getByRole('heading', { name: 'Definitions', level: 2 })).toBeVisible();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('agent-core.owner-capability'))).toEqual(expect.any(String));
   return { 'X-AgentCore-Owner-Capability': (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))! };
 }
@@ -32,8 +33,8 @@ test('Definition CSV upload and selected deletion confirm, cancel and preserve u
   await dialog.getByRole('textbox').fill(`resource-files-${Date.now()}`);
   await dialog.getByRole('button', { name: 'Create draft' }).click();
   const resources = page.locator('section[aria-label="Draft resources"]');
-  await page.getByRole("tab", { name: "Skills & resources", exact: true }).click();
-  await page.getByRole('tab', { name: 'Resources', exact: true }).click();
+  await navigateAdmin(page, "Skills & resources");
+  await navigateAdmin(page, 'Resources');
   await page.getByLabel('Resource logical path', { exact: true }).fill('knowledge/office.docx');
   await resources.locator('section[aria-label="Add draft resource"] input[type="file"]').setInputFiles({ name: 'office.docx', mimeType: '', buffer: Buffer.from('office bytes') });
   await page.getByLabel('Resource kind', { exact: true }).click();
@@ -75,8 +76,8 @@ test('Definition deletion locks stale revisions and recovers after repeated refr
   const bound = await page.request.put(root + '/resources/batch', { headers, data: { expectedRevision: draft.revision, items: ['one.csv', 'two.csv'].map(logicalPath => ({ logicalPath, kind: 'Knowledge', ...stored })) } });
   expect(bound.ok()).toBe(true);
   await page.goto(`/admin/definitions/${draft.definitionId}`);
-  await page.getByRole("tab", { name: "Skills & resources", exact: true }).click();
-  await page.getByRole('tab', { name: 'Resources', exact: true }).click();
+  await navigateAdmin(page, "Skills & resources");
+  await navigateAdmin(page, 'Resources');
   const resources = page.locator('section[aria-label="Draft resources"]');
   await resources.getByRole('checkbox', { name: 'Select resource one.csv', exact: true }).check();
   await page.route(`**${root}`, route => route.request().method() === 'GET'
@@ -155,8 +156,8 @@ test('Definition deletion retains a partial failure notice across the draft refr
   const bound = await page.request.put(root + '/resources/batch', { headers, data: { expectedRevision: draft.revision, items: ['one.csv', 'two.csv'].map(logicalPath => ({ logicalPath, kind: 'Knowledge', ...stored })) } });
   expect(bound.ok()).toBe(true);
   await page.goto(`/admin/definitions/${draft.definitionId}`);
-  await page.getByRole("tab", { name: "Skills & resources", exact: true }).click();
-  await page.getByRole('tab', { name: 'Resources', exact: true }).click();
+  await navigateAdmin(page, "Skills & resources");
+  await navigateAdmin(page, 'Resources');
   const resources = page.locator('section[aria-label="Draft resources"]');
   await resources.getByRole('checkbox', { name: 'Select resource one.csv', exact: true }).check();
   await resources.getByRole('checkbox', { name: 'Select resource two.csv', exact: true }).check();

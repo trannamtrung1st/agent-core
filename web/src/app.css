@@ -2704,3 +2704,44 @@ body,
   color: inherit;
   text-decoration: none;
 }
+
+/* Admin shell owns navigation geometry; panels keep their existing single inset. */
+.admin-layout { height: 100dvh; min-height: 0; }
+.admin-workspace { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.admin-sidebar { flex: 0 0 248px; overflow-y: auto; border-inline-end: 1px solid var(--ac-color-border); background: var(--ac-color-container); }
+.admin-workspace > .admin-content { flex: 1; overflow-y: auto; min-height: 0; }
+.admin-navigation { display: flex; flex-direction: column; gap: var(--ac-space-section); padding: var(--ac-space-default); }
+.admin-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.admin-nav-group-title { padding: var(--ac-space-compact); font-size: var(--ac-font-size-label); }
+.admin-nav-link, .admin-nav-back { padding: var(--ac-space-compact); border-radius: var(--ac-radius-control); color: var(--ac-color-text-secondary); overflow-wrap: anywhere; }
+.admin-nav-link:hover, .admin-nav-back:hover { background: var(--ac-color-fill); color: var(--ac-color-text); }
+.admin-nav-link[aria-current="page"] { background: var(--ac-color-primary-bg); color: var(--ac-color-text); }
+.admin-nav-owner { padding-inline: var(--ac-space-compact); overflow-wrap: anywhere; }
+.admin-breadcrumbs { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.admin-breadcrumbs ol { flex-wrap: wrap; }
+.admin-header-actions { margin-inline-start: auto; }
+.admin-page-heading .ant-typography { margin: 0; }
+.admin-page-heading h2 { font-size: 28px; }
+.admin-page-heading { display: flex; flex-direction: column; gap: var(--ac-space-compact); }
+.admin-search-results { display: flex; flex-direction: column; gap: var(--ac-space-compact); max-height: 55dvh; overflow-y: auto; }
+.admin-search-result { display: flex; flex-direction: column; gap: 2px; padding: var(--ac-space-compact); border-radius: var(--ac-radius-control); color: var(--ac-color-text); }
+.admin-search-result span { color: var(--ac-color-text-secondary); }
+.admin-search-result:hover { background: var(--ac-color-fill); }
+.admin-settings-anchor, .admin-page-heading { scroll-margin-block: var(--ac-space-section); }
+@media (max-width: 767px) {
+  .admin-header-actions { margin-inline-start: 0; }
+  .admin-breadcrumbs { flex-basis: calc(100% - 96px); }
+  .admin-search-label { display: none; }
+  .admin-page-heading h2 { font-size: 24px; }
+}
+@media (max-width: 767px) {
+  .admin-navigation a { min-height: 40px; box-sizing: border-box; }
+}
+.admin-nav-link:focus-visible, .admin-nav-back:focus-visible, .admin-search-result:focus-visible {
+  outline: 2px solid var(--ac-color-focus);
+  outline-offset: -2px;
+}
+@media (max-width: 767px) {
+  .admin-header .ant-btn, .admin-navigation-drawer .ant-drawer-close, .admin-search-modal .ant-modal-close { min-height: 40px; }
+  .admin-header .ant-btn-icon-only, .admin-navigation-drawer .ant-drawer-close, .admin-search-modal .ant-modal-close { min-width: 40px; }
+}

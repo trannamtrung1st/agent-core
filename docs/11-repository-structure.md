@@ -79,3 +79,8 @@ Current execution ownership is `Domain/Conversation` (Activation/AgentRun/origin
 ## Automation destination owners
 
 Domain/Triggers/AutomationDestination.cs owns validated execution/delivery values; Domain/Conversation/AgentRunAdmission.cs owns the explicit output contract. Application/Triggers/AutomationDestinationPolicy.cs owns eligible exact-Session/model validation; Application/Execution/CompletionDeliveryProjection.cs owns truthful receipt projection. Existing intake, stores, SessionRuntime, coordinator and reporter retain their execution responsibilities. web/src/features/chat/AutomationDestination.tsx supplies shared Ant Design destination/report presentation; wire types stay in services/api.ts. No new runner or application service boundary is introduced.
+
+
+## Admin workspace composition
+
+`web/src/features/admin/AdminApp.tsx` composes page-scoped reads and the unified `AdminShell`. `adminNavigation.ts` owns typed destinations/search metadata; `app/appRoute.ts` owns parsing, legacy replacement and guarded history. `AdminGlobalPages`, `DefinitionDetail`, `DefinitionDraftWorkspace`, `InstanceDetail`, `InstanceProfile`, `InstanceOverview` and `EffectiveConfigView` separate inventory, owner lifecycle, singular candidate state and read-only inspection. `adminPresentation` contains shared presentation helpers; `AdminRecordSummaries` retains immutable resources and identity summaries. Existing feature editors/API services retain command ownership. `/docs/13` owns behavior and `.agents/context/DESIGN.md` owns presentation.

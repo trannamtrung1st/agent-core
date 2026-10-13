@@ -23,7 +23,7 @@ function draftOf(view: SelfManagementView): Draft {
       managedAutoApply: view.effective.managedAutoApply ?? [], configurationAssistance: view.effective.builtInSkills?.configurationAssistance ?? true,
       harnessAuthoring: view.effective.builtInSkills?.harnessAuthoring ?? true };
 }
-export function SelfManagementSection({ instanceId, archived, onUpdated }: { instanceId: string; archived: boolean; onUpdated: () => void }) {
+export function SelfManagementSection({ instanceId, archived, onUpdated, onDirtyChange }: { instanceId: string; archived: boolean; onDirtyChange?: (dirty: boolean) => void; onUpdated: () => void }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [view, setView] = useState<SelfManagementView | null>(null); const [draft, setDraft] = useState<Draft>(inherited);
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState<AdminFailureNotice | null>(null);
@@ -54,6 +54,7 @@ export function SelfManagementSection({ instanceId, archived, onUpdated }: { ins
   }
   const effectiveMode = draft.mode ?? view?.definitionDefaults.mode ?? 'Disabled';
   const changed = view && JSON.stringify(draft) !== JSON.stringify(draftOf(view));
+  useEffect(() => { onDirtyChange?.(!!changed); }, [changed, onDirtyChange]);
   const disabled = archived || loading || busy;
   const builtinChoices = [{ value: 'inherit', label: 'Inherit' }, { value: 'enabled', label: 'Enabled' }, { value: 'disabled', label: 'Disabled' }];
   return <AgentConfigurationPanel title="Agent self-management" label="Agent self-management"

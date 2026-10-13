@@ -1,3 +1,5 @@
+import { backToDrafts, backToInventory } from "./support/admin-navigation";
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
@@ -9,8 +11,8 @@ test("Definition tabs keep draft creation compact and return to the draft list",
   await page.goto("/");
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
   await page.goto("/admin/definitions/examiner");
-  await expect(page.getByRole("tab", { name: "Versions", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "Drafts", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Versions", exact: true, level: 2 })).toBeVisible();
+  await navigateAdmin(page, "Drafts");
   await expect(page.getByRole("region", { name: "Definition versions", exact: true })).toBeHidden();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -27,18 +29,19 @@ test("Definition tabs keep draft creation compact and return to the draft list",
       expect(Math.abs(button!.y - select!.y)).toBeLessThan(1);
       expect(Math.abs(button!.x - select!.x - select!.width - 8)).toBeLessThan(1);
     } else {
-      expect(Math.abs(button!.y - select!.y - select!.height - 8)).toBeLessThan(1);
-      expect(Math.abs(button!.x - select!.x)).toBeLessThan(1);
+      const sameRow = Math.abs(button!.y - select!.y) < 1;
+      expect(sameRow ? Math.abs(button!.x - select!.x - select!.width - 8) : Math.abs(button!.y - select!.y - select!.height - 8)).toBeLessThan(1);
+      expect(button!.x + button!.width).toBeLessThanOrEqual(width);
       expect(button!.height).toBeGreaterThanOrEqual(40);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
   }
   await forkBuiltInV1Draft(page);
-  await page.getByRole("button", { name: "Back to drafts", exact: true }).click();
-  await page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true }).getByRole("button", { name: "Discard changes", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Drafts", exact: true })).toHaveAttribute("aria-selected", "true");
+  await backToDrafts(page);
+  await page.getByRole("dialog", { name: "Discard unsaved changes?", exact: true }).getByRole("button", { name: "Discard and leave", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Drafts", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByRole("table", { name: "Definition drafts table", exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "Versions", exact: true }).click();
+  await navigateAdmin(page, "Versions");
   await page.getByRole("button", { name: "View v1 (builtIn)", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Version details", exact: true })).toBeVisible();
 });
@@ -62,12 +65,12 @@ test("Admin collections paginate, sort, filter and recover from an empty search"
       expect(response.ok()).toBeTruthy();
     }
   }
-  await page.goto("/admin");
+  await page.goto("/admin/definitions");
   for (const [sectionName, searchName] of [
     ["Definitions", "Search definitions"], ["Instances", "Search instances"], ["Events", "Search events"]
   ]) {
-    if (sectionName === "Events") await page.getByRole("tab", { name: "Connections", exact: true }).click();
-    await page.getByRole("tab", { name: sectionName, exact: true }).click();
+    if (sectionName === "Events") await navigateAdmin(page, "Connections");
+    await navigateAdmin(page, sectionName);
     const section = page.getByRole("region", { name: sectionName, exact: true });
     await section.getByLabel(searchName).fill(prefix);
     await expect(section.getByText("12 results", { exact: true })).toBeVisible();
@@ -81,7 +84,7 @@ test("Admin collections paginate, sort, filter and recover from an empty search"
     await section.getByLabel(searchName).fill(prefix);
     await expect(section.locator("tbody tr[data-row-key]")).toHaveCount(10);
   }
-  await page.getByRole("tab", { name: "Definitions", exact: true }).click();
+  await navigateAdmin(page, "Definitions");
   const definitions = page.getByRole("region", { name: "Definitions", exact: true });
   await definitions.getByRole("columnheader", { name: "Definition", exact: true }).first().click();
   await expect(definitions.locator("tbody tr[data-row-key]").first()).toContainText(`${prefix}-00`);
@@ -96,8 +99,8 @@ test("Admin collections paginate, sort, filter and recover from an empty search"
   await filter.getByRole("button", { name: "Reset", exact: true }).click();
   await filter.getByRole("button", { name: "OK", exact: true }).click();
   await expect(definitions.locator("tbody tr[data-row-key]")).toHaveCount(10);
-  await page.getByRole("tab", { name: "Connections", exact: true }).click();
-  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  await navigateAdmin(page, "Connections");
+  await navigateAdmin(page, "Events");
   const sources = page.getByRole("region", { name: "Events", exact: true });
   await sources.getByLabel("Search events").fill("");
   await sources.getByRole("button", { name: "filter", exact: true }).click();
@@ -138,11 +141,12 @@ test("Instance navigation ignores a delayed response for the previously opened i
     await route.fulfill({ response });
   });
   try {
-    await page.goto(`/admin/instances/${ids[0]}`);
+    await page.goto(`/admin/instances/${ids[0]}/profile`);
     await intercepted;
-    await page.getByRole("link", { name: /Back to inventory/ }).click();
+    await backToInventory(page);
     await page.getByLabel("Search instances").fill(`${prefix}-Beta`);
     await page.getByRole("link", { name: `${prefix}-Beta · examiner`, exact: true }).click();
+    await navigateAdmin(page, "Profile & version");
     await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue(`${prefix}-Beta`);
     const oldResponse = page.waitForResponse(response => response.url().endsWith(`/instances/${ids[0]}/effective-config`));
     release();
@@ -165,12 +169,14 @@ test("Definition history navigation closes the previous definition's draft edito
     headers: { "X-AgentCore-Owner-Capability": token! }, data: { definitionId }
   });
   expect(response.ok()).toBeTruthy();
+  const draftId = (await response.json()).draftId as string;
   await page.goto("/admin/definitions/examiner");
   await expect(page.getByRole("heading", { name: "Examiner", exact: true })).toBeVisible();
-  await page.evaluate(id => {
-    history.pushState({}, "", `/admin/definitions/${id}`);
-    dispatchEvent(new PopStateEvent("popstate"));
-  }, definitionId);
+  await page.evaluate(async ({ definitionId, draftId }) => {
+    // Use the production navigation boundary, including its indexed native history.
+    const routes = await import('/src/app/appRoute.ts');
+    routes.navigateToAppPath(`/admin/definitions/${definitionId}/drafts/${draftId}/overview`);
+  }, { definitionId, draftId });
   await expect(draftEditorSection(page)).toBeVisible();
   await page.goBack();
   await expect(page.getByRole("heading", { name: "Examiner", exact: true })).toBeVisible();
@@ -202,7 +208,7 @@ test("Lifecycle and version changes preserve unsaved persona edits", async ({ pa
     data: { definitionId, version: 1 } });
   expect(created.ok()).toBeTruthy();
   const { instanceId } = await created.json();
-  await page.goto(`/admin/instances/${instanceId}`);
+  await page.goto(`/admin/instances/${instanceId}/profile`);
   await page.getByLabel("Persona name", { exact: true }).fill("Retained unsaved persona");
   await page.getByLabel("Target definition version", { exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: "v2" }).click();
@@ -231,9 +237,9 @@ test("Behavior updates preserve persona edits through a failed refresh and retry
   });
   expect(response.ok()).toBeTruthy();
   const { instanceId } = await response.json();
-  await page.goto(`/admin/instances/${instanceId}`);
+  await page.goto(`/admin/instances/${instanceId}/profile`);
   await page.getByLabel("Persona name", { exact: true }).fill("Unsaved persona survives");
-  await page.getByRole("tab", { name: "Settings", exact: true }).click();
+  await navigateAdmin(page, "Self-management");
   const management = page.getByRole("region", { name: "Agent self-management", exact: true });
   await management.getByRole("combobox", { name: "Self-management mode", exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: "Assisted" }).click();
@@ -245,11 +251,11 @@ test("Behavior updates preserve persona edits through a failed refresh and retry
   await management.getByRole("button", { name: "Save self-management", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Configuration refresh unavailable" })).toBeVisible();
   await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Unsaved persona survives");
-  await expect(page.locator("[inert] .admin-instance-tabs")).toHaveCount(1);
+  await expect(page.locator("[inert]")).toHaveCount(1);
   await page.unroute(pattern);
   await page.getByRole("button", { name: "Retry", exact: true }).click();
-  await page.getByRole("tab", { name: "Identity & version", exact: true }).click();
-  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await navigateAdmin(page, "Identity & version");
+  await navigateAdmin(page, "Profile");
   await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Unsaved persona survives");
   await page.getByRole("button", { name: "Save persona", exact: true }).click();
   await expect(page.getByText("Persona updated.", { exact: true })).toBeVisible();
@@ -291,7 +297,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await expect(details.getByRole("button", { name: "Save draft", exact: true })).toHaveCount(0);
   expect(await (await page.request.get("/api/v2/admin/definition-drafts", { headers })).json()).toEqual(draftsBefore);
   await page.getByRole("dialog", { name: "Version details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
-  await page.getByRole("link", { name: /Back to inventory/ }).click();
+  await backToInventory(page);
   const definitionId = `polish-version-${Date.now()}`;
   await page.getByRole("button", { name: "New definition", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "New definition", exact: true });
@@ -301,23 +307,23 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await openDefinitionSettings(editor);
   await editor.getByLabel("System instructions", { exact: true }).fill("Follow the published inspection guide.");
   const longGoal = "Inspect the complete published configuration, including long identity values and goals, without truncation on a narrow screen. Keep the version immutable and preserve the current collection context.";
-  await editor.getByRole("tab", { name: "Profile", exact: true }).click();
+  await navigateAdmin(editor, "Profile");
   await editor.getByLabel("Goal 1", { exact: true }).fill(longGoal);
-  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
-  await editor.getByRole("tab", { name: "Resources", exact: true }).click();
+  await navigateAdmin(editor, "Skills & resources");
+  await navigateAdmin(editor, "Resources");
   await expect(editor.getByRole("button", { name: "Save draft", exact: true })).toBeEnabled();
   await editor.getByRole("button", { name: "Save draft", exact: true }).click();
   await expect(page.getByText("Draft saved.", { exact: true })).toBeVisible();
-  await editor.getByRole("tab", { name: "Test & Publish", exact: true }).click();
+  await navigateAdmin(editor, "Test & Publish");
   await expect(editor.getByRole("button", { name: "Publish…", exact: true })).toBeDisabled();
   await completeDefinitionDraftPublishGate(page, editor);
   await editor.getByRole("button", { name: "Publish…", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Publish", exact: true }).click();
   await expect(page.getByText("Published version 1.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Versions", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "Drafts", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Versions", exact: true, level: 2 })).toBeVisible();
+  await navigateAdmin(page, "Drafts");
   await expect(page.getByText("No drafts yet. Fork a catalog version to start.", { exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "Versions", exact: true }).click();
+  await navigateAdmin(page, "Versions");
   const publishedRow = page.getByRole("button", { name: "View v1 (durable)", exact: true }).locator("xpath=ancestor::tr");
   await expect(publishedRow.getByRole("cell")).toHaveCount(7);
   await expect(publishedRow.getByRole("cell").nth(4)).toHaveText("1");
@@ -327,34 +333,36 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await openDefinitionSettings(details);
   await expect(details.getByLabel("System instructions", { exact: true })).toHaveValue("Follow the published inspection guide.");
   await page.setViewportSize({ width: 390, height: 844 });
-  await details.getByRole("tab", { name: "Profile", exact: true }).click();
+  await navigateAdmin(details, "Profile");
   const goal = details.getByLabel("Goal 1", { exact: true });
   await expect(goal).toHaveValue(longGoal);
   await expect.poll(() => goal.evaluate(element => element.clientHeight)).toBeGreaterThan(32);
   await expect.poll(() => goal.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
   await page.getByRole("dialog", { name: "Version details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.getByRole("link", { name: /Back to inventory/ }).click();
-  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
+  await backToInventory(page);
+  await navigateAdmin(page, 'Instances');
   await page.getByRole("button", { name: "New instance", exact: true }).click();
   const instanceDialog = page.getByRole("dialog", { name: "New instance", exact: true });
   await instanceDialog.getByLabel("Definition", { exact: true }).click();
   await instanceDialog.getByRole("combobox", { name: "Definition", exact: true }).fill(definitionId);
   await page.locator(".ant-select-item-option").filter({ hasText: definitionId }).last().click();
   await instanceDialog.getByRole("button", { name: "Create instance", exact: true }).click();
+  await navigateAdmin(page, "Profile & version");
   const persona = page.getByLabel("Persona name", { exact: true });
   await persona.fill("Unsaved inspector");
   for (const name of ["Continuity", "Automation", "Activity", "Credentials", "Effective configuration"]) {
-    await page.getByRole("tab", { name, exact: true }).click();
-    await expect(page.getByRole("tabpanel", { name, exact: true })).toBeVisible();
+    await navigateAdmin(page, name);
   }
-  await page.getByRole("tab", { name: "Identity & version", exact: true }).click();
+  await navigateAdmin(page, "Identity & version");
   await expect(persona).toHaveValue("Unsaved inspector");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-  for (const name of ["Continuity", "Automation", "Activity", "Credentials", "Effective configuration"]) {
-    await expect(page.getByRole("tab", { name, exact: true })).toBeInViewport();
-  }
+  const toggle = page.getByRole('button', { name: 'Open Admin navigation', exact: true });
+  await toggle.click();
+  for (const name of ['Memory', 'Automations', 'Sessions', 'Capabilities & credentials', 'Effective configuration']) await expect(page.getByRole('navigation', { name: 'Admin navigation' }).getByRole('link', { name, exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(toggle).toBeFocused();
   expect(errors).toEqual([]);
   expect(failedRequests).toEqual([]);
 });
@@ -362,7 +370,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
 test("Collection navigation and version drawer preserve context and keyboard focus", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
-  await page.goto("/admin");
+  await page.goto("/admin/definitions");
   const definitions = page.getByRole("region", { name: "Definitions", exact: true });
   await definitions.getByLabel("Search definitions").fill("examiner");
   const row = definitions.getByRole("link", { name: "Examiner · examiner", exact: true });
@@ -372,11 +380,11 @@ test("Collection navigation and version drawer preserve context and keyboard foc
   const cells = await definitionRow.getByRole("cell").all();
   expect((await cells[1].boundingBox())!.x).toBeGreaterThan((await row.boundingBox())!.x);
   const content = await page.locator(".admin-content").boundingBox();
-  expect(content!.width).toBe(page.viewportSize()!.width);
-  await page.getByRole("tab", { name: "Instances", exact: true }).click();
+  expect(content!.width).toBe(page.viewportSize()!.width - 248);
+  await navigateAdmin(page, "Instances");
   await expect(page).toHaveURL(/\/admin\/instances$/);
   await page.goBack();
-  await expect(page.getByRole("tab", { name: "Definitions", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("heading", { name: "Definitions", exact: true, level: 2 })).toBeVisible();
   await expect(definitions.getByLabel("Search definitions")).toHaveValue("examiner");
   await row.click();
   const versions = page.getByRole("region", { name: "Definition versions", exact: true });
@@ -403,12 +411,12 @@ test("Collection navigation and version drawer preserve context and keyboard foc
   await drawer.getByRole("button", { name: "Close", exact: true }).click();
   await expect(trigger).toBeFocused();
   await page.goto("/admin/connections/events");
-  await expect(page.getByRole("tab", { name: "Events", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("heading", { name: "Events", exact: true, level: 2 })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("region", { name: "Events", exact: true })).toBeVisible();
   await page.goto("/admin/instances");
   await page.locator(".admin-collection-name").first().click();
-  await page.getByRole("link", { name: /Back to inventory/ }).click();
+  await backToInventory(page);
   await expect(page).toHaveURL(/\/admin\/instances$/);
-  await expect(page.getByRole("tab", { name: "Instances", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("heading", { name: "Instances", exact: true, level: 2 })).toBeVisible();
 });

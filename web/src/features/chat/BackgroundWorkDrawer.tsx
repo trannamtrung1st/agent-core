@@ -117,7 +117,7 @@ export function BackgroundWorkDrawer({ instanceId, open, wide, onClose, initialS
   }
   function automationLink(item: BackgroundSession) {
     if (!item.origin.automationId) return null;
-    const path = `${adminInstancePath(instanceId, "automation", "automations")}?automation=${encodeURIComponent(item.origin.automationId)}`;
+    const path = `${adminInstancePath(instanceId, "automations")}?automation=${encodeURIComponent(item.origin.automationId)}`;
     return <Typography.Link href={path} onClick={followAppLink}>View Automation</Typography.Link>;
   }
   function chatHref(item: BackgroundSession) {

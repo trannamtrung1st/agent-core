@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test, type Page } from "@playwright/test";
 async function setup(page: Page, definitionId = "examiner", version = 1) {
   await page.goto("/admin/instances");
@@ -53,7 +54,7 @@ test("Activity scopes and pages sessions, preserves multi-turn diagnostics and r
   for (let i = 0; i < 21; i++) await create(page, headers, instanceId, `Empty work ${i}`);
   const path = `/admin/instances/${instanceId}/activity`;
   await page.goto(path);
-  await expect(page.getByRole("tab", { name: "Sessions", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("heading", { name: "Sessions", exact: true, level: 2 })).toBeVisible();
   const table = page.getByRole("table", { name: "Activity sessions table" });
   await expect(table.locator("tbody .admin-collection-name")).toHaveCount(20);
   await expect(table).not.toContainText("Foreign conversation");
@@ -75,18 +76,18 @@ test("Activity scopes and pages sessions, preserves multi-turn diagnostics and r
   await page.getByRole("link", { name: "Back to Activity", exact: true }).click();
   await expect(search).toHaveValue("Oldest");
   await expect(table.getByRole("link", { name: "Oldest conversation", exact: true })).toHaveCount(1);
-  await page.getByRole("tab", { name: "Runs", exact: true }).click();
+  await navigateAdmin(page, "Runs");
   const runs = page.getByRole("table", { name: "Runs table" });
   await expect(runs.getByRole("link", { name: "Chat turn", exact: true })).toHaveCount(2);
   await runs.getByRole("link", { name: "Chat turn", exact: true }).first().click(); await page.reload();
   await expect(page.getByRole("dialog", { name: "Run details", exact: true })).toContainText("Hello from synthetic.");
   await page.keyboard.press("Escape"); await expect(page.getByRole("dialog", { name: "Run details", exact: true })).toBeHidden();
-  await page.goBack(); await expect(page.getByRole("tab", { name: "Runs", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.goBack(); await expect(page.getByRole("heading", { name: "Runs", exact: true, level: 2 })).toBeVisible();
   await page.goto(`/admin/instances/${instanceId}/runs`);
-  await expect(page.getByRole("tab", { name: "Activity", exact: true })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tab", { name: "Runs", exact: true })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Memory", exact: true })).toBeVisible(); await expect(page.getByRole("tab", { name: "Experience", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Runs", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sessions", exact: true })).toBeVisible();
+  await navigateAdmin(page, "Continuity");
+  await expect(page.getByRole("link", { name: "Memory", exact: true })).toBeVisible(); await expect(page.getByRole("link", { name: "Experience", exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 test("Activity preserves the original background result and continues its exact Session", async ({ page }) => {

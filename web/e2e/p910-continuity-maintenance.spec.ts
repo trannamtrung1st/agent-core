@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test, type Page } from '@playwright/test';
 
 test.use({ actionTimeout: 15_000 });
@@ -14,13 +15,13 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
   page.on('console', e => { if (e.type() === 'error' && !e.text().startsWith('Warning: [antd:')) errors.push(e.text()); });
   page.on('requestfailed', r => { if (!r.failure()?.errorText.includes('ERR_ABORTED')) errors.push(r.url()); });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto('/admin');
-  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
+  await page.goto('/admin/definitions');
+  await navigateAdmin(page, 'Instances');
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   await select(page, 'Definition', 'General Assistant · general-assistant');
   await select(page, 'Published version', 'v21 · Built-in · Published');
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
-  await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
+  await navigateAdmin(page, 'Continuity');
   const id = new URL(page.url()).pathname.split('/')[3];
   const token = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': token! };
@@ -29,7 +30,7 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
   await expect(setting).toHaveAttribute('aria-checked', 'false');
   await expect(setting).toBeEnabled(); await setting.click();
   await expect(setting).toHaveAttribute('aria-checked', 'true');
-  await page.getByRole('tab', { name: 'Experience', exact: true }).click();
+  await navigateAdmin(page, 'Experience');
   await page.getByRole('switch', { name: 'Enable experience', exact: true }).click();
   await expect(page.getByText('Enabled · completed work may be retrospected')).toBeVisible();
   const sessions: string[] = [];
@@ -82,9 +83,9 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
   expect((await (await page.request.get(root + '/learned-memory?scope=IdentityUser', { headers })).json()).items).toHaveLength(3);
   expect((await page.request.post(`/api/v2/sessions/${approvalSession}/deactivate`, { headers })).ok()).toBe(true);
 
-  await page.goto(`/admin/instances/${id}`);
-  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Triggers', exact: true }).click();
+  await page.goto(`/admin/instances/${id}/profile`);
+  await navigateAdmin(page, 'Automation');
+  await navigateAdmin(page, 'Triggers');
   const automations = page.getByRole('region', { name: 'Automations', exact: true });
   async function createAndRun(marker: string) {
     await automations.getByRole('button', { name: 'New automation', exact: true }).click();
@@ -108,15 +109,15 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
   await automations.getByRole('link', { name: 'View last run: synthetic-maintain-experience', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Run details', exact: true }).getByText('Response', { exact: true }).first()).toBeVisible();
   await page.getByRole('dialog', { name: 'Run details', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
-  await page.getByRole('tab', { name: 'Memory', exact: true }).click();
+  await navigateAdmin(page, 'Continuity');
+  await navigateAdmin(page, 'Memory');
   await page.getByRole('button', { name: 'Load items', exact: true }).click();
   await expect(page.getByText('Consolidated from 3 memories', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Expand row', exact: true }).click();
   const details = page.getByRole('region', { name: 'Learned memory details', exact: true });
   await details.getByRole('button', { name: 'View sources', exact: true }).click();
   await expect(details.getByText('Superseded', { exact: true })).toHaveCount(3);
-  await page.getByRole('tab', { name: 'Experience', exact: true }).click();
+  await navigateAdmin(page, 'Experience');
   const experiences = page.getByRole('region', { name: 'Experience', exact: true });
   await experiences.getByRole('button', { name: 'View experience: Review repeated observable completed work', exact: true }).click();
   await expect(experiences.getByText('Consolidated from 3 experiences', { exact: true })).toBeVisible();
@@ -126,15 +127,16 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.screenshot({ path: info.outputPath(`p910-${width}.png`), fullPage: true });
   }
+  await navigateAdmin(page, 'Memory');
   await setting.click(); await expect(setting).toHaveAttribute('aria-checked', 'false');
-  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
-  await page.getByRole('tab', { name: 'Triggers', exact: true }).click();
+  await navigateAdmin(page, 'Automation');
+  await navigateAdmin(page, 'Triggers');
   if (!(await automations.getByRole('button', { name: 'Run automation now', exact: true }).isVisible()))
     await automations.getByRole('button', { name: 'View automation: synthetic-maintain-experience', exact: true }).click();
   await automations.getByRole('button', { name: 'Run automation now', exact: true }).click();
   await expect(automations.getByText(/Completed · No action/).first()).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
-  await page.getByRole('tab', { name: 'Memory', exact: true }).click();
+  await navigateAdmin(page, 'Continuity');
+  await navigateAdmin(page, 'Memory');
   const canonical = await (await page.request.get(root + '/learned-memory?scope=IdentityUser', { headers })).json();
   expect(canonical.items).toHaveLength(1);
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
@@ -142,7 +144,7 @@ test('Automation consolidates separately owned Memory and Experience; lineage, o
   await expect(confirm.getByText(/Source conversations and other retained continuity records are not deleted/)).toBeVisible();
   await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(page.getByText('No active learned-memory items in this scope.', { exact: true })).toBeVisible();
-  await page.reload(); await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
+  await page.reload(); await navigateAdmin(page, 'Continuity');
   await expect(setting).toHaveAttribute('aria-checked', 'false');
   await page.getByRole('button', { name: 'Load items', exact: true }).click();
   await expect(page.getByText('No active learned-memory items in this scope.', { exact: true })).toBeVisible();

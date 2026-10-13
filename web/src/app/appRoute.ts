@@ -1,102 +1,103 @@
-export type AppArea = "chat" | "admin";
-export type AdminCollection = "definitions" | "instances" | "events" | "credentials";
-
-export const ADMIN_DEFINITION_TABS = ["versions", "drafts"] as const;
-export type AdminDefinitionTab = (typeof ADMIN_DEFINITION_TABS)[number];
-export const ADMIN_INSTANCE_TABS = ["identity", "skills", "continuity", "automation", "activity", "credentials", "effective"] as const;
-export type AdminInstanceTab = (typeof ADMIN_INSTANCE_TABS)[number];
-export const ADMIN_CONTINUITY_TABS = ["memory", "experience"] as const;
-export const ADMIN_AUTOMATION_TABS = ["automations", "controls"] as const;
-export const ADMIN_IDENTITY_TABS = ["profile", "settings", "workspace"] as const;
-export const ADMIN_SKILL_RESOURCE_TABS = ["skills", "resources"] as const;
-export const ADMIN_ACTIVITY_TABS = ["sessions", "runs"] as const;
-export type AdminInstanceSection = (typeof ADMIN_SKILL_RESOURCE_TABS)[number] | (typeof ADMIN_ACTIVITY_TABS)[number] | (typeof ADMIN_IDENTITY_TABS)[number] | (typeof ADMIN_CONTINUITY_TABS)[number] | (typeof ADMIN_AUTOMATION_TABS)[number];
-
+import { definitionPages, definitionPath, draftPages, draftPath, globalPages, globalPath, instancePages, instancePath, type AdminCollection, type DefinitionPage, type DraftPage, type InstancePage } from '../features/admin/adminNavigation';
+export type { AdminCollection };
+export type AdminDefinitionTab = DefinitionPage;
+// Input compatibility for callers being migrated; parsed routes contain only canonical pages.
+export type AdminInstanceTab = 'identity' | 'skills' | 'continuity' | 'automation' | 'activity' | 'credentials' | 'effective';
+export type AdminInstanceSection = 'profile' | 'settings' | 'workspace' | 'skills' | 'resources' | 'sessions' | 'runs' | 'memory' | 'experience' | 'automations' | 'controls';
+export type AppArea = 'chat' | 'admin';
 export type AdminRoute =
-  | { area: "admin"; view: "home"; collection?: AdminCollection }
-  | { area: "admin"; view: "definition"; definitionId: string; tab?: AdminDefinitionTab }
-  | { area: "admin"; view: "instance"; instanceId: string; tab?: AdminInstanceTab; section?: AdminInstanceSection };
-
-export type AppRoute = { area: "chat" } | AdminRoute;
-
-const ADMIN_HOME = "/admin";
-const ADMIN_DEFINITION_PATTERN = /^\/admin\/definitions\/([^/]+)(?:\/([^/]+))?\/?$/i;
-const ADMIN_INSTANCE_PATTERN = /^\/admin\/instances\/([0-9a-f-]{36})(?:\/([^/]+)(?:\/([^/]+))?)?\/?$/i;
-
+  | { area: 'admin'; view: 'home'; collection?: AdminCollection }
+  | { area: 'admin'; view: 'definition'; definitionId: string; tab?: DefinitionPage }
+  | { area: 'admin'; view: 'draft'; definitionId: string; draftId: string; page: DraftPage }
+  | { area: 'admin'; view: 'instance'; instanceId: string; page: InstancePage }
+  | { area: 'admin'; view: 'not-found' };
+export type AppRoute = { area: 'chat' } | AdminRoute;
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const missing: AdminRoute = { area: 'admin', view: 'not-found' };
+const legacyInstance: Record<string, InstancePage> = {
+  '': 'overview', identity: 'profile', 'identity/profile': 'profile', 'identity/settings': 'behavior',
+  'identity/workspace': 'workspace', 'skills/skills': 'skills', 'skills/resources': 'resources',
+  continuity: 'memory', automation: 'automations', 'automation/automations': 'automations',
+  'automation/controls': 'automations', 'automation/harness': 'self-management', activity: 'sessions',
+  runs: 'runs', credentials: 'access',
+};
 export function parseAppRoute(pathname: string): AppRoute {
-  if (pathname === ADMIN_HOME || pathname === `${ADMIN_HOME}/`) {
-    return { area: "admin", view: "home" };
+  if (!/^\/admin(?:\/|$)/i.test(pathname)) return { area: 'chat' };
+  const path = pathname.replace(/\/$/, '');
+  if (path.toLowerCase() === '/admin') return { area: 'admin', view: 'home', collection: 'instances' };
+  const global = globalPages.find(p => `/admin/${p.path}` === path.toLowerCase());
+  if (global) return { area: 'admin', view: 'home', collection: global.id };
+  if (path.toLowerCase() === '/admin/connections') return { area: 'admin', view: 'home', collection: 'credentials' };
+  const instance = /^\/admin\/instances\/([^/]+)(?:\/(.*))?$/i.exec(path);
+  if (instance) {
+    if (!uuid.test(instance[1])) return missing;
+    const leaf = (instance[2] ?? '').toLowerCase();
+    const page = instancePages.find(p => p.path === leaf)?.id ?? legacyInstance[leaf];
+    return page ? { area: 'admin', view: 'instance', instanceId: instance[1].toLowerCase(), page } : missing;
   }
-  const collectionMatch = /^\/admin\/(definitions|instances)\/?$/i.exec(pathname);
-  if (collectionMatch) {
-    return { area: "admin", view: "home", collection: collectionMatch[1].toLowerCase() as AdminCollection };
+  const definition = /^\/admin\/definitions\/([^/]+)(?:\/(.*))?$/i.exec(path);
+  if (definition) {
+    let id: string;
+    try { id = decodeURIComponent(definition[1]); } catch { return missing; }
+    if (!id || /[\/\\\u0000-\u001f]/.test(id)) return missing;
+    const leaf = definition[2] ?? '';
+    if (!leaf || definitionPages.some(p => p.path === leaf)) return { area: 'admin', view: 'definition', definitionId: id, tab: leaf === 'drafts' ? 'drafts' : 'versions' };
+    const draft = /^drafts\/([^/]+)(?:\/([^/]+))?$/.exec(leaf);
+    if (draft && uuid.test(draft[1])) {
+      const page = draft[2] ?? 'overview';
+      if (draftPages.some(p => p.id === page)) return { area: 'admin', view: 'draft', definitionId: id, draftId: draft[1].toLowerCase(), page: page as DraftPage };
+    }
   }
-
-  const connectionMatch = /^\/admin\/connections(?:\/(credentials|events))?\/?$/i.exec(pathname);
-  if (connectionMatch) return { area: "admin", view: "home", collection: connectionMatch[1] === "events" ? "events" : "credentials" };
-  const definitionMatch = ADMIN_DEFINITION_PATTERN.exec(pathname);
-  if (definitionMatch) {
-    let definitionId: string;
-    try { definitionId = decodeURIComponent(definitionMatch[1]); }
-    catch { return { area: "chat" }; }
-    const tab = definitionMatch[2]?.toLowerCase();
-    return { area: "admin", view: "definition", definitionId,
-      ...(ADMIN_DEFINITION_TABS.includes(tab as AdminDefinitionTab) ? { tab: tab as AdminDefinitionTab } : {}) };
+  return missing;
+}
+export const adminHomePath = globalPath;
+export const adminDefinitionPath = definitionPath;
+export const adminDraftPath = draftPath;
+export function adminInstancePath(id: string, page?: InstancePage | AdminInstanceTab, section?: AdminInstanceSection): string {
+  const leaf = `${page ?? ''}${section ? `/${section}` : ''}`;
+  const canonical = legacyInstance[leaf] ?? instancePages.find(p => p.id === page)?.id;
+  return instancePath(id, canonical ?? (page === 'activity' ? section === 'runs' ? 'runs' : 'sessions' : page === 'continuity' ? section === 'experience' ? 'experience' : 'memory' : 'overview'));
+}
+export function adminRoutePath(route: AdminRoute): string | null {
+  if (route.view === 'home') return globalPath(route.collection);
+  if (route.view === 'instance') return instancePath(route.instanceId, route.page);
+  if (route.view === 'definition') return definitionPath(route.definitionId, route.tab);
+  if (route.view === 'draft') return draftPath(route.definitionId, route.draftId, route.page);
+  return null;
+}
+/** Only meaningful presentation queries cross a legacy redirect. Never forward arbitrary credentials. */
+export function canonicalAppUrl(path: string): string {
+  const url = new URL(path, window.location.origin);
+  const route = parseAppRoute(url.pathname);
+  if (route.area !== 'admin') return path;
+  const canonical = adminRoutePath(route);
+  if (!canonical || canonical === url.pathname) return path;
+  const safe = new URLSearchParams();
+  for (const key of ['session', 'run', 'automation', 'emailAccount', 'event', 'builtin', 'returnTo', 'q']) {
+    const value = url.searchParams.get(key); if (value !== null) safe.set(key, value);
   }
-
-  const instanceMatch = ADMIN_INSTANCE_PATTERN.exec(pathname);
-  if (instanceMatch) {
-    if (instanceMatch[2]?.toLowerCase() === "automation" && instanceMatch[3]?.toLowerCase() === "harness")
-      return { area: "admin", view: "instance", instanceId: instanceMatch[1].toLowerCase(), tab: "identity", section: "settings" };
-    const legacyRuns = instanceMatch[2]?.toLowerCase() === "runs";
-    const tab = legacyRuns ? "activity" : instanceMatch[2]?.toLowerCase();
-    const section = legacyRuns ? "runs" : instanceMatch[3]?.toLowerCase();
-    return { area: "admin", view: "instance", instanceId: instanceMatch[1].toLowerCase(),
-      ...(ADMIN_INSTANCE_TABS.includes(tab as AdminInstanceTab) ? { tab: tab as AdminInstanceTab } : {}),
-      ...(isInstanceSection(tab, section) ? { section: section as AdminInstanceSection } : {}) };
-  }
-
-  return { area: "chat" };
+  let hash = url.hash;
+  if (/\/automation\/controls\/?$/.test(url.pathname)) hash = '#execution-defaults';
+  if (/\/credentials\/?$/.test(url.pathname) && route.view === 'instance') hash = '#credentials';
+  return `${canonical}${safe.size ? `?${safe}` : ''}${hash}`;
 }
-
-export function adminHomePath(collection: AdminCollection = "definitions"): string {
-  return collection === "definitions" ? ADMIN_HOME : collection === "instances" ? `${ADMIN_HOME}/instances` : `${ADMIN_HOME}/connections/${collection}`;
+const LAST_CHAT_URL_KEY = 'agent-core:last-chat-url';
+export function rememberChatUrl(path: string): void { const url = new URL(path, window.location.origin); if (url.origin === window.location.origin && (url.pathname === '/' || url.pathname.startsWith('/c/'))) sessionStorage.setItem(LAST_CHAT_URL_KEY, url.pathname + url.search + url.hash); }
+export function lastChatUrl(): string { return sessionStorage.getItem(LAST_CHAT_URL_KEY) ?? '/'; }
+export type NavigationGuard = (path: string) => boolean | Promise<boolean>;
+let guard: NavigationGuard | undefined;
+export function registerNavigationGuard(next: NavigationGuard): () => void { guard = next; return () => { if (guard === next) guard = undefined; }; }
+export function approveAppNavigation(path: string): Promise<boolean> { return Promise.resolve(guard?.(path) ?? true); }
+export function initializeAppHistory() {
+  if (typeof window.history.state?.acIndex !== 'number') window.history.replaceState({ ...window.history.state, acIndex: 0 }, '', window.location.href);
 }
-
-export function adminDefinitionPath(definitionId: string, tab?: AdminDefinitionTab): string {
-  return `/admin/definitions/${encodeURIComponent(definitionId)}${tab ? `/${tab}` : ""}`;
-}
-
-function isInstanceSection(tab: string | undefined, section: string | undefined): boolean {
-  return section !== undefined && (tab === "continuity"
-    ? ADMIN_CONTINUITY_TABS.some(value => value === section)
-    : tab === "activity" ? ADMIN_ACTIVITY_TABS.some(value => value === section)
-    : tab === "identity" ? ADMIN_IDENTITY_TABS.some(value => value === section)
-    : tab === "skills" ? ADMIN_SKILL_RESOURCE_TABS.some(value => value === section)
-    : tab === "automation" && ADMIN_AUTOMATION_TABS.some(value => value === section));
-}
-
-export function adminInstancePath(instanceId: string, tab?: AdminInstanceTab, section?: AdminInstanceSection): string {
-  return `/admin/instances/${instanceId.toLowerCase()}${tab ? `/${tab}` : ""}${isInstanceSection(tab, section) ? `/${section}` : ""}`;
-}
-
-const LAST_CHAT_URL_KEY = "agent-core:last-chat-url";
-
-export function rememberChatUrl(pathname: string): void {
-  if (pathname === "/" || pathname.startsWith("/c/")) {
-    sessionStorage.setItem(LAST_CHAT_URL_KEY, pathname);
-  }
-}
-
-export function lastChatUrl(): string {
-  return sessionStorage.getItem(LAST_CHAT_URL_KEY) ?? "/";
-}
-
 export function navigateToAppPath(path: string, replace = false): void {
-  if (replace) {
-    window.history.replaceState(null, "", path);
-  } else {
-    window.history.pushState(null, "", path);
-  }
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  const commit = () => {
+    initializeAppHistory();
+    const index = window.history.state.acIndex as number;
+    window.history[replace ? 'replaceState' : 'pushState']({ acIndex: replace ? index : index + 1 }, '', canonicalAppUrl(path));
+    window.dispatchEvent(Object.assign(new PopStateEvent('popstate', { state: window.history.state }), { appNavigation: true }));
+  };
+  const approved = guard?.(path) ?? true;
+  if (typeof approved === "boolean") { if (approved) commit(); } else void approved.then(ok => { if (ok) commit(); });
 }

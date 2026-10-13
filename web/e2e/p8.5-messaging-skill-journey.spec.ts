@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
@@ -42,15 +43,16 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   const definitionId = `p85-journey-${Date.now()}`;
   await startSyntheticChat(page);
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin\/instances$/);
+  await navigateAdmin(page, "Definitions");
   await page.getByRole("button", { name: "New definition" }).click();
   const definitionDialog = page.getByRole("dialog", { name: "New definition" });
   await definitionDialog.getByLabel("Definition ID").fill(definitionId);
   await definitionDialog.getByRole("button", { name: "Create draft" }).click();
-  await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
+  await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}/drafts/[0-9a-f-]+/overview$`));
 
   const editor = draftEditorSection(page);
-  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await navigateAdmin(editor, "Skills & resources");
   await editor.getByRole("button", { name: "Add skill" }).click();
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill ID", { exact: true }).fill("billing.review");
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill name", { exact: true }).fill("Billing review");
@@ -58,7 +60,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Description", { exact: true }).fill("Procedural guidance.");
   await page.getByRole("dialog").getByRole("button", { name: "Save Skill" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
-  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await navigateAdmin(editor, "Skills & resources");
   await editor.getByRole("button", { name: "Add skill" }).click();
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill ID", { exact: true }).fill("order.lookup");
   await page.getByRole("dialog", { name: "New Definition Skill" }).getByLabel("Skill name", { exact: true }).fill("Order lookup");
@@ -147,7 +149,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
   expect(pins).toContain("billing.review");
   expect(pins).not.toContain("order.lookup");
 
-  await page.goto(`/admin/instances/${instance.instanceId}`);
+  await page.goto(`/admin/instances/${instance.instanceId}/profile`);
   const lifecycle = page.getByRole("region", { name: "Lifecycle controls" });
   await lifecycle.getByRole("button", { name: "Archive instance" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();

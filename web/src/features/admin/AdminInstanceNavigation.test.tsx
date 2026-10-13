@@ -1,4 +1,8 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { useEffect, useState } from 'react';
+import { AdminShell } from './AdminShell';
+import { adminInstancePath, parseAppRoute } from '../../app/appRoute';
+import type { InstancePage } from './adminNavigation';
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { App } from "antd";
 import { describe, expect, it, vi } from "vitest";
 import type { AdminEffectiveConfiguration } from "../../services/adminApi";
@@ -12,7 +16,7 @@ vi.mock("./InstanceRunsSection", () => ({
     open: boolean; detailsOnly?: boolean; selectedAgentRunId?: string;
     onSource?: (source: { kind: string; automationId: string }) => void;
     onRun?: (id: string) => void;
-  }) => !open ? null : detailsOnly ? <div role="dialog" aria-label="Run details">Run history {selectedAgentRunId}<button onClick={() => onSource?.({ kind: "automation", automationId: "original-thought" })}>Back to thought fixture</button><button onClick={() => onSource?.({ kind: "automation", automationId: "event-source" })}>Back to event fixture</button></div> : <div>Run history<button onClick={() => onRun?.("event-run")}>Inspect run fixture</button></div>
+  }) => !open ? null : detailsOnly ? <div role="dialog" aria-label="Run details">Run history {selectedAgentRunId}<button onClick={() => onSource?.({ kind: "automation", automationId: "90000000-0000-4000-8000-000000000010" })}>Back to thought fixture</button><button onClick={() => onSource?.({ kind: "automation", automationId: "90000000-0000-4000-8000-000000000011" })}>Back to event fixture</button></div> : <div>Run history<button onClick={() => onRun?.("event-run")}>Inspect run fixture</button></div>
 }));
 vi.mock("./InstanceActivitySection", () => ({ InstanceSessionsSection: () => <div>Session activity</div> }));
 vi.mock("./CredentialsSection", () => ({ CredentialsSection: () => null, InstanceCredentialsSection: () => <div>Credential bindings</div> }));
@@ -75,46 +79,40 @@ const config: AdminEffectiveConfiguration = {
     canAcceptNewTriggeredWork: true
   }
 };
-describe("Managed instance information architecture", () => {
-  it("groups retained context, automation and runs and retains exact selection in both directions", () => {
-    render(<App><InstanceDetail instanceId={config.instanceId} instances={{ kind: "ready", data: [] }}
-      effective={{ kind: "ready", data: config }} onBack={vi.fn()} onRetryEffective={vi.fn()} onInstanceChanged={vi.fn()} onInstanceDeleted={vi.fn()} /></App>);
-    for (const name of ["Identity & version", "Continuity", "Automation", "Activity", "Credentials", "Effective configuration"]) expect(screen.getByRole("tab", { name })).toBeVisible();
-    expect(screen.queryByRole("tab", { name: "Behavior & continuity" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Continuity" }));
-    expect(screen.getByText("Memory controls")).toBeVisible();
-    fireEvent.click(screen.getByRole("tab", { name: "Experience" }));
-    expect(screen.getByText("Experience controls")).toBeVisible();
-    fireEvent.click(screen.getByRole("tab", { name: "Automation" }));
-    expect(screen.getByText("Automation controls")).toBeVisible();
-    fireEvent.click(screen.getByRole("tab", { name: "Triggers" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inspect automation fixture" }));
-    // Current Runs baseline opens shared details without switching the source tab.
-    expect(screen.getByRole("tab", { name: "Automation" })).toHaveAttribute("aria-selected", "true");
-    expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history automation-run/)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Back to thought fixture" }));
-    expect(screen.getByRole("tab", { name: "Automation" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Triggers" })).toHaveAttribute("aria-selected", "true");
-    expect(within(screen.getByRole("tabpanel", { name: "Triggers" })).getByText(/original-thought/)).toBeVisible();
-    fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
-    expect(screen.getByRole("tab", { name: "Sessions" })).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(screen.getByRole("tab", { name: "Runs" }));
-    fireEvent.click(screen.getByRole("button", { name: "Inspect run fixture" }));
-    expect(within(screen.getByRole("dialog", { name: "Run details" })).getByText(/Run history event-run/)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Back to event fixture" }));
-    expect(screen.getByRole("tab", { name: "Triggers" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText(/Automation controls event-source/)).toBeVisible();
+function Fixture({ archived = false, start = 'memory' }: { archived?: boolean; start?: InstancePage }) {
+  const [page, setPage] = useState(start);
+  useEffect(() => {
+    window.history.replaceState(null, '', adminInstancePath(config.instanceId, start));
+    const pop = () => { const route = parseAppRoute(window.location.pathname); if (route.area === 'admin' && route.view === 'instance') setPage(route.page); };
+    window.addEventListener('popstate', pop); return () => window.removeEventListener('popstate', pop);
+  }, [start]);
+  return <App><AdminShell route={{ area: 'admin', view: 'instance', instanceId: config.instanceId, page }} ownerName="Alex"><InstanceDetail instanceId={config.instanceId} page={page} instances={{ kind: 'ready', data: [] }} effective={{ kind: 'ready', data: { ...config, instanceLifecycle: archived ? 'Archived' : 'Active' } }} onBack={vi.fn()} onRetryEffective={vi.fn()} onInstanceChanged={vi.fn()} onInstanceDeleted={vi.fn()} /></AdminShell></App>;
+}
+async function go(name: string) { await act(async () => fireEvent.click(within(screen.getByRole('navigation', { name: 'Admin navigation' })).getByRole('link', { name }))); }
+describe('Managed Instance canonical navigation', () => {
+  it('retains exact independent Run and Automation selections in both directions', async () => {
+    render(<Fixture />);
+    expect(screen.getByText('Memory controls')).toBeVisible();
+    expect(screen.queryByRole('tab', { name: 'Continuity' })).not.toBeInTheDocument();
+    await go('Experience'); expect(screen.getByText('Experience controls')).toBeVisible();
+    await go('Automations'); expect(screen.getByText('Automation controls')).toBeVisible();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Inspect automation fixture' })));
+    expect(within(screen.getByRole('dialog', { name: 'Run details' })).getByText(/Run history automation-run/)).toBeVisible();
+    expect(window.location.pathname).toBe(adminInstancePath(config.instanceId, 'automations'));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Back to thought fixture' })));
+    expect(screen.getByText(/Automation controls 90000000-0000-4000-8000-000000000010/)).toBeVisible();
+    await go('Sessions'); expect(screen.getByText('Session activity')).toBeVisible();
+    await go('Runs'); await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Inspect run fixture' })));
+    expect(within(screen.getByRole('dialog', { name: 'Run details' })).getByText(/Run history event-run/)).toBeVisible();
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Back to event fixture' })));
+    expect(window.location.pathname).toBe(adminInstancePath(config.instanceId, 'automations'));
+    expect(screen.getByText(/Automation controls 90000000-0000-4000-8000-000000000011/)).toBeVisible();
   });
-  it("keeps inactive instances inside the existing active-instance API boundary", () => {
-    render(<App><InstanceDetail instanceId={config.instanceId} instances={{ kind: "ready", data: [] }}
-      effective={{ kind: "ready", data: { ...config, instanceLifecycle: "Archived" } }} onBack={vi.fn()} onRetryEffective={vi.fn()} onInstanceChanged={vi.fn()} onInstanceDeleted={vi.fn()} /></App>);
-    expect(screen.queryByRole("tab", { name: "Automation" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Runs" }));
-    expect(screen.getByText("Run history")).toBeVisible();
-    fireEvent.click(screen.getByRole("tab", { name: "Continuity" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Experience" }));
-    expect(screen.getByText("Experience is available when this instance is active")).toBeVisible();
+  it('preserves archived read-only Run inspection and blocks active-only Experience', async () => {
+    render(<Fixture archived start="runs" />);
+    expect(screen.getByText('Run history')).toBeVisible();
+    await go('Experience');
+    expect(screen.getByText('Unarchive from Profile & version to inspect Experience.')).toBeVisible();
+    expect(screen.queryByText('Experience controls')).not.toBeInTheDocument();
   });
-
 });

@@ -1,20 +1,21 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test } from '@playwright/test';
 
 test('Recurring continuity review uses the shared Automation editor and Continuity retains data controls', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto('/admin');
-  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
+  await page.goto('/admin/definitions');
+  await navigateAdmin(page, 'Instances');
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   for (const [label, text] of [['Definition', 'general-assistant'], ['Published version', 'v21']] as const) {
     const input = page.getByRole('combobox', { name: label, exact: true }); await input.click(); await input.fill(text);
     await page.locator('.ant-select-item-option').filter({ hasText: label === 'Definition' ? 'General Assistant' : 'v21 · Built-in · Published' }).click();
   }
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
-  await page.getByRole('tab', { name: 'Continuity', exact: true }).click();
-  await page.getByRole('tab', { name: 'Experience', exact: true }).click();
+  await navigateAdmin(page, 'Continuity');
+  await navigateAdmin(page, 'Experience');
   await expect(page.getByRole('switch', { name: 'Enable experience', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Automatic continuity review' })).toHaveCount(0);
-  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+  await navigateAdmin(page, 'Automation');
   const region = page.getByRole('region', { name: 'Automations', exact: true });
   await region.getByRole('button', { name: 'New automation', exact: true }).click();
   await region.getByLabel('Automation name', { exact: true }).fill('Daily continuity review');

@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { completeDefinitionDraftPublishGate, publishDraftFromInstructions } from "./admin-definition-gate-helpers";
@@ -24,9 +25,9 @@ test("Admin pins All with always projection and Chat loads only the needed inter
   expect(create.ok(), await create.text()).toBe(true);
   const draft = await create.json();
   await page.goto(`/admin/definitions/${id}/drafts`);
-  await page.getByRole("button", { name: /^Draft rev / }).first().click();
+  await page.getByRole("link", { name: /^Draft rev / }).first().click();
   const editor = draftEditorSection(page);
-  await editor.getByRole("tab", { name: "Capabilities" }).click();
+  await navigateAdmin(editor, "Capabilities");
   await editor.getByLabel("Always projected capabilities").click();
   await editor.getByLabel("Always projected capabilities").fill("workspace.write");
   await expect(page.locator('.ant-select-item-option[title="workspace.write"]')).toHaveCount(0);

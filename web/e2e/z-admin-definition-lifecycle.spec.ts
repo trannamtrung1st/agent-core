@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
@@ -32,12 +33,13 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
   await startSyntheticChat(page);
 
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin\/instances$/);
+  await navigateAdmin(page, "Definitions");
 
   const definitions = page.getByRole("region", { name: "Definitions", exact: true });
   await definitions.getByRole("textbox", { name: "Search definitions" }).fill("examiner");
   await definitions.getByRole("link", { name: "Examiner · examiner", exact: true }).click();
-  await expect(page).toHaveURL(/\/admin\/definitions\/examiner$/i);
+  await expect(page).toHaveURL(/\/admin\/definitions\/examiner\/versions$/i);
 
   const draftEditor = await forkBuiltInV1Draft(page);
 

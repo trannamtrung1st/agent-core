@@ -1,10 +1,11 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { forkBuiltInV1Draft, openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { completeDefinitionDraftPublishGate, publishDraftFromInstructions, isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 
 async function view(editor: Locator, name: "Form" | "Advanced JSON") {
-  await editor.getByRole("radiogroup", { name: "Definition editor view" }).getByText(name, { exact: true }).click();
+  await navigateAdmin(editor, name === "Form" ? "Policies" : "Advanced JSON");
 }
 async function save(page: Page, editor: Locator, kinds: string[]) {
   const [response] = await Promise.all([
@@ -23,7 +24,7 @@ for (const kind of ["coreEvent", "applicationEvent"]) {
     await openDefinitionSettings(editor, "Trigger restrictions");
     const label = kind === "coreEvent" ? "Built-in Events" : "Webhook Events";
     await editor.getByRole("checkbox", { name: label, exact: true }).check();
-    await editor.getByRole("tab", { name: "Profile", exact: true }).click();
+    await navigateAdmin(editor, "Profile");
     await editor.getByLabel("Definition name", { exact: true }).fill(`Restricted ${kind}`);
     await openDefinitionSettings(editor, "Trigger restrictions");
     await view(editor, "Advanced JSON");
@@ -58,7 +59,7 @@ for (const kind of ["coreEvent", "applicationEvent"]) {
     }
     const draftId = await save(page, editor, ["schedule", kind]);
     await page.reload();
-    await page.locator(`[data-row-key="${draftId}"]`).getByRole("button", { name: /^Draft rev/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/drafts/${draftId}/`));
     await openDefinitionSettings(editor);
     await expect(editor.getByLabel("System instructions")).toBeVisible();
     await view(editor, "Advanced JSON");
@@ -84,7 +85,7 @@ test("publish review and immutable details preserve independent Event permission
   await expect(gate.getByText(/Built-in Events: Allowed; Webhook Events: Not allowed/)).toBeVisible();
   await publishDraftFromInstructions(page, editor);
   const version = (await page.getByText(/Published version \d+/).textContent())!.match(/Published version (\d+)/)![1];
-  await page.getByRole("region", { name: "Definition drafts", exact: true }).getByRole("tab", { name: "Versions", exact: true }).click();
+  await navigateAdmin(page, "Versions");
   await page.getByRole("button", { name: `View v${version} (durable)`, exact: true }).click();
   const details = page.getByRole("region", { name: "Version details", exact: true });
   await openDefinitionSettings(details, "Trigger restrictions");

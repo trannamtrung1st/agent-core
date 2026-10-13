@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
@@ -189,6 +190,7 @@ test("admin inventory keeps a server diagnostic id", async ({ page }) => {
     });
   });
   await page.getByRole("link", { name: "Open Admin" }).click();
+  await navigateAdmin(page, "Definitions");
   const definitions = page.locator('section[aria-label="Definitions"]');
   await expect(definitions.getByText("The request could not be completed.")).toBeVisible({ timeout: 15_000 });
   await definitions.getByRole("button", { name: "Error details" }).click();
@@ -200,11 +202,12 @@ async function openNewDraftForm(page: import("@playwright/test").Page, definitio
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await expect(page.getByTestId("connection")).toHaveText("Ready", { timeout: 15_000 });
   await page.getByRole("link", { name: "Open Admin" }).click();
+  await navigateAdmin(page, "Definitions");
   await page.getByRole("button", { name: "New definition" }).click();
   await page.getByRole("textbox", { name: "Definition ID" }).fill(definitionId);
   await page.getByRole("button", { name: "Create draft" }).click();
   await expect(page.getByRole("dialog", { name: "New definition" })).toBeHidden({ timeout: 15_000 });
-  await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
+  await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}/drafts/[0-9a-f-]+/overview$`));
   await openDefinitionSettings(draftEditorSection(page), "Model defaults");
 }
 

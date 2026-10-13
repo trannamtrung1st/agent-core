@@ -1,95 +1,41 @@
-import { describe, expect, it } from "vitest";
-import {
-  adminDefinitionPath,
-  adminHomePath,
-  adminInstancePath,
-  lastChatUrl,
-  parseAppRoute,
-  rememberChatUrl
-} from "./appRoute";
-
-describe("appRoute", () => {
-  it("parses chat and admin paths", () => {
-    expect(parseAppRoute("/")).toEqual({ area: "chat" });
-    expect(parseAppRoute("/c/019944af-00d1-7000-8000-000000000001")).toEqual({ area: "chat" });
-    expect(parseAppRoute("/admin")).toEqual({ area: "admin", view: "home" });
-    expect(parseAppRoute("/admin/instances")).toEqual({ area: "admin", view: "home", collection: "instances" });
-    expect(parseAppRoute("/admin/connections/events/")).toEqual({ area: "admin", view: "home", collection: "events" });
-    expect(parseAppRoute("/admin/definitions")).toEqual({ area: "admin", view: "home", collection: "definitions" });
-    expect(parseAppRoute("/admin/definitions/examiner")).toEqual({
-      area: "admin",
-      view: "definition",
-      definitionId: "examiner"
-    });
-    expect(parseAppRoute("/admin/instances/019944af-00d1-7000-8000-000000000001")).toEqual({
-      area: "admin",
-      view: "instance",
-      instanceId: "019944af-00d1-7000-8000-000000000001"
-    });
+import { describe, expect, it } from 'vitest';
+import { adminDefinitionPath, adminDraftPath, adminHomePath, adminInstancePath, canonicalAppUrl, lastChatUrl, parseAppRoute, rememberChatUrl } from './appRoute';
+import { draftPages, instancePages } from '../features/admin/adminNavigation';
+const id = '019944af-00d1-7000-8000-000000000001';
+const base = `/admin/instances/${id}`;
+describe('Admin canonical routes', () => {
+  it('keeps malformed Admin URLs in Admin and defaults inventories and owners deterministically', () => {
+    expect(parseAppRoute('/')).toEqual({ area: 'chat' });
+    expect(canonicalAppUrl('/admin')).toBe('/admin/instances');
+    expect(canonicalAppUrl('/admin/connections')).toBe('/admin/connections/credentials');
+    expect(canonicalAppUrl('/admin/definitions/examiner')).toBe('/admin/definitions/examiner/versions');
+    expect(canonicalAppUrl(base)).toBe(`${base}/overview`);
+    for (const url of ['/admin/nope', '/admin/instances/invalid', '/admin/definitions/%E0%A4%A', `${base}/automation/nope`, `${base}/continuity/thoughts`]) expect(parseAppRoute(url)).toEqual({ area: 'admin', view: 'not-found' });
   });
-
-  it("builds admin paths", () => {
-    expect(adminHomePath()).toBe("/admin");
-    expect(adminHomePath("instances")).toBe("/admin/instances");
-    expect(adminHomePath("events")).toBe("/admin/connections/events");
-    expect(adminDefinitionPath("examiner")).toBe("/admin/definitions/examiner");
-    expect(adminInstancePath("019944AF-00D1-7000-8000-000000000001")).toBe(
-      "/admin/instances/019944af-00d1-7000-8000-000000000001"
-    );
+  it.each([
+    ['identity', 'profile'], ['identity/profile', 'profile'], ['identity/settings', 'behavior'], ['identity/workspace', 'workspace'],
+    ['skills/skills', 'skills'], ['skills/resources', 'resources'], ['continuity', 'continuity/memory'],
+    ['automation', 'automations'], ['automation/automations', 'automations'], ['automation/controls', 'automations#execution-defaults'],
+    ['automation/harness', 'self-management'], ['activity', 'activity/sessions'], ['runs', 'activity/runs'], ['credentials', 'access#credentials'],
+  ])('migrates %s once to %s with meaningful query and no secret forwarding', (old, next) => {
+    const expected = `${base}/${next.split('#')[0]}?run=${id}&automation=${id}${next.includes('#') ? `#${next.split('#')[1]}` : '#focus'}`;
+    expect(canonicalAppUrl(`${base}/${old}?run=${id}&automation=${id}&token=secret#focus`)).toBe(expected);
+    expect(canonicalAppUrl(expected)).toBe(expected);
   });
-
-  it("round-trips definition and nested instance tabs", () => {
-    for (const tab of ["versions", "drafts"] as const) {
-      expect(parseAppRoute(adminDefinitionPath("field guide", tab))).toEqual({
-        area: "admin", view: "definition", definitionId: "field guide", tab
-      });
-    }
-    const instanceId = "019944af-00d1-7000-8000-000000000001";
-    for (const tab of ["identity", "activity", "credentials", "effective"] as const) {
-      expect(parseAppRoute(adminInstancePath(instanceId, tab))).toEqual({
-        area: "admin", view: "instance", instanceId, tab
-      });
-    }
-    for (const section of ["memory", "experience"] as const) {
-      expect(parseAppRoute(adminInstancePath(instanceId, "continuity", section))).toEqual({
-        area: "admin", view: "instance", instanceId, tab: "continuity", section
-      });
-    }
-    for (const section of ["automations", "controls"] as const) {
-      expect(parseAppRoute(adminInstancePath(instanceId, "automation", section))).toEqual({
-        area: "admin", view: "instance", instanceId, tab: "automation", section
-      });
-    }
+  it('round-trips every canonical Instance and exact draft page', () => {
+    for (const p of instancePages) expect(parseAppRoute(adminInstancePath(id, p.id))).toEqual({ area: 'admin', view: 'instance', instanceId: id, page: p.id });
+    for (const p of draftPages) expect(parseAppRoute(adminDraftPath('field guide', id, p.id))).toEqual({ area: 'admin', view: 'draft', definitionId: 'field guide', draftId: id, page: p.id });
+    expect(adminDefinitionPath('examiner')).toBe('/admin/definitions/examiner/versions');
+    expect(adminHomePath('credentials')).toBe('/admin/connections/credentials');
+    expect(adminHomePath('browser-privacy')).toBe('/admin/platform/browser-privacy');
   });
-
-  it("separates global Connections from Instance Credentials", () => {
-    const instanceId = "019944af-00d1-7000-8000-000000000001";
-    expect(parseAppRoute(`/admin/instances/${instanceId}/credentials`)).toEqual({ area: "admin", view: "instance", instanceId, tab: "credentials" });
-    expect(adminHomePath("credentials")).toBe("/admin/connections/credentials");
+  it('remembers the exact saved conversation and rejects Admin as chat memory', () => {
+    sessionStorage.clear(); rememberChatUrl('/admin'); expect(lastChatUrl()).toBe('/');
+    rememberChatUrl(`/c/${id}?returnTo=activity#source`); expect(lastChatUrl()).toBe(`/c/${id}?returnTo=activity#source`);
   });
-
-  it("ignores unknown tabs and sections and handles malformed escaped identifiers", () => {
-    const base = "/admin/instances/019944af-00d1-7000-8000-000000000001";
-    expect(parseAppRoute(`${base}/automation/unknown`)).toEqual({
-      area: "admin", view: "instance", instanceId: base.split("/").at(-1), tab: "automation"
-    });
-    expect(parseAppRoute(`${base}/continuity/thoughts/`)).not.toHaveProperty("section");
-    expect(parseAppRoute(`${base}/unknown`)).not.toHaveProperty("tab");
-    expect(parseAppRoute("/admin/definitions/examiner/unknown")).not.toHaveProperty("tab");
-    expect(parseAppRoute("/admin/definitions/%E0%A4%A")).toEqual({ area: "chat" });
-    expect(adminInstancePath(base.split("/").at(-1)!, "activity", "automations")).toBe(`${base}/activity`);
-  });
-
-  it("migrates legacy Runs links and round-trips Activity views", () => {
-    const instanceId = "019944af-00d1-7000-8000-000000000001";
-    expect(parseAppRoute(`/admin/instances/${instanceId}/runs`)).toEqual({ area: "admin", view: "instance", instanceId, tab: "activity", section: "runs" });
-    for (const section of ["sessions", "runs"] as const) expect(parseAppRoute(adminInstancePath(instanceId, "activity", section))).toEqual({ area: "admin", view: "instance", instanceId, tab: "activity", section });
-  });
-  it("remembers the last chat url", () => {
-    sessionStorage.clear();
-    rememberChatUrl("/admin");
-    expect(lastChatUrl()).toBe("/");
-    rememberChatUrl("/c/019944af-00d1-7000-8000-000000000001");
-    expect(lastChatUrl()).toBe("/c/019944af-00d1-7000-8000-000000000001");
+  it('retains an exact Session source during migration and resolves legacy builder groups', () => {
+    expect(canonicalAppUrl(`${base}/activity?session=${id}&q=source&password=secret`)).toBe(`${base}/activity/sessions?session=${id}&q=source`);
+    expect(adminInstancePath(id, 'skills', 'resources')).toBe(`${base}/resources`);
+    expect(adminInstancePath(id, 'automation', 'controls')).toBe(`${base}/automations`);
   });
 });

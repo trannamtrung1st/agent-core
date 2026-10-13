@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
@@ -49,7 +50,8 @@ test("admin resource publish managed chat exposes publication under agent", asyn
 
   await startSyntheticChat(page);
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin\/instances$/);
+  await navigateAdmin(page, "Definitions");
 
   const definitions = page.getByRole("region", { name: "Definitions", exact: true });
   await definitions.getByLabel("Search definitions", { exact: true }).fill("examiner");
@@ -58,7 +60,7 @@ test("admin resource publish managed chat exposes publication under agent", asyn
 
   await draftEditor.getByLabel("System instructions").fill(instructionMarker);
 
-  await draftEditor.getByRole("tab", { name: "Capabilities" }).click();
+  await navigateAdmin(draftEditor, "Capabilities");
   const harnessLabel = `e2e-harness-${Date.now()}`;
   await draftEditor.getByLabel("Harness labels").click();
   await draftEditor.getByLabel("Harness labels").fill(harnessLabel);
@@ -66,8 +68,8 @@ test("admin resource publish managed chat exposes publication under agent", asyn
   await draftEditor.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
 
-  await draftEditor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
-  await draftEditor.getByRole("tab", { name: "Resources", exact: true }).click();
+  await navigateAdmin(draftEditor, "Skills & resources");
+  await navigateAdmin(draftEditor, "Resources");
   await draftEditor.getByLabel("Resource logical path").fill(resourcePath);
   await draftEditor.locator('section[aria-label="Add draft resource"] input[type="file"]').setInputFiles({
     name: "e2e.md",

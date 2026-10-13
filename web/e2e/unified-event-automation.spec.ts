@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test } from '@playwright/test';
 
 test('Completed Automation can be deleted while its quiet Run remains inspectable after reload', async ({ page }) => {
@@ -41,8 +42,8 @@ test('Completed Automation can be deleted while its quiet Run remains inspectabl
   expect(work[0].automationId).toBe(automationId);
   expect(work[0].sessionId).toBeTruthy();
   expect(work[0].status).toBe('completed');
-  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
-  await page.getByRole('tab', { name: 'Runs', exact: true }).click();
+  await navigateAdmin(page, 'Activity');
+  await navigateAdmin(page, 'Runs');
   await page.getByRole('table', { name: 'Runs table', exact: true }).getByRole('row')
     .filter({ has: page.getByTitle(work[0].agentRunId, { exact: true }) })
     .getByRole('link', { name: 'Scheduled task', exact: true }).click();
@@ -63,10 +64,10 @@ test('Connections ingress activates configured Event instructions once and Runs 
   await definition.click(); await definition.fill('secretary');
   await page.locator('.ant-select-item-option').filter({ hasText: 'Secretary · secretary' }).click();
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
-  await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]+(?:\/identity)?$/);
+  await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]+\/overview$/);
   const instanceId = new URL(page.url()).pathname.split('/')[3];
   await page.goto('/admin/connections/events');
-  await page.getByRole('tab', { name: 'Events', exact: true }).click();
+  await navigateAdmin(page, 'Events');
   const sources = page.getByRole('region', { name: 'Events', exact: true });
   const sourceName = `Orders ${Date.now()}`;
   await sources.getByRole('button', { name: 'New webhook Event', exact: true }).click();

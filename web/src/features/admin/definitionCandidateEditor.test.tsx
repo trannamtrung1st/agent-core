@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { useState } from "react";
 import { applyCandidateJson, candidateForPersistence, candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AdminApp } from "./AdminApp";
+import { AdminTestWorkspace as AdminApp } from "../../test/AdminTestWorkspace";
 import { DefinitionCandidateEditor } from "./definitionCandidateEditor";
 import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 
@@ -202,19 +202,19 @@ function mockDraft(candidate: Record<string, unknown> = storedCandidate) {
 }
 
 async function openDraft() {
-  await act(async () => {
-    render(<AdminApp route={{ area: "admin", view: "definition", definitionId: "examiner" }} />);
-  });
-  fireEvent.click(await exposedRoles().findByRole("tab", { name: "Drafts" }));
-  await waitFor(() => {
-    expect(exposedRoles().getByRole("button", { name: /Draft rev 2/ })).toBeInTheDocument();
-  });
-  await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: /Draft rev 2/ })); });
-  openSettings();
-  await waitFor(() => {
-    expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
-    expect(screen.getByTitle("Scripted Alpha")).toBeInTheDocument();
-  });
+  await act(async () => { render(<AdminApp route={{ area: 'admin', view: 'draft', definitionId: 'examiner', draftId, page: 'behavior' }} />); });
+  await screen.findByLabelText('System instructions');
+}
+
+async function navigateDraft(label: string) {
+  await act(async () => { fireEvent.click(within(screen.getByRole('navigation', { name: 'Admin navigation' })).getByRole('link', { name: label })); });
+}
+async function openDraftSettings(...sections: string[]) {
+  const group = sections.some(x => ['Memory policy', 'Trigger restrictions', 'Advanced / metadata', 'Agent self-management defaults'].includes(x)) ? 'Policies'
+    : sections.some(x => ['Model defaults', 'Provider preferences', 'Execution budgets'].includes(x)) ? 'Models & execution' : 'Instructions & behavior';
+  await navigateDraft(group);
+  const root = document.querySelector<HTMLElement>('.admin-definition-settings > .ant-collapse')!;
+  for (const name of sections) { const header = exposedRoles(root).getByRole('button', { name }); if (header.getAttribute('aria-expanded') === 'false') fireEvent.click(header); }
 }
 
 // Exercise the controlled form without loading inventory, version tables, resources,
@@ -297,19 +297,17 @@ describe("definition candidate editor", () => {
     // These controls stay mounted across draft tabs. Reuse their accessible
     // handles instead of rescanning the entire AntD form after every change.
     const save = exposedRoles().getByRole("button", { name: "Save draft" });
-    const capabilitiesTab = exposedRoles().getByRole("tab", { name: "Capabilities" });
-    const definitionTab = exposedRoles().getByRole("tab", { name: "Identity & version" });
-    openSettings("Trigger restrictions");
+    await openDraftSettings('Trigger restrictions');
     setSpin("Minimum recurrence days", "0.5");
     expect(screen.getByLabelText("Minimum recurrence days")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText("Minimum recurrence days")).toHaveAccessibleDescription(
       "Whole days. 1 to 365. Minimum recurrence days must be a whole number from 1 to 365.");
     expect(save).toBeDisabled();
-    fireEvent.click(capabilitiesTab);
+    await navigateDraft('Capabilities');
     expect(save).toBeInTheDocument();
     expect(save).toBeDisabled();
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
-    fireEvent.click(definitionTab);
+    await openDraftSettings('Trigger restrictions');
     setSpin("Minimum recurrence days", "2");
     expect(screen.getByLabelText("Minimum recurrence days")).not.toHaveAttribute("aria-invalid", "true");
     expect(save).toBeEnabled();
@@ -410,9 +408,10 @@ describe("definition candidate editor", () => {
     }] });
     await openDraft();
 
-    openSettings("Conversation", "Behavior", "Initiative", "Voice", "Memory policy", "Trigger restrictions", "Provider preferences", "Advanced / metadata");
-    expect(screen.getByLabelText("Definition ID")).toHaveTextContent("examiner");
-    expect(screen.queryByRole("textbox", { name: "Definition ID" })).not.toBeInTheDocument();
+    await navigateDraft('Identity & goals');
+    expect(screen.getByLabelText('Definition ID')).toHaveTextContent('examiner');
+    expect(screen.queryByRole('textbox', { name: 'Definition ID' })).not.toBeInTheDocument();
+    await navigateDraft('Instructions & behavior');
     expect(screen.getByLabelText("Silence threshold")).toHaveAccessibleDescription(
       "Milliseconds. 1,000 to 120,000."
     );
@@ -426,10 +425,11 @@ describe("definition candidate editor", () => {
     expect(screen.getByLabelText("Conversation language")).toHaveAccessibleDescription(
       "auto, or a BCP 47 tag such as en."
     );
-    expect(screen.getByTitle("Scripted Alpha")).toBeInTheDocument();
+    await navigateDraft('Models & execution');
+    expect(await screen.findByTitle('Scripted Alpha')).toBeInTheDocument();
     expect(screen.getByText(/Speech aliases are required when voice is on/)).toBeInTheDocument();
 
-    fireEvent.click(exposedRoles().getByRole("tab", { name: "Profile" }));
+    await navigateDraft('Identity & goals');
     setText("Definition name", "Guide");
     setText("Definition role", "Coach");
     setText("Definition description", "Helps the operator.");
@@ -437,13 +437,13 @@ describe("definition candidate editor", () => {
     setText("Goal 1", "Coach the operator");
     fireEvent.click(exposedRoles().getByRole("button", { name: "Add goal" }));
     setText("Goal 2", "Keep answers short");
-    openSettings();
+    await openDraftSettings();
     setText("System instructions", "Edited instructions");
-    fireEvent.click(exposedRoles().getByRole("tab", { name: "Skills & resources" }));
+    await navigateDraft('Skills');
     fireEvent.click(exposedRoles().getByRole("button", { name: "Edit" }));
     setText("Procedure", "REFUND_PROCEDURE_EDITED");
     await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save Skill" })); });
-    fireEvent.click(exposedRoles().getByRole("tab", { name: "Identity & version" }));
+    await navigateDraft('Instructions & behavior');
     await chooseOption("Interruption style", "Answer the new turn");
     fireEvent.click(screen.getByLabelText("Acknowledge interruption"));
     fireEvent.click(screen.getByLabelText("Avoid unsupported claims"));
@@ -459,13 +459,15 @@ describe("definition candidate editor", () => {
     setSpin("Max silent evaluations", "9");
     setSpin("Max inactivity", "120000");
     await chooseOption("Initiative triggers", "Environment update");
+    await navigateDraft('Models & execution');
     await chooseOption("Reasoning", "Medium");
     await chooseOption("Model", "Scripted Beta");
     await chooseOption("Language-model provider", "backup-llm");
-    openSettings("Voice", "Provider preferences");
+    await openDraftSettings('Voice');
     fireEvent.click(screen.getByLabelText("Voice enabled"));
     setText("Voice id", "alloy");
     setSpin("Speaking rate", "1.2");
+    await openDraftSettings('Memory policy', 'Trigger restrictions', 'Advanced / metadata');
     fireEvent.click(screen.getByLabelText("Session memory"));
     fireEvent.click(screen.getByLabelText("Identity user promotion"));
     fireEvent.click(screen.getByLabelText("Identity user retrieval"));
@@ -486,7 +488,7 @@ describe("definition candidate editor", () => {
     setText("Metadata key 1", "team");
     setText("Metadata value 1", "platform");
 
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Capabilities" })); });
+    await navigateDraft('Capabilities');
     const harness = screen.getByLabelText("Harness labels");
     fireEvent.mouseDown(harness);
     fireEvent.change(harness, { target: { value: "lab-harness" } });
@@ -499,8 +501,8 @@ describe("definition candidate editor", () => {
     setText("Workspace template id", "examiner-default");
     fireEvent.click(screen.getByLabelText("Allow unread unsupported attachment types"));
 
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Identity & version" })); });
-    fireEvent.click(exposedRoles().getByRole("radio", { name: "Advanced JSON" }));
+
+    await navigateDraft('Advanced JSON');
     const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
     const parsed = JSON.parse(json.value) as {
       identity: { name: string; role: string; description: string; tone: string };
@@ -666,7 +668,7 @@ describe("definition candidate editor", () => {
 
     await openDraft();
 
-    openSettings("Voice", "Provider preferences");
+    await openDraftSettings('Voice');
     fireEvent.click(screen.getByLabelText("Voice enabled"));
     expect(screen.queryByTitle("primary-stt")).not.toBeInTheDocument();
     expect(screen.queryByTitle("primary-tts")).not.toBeInTheDocument();
@@ -717,21 +719,11 @@ describe("definition candidate editor", () => {
   it("keeps dirty edits across views and does not save invalid JSON", async () => {
     mockDraft();
     await openDraft();
-    // Cache the visible action/nav controls rather than rescanning retained form trees.
-    const editor = document.querySelector(".admin-draft-editor")!;
-    const actions = within(editor.querySelector(".admin-draft-actions")! as HTMLElement);
-    const views = within(editor.querySelector(".admin-draft-view-switch")! as HTMLElement);
-    const tabs = within(editor.querySelector(".admin-draft-tabs > .ant-tabs-nav")! as HTMLElement);
-    const jsonView = views.getByRole("radio", { name: "Advanced JSON" });
-    const formView = views.getByRole("radio", { name: "Form" });
-    const save = actions.getByRole("button", { name: "Save draft" });
-    const publish = actions.getByRole("button", { name: "Publish…" });
-    const capabilities = tabs.getByRole("tab", { name: "Capabilities" });
-    const resources = tabs.getByRole("tab", { name: "Skills & resources" });
-    const identity = tabs.getByRole("tab", { name: "Identity & version" });
-
+    const actions = within(document.querySelector<HTMLElement>('.admin-draft-actions')!);
+    const save = actions.getByRole('button', { name: 'Save draft' });
+    const publish = actions.getByRole('button', { name: 'Publish…' });
     setText("System instructions", "Unsaved instruction edit");
-    fireEvent.click(jsonView);
+    await navigateDraft('Advanced JSON');
     const json = screen.getByLabelText("Advanced JSON", { selector: "textarea" }) as HTMLTextAreaElement;
     expect(screen.getByText("Unsaved changes — save before using Test & Publish.")).toBeInTheDocument();
     expect(json.value).toContain(
@@ -746,22 +738,15 @@ describe("definition candidate editor", () => {
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
     expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();
 
-    fireEvent.click(formView);
-    expect(screen.getByLabelText("Advanced JSON", { selector: "textarea" })).toBeInTheDocument();
-    // Visited tab content can remain mounted. Check the labeled field's visibility
-    // directly instead of scanning every cached control's accessible role.
-    const instructions = screen.queryByLabelText("System instructions", { selector: "textarea" });
-    if (instructions) expect(instructions).not.toBeVisible();
-
-    await act(async () => { fireEvent.click(capabilities); });
-    expect(screen.getByText(/Fix Advanced JSON on Identity & version before changing capabilities/)).toBeInTheDocument();
-    expect(exposedRoles().getByRole("button", { name: "Add knowledge source" })).toBeDisabled();
-    fireEvent.click(exposedRoles().getByRole("button", { name: "Add knowledge source" }));
-
-    await act(async () => { fireEvent.click(resources); });
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Resources" })); });
-    await act(async () => { fireEvent.click(identity); });
-    expect(screen.getByLabelText("Advanced JSON", { selector: "textarea" })).toHaveValue("{ ");
+    await navigateDraft('Instructions & behavior');
+    expect(screen.getByLabelText('System instructions')).toBeDisabled();
+    await navigateDraft('Capabilities');
+    expect(screen.getByText(/Fix Advanced JSON before changing capabilities/)).toBeInTheDocument();
+    expect(exposedRoles().getByRole('button', { name: 'Add knowledge source' })).toBeDisabled();
+    fireEvent.click(exposedRoles().getByRole('button', { name: 'Add knowledge source' }));
+    await navigateDraft('Resources');
+    await navigateDraft('Advanced JSON');
+    expect(screen.getByLabelText('Advanced JSON', { selector: 'textarea' })).toHaveValue('{ ');
     expect(save).toBeInTheDocument();
     expect(save).toBeDisabled();
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
@@ -773,7 +758,7 @@ describe("definition candidate editor", () => {
     vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: tools, maxToolAllowlistEntries: null });
     await openDraft();
     setText("System instructions", "Keep this edit");
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Capabilities" })); });
+    await navigateDraft('Capabilities');
     expect(await screen.findByText("Authorized: 33 · Always selected: 33")).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByLabelText("Authorized capabilities"));
     fireEvent.change(screen.getByLabelText("Authorized capabilities"), { target: { value: tools[33] } });
@@ -789,7 +774,7 @@ describe("definition candidate editor", () => {
     vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read", "knowledge.retrieve", "browser.navigate"], maxToolAllowlistEntries: null });
     await openDraft();
     setText("System instructions", "Keep this edit");
-    await act(async () => { fireEvent.click(exposedRoles().getByRole("tab", { name: "Capabilities" })); });
+    await navigateDraft('Capabilities');
     expect(await screen.findByText("Authorized: 3 · Always selected: 1")).toBeInTheDocument();
     expect(screen.getByLabelText("Always projected capabilities")).toBeInTheDocument();
     expect(screen.getByText("Core also includes authorized, eligible Browser v2 bootstrap tools and active Skill requirements. These can appear without an Always selection; permission still comes from Authorized capabilities.")).toBeVisible();
@@ -804,7 +789,7 @@ describe("definition candidate editor", () => {
   it("saves from JSON using the same draft revision", async () => {
     mockDraft();
     await openDraft();
-    fireEvent.click(exposedRoles().getByRole("radio", { name: "Advanced JSON" }));
+    await navigateDraft('Advanced JSON');
     const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
     const edited = JSON.parse(json.value) as { systemInstructions: string; untouchedMarker: { nested: string } };
     edited.systemInstructions = "Saved from JSON";

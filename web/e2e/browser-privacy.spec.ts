@@ -17,7 +17,7 @@ async function openPrivacy(page: Page) {
     headers: { "X-AgentCore-Owner-Capability": token! }, data: { definitionId: "approval-demo", version: 1 }
   });
   expect(instance.ok()).toBe(true);
-  await page.goto(`/admin/instances/${(await instance.json()).instanceId}/effective`);
+  await page.goto("/admin/platform/browser-privacy");
   const region = page.getByRole("region", { name: "Screenshot privacy", exact: true });
   await expect(region.getByRole("button", { name: /Save screenshot privacy$/ })).toBeVisible();
   return region;
@@ -70,7 +70,8 @@ test("read failure retries through the same editor", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => localStorage.getItem("agent-core.owner-capability"))).not.toBeNull();
   const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
   const created = await page.request.post("/api/v2/admin/agent-instances", { headers: { "X-AgentCore-Owner-Capability": token! }, data: { definitionId: "approval-demo", version: 1 } });
-  await page.goto(`/admin/instances/${(await created.json()).instanceId}/effective`);
+  expect(created.ok()).toBe(true);
+  await page.goto("/admin/platform/browser-privacy");
   const region = page.getByRole("region", { name: "Screenshot privacy", exact: true });
   await expect(region.getByRole("button", { name: "Reload saved privacy policy" })).toBeVisible();
   await page.unroute("**/api/v2/admin/browser/privacy");

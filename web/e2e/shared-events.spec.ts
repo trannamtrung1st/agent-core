@@ -68,7 +68,7 @@ test("nested shared Event creation preserves Automation draft and lifecycle link
   const created = await page.request.post("/api/v2/admin/agent-instances", { headers, data: { definitionId: "secretary", version: 8 } });
   expect(created.ok()).toBe(true);
   const instanceId = (await created.json()).instanceId;
-  await page.goto(`/admin/instances/${instanceId}/automation/automations`);
+  await page.goto(`/admin/instances/${instanceId}/automations`);
   await page.getByRole("button", { name: "New automation", exact: true }).click();
   const drawer = page.getByRole("dialog", { name: "New automation", exact: true });
   const name = `Invoice review ${Date.now()}`;
@@ -117,7 +117,7 @@ test("nested shared Event creation preserves Automation draft and lifecycle link
   await page.getByRole("textbox", { name: "Search events", exact: true }).fill(name);
   await expect(eventDetails.getByRole("region", { name: "Received signals", exact: true }).getByText(generic.eventId, { exact: true })).toBeVisible();
   await eventDetails.getByRole("link", { name, exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/automation/automations\\?automation=`));
+  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/automations\\?automation=`));
   await expect(page.getByRole("button", { name: `View automation: ${name}`, exact: true })).toHaveAttribute("aria-expanded", "true");
   await page.goBack();
   await expect(eventDetails).toBeVisible();

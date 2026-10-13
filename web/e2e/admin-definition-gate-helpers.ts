@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, type Locator, type Page, type Request } from "@playwright/test";
 
 // Fetch cancellation is part of the draft evidence lifecycle. This recognizes
@@ -33,7 +34,7 @@ export async function ensureToolAllowlisted(
   draftEditor: Locator,
   toolName: string
 ) {
-  await draftEditor.getByRole("tab", { name: "Capabilities" }).click();
+  await navigateAdmin(draftEditor, "Capabilities");
   const allowlist = draftEditor.getByLabel("Authorized capabilities");
   await expect(allowlist).toBeVisible();
   // The tool-offered fixture requires immediate projection as well as authority.
@@ -72,7 +73,7 @@ export async function completeDefinitionDraftPublishGate(
     await ensureToolAllowlisted(page, draftEditor, toolName);
   }
 
-  await draftEditor.getByRole("tab", { name: "Test & Publish" }).click();
+  await navigateAdmin(draftEditor, "Test & Publish");
   const gate = draftEditor.getByLabel("Test validate and publish gate");
   await expect(gate.getByRole("button", { name: "Run validation" })).toBeVisible({ timeout: 15_000 });
 
@@ -94,7 +95,7 @@ export async function completeDefinitionDraftPublishGate(
 }
 
 export async function publishDraftFromInstructions(page: Page, draftEditor: Locator) {
-  await draftEditor.getByRole("tab", { name: "Identity & version" }).click();
+  await navigateAdmin(draftEditor, "Identity & version");
   await draftEditor.getByRole("button", { name: "Publish…" }).click();
   const modal = page.getByRole("dialog");
   await expect(modal).toBeVisible();

@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { waitForResponseSettled } from "./support/response-settled";
 import { backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { expect, test } from "@playwright/test";
@@ -78,14 +79,14 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   }, sessionId!);
   expect(instanceId).toBeTruthy();
   await expect(page.getByLabel(/Application connection:/)).toHaveCount(0);
-  await page.goto(`/admin/instances/${instanceId}`);
-  await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
-  await page.getByRole("tab", { name: "Credentials", exact: true }).click();
+  await page.goto(`/admin/instances/${instanceId}/profile`);
+  await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}\/profile$/i);
+  await navigateAdmin(page, "Credentials");
   await expect(page.getByRole("heading", { name: "Credential bindings" })).toBeVisible();
   await expect(page.getByText("No credentials bound")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Browser state" })).toBeVisible();
   await page.goto(`/admin/instances/${instanceId}/credentials`);
-  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/credentials$`));
+  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/access#credentials$`));
   await page.setViewportSize({ width: 390, height: 800 });
   await expect(page.getByRole("heading", { name: "Credential bindings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Bind credential", exact: true })).toBeVisible();
