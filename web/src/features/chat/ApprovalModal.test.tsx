@@ -16,6 +16,15 @@ const approval: PendingApproval = {
 };
 
 describe("ApprovalModal", () => {
+  it("shows an unconfirmed decision inside the dialog and keeps rejection retryable", () => {
+    const reject = vi.fn();
+    render(<ApprovalModal approval={{ ...approval, decisionError: "Connection lost." }} onApprove={vi.fn()} onReject={reject} />);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/Connection lost\. Retry a decision/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reject" }));
+    expect(reject).toHaveBeenCalledOnce();
+  });
+
   it.each(["automation.preferences.patch", "credentials.binding.remove"])("reviews %s as an exact Instance configuration change", (toolName) => {
     render(<ApprovalModal approval={{ ...approval, toolName, details: {
       Target: "This Instance", Before: "Current preference", After: "Requested preference",

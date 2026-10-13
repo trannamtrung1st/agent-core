@@ -60,6 +60,7 @@ test("sensitive approval modal reject dismisses without executing", async ({ pag
   await expect(modal).toBeVisible({ timeout: 30_000 });
   await modal.getByRole("button", { name: "Reject" }).click();
   await expect(modal).toBeHidden({ timeout: 20_000 });
+  await expect.poll(() => page.evaluate(() => window.__agentCore?.conversationExecution?.()?.responseId)).toBeNull();
   await expect(page.getByText("Sensitive action completed after approval.")).toHaveCount(0);
 });
 
@@ -78,3 +79,39 @@ test("sensitive approval modal approve via keyboard", async ({ page }) => {
   await expect(modal).toBeHidden({ timeout: 20_000 });
   await expect(page.getByText("Sensitive action completed after approval.")).toBeVisible({ timeout: 20_000 });
 });
+
+for (const recovery of ["refresh", "disconnect"] as const) {
+  test(`rejection via keyboard recovers after ${recovery}`, async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByLabel("Identity")).toBeVisible({ timeout: 15_000 });
+    await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.approvalHarness);
+    await page.getByLabel("Message").fill("Need sensitive approval for reject recovery.");
+    await page.getByRole("button", { name: "Send" }).click();
+    const modal = page.getByRole("dialog", { name: "Approve sensitive action" });
+    await expect(modal).toBeVisible({ timeout: 30_000 });
+    const before = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+    if (recovery === "refresh") {
+      await page.reload();
+    } else {
+      await page.evaluate(() => window.__agentCore?.disconnect?.());
+      await modal.getByRole("button", { name: "Reject" }).click();
+      await expect(modal).toContainText("Decision was not confirmed");
+      await expect(modal).toBeVisible();
+      await page.evaluate(() => window.__agentCore?.reconnect?.());
+    }
+    await waitForSessionAttached(page);
+    await expect(modal).toBeVisible();
+    const after = await page.evaluate(() => window.__agentCore?.conversationExecution?.());
+    expect(after?.executionId).toBe(before?.executionId);
+    expect(after?.responseId).toBe(before?.responseId);
+    await modal.getByRole("button", { name: "Reject" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(modal).toBeHidden({ timeout: 20_000 });
+    await expect.poll(() => page.evaluate(() => window.__agentCore?.conversationExecution?.()?.responseId)).toBeNull();
+    await expect(page.getByText("Sensitive action completed after approval.")).toHaveCount(0);
+    await page.reload();
+    await waitForSessionAttached(page);
+    await expect(modal).toBeHidden();
+    await expect(page.getByText("Sensitive action completed after approval.")).toHaveCount(0);
+  });
+}

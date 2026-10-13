@@ -50,6 +50,14 @@ export function ApprovalModal({ approval, onApprove, onReject }: ApprovalModalPr
     >
       {approval ? (
         <>
+          {approval.decisionError ? (
+            <Alert
+              type="error"
+              showIcon
+              title="Decision was not confirmed"
+              description={`${approval.decisionError} Retry a decision, or reconnect to recover its saved state.`}
+            />
+          ) : null}
           <Typography.Paragraph className="chat-approval-summary">{approval.summary}</Typography.Paragraph>
           {scope !== undefined ? <Alert className="chat-approval-scope" type="info" showIcon title="Applies to" description={scope} /> : null}
           {revisions.length > 0 ? (

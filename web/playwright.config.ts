@@ -43,7 +43,7 @@ export default defineConfig({
   use: {
     ...chromium,
     baseURL: webUrl,
-    trace: "off",
+    trace: "retain-on-failure",
     permissions: ["microphone"],
     launchOptions: {
       ...chromium.launchOptions,

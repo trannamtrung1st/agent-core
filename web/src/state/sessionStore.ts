@@ -46,6 +46,7 @@ export type ResponseProgress = {
 };
 
 export type PendingApproval = {
+  decisionError?: string;
   approvalId: string;
   responseId: string;
   operationId: string;

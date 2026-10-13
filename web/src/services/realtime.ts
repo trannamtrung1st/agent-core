@@ -3580,34 +3580,50 @@ export async function respondToApproval(decision: "approve" | "reject"): Promise
     return;
   }
 
-  const ack = await dispatchHubCommand((dispatchSequence) =>
-    invoke(
-      "RespondApproval",
-      "agent.approval.respond",
-      { approvalId: pending.approvalId, decision },
-      dispatchSequence,
-      pending.responseId
-    )
-  );
+  const isCurrent = () => {
+    const current = useSessionStore.getState();
+    return current.sessionId === snapshot.sessionId
+      && current.attachmentId === snapshot.attachmentId
+      && current.pendingApproval?.approvalId === pending.approvalId
+      && current.pendingApproval.responseId === pending.responseId;
+  };
 
-  if (ack?.accepted) {
+  let ack: HubCommandAck | void;
+  try {
+    ack = await dispatchHubCommand((dispatchSequence) => {
+      // A queued decision belongs to its original Session and attachment.
+      if (!isCurrent()) return Promise.resolve();
+      return invoke(
+        "RespondApproval",
+        "agent.approval.respond",
+        { approvalId: pending.approvalId, decision },
+        dispatchSequence,
+        pending.responseId
+      );
+    });
+  } catch (error) {
+    ack = { error: {
+      category: "Transport",
+      code: "ApprovalResponseFailed",
+      message: error instanceof Error ? error.message : "Approval response was not accepted.",
+      fatal: false
+    } };
+  }
+
+  // A late ACK/failure must never dismiss or annotate a replacement request.
+  if (!isCurrent()) return;
+  if (ack?.accepted || ack?.error?.code === "StaleCommand") {
     useSessionStore.setState({ pendingApproval: null });
     return;
   }
 
-  if (ack?.error?.code === "StaleCommand") {
-    useSessionStore.setState({ pendingApproval: null });
-    return;
-  }
-
-  useSessionStore.setState({
-    error: ack?.error?.message ?? "Approval response was not accepted.",
-    sessionError: sessionErrorFromWire(
-      ack?.error,
-      ack?.error?.message ?? "Approval response was not accepted."
-    ),
+  const message = ack?.error?.message ?? "Approval response was not accepted.";
+  useSessionStore.setState(state => ({
+    pendingApproval: { ...state.pendingApproval!, decisionError: message },
+    error: message,
+    sessionError: sessionErrorFromWire(ack?.error, message),
     errorFatal: false
-  });
+  }));
 }
 
 export async function requestVoice(): Promise<void> {
