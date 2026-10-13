@@ -20,7 +20,7 @@ async function comboboxOption(page: Page, combobox: Locator, optionText: string)
   return dropdown.locator(`.ant-select-item-option[title="${optionText}"]`);
 }
 
-async function selectAntdComboboxOption(page: Page, combobox: Locator, optionText: string) {
+export async function selectAntdComboboxOption(page: Page, combobox: Locator, optionText: string) {
   await page.keyboard.press("Escape");
   await combobox.click();
   await combobox.fill(optionText);

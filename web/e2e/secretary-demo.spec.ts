@@ -1,7 +1,7 @@
 import { navigateAdmin } from "./support/admin-navigation";
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { expect, test, type Page } from '@playwright/test';
-import { completeDefinitionDraftPublishGate, publishDraftFromInstructions } from './admin-definition-gate-helpers';
+import { completeDefinitionDraftPublishGate, publishDraftFromInstructions, selectAntdComboboxOption } from './admin-definition-gate-helpers';
 import { draftEditorSection } from './admin-draft-editor-helpers';
 import { selectManagedIdentityOption } from './admin-managed-helpers';
 import { waitForResponseSettled } from './support/response-settled';
@@ -123,8 +123,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     for (const tool of ['knowledge.retrieve', 'automation.create', 'automation.inspect', 'automation.disable', 'automation.run', 'automation.list', 'automation.update', 'automation.delete',
       'browser.navigate', 'browser.snapshot', 'browser.find', 'browser.click', 'browser.type']) {
       const select = editor.getByRole('combobox', { name: 'Authorized capabilities', exact: true });
-      await select.click(); await select.fill(tool);
-      await page.locator('.ant-select-item-option').filter({ hasText: tool }).last().click();
+      await selectAntdComboboxOption(page, select, tool);
       await page.keyboard.press('Escape');
     }
     // The deterministic schedule fixture requires its tool schema immediately;
@@ -132,8 +131,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
     for (const tool of ['automation.create', 'automation.inspect', 'automation.disable', 'automation.run',
       'automation.list', 'automation.update', 'automation.delete']) {
       const select = editor.getByRole('combobox', { name: 'Always projected capabilities', exact: true });
-      await select.click(); await select.fill(tool);
-      await page.locator('.ant-select-item-option').filter({ hasText: tool }).last().click();
+      await selectAntdComboboxOption(page, select, tool);
       await page.keyboard.press('Escape');
     }
     await saveDraft(page);
