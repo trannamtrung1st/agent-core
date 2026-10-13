@@ -83,6 +83,7 @@ builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<AttachmentTtlHostedService>();
 builder.Services.AddHostedService<WorkspaceCleanupHostedService>();
 builder.Services.AddHostedService<TriggerSchedulerHostedService>();
+builder.Services.AddHostedService<EmailWatchHostedService>();
 builder.Services.AddHostedService<BackgroundOccurrenceIntakeHostedService>();
 builder.Services.AddSingleton<IAgentRunDispatcher, AgentRunDispatcher>();
 builder.Services.AddHostedService<AgentRunHostedService>();

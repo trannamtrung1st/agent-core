@@ -26,18 +26,24 @@ public sealed class AccountEmailChangeFeed(ICredentialStore credentials, ICreden
     }
     private ImapSmtpEmailProvider Imap(Credential c) => providers.CreateWatcher(c, async ct =>
     { await Recheck(c, ct); var current = (await credentials.GetAsync(c.CredentialId, ct))!; return protector.Unprotect(c.CredentialId, current.ProtectionVersion, current.ProtectedPayload); });
+    private async ValueTask<EmailWatchBatch> Watch(Credential c, EmailWatchCursor? cursor, CancellationToken ct)
+    {
+        try { return await Imap(c).WatchAsync(cursor, ct); }
+        catch (Exception ex) when (ex is MailKit.Security.AuthenticationException or MailKit.Security.SslHandshakeException or System.Security.Authentication.AuthenticationException
+            || ex is AgentCoreException { StatusCode: 400 or 403 }) { throw new AgentCore.Application.Email.MailAuthorizationUnavailableException(); }
+    }
     public async ValueTask<EmailWatchCursor> BaselineAsync(Credential c, CancellationToken ct)
     {
         await Recheck(c, ct);
         var cursor = synthetic ? providers.SyntheticBaseline(c.CredentialId)
-            : c.EmailAccount!.Preset == EmailProviderPreset.Gmail ? await Gmail(c).BaselineAsync(ct) : (await Imap(c).WatchAsync(null, ct)).NextCursor;
+            : c.EmailAccount!.Preset == EmailProviderPreset.Gmail ? await Gmail(c).BaselineAsync(ct) : (await Watch(c, null, ct)).NextCursor;
         await Recheck(c, ct); return cursor;
     }
     public async ValueTask<EmailWatchBatch> PollAsync(Credential c, EmailWatchCursor cursor, CancellationToken ct)
     {
         await Recheck(c, ct);
         var batch = synthetic ? providers.SyntheticPoll(c.CredentialId, cursor)
-            : c.EmailAccount!.Preset == EmailProviderPreset.Gmail ? await Gmail(c).PollAsync(cursor, ct) : await Imap(c).WatchAsync(cursor, ct);
+            : c.EmailAccount!.Preset == EmailProviderPreset.Gmail ? await Gmail(c).PollAsync(cursor, ct) : await Watch(c, cursor, ct);
         await Recheck(c, ct); return batch;
     }
 }

@@ -10,7 +10,7 @@ namespace AgentCore.Application.Events;
 
 public sealed class CoreEventDispatcher(ICoreEventStore events, ITriggerStore triggers, IEventFilterEvaluator filters,
     ITriggerAdmissionGuard guard, IAgentInstanceStore instances, IAgentDefinitionStore definitions, IModelCatalog catalog,
-    IIdGenerator ids, TimeProvider time, IExternalEventStore externalEvents, ILogger<CoreEventDispatcher>? logger = null)
+    IIdGenerator ids, TimeProvider time, IExternalEventStore externalEvents, ILogger<CoreEventDispatcher>? logger = null, IEmailWatchStore? emailWatches = null, Email.EmailMonitoringOptions? emailMonitoring = null, IEmailProviderFactory? emailProviders = null)
 {
     private EventRecoveryCursor? receiptCursor;
     private EventRecoveryCursor? bucketCursor;
@@ -43,6 +43,8 @@ public sealed class CoreEventDispatcher(ICoreEventStore events, ITriggerStore tr
                     {
                         if (delivery.Status is not (EventMatchStatus.Pending or EventMatchStatus.Matched) && !(delivery.Status == EventMatchStatus.FilterError && delivery.Decision?.Retryable == true)) continue;
                         var s = delivery.Subscription;
+                        if (e.Key == "email.message.received" && !await EmailAllowed(e.EventId, ct))
+                        { await FinishDeliveryAsync(e.EventId, s.TriggerId, EventMatchStatus.PolicySkipped, "email-authority-revoked", ct); continue; }
                         var current = await triggers.GetAsync(e.Owner, s.AutomationId, ct);
                         var policy = await guard.EvaluateAsync(e.Owner, TriggerSourceKind.CoreEvent, ct);
                         if (s.Owner != e.Owner || current?.Status != AutomationStatus.Active || current.Triggers.All(t => t.TriggerId != s.TriggerId || !t.Enabled) || policy.Kind != TriggerAdmissionDecisionKind.Allow)
@@ -110,6 +112,12 @@ public sealed class CoreEventDispatcher(ICoreEventStore events, ITriggerStore tr
                 var pin = current.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession ? null : await ExecutionModelAdmission.ResolveAsync(catalog, instances, definitions, triggers, s.Owner, s.AutomationId, ct);
                 if (pin is { FailureCode: not null }) { await events.CompleteBucketAsync(bucket.BucketId, ct, "model-unavailable"); continue; }
                 var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
+                if (bucket.Sources.Any(e => e.Key == "email.message.received"))
+                {
+                    var authorized = true;
+                    foreach (var source in bucket.Sources.Where(e => e.Key == "email.message.received")) authorized &= await EmailAllowed(source.EventId, ct);
+                    if (!authorized) { await events.CompleteBucketAsync(bucket.BucketId, ct, "email-authority-revoked"); continue; }
+                }
                 var sources = bucket.Sources;
                 string evidence;
                 try
@@ -141,6 +149,9 @@ public sealed class CoreEventDispatcher(ICoreEventStore events, ITriggerStore tr
         }
         return admittedCount;
     }
+    private async ValueTask<bool> EmailAllowed(Guid id, CancellationToken ct) => emailWatches is not null
+        && emailMonitoring?.Enabled == true && emailProviders?.IsEnabled == true && await emailWatches.CanDeliverAsync(id, ct);
+
     private async ValueTask FinishDeliveryAsync(Guid eventId, Guid automationId, EventMatchStatus status, string? code, CancellationToken ct)
     {
         await events.FinishAsync(eventId, automationId, status, code, ct);

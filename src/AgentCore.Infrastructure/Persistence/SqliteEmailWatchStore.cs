@@ -76,11 +76,16 @@ public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> 
         Write(r, EmailWatchTransitions.Success(s, batch, emitted, now));
         try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); return true; } catch (DbUpdateConcurrencyException) { return false; }
     }
-    private static Task<bool> BindingValid(AgentCoreDbContext db, EmailWatchNotification n, CancellationToken ct) => db.AgentCredentialBindings.AnyAsync(b =>
-        b.BindingId == n.BindingId.ToString("D") && b.Revision == n.BindingRevision && b.CredentialId == n.AccountId.ToString("D")
-        && b.Reference == JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(n.Event.DataJson)!["accountRef"].GetString()
-        && b.AgentInstanceId == n.Event.Owner.AgentInstanceId.ToString("D")
-        && db.AgentInstances.Any(i => i.InstanceId == b.AgentInstanceId && i.Lifecycle == "Active"), ct);
+    private static async Task<bool> BindingValid(AgentCoreDbContext db, EmailWatchNotification n, CancellationToken ct)
+    {
+        var reference = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(n.Event.DataJson)!["accountRef"].GetString();
+        if (!await db.AgentCredentialBindings.AnyAsync(b => b.BindingId == n.BindingId.ToString("D") && b.Revision == n.BindingRevision
+            && b.CredentialId == n.AccountId.ToString("D") && b.Reference == reference && b.AgentInstanceId == n.Event.Owner.AgentInstanceId.ToString("D")
+            && db.AgentInstances.Any(i => i.InstanceId == b.AgentInstanceId && i.Lifecycle == "Active"), ct)) return false;
+        var rows = await db.Automations.Include(a => a.Triggers).Where(a => a.AgentInstanceId == n.Event.Owner.AgentInstanceId.ToString("D")
+            && a.ProfileId == n.Event.Owner.ProfileId.ToString("D") && a.Status == (int)AgentCore.Domain.Triggers.AutomationStatus.Active).ToArrayAsync(ct);
+        return rows.Select(TriggerStoreMapping.ToRegistration).Any(a => a.Triggers.Any(t => t.Enabled && t.Configuration is AgentCore.Domain.Triggers.CoreEventTrigger { CoreEventKey: "email.message.received" }));
+    }
     public async ValueTask RecordFailureAsync(EmailWatchClaim claim, SafeEmailWatchFailure failure, DateTimeOffset now, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct); var r = await db.EmailWatches.SingleOrDefaultAsync(r => r.AccountId == claim.State.AccountId.ToString("D"), ct);

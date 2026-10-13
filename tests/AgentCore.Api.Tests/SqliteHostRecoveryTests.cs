@@ -777,6 +777,8 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
                 services.Remove(store);
             }
 
+            services.RemoveAll<IEmailWatchStore>();
+            services.AddSingleton<IEmailWatchStore, SqliteEmailWatchStore>();
             services.RemoveAll<IEmailStore>();
             services.AddSingleton<IEmailStore, SqliteEmailStore>();
             services.AddSingleton<SqliteCredentialStore>();
@@ -795,6 +797,7 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
             {
                 foreach (var hosted in services.Where(item =>
                              item.ImplementationType == typeof(TriggerSchedulerHostedService)
+                             || item.ImplementationType == typeof(EmailWatchHostedService)
                              || item.ImplementationType == typeof(AgentRunHostedService)
                              || item.ImplementationType == typeof(BackgroundOccurrenceIntakeHostedService)).ToArray())
                 {

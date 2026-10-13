@@ -7,7 +7,7 @@ using AgentCore.Domain.Email;
 namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class InMemoryEmailWatchStore(InMemoryAgentInstanceStore instances, ICredentialStore credentials,
-    IAgentCredentialBindingStore bindings, InMemoryCoreEventStore events) : IEmailWatchStore
+    IAgentCredentialBindingStore bindings, InMemoryCoreEventStore events, ITriggerStore? triggers = null) : IEmailWatchStore
 {
     private readonly Dictionary<Guid, EmailWatchState> states = [];
     private readonly Dictionary<Guid, EmailWatchNotification> notifications = [];
@@ -43,7 +43,8 @@ public sealed class InMemoryEmailWatchStore(InMemoryAgentInstanceStore instances
     }
     private bool BindingValid(EmailWatchNotification n) => bindings.ListBindingsAsync(n.Event.Owner.AgentInstanceId).Result.Any(b =>
         b.BindingId == n.BindingId && b.CredentialId == n.AccountId && b.Revision == n.BindingRevision)
-        && instances.FindAsync(n.Event.Owner.AgentInstanceId).Result?.Lifecycle == AgentInstanceLifecycle.Active;
+        && instances.FindAsync(n.Event.Owner.AgentInstanceId).Result?.Lifecycle == AgentInstanceLifecycle.Active
+        && triggers is not null && triggers.ListAsync(n.Event.Owner, AgentCore.Domain.Triggers.AutomationStatus.Active).Result.Any(a => a.Triggers.Any(t => t.Enabled && t.Configuration is AgentCore.Domain.Triggers.CoreEventTrigger { CoreEventKey: "email.message.received" }));
     public ValueTask<bool> CommitAsync(EmailWatchClaim claim, EmailWatchBatch batch, IReadOnlyList<EmailWatchNotification> proposed, DateTimeOffset now, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
