@@ -410,14 +410,14 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
             item.authorizationOrigin === "CurrentUserTurn" ? "Chat user request" : "Admin owner", item.sourceSessionId ?? "",
             item.effectiveModelKey ?? item.modelKey ?? "Unattended default", item.executionStatus ?? ""]
             .some(value => value.toLowerCase().includes(search.trim().toLowerCase()))).sort((a, b) => Number(b.automationId === selection?.automationId) - Number(a.automationId === selection?.automationId))}
-          scroll={{ x: 1770 }} pagination={pagination}
+          scroll={{ x: 1850 }} pagination={pagination}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No matches. Clear search or filters to see all results." /> }}
           columns={[
             { title: "Name", key: "task", width: 350, ellipsis: true,
               render: (_, item) => <Button type="link" size="small" className="admin-collection-name" title={item.name}
                 data-automation-id={item.automationId} aria-label={`View automation: ${item.name}`} aria-expanded={expanded.includes(item.automationId)}
                 onClick={() => setExpanded(expanded.includes(item.automationId) ? [] : [item.automationId])}>{item.name}</Button> },
-            { title: "Destination", key: "destination", width: 240, render: (_, item) => <Flex vertical gap={token.paddingXS}><AutomationDestination target={item.executionTarget} delivery={item.completionDelivery} /></Flex> },
+            { title: "Destination", key: "destination", width: 320, render: (_, item) => <Flex vertical gap={token.paddingXS}><AutomationDestination target={item.executionTarget} delivery={item.completionDelivery} /></Flex> },
             { title: "When", key: "timing", width: 240, ellipsis: true, render: (_, item) => <span title={automationWhen(item, sources)}>{automationWhen(item, sources)}</span> },
             { title: "Status", dataIndex: "status", width: 120,
               filters: [...new Set(review.items.map(item => item.status))].map(value => ({ text: value, value })),
