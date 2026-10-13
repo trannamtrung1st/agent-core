@@ -135,7 +135,7 @@ test("p7d managed instance persona form json chat archive and history", async ({
   expect(secondSession.agentVersion).toBe(publishedVersion);
   expect(secondSession.pinnedPersonaRevision).toBe(3);
 
-  await page.goto(`/admin/instances/${instance.instanceId}/profile`);
+  await page.goto(`/admin/instances/${instance.instanceId}/lifecycle`);
   await page.getByRole("button", { name: "Archive instance" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByText("Instance archived.")).toBeVisible({ timeout: 15_000 });

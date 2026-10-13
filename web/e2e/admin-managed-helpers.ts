@@ -292,6 +292,6 @@ export async function savePersonaAndAwaitPatch(page: Page, instanceId: string) {
       response.ok(),
     { timeout: 30_000 }
   );
-  await page.getByRole("button", { name: "Save persona" }).click();
+  await page.getByRole("button", { name: "Save configuration", exact: true }).click();
   return await responsePromise;
 }
