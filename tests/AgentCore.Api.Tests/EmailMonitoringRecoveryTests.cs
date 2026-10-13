@@ -69,9 +69,16 @@ public sealed class EmailMonitoringRecoveryTests
         Assert.False(await watches.CanDeliverAsync(pending[0].Event.EventId));
         await monitoring.ConfigureAsync(account.CredentialId, 1, true, 300);
         Assert.Equal("Paused", (await monitoring.GetAsync(account.CredentialId)).Status);
-        var pollsAtPause = feed.Polls; clock.Advance(901); await monitoring.RunOnceAsync(); Assert.Equal(pollsAtPause, feed.Polls);
+        var pollsAtPause = feed.Polls; clock.Advance(901);
+        var paused = (await client.GetFromJsonAsync<EmailMonitoringView>($"/api/v2/admin/email-accounts/{account.CredentialId}/monitoring"))!;
+        Assert.Equal("Paused", paused.Status); Assert.False(paused.CheckPending); // Explicit recovery remains possible after the stored retry is due.
+        await monitoring.RunOnceAsync(); Assert.Equal(pollsAtPause, feed.Polls);
         feed.Permanent = false;
-        feed.Block = true; await monitoring.CheckAsync(account.CredentialId, 2); var inFlight = monitoring.RunOnceAsync().AsTask();
+        feed.Block = true;
+        var recovery = await client.PostAsJsonAsync($"/api/v2/admin/email-accounts/{account.CredentialId}/monitoring/check", new { expectedRevision = 2 });
+        Assert.Equal(System.Net.HttpStatusCode.Accepted, recovery.StatusCode);
+        Assert.True((await recovery.Content.ReadFromJsonAsync<EmailMonitoringView>())!.CheckPending);
+        var inFlight = monitoring.RunOnceAsync().AsTask();
         await feed.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await monitoring.ConfigureAsync(account.CredentialId, 2, false, 60); feed.Release.SetResult(); await inFlight;
         Assert.Null((await watches.GetAsync(account.CredentialId)).Cursor); Assert.False(await watches.CanDeliverAsync(pending[0].Event.EventId));

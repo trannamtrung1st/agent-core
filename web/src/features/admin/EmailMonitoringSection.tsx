@@ -31,12 +31,14 @@ export function EmailMonitoringSection({ account, instanceId }: { account: Syste
     const version = identity.current; const read = ++readSequence.current; const draft = draftSequence.current;
     if (showLoading) setLoading(true);
     try { const value = await getEmailMonitoring(account.credentialId); if (version !== identity.current || read !== readSequence.current) return;
-      apply(value, replaceDraft || (!dirtyRef.current && draft === draftSequence.current)); if (replaceDraft) { setError(undefined); setFeedback(''); } }
-    catch (e) { if (version === identity.current) setError(describeAdminError(e, 'Monitoring could not be loaded. Reload this account to retry.')); }
+      const replace = !busyRef.current && draft === draftSequence.current && (replaceDraft || !dirtyRef.current);
+      apply(value, replace); if (replaceDraft && replace) { setError(undefined); setFeedback(''); } }
+    catch (e) { if (version === identity.current && read === readSequence.current) setError(describeAdminError(e, 'Monitoring could not be loaded. Reload this account to retry.')); }
     finally { if (version === identity.current && showLoading) setLoading(false); }
   }, [account.credentialId, apply]);
   useEffect(() => {
-    identity.current++; setStatus(undefined); setSaved(undefined); setError(undefined); setFeedback(''); dirtyRef.current = false;
+    identity.current++; draftSequence.current++; busyRef.current = false; setBusy(undefined); setEnabled(false); setInterval(300);
+    setStatus(undefined); setSaved(undefined); setError(undefined); setFeedback(''); dirtyRef.current = false;
     void load(true, true);
     return () => { identity.current++; };
   }, [load]);
@@ -75,7 +77,7 @@ export function EmailMonitoringSection({ account, instanceId }: { account: Syste
     </Flex>
     {loading ? <Skeleton active paragraph={{ rows: 2 }} title={false} /> : status && saved && <>
       {warning && <Alert showIcon type="warning" title={status.status === 'Gap' ? 'Some messages may have been missed' : statusText[status.status]}
-        description={status.status === 'HostDisabled' ? 'Ask the operator to enable Email and EmailMonitoring. Your saved settings remain.' : status.status === 'Retrying' ? 'A temporary mailbox failure will retry automatically. Check now requests another attempt.' : status.status === 'Gap' ? 'The mailbox cursor changed or expired. Monitoring resumed from a new baseline; old mail will not be replayed.' : 'Review account status and Test access above. Reconnect Gmail or update Custom credentials, then Check now.'} />}
+        description={status.status === 'HostDisabled' ? 'Ask the operator to enable Email and EmailMonitoring. Your saved settings remain.' : status.status === 'Retrying' ? 'A temporary mailbox failure will retry automatically. Check now requests another attempt.' : status.status === 'Gap' ? 'The mailbox cursor changed or expired. Monitoring resumed from a new baseline; old mail will not be replayed.' : account.emailAccount?.preset === 'Custom' ? 'Review account status and Test incoming above. Update Custom credentials, then Check now.' : 'Review account status and Test access above. Reconnect Gmail, then Check now.'} />}
       <Flex vertical gap={token.paddingSM}>
         <Flex className="admin-email-monitor-controls" wrap gap={token.padding} align="center">
           <Flex gap={token.paddingXS} align="center"><Switch id={`email-monitor-${account.credentialId}`} aria-label="New inbox messages" checked={enabled} disabled={!!busy} onChange={value => editDraft(() => setEnabled(value))} /><label htmlFor={`email-monitor-${account.credentialId}`}>New inbox messages</label></Flex>

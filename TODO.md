@@ -8,7 +8,8 @@
 - [x] Owner HTTP and existing Credential detail saved Monitoring controls; four responsive Synthetic browser journeys.
 - [x] Isolated Compose SQLite/key-ring and monitoring cursor/generation recreation checks.
 - [x] Full frozen-source local gates: 3,889 backend passes / 21 opt-in skips, 951 frontend passes, 212 Synthetic browser passes, build and both Compose restart checks. See [the evidence report](docs/reports/email-monitoring-verification-2026-10-13.md).
-- [ ] Public push and exact-source hosted jobs: automatic approval review requires explicit authorization to publish this payload to the public repository. No hosted closure is claimed.
+- [x] Explicit owner authorization to commit/push this payload to the public repository, 2026-10-13.
+- [ ] Final review corrections, public push and exact-source hosted jobs. No hosted closure is claimed until those jobs pass.
 - [ ] Separate dedicated-mailbox Real Gmail/IMAP UAT, only after explicit owner opt-in. No live acceptance is claimed.
 
 ## Stable original Background Work results (2026-10-09)

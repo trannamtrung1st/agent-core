@@ -46,8 +46,8 @@ public sealed class EmailMonitoringService(IEmailWatchStore watches, IEmailChang
     public async ValueTask<EmailMonitoringView> GetAsync(Guid id, CancellationToken ct = default)
     {
         var c = await Account(id, ct); var s = await watches.GetAsync(id, ct); var now = time.GetUtcNow();
-        var pending = s.LeaseExpiresAtUtc > now || s.Enabled && s.NextCheckAtUtc <= now;
         var authChanged = s.AuthorizationFingerprint is not null && s.AuthorizationFingerprint != EmailWatchAuthorization.Fingerprint(c);
+        var pending = s.LeaseExpiresAtUtc > now || s.Enabled && (!s.Paused || authChanged) && s.NextCheckAtUtc <= now;
         var status = !s.Enabled ? "Off" : !HostAvailable ? "HostDisabled" : !Available(c) || s.Paused && !authChanged ? "Paused"
             : authChanged ? "Initializing" : s.LeaseExpiresAtUtc > now ? s.Cursor is null ? "Initializing" : "Checking" : s.LastErrorCode is not null ? "Retrying"
             : s.Cursor is null || authChanged ? "Initializing" : s.LastGapAtUtc is not null ? "Gap" : "Monitoring";

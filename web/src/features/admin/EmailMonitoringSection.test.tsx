@@ -55,3 +55,48 @@ it('fences a delayed account-status read so it cannot overwrite edits or their C
   fireEvent.click(screen.getByRole('button', { name: 'Save monitoring' }));
   await waitFor(() => expect(api.saveEmailMonitoring).toHaveBeenCalledWith('fixture', { expectedRevision: 1, enabled: false, intervalSeconds: 300 }));
 });
+
+it('keeps edits and their original revision when an explicit Reload finishes after editing begins', async () => {
+  let resolve!: (v: api.EmailMonitoring) => void;
+  vi.mocked(api.getEmailMonitoring).mockResolvedValueOnce(initial).mockReturnValueOnce(new Promise(r => { resolve = r; }));
+  vi.mocked(api.saveEmailMonitoring).mockResolvedValue({ ...initial, enabled: true, configurationRevision: 1 });
+  view(); const toggle = await screen.findByRole('switch');
+  fireEvent.click(screen.getByRole('button', { name: 'Reload monitoring' }));
+  await waitFor(() => expect(api.getEmailMonitoring).toHaveBeenCalledTimes(2));
+  fireEvent.click(toggle); await act(async () => resolve({ ...initial, configurationRevision: 2 }));
+  expect(toggle).toBeChecked(); expect(screen.getByText('Unsaved monitoring changes')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Save monitoring' }));
+  await waitFor(() => expect(api.saveEmailMonitoring).toHaveBeenCalledWith('fixture', { expectedRevision: 0, enabled: true, intervalSeconds: 300 }));
+});
+it('releases an old pending save when the same detail component changes accounts', async () => {
+  let resolve!: (v: api.EmailMonitoring) => void;
+  vi.mocked(api.saveEmailMonitoring).mockReturnValue(new Promise(r => { resolve = r; }));
+  const wrapped = (id: string) => <ConfigProvider><App><EmailMonitoringSection account={{ ...account, credentialId: id }} /></App></ConfigProvider>;
+  const mounted = render(wrapped('fixture')); const toggle = await screen.findByRole('switch');
+  fireEvent.click(toggle); fireEvent.click(screen.getByRole('button', { name: 'Save monitoring' }));
+  await waitFor(() => expect(toggle).toBeDisabled());
+  vi.mocked(api.getEmailMonitoring).mockResolvedValue({ ...initial, accountId: 'other' }); mounted.rerender(wrapped('other'));
+  await waitFor(() => expect(screen.getByRole('switch')).toBeEnabled());
+  await act(async () => resolve({ ...initial, enabled: true, configurationRevision: 1 }));
+  expect(screen.getByRole('switch')).not.toBeChecked();
+  expect(screen.queryByText('Monitoring settings saved.')).not.toBeInTheDocument();
+});
+
+it('ignores a retired read failure after a newer Reload succeeds', async () => {
+  let reject!: (e: Error) => void;
+  vi.mocked(api.getEmailMonitoring).mockResolvedValueOnce(initial).mockReturnValueOnce(new Promise((_, r) => { reject = r; })).mockResolvedValueOnce({ ...initial, configurationRevision: 2 });
+  view(); await screen.findByRole('switch');
+  fireEvent.click(screen.getByRole('button', { name: 'Reload monitoring' }));
+  await waitFor(() => expect(api.getEmailMonitoring).toHaveBeenCalledTimes(2));
+  fireEvent.click(screen.getByRole('button', { name: 'Reload monitoring' }));
+  await waitFor(() => expect(api.getEmailMonitoring).toHaveBeenCalledTimes(3));
+  await act(async () => reject(new Error('Retired read failed.')));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+it('names the Custom incoming test in paused recovery and leaves explicit Check now available', async () => {
+  vi.mocked(api.getEmailMonitoring).mockResolvedValue({ ...initial, enabled: true, status: 'Paused', errorCode: 'email_watch_access_required' });
+  render(<ConfigProvider><App><EmailMonitoringSection account={{ ...account, emailAccount: { preset: 'Custom' } as api.EmailAccountProfile }} /></App></ConfigProvider>);
+  await screen.findByText('Review account status and Test incoming above. Update Custom credentials, then Check now.');
+  expect(screen.getByRole('button', { name: 'Check now' })).toBeEnabled();
+});

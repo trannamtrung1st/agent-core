@@ -1,6 +1,6 @@
 # Email monitoring verification — 13 October 2026
 
-Status: implemented locally on `develop/branch-1`, final behavior candidate `47f6353f`, reconciled with main baseline `8fc22203`. All required local backend/frontend/browser/build/packaging checks are green; non-live closure is not claimed because public push/hosted CI requires explicit publication approval. Real Gmail/IMAP UAT is separate and has not been authorized or run against an owner's mailbox.
+Status: implemented on `develop/branch-1`, reconciled with main baseline `8fc22203`. The previous local behavior candidate `47f6353f` and UI polish `f8738a56` have recorded local evidence. The owner explicitly authorized public commit/push on 2026-10-13; the final review below resolves additional recovery/default defects and runs final-source gates. Non-live closure is pending those results. Real Gmail/IMAP UAT is separate and has not been authorized or run against an owner's mailbox.
 
 ## Delivered slices
 
@@ -9,7 +9,7 @@ Status: implemented locally on `develop/branch-1`, final behavior candidate `47f
 - C `363bd110`: one central worker, built-in catalog, atomic cursor/outbox staging and hidden source authority. SQLite watcher → Event → normal owned Automation Run → original authorized email.read → work.complete passed. Polling made zero model calls; unbinding denied a second pending Event.
 - D `fa09f8c5` plus verification corrections: owner GET/PUT/202 check contract and existing account-detail AntD controls. No new navigation, provider grants, auto-binding or send approval.
 - E `408b1754`, `0a02fa40`, `47f6353f`: transactional/gated source authority, independent paused/re-enable recovery, due-lease fairness and truthful commit telemetry. Gmail handles ID-only History responses with minimal metadata (the final fake-HTTP matrix includes both ID-only and label-bearing entries); older Definitions remain denied. Final model fixture parses account/message references from the actual admitted evidence.
-- F `4c262783`: canonical docs/design synchronization and responsive capture evidence; final results are recorded below. Hosted verification is blocked by explicit public-publication approval.
+- F `4c262783`: canonical docs/design synchronization and responsive capture evidence; final results are recorded below. Hosted verification was initially blocked by public-publication approval; the owner authorization and final review below supersede that blocker.
 
 ## Runtime observations
 
@@ -75,7 +75,7 @@ Final local acceptance on behavior candidate `47f6353f`: backend 3,889 passed / 
 
 ## Release acceptance
 
-EM-01–EM-29 are the proposal's acceptance IDs. Passing focused checks and responsive screenshots do not waive full-suite, source-authority race, broader Synthetic, design/document or hosted gates. Local implementation is complete; hosted exact-source acceptance remains blocked. No freeze/closure is claimed until explicit public-publication approval permits push/dispatch and the required hosted jobs pass. Live-provider consent, fresh real-mail detection/read, restart/duplicates and revoke behavior remain unverified separately from mandatory offline acceptance.
+EM-01–EM-29 are the proposal's acceptance IDs. Passing focused checks and responsive screenshots do not waive full-suite, source-authority race, broader Synthetic, design/document or hosted gates. Local implementation is complete; the owner authorized public push/dispatch on 2026-10-13. No freeze/closure is claimed until the final reviewed candidate passes its required hosted jobs. Live-provider consent, fresh real-mail detection/read, restart/duplicates and revoke behavior remain unverified separately from mandatory offline acceptance.
 
 
 ## Follow-up UI polish (2026-10-13)
@@ -96,4 +96,21 @@ Validation on the follow-up UI source:
 
 Current captures: [desktop](assets/email-monitoring/polish-monitoring-1440.png), [tablet](assets/email-monitoring/polish-monitoring-768.png), [390px](assets/email-monitoring/polish-monitoring-390.png), [320px](assets/email-monitoring/polish-monitoring-320.png), [Synthetic coverage gap at 390px](assets/email-monitoring/polish-gap-390.png).
 
-This follow-up changes frontend presentation and local feedback; it does not repeat or supersede the earlier complete backend, 951-test frontend, 212-case browser or Compose evidence. Hosted acceptance/publication and dedicated real-mailbox UAT remain open as described above. Physical-device and actual screen-reader behavior were not tested.
+This follow-up changes frontend presentation and local feedback; it does not repeat or supersede the earlier complete backend, 951-test frontend, 212-case browser or Compose evidence. Hosted acceptance/publication was still pending when this polish was delivered; the later explicit authorization and final review below supersede the publication blocker. Dedicated real-mailbox UAT remains open. Physical-device and actual screen-reader behavior were not tested.
+
+
+## Final review and authorized publication (2026-10-13)
+
+The owner explicitly approved committing and publishing this branch to the public repository. Review traced watch due/lease/generation transitions, provider cursor budgets and authorization, atomic source receipts/admission, owner projection and frontend asynchronous form state. Corrections within the approved slice:
+
+- A permanently paused watch no longer reports checkPending merely because its internal retry timestamp has passed. This leaves explicit Check now available for an otherwise usable account. The clock-controlled owner HTTP recovery fixture failed in both InMemory and SQLite before the fix, then verified Paused/false pending, no automatic poll and 202 explicit recovery after it.
+- Explicit Reload now fences edits made after its request began and retains their original configuration revision. A retired read failure cannot replace a newer successful read. Switching accounts releases an old pending UI action and ignores its completion. The delayed Reload and pending-save account-change regressions both failed before the correction.
+- Custom port/TLS defaults are owned by the mounted form fields: new accounts show IMAP 993, SMTP 465 and required implicit TLS. Saved accounts retain their own values. Actual browser reproduction observed all four fields empty before the fix; afterward MCP observed 993/465 and both TLS choices. The new 320px E2E saves from those defaults, deliberately changes SMTP to 587/STARTTLS, tests incoming access in Synthetic and reopens the exact saved values.
+- Paused recovery names Test incoming for Custom and Test access for Gmail, matching the visible controls.
+- The hosted Compose job now includes the existing isolated watch/cursor/generation recreation script after the SQLite/key-ring smoke. It uses a fresh email-monitor-ci-* project and the built Synthetic image; no user database or real mailbox is involved.
+
+Executed focused checks: 4 EmailMonitoring owner/runtime API cases passed, including SQLite event → normal Run → authorized original email.read; 24 unit cases passed across Monitoring, Credential collections and account dialog before the final small UI refinements; the fresh final Monitoring run passed all 10 cases (`/tmp/email-monitor-review-final-monitor-ui.log`). The focused browser regression passed all 11 cases in 3.4 minutes at ports 6094/6194 using `/tmp/email-monitor-review-browser/monitor.db`; its log is `/tmp/email-monitor-review-browser.log`. Existing test deadlines and assertions were retained.
+
+MCP exercised actual Custom creation defaults and existing-account reopening, and the delayed Reload/edit/Cancel path. The gated read used a harmless subscriber-count projection to observe that the response had rendered before checking the draft, then restored the real projection. Expected and observed: the draft remained checked after the delayed response and Cancel restored persisted Off. A safe Paused projection with an already-past due timestamp and false pending left Check now enabled at 320px without overflow; real owner HTTP admission is established by the clock-controlled two-store fixture. No real provider failure, subscription creation, mail arrival or send is claimed by these UI projections. Console inspection found no application warnings/errors in the final account journey.
+
+Full local backend/frontend and final build gates run against the review source, with logs `/tmp/email-monitor-review-full-backend.log`, `/tmp/email-monitor-review-frozen-frontend.log` and `/tmp/email-monitor-review-build-final.log`. The first full frontend run (`/tmp/email-monitor-review-full-frontend.log`) passed 954 cases but failed the new copy assertion: it had cached the old component before that final source/test addition. A fresh focused run passed; the full gate was restarted with source edits frozen, without relaxing assertions. The hosted run will verify the pushed exact source, including the complete browser projects and both Compose checks. Final counts/SHA/hosted outcome are recorded in the closure addendum after completion. Documentation validation checked 16 files, 678 local targets and 217 anchors with zero missing references; workflow YAML and design JSON parsed; source diff and scoped Impeccable checks passed. Real-mailbox UAT remains separately unapproved and unrun.
