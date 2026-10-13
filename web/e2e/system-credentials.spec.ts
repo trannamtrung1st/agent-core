@@ -79,7 +79,7 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   expect(JSON.stringify(c)).not.toContain("ui-known-private-9847");
   expect(Object.hasOwn(c.metadata, "__proto__")).toBe(true);
   expect(c.metadata.__proto__).toBe("safe metadata value");
-  await row.getByRole("button", {name:"Replace value"}).click();
+  await row.getByRole("button", {name:/More actions/}).click(); await page.getByRole("menuitem", {name:"Replace value",exact:true}).click();
   const replace = page.getByRole("dialog", {name:"Replace protected value"});
   const input = replace.getByLabel("Protected value", {exact:true}); await expect(input).toHaveValue("");
   await page.route(`**/credentials/${c.credentialId}/value`, route => route.fulfill({status:409,json:{title:"Stale credential revision",detail:"Reload the credential.",diagnosticId:"credential-write-diagnostic"}}), {times:1});
@@ -91,7 +91,7 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await expect(replace.getByRole("button", {name:/Save credential/})).toBeEnabled();
   await expect(replace.getByRole("button", {name:/Save credential/})).not.toHaveClass(/ant-btn-loading/);
   await input.fill("rotated-private-9546"); await replace.getByRole("button", {name:/Save credential/}).click(); await expect(replace).toBeHidden();
-  await row.getByRole("button", {name:"Replace value"}).click(); await expect(input).toHaveValue(""); await replace.getByRole("button", {name:"Cancel"}).click();
+  await row.getByRole("button", {name:/More actions/}).click(); await page.getByRole("menuitem", {name:"Replace value",exact:true}).click(); await expect(input).toHaveValue(""); await replace.getByRole("button", {name:"Cancel"}).click();
   for (const [instance, alias] of [[a,"primary"],[b,"shared"]] as const) {
     await page.goto(`/admin/instances/${instance.instanceId}/credentials`);
     await page.getByRole("button", {name:"Bind credential",exact:true}).click();
@@ -112,7 +112,9 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   }
   await page.goto("/admin/connections/credentials");
   await page.getByRole("textbox", {name:"Search credentials",exact:true}).fill(name);
-  await expect(row.getByRole("button",{name:"Delete",exact:true})).toBeDisabled();
+  await row.getByRole("button",{name:/More actions/}).click();
+  await expect(page.getByRole("menuitem",{name:"Delete",exact:true})).toBeDisabled();
+  await page.keyboard.press("Escape");
   await row.getByRole("button",{name:"Edit",exact:true}).click();
   const edit = page.getByRole("dialog", {name:"Edit credential"}); await expect(edit.getByLabel("Kind")).toHaveCount(0); await expect(edit.locator("input[type=password]")).toHaveCount(0);
   await expect(edit.getByLabel("Metadata key 1")).toHaveValue("username");
@@ -121,7 +123,7 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await expect(edit.getByLabel("Metadata value 2")).toHaveValue("safe metadata value");
   await edit.getByRole("combobox", {name:"Status"}).click(); await page.getByTitle("Disabled", {exact:true}).click();
   await edit.getByRole("button", {name:/Save credential/}).click(); await expect(edit).toBeHidden(); await expect(row).toContainText("Disabled");
-  await page.goto(`/admin/instances/${a.instanceId}/credentials`); await expect(page).toHaveURL(new RegExp(`/instances/${a.instanceId}/access#credentials$`));
+  await page.goto(`/admin/instances/${a.instanceId}/credentials`); await expect(page).toHaveURL(new RegExp(`/instances/${a.instanceId}/credentials$`));
   await expect(page.getByText("Password · Disabled")).toBeVisible();
   await page.getByRole("button",{name:"Reset browser profile",exact:true}).click();
   await page.getByRole("dialog",{name:"Reset browser profile?"}).getByRole("button",{name:"Cancel",exact:true}).click();
@@ -137,7 +139,7 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await owner(page, `agent-instances/${b.instanceId}/lifecycle`, "PATCH", {expectedRevision:currentB.instanceRevision,lifecycle:"Archived"});
   await page.goto(`/admin/instances/${b.instanceId}/credentials`); await expect(page.getByRole("button",{name:"Bind credential",exact:true})).toBeDisabled(); await expect(page.getByRole("button",{name:"Unbind",exact:true})).toBeDisabled();
   for (const width of [1440,768,390]) {
-    await page.setViewportSize({width,height:900}); await expect(page.getByRole("heading",{name:"Credential bindings"})).toBeVisible();
+    await page.setViewportSize({width,height:900}); await expect(page.getByRole("heading",{name:"Credential bindings",exact:true,level:2})).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   }
   await page.goto("/admin/connections/events"); await expect(page.getByRole("heading",{name:"Events",exact:true,level:2})).toBeVisible();

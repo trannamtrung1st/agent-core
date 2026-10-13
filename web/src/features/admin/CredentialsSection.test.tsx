@@ -34,7 +34,7 @@ describe("System credentials", () => {
     vi.mocked(api.replaceCredentialValue).mockRejectedValue(Object.assign(new Error("Revision conflict"), {
       name: "AdminRequestError", diagnosticId: "credential-write-diagnostic"
     }));
-    view(); fireEvent.click(await screen.findByRole("button", { name: "Replace value" }));
+    view(); fireEvent.click(await screen.findByRole("button", { name: "More actions for Shared store" })); fireEvent.click(await screen.findByRole("menuitem", { name: "Replace value" }));
     const dialog = within(await screen.findByRole("dialog", { name: "Replace protected value" }));
     const input = dialog.getByLabelText("Protected value", { exact: true });
     expect(input).toHaveAttribute("type", "password");
@@ -48,7 +48,7 @@ describe("System credentials", () => {
     fireEvent.change(input, { target: { value: "must-clear-on-cancel" } });
     fireEvent.click(dialog.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    fireEvent.click(screen.getByRole("button", { name: "Replace value" }));
+    fireEvent.click(screen.getByRole("button", { name: "More actions for Shared store" })); fireEvent.click(await screen.findByRole("menuitem", { name: "Replace value" }));
     expect(within(await screen.findByRole("dialog", { name: "Replace protected value" })).getByLabelText("Protected value", { exact: true })).toHaveValue("");
   });
   it("round trips dynamic metadata keys that collide with JavaScript object properties", async () => {

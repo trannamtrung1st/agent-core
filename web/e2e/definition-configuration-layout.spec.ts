@@ -68,7 +68,7 @@ test('Definition configuration retains edits and navigation across shared sectio
   await navigateAdmin(editor, 'Capabilities');
   await navigateAdmin(editor, 'Resources');
   await expect(editor.getByLabel('Resource logical path')).toHaveValue('references/retained-input.txt');
-  await navigateAdmin(editor, 'Instructions & behavior');
+  await navigateAdmin(editor, 'Instructions');
   await expect(editor.getByLabel('System instructions')).toHaveValue('Retain this instruction across every configuration view.');
   for (const width of [1440, 768, 767, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -94,7 +94,7 @@ test('Definition configuration retains edits and navigation across shared sectio
   }
   await navigateAdmin(editor, 'Resources');
   await editor.getByLabel('Resource logical path').fill('');
-  await navigateAdmin(editor, 'Instructions & behavior');
+  await navigateAdmin(editor, 'Instructions');
   await editor.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
   await page.reload();

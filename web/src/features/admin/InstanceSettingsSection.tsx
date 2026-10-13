@@ -1,3 +1,4 @@
+import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { emptyDraft, useInstanceSettingsController } from './useInstanceSettingsController';
 import { useAdminDraftStatus } from './AdminDraftStatus';
 import { useEffect, useId, useState } from 'react';
@@ -21,20 +22,21 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [expanded, setExpanded] = useState<string[]>([]);
   const formId = useId();
-  const { sections, drafts, setDrafts, customized, setCustomized, loading, busy, error, models, defaultModelKey, reload, change, inherit, save } = useInstanceSettingsController(instanceId, archived, active, onUpdated);
+  const { sections, drafts, setDrafts, loading, busy, error, models, defaultModelKey, reload, change, inherit, save, saveAll } = useInstanceSettingsController(instanceId, archived, active, onUpdated);
   useEffect(() => { setExpanded([]); }, [instanceId]);
   const requested = page ? instanceSettingGroups[page] ?? [] : undefined;
   const dirtySections = Object.entries(drafts).filter(([, draft]) => Object.keys(draft.set).length + draft.clear.length > 0).map(([key]) => key);
   useAdminDraftStatus(Object.entries(instanceSettingGroups).filter(([, sections]) => sections?.some(section => dirtySections.includes(section))).map(([key]) => key));
   useEffect(() => { onDirtyChange?.(dirtySections.length > 0); }, [dirtySections.join(','), onDirtyChange]);
   useEffect(() => { if (requested) setExpanded(current => [...new Set([...current, ...requested])]); }, [page]);
+  const configuration = useInstanceConfigurationEditor('Settings', { dirty: dirtySections.length > 0, busy: busy || loading, revision: sections?.[0]?.instanceRevision, blocked: !sections ? 'Read current settings before saving.' : undefined, save: saveAll, discard: () => setDrafts({}), refresh: reload });
   return <Flex vertical gap={token.padding}>
-    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.</Typography.Paragraph>
+    <Typography.Paragraph type="secondary" className="admin-settings-intro" style={{ margin: 0 }}>Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.</Typography.Paragraph>
     <Button style={{ alignSelf: "flex-start" }} disabled={busy || loading} onClick={() => void reload()}>Reload settings</Button>
     {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => void reload()}>Retry settings</Button>} />}
     {loading && <Spin aria-label="Loading Instance settings" />}
     {sections && <Collapse styles={{ header: { alignItems: 'center' } }} activeKey={expanded} onChange={keys => setExpanded(Array.isArray(keys) ? keys : [keys])} items={sections.filter(section => !requested || requested.includes(section.section)).map(section => {
-      const draft = drafts[section.section] ?? emptyDraft(); const own = customized[section.section] ?? Object.keys(section.overrides).length > 0;
+      const draft = drafts[section.section] ?? emptyDraft();
       const changed = Object.keys(draft.set).length + draft.clear.length > 0;
       const title = titles[section.section];
       const hasOverrides = Object.keys(draft.set).length > 0 || Object.keys(section.overrides).some(field => !draft.clear.includes(field));
@@ -43,15 +45,14 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
         {changed && <Typography.Text type="secondary">Unsaved changes</Typography.Text>}
         {hasOverrides && <Tooltip trigger={['hover', 'focus', 'click']} title={changed ? 'Unsaved Instance overrides' : 'This section has Instance overrides.'}><InfoCircleOutlined tabIndex={0} aria-label={`${title}: Instance override`} /></Tooltip>}
       </Flex>, children: <Flex vertical gap={token.padding} role="group" aria-label={`${title} settings`}>
-        {!own && <Button style={{ alignSelf: 'flex-start' }} aria-label={`Customize ${title}`} disabled={archived || busy} onClick={() => setCustomized(current => ({ ...current, [section.section]: true }))}>Customize</Button>}
-        {section.section === 'instructions' && own && <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Saving replaces the complete operating instructions for this Instance. Review the inherited instructions before editing.</Typography.Paragraph>}
+        {section.section === 'instructions' && <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Saving replaces the complete operating instructions for this Instance. Review the inherited instructions before editing.</Typography.Paragraph>}
         <Form layout="vertical" className={`admin-config-form admin-settings-form admin-settings-field-grid instance-settings-form${section.section === 'instructions' ? ' admin-settings-instructions' : ''}`}>
           {(fieldOrder[section.section] ?? Object.keys(section.effective)).filter(field => field in section.effective).map(field => {
             const inherited = section.effective[field];
             const value = draft.clear.includes(field) ? section.definitionDefaults?.[field] ?? null : field in draft.set ? draft.set[field] : inherited;
             const constraint = section.constraints?.[field];
             const locked = typeof constraint?.requiredBoolean === 'boolean';
-            const disabled = archived || busy || !own || draft.clear.includes(field) || locked;
+            const disabled = archived || busy || draft.clear.includes(field) || locked;
             const label = labels[field] ?? field[0].toUpperCase() + field.slice(1);
             const id = `${formId}-${section.section}-${field}`;
             const boolean = typeof inherited === 'boolean';
@@ -59,11 +60,11 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
             const status = draft.clear.includes(field) ? 'Will inherit on save' : field in draft.set ? 'Unsaved Instance override' : section.sources[field] === 'instance' ? 'Instance override' : null;
             const defaultValue = section.definitionDefaults?.[field];
             const defaultText = Array.isArray(defaultValue) ? defaultValue.join(', ') || 'None' : defaultValue === null ? 'None' : String(defaultValue);
-            const fieldLabel = <Flex align="center" wrap gap={token.paddingXS}>
+            const fieldLabel = <Flex className="instance-settings-field-label" align="center" gap={token.paddingXS}>
               {boolean ? <label htmlFor={id}>{label}</label> : <span>{label}</span>}
               {status && <Tooltip trigger={['hover', 'focus', 'click']} title={`${status}. Definition default: ${defaultText}.`}><Button type="text" size="small" icon={<InfoCircleOutlined />} aria-label={`${label}: ${status}`} /></Tooltip>}
               {constraint && <Tooltip trigger={['hover', 'focus', 'click']} title={constraint.reason}><Button type="text" size="small" icon={<LockOutlined />} aria-label={`${label}: Definition restriction`} /></Tooltip>}
-              {own && field in section.overrides && <Tooltip trigger={['hover', 'focus']} title="Reset to Definition default"><Button type="text" size="small" icon={<UndoOutlined />} aria-label={`Reset ${label}`} disabled={archived || busy || draft.clear.includes(field)} onClick={() => inherit(section, field)} /></Tooltip>}
+              {field in section.overrides && <Tooltip trigger={['hover', 'focus']} title="Reset to Definition default"><Button type="text" size="small" icon={<UndoOutlined />} aria-label={`Reset ${label}`} disabled={archived || busy || draft.clear.includes(field)} onClick={() => inherit(section, field)} /></Tooltip>}
             </Flex>;
             let control;
             if (boolean) control = <Switch id={id} aria-label={label} checked={value === true} disabled={disabled} onChange={v => change(section, field, v)} />;
@@ -81,14 +82,13 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
             return <Form.Item key={field} className={[wide && "instance-settings-field-wide", boolean && "instance-settings-switch-field"].filter(Boolean).join(" ")} htmlFor={id} label={boolean ? undefined : fieldLabel}>{boolean ? <Flex align="center" gap={token.paddingSM}>{fieldLabel}{control}</Flex> : control}</Form.Item>;
           })}
         </Form>
-        {own && <Flex wrap gap={token.paddingXS}>
-          <Button type="primary" aria-label={`Save ${title}`} disabled={archived || busy || !changed} loading={busy} onClick={() => void save(section)}>Save</Button>
-          <Button aria-label={`Discard ${title} changes`} disabled={busy || archived || !changed && Object.keys(section.overrides).length > 0} onClick={() => {
+        <Flex wrap gap={token.paddingXS}>
+          {!configuration.managed && <Button type="primary" aria-label={`Save ${title}`} disabled={archived || busy || !changed} loading={busy} onClick={() => void save(section)}>Save</Button>}
+          {!configuration.managed && <Button aria-label={`Discard ${title} changes`} disabled={busy || archived || !changed && Object.keys(section.overrides).length > 0} onClick={() => {
             setDrafts(current => ({ ...current, [section.section]: emptyDraft() }));
-            setCustomized(current => ({ ...current, [section.section]: Object.keys(section.overrides).length > 0 }));
-          }}>Discard</Button>
+          }}>Discard</Button>}
           <Button aria-label={`Reset ${title} to Definition`} disabled={archived || busy || !Object.keys(section.overrides).length} onClick={() => confirmAction(modal, { title: `Reset ${title}?`, content: "Clears only this section’s overrides and discards its unsaved edits. Other settings and budget profiles are preserved.", okText: "Reset section", onOk: () => save(section, true) })}>Reset</Button>
-        </Flex>}
+        </Flex>
         <Typography.Text type="secondary">Instance adopted v{section.definitionVersion} · revision {section.instanceRevision}</Typography.Text>
       </Flex> };
     })} />}

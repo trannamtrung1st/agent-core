@@ -60,8 +60,8 @@ for (const width of [1440, 768, 390, 320]) test(`email monitoring saved settings
   expect(created.ok()).toBe(true); const instance = await created.json();
   const binding = await page.request.post(`/api/v2/admin/agent-instances/${instance.instanceId}/credential-bindings`, { headers, data: { expectedInstanceRevision: instance.revision, credentialId: account.credentialId, reference: 'inbox' } });
   expect(binding.ok()).toBe(true);
-  await page.goto(`/admin/instances/${instance.instanceId}/access`);
-  await expect(page.getByRole('heading', { name: 'Capabilities & credentials', exact: true, level: 2 })).toBeVisible();
+  await page.goto(`/admin/instances/${instance.instanceId}/credentials`);
+  await expect(page.getByRole('heading', { name: 'Credential bindings', exact: true, level: 2 })).toBeVisible();
   await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name: 'Expand row', exact: true }).click();
   const bound = page.getByRole('region', { name: 'Email monitoring', exact: true });
   await bound.getByRole('switch', { name: 'New inbox messages', exact: true }).click();
@@ -70,7 +70,7 @@ for (const width of [1440, 768, 390, 320]) test(`email monitoring saved settings
   await expect(setup).toHaveAttribute('href', `/admin/instances/${instance.instanceId}/automations`);
   await setup.click();
   await expect(page.getByRole('heading', { name: 'Automations', exact: true, level: 2 })).toBeVisible();
-  await navigateAdmin(page, 'Capabilities & credentials');
+  await navigateAdmin(page, 'Credential bindings');
   await expect(bound.getByRole('switch', { name: 'New inbox messages', exact: true })).not.toBeChecked();
   await expect(bound.getByRole('button', { name: 'Save monitoring', exact: true })).toBeEnabled();
   await page.getByRole('link', { name: 'Chat', exact: true }).click();

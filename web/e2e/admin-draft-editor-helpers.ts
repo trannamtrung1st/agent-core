@@ -11,9 +11,9 @@ export async function openDefinitionSettings(editor: Locator, section = "Operati
     if (await header.getAttribute('aria-expanded') === 'false') await header.click();
     return;
   }
-  const owner = section === 'Model defaults' || section === 'Provider preferences' || section === 'Execution budgets' ? 'Models & execution'
-    : section === 'Memory policy' || section === 'Trigger restrictions' || section === 'Agent self-management defaults' || section === 'Advanced / metadata' ? 'Policies' : 'Instructions & behavior';
-  await navigateAdmin(page, owner);
+  const owners: Record<string, string> = { 'Model defaults': 'Models', 'Provider preferences': 'Providers', 'Execution budgets': 'Execution budgets', 'Memory policy': 'Memory policy', 'Trigger restrictions': 'Trigger restrictions', 'Agent self-management defaults': 'Self-management', 'Advanced / metadata': 'Metadata', Conversation: 'Conversation', Behavior: 'Behavior', Initiative: 'Initiative', Voice: 'Voice' };
+  const current = editor.getByRole('button', { name: section, exact: true });
+  if (!await current.isVisible().catch(() => false)) await navigateAdmin(page, owners[section] ?? 'Instructions');
   const header = editor.getByRole("button", { name: section, exact: true });
   if (await header.getAttribute("aria-expanded") === "false") await header.click();
 }

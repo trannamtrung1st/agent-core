@@ -1,3 +1,4 @@
+import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { useExecutionBudgetLimits } from "./executionBudgetLimits";
 import { memo, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Alert, Button, Collapse, Flex, Form, InputNumber, Select, Spin, Typography, theme } from 'antd';
@@ -108,16 +109,20 @@ export function InstanceExecutionBudgets({ instanceId, archived, onUpdated, onDi
   }, [instanceId, attempt]);
   const dirty = loaded && JSON.stringify(value) !== JSON.stringify(loaded.executionBudgets ?? {});
   useEffect(() => { onDirtyChange?.(!!dirty); }, [dirty, onDirtyChange]);
-  async function save() {
+  async function save(expectedRevision?: number) {
     if (!limits || !loaded || !validExecutionBudgets(value, limits)) return;
     const generation = epoch.current;
     setBusy(true); setError(null);
-    try { const updated = await setExecutionBudgets(instanceId, loaded.revision, value);
-      if (generation === epoch.current) { setLoaded({ ...loaded, revision: updated.revision, executionBudgets: value }); onUpdated(); }
+    try { const updated = await setExecutionBudgets(instanceId, expectedRevision ?? loaded.revision, value);
+      if (generation === epoch.current) { setLoaded({ ...loaded, revision: updated.revision, executionBudgets: value }); if (expectedRevision === undefined) onUpdated(); return updated.revision; }
     }
-    catch (e) { if (generation === epoch.current) setError(e instanceof Error ? e.message : 'The Instance changed. Reload and review before saving.'); }
+    catch (e) { if (generation === epoch.current) setError(e instanceof Error ? e.message : 'The Instance changed. Reload and review before saving.'); if (expectedRevision !== undefined) throw e; }
     finally { if (generation === epoch.current) setBusy(false); }
   }
+  const configuration = useInstanceConfigurationEditor('Execution budgets', { dirty: !!dirty, busy, revision: loaded?.revision,
+    blocked: !limits || !loaded || !validExecutionBudgets(value, limits) ? 'Check execution budgets and host limits before saving.' : undefined,
+    save: async revision => { const updated = await save(revision); if (updated === undefined) throw new Error('Budgets could not be saved.'); return updated; },
+    discard: () => setValue(loaded?.executionBudgets ?? {}), refresh: async () => { const updated = await getExecutionBudgets(instanceId); setLoaded(updated); } });
   return <ExecutionBudgetPanel needsAttention={!!error || !!limitsError || !!limits && !validExecutionBudgets(value, limits)}><Flex vertical gap={token.padding}>
     {error && <Alert showIcon type="error" title={error} action={<Button onClick={() => { preserveDraft.current = !!dirty; setAttempt(v => v + 1); }}>Reload</Button>} />}
     {limitsError && <Alert showIcon type="error" title={limitsError} action={<Button onClick={reloadLimits}>Retry limits</Button>} />}
@@ -125,8 +130,8 @@ export function InstanceExecutionBudgets({ instanceId, archived, onUpdated, onDi
     {!loaded ? !error && <Spin aria-label="Loading execution budgets" /> : <>
       {limits && <BudgetFields limits={limits} value={value} inherited={loaded.definitionDefaults ?? emptyPolicy} instance disabled={busy || archived} onChange={setValue} /> }
       {dirty && <Typography.Text type="secondary">Unsaved budget changes</Typography.Text>}
-      <Flex gap={token.paddingSM} wrap><Button type="primary" loading={busy} disabled={!limits || !dirty || archived || !validExecutionBudgets(value, limits)} aria-label="Save execution budgets" onClick={() => void save()}>Save</Button>
-        <Button disabled={!dirty || busy} aria-label="Discard execution budget changes" onClick={() => setValue(loaded.executionBudgets ?? {})}>Discard</Button></Flex>
+      {!configuration.managed && <Flex gap={token.paddingSM} wrap><Button type="primary" loading={busy} disabled={!limits || !dirty || archived || !validExecutionBudgets(value, limits)} aria-label="Save execution budgets" onClick={() => void save()}>Save</Button>
+        <Button disabled={!dirty || busy} aria-label="Discard execution budget changes" onClick={() => setValue(loaded.executionBudgets ?? {})}>Discard</Button></Flex>}
     </>}
   </Flex></ExecutionBudgetPanel>;
 }

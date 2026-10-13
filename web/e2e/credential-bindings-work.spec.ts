@@ -86,7 +86,7 @@ test("credential bindings and quiet background work stay labeled", async ({ page
   await expect(page.getByText("No credentials bound")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Browser state" })).toBeVisible();
   await page.goto(`/admin/instances/${instanceId}/credentials`);
-  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/access#credentials$`));
+  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/credentials$`));
   await page.setViewportSize({ width: 390, height: 800 });
   await expect(page.getByRole("heading", { name: "Credential bindings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Bind credential", exact: true })).toBeVisible();

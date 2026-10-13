@@ -1,3 +1,4 @@
+import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, App, Button, Checkbox, Flex, Form, Select, Spin, Tag, Typography, theme } from 'antd';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
@@ -41,20 +42,21 @@ export function SelfManagementSection({ instanceId, archived, onUpdated, onDirty
     catch (e) { if (request === generation.current) setError(describeAdminError(e, 'Unable to refresh policy. Retry.')); }
     finally { if (request === generation.current) setLoading(false); }
   }
-  async function save(frozen?: boolean) {
+  async function save(frozen?: boolean, expectedRevision?: number) {
     if (!view || archived) return;
     const request = generation.current; setBusy(true); setError(null);
     try {
-      const next = await saveSelfManagement(instanceId, { expectedRevision: view.instanceRevision,
+      const next = await saveSelfManagement(instanceId, { expectedRevision: expectedRevision ?? view.instanceRevision,
         ...(frozen === undefined ? draft : draftOf(view)), ...(frozen !== undefined ? { frozen } : {}) });
       if (request !== generation.current) return;
-      setView(next); if (frozen === undefined) setDraft(draftOf(next)); onUpdated();
-    } catch (e) { if (request === generation.current) setError(describeAdminError(e, 'Policy could not be saved. Refresh revisions; your draft is retained.')); }
+      setView(next); if (frozen === undefined) setDraft(draftOf(next)); if (expectedRevision === undefined) onUpdated(); return next.instanceRevision;
+    } catch (e) { if (request === generation.current) setError(describeAdminError(e, 'Policy could not be saved. Refresh revisions; your draft is retained.')); if (expectedRevision !== undefined) throw e; }
     finally { if (request === generation.current) setBusy(false); }
   }
   const effectiveMode = draft.mode ?? view?.definitionDefaults.mode ?? 'Disabled';
   const changed = view && JSON.stringify(draft) !== JSON.stringify(draftOf(view));
   useEffect(() => { onDirtyChange?.(!!changed); }, [changed, onDirtyChange]);
+  const configuration = useInstanceConfigurationEditor('Self-management', { dirty: !!changed, busy: busy || loading, revision: view?.instanceRevision, blocked: !view ? 'Read current self-management before saving.' : undefined, save: async revision => { const updated = await save(undefined, revision); if (updated === undefined) throw new Error('Self-management could not be saved.'); return updated; }, discard: () => setDraft(view ? draftOf(view) : inherited), refresh: reload });
   const disabled = archived || loading || busy;
   const builtinChoices = [{ value: 'inherit', label: 'Inherit' }, { value: 'enabled', label: 'Enabled' }, { value: 'disabled', label: 'Disabled' }];
   return <AgentConfigurationPanel title="Agent self-management" label="Agent self-management"
@@ -74,15 +76,15 @@ export function SelfManagementSection({ instanceId, archived, onUpdated, onDirty
           </Form.Item>
           <Form.Item label="Allowed management areas" extra="These areas add a management gate. They cannot exceed Definition capability or host authority.">
             <Flex vertical gap={token.paddingXS}>
-              <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => setDraft(d => ({ ...d, scopes: d.scopes === null ? view.effective.scopes : null }))}>{draft.scopes === null ? 'Customize areas' : 'Inherit areas'}</Button>
-              <Checkbox.Group aria-label="Allowed management areas" options={managementAreas} disabled={disabled || draft.scopes === null}
+              <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => setDraft(d => ({ ...d, scopes: null }))}>Inherit areas</Button>
+              <Checkbox.Group aria-label="Allowed management areas" options={managementAreas} disabled={disabled}
                 value={draft.scopes ?? view.definitionDefaults.scopes} onChange={scopes => setDraft(d => ({ ...d, scopes: scopes as HarnessScope[] }))} />
             </Flex>
           </Form.Item>
           {effectiveMode === 'Managed' && <Form.Item label="Managed automatic changes" extra="Capabilities, privacy, triggers, credentials and management widening always require exact approval.">
             <Flex vertical gap={token.paddingXS}>
-              <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => setDraft(d => ({ ...d, managedAutoApply: d.managedAutoApply === null ? view.effective.managedAutoApply ?? [] : null }))}>{draft.managedAutoApply === null ? 'Customize automatic changes' : 'Inherit automatic changes'}</Button>
-              <Checkbox.Group aria-label="Managed automatic changes" disabled={disabled || draft.managedAutoApply === null} value={draft.managedAutoApply ?? view.definitionDefaults.managedAutoApply ?? []}
+              <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => setDraft(d => ({ ...d, managedAutoApply: null }))}>Inherit automatic changes</Button>
+              <Checkbox.Group aria-label="Managed automatic changes" disabled={disabled} value={draft.managedAutoApply ?? view.definitionDefaults.managedAutoApply ?? []}
                 options={[{ label: 'Conversation preferences', value: 'ConversationPreferences' }, { label: 'New text resources', value: 'TextResources' }, { label: 'Skill create/update/enable', value: 'SkillChanges' }]}
                 onChange={values => setDraft(d => ({ ...d, managedAutoApply: values as ManagementAutoApply[] }))} />
             </Flex>
@@ -96,10 +98,10 @@ export function SelfManagementSection({ instanceId, archived, onUpdated, onDirty
           </Form.Item>)}
           <Typography.Text type="secondary">Changes apply to the next new Run in existing Sessions. Revocation and freeze take effect immediately.</Typography.Text>
           <Flex wrap gap={token.paddingXS}>
-            <Button type="primary" disabled={disabled || !changed} onClick={() => void save()}>Save self-management</Button>
+            {!configuration.managed && <Button type="primary" disabled={disabled || !changed} onClick={() => void save()}>Save self-management</Button>}
             <Button disabled={disabled} onClick={() => setDraft(inherited)}>Reset to Definition defaults</Button>
-            {view.effective.frozen ? <Button disabled={disabled} onClick={() => confirmAction(modal, { title: 'Unfreeze self-management?', content: 'This explicitly removes the Instance lock. The selected mode and areas govern the next Run.', okText: 'Unfreeze', onOk: () => save(false) })}>Unfreeze self-management</Button>
-              : view.effective.mode !== 'Disabled' && <Button disabled={disabled} onClick={() => confirmAction(modal, { title: 'Freeze self-management?', content: 'Revoke Chat configuration immediately. Normal tasks and retained content remain available. Only Admin can unfreeze.', okText: 'Freeze self-management', onOk: () => save(true) })}>Freeze self-management</Button>}
+            {view.effective.frozen ? <Button disabled={disabled} onClick={() => confirmAction(modal, { title: 'Unfreeze self-management?', content: 'This explicitly removes the Instance lock. The selected mode and areas govern the next Run.', okText: 'Unfreeze', onOk: async () => { await save(false); } })}>Unfreeze self-management</Button>
+              : view.effective.mode !== 'Disabled' && <Button disabled={disabled} onClick={() => confirmAction(modal, { title: 'Freeze self-management?', content: 'Revoke Chat configuration immediately. Normal tasks and retained content remain available. Only Admin can unfreeze.', okText: 'Freeze self-management', onOk: async () => { await save(true); } })}>Freeze self-management</Button>}
           </Flex>
         </Flex>
       </Form>

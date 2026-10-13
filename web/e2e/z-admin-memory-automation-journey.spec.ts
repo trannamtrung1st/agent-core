@@ -10,7 +10,7 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
 
   await page.getByRole("link", { name: "Open Admin" }).click();
   await page.goto(`/admin/instances/${instance.instanceId}/profile`);
-  await expect(page.locator(".admin-instance-heading").getByText("Agent Instance", { exact: true })).toBeVisible();
+  await expect(page.locator(".admin-owner-heading").getByText("Agent Instance", { exact: true })).toBeVisible();
 
   await navigateAdmin(page, "Continuity");
   const memoryAutomation = page.locator(".admin-content");

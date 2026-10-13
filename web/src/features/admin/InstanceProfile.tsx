@@ -1,3 +1,4 @@
+import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { Alert, App, Button, Flex, Form, Input, Select, Tabs, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { confirmAction } from "../../app/confirmAction";
@@ -14,8 +15,10 @@ export function InstanceManagedControls({
   config,
   onUpdated,
   onDeleted,
-  onDirtyChange
+  onDirtyChange,
+  page
 }: {
+  page?: 'profile' | 'version' | 'lifecycle';
   config: AdminEffectiveConfiguration;
   onUpdated: () => void;
   onDeleted: () => void;
@@ -107,21 +110,24 @@ export function InstanceManagedControls({
     }
   };
 
-  const savePersona = async () => {
+  const savePersona = async (expectedRevision?: number) => {
     const nextPersona = resolvePersonaForSave();
     if (!nextPersona) {
+      if (expectedRevision !== undefined) throw new Error("Repair Persona JSON before saving.");
       return;
     }
     setBusy(true);
     try {
-      await updateAdminAgentInstancePersona(config.instanceId, {
-        expectedRevision: config.instanceRevision,
+      const updated = await updateAdminAgentInstancePersona(config.instanceId, {
+        expectedRevision: expectedRevision ?? config.instanceRevision,
         expectedPersonaRevision: config.personaRevision,
         ...nextPersona
       });
       message.success("Persona updated.");
-      onUpdated();
+      if (expectedRevision === undefined) onUpdated();
+      return updated?.revision;
     } catch (error) {
+      if (expectedRevision !== undefined) throw error;
       handleMutationError(error);
     } finally {
       setBusy(false);
@@ -202,11 +208,16 @@ export function InstanceManagedControls({
   );
 
   useEffect(() => { onDirtyChange?.(personaDirty); }, [personaDirty, onDirtyChange]);
+  let invalidPersonaJson: string | undefined;
+  if (personaTab === 'json') { try { parsePersonaJson(personaJsonDraft); } catch { invalidPersonaJson = 'Repair Persona JSON before saving.'; } }
+  const configuration = useInstanceConfigurationEditor('Profile', { dirty: personaDirty, busy, revision: config.instanceRevision, blocked: invalidPersonaJson,
+    save: async revision => { const updated = await savePersona(revision); if (updated === undefined) throw new Error('Persona revision could not be confirmed.'); return updated; },
+    discard: () => { setPersona({ ...config.persona }); setPersonaJsonDraft(JSON.stringify(config.persona, null, 2)); setPersonaJsonError(null); } });
   return (
     <AgentConfigurationPanel title="Instance management" label="Managed instance controls"
       description="Update the persona, active definition version, and lifecycle."
-      className="admin-instance-management" bodyClassName="admin-instance-control-grid">
-        <section className="admin-instance-persona" aria-label="Persona editor">
+      className="admin-instance-management" bodyClassName={`admin-instance-control-grid${page ? " admin-instance-focused" : ""}`}>
+        <section hidden={!!page && page !== "profile"} className="admin-instance-persona" aria-label="Persona editor">
           <Flex align="baseline" gap="var(--ac-space-compact)" wrap>
             <Typography.Title level={5}>Persona</Typography.Title>
             <Typography.Text type="secondary">
@@ -222,7 +233,7 @@ export function InstanceManagedControls({
                 key: "form",
                 label: "Form",
                 children: (
-                  <Form className="admin-instance-persona-form admin-settings-form" layout="vertical" disabled={busy}>
+                  <Form className="admin-instance-persona-form admin-settings-form" layout="vertical" disabled={busy || config.instanceLifecycle !== "Active"}>
                     <Form.Item label="Name">
                       <Input
                         aria-label="Persona name"
@@ -262,6 +273,7 @@ export function InstanceManagedControls({
                   <Flex vertical gap={8}>
                     <Input.TextArea
                       aria-label="Persona JSON"
+                      disabled={busy || config.instanceLifecycle !== "Active"}
                       rows={8}
                       value={personaJsonDraft}
                       onChange={(event) => {
@@ -269,16 +281,16 @@ export function InstanceManagedControls({
                         setPersonaJsonError(null);
                       }}
                     />
-                    {personaJsonError ? <Typography.Text type="danger">{personaJsonError}</Typography.Text> : null}
+                    {personaJsonError || invalidPersonaJson ? <Typography.Text type="danger">{personaJsonError ?? invalidPersonaJson}</Typography.Text> : null}
                   </Flex>
                 )
               }
             ]}
           />
           <Flex vertical gap={8} align="start" className="admin-instance-persona-actions">
-            <Button type="primary" onClick={() => void savePersona()} disabled={busy}>
+            {!configuration.managed && <Button type="primary" onClick={() => void savePersona()} disabled={busy || config.instanceLifecycle !== "Active"}>
               Save persona
-            </Button>
+            </Button>}
             {personaDirty ? (
               <Typography.Text type="secondary">
                 Unsaved persona edits stay in this editor across lifecycle and version changes until you save or
@@ -287,8 +299,8 @@ export function InstanceManagedControls({
             ) : null}
           </Flex>
         </section>
-        <div className="admin-instance-assignment">
-          <section aria-label="Active version">
+        <div hidden={page === "profile"} className="admin-instance-assignment">
+          <section hidden={page === "lifecycle"} aria-label="Active version">
             <Typography.Title level={5}>Active version</Typography.Title>
             <Typography.Paragraph type="secondary">
               Choose the immutable Definition version used by the next new Run, including in existing conversations.
@@ -319,7 +331,7 @@ export function InstanceManagedControls({
                 value={targetVersion}
                 options={versionOptions}
                 onChange={setTargetVersion}
-                disabled={busy}
+                disabled={busy || config.instanceLifecycle !== "Active"}
               />
               <Button onClick={() => void applyVersion()}
                 disabled={busy || targetVersion === config.definitionVersion}>
@@ -327,7 +339,7 @@ export function InstanceManagedControls({
               </Button>
             </Flex>
           </section>
-          <section className="admin-instance-lifecycle" aria-label="Lifecycle controls">
+          <section hidden={page === "version"} className="admin-instance-lifecycle" aria-label="Lifecycle controls">
             <Flex align="baseline" gap="var(--ac-space-compact)" wrap>
               <Typography.Title level={5}>Lifecycle</Typography.Title>
               <Tag color={config.instanceLifecycle === "Active" ? "green" : "default"}>

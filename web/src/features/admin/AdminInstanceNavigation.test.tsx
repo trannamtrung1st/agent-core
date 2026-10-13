@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { AdminShell } from './AdminShell';
 import { adminInstancePath, parseAppRoute } from '../../app/appRoute';
 import type { InstancePage } from './adminNavigation';
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "antd";
 import { describe, expect, it, vi } from "vitest";
 import type { AdminEffectiveConfiguration } from "../../services/adminApi";
@@ -90,6 +90,19 @@ function Fixture({ archived = false, start = 'memory' }: { archived?: boolean; s
 }
 async function go(name: string) { await act(async () => fireEvent.click(within(screen.getByRole('navigation', { name: 'Admin navigation' })).getByRole('link', { name }))); }
 describe('Managed Instance canonical navigation', () => {
+  it('keeps owner search results separate when the Instance is named Global Admin', async () => {
+    render(<App><AdminShell route={{ area: 'admin', view: 'instance', instanceId: config.instanceId, page: 'overview' }} ownerName="Global Admin"><div>Instance overview</div></AdminShell></App>);
+    fireEvent.click(screen.getByRole('button', { name: 'Search Admin' }));
+    const search = await screen.findByRole('dialog', { name: 'Search Admin' });
+    const owner = within(search).getByRole('region', { name: 'Instance · Global Admin destinations' });
+    const global = within(search).getByRole('region', { name: 'Global Admin destinations' });
+    expect(within(owner).getByRole('link', { name: /^Models/ })).toHaveAttribute('href', adminInstancePath(config.instanceId, 'models'));
+    expect(within(global).queryByRole('link', { name: /^Models/ })).not.toBeInTheDocument();
+    expect(within(global).getByRole('link', { name: /Credentials/ })).toHaveAttribute('href', '/admin/connections/credentials');
+    fireEvent.change(within(search).getByRole('textbox', { name: 'Search Admin destinations' }), { target: { value: 'reasoning' } });
+    await waitFor(() => expect(within(search).getByRole('region', { name: 'Instance · Global Admin destinations' })).toBeVisible());
+    expect(within(search).queryByRole('region', { name: 'Global Admin destinations' })).not.toBeInTheDocument();
+  });
   it('retains exact independent Run and Automation selections in both directions', async () => {
     render(<Fixture />);
     expect(screen.getByText('Memory controls')).toBeVisible();
@@ -112,7 +125,7 @@ describe('Managed Instance canonical navigation', () => {
     render(<Fixture archived start="runs" />);
     expect(screen.getByText('Run history')).toBeVisible();
     await go('Experience');
-    expect(screen.getByText('Unarchive from Profile & version to inspect Experience.')).toBeVisible();
+    expect(screen.getByText('Unarchive from Lifecycle to inspect Experience.')).toBeVisible();
     expect(screen.queryByText('Experience controls')).not.toBeInTheDocument();
   });
 });

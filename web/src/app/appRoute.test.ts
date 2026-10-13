@@ -13,10 +13,10 @@ describe('Admin canonical routes', () => {
     for (const url of ['/admin/nope', '/admin/instances/invalid', '/admin/definitions/%E0%A4%A', `${base}/automation/nope`, `${base}/continuity/thoughts`]) expect(parseAppRoute(url)).toEqual({ area: 'admin', view: 'not-found' });
   });
   it.each([
-    ['identity', 'profile'], ['identity/profile', 'profile'], ['identity/settings', 'behavior'], ['identity/workspace', 'workspace'],
+    ['identity', 'profile'], ['identity/profile', 'profile'], ['identity/settings', 'instructions'], ['identity/workspace', 'workspace'],
     ['skills/skills', 'skills'], ['skills/resources', 'resources'], ['continuity', 'continuity/memory'],
-    ['automation', 'automations'], ['automation/automations', 'automations'], ['automation/controls', 'automations#execution-defaults'],
-    ['automation/harness', 'self-management'], ['activity', 'activity/sessions'], ['runs', 'activity/runs'], ['credentials', 'access#credentials'],
+    ['automation', 'automations'], ['automation/automations', 'automations'], ['automation/controls', 'unattended#execution-defaults'],
+    ['automation/harness', 'self-management'], ['activity', 'activity/sessions'], ['runs', 'activity/runs'], ['access', 'capabilities'],
   ])('migrates %s once to %s with meaningful query and no secret forwarding', (old, next) => {
     const expected = `${base}/${next.split('#')[0]}?run=${id}&automation=${id}${next.includes('#') ? `#${next.split('#')[1]}` : '#focus'}`;
     expect(canonicalAppUrl(`${base}/${old}?run=${id}&automation=${id}&token=secret#focus`)).toBe(expected);
@@ -28,6 +28,12 @@ describe('Admin canonical routes', () => {
     expect(adminDefinitionPath('examiner')).toBe('/admin/definitions/examiner/versions');
     expect(adminHomePath('credentials')).toBe('/admin/connections/credentials');
     expect(adminHomePath('browser-privacy')).toBe('/admin/platform/browser-privacy');
+  });
+  it('relocates legacy combined-page anchors to their focused owner', () => {
+    expect(canonicalAppUrl(`${base}/behavior#voice`)).toBe(`${base}/voice#voice`);
+    expect(canonicalAppUrl(`${base}/models#providerPreferences`)).toBe(`${base}/providers#providerPreferences`);
+    expect(canonicalAppUrl(`${base}/access#credentials`)).toBe(`${base}/credentials#credentials`);
+    expect(canonicalAppUrl(`/admin/definitions/examiner/drafts/${id}/policies#selfManagement`)).toBe(`/admin/definitions/examiner/drafts/${id}/self-management#selfManagement`);
   });
   it('remembers the exact saved conversation and rejects Admin as chat memory', () => {
     sessionStorage.clear(); rememberChatUrl('/admin'); expect(lastChatUrl()).toBe('/');

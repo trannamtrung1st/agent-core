@@ -1,5 +1,5 @@
 import { DeleteOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Flex, Result, Select, Spin, Table, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Empty, Flex, Result, Select, Spin, Table, Tag, Tooltip, Typography, theme } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { followAppLink } from "../../app/appLink";
 import { adminDefinitionPath, adminDraftPath, navigateToAppPath, type AdminDefinitionTab } from "../../app/appRoute";
@@ -11,7 +11,7 @@ import { describeAdminError } from "./adminErrors";
 import { AdminRetryAction, showAdminFailure } from "./adminFailure";
 import { startManagedPublicationChat } from "./adminManagedChat";
 import { definitionPages, draftPages, type DraftPage } from './adminNavigation';
-import { AdminPageHeading } from './AdminShell';
+import { AdminOwnerHeading, AdminPageHeading } from './AdminShell';
 import { applyCandidateJson, automationNumberErrors, candidateForPersistence, candidateToJson, candidatesEqual, cloneCandidate, type DefinitionCandidate } from "./definitionCandidate";
 import { type DefinitionEditorView } from "./definitionCandidateEditor";
 import { type DefinitionDraftEvidenceHandle } from "./definitionDraftPublishGatePanel";
@@ -62,6 +62,8 @@ export function DefinitionDetail({
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const [lifecycleError, setLifecycleErrorValue] = useState<string | null>(null);
   const [lifecycleDiagnosticId, setLifecycleDiagnosticId] = useState<string | null>(null);
+  // Catalog refreshes must not erase the exact draft's read outcome.
+  const [draftReadError, setDraftReadError] = useState<string | null>(null);
   const setLifecycleError = useCallback((message: string | null, diagnosticId?: string | null) => {
     setLifecycleErrorValue(message);
     setLifecycleDiagnosticId(message ? diagnosticId ?? null : null);
@@ -86,7 +88,7 @@ export function DefinitionDetail({
 
   const [transientDirtyPages, setTransientDirtyPages] = useState<readonly string[]>([]);
   const dirtyCandidate = activeDraft !== null && !candidatesEqual(candidate, activeDraft.candidate);
-  const candidateAreas: Record<string, readonly string[]> = { profile: ['identity', 'goals'], behavior: ['systemInstructions', 'conversationPolicy', 'behaviorPolicy', 'initiativePolicy', 'voice'], models: ['modelDefaults', 'providerPreferences', 'executionBudgets'], skills: ['skills'], capabilities: ['environment'], policies: ['memoryPolicy', 'triggerPolicy', 'selfManagement', 'metadata'] };
+  const candidateAreas: Record<string, readonly string[]> = { profile: ['identity', 'goals'], instructions: ['systemInstructions'], conversation: ['conversationPolicy'], behavior: ['behaviorPolicy'], initiative: ['initiativePolicy'], voice: ['voice'], models: ['modelDefaults'], providers: ['providerPreferences'], execution: ['executionBudgets'], skills: ['skills'], capabilities: ['environment'], 'memory-policy': ['memoryPolicy'], 'trigger-policy': ['triggerPolicy'], 'self-management': ['selfManagement'], metadata: ['metadata'] };
   useAdminDraftStatus(activeDraft ? [...Object.entries(candidateAreas).filter(([, fields]) => fields.some(field => JSON.stringify(candidate[field]) !== JSON.stringify(activeDraft.candidate[field]))).map(([page]) => page), ...(jsonError ? ['advanced-json'] : []), ...transientDirtyPages] : []);
   const dirty = activeDraft !== null && (dirtyCandidate || jsonError !== null || transientDirtyPages.length > 0);
   const releaseConsumedDraft = useAdminUnsavedChanges(`draft:${definitionId}:${activeDraft?.draftId ?? draftId ?? ''}`, dirty);
@@ -183,6 +185,7 @@ export function DefinitionDetail({
     draftRead.current.pending = true;
     setBusy(true);
     setLifecycleError(null);
+    setDraftReadError(null);
     try {
       const draft = await getAdminDefinitionDraft(draftId);
       if (sequence !== draftRead.current.sequence) return;
@@ -194,7 +197,10 @@ export function DefinitionDetail({
       loadCandidate(draft.candidate);
       if (updatePath) navigateToAppPath(adminDraftPath(definitionId, draft.draftId));
     } catch (error) {
-      if (sequence === draftRead.current.sequence) reportLifecycleError(error, "Failed to load draft.");
+      if (sequence === draftRead.current.sequence) {
+        setDraftReadError(describeAdminError(error, "Failed to load draft.").message);
+        reportLifecycleError(error, "Failed to load draft.");
+      }
     } finally {
       if (sequence === draftRead.current.sequence) {
         draftRead.current.pending = false;
@@ -423,10 +429,8 @@ export function DefinitionDetail({
   return (
     <Flex vertical gap={16}>
       {group ? (
-        <div className="admin-definition-heading">
-          <Flex align="start" justify="space-between" gap={12} wrap="wrap">
-            <Flex vertical gap={8} className="admin-inventory-row-copy">
-              <Typography.Title level={2}>{group.logicalName}</Typography.Title>
+        <AdminOwnerHeading name={group.logicalName}
+          metadata={<>
               <Typography.Text type="secondary" className="admin-inventory-row-secondary">
                 {group.definitionId}
               </Typography.Text>
@@ -438,24 +442,22 @@ export function DefinitionDetail({
               <Typography.Text type="secondary" className="admin-inventory-row-description">
                 {formatDefinitionVersionSummary(group)}
               </Typography.Text>
-            </Flex>
-            {canDeleteDefinition ? (
+          </>}
+          extra={canDeleteDefinition ? (
               <Button danger disabled={busy} onClick={confirmDeleteDefinition}>
                 Delete definition
               </Button>
             ) : null}
-          </Flex>
-          <Flex gap={8} wrap="wrap">
+          status={<Flex gap={8} wrap="wrap">
             <Tag>{formatDefinitionInventoryCounts(group)}</Tag>
-            <Tag>{group.draftOnly ? "Draft" : formatInventoryStatus(group.latestStatus)}</Tag>
+            <Tag>{group.draftOnly ? "Draft" : `Latest: ${formatInventoryStatus(group.latestStatus)}`}</Tag>
             {!group.draftOnly && latestActiveVersion(group.versions) !== null
               && latestActiveVersion(group.versions) !== group.latestVersion ? (
                 <Tag color="blue">Latest active v{latestActiveVersion(group.versions)}</Tag>
               ) : null}
-          </Flex>
-        </div>
+          </Flex>} />
       ) : (
-        <Typography.Title level={4}>{definitionId}</Typography.Title>
+        <AdminOwnerHeading name={definitionId} />
       )}
       <AdminPageHeading page={draftId ? draftPages.find(page => page.id === draftPage) : definitionPages.find(page => page.id === (tab ?? "versions"))} />
       {definitions.kind === "loading" ? <Spin /> : null}
@@ -475,7 +477,7 @@ export function DefinitionDetail({
       {definitions.kind === "ready" && !group && !lifecycleLoading && draftSummaries.length === 0 ? (
         <Result status="404" title="Definition not found" />
       ) : null}
-      {draftId && !activeDraft && <Alert type={lifecycleError ? "error" : "info"} showIcon title={lifecycleError ?? "Loading draft…"} action={<Button disabled={busy} onClick={() => void selectDraft(draftId, false)}>Retry draft</Button>} />}
+      {draftId && !activeDraft && <Alert type={draftReadError ? "error" : "info"} showIcon title={draftReadError ?? "Loading draft…"} action={<Button disabled={busy} onClick={() => void selectDraft(draftId, false)}>Retry draft</Button>} />}
       {(group || draftSummaries.length > 0) && activeDraft && draftId ? (
         <section ref={editorSurfaceRef} className="admin-draft-focused" aria-label="Draft editor">
           {lifecycleError ? (
@@ -596,10 +598,10 @@ export function DefinitionDetail({
                               onFilter: (value, item) => item.sourceKind === value },
                             { title: "Updated", dataIndex: "updatedAt", defaultSortOrder: "descend",
                               sorter: (a, b) => a.updatedAt.localeCompare(b.updatedAt), render: formatAdminTimestamp },
-                            { title: "Actions", key: "actions", width: 80, render: (_, item) => <Button type="text" size="small" danger
+                            { title: "Actions", key: "actions", width: 80, render: (_, item) => <Tooltip title="Delete draft"><Button type="text" size="small" danger
                               icon={<DeleteOutlined />} disabled={busy}
                               aria-label={`Delete ${item.sourceVersion != null ? `draft from v${item.sourceVersion}` : "draft"}, revision ${item.revision}`}
-                              onClick={() => confirmDeleteDraft(item, item.revision)} /> }
+                              onClick={() => confirmDeleteDraft(item, item.revision)} /></Tooltip> }
                           ]}
                         />
                       </div>

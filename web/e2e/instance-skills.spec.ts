@@ -123,6 +123,7 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await expect(page.getByText('Draft saved.')).toBeVisible();
   await completeDefinitionDraftPublishGate(page, editor); await publishDraftFromInstructions(page, editor);
   await page.goto(`/admin/instances/${id}/profile`);
+  await navigateAdmin(page, "Definition version");
   await page.getByLabel('Target definition version').click(); await page.locator('.ant-select-item-option').filter({ hasText: /^v2\b/ }).click();
   await page.getByRole('button', { name: 'Upgrade to v2' }).click(); await page.getByRole("button", {name:"Adopt version",exact:true}).click(); await expect(page.getByText('Instance adopted v2.')).toBeVisible();
   await navigateAdmin(page, 'Skills & resources');
@@ -134,7 +135,8 @@ test('Definition upgrade and rollback preserve disabled choices and independent 
   await expect(page.getByRole('dialog')).toBeHidden();
   await local.getByRole('button', { name: 'Edit' }).click(); await expect(page.getByLabel('Procedure', { exact: true })).toHaveValue('LOCAL_INDEPENDENT');
   await page.getByRole('button', { name: 'Cancel editing' }).click();
-  await navigateAdmin(page, 'Identity & version'); await page.getByLabel('Target definition version').click();
+  await navigateAdmin(page, "Definition version");
+  await navigateAdmin(page, 'Definition version'); await page.getByLabel('Target definition version').click();
   await page.locator('.ant-select-item-option').filter({ hasText: /^v1\b/ }).click(); await page.getByRole('button', { name: 'Rollback to v1' }).click(); await page.getByRole("button", {name:"Adopt version",exact:true}).click();
   await expect(page.getByText('Instance adopted v1.')).toBeVisible(); await navigateAdmin(page, 'Skills & resources');
   await navigateAdmin(page, 'Skills');

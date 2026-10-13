@@ -1,8 +1,8 @@
 import { followAppLink } from "../../app/appLink";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Alert, App, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Form, Grid, Input, Modal, Select, Spin, Table, Tag, Typography, theme } from "antd";
-import { MoreOutlined, PlusOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Form, Grid, Input, Modal, Select, Spin, Table, Tag, Tooltip, Typography, theme } from "antd";
+import { MoreOutlined, PlusOutlined, EyeOutlined, EditOutlined, KeyOutlined, StopOutlined } from "@ant-design/icons";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { confirmAction } from "../../app/confirmAction";
 import { adminHomePath, adminInstancePath, navigateToAppPath } from "../../app/appRoute";
@@ -128,11 +128,11 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
     <Button size="small" disabled={busy} aria-label={`${credentialAction(item)} for ${item.displayName}`} onClick={e => { opener.current = e.currentTarget; confirmCredential(item); }}>{credentialAction(item)}</Button>
     {item.status === "Active" ? <Button size="small" danger aria-label={`Revoke ${item.displayName}`} disabled={busy} onClick={e => { opener.current = e.currentTarget; confirmRevoke(item); }}>Revoke Event</Button> : null}
   </Flex> : <Flex className="admin-table-actions" gap={token.paddingXS} align="center">
-    <Button size="small" href={embedded ? undefined : `${adminHomePath("events")}?event=${item.eventId}`} onClick={e => { const open = () => { opener.current = e.currentTarget; openDetails(item.eventId); }; if (embedded) open(); else followAppLink(e, open); }} aria-label={`View details for ${item.displayName}`}>View</Button>
+    <Tooltip title="View details"><Button size="small" icon={<EyeOutlined aria-hidden />} href={embedded ? undefined : `${adminHomePath("events")}?event=${item.eventId}`} onClick={e => { const open = () => { opener.current = e.currentTarget; openDetails(item.eventId); }; if (embedded) open(); else followAppLink(e, open); }} aria-label={`View details for ${item.displayName}`} /></Tooltip>
     <Dropdown trigger={["click"]} menu={{ items: [
-      { key: "rename", label: "Rename", disabled: busy },
-      { key: "credential", label: credentialAction(item), disabled: busy },
-      ...(item.status === "Active" ? [{ key: "revoke", label: "Revoke Event", danger: true, disabled: busy }] : [])
+      { key: "rename", icon: <EditOutlined aria-hidden />, label: "Rename", disabled: busy },
+      { key: "credential", icon: <KeyOutlined aria-hidden />, label: credentialAction(item), disabled: busy },
+      ...(item.status === "Active" ? [{ key: "revoke", icon: <StopOutlined aria-hidden />, label: "Revoke Event", danger: true, disabled: busy }] : [])
     ], onClick: ({ key }) => { if (key === "rename") openEditor(item, opener.current); else if (key === "credential") confirmCredential(item); else confirmRevoke(item); } }}>
       <Button size="small" icon={<MoreOutlined aria-hidden />} aria-label={`More actions for ${item.displayName}`} disabled={busy} onClick={e => { opener.current = e.currentTarget; }} />
     </Dropdown>
@@ -140,7 +140,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
   const subscriptionHref = (instanceId: string, automationId: string) => `${adminInstancePath(instanceId, "automations")}?automation=${automationId}`;
   const eventHref = (source: EventSourceReference) => `${adminHomePath("events")}?${source.kind === "builtin" ? `builtin=${encodeURIComponent(source.key)}` : `event=${source.eventId}`}`;
   const nameError = /[\u0000-\u001f\u007f-\u009f]/.test(name) ? "Use a name without control characters." : null;
-  return <AgentConfigurationPanel title="Events" label="Events"
+  return <AgentConfigurationPanel title="Event catalog" label="Events"
     description="Browse read-only Built-in definitions and manage authenticated Webhook Events. Automations choose how each agent responds." bodyGap="section">
       {loading ? <Spin aria-label="Loading Events" /> : null}
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} />} action={<AdminRetryAction onRetry={() => void reload()} />} /> : null}
@@ -159,7 +159,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
           { title: "Description / key", width: 310, render: (_, e) => <Flex vertical gap={token.paddingXS}><Typography.Text>{e.description}</Typography.Text><Typography.Text type="secondary">{e.key}</Typography.Text></Flex> },
           { title: "State", width: 100, filters: [{ text: "Active", value: "Active" }, { text: "Revoked", value: "Revoked" }, { text: "Read-only", value: "Built-in" }], onFilter: (value, entry) => entry.state === value, render: (_, e) => e.source.kind === "builtin" ? "Read-only" : <Tag color={e.state === "Active" ? "success" : "default"}>{e.state}</Tag> },
           { title: "Subscriptions", width: 120, render: (_, e) => e.webhook ? `${e.webhook.activeSubscriberCount} active / ${e.webhook.subscriberCount} total` : "Instance-scoped" },
-          { title: "Actions", width: 130, render: (_, e) => e.webhook ? actions(e.webhook) : <Button size="small" aria-label={`View details for ${e.name}`} href={embedded ? undefined : eventHref(e.source)} onClick={event => { const open = () => { opener.current = event.currentTarget; setBuiltinKey(e.key); if (!embedded) navigateToAppPath(eventHref(e.source)); }; if (embedded) open(); else followAppLink(event, open); }}>View</Button> }
+          { title: "Actions", width: 112, render: (_, e) => e.webhook ? actions(e.webhook) : <Tooltip title="View details"><Button size="small" icon={<EyeOutlined aria-hidden />} aria-label={`View details for ${e.name}`} href={embedded ? undefined : eventHref(e.source)} onClick={event => { const open = () => { opener.current = event.currentTarget; setBuiltinKey(e.key); if (!embedded) navigateToAppPath(eventHref(e.source)); }; if (embedded) open(); else followAppLink(event, open); }} /></Tooltip> }
         ]} /> : null}
       <Drawer open={!!builtinKey} aria-labelledby={`${formId}-builtin-title`} title={<span id={`${formId}-builtin-title`}>{builtinKey ?? "Built-in Event"}</span>} size={compact ? "100%" : 640} getContainer={false} rootStyle={{ position: "fixed" }} rootClassName="admin-automation-drawer"
         styles={{ body: { padding: token.padding } }} onClose={closeDetails} afterOpenChange={open => { if (!open) restoreFocus(); }}>

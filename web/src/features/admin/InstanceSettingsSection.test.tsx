@@ -29,10 +29,8 @@ async function editVoiceWithOtherDraft() {
   fireEvent.click(await screen.findByRole('button', { name: 'Provider preferences' }));
   expect(screen.getByRole('textbox', { name: 'Speech recognizer' })).toHaveValue('primary-stt');
   fireEvent.click(screen.getByRole('button', { name: 'Conversation' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Customize Conversation' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Language' }), { target: { value: 'fr-FR' } });
   fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Customize Voice' }));
   fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
   fireEvent.click(screen.getByRole('button', { name: 'Save Voice' }));
 }
@@ -115,13 +113,11 @@ it('finishes the committed save after leaving and re-entering the settings tab d
 });
 
 
-it('customizes without writing and discards a local draft back to Definition defaults', async () => {
+it('edits inherited values without writing and discards a local draft back to Definition defaults', async () => {
   vi.mocked(api.listInstanceSettings).mockResolvedValue(sections());
   render(<ConfigProvider><App><InstanceSettingsSection instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Conversation' }));
   const language = screen.getByRole('textbox', { name: 'Language' });
-  expect(language).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: 'Customize Conversation' }));
   expect(language).toBeEnabled();
   expect(screen.getByRole('button', { name: 'Save Conversation' })).toBeDisabled();
   expect(api.patchInstanceSettings).not.toHaveBeenCalled();
@@ -129,8 +125,8 @@ it('customizes without writing and discards a local draft back to Definition def
   expect(screen.getByRole('button', { name: /^Conversation.*Unsaved changes/ })).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: 'Discard Conversation changes' }));
   expect(language).toHaveValue('en-US');
-  expect(language).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Customize Conversation' })).toBeVisible();
+  expect(language).toBeEnabled();
+  expect(screen.queryByRole('button', { name: 'Customize Conversation' })).not.toBeInTheDocument();
   expect(api.patchInstanceSettings).not.toHaveBeenCalled();
 });
 
@@ -144,7 +140,6 @@ it('shows override provenance only in focusable tooltips and removes it after re
   expect(screen.queryByText('Definition default')).not.toBeInTheDocument();
   expect(screen.queryByText('Using the selected Definition’s defaults.')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Enabled: Instance override' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Customize Voice' }));
   fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
   expect(screen.getByRole('button', { name: 'Enabled: Unsaved Instance override' })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: 'Save Voice' }));
@@ -169,7 +164,6 @@ it('explains published restrictions before saving while allowing independent tog
   vi.mocked(api.listInstanceSettings).mockResolvedValue([fixture]);
   render(<ConfigProvider><App><InstanceSettingsSection instanceId="owner" archived={false} onUpdated={() => {}} /></App></ConfigProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Behavior' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Customize Behavior' }));
   expect(screen.getByRole('switch', { name: 'Avoid unsupported claims' })).toBeDisabled();
   const restriction = screen.getByRole('button', { name: 'Avoid unsupported claims: Definition restriction' });
   fireEvent.focus(restriction);

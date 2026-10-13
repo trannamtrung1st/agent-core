@@ -2,6 +2,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { navigateAdmin } from './support/admin-navigation';
 test.use({ trace: 'retain-on-failure' });
 async function openInNewTab(page: Page, link: Locator, content: 'Instances table' | 'Overview' | 'Automations', gesture: 'modifier' | 'middle' = 'modifier') {
+  // A prior popup was brought forward; restore the source before its next native gesture.
+  await page.bringToFront();
   const source = page.url(); const href = await link.getAttribute('href'); expect(href).toBeTruthy();
   const destination = new URL(href!, source).href;
   await page.bringToFront(); await link.hover();
@@ -81,7 +83,7 @@ for (const width of [1440, 390]) test(`native canonical links preserve source dr
   await page.getByRole('textbox', { name: 'Search instances', exact: true }).fill(instanceId);
   const instance = page.locator(`a[href="${base}/overview"]`); const detail = await openInNewTab(page, instance, 'Overview');
   await detail.close(); await instance.click();
-  await navigateAdmin(page, 'Profile & version'); await page.getByLabel('Persona name', { exact: true }).fill('Unsaved native navigation edit');
+  await navigateAdmin(page, 'Profile'); await page.getByLabel('Persona name', { exact: true }).fill('Unsaved native navigation edit');
   const menu = page.getByRole('button', { name: 'Open Admin navigation', exact: true }); if (await menu.isVisible()) await menu.click();
   const nav = page.getByRole('navigation', { name: 'Admin navigation', exact: true });
   const source = page.url(); const automation = await openInNewTab(page, nav.getByRole('link', { name: 'Automations', exact: true }), 'Automations');

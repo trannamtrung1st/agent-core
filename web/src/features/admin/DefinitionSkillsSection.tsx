@@ -51,10 +51,10 @@ export function DefinitionSkillsSection({ candidate, busy, readOnly, onChange, a
         { title: 'Activation', width: 120, responsive: ['md'], render: (_, skill) => <Tag>{skill.projection === 'Always' ? 'Always' : skill.projection === 'OnDemand' ? 'On demand' : 'Not set'}</Tag> },
         { title: 'Default enabled', width: 110, responsive: ['md'], render: (_, skill) => skill.defaultEnabled === undefined ? 'Not set' : skill.defaultEnabled ? 'Yes' : 'No' },
         { title: 'Requires', width: 170, responsive: ['md'], onCell: () => ({ style: { whiteSpace: 'normal' } }), render: (_, skill) => <Typography.Text className="admin-skill-summary" ellipsis={{ tooltip: true }} title={skill.requiredCapabilities || 'No capabilities'}>{skill.requiredCapabilities || 'No capabilities'}</Typography.Text> },
-        { title: 'Actions', fixed: 'right', width: compact ? (readOnly ? 64 : 160) : readOnly ? 100 : 280, render: (_, skill) => <Flex className="admin-table-actions" gap={token.paddingXS}>
-          <Tooltip title={compact ? 'Details' : undefined}><Button aria-label="Details" icon={compact ? <EyeOutlined /> : undefined} disabled={busy} onClick={() => open(skill.index, true)}>{compact ? null : 'Details'}</Button></Tooltip>
-          {!readOnly && <><Tooltip title={compact ? 'Edit' : undefined}><Button aria-label="Edit" icon={compact ? <EditOutlined /> : undefined} disabled={busy} onClick={() => open(skill.index)}>{compact ? null : 'Edit'}</Button></Tooltip>
-            <Tooltip title={compact ? 'Remove' : undefined}><Button icon={compact ? <DeleteOutlined /> : undefined} danger disabled={busy} aria-label={`Remove skill ${skill.index + 1}`} onClick={() => remove(skill.index)}>{compact ? null : 'Remove'}</Button></Tooltip></>}
+        { title: 'Actions', fixed: 'right', width: readOnly ? 64 : 160, render: (_, skill) => <Flex className="admin-table-actions" gap={token.paddingXS}>
+          <Tooltip title="Details"><Button aria-label="Details" icon={<EyeOutlined aria-hidden />} disabled={busy} onClick={() => open(skill.index, true)}></Button></Tooltip>
+          {!readOnly && <><Tooltip title="Edit"><Button aria-label="Edit" icon={<EditOutlined aria-hidden />} disabled={busy} onClick={() => open(skill.index)}></Button></Tooltip>
+            <Tooltip title="Remove"><Button icon={<DeleteOutlined aria-hidden />} danger disabled={busy} aria-label={`Remove skill ${skill.index + 1}`} onClick={() => remove(skill.index)}></Button></Tooltip></>}
         </Flex> }
       ]} />
     <SkillDrawer open={Boolean(selected) && active} definition value={selected?.value ?? null}

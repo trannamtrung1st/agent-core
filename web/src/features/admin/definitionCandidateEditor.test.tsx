@@ -202,7 +202,7 @@ function mockDraft(candidate: Record<string, unknown> = storedCandidate) {
 }
 
 async function openDraft() {
-  await act(async () => { render(<AdminApp route={{ area: 'admin', view: 'draft', definitionId: 'examiner', draftId, page: 'behavior' }} />); });
+  await act(async () => { render(<AdminApp route={{ area: 'admin', view: 'draft', definitionId: 'examiner', draftId, page: 'instructions' }} />); });
   await screen.findByLabelText('System instructions');
 }
 
@@ -210,11 +210,12 @@ async function navigateDraft(label: string) {
   await act(async () => { fireEvent.click(within(screen.getByRole('navigation', { name: 'Admin navigation' })).getByRole('link', { name: label })); });
 }
 async function openDraftSettings(...sections: string[]) {
-  const group = sections.some(x => ['Memory policy', 'Trigger restrictions', 'Advanced / metadata', 'Agent self-management defaults'].includes(x)) ? 'Policies'
-    : sections.some(x => ['Model defaults', 'Provider preferences', 'Execution budgets'].includes(x)) ? 'Models & execution' : 'Instructions & behavior';
-  await navigateDraft(group);
-  const root = document.querySelector<HTMLElement>('.admin-definition-settings > .ant-collapse')!;
-  for (const name of sections) { const header = exposedRoles(root).getByRole('button', { name }); if (header.getAttribute('aria-expanded') === 'false') fireEvent.click(header); }
+  const owners: Record<string, string> = { 'Memory policy': 'Memory policy', 'Trigger restrictions': 'Trigger restrictions', 'Advanced / metadata': 'Metadata', 'Agent self-management defaults': 'Self-management', 'Model defaults': 'Models', 'Provider preferences': 'Providers', 'Execution budgets': 'Execution budgets', Conversation: 'Conversation', Behavior: 'Behavior', Initiative: 'Initiative', Voice: 'Voice' };
+  for (const name of sections.length ? sections : ['Operating instructions']) {
+    await navigateDraft(owners[name] ?? 'Instructions');
+    const header = screen.getByRole('button', { name });
+    if (header.getAttribute('aria-expanded') === 'false') fireEvent.click(header);
+  }
 }
 
 // Exercise the controlled form without loading inventory, version tables, resources,
@@ -411,7 +412,7 @@ describe("definition candidate editor", () => {
     await navigateDraft('Identity & goals');
     expect(screen.getByLabelText('Definition ID')).toHaveTextContent('examiner');
     expect(screen.queryByRole('textbox', { name: 'Definition ID' })).not.toBeInTheDocument();
-    await navigateDraft('Instructions & behavior');
+    await navigateDraft('Initiative');
     expect(screen.getByLabelText("Silence threshold")).toHaveAccessibleDescription(
       "Milliseconds. 1,000 to 120,000."
     );
@@ -422,11 +423,13 @@ describe("definition candidate editor", () => {
       "Milliseconds. Empty uses 900,000."
     );
     expect(screen.getByLabelText("Silence threshold")).toHaveValue("3000");
+    await navigateDraft('Conversation');
     expect(screen.getByLabelText("Conversation language")).toHaveAccessibleDescription(
       "auto, or a BCP 47 tag such as en."
     );
-    await navigateDraft('Models & execution');
+    await navigateDraft('Models');
     expect(await screen.findByTitle('Scripted Alpha')).toBeInTheDocument();
+    await navigateDraft('Providers');
     expect(screen.getByText(/Speech aliases are required when voice is on/)).toBeInTheDocument();
 
     await navigateDraft('Identity & goals');
@@ -443,14 +446,16 @@ describe("definition candidate editor", () => {
     fireEvent.click(exposedRoles().getByRole("button", { name: "Edit" }));
     setText("Procedure", "REFUND_PROCEDURE_EDITED");
     await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save Skill" })); });
-    await navigateDraft('Instructions & behavior');
+    await navigateDraft('Behavior');
     await chooseOption("Interruption style", "Answer the new turn");
     fireEvent.click(screen.getByLabelText("Acknowledge interruption"));
     fireEvent.click(screen.getByLabelText("Avoid unsupported claims"));
+    await navigateDraft('Conversation');
     await chooseOption("Response length", "Balanced");
     setText("Conversation language", "en");
     setSpin("Max output tokens", "512");
     fireEvent.click(screen.getByLabelText("Ask one question at a time"));
+    await navigateDraft('Initiative');
     fireEvent.click(screen.getByLabelText("Initiative enabled"));
     setSpin("Silence threshold", "4000");
     setSpin("Cooldown", "20000");
@@ -459,20 +464,22 @@ describe("definition candidate editor", () => {
     setSpin("Max silent evaluations", "9");
     setSpin("Max inactivity", "120000");
     await chooseOption("Initiative triggers", "Environment update");
-    await navigateDraft('Models & execution');
+    await navigateDraft('Models');
     await chooseOption("Reasoning", "Medium");
     await chooseOption("Model", "Scripted Beta");
+    await navigateDraft('Providers');
     await chooseOption("Language-model provider", "backup-llm");
     await openDraftSettings('Voice');
     fireEvent.click(screen.getByLabelText("Voice enabled"));
     setText("Voice id", "alloy");
     setSpin("Speaking rate", "1.2");
-    await openDraftSettings('Memory policy', 'Trigger restrictions', 'Advanced / metadata');
+    await openDraftSettings('Memory policy');
     fireEvent.click(screen.getByLabelText("Session memory"));
     fireEvent.click(screen.getByLabelText("Identity user promotion"));
     fireEvent.click(screen.getByLabelText("Identity user retrieval"));
     fireEvent.click(screen.getByLabelText("User promotion"));
     fireEvent.click(screen.getByLabelText("User retrieval"));
+    await openDraftSettings('Trigger restrictions');
     fireEvent.click(screen.getByLabelText("Automation enabled"));
     fireEvent.click(screen.getByLabelText("Allow user scheduling"));
     fireEvent.click(screen.getByLabelText("Allow one-shot"));
@@ -485,6 +492,7 @@ describe("definition candidate editor", () => {
     setSpin("Minimum recurrence days", "2");
     setSpin("Minimum fixed interval seconds", "120");
     fireEvent.click(exposedRoles().getByRole("checkbox", { name: "Webhook Events" }));
+    await openDraftSettings('Advanced / metadata');
     setText("Metadata key 1", "team");
     setText("Metadata value 1", "platform");
 
@@ -738,7 +746,7 @@ describe("definition candidate editor", () => {
     expect(updateAdminDefinitionDraft).not.toHaveBeenCalled();
     expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();
 
-    await navigateDraft('Instructions & behavior');
+    await navigateDraft('Instructions');
     expect(screen.getByLabelText('System instructions')).toBeDisabled();
     await navigateDraft('Capabilities');
     expect(screen.getByText(/Fix Advanced JSON before changing capabilities/)).toBeInTheDocument();

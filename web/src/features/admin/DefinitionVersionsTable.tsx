@@ -1,7 +1,8 @@
+import { MessageOutlined, MoreOutlined, StopOutlined } from '@ant-design/icons';
 import { AgentConfigurationPanel, AgentSkillsResourcesSections } from "./AgentConfigurationLayout";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Alert, Button, Descriptions, Drawer, Empty, Flex, Spin, Table, Tabs, Tag, Typography, theme } from "antd";
+import { Alert, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Spin, Table, Tabs, Tag, Tooltip, Typography, theme } from "antd";
 import { getAdminDefinitionVersion, type AdminDefinitionInventoryItem, type AdminDefinitionPublicationSummary } from "../../services/adminApi";
 import { describeAdminError } from "./adminErrors";
 import { AdminRetryAction } from "./adminFailure";
@@ -80,16 +81,11 @@ export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDe
           { title: "Skills", key: "skills", width: 80, align: "right",
             sorter: (a, b) => (a.publication?.skills?.length ?? -1) - (b.publication?.skills?.length ?? -1),
             render: (_, row) => row.publication ? row.publication.skills?.length ?? 0 : "—" },
-          { title: "Actions", key: "actions", width: 280, render: (_, row) => <Flex className="admin-table-actions" gap={token.paddingXS}>
-            {row.publication ? <>
-              <Button size="small" aria-label={`Start managed chat for v${row.version}`}
-                disabled={busy || row.publication.status !== "Active"} onClick={() => onChat(row.version)}>Chat</Button>
-              {row.publication.status === "Active" ? <Button size="small" danger disabled={busy}
-                aria-label={`Deprecate publication v${row.version}`} onClick={() => onDeprecate(row.publication!)}>
-                Deprecate publication
-              </Button> : null}
-            </> : null}
-          </Flex> }
+          { title: "Actions", key: "actions", width: 112, render: (_, row) => row.publication ? <Flex className="admin-table-actions" gap={token.paddingXS}>
+            <Tooltip title="Start managed chat"><Button size="small" icon={<MessageOutlined aria-hidden />} aria-label={`Start managed chat for v${row.version}`} disabled={busy || row.publication.status !== "Active"} onClick={() => onChat(row.version)} /></Tooltip>
+            {row.publication.status === 'Active' && <Dropdown trigger={['click']} menu={{ items: [{ key: 'deprecate', label: 'Deprecate publication', icon: <StopOutlined aria-hidden />, danger: true, disabled: busy }], onClick: () => onDeprecate(row.publication!) }}><Button size="small" icon={<MoreOutlined aria-hidden />} aria-label={`More actions for publication v${row.version}`} disabled={busy} /></Dropdown>}
+          </Flex> : null }
+
         ]}
       />
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}

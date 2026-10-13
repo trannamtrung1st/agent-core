@@ -1,0 +1,74 @@
+[
+  {
+    "width": 1440,
+    "height": 900,
+    "overflow": 0,
+    "headerHeight": 56,
+    "brandContained": true,
+    "brandActionGap": 944.1953125,
+    "mainInset": 16,
+    "labelRowMinimum": 32,
+    "actionBorder": 1,
+    "actionInset": 16
+  },
+  {
+    "width": 1024,
+    "height": 900,
+    "overflow": 0,
+    "headerHeight": 56,
+    "brandContained": true,
+    "brandActionGap": 528.1953125,
+    "mainInset": 16,
+    "labelRowMinimum": 32,
+    "actionBorder": 1,
+    "actionInset": 16
+  },
+  {
+    "width": 768,
+    "height": 900,
+    "overflow": 0,
+    "headerHeight": 89,
+    "brandContained": true,
+    "brandActionGap": 211.6640625,
+    "mainInset": 16,
+    "labelRowMinimum": 32,
+    "actionBorder": 1,
+    "actionInset": 16
+  },
+  {
+    "width": 767,
+    "height": 900,
+    "overflow": 0,
+    "headerHeight": 87,
+    "brandContained": true,
+    "brandActionGap": 443.7109375,
+    "mainInset": 12,
+    "labelRowMinimum": 40,
+    "actionBorder": 1,
+    "actionInset": 16
+  },
+  {
+    "width": 390,
+    "height": 900,
+    "overflow": 0,
+    "headerHeight": 87,
+    "brandContained": true,
+    "brandActionGap": 66.7109375,
+    "mainInset": 12,
+    "labelRowMinimum": 40,
+    "actionBorder": 1,
+    "actionInset": 16
+  },
+  {
+    "width": 320,
+    "height": 900,
+    "overflow": 0,
+    "headerHeight": 87,
+    "brandContained": true,
+    "brandActionGap": 8.7109375,
+    "mainInset": 12,
+    "labelRowMinimum": 40,
+    "actionBorder": 1,
+    "actionInset": 16
+  }
+]

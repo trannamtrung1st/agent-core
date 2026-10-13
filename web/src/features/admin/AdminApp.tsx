@@ -1,4 +1,4 @@
-import { Alert, App, Button, Flex, Result } from "antd";
+import { Alert, App, Button, Result } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { followAppLink } from "../../app/appLink";
 import { adminDefinitionPath, adminHomePath, adminInstancePath, navigateToAppPath, type AdminRoute } from "../../app/appRoute";
@@ -101,22 +101,24 @@ function AdminAppContent({ route }: { route: AdminRoute }) {
   const definitionGroups = definitions.kind === "ready"
     ? groupDefinitionInventory(definitions.data)
     : [];
+  const inventoryActions = route.view !== "home" ? undefined
+    : collection === "definitions" ? <NewDefinitionButton groups={definitionGroups} />
+    : collection === "instances" ? <NewInstanceButton loading={definitions.kind !== "ready"} groups={definitionGroups.filter(group => group.versions.length > 0)} />
+    : undefined;
+  const inventoryCount = route.view !== "home" ? undefined
+    : collection === "definitions" && definitions.kind === "ready" ? `${definitionGroups.length} ${definitionGroups.length === 1 ? "definition" : "definitions"}`
+    : collection === "instances" && instances.kind === "ready" ? `${instances.data.length} ${instances.data.length === 1 ? "instance" : "instances"}`
+    : undefined;
 
   return (
     <App className="antd-root" message={{ duration: 3, maxCount: 3 }}>
-    <AdminShell route={route} ownerName={route.view === "instance" && effectiveConfig.data?.instanceId === route.instanceId ? effectiveConfig.data.persona.name : undefined}>
+    <AdminShell route={route} ownerName={route.view === "instance" && effectiveConfig.data?.instanceId === route.instanceId ? effectiveConfig.data.persona.name : undefined}
+      headingActions={inventoryActions} headingMetadata={inventoryCount}>
         {route.view === "home" ? (
           <div className="admin-home">
-            <Flex gap={8} wrap className="admin-home-intro">
-              {collection === "definitions" ? <NewDefinitionButton groups={definitionGroups} /> : null}
-              {collection === "instances" ? <NewInstanceButton loading={definitions.kind !== "ready"} groups={definitionGroups.filter(group => group.versions.length > 0)} /> : null}
-            </Flex>
             {collection === "instances" && definitions.kind === "error" && <Alert type="error" showIcon title={`Definition choices unavailable. ${definitions.message}`} action={<Button onClick={() => void reloadDefinitions()}>Retry Definition choices</Button>} />}
             <RetainedAdminPage active={collection === "definitions"}><InventorySection
                 title="Definitions"
-                countLabel={definitions.kind === "ready"
-                  ? `${definitionGroups.length} ${definitionGroups.length === 1 ? "definition" : "definitions"}`
-                  : null}
                 emptyLabel="No definitions found."
                 loading={definitions.kind === "loading"}
                 error={definitions.kind === "error" ? definitions.message : null}
@@ -143,9 +145,6 @@ function AdminAppContent({ route }: { route: AdminRoute }) {
               /></RetainedAdminPage>
             <RetainedAdminPage active={collection === "instances"}><InventorySection
                 title="Instances"
-                countLabel={instances.kind === "ready"
-                  ? `${instances.data.length} ${instances.data.length === 1 ? "instance" : "instances"}`
-                  : null}
                 emptyLabel="No instances yet."
                 loading={instances.kind === "loading"}
                 error={instances.kind === "error" ? instances.message : null}
