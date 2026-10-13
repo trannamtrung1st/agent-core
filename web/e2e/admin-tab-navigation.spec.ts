@@ -114,6 +114,13 @@ test('Search Admin scopes approved labels, focuses anchors and recovers after de
   const draftUrl = page.url();
   await navigateAdmin(page, 'Instructions & behavior');
   await page.getByLabel('System instructions', { exact: true }).fill('Unsaved draft being explicitly deleted');
+  await page.getByRole('button', { name: 'Search Admin', exact: true }).click();
+  await search.getByRole('textbox').fill('browser privacy');
+  await search.getByRole('link', { name: /Browser privacy/ }).click();
+  await page.getByRole('dialog', { name: 'Discard unsaved changes?', exact: true }).getByRole('button', { name: 'Stay', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Discard unsaved changes?', exact: true })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Search Admin', exact: true })).toBeFocused();
+  await expect(page.getByLabel('System instructions', { exact: true })).toHaveValue('Unsaved draft being explicitly deleted');
   await page.getByRole('button', { name: 'Delete draft', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete draft', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/definitions\/examiner\/drafts$/);

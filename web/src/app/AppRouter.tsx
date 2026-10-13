@@ -67,9 +67,16 @@ export function AppRouter() {
   }
 
   const returnPath = new URLSearchParams(window.location.search).get("returnTo");
-  const returnRoute = returnPath ? parseAppRoute(returnPath.split("?")[0]) : null;
-  const activityHref = returnPath && returnRoute?.area === "admin" && returnRoute.view === "instance" && (returnRoute.page === "sessions" || returnRoute.page === "runs")
-    ? returnPath : undefined;
+  let activityHref: string | undefined;
+  if (returnPath) {
+    try {
+      const target = new URL(returnPath, window.location.origin);
+      const returnRoute = parseAppRoute(target.pathname);
+      if (target.origin === window.location.origin && returnRoute.area === "admin" && returnRoute.view === "instance" && (returnRoute.page === "sessions" || returnRoute.page === "runs")) {
+        activityHref = target.pathname + target.search + target.hash;
+      }
+    } catch { /* Malformed return targets provide no Activity action. */ }
+  }
 
   return (
     <ChatApp
