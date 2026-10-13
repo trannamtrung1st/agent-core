@@ -73,6 +73,10 @@ test('owned home images, inert code/Markdown, native media and unsupported files
     expect(saved.ok(), await saved.text()).toBe(true);
   }
   await page.goto(`/admin/instances/${owner}/workspace`);
+  const previewNavigations: string[] = [];
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) previewNavigations.push(frame.url());
+  });
   const open = async (name: string) => {
     await page
       .getByRole('button', { name: `Preview ${name}`, exact: true })
@@ -185,4 +189,5 @@ test('owned home images, inert code/Markdown, native media and unsupported files
     pdf.getByRole('button', { name: 'Download report.pdf' }),
   ).toBeEnabled();
   expect(errors).toEqual([]);
+  expect(previewNavigations).toEqual([]);
 });

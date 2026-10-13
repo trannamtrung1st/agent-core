@@ -43,6 +43,10 @@ test('protected attachment preview preserves CSV source, download, keyboard and 
     { timeout: 30000 },
   );
   const opener = page.getByRole('button', { name: 'Preview quoted.csv' });
+  const previewNavigations: string[] = [];
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame()) previewNavigations.push(frame.url());
+  });
   await opener.click();
   const dialog = page.getByRole('dialog', { name: 'quoted.csv' });
   await expect(dialog.getByText('001', { exact: true })).toBeVisible();
@@ -95,5 +99,6 @@ test('protected attachment preview preserves CSV source, download, keyboard and 
     page.getByRole('dialog').getByText('001', { exact: true }),
   ).toBeVisible();
   expect(errors).toEqual([]);
+  expect(previewNavigations).toEqual([]);
   expect(requests.length).toBeGreaterThan(1);
 });

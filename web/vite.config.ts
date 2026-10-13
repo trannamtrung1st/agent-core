@@ -8,6 +8,16 @@ export default defineConfig({
   appType: "spa",
   plugins: [react()],
   worker: { format: "es" },
+  // Worker-only imports are outside Vite's main dependency scan. Prebundle
+  // them before serving so the first preview cannot invalidate the page.
+  optimizeDeps: {
+    include: [
+      "papaparse", "shiki/core", "shiki/engine/javascript",
+      "shiki/themes/github-dark.mjs",
+      ...["javascript", "typescript", "jsx", "tsx", "json", "yaml", "toml", "xml", "csharp", "python", "sql", "css"]
+        .map(language => `shiki/langs/${language}.mjs`)
+    ]
+  },
   server: {
     port: Number(process.env.VITE_DEV_PORT ?? 5173),
     proxy: {
