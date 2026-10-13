@@ -66,6 +66,7 @@ public sealed class EmailMonitoringRecoveryTests
         }
         feed.Permanent = true; await monitoring.CheckAsync(account.CredentialId, 1); await monitoring.RunOnceAsync();
         Assert.Equal("Paused", (await monitoring.GetAsync(account.CredentialId)).Status);
+        Assert.False(await watches.CanDeliverAsync(pending[0].Event.EventId));
         var pollsAtPause = feed.Polls; clock.Advance(901); await monitoring.RunOnceAsync(); Assert.Equal(pollsAtPause, feed.Polls);
         feed.Permanent = false;
         feed.Block = true; await monitoring.CheckAsync(account.CredentialId, 1); var inFlight = monitoring.RunOnceAsync().AsTask();

@@ -23,6 +23,7 @@ internal static class EmailWatchTransitions
             RuntimeRevision = s.RuntimeRevision + 1, Generation = s.Generation + (changed ? 1 : 0),
             Cursor = changed ? null : s.Cursor, AuthorizationFingerprint = changed ? null : s.AuthorizationFingerprint,
             LeaseId = null, LeaseExpiresAtUtc = null, Paused = false, LastErrorCode = null, LastDiagnosticId = null,
+            LastGapAtUtc = enabled && changed && s.Generation > 0 ? now : s.LastGapAtUtc,
             NextCheckAtUtc = enabled ? changed ? now : now.AddSeconds(interval) : null };
     }
     internal static EmailWatchState Claim(EmailWatchState s, Credential c, DateTimeOffset now)

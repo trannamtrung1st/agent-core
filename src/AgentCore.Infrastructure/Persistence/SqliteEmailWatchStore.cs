@@ -104,7 +104,7 @@ public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> 
         var n = JsonSerializer.Deserialize<EmailWatchNotification>(receipt.AuthorityJson)!;
         var r = await db.EmailWatches.AsNoTracking().SingleOrDefaultAsync(r => r.AccountId == n.AccountId.ToString("D"), ct); if (r is null) return false;
         var s = Read(r); Credential c; try { c = await Account(db, n.AccountId, ct); } catch (AgentCoreException) { return false; }
-        return s.Enabled && s.Generation == n.Generation && EmailWatchTransitions.Usable(c) && EmailWatchTransitions.Fingerprint(c) == n.AuthorizationFingerprint && await BindingValid(db, n, ct);
+        return s.Enabled && !s.Paused && s.Generation == n.Generation && EmailWatchTransitions.Usable(c) && EmailWatchTransitions.Fingerprint(c) == n.AuthorizationFingerprint && await BindingValid(db, n, ct);
     }
     internal static async Task<bool> CanAdmit(AgentCoreDbContext db, AgentCore.Domain.Triggers.TriggerOccurrence occurrence, CancellationToken ct)
     {

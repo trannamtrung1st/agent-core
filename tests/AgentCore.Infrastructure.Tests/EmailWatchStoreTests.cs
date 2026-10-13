@@ -41,7 +41,7 @@ public sealed class EmailWatchStoreTests
             config = await watches.ConfigureAsync(id, 2, false, 300, now.AddSeconds(95));
             Assert.False(await watches.CommitAsync(running, new([], cursor), [], now.AddSeconds(96)));
             Assert.Empty(await watches.ClaimDueAsync(now.AddHours(1), 8));
-            config = await watches.ConfigureAsync(id, 3, true, 300, now.AddSeconds(97)); Assert.Null(config.Cursor);
+            config = await watches.ConfigureAsync(id, 3, true, 300, now.AddSeconds(97)); Assert.Null(config.Cursor); Assert.Equal(now.AddSeconds(97), config.LastGapAtUtc);
             var revokedClaim = Assert.Single(await watches.ClaimDueAsync(now.AddSeconds(97), 8));
             await credentials.SaveAsync(c with { Status = CredentialStatus.Disabled, Revision = 2 }, 1);
             await credentials.SaveAsync(c with { Revision = 3 }, 2);

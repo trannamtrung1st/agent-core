@@ -83,7 +83,7 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
         {
             if (!notifications.TryGetValue(eventId, out var n) || !states.TryGetValue(n.AccountId, out var s)) return ValueTask.FromResult(false);
             var c = credentials.GetAsync(n.AccountId).Result;
-            return ValueTask.FromResult(s.Enabled && s.Generation == n.Generation && c is not null && EmailWatchTransitions.Usable(c) && EmailWatchTransitions.Fingerprint(c) == n.AuthorizationFingerprint && BindingValid(n));
+            return ValueTask.FromResult(s.Enabled && !s.Paused && s.Generation == n.Generation && c is not null && EmailWatchTransitions.Usable(c) && EmailWatchTransitions.Fingerprint(c) == n.AuthorizationFingerprint && BindingValid(n));
         }
     }
 }
