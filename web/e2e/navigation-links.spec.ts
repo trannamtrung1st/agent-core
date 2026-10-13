@@ -3,9 +3,28 @@ import { navigateAdmin } from './support/admin-navigation';
 test.use({ trace: 'retain-on-failure' });
 async function openInNewTab(page: Page, link: Locator, content: 'Instances table' | 'Overview' | 'Automations', gesture: 'modifier' | 'middle' = 'modifier') {
   const source = page.url(); const href = await link.getAttribute('href'); expect(href).toBeTruthy();
+  await page.bringToFront();
+  await link.hover();
+  if (await link.getAttribute('aria-label') === 'Open Admin') await expect(page.getByRole('tooltip')).toContainText('Admin');
+  // Foreground the real native target before Playwright waits for its initial
+  // navigation. A background target can load without delivering its Page channel.
+  const sourceSession = await page.context().newCDPSession(page);
+  const { targetInfo: sourceTarget } = await sourceSession.send('Target.getTargetInfo');
+  await sourceSession.detach();
+  const browserSession = await page.context().browser()!.newBrowserCDPSession();
+  const { targetInfos } = await browserSession.send('Target.getTargets');
+  const existingTargets = new Set(targetInfos.map(target => target.targetId));
+  browserSession.on('Target.targetCreated', ({ targetInfo }) => {
+    if (targetInfo.type === 'page' && targetInfo.browserContextId === sourceTarget.browserContextId && !existingTargets.has(targetInfo.targetId)) {
+      void browserSession.send('Target.activateTarget', { targetId: targetInfo.targetId }).catch(error => console.log(`Native target activation: ${String(error)}`));
+    }
+  });
+  await browserSession.send('Target.setDiscoverTargets', { discover: true });
   const popup = page.context().waitForEvent('page');
-  await link.click(gesture === 'middle' ? { button: 'middle' } : { modifiers: ['ControlOrMeta'] });
-  const opened = await popup; const destination = new URL(href!, source).href;
+  let opened: Page;
+  try { await link.click(gesture === 'middle' ? { button: 'middle' } : { modifiers: ['ControlOrMeta'] }); opened = await popup; }
+  finally { await browserSession.detach(); }
+  const destination = new URL(href!, source).href;
   // A modifier-click opens a background tab; select it before asserting its hydrated UI.
   await opened.bringToFront();
   const bootstrapStarted = Date.now();
@@ -19,7 +38,11 @@ async function openInNewTab(page: Page, link: Locator, content: 'Instances table
       const style = getComputedStyle(element); const rect = element.getBoundingClientRect();
       return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
     });
-  }, { destination, content }), { timeout: 15_000, message: `Native popup displays ${content} at its canonical URL` }).toBe(true);
+  }, { destination, content }).catch(error => {
+    // The initial document can be replaced while the readiness read is in flight.
+    if (!opened.isClosed() && /Execution context was destroyed|Cannot find context with specified id/.test(String(error))) return false;
+    throw error;
+  }), { timeout: 15_000, message: `Native popup displays ${content} at its canonical URL` }).toBe(true);
   console.log(`Native popup bootstrap: ${Date.now() - bootstrapStarted}ms`);
   await expect(page).toHaveURL(source); return opened;
 }

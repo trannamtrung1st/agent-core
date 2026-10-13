@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, App, Button, Descriptions, Flex, Spin, Tag, Typography, theme } from 'antd';
 import { CheckCircleOutlined, ExclamationCircleOutlined, LinkOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import { checkEmailConnection, disconnectEmailOAuth, getEmailConnection, startEmailOAuth, type EmailOAuthConnection, type SystemCredential } from '../../services/adminApi';
@@ -22,16 +22,36 @@ export function GmailConnectionPanel({ account, onChanged, showCredentialStatus 
   const { token } = theme.useToken(); const { modal } = App.useApp(); const layout = useAdminDetailLayout();
   const [connection, setConnection] = useState<EmailOAuthConnection>(); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(true);
   const [error, setError] = useState<AdminFailureNotice>();
-  const load = useCallback(async () => { setLoading(true); setError(undefined); try { setConnection(await getEmailConnection(account)); }
-    catch (e) { setError(describeAdminError(e, 'Unable to load connection. Retry to get current status.')); } finally { setLoading(false); } }, [account.credentialId, account.revision]);
-  useEffect(() => { void load(); }, [load]);
+  const identity = useRef(0); const readSequence = useRef(0); const busyRef = useRef(false);
+  const load = useCallback(async () => {
+    const version = identity.current; const read = ++readSequence.current;
+    const current = () => version === identity.current && read === readSequence.current;
+    setLoading(true); setError(undefined);
+    try { const value = await getEmailConnection(account); if (current()) setConnection(value); }
+    catch (e) { if (current()) setError(describeAdminError(e, 'Unable to load connection. Retry to get current status.')); }
+    finally { if (current()) setLoading(false); }
+  }, [account.credentialId, account.revision]);
+  useEffect(() => {
+    identity.current++; busyRef.current = false; setBusy(false); setConnection(undefined);
+    void load();
+    return () => { identity.current++; readSequence.current++; };
+  }, [load]);
   async function act(action: 'connect' | 'check' | 'disconnect') {
+    if (busyRef.current) return;
+    const version = identity.current; readSequence.current++; busyRef.current = true;
     setBusy(true); setError(undefined);
     try {
-      if (action === 'connect') { await beforeConnect?.(); const start = await startEmailOAuth(account); window.location.assign(start.authorizationUrl); }
-      else { setConnection(await (action === 'check' ? checkEmailConnection(account) : disconnectEmailOAuth(account))); await onChanged?.(); }
-    } catch (e) { setError(describeAdminError(e, 'Connection changed or is unavailable. Refresh this account and retry.')); }
-    finally { setBusy(false); }
+      if (action === 'connect') {
+        await beforeConnect?.(); if (version !== identity.current) return;
+        const start = await startEmailOAuth(account);
+        if (version === identity.current) window.location.assign(start.authorizationUrl);
+      } else {
+        const value = await (action === 'check' ? checkEmailConnection(account) : disconnectEmailOAuth(account));
+        if (version !== identity.current) return;
+        setConnection(value); await onChanged?.();
+      }
+    } catch (e) { if (version === identity.current) setError(describeAdminError(e, 'Connection changed or is unavailable. Refresh this account and retry.')); }
+    finally { if (version === identity.current) { busyRef.current = false; setBusy(false); } }
   }
   const p = account.emailAccount!; const connected = connection?.status === 'Connected';
   return <Flex vertical gap={token.paddingSM}>
