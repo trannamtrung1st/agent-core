@@ -21,6 +21,12 @@ export async function navigateAdmin(target: Page | Locator, oldLabel: string) {
   const page = 'goto' in target ? target : target.page();
   const local = target.getByRole('tab', { name: oldLabel, exact: true });
   // Immutable inspectors retain local read-only view controls; they are not workspace routes.
+  // Their region mounts before the asynchronous version read creates its tabs.
+  if (!('goto' in target) && (await target.getAttribute('role') === 'dialog' || await target.locator('xpath=ancestor::*[@role="dialog"]').count())) {
+    await expect(local.first()).toBeVisible();
+    await local.first().click();
+    return;
+  }
   if (await local.first().isVisible().catch(() => false)) { await local.first().click(); return; }
   const draft = /\/drafts\/[^/]+\//.test(new URL(page.url()).pathname);
   const names: Record<string, string> = { 'Identity & version': draft ? 'Identity & goals' : 'Profile & version', Profile: draft ? 'Identity & goals' : 'Profile & version', Settings: 'Instructions & behavior', 'Skills & resources': 'Skills', Continuity: 'Memory', Automation: 'Automations', Triggers: 'Automations', 'Policies & models': 'Automations', Activity: 'Sessions', Credentials: /\/instances\//.test(page.url()) ? 'Capabilities & credentials' : 'Credentials', Connections: 'Credentials' };

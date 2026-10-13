@@ -168,10 +168,25 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await expect.poll(() => [...heldEvidenceRequests].filter(request => canceledEvidenceRequests.has(request)).length + failedResponses.filter(url => url.includes("/evaluation-")).length).toBe(2);
   expect([...heldEvidenceRequests].filter(request => canceledEvidenceRequests.has(request)), failedResponses.join("\n")).toHaveLength(2);
 
+  // Hold the immutable version read so local navigation starts before its tabs exist.
+  // A loading inspector must never fall back to the contextual workspace rail.
+  let releaseVersionRead = () => {};
+  let versionReadStarted = false;
+  const versionReadHeld = new Promise<void>(resolve => { releaseVersionRead = resolve; });
+  const versionReadUrl = `**/api/v2/admin/definitions/${definitionId}/versions/1?sourceKind=ForkDurable`;
+  const holdVersionRead = async (route: import("@playwright/test").Route) => {
+    versionReadStarted = true; await versionReadHeld; await route.continue();
+  };
+  await page.route(versionReadUrl, holdVersionRead);
   await page.getByRole("button", { name: "View v1 (durable)", exact: true }).click();
+  await expect.poll(() => versionReadStarted).toBe(true);
   const versionDetails = page.getByRole("region", { name: "Version details", exact: true });
   await expect(versionDetails.getByRole("region", { name: "Skills", exact: true })).toHaveCount(0);
-  await navigateAdmin(versionDetails, "Skills & resources");
+  const inspectSkills = navigateAdmin(versionDetails, "Skills & resources");
+  await expect(versionDetails.getByLabel("Loading version details", { exact: true })).toBeVisible();
+  releaseVersionRead();
+  await inspectSkills;
+  await page.unroute(versionReadUrl, holdVersionRead);
   const published = versionDetails.getByRole("region", { name: "Skills", exact: true });
   await expect(published).toBeVisible({ timeout: 15_000 });
   await expect(published).toContainText("Refund");

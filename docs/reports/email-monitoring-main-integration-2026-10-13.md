@@ -1,6 +1,6 @@
 # Email monitoring integration with current main
 
-Date: 2026-10-13. Branch: `develop/branch-1`. Merge parents: email closure `60e3d2c3` and fetched main `d425b121`.
+Date: 2026-10-13. Branch: `develop/branch-1`. Merge source: `c789a54912b97bd14890276e052e2fd40fd34e58`, with parents email closure `60e3d2c3` and fetched main `d425b121`.
 
 ## Scope and conflict resolution
 
@@ -33,8 +33,20 @@ Captures: [global desktop](assets/email-main-sync/global-1440.png), [1024px boun
 | Initial focused route/email component suites | 43 passed, before the additional dirty-report regression |
 | Integrated `EmailMonitoring*` API/watcher recovery/Event-to-Run tests | 4 passed, 0 skipped |
 | Scoped Impeccable type/layout detector | Passed, no findings |
-| Full frontend suite including new regression | Running; final result recorded below after completion |
-| Email plus Admin shell/navigation/overflow E2E | Running; final result recorded below after completion |
-| Exact merge-source hosted Synthetic workflow | Pending dispatch and completion |
+| Full frontend suite including new regression | 969 passed across 117 files, 505.51s, 0 failures |
+| Email plus Admin shell/navigation/overflow E2E | 27 passed, 6.2 minutes, 0 failures |
+| Documentation/design links and syntax | 18 Markdown files, 706 local targets and 217 anchors valid; design JSON parses and whitespace/conflict checks pass |
+| Initial exact merge-source hosted workflow | [Run 38372022818](https://github.com/trannamtrung1st/agent-core/actions/runs/38372022818) tested `c789a549`: six jobs passed; browser shard 2 failed the inherited immutable-inspector readiness race described below |
+| Inspector correction regression | 9 passed in 1.0 minute, including a deliberately held immutable-version read and the original publication/Skill-pin assertions |
 
-The browser regression now covers connection-test refresh while dirty, OAuth history index, canonical contextual links, retained monitoring choices and Instance departure protection at all four existing email viewports. Full hosted coverage remains required before claiming whole-suite integration acceptance. Human screen-reader narration, device audio and live Gmail/IMAP remain unrun.
+Commands used Node 22.18.0 explicitly: from `web`, `node node_modules/typescript/bin/tsc --noEmit`, `node node_modules/vite/bin/vite.js build`, and `node node_modules/vitest/vitest.mjs run --maxWorkers=2`. Backend: `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --no-restore --disable-build-servers --nologo --filter 'FullyQualifiedName~EmailMonitoring'`, with live-provider opt-ins disabled. Browser: `node node_modules/@playwright/test/cli.js test --config=/tmp/email-monitor-review.playwright.config.mts --project=synthetic email-monitoring.spec.ts email-accounts.spec.ts system-credentials.spec.ts admin-tab-navigation.spec.ts admin-shell.spec.ts admin-table-overflow.spec.ts`, with separate API 6094 / Vite 6194, disposable SQLite and matching proxy/OAuth origins. Both native MCP hosts and the runner hosts were stopped after verification. Local logs remain under `/tmp/email-main-sync-*`.
+
+The browser regression covers connection-test refresh while dirty, OAuth history index, canonical contextual links, retained monitoring choices and Instance departure protection at all four existing email viewports. Human screen-reader narration, device audio and live Gmail/IMAP remain unrun.
+
+## Hosted inspector readiness correction
+
+The initial hosted run passed backend (3,879 tests / 27 opt-in or runner-readiness skips), both frontend shards, core shard 1 (107 cases), all 16 separately isolated acceptance cases and both Compose checks. Core shard 2 passed 106 cases and failed `p8-skill-journey.spec.ts` while `navigateAdmin` waited for a Skills link in the contextual rail. The retained failure snapshot shows the immutable-version drawer had eventually rendered its local Skills & resources tab. The helper made its local-versus-route decision before that asynchronous version read completed, so it selected a destination absent from the Definition's global rail. This is a migrated test-helper race, not missing published Skills.
+
+The shared helper now recognizes an inspector dialog and waits for its requested local tab before clicking. The P8 fixture deliberately holds the exact `ForkDurable` version read, starts navigation while the loading indicator is visible, releases the read, and asserts the original immutable Skills, protected read-only controls, managed-chat behavior and persisted Always/OnDemand pins. The first nine-case check passed; an initial delayed-read fixture used the wrong source-kind query and was interrupted, then corrected with a bounded request-start assertion. The final nine-case run passed with the actual held read. No product code, destination assertion, journey deadline or global timeout changed after `c789a549`.
+
+The replacement exact-source hosted workflow is required before claiming whole-suite integration acceptance; its result is recorded after completion. Logs and the initial failure snapshot remain under `/tmp/email-main-sync-ci-*`; the corrected focused command adds `p8-skill-journey.spec.ts admin-collections.spec.ts` to the same isolated two-host runner configuration.
