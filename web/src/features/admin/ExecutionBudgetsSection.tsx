@@ -12,7 +12,7 @@ const minimums = { maxSteps: 8, durationSeconds: 60, perToolSeconds: 1 };
 const emptyPolicy: ExecutionBudgetPolicy = {};
 function ExecutionBudgetPanel({ children, needsAttention }: { children: ReactNode; needsAttention?: boolean }) {
   const { token } = theme.useToken();
-  return <section aria-label="Execution budgets"><Collapse defaultActiveKey={['budgets']} items={[{
+  return <section id="execution-budgets" tabIndex={-1} className="admin-settings-anchor" aria-label="Execution budgets"><Collapse defaultActiveKey={['budgets']} items={[{
     key: 'budgets', label: <Flex wrap align="center" gap={token.paddingXS}>
       <span>Execution budgets</span>
       {needsAttention && <Typography.Text type="danger" aria-hidden>Needs attention</Typography.Text>}
@@ -90,7 +90,7 @@ export function DefinitionExecutionBudgets({ candidate, busy, readOnly, onChange
       onChange={updateBudget} /> }
   </ExecutionBudgetPanel>;
 }
-export function InstanceExecutionBudgets({ instanceId, archived, onUpdated }: { instanceId: string; archived: boolean; onUpdated: () => void }) {
+export function InstanceExecutionBudgets({ instanceId, archived, onUpdated, onDirtyChange }: { instanceId: string; archived: boolean; onUpdated: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const { token } = theme.useToken();
   const { limits, error: limitsError, reload: reloadLimits } = useExecutionBudgetLimits();
   const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof getExecutionBudgets>> | null>(null);
@@ -107,6 +107,7 @@ export function InstanceExecutionBudgets({ instanceId, archived, onUpdated }: { 
     return () => { current = false; epoch.current++; };
   }, [instanceId, attempt]);
   const dirty = loaded && JSON.stringify(value) !== JSON.stringify(loaded.executionBudgets ?? {});
+  useEffect(() => { onDirtyChange?.(!!dirty); }, [dirty, onDirtyChange]);
   async function save() {
     if (!limits || !loaded || !validExecutionBudgets(value, limits)) return;
     const generation = epoch.current;

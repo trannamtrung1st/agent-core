@@ -4,8 +4,8 @@ import path from 'node:path';
 
 test('Instance imports retry remaining files, preserve folder paths and edit exact content', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
-  await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: 'Agent inventory' })).toBeVisible();
+  await page.goto('/admin/definitions');
+  await expect(page.getByRole('heading', { name: 'Definitions', level: 2 })).toBeVisible();
   const capability = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': capability! };
   const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 21 } });
@@ -87,8 +87,8 @@ test('Instance imports retry remaining files, preserve folder paths and edit exa
 });
 
 test('inherited built-in knowledge can be inspected and disabled while Instance kinds exclude evaluation fixtures', async ({ page }) => {
-  await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: 'Agent inventory' })).toBeVisible();
+  await page.goto('/admin/definitions');
+  await expect(page.getByRole('heading', { name: 'Definitions', level: 2 })).toBeVisible();
   const capability = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
   const headers = { 'X-AgentCore-Owner-Capability': capability! };
   const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 21 } });

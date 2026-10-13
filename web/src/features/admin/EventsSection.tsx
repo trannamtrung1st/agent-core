@@ -137,7 +137,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
       <Button size="small" icon={<MoreOutlined aria-hidden />} aria-label={`More actions for ${item.displayName}`} disabled={busy} onClick={e => { opener.current = e.currentTarget; }} />
     </Dropdown>
   </Flex>;
-  const subscriptionHref = (instanceId: string, automationId: string) => `${adminInstancePath(instanceId, "automation", "automations")}?automation=${automationId}`;
+  const subscriptionHref = (instanceId: string, automationId: string) => `${adminInstancePath(instanceId, "automations")}?automation=${automationId}`;
   const eventHref = (source: EventSourceReference) => `${adminHomePath("events")}?${source.kind === "builtin" ? `builtin=${encodeURIComponent(source.key)}` : `event=${source.eventId}`}`;
   const nameError = /[\u0000-\u001f\u007f-\u009f]/.test(name) ? "Use a name without control characters." : null;
   return <AgentConfigurationPanel title="Events" label="Events"

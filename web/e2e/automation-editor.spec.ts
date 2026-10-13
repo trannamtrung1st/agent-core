@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test } from "@playwright/test";
 
 test("automation drawer retains failed drafts and supports responsive create, edit and dismissal", async ({ page }) => {
@@ -9,7 +10,7 @@ test("automation drawer retains failed drafts and supports responsive create, ed
   await page.locator(".ant-select-item-option").filter({ hasText: "Secretary · secretary" }).click();
   await page.getByRole("button", { name: "Create instance", exact: true }).click();
   await expect(page).toHaveURL(/admin\/instances\/.+/);
-  await page.getByRole("tab", { name: "Automation", exact: true }).click();
+  await navigateAdmin(page, "Automation");
   const newButton = page.getByRole("button", { name: "New automation", exact: true });
   await newButton.click();
   const drawer = page.getByRole("dialog", { name: "New automation", exact: true });

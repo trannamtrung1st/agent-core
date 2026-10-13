@@ -1,3 +1,4 @@
+import { useAdminUnsavedChanges } from './useAdminUnsavedChanges';
 import { useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Descriptions, Flex, Form, Select, Spin, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
@@ -9,13 +10,14 @@ import { useAdminDetailLayout } from "./useAdminDetailLayout";
 type Fields = { mode: BrowserPrivacyMode; unmaskedOrigins: string[]; trustedGraphicsOrigins: string[] };
 const exposure = "Unmasked screenshots can expose credentials, OTPs, personal information and confidential application data to model providers and immutable Session artifacts. All child frames remain masked. Semantic redaction and browser origin restrictions still apply.";
 
-/** Global host policy editor inside the existing Browser provider configuration. */
+/** Global Host policy has one edit owner under Platform → Browser privacy. */
 export function BrowserPrivacySection() {
   const { modal } = App.useApp();
   const { token } = theme.useToken();
   const detailLayout = useAdminDetailLayout();
   const [form] = Form.useForm<Fields>();
   const mode = Form.useWatch("mode", form);
+  const fields = Form.useWatch([], form);
   const [policy, setPolicy] = useState<BrowserPrivacy | null>(null);
   const [error, setError] = useState<AdminFailureNotice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,6 +25,8 @@ export function BrowserPrivacySection() {
   const [notice, setNotice] = useState<string | null>(null);
   const active = useRef<AbortController | null>(null);
 
+  const dirty = !!policy && !!fields && JSON.stringify(fields) !== JSON.stringify({ mode: policy.saved.mode, unmaskedOrigins: policy.saved.unmaskedOrigins, trustedGraphicsOrigins: policy.saved.trustedGraphicsOrigins });
+  useAdminUnsavedChanges('global:browser-privacy', dirty);
   function accept(value: BrowserPrivacy) {
     setPolicy(value);
     form.setFieldsValue({ mode: value.saved.mode, unmaskedOrigins: value.saved.unmaskedOrigins,

@@ -58,7 +58,7 @@ test('background summary previews files and navigates to the exact source Automa
   await expect(drawer.getByText('50+ files', { exact: true })).toBeVisible();
   await expect(drawer.getByText('The background check finished.')).toBeVisible();
   await drawer.getByRole('link', { name: 'View Automation', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/automation/automations\\?automation=${automationId}`));
+  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/automations\\?automation=${automationId}`));
   const source = page.getByRole('region', { name: 'Automation details', exact: true });
   await expect(source).toContainText('Review only, then finish quietly.');
   await expect(page.getByRole('button', { name: 'View automation: Exact background source', exact: true })).toHaveAttribute('aria-expanded', 'true');
@@ -73,7 +73,11 @@ test('mark all as read includes unloaded pages, persists, and preserves later at
   const rows = Array.from({ length: 101 }, (_, i) => backgroundFixture(100 + i, `Attention result ${i}`, {
     outcome: { kind: 'Response', summary: 'Review this result.', outcomeEntryId: 'result', attentionRequired: true }
   }));
+  await expect(page).toHaveURL(/\/c\//);
   await mockBackgroundSessions(page, rows);
+  // Reopen the same saved conversation with the fixture installed before the first count read.
+  await page.reload();
+  await expect(page.getByTestId("connection")).toHaveText("Ready");
   const opener = page.locator('.chat-header-background-work');
   await expect(opener).toHaveAttribute('aria-label', 'Background work, 101 need attention');
   let failBulkPage = true;

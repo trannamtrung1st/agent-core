@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { approvalFixture, backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { expect, test } from "@playwright/test";
 
@@ -35,11 +36,11 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   const eventId = "22222222-2222-4222-8222-222222222222";
   let sourceStatus = "Active";
   let sources: Array<Record<string, unknown>> = [];
-  await page.goto(`/admin/instances/${instanceId}`);
-  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
-  const automation = page.locator(".admin-instance-tabs");
-  await page.getByRole("tab", { name: "Automation", exact: true }).click();
-  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
+  await page.goto(`/admin/instances/${instanceId}/profile`);
+  await navigateAdmin(page, "Continuity");
+  const automation = page.locator(".admin-content");
+  await navigateAdmin(page, "Automation");
+  await navigateAdmin(page, "Policies & models");
   await expect(automation.getByText(/Effective source: Conversation default/)).toBeVisible();
   const model = automation.getByRole("combobox", { name: "Unattended model" });
   await model.focus();
@@ -66,9 +67,9 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   await page.reload();
   const config = await reloaded;
   expect((await config.json()).unattendedModelCatalogKey).toBe("scripted-alpha");
-  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
-  await page.getByRole("tab", { name: "Automation", exact: true }).click();
-  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
+  await navigateAdmin(page, "Continuity");
+  await navigateAdmin(page, "Automation");
+  await navigateAdmin(page, "Policies & models");
   await expect(automation.getByText("Effective source: Unattended default (Scripted Alpha)")).toBeVisible({ timeout: 15_000 });
 
   await page.route("**/api/v2/admin/connections/events**", async (route) => {
@@ -109,9 +110,9 @@ test("admin unattended model and event sources stay operable at wide and narrow 
     await route.continue();
   });
 
-  await page.goto("/admin");
-  await page.getByRole("tab", { name: "Connections", exact: true }).click();
-  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  await page.goto("/admin/definitions");
+  await navigateAdmin(page, "Connections");
+  await navigateAdmin(page, "Events");
   const sourcesRegion = page.getByRole("region", { name: "Events" });
   await expect(sourcesRegion.getByRole("link", { name: "run.completed", exact: true })).toBeVisible();
   await sourcesRegion.getByRole("combobox", { name: "Event type filter", exact: true }).click();

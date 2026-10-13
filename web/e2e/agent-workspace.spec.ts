@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -60,7 +61,7 @@ test("managed home survives deleted source, guards a revision and delivers a fre
   const artifact = await pendingArtifact; expect(await readFile((await artifact.path())!)).toEqual(revised);
   const records = await (await request.get(`/api/v2/sessions/${a2}/artifacts`, { headers })).json();
   expect(records[0].artifactId).not.toBe(second.itemId); expect(records[0].sessionId).toBe(a2);
-  await page.goto(`/admin/instances/${a}/identity`); await page.getByRole("tab", { name: "Workspace", exact: true }).click();
+  await page.goto(`/admin/instances/${a}/identity`); await navigateAdmin(page, "Workspace");
   await expect(page.getByText(home, { exact: true })).toBeVisible();
   const pendingHome = page.waitForEvent("download"); await page.getByRole("button", { name: `Download ${home}`, exact: true }).click();
   const durable = await pendingHome; expect(await readFile((await durable.path())!)).toEqual(revised);
@@ -69,9 +70,9 @@ test("managed home survives deleted source, guards a revision and delivers a fre
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`home-${width}.png`), fullPage: true });
   }
-  await page.goto(`/admin/instances/${b}/identity`); await page.getByRole("tab", { name: "Workspace", exact: true }).click(); await expect(page.getByText("No workspace items yet")).toBeVisible();
+  await page.goto(`/admin/instances/${b}/identity`); await navigateAdmin(page, "Workspace"); await expect(page.getByText("No workspace items yet")).toBeVisible();
   expect((await request.get(`/api/v2/agent-instances/${b}/workspace/${second.itemId}/content`, { headers })).status()).toBe(404);
-  await page.goto(`/admin/instances/${a}/identity`); await page.getByRole("tab", { name: "Workspace", exact: true }).click(); await expect(page.getByText(home, { exact: true })).toBeVisible();
+  await page.goto(`/admin/instances/${a}/identity`); await navigateAdmin(page, "Workspace"); await expect(page.getByText(home, { exact: true })).toBeVisible();
   await page.getByRole("button", { name: `Delete ${home}`, exact: true }).click();
   await page.getByRole("button", { name: "Cancel", exact: true }).click(); await expect(page.getByText(home, { exact: true })).toBeVisible();
   // The separate SQLite reopen/Compose gate proves restart survival; keep this UI journey fast and deterministic.

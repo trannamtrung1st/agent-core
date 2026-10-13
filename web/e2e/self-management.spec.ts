@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test, type Page } from '@playwright/test';
 import { waitForResponseSettled } from './support/response-settled';
 async function select(page: Page, name: string, text: string, search = false) {
@@ -12,7 +13,7 @@ test('Admin enable, bounded save, exact rejection and approval, next Run readbac
   test.setTimeout(120000);
   const name = 'Self management UAT';
   await page.goto('/');await page.getByRole('link',{name:'Open Admin'}).click();
-  await page.getByRole('tab',{name:'Instances',exact:true}).click();await page.getByRole('button',{name:'New instance',exact:true}).click();
+  await navigateAdmin(page, 'Instances');await page.getByRole('button',{name:'New instance',exact:true}).click();
   await select(page,'Definition','General Assistant · general-assistant',true);
   await select(page,'Published version','v23 · Built-in · Published',true);
   const create=page.getByRole('dialog',{name:'New instance',exact:true});
@@ -20,7 +21,7 @@ test('Admin enable, bounded save, exact rejection and approval, next Run readbac
   for(const [label,value] of [['Persona name',name],['Persona role','Operations'],['Persona description','Verify owned configuration.'],['Persona tone','Clear']])await create.getByLabel(label).fill(value);
   await create.getByRole('button',{name:'Create instance',exact:true}).click();await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
   const id=new URL(page.url()).pathname.split('/')[3];
-  await page.goto('/admin/instances/'+id+'/identity/settings');
+  await page.goto('/admin/instances/'+id+'/self-management');
   const panel=page.getByRole('region',{name:'Agent self-management',exact:true});
   await expect(panel).toContainText('Definition defaults');
   await select(page,'Self-management mode','Managed');
@@ -57,7 +58,7 @@ test('Admin enable, bounded save, exact rejection and approval, next Run readbac
   await freeze.getByRole('button',{name:'Freeze self-management',exact:true}).click();await expect(page.getByText('Self-management frozen. Normal tasks remain available.',{exact:true})).toBeVisible();
   await send(page,'Hello');await expect(page.getByText('Hello from synthetic.',{exact:true})).toBeVisible();
   await send(page,'Inspect my configuration.');await expect(page.getByText('Self-management is unavailable under the current policy. Use Admin to enable it.',{exact:true})).toBeVisible();
-  await page.goto('/admin/instances/'+id+'/identity/settings');await expect(panel).toContainText('Self-management is frozen');
+  await page.goto('/admin/instances/'+id+'/self-management');await expect(panel).toContainText('Self-management is frozen');
   await panel.getByRole('button',{name:'Unfreeze self-management',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Unfreeze',exact:true}).click();
   await expect(panel.getByText('Self-management is frozen',{exact:true})).toHaveCount(0);
   for(const [width,height] of [[1440,900],[768,900],[390,844]]) {await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);}
@@ -74,7 +75,7 @@ test('approval continues a diagnosed task automatically in exactly one fresh Run
   for(const [label,value] of [['Persona name','Continuation UAT'],['Persona role','Operations'],['Persona description','Verify bounded configuration continuation.'],['Persona tone','Clear']])await create.getByLabel(label).fill(value);
   await create.getByRole('button',{name:'Create instance',exact:true}).click();await expect(page.getByRole('heading',{name:'Continuation UAT',exact:true})).toBeVisible();
   const id=new URL(page.url()).pathname.split('/')[3];
-  await page.goto('/admin/instances/'+id+'/identity/settings');
+  await page.goto('/admin/instances/'+id+'/self-management');
   const panel=page.getByRole('region',{name:'Agent self-management',exact:true});
   await select(page,'Self-management mode','Assisted');await panel.getByRole('button',{name:'Customize areas'}).click();
   await panel.getByRole('checkbox',{name:'Settings',exact:true}).check();await panel.getByRole('button',{name:'Save self-management'}).click();

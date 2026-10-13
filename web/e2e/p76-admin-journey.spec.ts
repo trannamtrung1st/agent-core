@@ -1,3 +1,4 @@
+import { navigateAdmin, backToInventory } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { isCanceledDraftEvidenceRead } from "./admin-definition-gate-helpers";
@@ -19,8 +20,8 @@ async function saveDraft(page: Page, editor: Locator) {
 }
 
 async function showAdvancedJson(editor: Locator) {
-  await editor.getByRole("tab", { name: "Identity & version", exact: true }).click();
-  await editor.locator(".admin-draft-view-switch").getByText("Advanced JSON", { exact: true }).click();
+  await navigateAdmin(editor, "Identity & version");
+  await navigateAdmin(editor, "Advanced JSON");
 }
 
 async function selectOption(page: Page, combobox: Locator, optionText: string) {
@@ -51,14 +52,15 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
 
   await startSyntheticChat(page);
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.getByRole("heading", { name: "Agent inventory" })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/instances$/);
+  await navigateAdmin(page, "Definitions");
+  await expect(page.getByRole("heading", { name: "Definitions", level: 2 })).toBeVisible();
 
   await page.getByRole("button", { name: "New definition" }).click();
   const definitionDialog = page.getByRole("dialog", { name: "New definition" });
   await definitionDialog.getByLabel("Definition ID").fill(definitionId);
   await definitionDialog.getByRole("button", { name: "Create draft" }).click();
-  await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
+  await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}/drafts/[0-9a-f-]+/overview$`));
 
   const editor = draftEditorSection(page);
   await openDefinitionSettings(editor);
@@ -74,8 +76,8 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await json.fill(withTone);
   await saveDraft(page, editor);
 
-  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
-  await editor.getByRole("tab", { name: "Resources", exact: true }).click();
+  await navigateAdmin(editor, "Skills & resources");
+  await navigateAdmin(editor, "Resources");
   const filePicker = editor.locator('section[aria-label="Import resources"] input[type="file"]').first();
   await filePicker.setInputFiles([
     { name: "policy.md", mimeType: "text/markdown", buffer: Buffer.from("# Refund policy\n", "utf8") },
@@ -99,10 +101,16 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   });
   await expect(editor.getByText("File is larger than 8 MiB.")).toBeVisible();
   await expect(editor.getByRole("button", { name: "Bind imported resources" })).toBeDisabled();
+  await navigateAdmin(editor, "Test & Publish");
+  await expect(editor.getByRole("button", { name: "Save required scenario" })).toBeDisabled();
+  await editor.getByRole("link", { name: /Finish or discard unsaved resource input/ }).click();
+  await expect(editor.getByText("File is larger than 8 MiB.")).toBeVisible();
+  await editor.getByRole("button", { name: "Remove imported resource 1", exact: true }).click();
+  await expect(editor.getByText("File is larger than 8 MiB.")).toHaveCount(0);
   await expect(editor.getByText("knowledge/policy.md")).toBeVisible();
   await expect(editor.getByText("references/notes.txt")).toBeVisible();
 
-  await editor.getByRole("tab", { name: "Capabilities" }).click();
+  await navigateAdmin(editor, "Capabilities");
   await editor.getByRole("button", { name: "Add knowledge source" }).click();
   await editor.getByLabel("Knowledge identity 1").fill("refund-policy");
   await editor.getByLabel("Knowledge title 1").fill("Refund policy");
@@ -110,7 +118,7 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await selectOption(page, editor.getByLabel("Knowledge resource 1"), "knowledge/policy.md");
   await saveDraft(page, editor);
 
-  await editor.getByRole("tab", { name: "Identity & version" }).click();
+  await navigateAdmin(editor, "Identity & version");
   await showAdvancedJson(editor);
   const publishedJson = editor.getByRole("textbox", { name: "Advanced JSON" });
   const validJson = await publishedJson.inputValue();
@@ -129,9 +137,9 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await completeDefinitionDraftPublishGate(page, editor);
   await publishDraftFromInstructions(page, editor);
 
-  await page.getByRole("link", { name: "Back to inventory" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
-  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
+  await backToInventory(page);
+  await expect(page).toHaveURL(/\/admin\/definitions$/);
+  await navigateAdmin(page, 'Instances');
   await page.getByRole("button", { name: "New instance" }).click();
   const instanceDialog = page.getByRole("dialog", { name: "New instance" });
   await selectOption(page, instanceDialog.getByRole("combobox", { name: "Definition", exact: true }), definitionId);
@@ -141,9 +149,10 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await instanceDialog.getByLabel("Persona description").fill("Helps the operator through the P7.6 admin journey.");
   await instanceDialog.getByLabel("Persona tone").fill("Warm");
   await instanceDialog.getByRole("button", { name: "Create instance" }).click();
-  await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]+$/i);
+  await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]+\/overview$/i);
   await expect(page.getByRole("heading", { name: personaName })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(`${definitionId} · v1`)).toBeVisible();
+  await navigateAdmin(page, "Profile & version");
   await expect(page.getByRole("region", { name: "Active version" })).toBeVisible();
   await expect(page.getByLabel("Target definition version")).toBeVisible();
 
@@ -157,18 +166,20 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await expect(page.getByText("Instance unarchived.")).toBeVisible({ timeout: 15_000 });
   await expect(lifecycle.getByText("Active", { exact: true })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
-  const memory = page.getByRole("tabpanel", { name: "Continuity", exact: true });
-  await memory.getByRole("tab", { name: "Memory" }).click();
+  await navigateAdmin(page, "Continuity");
+  const memory = page.locator(".admin-content");
+  await navigateAdmin(memory, "Memory");
   await expect(memory.getByText("Effective memory policy", { exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "Automation", exact: true }).click();
-  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
+  await navigateAdmin(page, "Automation");
+  await navigateAdmin(page, "Policies & models");
   await expect(page.getByLabel("Automation administration")).toBeVisible();
 
-  await page.getByRole("tab", { name: "Effective configuration", exact: true }).click();
+  await navigateAdmin(page, "Effective configuration");
   const effective = page.getByRole("region", { name: "Effective configuration" });
   await expect(effective.getByText("Catalog key")).toBeVisible();
-  const privacy = effective.getByRole("region", { name: "Screenshot privacy", exact: true });
+  await expect(effective.getByRole("button", { name: "Save screenshot privacy", exact: true })).toHaveCount(0);
+  await effective.getByRole("link", { name: /Manage global Browser privacy/ }).click();
+  const privacy = page.getByRole("region", { name: "Screenshot privacy", exact: true });
   await expect(privacy.getByRole("button", { name: "Save screenshot privacy", exact: true })).toBeVisible();
   await expect(privacy.getByRole("combobox", { name: /Saved screenshot privacy mode/ })).toBeVisible();
   for (const section of await effective.locator('.admin-effective-config-section:not([aria-label="Browser provider"])').all()) {
@@ -177,9 +188,9 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
     }
   }
 
-  await page.getByRole("link", { name: "Back to inventory" }).click();
+  await page.goto("/admin/definitions");
   const definitions = page.getByRole("region", { name: "Definitions", exact: true });
-  await page.getByRole("tab", { name: "Definitions", exact: true }).click();
+  await navigateAdmin(page, "Definitions");
   await definitions.getByLabel("Search definitions", { exact: true }).fill(definitionId);
   await definitions.getByRole("link", { name: new RegExp(definitionId) }).click();
   await expect(definitionDraftsSection(page).getByRole("button", { name: "Start managed chat for v1" })).toBeEnabled();

@@ -14,6 +14,7 @@ export type EvidenceLoadStatus = "idle" | "loading" | "ready" | "failed";
 
 export function computePublishEligibility(input: {
   dirty: boolean;
+  dirtyReason?: string;
   draftId: string;
   draftRevision: number;
   evidenceLoadStatus: EvidenceLoadStatus;
@@ -24,7 +25,7 @@ export function computePublishEligibility(input: {
 }): PublishEligibility {
   const blockers: string[] = [];
   if (input.dirty) {
-    blockers.push("Save draft edits before validating or publishing.");
+    blockers.push(input.dirtyReason ?? "Save draft edits before validating or publishing.");
   }
 
   if (input.evidenceLoadStatus === "failed") {

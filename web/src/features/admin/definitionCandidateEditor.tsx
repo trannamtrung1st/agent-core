@@ -1,3 +1,4 @@
+import { draftSettingGroups, type DraftPage } from './adminNavigation';
 import { DefinitionSelfManagement } from "./DefinitionSelfManagement";
 import { AutomationTriggerPermissions } from "./AutomationTriggerPermissions";
 import { orderedReasoningEfforts, retainedReasoningEffort } from "../models/reasoningEfforts";
@@ -54,7 +55,8 @@ export function DefinitionCandidateEditor({
   readOnly = false,
   onCandidateChange,
   onJsonTextChange,
-  onViewChange
+  onViewChange,
+  page
 }: {
   candidate: DefinitionCandidate;
   view: DefinitionEditorView;
@@ -64,6 +66,7 @@ export function DefinitionCandidateEditor({
   onCandidateChange: (candidate: DefinitionCandidate) => void;
   onJsonTextChange: (text: string) => void;
   onViewChange: (view: DefinitionEditorView) => void;
+  page?: DraftPage;
 }) {
   const [authoring, setAuthoring] = useState<AdminAuthoringOptions | null>(null);
   const [authoringError, setAuthoringError] = useState<string | null>(null);
@@ -93,7 +96,7 @@ export function DefinitionCandidateEditor({
 
   return (
     <Flex vertical gap={12}>
-      <Segmented
+      {!page && <Segmented
         aria-label="Definition editor view"
         className="admin-draft-view-switch"
         value={view}
@@ -103,7 +106,7 @@ export function DefinitionCandidateEditor({
         ]}
         onChange={(value) => onViewChange(value as DefinitionEditorView)}
         disabled={busy}
-      />
+      />}
       {view === "json" ? (
         <AgentConfigurationPanel title="Advanced JSON" label="Definition JSON editor">
         <Input.TextArea
@@ -120,6 +123,7 @@ export function DefinitionCandidateEditor({
       ) : null}
       <div hidden={view !== "form"}>
         <DefinitionCandidateForm
+          page={page}
           candidate={candidate}
           busy={busy}
           readOnly={readOnly}
@@ -140,6 +144,7 @@ function DefinitionCandidateForm({
   authoring,
   authoringError,
   authoringDiagnosticId,
+  page,
   onCandidateChange
 }: {
   candidate: DefinitionCandidate;
@@ -148,6 +153,7 @@ function DefinitionCandidateForm({
   authoring: AdminAuthoringOptions | null;
   authoringError: string | null;
   authoringDiagnosticId: string | null;
+  page?: DraftPage;
   onCandidateChange: (candidate: DefinitionCandidate) => void;
 }) {
   const goals = readCandidateStringList(candidate, ["goals"]);
@@ -173,7 +179,7 @@ function DefinitionCandidateForm({
 
   const { token } = theme.useToken();
   return (
-    <AgentIdentitySections
+    <AgentIdentitySections section={page ? page === "profile" ? "profile" : "settings" : undefined}
       profile={
         <AgentConfigurationPanel title="Identity & goals" label="Identity and goals" className={`admin-definition-profile${readOnly ? " admin-draft-form-readonly" : ""}`}>
           <section className="admin-draft-form-section admin-settings-form">
@@ -256,7 +262,7 @@ function DefinitionCandidateForm({
                 : undefined}
             />
           ) : null}
-          <Collapse items={[
+          <Collapse key={page} defaultActiveKey={page ? [...(draftSettingGroups[page] ?? [])] : undefined} items={[
             {
               key: "instructions", label: "Operating instructions", children: (
                 <section className="admin-draft-form-section admin-settings-form admin-settings-instructions" aria-label="Instructions">
@@ -787,8 +793,8 @@ function DefinitionCandidateForm({
                 </section>
               )
             },
-          ]} />
-          <DefinitionExecutionBudgets candidate={candidate} busy={busy} readOnly={readOnly} onChange={onCandidateChange} />
+          ].filter(item => !page || draftSettingGroups[page]?.includes(item.key)).map(item => ({ ...item, label: <span id={item.key} tabIndex={-1} className="admin-settings-anchor">{item.label}</span> }))} />
+          {(!page || page === "models") && <DefinitionExecutionBudgets candidate={candidate} busy={busy} readOnly={readOnly} onChange={onCandidateChange} />}
         </Flex>
       }
     />

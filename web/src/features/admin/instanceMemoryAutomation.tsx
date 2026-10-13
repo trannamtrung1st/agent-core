@@ -66,14 +66,19 @@ const MEMORY_SCOPES: AdminLearnedMemoryScope[] = ["Session", "IdentityUser", "Us
 
 function UnattendedModelForm({
   config,
-  models
+  models,
+  onDirtyChange,
+  onUpdated
 }: {
   config: AdminEffectiveConfiguration;
   models: ModelDescriptor[];
+  onDirtyChange?: (dirty: boolean) => void;
+  onUpdated?: () => void;
 }) {
   const { token } = theme.useToken();
   const [catalogKey, setCatalogKey] = useState(config.unattendedModelCatalogKey ?? "");
   const [savedCatalogKey, setSavedCatalogKey] = useState(config.unattendedModelCatalogKey ?? "");
+  const [savedEffort, setSavedEffort] = useState(config.unattendedReasoningEffort ?? "");
   const [effort, setEffort] = useState(config.unattendedReasoningEffort ?? "");
   const [revision, setRevision] = useState(config.instanceRevision);
   const [busy, setBusy] = useState(false);
@@ -81,12 +86,14 @@ function UnattendedModelForm({
   useEffect(() => {
     setRevision(config.instanceRevision);
     setSavedCatalogKey(config.unattendedModelCatalogKey ?? "");
-  }, [config.instanceRevision, config.unattendedModelCatalogKey]);
+    setSavedEffort(config.unattendedReasoningEffort ?? "");
+  }, [config.instanceRevision, config.unattendedModelCatalogKey, config.unattendedReasoningEffort]);
   const selected = models.find((model) => model.key === savedCatalogKey);
   const source = savedCatalogKey
     ? `Effective source: Unattended default (${selected?.displayName ?? savedCatalogKey})`
     : `Effective source: Conversation default (${config.effectiveModel.displayName})`;
 
+  useEffect(() => { onDirtyChange?.(catalogKey !== savedCatalogKey || effort !== savedEffort); }, [catalogKey, savedCatalogKey, effort, savedEffort, onDirtyChange]);
   async function save() {
     setBusy(true);
     setError(null);
@@ -101,6 +108,8 @@ function UnattendedModelForm({
       setSavedCatalogKey(updated.unattendedModelCatalogKey ?? "");
       setCatalogKey(updated.unattendedModelCatalogKey ?? "");
       setEffort(updated.unattendedReasoningEffort ?? "");
+      setSavedEffort(updated.unattendedReasoningEffort ?? "");
+      onUpdated?.();
     } catch (reason: unknown) {
       setError(describeAdminError(reason, "The unattended model could not be saved.").message);
     } finally {
@@ -143,7 +152,7 @@ function triggerPolicySummary(config: AdminEffectiveConfiguration): string {
   return `${p?.enabled ? "Enabled" : "Disabled (configured permissions are inactive)"} · ${automationTriggerPermissionSummary(p?.allowedSourceKinds)}`;
 }
 
-export function InstanceMemoryAutomationPanel({ config, section }: { config: AdminEffectiveConfiguration; section?: "memory" | "automation" }) {
+export function InstanceMemoryAutomationPanel({ config, section, onDirtyChange, onUpdated }: { config: AdminEffectiveConfiguration; section?: "memory" | "automation"; onUpdated?: () => void; onDirtyChange?: (dirty: boolean) => void }) {
   const { message, modal } = App.useApp();
   const { token } = theme.useToken();
   const detailLayout = useAdminDetailLayout();
@@ -435,7 +444,7 @@ export function InstanceMemoryAutomationPanel({ config, section }: { config: Adm
                   <Descriptions {...detailLayout} size="small" column={1} bordered>
                     <Descriptions.Item label="Effective trigger policy">{triggerPolicySummary(config)}</Descriptions.Item>
                   </Descriptions>
-                  <UnattendedModelForm config={config} models={models} />
+                  <UnattendedModelForm config={config} models={models} onDirtyChange={onDirtyChange} onUpdated={onUpdated} />
                 </AgentConfigurationPanel>
 
             </Flex>

@@ -174,7 +174,7 @@ describe("Background Sessions", () => {
     expect(screen.getByRole("heading", { name: "Progress check", level: 5 })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Progress check" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View Automation" })).toHaveAttribute("href",
-      "/admin/instances/90000000-0000-4000-8000-000000000001/automation/automations?automation=90000000-0000-4000-8000-000000000010");
+      "/admin/instances/90000000-0000-4000-8000-000000000001/automations?automation=90000000-0000-4000-8000-000000000010");
   });
   it("dismisses with Escape inside the drawer without reaching its parent", async () => {
     const close = vi.fn(); const parentKeyDown = vi.fn();

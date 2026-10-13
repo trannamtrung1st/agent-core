@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test, type Page } from '@playwright/test';
 
 async function select(page: Page, label: string, text: string) {
@@ -8,7 +9,7 @@ async function select(page: Page, label: string, text: string) {
 async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowledge & resources') {
   await page.goto('/');
   await page.getByRole('link',{name:'Open Admin'}).click();
-  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
+  await navigateAdmin(page, 'Instances');
   await page.getByRole('button',{name:'New instance',exact:true}).click();
   await select(page,'Definition','General Assistant · general-assistant');
   await select(page,'Published version','v21 · Built-in · Published');
@@ -85,8 +86,8 @@ test('Managed tool and instruction proposals require exact Chat approval',async(
 
 test('Freeze blocks durable Chat learning while normal Chat still works',async({page})=>{
   const id=await create(page,'Frozen learning');
-  await page.getByRole('link',{name:'Open Admin'}).click();await page.goto(`/admin/instances/${id}`);
-  await page.goto('/admin/instances/'+id+'/identity/settings');
+  await page.getByRole('link',{name:'Open Admin'}).click();await page.goto(`/admin/instances/${id}/profile`);
+  await page.goto('/admin/instances/'+id+'/self-management');
   await page.getByRole('button',{name:'Freeze self-management',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:'Freeze self-management',exact:true}).click();
   await expect(page.getByText('Frozen',{exact:true})).toBeVisible();await page.locator('.admin-header').getByRole('link',{name:/Chat$/}).first().click();await select(page,'Identity','Frozen learning');

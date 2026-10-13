@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, type Page } from "@playwright/test";
@@ -60,9 +61,9 @@ async function patchExaminerDraftMemoryPolicy(page: Page, draftId: string) {
 }
 
 async function reopenExaminerDraftByMarker(page: Page, marker: string) {
-  await page.getByRole("tab", { name: "Drafts", exact: true }).click();
+  await navigateAdmin(page, "Drafts");
   const draftsList = definitionDraftsSection(page);
-  await draftsList.getByRole("button", { name: /Draft rev .*ForkBuiltIn/ }).first().click();
+  await draftsList.getByRole("link", { name: /Draft rev .*ForkBuiltIn/ }).first().click();
   const editor = draftEditorSection(page);
   await openDefinitionSettings(editor);
   await expect(editor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
@@ -74,7 +75,8 @@ async function reopenExaminerDraftByMarker(page: Page, marker: string) {
 /** P7G §8 steps 3–11: fork, resource, capability, memory policy, publish gate, managed instance. */
 export async function publishExaminerP7gFirstPublication(page: Page) {
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin\/instances$/);
+  await navigateAdmin(page, "Definitions");
   await page.getByRole("textbox", { name: "Search definitions" }).fill("examiner");
   await page.locator('section[aria-label="Definitions"]').getByRole("link", { name: /examiner/i }).first().click();
 
@@ -91,7 +93,7 @@ export async function publishExaminerP7gFirstPublication(page: Page) {
   const marker = `p7g-whole-${Date.now()}`;
   await draftEditor.getByLabel("System instructions").fill(marker);
 
-  await draftEditor.getByRole("tab", { name: "Capabilities" }).click();
+  await navigateAdmin(draftEditor, "Capabilities");
   const harnessLabel = `p7g-harness-${Date.now()}`;
   await draftEditor.getByLabel("Harness labels").click();
   await draftEditor.getByLabel("Harness labels").fill(harnessLabel);
@@ -100,8 +102,8 @@ export async function publishExaminerP7gFirstPublication(page: Page) {
 
   const resourceBody = `p7g-resource-${Date.now()}`;
   const resourcePath = `knowledge/p7g-${Date.now()}.md`;
-  await draftEditor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
-  await draftEditor.getByRole("tab", { name: "Resources", exact: true }).click();
+  await navigateAdmin(draftEditor, "Skills & resources");
+  await navigateAdmin(draftEditor, "Resources");
   await draftEditor.getByLabel("Resource logical path").fill(resourcePath);
   await draftEditor.locator('section[aria-label="Add draft resource"] input[type="file"]').setInputFiles({
     name: "p7g.md",
@@ -169,7 +171,8 @@ export async function startSyntheticChat(page: Page) {
 
 export async function publishExaminerDraftAndCreateManagedInstance(page: Page) {
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin\/instances$/);
+  await navigateAdmin(page, "Definitions");
   await page.getByRole("textbox", { name: "Search definitions" }).fill("examiner");
   await page.locator('section[aria-label="Definitions"]').getByRole("link", { name: /examiner/i }).first().click();
 
@@ -248,7 +251,7 @@ export async function expectManagedIdentityOptionAbsent(page: Page, instanceId: 
 
 export async function openExaminerDefinitionDrafts(page: Page) {
   await page.goto("/admin/definitions/examiner");
-  await expect(page).toHaveURL(/\/admin\/definitions\/examiner$/i);
+  await expect(page).toHaveURL(/\/admin\/definitions\/examiner\/versions$/i);
   return definitionDraftsSection(page);
 }
 
@@ -262,7 +265,7 @@ export async function publishExaminerForkedVersion(page: Page, forkFromVersion: 
   await instructions.fill(`${prior}\n${marker}`);
   await ensureToolAllowlisted(page, draftEditor, "knowledge.retrieve");
   draftEditor = draftEditorSection(page);
-  await draftEditor.getByRole("tab", { name: "Identity & version" }).click();
+  await openDefinitionSettings(draftEditor);
   await expect(draftEditor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
   });

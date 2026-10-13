@@ -121,7 +121,7 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
   await expect(edit.getByLabel("Metadata value 2")).toHaveValue("safe metadata value");
   await edit.getByRole("combobox", {name:"Status"}).click(); await page.getByTitle("Disabled", {exact:true}).click();
   await edit.getByRole("button", {name:/Save credential/}).click(); await expect(edit).toBeHidden(); await expect(row).toContainText("Disabled");
-  await page.goto(`/admin/instances/${a.instanceId}/credentials`); await expect(page).toHaveURL(new RegExp(`/instances/${a.instanceId}/credentials$`));
+  await page.goto(`/admin/instances/${a.instanceId}/credentials`); await expect(page).toHaveURL(new RegExp(`/instances/${a.instanceId}/access#credentials$`));
   await expect(page.getByText("Password · Disabled")).toBeVisible();
   await page.getByRole("button",{name:"Reset browser profile",exact:true}).click();
   await page.getByRole("dialog",{name:"Reset browser profile?"}).getByRole("button",{name:"Cancel",exact:true}).click();
@@ -140,7 +140,7 @@ test("shared system credentials have safe CRUD, explicit bindings, profile reset
     await page.setViewportSize({width,height:900}); await expect(page.getByRole("heading",{name:"Credential bindings"})).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   }
-  await page.goto("/admin/connections/events"); await expect(page.getByRole("tab",{name:"Events",exact:true})).toHaveAttribute("aria-selected","true");
+  await page.goto("/admin/connections/events"); await expect(page.getByRole("heading",{name:"Events",exact:true,level:2})).toBeVisible();
   await expect(page.getByRole("region",{name:"Events"})).toBeVisible();
   expect(errors).toEqual([]);
 });

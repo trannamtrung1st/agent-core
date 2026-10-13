@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test } from '@playwright/test';
 
 test('Unified Automation authoring retains admitted instructions and source focus across Runs, edits, reload and mobile', async ({ page }) => {
@@ -5,8 +6,8 @@ test('Unified Automation authoring retains admitted instructions and source focu
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('response', response => { if (response.status() >= 500) errors.push(`${response.status()} ${response.url()}`); });
-  await page.goto('/admin');
-  await page.getByRole('tab', { name: 'Instances', exact: true }).click();
+  await page.goto('/admin/definitions');
+  await navigateAdmin(page, 'Instances');
   await page.getByRole('button', { name: 'New instance', exact: true }).click();
   for (const [label, text] of [['Definition', 'general-assistant'], ['Published version', 'v21']] as const) {
     const input = page.getByRole('combobox', { name: label, exact: true });
@@ -14,7 +15,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
     await page.locator('.ant-select-item-option').filter({ hasText: label === 'Definition' ? 'General Assistant' : 'v21 · Built-in · Published' }).click();
   }
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
-  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+  await navigateAdmin(page, 'Automation');
   const automations = page.getByRole('region', { name: 'Automations', exact: true });
   await expect(automations.getByText(/No automations yet/)).toBeVisible();
   await automations.getByRole('button', { name: 'New automation', exact: true }).click();
@@ -60,8 +61,8 @@ test('Unified Automation authoring retains admitted instructions and source focu
   await details.getByRole('link', { name: 'View Automation', exact: true }).click();
   const updatedSource = automations.getByRole('button', { name: `View automation: ${updatedName}`, exact: true });
   await expect(updatedSource).toBeFocused();
-  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
-  await page.getByRole('tab', { name: 'Runs', exact: true }).click(); await page.reload();
+  await navigateAdmin(page, 'Activity');
+  await navigateAdmin(page, 'Runs'); await page.reload();
   const runs = page.getByRole('region', { name: 'Runs', exact: true });
   const admitted = (await (await page.request.get(`/api/v2/agent-instances/${id}/agent-runs`, { headers })).json()).items[0];
   const history = await page.request.get(`/api/v1/sessions/${admitted.sessionId}/messages`, { headers });
@@ -76,7 +77,7 @@ test('Unified Automation authoring retains admitted instructions and source focu
   await details.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(historyLink).toBeFocused();
   errors.splice(0); // The deliberate 503 is the tested recovery boundary.
-  await page.getByRole('tab', { name: 'Automation', exact: true }).click();
+  await navigateAdmin(page, 'Automation');
   await page.setViewportSize({ width: 390, height: 844 });
   if (await updatedSource.getAttribute('aria-expanded') !== 'true') await updatedSource.click();
   await automations.getByRole('button', { name: 'Edit automation', exact: true }).click();

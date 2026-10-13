@@ -42,7 +42,7 @@ export function InstanceSessionsSection({ instanceId, open, archived = false }: 
   if (selected) previousSelection.current = selected;
   // Keep the same drawer mounted until its closing animation restores initiating focus.
   const displayed = selected ?? (!selectedId ? previousSelection.current : null);
-  const backPath = `${adminInstancePath(instanceId, "activity", "sessions")}${search ? `?${new URLSearchParams({ q: search })}` : ""}`;
+  const backPath = `${adminInstancePath(instanceId, "sessions")}${search ? `?${new URLSearchParams({ q: search })}` : ""}`;
   function inspect(row: InstanceActivitySession) {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const params = new URLSearchParams(window.location.search); params.set("session", row.session.sessionId);

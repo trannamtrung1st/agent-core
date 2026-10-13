@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Button, Collapse, Descriptions, Flex, Select, Skeleton, Switch, Tag, Typography, theme } from 'antd';
 import { CheckCircleOutlined, ExclamationCircleOutlined, MinusCircleOutlined, SyncOutlined } from '@ant-design/icons';
 import { checkEmailMonitoring, getEmailMonitoring, saveEmailMonitoring, type EmailMonitoring, type SystemCredential } from '../../services/adminApi';
+import { adminHomePath, adminInstancePath } from '../../app/appRoute';
 import { followAppLink } from '../../app/appLink';
 import { AdminErrorNotice } from './adminFailure';
 import { describeAdminError, type AdminFailureNotice } from './adminErrors';
@@ -14,7 +15,7 @@ const statusText: Record<EmailMonitoring['status'], string> = {
   Off: 'Monitoring Off', HostDisabled: 'Monitoring unavailable by operator', Paused: 'Monitoring paused',
   Initializing: 'Establishing baseline from now', Checking: 'Checking inbox', Retrying: 'Retrying', Gap: 'Monitoring · coverage gap', Monitoring: 'Monitoring On',
 };
-export function EmailMonitoringSection({ account, instanceId }: { account: SystemCredential; instanceId?: string }) {
+export function EmailMonitoringSection({ account, instanceId, onDirtyChange }: { account: SystemCredential; instanceId?: string; onDirtyChange?: (dirty: boolean) => void }) {
   const { token } = theme.useToken(); const layout = useAdminDetailLayout();
   const [status, setStatus] = useState<EmailMonitoring>(); const [saved, setSaved] = useState<EmailMonitoring>();
   const [enabled, setEnabled] = useState(false); const [interval, setInterval] = useState(300);
@@ -23,6 +24,7 @@ export function EmailMonitoringSection({ account, instanceId }: { account: Syste
   const identity = useRef(0); const readSequence = useRef(0); const draftSequence = useRef(0); const dirtyRef = useRef(false); const busyRef = useRef(false);
   const dirty = !!saved && (enabled !== saved.enabled || interval !== saved.intervalSeconds);
   dirtyRef.current = dirty; busyRef.current = !!busy;
+  useEffect(() => { onDirtyChange?.(dirty); return () => onDirtyChange?.(false); }, [dirty, onDirtyChange]);
   const apply = useCallback((value: EmailMonitoring, replaceDraft: boolean) => {
     setStatus(value);
     if (replaceDraft) { dirtyRef.current = false; setSaved(value); setEnabled(value.enabled); setInterval(value.intervalSeconds); }
@@ -100,7 +102,7 @@ export function EmailMonitoringSection({ account, instanceId }: { account: Syste
       ]} />
       <Flex vertical gap={token.paddingXS}>
         {status.subscribedInstances === 0 && <Typography.Text type="secondary">No subscribed Automations</Typography.Text>}
-        <Flex wrap gap={token.padding}><a href={instanceId ? `/admin/instances/${instanceId}/automation/automations` : '/admin/instances'} onClick={followAppLink}>Configure an Instance Automation</a><a href="/admin/connections/events" onClick={followAppLink}>View Events catalog</a></Flex>
+        <Flex wrap gap={token.padding}><a href={instanceId ? adminInstancePath(instanceId, 'automations') : adminHomePath('instances')} onClick={followAppLink}>Configure an Instance Automation</a><a href={adminHomePath('events')} onClick={followAppLink}>View Events catalog</a></Flex>
       </Flex>
       <Collapse ghost size="small" items={[{ key: 'details', label: 'Monitoring diagnostics', children: <Descriptions size="small" column={1} {...layout} items={[
         { key: 'checked', label: 'Last attempted check', children: <LocalTime value={status.lastCheckedAtUtc} /> },

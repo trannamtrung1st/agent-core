@@ -18,15 +18,15 @@ describe("Admin conversation navigation", () => {
     expect(navigateFromBrowserHistory).toHaveBeenCalledTimes(1);
     expect(suspendLiveSessionForNavigation).toHaveBeenCalled();
   });
-  it("returns to the validated instance Activity route and retains its filter", () => {
-    const returnTo = `/admin/instances/${instance}/activity/sessions?q=Planning`;
+  it.each(["?q=Planning", "#source"])("returns to the validated Activity route and retains %s", suffix => {
+    const returnTo = `/admin/instances/${instance}/activity/sessions${suffix}`;
     window.history.replaceState(null, "", `/c/${instance}?${new URLSearchParams({ returnTo })}`);
     render(<AppRouter />); fireEvent.click(screen.getByRole("button", { name: "Back to Activity" }));
-    expect(window.location.pathname + window.location.search).toBe(returnTo);
+    expect(window.location.pathname + window.location.search + window.location.hash).toBe(returnTo);
     expect(screen.getByText("Admin")).toBeVisible();
   });
-  it("ignores external return targets", () => {
-    window.history.replaceState(null, "", `/c/${instance}?${new URLSearchParams({ returnTo: "https://example.com/" })}`);
+  it.each(["/", `/admin/instances/${instance}/activity/sessions`])("ignores external return target %s", path => {
+    window.history.replaceState(null, "", `/c/${instance}?${new URLSearchParams({ returnTo: `https://example.com${path}` })}`);
     render(<AppRouter />); expect(screen.queryByRole("button", { name: "Back to Activity" })).not.toBeInTheDocument();
   });
 });

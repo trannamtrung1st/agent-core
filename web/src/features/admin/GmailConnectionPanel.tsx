@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, App, Button, Descriptions, Flex, Spin, Tag, Typography, theme } from 'antd';
 import { CheckCircleOutlined, ExclamationCircleOutlined, LinkOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import { checkEmailConnection, disconnectEmailOAuth, getEmailConnection, startEmailOAuth, type EmailOAuthConnection, type SystemCredential } from '../../services/adminApi';
+import { adminHomePath, adminInstancePath } from '../../app/appRoute';
 import { followAppLink } from '../../app/appLink';
 import { confirmAction } from '../../app/confirmAction';
 import { AdminErrorNotice } from './adminFailure';
@@ -17,7 +18,7 @@ export function EmailConnectionTag({ account }: { account: SystemCredential }) {
   return <Tag color={account.status === 'Disabled' ? 'default' : connected ? 'success' : p.connectionStatus === 'ReconnectRequired' ? 'warning' : 'default'}
     icon={connected ? <CheckCircleOutlined /> : p.connectionStatus === 'ReconnectRequired' ? <ExclamationCircleOutlined /> : <MinusCircleOutlined />}>{status}</Tag>;
 }
-export function GmailConnectionPanel({ account, onChanged, showCredentialStatus = true, beforeConnect }: { account: SystemCredential; onChanged?: () => Promise<void>; showCredentialStatus?: boolean; beforeConnect?: () => Promise<void> }) {
+export function GmailConnectionPanel({ account, onChanged, showCredentialStatus = true, beforeConnect, instanceId }: { instanceId?: string; account: SystemCredential; onChanged?: () => Promise<void>; showCredentialStatus?: boolean; beforeConnect?: () => Promise<void> }) {
   const { token } = theme.useToken(); const { modal } = App.useApp(); const layout = useAdminDetailLayout();
   const [connection, setConnection] = useState<EmailOAuthConnection>(); const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(true);
   const [error, setError] = useState<AdminFailureNotice>();
@@ -47,7 +48,7 @@ export function GmailConnectionPanel({ account, onChanged, showCredentialStatus 
       {connection?.error && <Alert type="warning" showIcon title={<AdminErrorNotice message={connection.error} diagnosticId={connection.diagnosticId ?? undefined} showDetailsLabel />} />}
       <Typography.Text type="secondary">Connection actions take effect immediately. Test access checks authorization only and never sends email. Disconnect blocks this account for all bound agents. Instance bindings remain. Unbind removes only one agent’s access.</Typography.Text>
       {connection?.lastCheckedAtUtc && !connection.error && connected && <Typography.Text type="success" role="status">Access verified · no email sent</Typography.Text>}
-      {connected && <Typography.Text type="secondary">To use this account, grant access in an <a href="/admin/instances" onClick={followAppLink}>agent’s Credentials section</a>.</Typography.Text>}
+      {connected && <Typography.Text type="secondary">To use this account, grant access in an <a href={instanceId ? `${adminInstancePath(instanceId, 'access')}#credentials` : adminHomePath('instances')} onClick={followAppLink}>Instance’s Capabilities &amp; credentials page</a>.</Typography.Text>}
       <Flex gap={token.paddingXS} wrap>
         <Button type={connected ? 'default' : 'primary'} icon={<LinkOutlined aria-hidden />} disabled={busy || !connection?.configured || account.status !== 'Active'} loading={busy} onClick={() => void act('connect')}>{p.googleSubject ? 'Reconnect with Google' : 'Connect with Google'}</Button>
         {p.connectionStatus === 'Connected' && <Button disabled={busy || account.status !== 'Active'} onClick={() => void act('check')}>{connection?.error ? 'Retry check' : 'Test access'}</Button>}

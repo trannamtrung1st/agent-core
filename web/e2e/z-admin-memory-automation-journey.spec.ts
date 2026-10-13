@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test } from "@playwright/test";
 import { publishExaminerDraftAndCreateManagedInstance, startSyntheticChat } from "./admin-managed-helpers";
 
@@ -8,12 +9,12 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
   const { instance, firstSession } = await publishExaminerDraftAndCreateManagedInstance(page);
 
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await page.goto(`/admin/instances/${instance.instanceId}`);
+  await page.goto(`/admin/instances/${instance.instanceId}/profile`);
   await expect(page.locator(".admin-instance-heading").getByText("Agent Instance", { exact: true })).toBeVisible();
 
-  await page.getByRole("tab", { name: "Continuity", exact: true }).click();
-  const memoryAutomation = page.locator(".admin-instance-tabs");
-  await memoryAutomation.getByRole("tab", { name: "Memory" }).click();
+  await navigateAdmin(page, "Continuity");
+  const memoryAutomation = page.locator(".admin-content");
+  await navigateAdmin(memoryAutomation, "Memory");
   await memoryAutomation.getByRole("combobox", { name: "Memory scope" }).click();
   await page.locator(".ant-select-item-option", { hasText: "Session" }).click();
   await memoryAutomation.getByRole("button", { name: "Enter Session ID", exact: true }).click();
@@ -39,8 +40,8 @@ test("p7e admin memory and automation tabs exercise owner-protected APIs", async
     await expect(memoryAutomation.locator(".ant-typography-danger")).toBeVisible();
   }
 
-  await page.getByRole("tab", { name: "Automation", exact: true }).click();
-  await page.getByRole("tab", { name: "Policies & models", exact: true }).click();
-  await page.getByRole("tab", { name: "Triggers", exact: true }).click();
+  await navigateAdmin(page, "Automation");
+  await navigateAdmin(page, "Policies & models");
+  await navigateAdmin(page, "Triggers");
   await expect(page.getByRole("region", { name: "Automations", exact: true }).getByText(/No automations yet/)).toBeVisible();
 });

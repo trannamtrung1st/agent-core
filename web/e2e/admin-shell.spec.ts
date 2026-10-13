@@ -1,3 +1,5 @@
+import { expandAdminSection } from "./support/admin-navigation";
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { expect, test } from "@playwright/test";
@@ -32,7 +34,7 @@ async function startSyntheticChat(page: import("@playwright/test").Page) {
 
 async function openFirstInstanceEffectiveConfig(page: import("@playwright/test").Page) {
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin\/instances$/);
   await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
   // Internal Admin navigation keeps the underlying Chat subscription alive.
   // Only local audio capture/playback is suspended, never the live text Run.
@@ -41,14 +43,14 @@ async function openFirstInstanceEffectiveConfig(page: import("@playwright/test")
   await expect.poll(async () => (await readTransport(page)).streaming).toBe(false);
   await expect.poll(async () => (await readTransport(page)).captureLive).toBe(false);
 
-  await page.getByRole("tab", { name: "Instances", exact: true }).click();
+  await navigateAdmin(page, "Instances");
   const instances = page.locator('section[aria-label="Instances"]');
   await instances.getByLabel("Search instances", { exact: true }).fill("examiner");
   const instanceLink = instances.getByRole("link", { name: /examiner/i }).first();
   await expect(instanceLink).toBeVisible({ timeout: 15_000 });
   await instanceLink.click();
-  await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}$/i);
-  await page.getByRole("tab", { name: "Effective configuration", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]{36}\/overview$/i);
+  await navigateAdmin(page, "Effective configuration");
   await expect(page.getByText("Runtime model")).toBeVisible();
   await expect(page.getByText("Interruption classifier")).toBeVisible();
 }
@@ -111,7 +113,7 @@ for (const returnWhileLive of [true, false]) {
     expect(before?.executionId).toBeTruthy();
     expect(before?.responseId).toBeTruthy();
     await page.getByRole("link", { name: "Open Admin" }).click();
-    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page).toHaveURL(/\/admin\/instances$/);
     expect(await readTransport(page)).toEqual({ hub: true, connection: "ready", captureLive: false, streaming: false });
     expect(await page.evaluate(() => window.__agentCore?.conversationExecution?.())).toEqual(before);
     if (!returnWhileLive) {
@@ -134,7 +136,7 @@ for (const returnWhileLive of [true, false]) {
 
 test("Admin leaves Voice and terminalizes playback without reconnecting", async ({ page }) => {
   await startSyntheticChat(page);
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await expandAdminSection(page, "Voice");
   await expect.poll(async () => (await readTransport(page)).streaming).toBe(true);
   await page.getByLabel("Message").fill("[test:durable-stream] Voice across Admin");
   await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -202,7 +204,7 @@ test("unexpected hub close in Admin recovers the same streamed text Run", async 
 for (const rejectionCount of [1, 2]) test(`a rejected Admin Voice mode change recovers after ${rejectionCount} rejection(s)`, async ({ page }) => {
   await startSyntheticChat(page);
   const chatUrl = page.url();
-  await page.getByRole("button", { name: "Voice", exact: true }).click();
+  await expandAdminSection(page, "Voice");
   await expect.poll(async () => (await readTransport(page)).streaming).toBe(true);
   await page.getByLabel("Message").fill("[test:durable-stream] Finish after failed mode change");
   await page.getByRole("button", { name: "Send", exact: true }).click();

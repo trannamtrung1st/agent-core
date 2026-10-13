@@ -100,3 +100,13 @@ it('names the Custom incoming test in paused recovery and leaves explicit Check 
   await screen.findByText('Review account status and Test incoming above. Update Custom credentials, then Check now.');
   expect(screen.getByRole('button', { name: 'Check now' })).toBeEnabled();
 });
+
+it('uses canonical contextual Automations and reports retained drafts to the Instance workspace', async () => {
+  const report = vi.fn();
+  const mounted = render(<ConfigProvider><App><EmailMonitoringSection account={account} instanceId="AABBCCDD-0000-0000-0000-000000000001" onDirtyChange={report} /></App></ConfigProvider>);
+  const toggle = await screen.findByRole('switch');
+  expect(screen.getByRole('link', { name: 'Configure an Instance Automation' })).toHaveAttribute('href', '/admin/instances/aabbccdd-0000-0000-0000-000000000001/automations');
+  fireEvent.click(toggle); await waitFor(() => expect(report).toHaveBeenLastCalledWith(true));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel changes' })); await waitFor(() => expect(report).toHaveBeenLastCalledWith(false));
+  fireEvent.click(toggle); mounted.unmount(); expect(report).toHaveBeenLastCalledWith(false);
+});

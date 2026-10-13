@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { emptyDraft, useInstanceSettingsController } from './useInstanceSettingsController';
+import { useAdminDraftStatus } from './AdminDraftStatus';
+import { useEffect, useId, useState } from 'react';
 import { Alert, App, Button, Collapse, Flex, Form, Input, InputNumber, Select, Spin, Switch, Tooltip, Typography, theme } from 'antd';
 import { InfoCircleOutlined, LockOutlined, UndoOutlined } from '@ant-design/icons';
-import { listInstanceSettings, patchInstanceSettings, type SettingValue, type SettingsSection } from '../../services/instanceConfiguration';
 import { confirmAction } from '../../app/confirmAction';
-import { describeAdminError } from './adminErrors';
-import { listModels } from '../../services/api';
-import { InstanceExecutionBudgets } from './ExecutionBudgetsSection';
+import { instanceSettingGroups, type InstancePage } from './adminNavigation';
 import { orderedReasoningEfforts } from '../models/reasoningEfforts';
 
 const titles: Record<string, string> = { instructions: 'Operating instructions', conversationPolicy: 'Conversation', behaviorPolicy: 'Behavior', initiativePolicy: 'Initiative', voice: 'Voice', modelDefaults: 'Model defaults', memoryPolicy: 'Memory policy', capabilities: 'Capabilities', triggerPolicy: 'Trigger restrictions', providerPreferences: 'Provider preferences' };
@@ -16,72 +15,31 @@ const fieldOrder: Record<string, string[]> = {
 const choiceLabels: Record<string, string> = { concise: 'Concise', balanced: 'Balanced', acknowledgeThenContinue: 'Acknowledge, then continue', answerNewTurn: 'Answer new turn' };
 const nullable = new Set(['maxConsecutiveProactiveTurns', 'maxSilentEvaluations', 'maxInactivityMs', 'catalogKey', 'reasoningEffort', 'speechRecognizer', 'speechSynthesizer']);
 const numerics = new Set(['maxOutputTokens', 'silenceThresholdMs', 'cooldownMs', 'maxPerSilencePeriod', 'maxConsecutiveProactiveTurns', 'maxSilentEvaluations', 'maxInactivityMs', 'speakingRate', 'maxActiveRegistrations', 'oneShotHorizonDays', 'minRecurrenceDays', 'minFixedIntervalSeconds']);
-type Draft = { set: Record<string, SettingValue>; clear: string[] };
-const emptyDraft = (): Draft => ({ set: {}, clear: [] });
 
-export function InstanceSettingsSection({ instanceId, archived, active = true, onUpdated }: { instanceId: string; archived: boolean; active?: boolean; onUpdated: () => void }) {
+
+export function InstanceSettingsSection({ instanceId, archived, active = true, page, onDirtyChange, onUpdated }: { instanceId: string; archived: boolean; active?: boolean; page?: InstancePage; onDirtyChange?: (dirty: boolean) => void; onUpdated: () => void }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [expanded, setExpanded] = useState<string[]>([]);
-  const [sections, setSections] = useState<SettingsSection[] | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({}); const [customized, setCustomized] = useState<Record<string, boolean>>({});
-  const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
-  const [models, setModels] = useState<{ key: string; displayName: string; supportedReasoningEfforts: string[] }[]>([]);
-  const [defaultModelKey, setDefaultModelKey] = useState<string | null>(null);
   const formId = useId();
-  const epoch = useRef(0); const saving = useRef(false); const owner = useRef(instanceId); owner.current = instanceId;
-  useEffect(() => { epoch.current++; saving.current = false; setSections(null); setExpanded([]); setDrafts({}); setCustomized({}); setError(null); setBusy(false); }, [instanceId]);
-  const reload = useCallback(async () => {
-    const request = ++epoch.current; setLoading(true); setError(null); setSections(null);
-    try { const result = await listInstanceSettings(instanceId); if (owner.current === instanceId && request === epoch.current) setSections(result); }
-    catch (e) { if (request === epoch.current) setError(describeAdminError(e, 'Unable to read settings. Retry before saving; drafts are retained.').message); }
-    finally { if (request === epoch.current) setLoading(false); }
-  }, [instanceId]);
-  // A pending save owns its refresh; re-entering the tab must not supersede that read.
-  useEffect(() => { if (active && !saving.current) void reload(); }, [reload, active]);
-  useEffect(() => { let current = true; listModels().then(c => { if (current) { setModels(c.models); setDefaultModelKey(c.defaultKey); } }).catch(() => {}); return () => { current = false; }; }, []);
-  function change(section: SettingsSection, field: string, value: SettingValue) {
-    setDrafts(previous => {
-      const draft = previous[section.section] ?? emptyDraft(); const set = { ...draft.set };
-      if (JSON.stringify(value) === JSON.stringify(section.effective[field])) delete set[field]; else set[field] = value;
-      return { ...previous, [section.section]: { set, clear: draft.clear.filter(k => k !== field) } };
-    });
-  }
-  function inherit(section: SettingsSection, field: string) {
-    setDrafts(previous => { const draft = previous[section.section] ?? emptyDraft(); const set = { ...draft.set }; delete set[field];
-      return { ...previous, [section.section]: { set, clear: [...new Set([...draft.clear, field])] } }; });
-  }
-  async function save(section: SettingsSection, reset = false) {
-    const draft = reset ? { set: {}, clear: Object.keys(section.overrides) } : drafts[section.section] ?? emptyDraft();
-    if (archived || busy || !sections || !Object.keys(draft.set).length && !draft.clear.length) return;
-    const request = epoch.current; let committed = false; saving.current = true; setBusy(true); setError(null);
-    try {
-      await patchInstanceSettings(instanceId, section, draft.set, draft.clear);
-      if (request !== epoch.current || owner.current !== instanceId) return;
-      committed = true;
-      setDrafts(current => ({ ...current, [section.section]: emptyDraft() }));
-      if (reset) setCustomized(current => ({ ...current, [section.section]: false }));
-      onUpdated();
-      // Resolving one section can also change another (for example Voice disables speech aliases).
-      setSections(null); setLoading(true);
-      const refreshed = await listInstanceSettings(instanceId);
-      if (request === epoch.current && owner.current === instanceId) setSections(refreshed);
-    } catch (e) { if (request === epoch.current) setError(committed
-      ? `Settings were saved. ${describeAdminError(e, 'Settings could not be refreshed.').message} Retry settings; other drafts are retained.`
-      : describeAdminError(e, 'Settings could not be saved. Reload while retaining your draft.').message); }
-    finally { if (request === epoch.current) { saving.current = false; setBusy(false); setLoading(false); } }
-  }
+  const { sections, drafts, setDrafts, customized, setCustomized, loading, busy, error, models, defaultModelKey, reload, change, inherit, save } = useInstanceSettingsController(instanceId, archived, active, onUpdated);
+  useEffect(() => { setExpanded([]); }, [instanceId]);
+  const requested = page ? instanceSettingGroups[page] ?? [] : undefined;
+  const dirtySections = Object.entries(drafts).filter(([, draft]) => Object.keys(draft.set).length + draft.clear.length > 0).map(([key]) => key);
+  useAdminDraftStatus(Object.entries(instanceSettingGroups).filter(([, sections]) => sections?.some(section => dirtySections.includes(section))).map(([key]) => key));
+  useEffect(() => { onDirtyChange?.(dirtySections.length > 0); }, [dirtySections.join(','), onDirtyChange]);
+  useEffect(() => { if (requested) setExpanded(current => [...new Set([...current, ...requested])]); }, [page]);
   return <Flex vertical gap={token.padding}>
     <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.</Typography.Paragraph>
     <Button style={{ alignSelf: "flex-start" }} disabled={busy || loading} onClick={() => void reload()}>Reload settings</Button>
     {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => void reload()}>Retry settings</Button>} />}
     {loading && <Spin aria-label="Loading Instance settings" />}
-    {sections && <Collapse styles={{ header: { alignItems: 'center' } }} activeKey={expanded} onChange={keys => setExpanded(Array.isArray(keys) ? keys : [keys])} items={sections.map(section => {
+    {sections && <Collapse styles={{ header: { alignItems: 'center' } }} activeKey={expanded} onChange={keys => setExpanded(Array.isArray(keys) ? keys : [keys])} items={sections.filter(section => !requested || requested.includes(section.section)).map(section => {
       const draft = drafts[section.section] ?? emptyDraft(); const own = customized[section.section] ?? Object.keys(section.overrides).length > 0;
       const changed = Object.keys(draft.set).length + draft.clear.length > 0;
       const title = titles[section.section];
       const hasOverrides = Object.keys(draft.set).length > 0 || Object.keys(section.overrides).some(field => !draft.clear.includes(field));
       return { key: section.section, label: <Flex wrap align="center" gap={token.paddingXS}>
-        <span>{title}</span>
+        <span id={section.section === "triggerPolicy" ? "restrictions" : section.section} tabIndex={-1} className="admin-settings-anchor">{title}</span>
         {changed && <Typography.Text type="secondary">Unsaved changes</Typography.Text>}
         {hasOverrides && <Tooltip trigger={['hover', 'focus', 'click']} title={changed ? 'Unsaved Instance overrides' : 'This section has Instance overrides.'}><InfoCircleOutlined tabIndex={0} aria-label={`${title}: Instance override`} /></Tooltip>}
       </Flex>, children: <Flex vertical gap={token.padding} role="group" aria-label={`${title} settings`}>
@@ -134,6 +92,6 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, o
         <Typography.Text type="secondary">Instance adopted v{section.definitionVersion} · revision {section.instanceRevision}</Typography.Text>
       </Flex> };
     })} />}
-    <InstanceExecutionBudgets instanceId={instanceId} archived={archived} onUpdated={onUpdated} />
+
   </Flex>;
 }

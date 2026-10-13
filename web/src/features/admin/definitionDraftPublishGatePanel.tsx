@@ -1,3 +1,4 @@
+import { followAppLink } from "../../app/appLink";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { AgentConfigurationPanel } from "./AgentConfigurationLayout";
 import { Alert, Button, Descriptions, Flex, Input, List, Select, Spin, Tag, Typography } from "antd";
@@ -25,6 +26,8 @@ type Props = {
   evidenceRef?: Ref<DefinitionDraftEvidenceHandle>;
   activeDraft: AdminDefinitionDraft;
   dirty: boolean;
+  dirtyReason?: string;
+  dirtyHref?: string;
   busy: boolean;
   toolNames: string[];
   onDraftRevisionChange: (draft: AdminDefinitionDraft) => void;
@@ -36,6 +39,8 @@ export function DefinitionDraftPublishGatePanel({
   activeDraft,
   evidenceRef,
   dirty,
+  dirtyReason,
+  dirtyHref,
   busy,
   toolNames,
   onDraftRevisionChange,
@@ -164,6 +169,7 @@ export function DefinitionDraftPublishGatePanel({
     () =>
       computePublishEligibility({
         dirty,
+        dirtyReason,
         draftId: activeDraft.draftId,
         draftRevision: activeDraft.revision,
         evidenceLoadStatus,
@@ -174,6 +180,7 @@ export function DefinitionDraftPublishGatePanel({
       }),
     [
       dirty,
+      dirtyReason,
       activeDraft.draftId,
       activeDraft.revision,
       evidenceLoadStatus,
@@ -292,7 +299,7 @@ export function DefinitionDraftPublishGatePanel({
           description={
             <ul className="admin-publish-blockers">
               {eligibility.blockers.map((item) => (
-                <li key={item}>{item}</li>
+                <li key={item}>{item === dirtyReason && dirtyHref ? <a href={dirtyHref} onClick={followAppLink}>{item}</a> : item}</li>
               ))}
             </ul>
           }

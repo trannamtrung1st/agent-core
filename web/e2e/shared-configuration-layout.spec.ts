@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test } from '@playwright/test';
 
 test('Shared Admin panels keep aligned insets and usable actions across viewport boundaries', async ({ page }) => {
@@ -9,21 +10,15 @@ test('Shared Admin panels keep aligned insets and usable actions across viewport
   await page.getByRole('combobox', { name: 'Definition', exact: true }).click();
   await page.locator('.ant-select-item-option').filter({ hasText: 'General Assistant · general-assistant' }).click();
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
+  await navigateAdmin(page, 'Profile & version');
   await expect(page.getByLabel('Persona name', { exact: true })).toBeVisible();
-  async function selectTab(name: string) {
-    // Ant Design's tablet overflow can place a tab outside the visible strip.
-    // Focusing also adds a positional accessible label; send Enter through the
-    // keyboard rather than resolving the old exact name a second time.
-    await page.getByRole('tab', { name, exact: true }).focus();
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('tab', { name: new RegExp(`${name}$`) })).toHaveAttribute('aria-selected', 'true');
-  }
+  async function selectTab(name: string) { await navigateAdmin(page, name); }
 
   for (const width of [1440, 768, 767, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const surfaces = [
       { tab: 'Identity & version', section: 'Workspace', labels: ['Agent Workspace'] },
-      { tab: 'Identity & version', section: 'Settings', labels: ['Agent self-management'] },
+      { tab: 'Self-management', labels: ['Agent self-management'] },
       { tab: 'Skills & resources', section: 'Skills', labels: ['Definition Skills', 'Instance Skills'] },
       { tab: 'Skills & resources', section: 'Resources', labels: ['Definition resources', 'Instance resources'] },
       { tab: 'Continuity', section: 'Memory', labels: ['Identity maintenance', 'Learned memory administration'] },

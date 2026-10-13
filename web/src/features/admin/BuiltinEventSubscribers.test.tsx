@@ -35,7 +35,7 @@ describe("Built-in subscriber scope and recovery", () => {
     await act(async () => release(review("First automation")));
     expect(screen.queryByRole("link", { name: "First automation" })).not.toBeInTheDocument();
     fireEvent.click(second);
-    expect(navigateToAppPath).toHaveBeenCalledWith("/admin/instances/second/automation/automations?automation=Second automation");
+    expect(navigateToAppPath).toHaveBeenCalledWith("/admin/instances/second/automations?automation=Second automation");
     expect(listAdminInstances).not.toHaveBeenCalled();
   });
   it("retries a failed owned subscription read and restores the exact Automation link", async () => {
@@ -44,6 +44,6 @@ describe("Built-in subscriber scope and recovery", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Retry subscribers" }));
     fireEvent.click(await screen.findByRole("link", { name: "Recovered" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(navigateToAppPath).toHaveBeenCalledWith("/admin/instances/owner/automation/automations?automation=Recovered");
+    expect(navigateToAppPath).toHaveBeenCalledWith("/admin/instances/owner/automations?automation=Recovered");
   });
 });

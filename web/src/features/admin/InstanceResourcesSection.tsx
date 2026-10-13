@@ -12,12 +12,13 @@ import { describeAdminError } from './adminErrors';
 import { listInstanceResources, copyInstanceResource, uploadInstanceResource, toggleInstanceResource, deleteInstanceResource, downloadInstanceResource, readInstanceResourceFile, type InstanceResource, type ResourceCatalog } from '../../services/instanceConfiguration';
 const kinds = [{ value: 1, label: 'Knowledge' }, { value: 2, label: 'Reference' }, { value: 3, label: 'Template' }, { value: 4, label: 'Static asset' }];
 type Editor = { resource: InstanceResource | null; logicalPath: string; kind: number; enabled: boolean; file: File | null; items: ResourcePreviewItem[]; readOnly: boolean };
-export function InstanceResourcesSection({ instanceId, archived, active = true, onUpdated }: { instanceId: string; archived: boolean; active?: boolean; onUpdated: () => void }) {
+export function InstanceResourcesSection({ instanceId, archived, active = true, onUpdated, onDirtyChange }: { instanceId: string; archived: boolean; active?: boolean; onDirtyChange?: (dirty: boolean) => void; onUpdated: () => void }) {
   const detailLayout = useAdminDetailLayout(); const { token } = theme.useToken(); const { modal } = App.useApp(); const compact = !Grid.useBreakpoint().md;
   const [selectedResources, setSelectedResources] = useState<React.Key[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<ResourceCatalog | null>(null); const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null); const [editor, setEditor] = useState<Editor | null>(null); const [kind, setKind] = useState<number>();
+  useEffect(() => { onDirtyChange?.(!!editor && !editor.readOnly); }, [editor, onDirtyChange]);
   const [progress, setProgress] = useState<string | null>(null);
   const { search, setSearch, pagination } = useAdminCollectionSearch(); const epoch = useRef(0); const owner = useRef(instanceId); owner.current = instanceId;
   const previewEpoch = useRef(0); const opener = useRef<HTMLElement | null>(null); const drawerVisible = useRef(false);

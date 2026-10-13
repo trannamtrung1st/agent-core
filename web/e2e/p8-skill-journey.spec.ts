@@ -1,3 +1,4 @@
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { startSyntheticChat } from "./admin-managed-helpers";
@@ -47,21 +48,22 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   const definitionId = `p8-skills-${Date.now()}`;
   await startSyntheticChat(page);
   await page.getByRole("link", { name: "Open Admin" }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin\/instances$/);
+  await navigateAdmin(page, "Definitions");
   await page.getByRole("button", { name: "New definition" }).click();
   const definitionDialog = page.getByRole("dialog", { name: "New definition" });
   await definitionDialog.getByLabel("Definition ID").fill(definitionId);
   await definitionDialog.getByRole("button", { name: "Create draft" }).click();
-  await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}$`));
+  await expect(page).toHaveURL(new RegExp(`/admin/definitions/${definitionId}/drafts/[0-9a-f-]+/overview$`));
 
   const editor = draftEditorSection(page);
   await openDefinitionSettings(editor);
   await expect(editor.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
-  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await navigateAdmin(editor, "Skills & resources");
   await expect(editor.getByText("No skills yet. A definition without skills runs with an empty skill set.")).toBeVisible();
   await expect(editor.getByText(/Required capabilities are requirements, not grants/)).toBeVisible();
 
-  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await navigateAdmin(editor, "Skills & resources");
 
   await editor.getByRole("button", { name: "Add skill" }).click();
   const drawer = page.getByRole("dialog", { name: "New Definition Skill" });
@@ -84,7 +86,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
 
   await drawer.getByRole("button", { name: "Save Skill" }).click();
   await expect(drawer).toBeHidden();
-  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await navigateAdmin(editor, "Skills & resources");
   await editor.getByRole("button", { name: "Add skill" }).click();
   await drawer.getByLabel("Skill ID", { exact: true }).fill("order.lookup");
   await drawer.getByLabel("Skill name", { exact: true }).fill("Order lookup");
@@ -93,8 +95,8 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
 
   await drawer.getByRole("button", { name: "Save Skill" }).click();
   await expect(drawer).toBeHidden();
-  await editor.getByRole("tab", { name: "Identity & version", exact: true }).click();
-  await editor.locator(".admin-draft-view-switch").getByText("Advanced JSON", { exact: true }).click();
+  await navigateAdmin(editor, "Identity & version");
+  await navigateAdmin(editor, "Advanced JSON");
   const json = editor.getByRole("textbox", { name: "Advanced JSON" });
   await expect(json).toHaveValue(/REFUND_PROCEDURE/);
   await expect(json).toHaveValue(/ORDER_PROCEDURE/);
@@ -104,9 +106,9 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await expect(editor.getByRole("button", { name: "Publish…" })).toBeDisabled();
   await json.fill(validJson);
   await expect(editor.getByRole("alert").filter({ hasText: "Advanced JSON is invalid" })).toHaveCount(0);
-  await editor.getByRole("tab", { name: "Identity & version", exact: true }).click();
-  await editor.locator(".admin-draft-view-switch").getByText("Form", { exact: true }).click();
-  await editor.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await navigateAdmin(editor, "Identity & version");
+  await navigateAdmin(editor, "Instructions & behavior");
+  await navigateAdmin(editor, "Skills & resources");
   const skills = editor.getByRole("region", { name: "Skills", exact: true });
   await skills.getByRole("row").filter({ hasText: "Refund" }).getByRole("button", { name: "Details", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("REFUND_PROCEDURE");
@@ -131,7 +133,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   };
   await page.route("**/evaluation-scenarios**", holdEvidence);
   await page.route("**/evaluation-results**", holdEvidence);
-  await editor.getByRole("tab", { name: "Test & Publish" }).click();
+  await navigateAdmin(editor, "Test & Publish");
   const gate = editor.getByLabel("Test validate and publish gate");
   await expect(gate.getByRole("alert").filter({ hasText: "Publish blocked" })).toBeVisible();
   await expect(gate.getByText("Evaluation evidence is not ready for the active draft.")).toBeVisible();
@@ -169,7 +171,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await page.getByRole("button", { name: "View v1 (durable)", exact: true }).click();
   const versionDetails = page.getByRole("region", { name: "Version details", exact: true });
   await expect(versionDetails.getByRole("region", { name: "Skills", exact: true })).toHaveCount(0);
-  await versionDetails.getByRole("tab", { name: "Skills & resources", exact: true }).click();
+  await navigateAdmin(versionDetails, "Skills & resources");
   const published = versionDetails.getByRole("region", { name: "Skills", exact: true });
   await expect(published).toBeVisible({ timeout: 15_000 });
   await expect(published).toContainText("Refund");
@@ -223,7 +225,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   expect(pins).toContain("refund.handle");
   expect(pins).not.toContain("order.lookup");
 
-  await page.goto(`/admin/instances/${instance.instanceId}`);
+  await page.goto(`/admin/instances/${instance.instanceId}/profile`);
   const lifecycle = page.getByRole("region", { name: "Lifecycle controls" });
   await lifecycle.getByRole("button", { name: "Archive instance" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();

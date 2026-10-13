@@ -10,13 +10,14 @@ import { AdminErrorNotice } from './adminFailure';
 import { AdminCollectionToolbar, useAdminCollectionSearch } from './AdminCollectionToolbar';
 
 
-export function InstanceSkillsSection({ instanceId, archived, active = true, onUpdated }: { instanceId: string; archived: boolean; active?: boolean; onUpdated?: () => void }) {
+export function InstanceSkillsSection({ instanceId, archived, active = true, onUpdated, onDirtyChange }: { instanceId: string; archived: boolean; active?: boolean; onDirtyChange?: (dirty: boolean) => void; onUpdated?: () => void }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const compact = !Grid.useBreakpoint().md;
   const [skills, setSkills] = useState<InstanceSkill[] | null>(null); const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false); const [error, setError] = useState<AdminFailureNotice | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [editing, setEditing] = useState<InstanceSkill | 'new' | null>(null); const [inspected, setInspected] = useState<InstanceSkill | null>(null);
+  useEffect(() => { onDirtyChange?.(!!editing); }, [editing, onDirtyChange]);
   const [drawerValue, setDrawerValue] = useState<SkillDrawerValue | null>(null); const { search, setSearch, pagination } = useAdminCollectionSearch();
   const generation = useRef(0);
   const returnFocus = useRef<HTMLElement | null>(null);

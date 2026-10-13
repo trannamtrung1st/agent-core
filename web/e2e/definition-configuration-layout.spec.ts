@@ -1,3 +1,5 @@
+import { expandAdminSection } from "./support/admin-navigation";
+import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test } from '@playwright/test';
 import { draftEditorSection, openDefinitionSettings } from './admin-draft-editor-helpers';
@@ -14,17 +16,17 @@ test('Definition configuration retains edits and navigation across shared sectio
   });
   await page.goto('/');
   await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));
-  await page.goto('/admin');
+  await page.goto('/admin/definitions');
   await page.getByRole('button', { name: 'New definition', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'New definition', exact: true });
   const id = `shared-configuration-${Date.now()}`;
   await dialog.getByLabel('Definition ID').fill(id);
   await dialog.getByRole('button', { name: 'Create draft', exact: true }).click();
   const editor = draftEditorSection(page);
-  await expect(editor.getByRole('tab', { name: 'Profile', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await navigateAdmin(page, 'Identity & goals');
   await editor.getByLabel('Definition name').fill('A long Definition name that must wrap without moving the configuration controls outside the viewport');
   await openDefinitionSettings(editor);
-  await expect(editor.getByRole('button', { name: 'Conversation', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(editor.getByRole('button', { name: 'Conversation', exact: true })).toHaveAttribute('aria-expanded', 'true');
   await editor.getByLabel('System instructions').fill('Retain this instruction across every configuration view.');
   await openDefinitionSettings(editor, 'Conversation');
   const questionSwitch = editor.getByRole('switch', { name: 'Ask one question at a time', exact: true });
@@ -39,36 +41,34 @@ test('Definition configuration retains edits and navigation across shared sectio
   await editor.getByLabel('Minimum recurrence days').fill('0.5');
   await expect(editor.getByLabel('Minimum recurrence days')).toHaveAttribute('aria-invalid', 'true');
   await expect(editor.getByRole('button', { name: 'Save draft', exact: true })).toBeDisabled();
-  await editor.getByRole('button', { name: 'Trigger restrictions', exact: true }).click();
+  await editor.getByRole('button', { name: /Trigger restrictions/ }).click();
   await expect(editor.getByText('Needs attention', { exact: true })).toBeVisible();
-  await editor.getByRole('tab', { name: 'Profile', exact: true }).click();
-  await expect(editor.getByText(/Review Trigger restrictions in Identity & version → Settings/)).toBeVisible();
+  await navigateAdmin(editor, 'Profile');
+  await expect(editor.getByText(/Review Trigger restrictions in Policies/)).toBeVisible();
   await openDefinitionSettings(editor, 'Trigger restrictions');
   await editor.getByLabel('Minimum recurrence days').fill('2');
   await expect(editor.getByText('Needs attention', { exact: true })).toHaveCount(0);
-  await editor.locator('.admin-draft-view-switch').getByText('Advanced JSON', { exact: true }).click();
+  await navigateAdmin(editor, "Advanced JSON");
   const json = editor.getByRole('textbox', { name: 'Advanced JSON', exact: true });
   const valid = await json.inputValue();
   await json.fill('{');
-  await editor.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
+  await navigateAdmin(editor, 'Skills & resources');
   await expect(editor.getByRole('button', { name: 'Add skill', exact: true })).toBeDisabled();
   await expect(editor.getByRole('alert').filter({ hasText: 'Advanced JSON is invalid' })).toBeVisible();
-  await editor.getByRole('tab', { name: 'Identity & version', exact: true }).click();
+  await navigateAdmin(editor, 'Advanced JSON');
   await expect(json).toHaveValue('{');
   await json.fill(valid);
-  await editor.locator('.admin-draft-view-switch').getByText('Form', { exact: true }).click();
-  await expect(editor.getByRole('tab', { name: 'Settings', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await openDefinitionSettings(editor, 'Trigger restrictions');
   await expect(editor.getByLabel('Minimum recurrence days')).toHaveValue('2');
-  await editor.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
+  await navigateAdmin(editor, 'Skills & resources');
   await expect(editor.getByText('No skills yet. A definition without skills runs with an empty skill set.')).toBeVisible();
-  await editor.getByRole('tab', { name: 'Resources', exact: true }).click();
+  await navigateAdmin(editor, 'Resources');
   await expect(editor.getByText('No resources bound to this draft.')).toBeVisible();
   await editor.getByLabel('Resource logical path').fill('references/retained-input.txt');
-  await editor.getByRole('tab', { name: 'Capabilities', exact: true }).click();
-  await editor.getByRole('tab', { name: 'Skills & resources', exact: true }).click();
-  await expect(editor.getByRole('tab', { name: 'Resources', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await navigateAdmin(editor, 'Capabilities');
+  await navigateAdmin(editor, 'Resources');
   await expect(editor.getByLabel('Resource logical path')).toHaveValue('references/retained-input.txt');
-  await editor.getByRole('tab', { name: 'Identity & version', exact: true }).click();
+  await navigateAdmin(editor, 'Instructions & behavior');
   await expect(editor.getByLabel('System instructions')).toHaveValue('Retain this instruction across every configuration view.');
   for (const width of [1440, 768, 767, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -76,8 +76,12 @@ test('Definition configuration retains edits and navigation across shared sectio
     const field = await editor.getByLabel('Max output tokens').boundingBox();
     expect(field!.width).toBeLessThanOrEqual(192);
     if (width >= 768) {
-      const toggle = await questionSwitch.boundingBox();
-      expect(Math.abs(toggle!.y + toggle!.height - field!.y - field!.height)).toBeLessThanOrEqual(1);
+      // Read both bounds in one layout frame; textarea autosizing can settle between separate reads.
+      await expect.poll(() => editor.evaluate(root => {
+        const field = root.querySelector<HTMLElement>('[aria-label="Max output tokens"]')!.getBoundingClientRect();
+        const toggle = root.querySelector<HTMLElement>('[aria-label="Ask one question at a time"]')!.getBoundingClientRect();
+        return Math.abs(toggle.bottom - field.bottom);
+      })).toBeLessThanOrEqual(1);
     }
     await editor.getByLabel('System instructions').scrollIntoViewIfNeeded();
     const instructions = await editor.getByLabel('System instructions').boundingBox();
@@ -88,10 +92,13 @@ test('Definition configuration retains edits and navigation across shared sectio
     expect(save!.y).toBeGreaterThanOrEqual(0);
     expect(save!.y + save!.height).toBeLessThanOrEqual(900);
   }
+  await navigateAdmin(editor, 'Resources');
+  await editor.getByLabel('Resource logical path').fill('');
+  await navigateAdmin(editor, 'Instructions & behavior');
   await editor.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
   await page.reload();
-  await expect(editor.getByRole('tab', { name: 'Profile', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await navigateAdmin(page, 'Identity & goals');
   await expect(editor.getByLabel('Definition name')).toHaveValue(/A long Definition name/);
   await openDefinitionSettings(editor, 'Conversation');
   await expect(editor.getByLabel('Max output tokens')).toHaveValue('512');
@@ -100,7 +107,7 @@ test('Definition configuration retains edits and navigation across shared sectio
 });
 
 test('Definition save guidance leads to the capability catalog retry and retains the candidate', async ({ page }) => {
-  await page.goto('/admin');
+  await page.goto('/admin/definitions');
   await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));
   await page.route('**/api/v2/admin/tools', route => route.fulfill({
     status: 503, contentType: 'application/problem+json', body: JSON.stringify({ detail: 'Registry temporarily unavailable.' })
@@ -110,15 +117,16 @@ test('Definition save guidance leads to the capability catalog retry and retains
   await dialog.getByLabel('Definition ID').fill(`catalog-recovery-${Date.now()}`);
   await dialog.getByRole('button', { name: 'Create draft', exact: true }).click();
   const editor = draftEditorSection(page);
+  await navigateAdmin(page, 'Identity & goals');
   await editor.getByLabel('Definition name').fill('Keep this name through catalog retry');
   await expect(editor.getByText('The capability catalog is unavailable. Open Capabilities and choose Retry tool registry, or use Advanced JSON.')).toBeVisible();
   await expect(editor.getByRole('button', { name: 'Save draft', exact: true })).toBeDisabled();
-  await editor.getByRole('tab', { name: 'Capabilities', exact: true }).click();
+  await navigateAdmin(editor, 'Capabilities');
   await expect(editor.getByRole('alert')).toContainText('Registry temporarily unavailable.');
   await page.unroute('**/api/v2/admin/tools');
   await editor.getByRole('button', { name: 'Retry tool registry', exact: true }).click();
   await expect(editor.getByText(/The capability catalog is unavailable/)).toHaveCount(0);
-  await editor.getByRole('tab', { name: 'Identity & version', exact: true }).click();
+  await navigateAdmin(editor, 'Identity & goals');
   await expect(editor.getByLabel('Definition name')).toHaveValue('Keep this name through catalog retry');
   await editor.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
