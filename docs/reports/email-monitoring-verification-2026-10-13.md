@@ -1,6 +1,6 @@
 # Email monitoring verification — 13 October 2026
 
-Status: implemented on `develop/branch-1`, reconciled with main baseline `8fc22203`. The previous local behavior candidate `47f6353f` and UI polish `f8738a56` have recorded local evidence. The owner explicitly authorized public commit/push on 2026-10-13; the final review below resolves additional recovery/default defects and runs final-source gates. Non-live closure is pending those results. Real Gmail/IMAP UAT is separate and has not been authorized or run against an owner's mailbox.
+Status: non-live scope closed/frozen on behavior `bcfa7a7e7b602f35e635765c262d4f2a35ca6015`, on `develop/branch-1` from main baseline `8fc22203`. All seven [exact-source hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/38359505594) and final local gates passed. Explicit public publication authorization was granted on 2026-10-13. Real Gmail/IMAP UAT remains separately unapproved and unrun.
 
 ## Delivered slices
 
@@ -37,7 +37,7 @@ Repeatable `email-monitoring.spec.ts` passed all four widths against the disposa
 | Existing Compose | Final source: `COMPOSE_PROJECT_NAME=email-monitor-final-20261013 AGENTCORE_COMPOSE_PORT=5494 bash scripts/compose-sqlite-volume.sh` — passed; existing data, Synthetic OAuth and exact key-ring hashes survived recreation |
 | Monitoring Compose | Final source: `python3 scripts/verify-email-watch-restart.py --project email-monitor-final-20261013 --port 5494` — passed; cursor, generation, configuration and account authorization unchanged, no historical inbox Events |
 | Impeccable | context once, actual shape/audit/polish/Operate references, incumbent UI and before captures read; doctor returned no findings; scoped detector returned no findings. Final confirmation preserved switch focus and zero overflow; canonical targets/anchors and design JSON validated |
-| Exact-source hosted workflow | Blocked: automatic approval review rejected public Git push twice, including after verifying repository ownership/Admin access. No push or workflow dispatch occurred; explicit user approval to publish the payload to the public repository is required |
+| Exact-source hosted workflow | All seven [jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/38359505594) passed on `bcfa7a7e7b602f35e635765c262d4f2a35ca6015`. Initial publication approval rejections were resolved by explicit owner authorization; the public branch was pushed successfully |
 | Real Gmail / IMAP | Not run; dedicated mailbox owner opt-in remains a separate UAT gate |
 
 Native/browser ports 5394/5194 and Compose 5494 are disposable task hosts. No user database reset or existing host termination was performed. Sandbox blocked VSTest loopback until the test invocation was escalated; actual checks then ran. Migration tooling 10.0.5 reported its version older than EF runtime 10.0.12, but generated/executed migrations successfully. The SQLite trigger-constraint widening performs an existing EF data-preserving table rebuild; production backup/startup migration rules apply.
@@ -64,7 +64,7 @@ Google's [History API contract](https://developers.google.com/workspace/gmail/ap
 | EM-21–22 | Owner projection omits secrets/cursors/leases/fingerprints/content; Event data omits subject/body; polling has zero model calls and no automatic binding/send. Existing approval/send regressions passed in the complete Synthetic browser suite. |
 | EM-23–25 | Dedicated controlled-form tests, conflict/slow-save/deferred-read fixtures, keyboard/mouse four-width click paths, paused/host/gap/retry projections, focus and zero overflow. No physical-device/screen-reader or real transport-failure UI claim. |
 | EM-26–27 | Full Synthetic browser suite passed 212 cases including neighboring Gmail/chooser/send, Events and speech. Both stores reopen/retain receipts; isolated Compose verifies existing grants/key-ring and watch cursor/generation preservation. Final complete backend/frontend gates are green, with counts/logs recorded separately. |
-| EM-28 | Canonical links/anchors and design JSON/doctor checks passed. Hosted exact-source jobs are blocked by public-publication approval; this acceptance ID remains open. |
+| EM-28 | Canonical targets/anchors, design JSON/Impeccable checks and all seven [exact-source hosted jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/38359505594) passed on `bcfa7a7e7b602f35e635765c262d4f2a35ca6015`. Final review and closure below supersede the initial publication blocker. |
 | EM-29 | Dedicated owner mailbox opt-in was not requested; Real Gmail/IMAP UAT remains separately unverified. |
 
 ## Impeccable audit and delivery
@@ -75,7 +75,7 @@ Final local acceptance on behavior candidate `47f6353f`: backend 3,889 passed / 
 
 ## Release acceptance
 
-EM-01–EM-29 are the proposal's acceptance IDs. Passing focused checks and responsive screenshots do not waive full-suite, source-authority race, broader Synthetic, design/document or hosted gates. Local implementation is complete; the owner authorized public push/dispatch on 2026-10-13. No freeze/closure is claimed until the final reviewed candidate passes its required hosted jobs. Live-provider consent, fresh real-mail detection/read, restart/duplicates and revoke behavior remain unverified separately from mandatory offline acceptance.
+EM-01–EM-29 are the proposal's acceptance IDs. Passing focused checks and responsive screenshots do not waive full-suite, source-authority race, broader Synthetic, design/document or hosted gates. The owner authorized public push/dispatch on 2026-10-13. Non-live implementation is closed/frozen on `bcfa7a7e7b602f35e635765c262d4f2a35ca6015` after all required local and exact-source hosted gates passed. Live-provider consent, fresh real-mail detection/read, restart/duplicates and revoke behavior remain unverified separately from mandatory offline acceptance.
 
 
 ## Follow-up UI polish (2026-10-13)
@@ -114,3 +114,24 @@ Executed focused checks: 4 EmailMonitoring owner/runtime API cases passed, inclu
 MCP exercised actual Custom creation defaults and existing-account reopening, and the delayed Reload/edit/Cancel path. The gated read used a harmless subscriber-count projection to observe that the response had rendered before checking the draft, then restored the real projection. Expected and observed: the draft remained checked after the delayed response and Cancel restored persisted Off. A safe Paused projection with an already-past due timestamp and false pending left Check now enabled at 320px without overflow; real owner HTTP admission is established by the clock-controlled two-store fixture. No real provider failure, subscription creation, mail arrival or send is claimed by these UI projections. Console inspection found no application warnings/errors in the final account journey.
 
 Full local backend/frontend and final build gates run against the review source, with logs `/tmp/email-monitor-review-full-backend.log`, `/tmp/email-monitor-review-frozen-frontend.log` and `/tmp/email-monitor-review-build-final.log`. The first full frontend run (`/tmp/email-monitor-review-full-frontend.log`) passed 954 cases but failed the new copy assertion: it had cached the old component before that final source/test addition. A fresh focused run passed; the full gate was restarted with source edits frozen, without relaxing assertions. The hosted run will verify the pushed exact source, including the complete browser projects and both Compose checks. Final counts/SHA/hosted outcome are recorded in the closure addendum after completion. Documentation validation checked 16 files, 678 local targets and 217 anchors with zero missing references; workflow YAML and design JSON parsed; source diff and scoped Impeccable checks passed. Real-mailbox UAT remains separately unapproved and unrun.
+
+
+## Closure addendum (2026-10-13)
+
+Behavior is frozen on `bcfa7a7e7b602f35e635765c262d4f2a35ca6015`. The owner-authorized public push succeeded; an initial HTTP 400 transport failure was resolved with per-command buffered HTTP/1.1 transfer, without a force push or global Git configuration change. Current main was fetched and has no commits missing from this branch. All seven [hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38359505594) completed successfully on that exact SHA:
+
+| Job | Result |
+| --- | --- |
+| Synthetic Compose smoke | Passed |
+| Synthetic Playwright acceptance | Passed |
+| Synthetic Playwright core (1/2) | Passed |
+| Synthetic Playwright core (2/2) | Passed |
+| Synthetic backend | Passed |
+| Synthetic frontend (1/2) | Passed |
+| Synthetic frontend (2/2) | Passed |
+
+Final local evidence: full backend **3,889 passed / 21 explicit opt-in skips / zero failures**; full frontend **955 passed in 117 files** (488.12 seconds); strict TypeScript and production build passed. The existing bundle-size advisory remains. Focused Synthetic browser regression passed **11 cases**; fresh final Monitoring unit regression passed **10 cases**, and the direct MCP outcomes are recorded above. All required affected paths were executed; builds alone were not treated as runtime acceptance.
+
+Hosted detail: backend's four configured .NET projects passed **3,879 cases / 27 skips**, plus 3 Python storage-monitoring tests. The six additional skips are existing DockerSandboxFact readiness-probe cases; those six and the four OrderEvents cases ran in the successful local solution gate. No test assertion or timeout was relaxed. Frontend shards passed **547 + 408 = 955** cases. Core/browser-STT/browser-browser shards passed **108 + 105 = 213** cases. Sequential acceptance projects passed **16** cases (Manual-A 1, lifecycle 1, Admin 1, harness 6, continuity 2, maintenance 1, secretary 4). Both Compose steps passed, including persisted watch cursor/generation/configuration/authorization and no historical Events across recreation. Hosted evidence is saved at `/tmp/email-monitor-review-ci-final.json` and `/tmp/email-monitor-review-ci-full.log`.
+
+The documentation follow-up records this accepted behavior and does not change runtime source. EM-01–EM-28 non-live evidence and EM-29's separate opt-in UAT disclosure are complete. No real Gmail/IMAP consent, mail detection/read, delivery, live restart/revoke, physical-device or actual screen-reader acceptance is claimed. P10/P11 and earlier historical freezes remain unchanged. Owned native and test hosts were stopped; no user database reset or unrelated host termination occurred.

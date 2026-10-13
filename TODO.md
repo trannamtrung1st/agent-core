@@ -9,7 +9,7 @@
 - [x] Isolated Compose SQLite/key-ring and monitoring cursor/generation recreation checks.
 - [x] Full frozen-source local gates: 3,889 backend passes / 21 opt-in skips, 951 frontend passes, 212 Synthetic browser passes, build and both Compose restart checks. See [the evidence report](docs/reports/email-monitoring-verification-2026-10-13.md).
 - [x] Explicit owner authorization to commit/push this payload to the public repository, 2026-10-13.
-- [ ] Final review corrections, public push and exact-source hosted jobs. No hosted closure is claimed until those jobs pass.
+- [x] Final review corrections and public push; behavior `bcfa7a7e7b602f35e635765c262d4f2a35ca6015` accepted with all seven [hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38359505594) green. Final local backend 3,889 passes / 21 opt-in skips, frontend 955 passes, focused browser 11 passes and build are green. Dedicated Real UAT remains separate.
 - [ ] Separate dedicated-mailbox Real Gmail/IMAP UAT, only after explicit owner opt-in. No live acceptance is claimed.
 
 ## Stable original Background Work results (2026-10-09)
