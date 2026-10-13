@@ -3,48 +3,71 @@ import { navigateAdmin } from './support/admin-navigation';
 test.use({ trace: 'retain-on-failure' });
 async function openInNewTab(page: Page, link: Locator, content: 'Instances table' | 'Overview' | 'Automations', gesture: 'modifier' | 'middle' = 'modifier') {
   const source = page.url(); const href = await link.getAttribute('href'); expect(href).toBeTruthy();
-  await page.bringToFront();
-  await link.hover();
+  const destination = new URL(href!, source).href;
+  await page.bringToFront(); await link.hover();
   if (await link.getAttribute('aria-label') === 'Open Admin') await expect(page.getByRole('tooltip')).toContainText('Admin');
-  // Foreground the real native target before Playwright waits for its initial
-  // navigation. A background target can load without delivering its Page channel.
   const sourceSession = await page.context().newCDPSession(page);
   const { targetInfo: sourceTarget } = await sourceSession.send('Target.getTargetInfo');
   await sourceSession.detach();
   const browserSession = await page.context().browser()!.newBrowserCDPSession();
   const { targetInfos } = await browserSession.send('Target.getTargets');
   const existingTargets = new Set(targetInfos.map(target => target.targetId));
+  let nativeTargetId: string | undefined;
   browserSession.on('Target.targetCreated', ({ targetInfo }) => {
-    if (targetInfo.type === 'page' && targetInfo.browserContextId === sourceTarget.browserContextId && !existingTargets.has(targetInfo.targetId)) {
-      void browserSession.send('Target.activateTarget', { targetId: targetInfo.targetId }).catch(error => console.log(`Native target activation: ${String(error)}`));
-    }
+    if (targetInfo.type === 'page' && targetInfo.browserContextId === sourceTarget.browserContextId && !existingTargets.has(targetInfo.targetId)) nativeTargetId ??= targetInfo.targetId;
   });
   await browserSession.send('Target.setDiscoverTargets', { discover: true });
-  const popup = page.context().waitForEvent('page');
-  let opened: Page;
-  try { await link.click(gesture === 'middle' ? { button: 'middle' } : { modifiers: ['ControlOrMeta'] }); opened = await popup; }
-  finally { await browserSession.detach(); }
-  const destination = new URL(href!, source).href;
-  // A modifier-click opens a background tab; select it before asserting its hydrated UI.
-  await opened.bringToFront();
-  const bootstrapStarted = Date.now();
-  // Chromium can leave Playwright's popup navigation marker pending after the document
-  // has loaded. Read the actual document instead of disabling navigation checks globally.
-  await expect.poll(() => opened.evaluate(({ destination, content }) => {
-    const matches = content === 'Instances table'
-      ? [...document.querySelectorAll('table[aria-label="Instances table"]')]
-      : [...document.querySelectorAll('h2, [role="heading"][aria-level="2"]')].filter(element => element.textContent?.trim() === content);
-    return location.href === destination && document.readyState === 'complete' && matches.some(element => {
-      const style = getComputedStyle(element); const rect = element.getBoundingClientRect();
-      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+  try {
+    // Actual native gestures only: never create a scripted replacement page.
+    await link.click(gesture === 'middle' ? { button: 'middle' } : { modifiers: ['ControlOrMeta'] });
+    await expect.poll(() => nativeTargetId, { timeout: 15_000, message: 'Native gesture creates a new target in the source browser context' }).not.toBeUndefined();
+    await browserSession.send('Target.activateTarget', { targetId: nativeTargetId! });
+    // Chromium can load a native tab without delivering Playwright's Page channel.
+    // Attach to that same real target and read its document, bypassing no UI checks.
+    const { sessionId } = await browserSession.send('Target.attachToTarget', { targetId: nativeTargetId!, flatten: false });
+    let sequence = 0;
+    const pending = new Map<number, { resolve: (result: any) => void; reject: (error: Error) => void }>();
+    browserSession.on('Target.receivedMessageFromTarget', event => {
+      if (event.sessionId !== sessionId) return;
+      const response = JSON.parse(event.message); const request = pending.get(response.id);
+      if (!request) return; pending.delete(response.id);
+      if (response.error) request.reject(new Error(response.error.message)); else request.resolve(response.result);
     });
-  }, { destination, content }).catch(error => {
-    // The initial document can be replaced while the readiness read is in flight.
-    if (!opened.isClosed() && /Execution context was destroyed|Cannot find context with specified id/.test(String(error))) return false;
-    throw error;
-  }), { timeout: 15_000, message: `Native popup displays ${content} at its canonical URL` }).toBe(true);
-  console.log(`Native popup bootstrap: ${Date.now() - bootstrapStarted}ms`);
-  await expect(page).toHaveURL(source); return opened;
+    const readDocument = () => new Promise<any>((resolve, reject) => {
+      const id = ++sequence; pending.set(id, { resolve, reject });
+      const expression = `(({ destination, content }) => {
+        const matches = content === 'Instances table'
+          ? [...document.querySelectorAll('table[aria-label="Instances table"]')]
+          : [...document.querySelectorAll('h2, [role="heading"][aria-level="2"]')].filter(element => element.textContent?.trim() === content);
+        return location.href === destination && document.readyState === 'complete' && matches.some(element => {
+          const style = getComputedStyle(element); const rect = element.getBoundingClientRect();
+          return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+        });
+      })(${JSON.stringify({ destination, content })})`;
+      void browserSession.send('Target.sendMessageToTarget', { sessionId, message: JSON.stringify({ id, method: 'Runtime.evaluate', params: { expression, returnByValue: true } }) })
+        .catch(error => { pending.delete(id); reject(error); });
+    });
+    const bootstrapStarted = Date.now();
+    await expect.poll(async () => {
+      try {
+        const response = await readDocument();
+        if (response.exceptionDetails) throw new Error(response.exceptionDetails.text);
+        return response.result?.value === true;
+      } catch (error) {
+        if (/Execution context was destroyed|Cannot find context with specified id|Cannot find default execution context/.test(String(error))) return false;
+        throw error;
+      }
+    }, { timeout: 15_000, message: `Native target displays ${content} at its canonical URL` }).toBe(true);
+    console.log(`Native target bootstrap: ${Date.now() - bootstrapStarted}ms`);
+    await expect(page).toHaveURL(source);
+    return { close: async () => {
+      try { const result = await browserSession.send('Target.closeTarget', { targetId: nativeTargetId! }); expect(result.success).toBe(true); }
+      finally { await browserSession.detach(); }
+    } };
+  } catch (error) {
+    if (nativeTargetId) await browserSession.send('Target.closeTarget', { targetId: nativeTargetId }).catch(() => {});
+    await browserSession.detach(); throw error;
+  }
 }
 for (const width of [1440, 390]) test(`native canonical links preserve source drafts at ${width}px`, async ({ page }) => {
   test.setTimeout(90_000); await page.setViewportSize({ width, height: 900 });
