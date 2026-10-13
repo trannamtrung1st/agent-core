@@ -1344,6 +1344,7 @@ Always keep this section.
 
 - [ ] Admin assistant agent remains a future idea.
 - [ ] PNG, more file generation/processing.
+- [ ] RAG, Chroma DB integration.
 - [x] Add mentioning skills, files, etc...
 - [x] Consider skills catalog at system level...
 - [x] P9.7 owns bounded, configurable agent-assisted/self-managed harness authoring; do not track a second generic “self-improvement” runtime here.
