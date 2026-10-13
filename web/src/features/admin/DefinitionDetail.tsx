@@ -62,6 +62,8 @@ export function DefinitionDetail({
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const [lifecycleError, setLifecycleErrorValue] = useState<string | null>(null);
   const [lifecycleDiagnosticId, setLifecycleDiagnosticId] = useState<string | null>(null);
+  // Catalog refreshes must not erase the exact draft's read outcome.
+  const [draftReadError, setDraftReadError] = useState<string | null>(null);
   const setLifecycleError = useCallback((message: string | null, diagnosticId?: string | null) => {
     setLifecycleErrorValue(message);
     setLifecycleDiagnosticId(message ? diagnosticId ?? null : null);
@@ -183,6 +185,7 @@ export function DefinitionDetail({
     draftRead.current.pending = true;
     setBusy(true);
     setLifecycleError(null);
+    setDraftReadError(null);
     try {
       const draft = await getAdminDefinitionDraft(draftId);
       if (sequence !== draftRead.current.sequence) return;
@@ -194,7 +197,10 @@ export function DefinitionDetail({
       loadCandidate(draft.candidate);
       if (updatePath) navigateToAppPath(adminDraftPath(definitionId, draft.draftId));
     } catch (error) {
-      if (sequence === draftRead.current.sequence) reportLifecycleError(error, "Failed to load draft.");
+      if (sequence === draftRead.current.sequence) {
+        setDraftReadError(describeAdminError(error, "Failed to load draft.").message);
+        reportLifecycleError(error, "Failed to load draft.");
+      }
     } finally {
       if (sequence === draftRead.current.sequence) {
         draftRead.current.pending = false;
@@ -471,7 +477,7 @@ export function DefinitionDetail({
       {definitions.kind === "ready" && !group && !lifecycleLoading && draftSummaries.length === 0 ? (
         <Result status="404" title="Definition not found" />
       ) : null}
-      {draftId && !activeDraft && <Alert type={lifecycleError ? "error" : "info"} showIcon title={lifecycleError ?? "Loading draft…"} action={<Button disabled={busy} onClick={() => void selectDraft(draftId, false)}>Retry draft</Button>} />}
+      {draftId && !activeDraft && <Alert type={draftReadError ? "error" : "info"} showIcon title={draftReadError ?? "Loading draft…"} action={<Button disabled={busy} onClick={() => void selectDraft(draftId, false)}>Retry draft</Button>} />}
       {(group || draftSummaries.length > 0) && activeDraft && draftId ? (
         <section ref={editorSurfaceRef} className="admin-draft-focused" aria-label="Draft editor">
           {lifecycleError ? (

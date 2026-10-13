@@ -2,6 +2,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { navigateAdmin } from './support/admin-navigation';
 test.use({ trace: 'retain-on-failure' });
 async function openInNewTab(page: Page, link: Locator, content: 'Instances table' | 'Overview' | 'Automations', gesture: 'modifier' | 'middle' = 'modifier') {
+  // A prior popup was brought forward; restore the source before its next native gesture.
+  await page.bringToFront();
   const source = page.url(); const href = await link.getAttribute('href'); expect(href).toBeTruthy();
   const popup = page.context().waitForEvent('page');
   await link.click(gesture === 'middle' ? { button: 'middle' } : { modifiers: ['ControlOrMeta'] });

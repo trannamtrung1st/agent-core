@@ -15,6 +15,7 @@ import {
   formatForkSourceOptionLabel
 } from "./AdminApp";
 import type { AdminDefinitionPublicationResource, AdminEffectiveConfiguration } from "../../services/adminApi";
+import { DefinitionDetail } from "./DefinitionDetail";
 
 vi.mock("../../services/instanceConfiguration", () => ({
   previewInstanceVersion: vi.fn(async (_id: string, version: number) => ({instanceRevision:1,currentVersion:1,targetVersion:version,changedDefinitionFields:[],preservedInstanceOverrides:[],newInheritedItems:[],removedInheritedItems:[],activationNotice:"Applies to the next Run."})),
@@ -282,6 +283,25 @@ describe("AdminApp", () => {
   afterEach(() => {
     useAppSpy?.mockRestore();
     useAppSpy = undefined;
+  });
+  it("keeps an exact draft read failure when the Definition catalog finishes loading", async () => {
+    const draftId = "019944af-00d1-7000-8000-0000000000de";
+    vi.mocked(getAdminDefinitionDraft).mockRejectedValue(new Error("Draft not found."));
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    const props = { definitionId: "examiner", draftId, draftPage: "overview" as const,
+      onBack: vi.fn(), onRetryDefinitions: vi.fn(), onDeleted: vi.fn() };
+    const { rerender } = render(<antd.App><DefinitionDetail {...props} definitions={{ kind: "loading" }} /></antd.App>);
+    expect(await screen.findByText("Draft not found.")).toBeVisible();
+    await act(async () => rerender(<antd.App><DefinitionDetail {...props} definitions={{ kind: "ready", data: [
+      { definitionId: "examiner", version: 1, source: "builtIn", status: "published", displayName: "Examiner" }
+    ] }} /></antd.App>));
+    expect(screen.getByText("Draft not found.")).toBeVisible();
+    expect(screen.queryByText("Loading draft…")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save draft" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry draft" }));
+    await waitFor(() => expect(getAdminDefinitionDraft).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Draft not found.")).toBeVisible();
   });
   it("renders definition and instance inventory", async () => {
     vi.mocked(listAdminDefinitions).mockResolvedValue([
