@@ -57,37 +57,49 @@ export function EmailMonitoringSection({ account, instanceId }: { account: Syste
     } catch (e) { if (version === identity.current) setError(describeAdminError(e, 'Monitoring changed or is unavailable. Your draft is retained; reload to review current settings.')); }
     finally { if (version === identity.current) { busyRef.current = false; setBusy(undefined); } }
   }
+  function editDraft(change: () => void) {
+    draftSequence.current++; dirtyRef.current = true; setFeedback(''); change();
+  }
   const warning = status && ['Paused', 'Retrying', 'Gap', 'HostDisabled'].includes(status.status);
-  return <Flex vertical gap={token.paddingSM} role="region" aria-label="Email monitoring" style={{ paddingBlockStart: token.padding }}>
-    <Typography.Text strong>Monitoring</Typography.Text>
-    <Typography.Text type="secondary" style={{ maxInlineSize: '75ch' }}>Observe new inbox messages from now and notify subscribed Automations. Existing mail is skipped. Monitoring does not grant agents account access or approve sending.</Typography.Text>
-    {loading ? <Skeleton active paragraph={{ rows: 2 }} title={false} /> : status && saved && <>
+  const checking = status && (status.checkPending || ['Initializing', 'Checking'].includes(status.status));
+  return <Flex vertical gap={token.padding} role="region" aria-label="Email monitoring"
+    style={{ paddingBlockStart: token.padding, borderBlockStart: `${token.lineWidth}px solid ${token.colorBorderSecondary}` }}>
+    <Flex vertical gap={token.paddingXS}>
       <Flex gap={token.paddingXS} wrap align="center">
-        <Tag color={warning ? 'warning' : status.status === 'Monitoring' ? 'success' : 'default'} icon={warning ? <ExclamationCircleOutlined /> : status.status === 'Monitoring' ? <CheckCircleOutlined /> : status.checkPending ? <SyncOutlined /> : <MinusCircleOutlined />}>{statusText[status.status]}</Tag>
-        {status.checkPending && !['Initializing', 'Checking'].includes(status.status) && <Typography.Text>Check queued</Typography.Text>}
-        {status.subscribedInstances === 0 && <Typography.Text type="secondary">No subscribed Automations</Typography.Text>}
+        <Typography.Text strong style={{ fontSize: token.fontSizeLG }}>Monitoring</Typography.Text>
+        {status && <span role="status"><Tag color={warning ? 'warning' : status.status === 'Monitoring' ? 'success' : checking ? 'processing' : 'default'}
+          icon={warning ? <ExclamationCircleOutlined /> : status.status === 'Monitoring' ? <CheckCircleOutlined /> : checking ? <SyncOutlined /> : <MinusCircleOutlined />}>{statusText[status.status]}</Tag></span>}
+        {status?.checkPending && !['Initializing', 'Checking'].includes(status.status) && <Typography.Text>Check queued</Typography.Text>}
       </Flex>
+      <Typography.Text type="secondary" style={{ maxInlineSize: '75ch' }}>Observe new inbox messages from now and notify subscribed Automations. Existing mail is skipped. Monitoring does not grant agents account access or approve sending.</Typography.Text>
+    </Flex>
+    {loading ? <Skeleton active paragraph={{ rows: 2 }} title={false} /> : status && saved && <>
       {warning && <Alert showIcon type="warning" title={status.status === 'Gap' ? 'Some messages may have been missed' : statusText[status.status]}
         description={status.status === 'HostDisabled' ? 'Ask the operator to enable Email and EmailMonitoring. Your saved settings remain.' : status.status === 'Retrying' ? 'A temporary mailbox failure will retry automatically. Check now requests another attempt.' : status.status === 'Gap' ? 'The mailbox cursor changed or expired. Monitoring resumed from a new baseline; old mail will not be replayed.' : 'Review account status and Test access above. Reconnect Gmail or update Custom credentials, then Check now.'} />}
-      <Flex wrap gap={token.paddingSM} align="center">
-        <Flex gap={token.paddingXS} align="center"><Switch id={`email-monitor-${account.credentialId}`} aria-label="New inbox messages" checked={enabled} disabled={!!busy} onChange={value => { draftSequence.current++; dirtyRef.current = true; setEnabled(value); }} /><label htmlFor={`email-monitor-${account.credentialId}`}>New inbox messages</label></Flex>
-        <Flex gap={token.paddingXS} align="center"><label htmlFor={`email-interval-${account.credentialId}`}>Check every</label><Select virtual={false} id={`email-interval-${account.credentialId}`} aria-label="Check every" value={interval} disabled={!!busy} onChange={value => { draftSequence.current++; dirtyRef.current = true; setInterval(value); }}
-          options={[{ value: 60, label: '1 minute' }, { value: 300, label: '5 minutes' }, { value: 900, label: '15 minutes' }]} /></Flex>
+      <Flex vertical gap={token.paddingSM}>
+        <Flex className="admin-email-monitor-controls" wrap gap={token.padding} align="center">
+          <Flex gap={token.paddingXS} align="center"><Switch id={`email-monitor-${account.credentialId}`} aria-label="New inbox messages" checked={enabled} disabled={!!busy} onChange={value => editDraft(() => setEnabled(value))} /><label htmlFor={`email-monitor-${account.credentialId}`}>New inbox messages</label></Flex>
+          <Flex gap={token.paddingXS} align="center"><label htmlFor={`email-interval-${account.credentialId}`}>Check every</label><Select virtual={false} id={`email-interval-${account.credentialId}`} aria-label="Check every" value={interval} disabled={!!busy} onChange={value => editDraft(() => setInterval(value))}
+            options={[{ value: 60, label: '1 minute' }, { value: 300, label: '5 minutes' }, { value: 900, label: '15 minutes' }]} /></Flex>
+        </Flex>
+        {dirty && <Typography.Text type="secondary">Unsaved monitoring changes</Typography.Text>}
+        <Flex gap={token.paddingXS} wrap>
+          <Button aria-label="Save monitoring" type="primary" disabled={!dirty || !!busy} loading={busy === 'save'} onClick={() => void act('save')}>Save monitoring</Button>
+          {dirty && <Button disabled={!!busy} onClick={() => { draftSequence.current++; apply(saved, true); setError(undefined); setFeedback(''); }}>Cancel changes</Button>}
+          <Button aria-label="Check now" disabled={!!busy || dirty || !status.enabled || !status.hostAvailable || !status.accountAvailable || status.checkPending} loading={busy === 'check'} onClick={() => void act('check')}>Check now</Button>
+          <Button type="text" disabled={!!busy} onClick={() => void load(true)}>Reload monitoring</Button>
+        </Flex>
+        {feedback && <Typography.Text role="status" type={feedback === 'Monitoring settings saved.' ? 'success' : undefined}>{feedback}</Typography.Text>}
+        <Typography.Text type="secondary" style={{ maxInlineSize: '75ch' }}>Check now queues a mailbox scan and may trigger Automations. Test access only checks the connection.</Typography.Text>
       </Flex>
-      {dirty && <Typography.Text type="secondary">Unsaved monitoring changes</Typography.Text>}
-      <Flex gap={token.paddingXS} wrap>
-        <Button aria-label="Save monitoring" type="primary" disabled={!dirty || !!busy} loading={busy === 'save'} onClick={() => void act('save')}>Save monitoring</Button>
-        {dirty && <Button disabled={!!busy} onClick={() => { draftSequence.current++; apply(saved, true); setError(undefined); }}>Cancel changes</Button>}
-        <Button aria-label="Check now" disabled={!!busy || dirty || !status.enabled || !status.hostAvailable || !status.accountAvailable || status.checkPending} loading={busy === 'check'} onClick={() => void act('check')}>Check now</Button>
-        <Button disabled={!!busy} onClick={() => void load(true)}>Reload monitoring</Button>
-      </Flex>
-      <Typography.Text type="secondary" style={{ maxInlineSize: '75ch' }}>Check now queues a mailbox scan and may trigger Automations. Test access only checks the connection.</Typography.Text>
-      {feedback && <Typography.Text role="status">{feedback}</Typography.Text>}
       <Descriptions size="small" column={1} {...layout} items={[
         { key: 'success', label: 'Last successful check', children: <LocalTime value={status.lastSuccessAtUtc} /> },
-        { key: 'next', label: 'Next check', children: status.enabled && status.hostAvailable && status.accountAvailable ? <LocalTime value={status.nextCheckAtUtc} /> : 'Paused / Off' },
+        { key: 'next', label: 'Next check', children: !status.enabled ? 'Monitoring is off' : !status.hostAvailable ? 'Unavailable by operator' : !status.accountAvailable || status.status === 'Paused' ? 'Paused' : <LocalTime value={status.nextCheckAtUtc} /> },
       ]} />
-      <Flex wrap gap={token.paddingXS}><a href={instanceId ? `/admin/instances/${instanceId}/automation/automations` : '/admin/instances'} onClick={followAppLink}>Configure an Instance Automation</a><a href="/admin/connections/events" onClick={followAppLink}>View Events catalog</a></Flex>
+      <Flex vertical gap={token.paddingXS}>
+        {status.subscribedInstances === 0 && <Typography.Text type="secondary">No subscribed Automations</Typography.Text>}
+        <Flex wrap gap={token.padding}><a href={instanceId ? `/admin/instances/${instanceId}/automation/automations` : '/admin/instances'} onClick={followAppLink}>Configure an Instance Automation</a><a href="/admin/connections/events" onClick={followAppLink}>View Events catalog</a></Flex>
+      </Flex>
       <Collapse ghost size="small" items={[{ key: 'details', label: 'Monitoring diagnostics', children: <Descriptions size="small" column={1} {...layout} items={[
         { key: 'checked', label: 'Last attempted check', children: <LocalTime value={status.lastCheckedAtUtc} /> },
         { key: 'event', label: 'Last Event staged', children: <LocalTime value={status.lastEventAtUtc} /> },

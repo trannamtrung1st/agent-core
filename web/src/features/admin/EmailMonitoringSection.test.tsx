@@ -16,7 +16,7 @@ it('saves only dirty settings with independent revision and permits editing whil
   expect(screen.getByRole('button', { name: 'Save monitoring' })).toBeEnabled(); fireEvent.click(screen.getByRole('button', { name: 'Save monitoring' }));
   await waitFor(() => expect(api.saveEmailMonitoring).toHaveBeenCalledWith('fixture', { expectedRevision: 0, enabled: true, intervalSeconds: 300 }));
   await screen.findByText('Monitoring settings saved.'); expect(toggle).toBeChecked(); fireEvent.click(toggle);
-  expect(screen.getByRole('button', { name: 'Save monitoring' })).toBeEnabled(); fireEvent.click(screen.getByRole('button', { name: 'Cancel changes' })); expect(toggle).toBeChecked();
+  expect(screen.getByRole('button', { name: 'Save monitoring' })).toBeEnabled(); expect(screen.queryByText('Monitoring settings saved.')).not.toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Cancel changes' })); expect(toggle).toBeChecked();
 });
 it('retains draft after revision conflict until explicit Reload', async () => {
   vi.mocked(api.saveEmailMonitoring).mockRejectedValue(new Error('Monitoring revision is stale.'));

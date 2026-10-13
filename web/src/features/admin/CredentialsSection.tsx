@@ -83,7 +83,7 @@ function CredentialDetails({ credential, onChanged, instanceId }: { credential: 
     catch (e) { setTestError(describeAdminError(e, 'Connection test failed. Refresh the account and retry.')); }
     finally { setTesting(undefined); }
   }
-  return <div className="admin-credential-details" role="region" aria-label={`Details for ${credential.displayName}`} style={{ whiteSpace: "normal", maxInlineSize: `calc(100cqi - ${token.padding * 2}px)` }}>
+  return <Flex vertical gap={token.padding} className="admin-credential-details" role="region" aria-label={`Details for ${credential.displayName}`} style={{ whiteSpace: "normal", maxInlineSize: `calc(100cqi - ${token.padding * 2}px)` }}>
     <Descriptions bordered column={1} size="small" {...detailLayout} items={[
       { key: "kind", label: "Kind / purpose", children: `${credential.kind} · ${credential.purpose === 'EmailAccount' ? 'Email account' : 'General'}` },
       ...(credential.emailAccount?.preset === "Custom" ? [
@@ -97,7 +97,7 @@ function CredentialDetails({ credential, onChanged, instanceId }: { credential: 
         ? <Flex vertical>{credential.allowedOrigins.map(origin => <Typography.Text key={origin}>{origin}</Typography.Text>)}</Flex> : "None configured" }
     ]} />
     {credential.emailAccount?.preset === "Gmail" && <GmailConnectionPanel account={credential} onChanged={onChanged} />}
-    {credential.emailAccount?.preset === "Custom" && <Flex vertical gap={token.paddingXS} style={{ paddingBlockStart: token.paddingSM }}>
+    {credential.emailAccount?.preset === "Custom" && <Flex vertical gap={token.paddingXS}>
       <Typography.Text type="secondary">Connection tests authenticate without sending mail. A configured account has not been tested.</Typography.Text>
       {testError && <Alert type="error" showIcon title={<AdminErrorNotice message={testError.message} diagnosticId={testError.diagnosticId} showDetailsLabel />} />}
       {(['imap', 'smtp'] as const).map(protocol => <Flex key={protocol} align="center" wrap gap={token.paddingXS}>
@@ -108,7 +108,7 @@ function CredentialDetails({ credential, onChanged, instanceId }: { credential: 
       </Flex>)}
     </Flex>}
     {credential.emailAccount && <EmailMonitoringSection account={credential} instanceId={instanceId} />}
-  </div>;
+  </Flex>;
 }
 function ProtectedValueField({ email = false }: { email?: boolean }) {
   return <Form.Item name="protectedValue" label={email ? "Password" : "Protected value"} rules={[{ required: true }]} extra="Protected values cannot be read back. Replace the value if it changes.">
