@@ -1,0 +1,8 @@
+FROM python@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+# A minimal SDK proof image, not the final Python/Node/Office Workbench.
+RUN groupadd --gid 1000 sandbox \
+    && useradd --uid 1000 --gid 1000 --create-home sandbox \
+    && mkdir -p /working /opt/opensandbox \
+    && chown sandbox:sandbox /working /opt/opensandbox
+USER 1000:1000
+WORKDIR /working

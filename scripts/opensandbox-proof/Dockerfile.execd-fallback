@@ -1,0 +1,11 @@
+FROM opensandbox/execd@sha256:cda2bc35409bbf57561599b316cafb899598f7dce671332e7ceda14eb1cfeded AS upstream
+FROM python@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+RUN groupadd --gid 1000 sandbox \
+    && useradd --uid 1000 --gid 1000 --create-home sandbox \
+    && mkdir -p /working \
+    && chown sandbox:sandbox /working
+COPY --from=upstream /execd /usr/local/bin/execd
+USER 1000:1000
+WORKDIR /working
+ENV EXECD_ENVS=/working/.execd.env
+ENTRYPOINT ["/usr/local/bin/execd"]

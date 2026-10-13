@@ -1,0 +1,37 @@
+# Candidate for a DISPOSABLE isolated Linux runner only. Not accepted deployment config.
+# Inject a random private key through OPENSANDBOX_SERVER_API_KEY on the isolated runner.
+# No known placeholder key is provided. Never acknowledge insecure/key-free startup.
+[server]
+host = "0.0.0.0"
+port = 8080
+max_sandbox_timeout_seconds = 300
+
+[proxy]
+resolve_internal = true
+
+[runtime]
+type = "docker"
+execd_image = "opensandbox/execd@sha256:cda2bc35409bbf57561599b316cafb899598f7dce671332e7ceda14eb1cfeded"
+
+[docker]
+network_mode = "bridge"
+publish_host = "127.0.0.1"
+drop_capabilities = ["ALL"]
+no_new_privileges = true
+pids_limit = 64
+port_range_min = 40000
+port_range_max = 40199
+sandbox_binds = []
+
+[storage]
+allowed_host_paths = []
+
+[store]
+type = "sqlite"
+path = "/var/lib/opensandbox/proof.db"
+
+[egress]
+image = "opensandbox/egress@sha256:bce2cc2e4dc3a3594678b91ac29efb0669fccebfdfc137727018d3b087fbb13a"
+mode = "dns+nft"
+disable_ipv6 = true
+readiness_timeout_seconds = 30

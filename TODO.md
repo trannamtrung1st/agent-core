@@ -8,9 +8,15 @@ The MVP and phases through P9.10 have closed/frozen evidence. Later bounded enha
 
 Email accounts, Gmail OAuth and monitoring have accepted non-live scopes. The contextual Admin/email integration also has exact-source hosted acceptance; see [integration verification](docs/reports/email-monitoring-main-integration-2026-10-13.md). Real mailbox acceptance remains separate.
 
-P10 (Sandbox evolution) and P11 (Multi-user and production infrastructure) remain unopened and requirement-triggered.
+P10's scoped OpenSandbox cutover is owner-authorized, with Stage A blocked on
+isolated-runner approval and unresolved command/control-plane isolation.
+[Verification](docs/reports/opensandbox-integration-verification.md) records the
+actual fallback failure and remaining gates. P11 remains unopened and
+requirement-triggered.
 
 ## Open work and acceptance gaps
+
+- [ ] **OpenSandbox cutover:** pass the real Stage A compatibility/isolation gate before dependent implementation; then complete contracts/persistence, lifecycle, atomic Workspace bridge, non-replayable tools, Admin/Chat and all OSB-01–18 acceptance. The privileged disposable runner requires explicit approval; the unprivileged fallback reproduced loopback execd reachability. See [verification](docs/reports/opensandbox-integration-verification.md).
 
 - [ ] **Environment instructions**: for all agents working in same context? [TBD]
 - [ ] **Original Background Work results:** reconcile the remaining exact-source hosted acceptance after follow-up fixture/native-browser corrections. Local checks and earlier green runs are recorded in the [verification ledger](docs/reports/background-original-result-verification.md); preserve the distinction between earlier acceptance and later edits.
@@ -24,7 +30,7 @@ Other bounded successor verification limits remain in their linked reports under
 
 ## Future work — start only for a concrete requirement
 
-- **P10 — Sandbox:** keep Docker while it meets workflow needs. Add a second provider, stronger isolation, pools or remote execution only when a workflow requires it.
+- **Sandbox beyond approved P10:** pools, Kubernetes, multi-host scheduling and a second execution engine remain deferred. The approved OpenSandbox cutover is tracked above.
 - **P11 — Production:** introduce authentication and tenant ownership for an external pilot; adopt PostgreSQL, object storage or external secret protection when hosting requires them. Add TLS, operational monitoring, backup/restore and rollback evidence for that deployment. Distributed workers, coordination services and orchestration require a measured need.
 - **Application participation:** define Application Bindings when a real client application embeds or invokes an identity. Website automation already uses explicit Credential grants and instance-owned Browser state. Broader messaging, shared application/task workspaces and portable worker packages need separate requirements.
 - **Extensions and packaging:** add provider seams and reusable evaluations when another concrete implementation needs them. Marketplaces, universal plugins, package import/export, Git/folder sync and remote file browsing remain deferred.

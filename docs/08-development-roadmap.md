@@ -2,6 +2,13 @@
 
 Build the canonical composed pipeline from deterministic conversation mechanics toward continuous full-duplex audio. Native realtime models are future-only and have no MVP milestone. [Implementation Plan](18-implementation-plan.md) is authoritative for each milestone's goal, scope, interfaces, tests, acceptance criteria and non-goals.
 
+P10's scoped OpenSandbox cutover was authorized on 2026-10-13. Stage A is
+blocked/not accepted; the current runtime has not been replaced. See the
+[ordered gates](18-implementation-plan.md#p10-opensandbox-cutover-authorized-2026-10-13)
+and [actual verification](reports/opensandbox-integration-verification.md).
+P11 remains unopened; earlier P10/P11 statements below record their historical
+slice boundaries.
+
 | Milestone | Deliverable | Acceptance gate |
 | --- | --- | --- |
 | 0 | Documentation/contracts finalized | Complete; see [Implementation Plan](18-implementation-plan.md) |

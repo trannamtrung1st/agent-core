@@ -1,5 +1,34 @@
 # Implementation Plan
 
+## P10 OpenSandbox cutover (authorized 2026-10-13)
+
+The owner requested complete implementation of the final local OpenSandbox
+proposal. This opens the scoped P10 execution integration; P11 remains
+unopened. Use one vendor-neutral Application service and Infrastructure-only
+official C# SDK, one per-Session execution replica, Core-owned authoritative
+Workspace/Artifacts, exact Definition authority and pinned Run/generation
+policy. The existing Docker/BusyBox implementation remains the observed
+product until a verified coherent cutover; no second production executor or
+automatic host fallback is authorized.
+
+Required order: A real upstream compatibility and isolation proof → B typed
+contracts/policy/persistence → C Workbench/lifecycle → D atomic Workspace
+bridge → E tools/non-replayable Run safety → F Admin/Chat/canonical docs → G
+full OSB-01–18 acceptance and legacy retirement. Each stage must pass before
+dependent work. All-scope delivery includes owned bounded background
+processes, historical Definition compatibility, data-preserving migrations,
+Office Artifact delivery, responsive runtime UX, Compose/runner restart and
+real network isolation evidence. Mocked SDK tests cannot accept Stage A.
+
+Current status: **Stage A blocked/not accepted**. The published 1.1.1 SDK
+compiles; a real unprivileged execd fallback reproduced command access to
+local execd despite network-none. The isolated privileged test runner was
+rejected by automatic approval review. No product cutover has begun. Exact
+evidence, pending runner approval and remaining gates are recorded in the
+[verification ledger](reports/opensandbox-integration-verification.md).
+Earlier P10/P11 status statements below record their historical slice
+boundaries and do not override this newly authorized P10 gate.
+
 ## Browser semantic-action redesign
 
 User-authorized complete cutover on `develop/branch-1a` from behavior baseline `09e20afea2ffbc381fce1b43f5c49fd3722e50e8`. This follow-up preserves existing milestone invariants and leaves P10/P11 unopened. Application now owns one closed typed command family and direct semantic target grammar; Infrastructure delegates matching/actionability to public Microsoft.Playwright 1.63 APIs. Optional find mints no authority. General Assistant v21 / Secretary v8 replace executable old browser instructions, and old browser checkpoints cannot resume.
