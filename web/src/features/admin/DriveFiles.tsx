@@ -21,7 +21,11 @@ import {
 } from '../../services/drive';
 import { FilePreviewButton } from '../filePreview/FilePreview';
 import { artifactSize } from '../../services/artifacts';
-import { FolderOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  CloseCircleFilled,
+  FolderOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
 export function DriveFilesButton({
   instanceId,
   accountRef,
@@ -140,16 +144,18 @@ function DriveFiles({
         <Flex className="file-preview-toolbar" wrap gap={token.paddingXS}>
           <Input.Search
             className="drive-file-search"
-            allowClear
+            allowClear={{
+              clearIcon: <CloseCircleFilled aria-label="Clear Drive search" />,
+            }}
             aria-label="Search app-authorized Drive files"
             placeholder="Search available file names"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            onSearch={() =>
+            onSearch={(value) =>
               setRequest({
                 ...request,
                 cursor: undefined,
-                query,
+                query: value,
                 attempt: request.attempt + 1,
               })
             }

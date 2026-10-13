@@ -157,6 +157,7 @@ function SaveDialog({
     };
   }, [open, identity, attempt]);
   const account = accounts?.find((a) => a.accountRef === alias);
+  const formLocked = busy || !!pending || !!receipt;
   const [folders, setFolders] = useState<DriveFile[]>([]);
   const [folderQuery, setFolderQuery] = useState('');
   const [folderCursor, setFolderCursor] = useState<string | null>(null);
@@ -352,13 +353,18 @@ function SaveDialog({
       footer={
         <Flex wrap gap={token.paddingXS} justify="end">
           {pending ? (
-            <Button loading={busy} onClick={() => void inspect()}>
+            <Button
+              aria-label="Check operation"
+              loading={busy}
+              onClick={() => void inspect()}
+            >
               Check operation
             </Button>
           ) : (
             !receipt && (
               <Button
                 type="primary"
+                aria-label="Save new file"
                 loading={busy}
                 disabled={
                   !account?.available || !metadata || !name.trim() || !folder
@@ -420,7 +426,7 @@ function SaveDialog({
         {!accounts && !error ? (
           <Spin aria-label="Reading Drive destinations" />
         ) : (
-          <Form layout="vertical" disabled={busy || !!pending || !!receipt}>
+          <Form layout="vertical" disabled={formLocked}>
             <Form.Item label="Drive account">
               <Select
                 aria-label="Drive account"
@@ -460,7 +466,7 @@ function SaveDialog({
             >
               <Select
                 aria-label="Drive folder"
-                disabled={!account?.available}
+                disabled={formLocked || !account?.available}
                 loading={folderBusy}
                 showSearch={{ filterOption: false, onSearch: setFolderQuery }}
                 value={folder}
@@ -476,6 +482,7 @@ function SaveDialog({
               {folderCursor && (
                 <Button
                   type="link"
+                  aria-label="More available folders"
                   loading={folderBusy}
                   onClick={() => void moreFolders()}
                 >

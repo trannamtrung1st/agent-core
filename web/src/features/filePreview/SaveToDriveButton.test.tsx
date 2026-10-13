@@ -15,6 +15,8 @@ vi.mock('../../services/drive', async (original) => ({
   getDriveOptions: vi.fn(),
   getSaveAccounts: vi.fn(),
   listDriveFiles: vi.fn(),
+  saveToDrive: vi.fn(),
+  inspectDriveOperation: vi.fn(),
 }));
 vi.mock('./fileSource', async (original) => ({
   ...(await original<typeof import('./fileSource')>()),
@@ -47,6 +49,7 @@ const folder: drive.DriveFile = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
+  sessionStorage.clear();
   vi.mocked(drive.getDriveOptions).mockResolvedValue({
     enabled: true,
     configured: true,
@@ -76,6 +79,55 @@ async function open() {
   );
 }
 describe('Drive save destination recovery', () => {
+  it('locks destination controls during upload, uncertain recovery and verified completion', async () => {
+    vi.mocked(drive.getSaveAccounts).mockResolvedValue({
+      instanceId: 'i',
+      accounts: [accounts[0]],
+    });
+    let reject!: (reason: unknown) => void;
+    vi.mocked(drive.saveToDrive).mockReturnValue(
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+    );
+    vi.mocked(drive.inspectDriveOperation).mockResolvedValue({
+      operationId: 'op',
+      status: 'Succeeded',
+      reconciled: true,
+      synthetic: true,
+      limitation: null,
+      file: { ...folder, id: 'remote', name: 'report.docx', folder: false },
+    });
+    await open();
+    const save = await screen.findByRole('button', { name: 'Save new file' });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+    await waitFor(() => expect(drive.saveToDrive).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole('combobox', { name: 'Drive folder' }),
+    ).toBeDisabled();
+    await act(async () => reject(new drive.DrivePendingError('op', 'remote')));
+    const inspect = await screen.findByRole('button', {
+      name: /Check operation/,
+    });
+    expect(inspect).toHaveAccessibleName('Check operation');
+    expect(
+      screen.getByRole('combobox', { name: 'Drive folder' }),
+    ).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Save new file' })).toBeNull();
+    fireEvent.click(inspect);
+    await screen.findByText('Verified in Synthetic Drive');
+    expect(
+      screen.getByRole('combobox', { name: 'Drive folder' }),
+    ).toBeDisabled();
+    expect(drive.saveToDrive).toHaveBeenCalledTimes(1);
+    expect(drive.inspectDriveOperation).toHaveBeenCalledWith(
+      'i',
+      'work',
+      'op',
+      expect.any(AbortSignal),
+    );
+  });
   it('retries a failed destination read in the same dialog without enabling an upload', async () => {
     vi.mocked(drive.getSaveAccounts).mockRejectedValueOnce(
       new Error('Destinations unavailable'),

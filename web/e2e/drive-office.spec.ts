@@ -97,6 +97,9 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     .getByRole('button', { name: 'Save new file', exact: true })
     .click();
   await expect(save).toContainText('Verified in Synthetic Drive');
+  await expect(
+    save.getByRole('combobox', { name: 'Drive folder' }),
+  ).toBeDisabled();
   await save.getByRole('button', { name: 'Close', exact: true }).click();
   await page.goto(`/admin/instances/${owner}/credentials`);
   await page
@@ -111,6 +114,19 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     name: 'Files available to Agent Core',
   });
   await expect(files).toContainText('App-authorized files only');
+  const search = files.getByRole('searchbox', {
+    name: 'Search app-authorized Drive files',
+  });
+  await search.fill('q3-sales');
+  await search.press('Enter');
+  await expect(files.getByText('q3-sales.xlsx', { exact: true })).toBeVisible();
+  await expect(
+    files.getByText('review-copy.docx', { exact: true }),
+  ).toHaveCount(0);
+  await files.getByRole('button', { name: 'Clear Drive search' }).click();
+  await expect(
+    files.getByText('review-copy.docx', { exact: true }),
+  ).toBeVisible();
   await files.getByRole('button', { name: 'Preview q3-sales.xlsx' }).click();
   const workbook = page.getByRole('dialog', {
     name: 'q3-sales.xlsx',
