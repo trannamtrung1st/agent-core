@@ -25,7 +25,7 @@ One batched inspection of global Gmail details at 1440/1024/768/390/320 and boun
 
 Captures: [global desktop](assets/email-main-sync/global-1440.png), [1024px boundary](assets/email-main-sync/global-1024.png), [tablet](assets/email-main-sync/global-768.png), [phone](assets/email-main-sync/global-390.png), [320px](assets/email-main-sync/global-320.png), [Instance desktop](assets/email-main-sync/instance-1440.png), [Instance phone](assets/email-main-sync/instance-390.png).
 
-## Verification status
+## Initial local verification
 
 | Check | Result |
 | --- | --- |
@@ -33,7 +33,7 @@ Captures: [global desktop](assets/email-main-sync/global-1440.png), [1024px boun
 | Initial focused route/email component suites | 43 passed, before the additional dirty-report regression |
 | Integrated `EmailMonitoring*` API/watcher recovery/Event-to-Run tests | 4 passed, 0 skipped |
 | Scoped Impeccable type/layout detector | Passed, no findings |
-| Full frontend suite including new regression | 969 passed across 117 files, 505.51s, 0 failures |
+| Initial full frontend suite including dirty-report regression | 969 passed across 117 files, 505.51s, 0 failures |
 | Email plus Admin shell/navigation/overflow E2E | 27 passed, 6.2 minutes, 0 failures |
 | Documentation/design links and syntax | 18 Markdown files, 706 local targets and 217 anchors valid; design JSON parses and whitespace/conflict checks pass |
 | Initial exact merge-source hosted workflow | [Run 38372022818](https://github.com/trannamtrung1st/agent-core/actions/runs/38372022818) tested `c789a549`: six jobs passed; browser shard 2 failed the inherited immutable-inspector readiness race described below |
@@ -67,4 +67,26 @@ Run [38381523202](https://github.com/trannamtrung1st/agent-core/actions/runs/383
 
 The native helper now discovers a newly created page target in the source Chromium browser context after the actual middle/modifier click. It activates and attaches to that same target, reads its actual document through the public CDP session, verifies the unchanged canonical URL, complete document and visible exactly named table/heading, and closes that target. It never creates a replacement page or retries the click. Source URL, unsaved persona, Back, Stay and Discard assertions remain unchanged, as does the 90-second journey deadline. Direct target messaging avoids depending on a Page event that can remain undelivered despite a loaded destination. Specific initial execution-context transitions are polled within the existing 15-second readiness bound. Cleanup closes only the detected native target and detaches its test session.
 
-Three repetitions at each existing width passed: 6 cases in 39.5 seconds, with all native creation/content/draft/history assertions intact. This correction changes only the browser fixture; product source remains identical to `bd51d950`. The final exact-source hosted result is recorded after completion.
+Three repetitions at each existing width passed: 6 cases in 39.5 seconds, with all native creation/content/draft/history assertions intact. This correction changes only the browser fixture; product source remains identical to `bd51d950`. The final exact-source hosted result is recorded below.
+
+## Final integration acceptance
+
+All seven jobs in [run 38385688652](https://github.com/trannamtrung1st/agent-core/actions/runs/38385688652) passed on exact source `70691cad72cbaa1ed221eba4d3e534deb561d291`. Product behavior is unchanged from `bd51d950`; only the native browser fixture and evidence changed afterward. Main remained `d425b121` when rechecked and is an ancestor of this branch. The final evidence commit changes documentation only.
+
+| Final gate | Observed result |
+| --- | --- |
+| Local full frontend | 972 tests across 118 files passed; 478.74s |
+| Local focused component correction | 29 passed |
+| Local email/monitoring/shared bindings after correction | 11 passed |
+| Local native-target repetitions | 6 passed; three at each width |
+| Earlier merge-source Admin shell/navigation/overflow/email batch | 27 passed |
+| Inspector held-read regression and inventory consumers | 9 passed |
+| Strict TypeScript and production build | Passed; unchanged bundle size advisory |
+| Hosted backend | Domain 195, Infrastructure 1,319, Application 1,802, API 563: 3,879 passed / 27 skips / 0 failures |
+| Hosted frontend | Both complete unit/build shards passed |
+| Hosted core/browser speech | 107 + 107 = 214 passed / 0 failures, including native link, Gmail and inspector regressions |
+| Hosted separate acceptance | 16 passed: Manual 1, lifecycle 1, Admin 1, harness 6, continuity 2, maintenance 1, Secretary 4 |
+| Hosted Compose | Both SQLite/key-ring and email cursor/generation recreation checks passed |
+| Documentation/design | 18 Markdown files, 706 local targets and 217 anchors valid; design JSON parses; whitespace checks pass; design hook/manual scoped check reported no deterministic findings |
+
+Hosted backend skips retain the existing 21 opt-in checks and six Docker sandbox runner-readiness checks; the backend implementation and tests are unchanged by this integration. The final local backend evidence for this UI merge is the four integrated monitoring cases, not a newly claimed full local backend run. No provider credentials, real mailbox, external delivery, human screen-reader narration or hardware audio acceptance is claimed. Existing historical freezes and P10/P11 remain unchanged. The requested main merge and non-live UI integration are complete.
