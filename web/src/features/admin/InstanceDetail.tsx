@@ -1,3 +1,4 @@
+import { InstanceConfigurationActions, InstanceConfigurationContent, InstanceConfigurationProvider } from './InstanceConfigurationActions';
 import { Alert, Button, Flex, Spin, Typography, theme } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { followAppLink } from "../../app/appLink";
@@ -42,7 +43,7 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
   const [runDetailsOpen, setRunDetailsOpen] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
   const [editorDirty, setEditorDirty] = useState<Record<string, boolean>>({});
-  useAdminDraftStatus(Object.keys(editorDirty).filter(key => editorDirty[key]).map(key => key === 'budgets' ? 'models' : key === 'management' ? 'self-management' : key === 'unattended' ? 'automations' : key));
+  useAdminDraftStatus(Object.keys(editorDirty).filter(key => editorDirty[key]).map(key => key === 'budgets' ? 'execution' : key === 'management' ? 'self-management' : key === 'unattended' ? 'unattended' : key));
   const dirty = settingsDirty || Object.values(editorDirty).some(Boolean);
   const releaseConsumedInstance = useAdminUnsavedChanges(`instance:${instanceId}`, dirty);
   const reportDirty = useCallback((key: string, value: boolean) => setEditorDirty(current => current[key] === value ? current : { ...current, [key]: value }), []);
@@ -83,7 +84,7 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
   const resolved = effective.data?.instanceId === instanceId ? effective.data : null;
   const archived = resolved?.instanceLifecycle !== 'Active';
   useEffect(() => {
-    if (resolved && archived && page === 'automations') navigateToAppPath(`${adminInstancePath(instanceId, 'profile')}?notice=archived-automations`, true);
+    if (resolved && archived && (page === 'automations' || page === 'unattended')) navigateToAppPath(`${adminInstancePath(instanceId, 'lifecycle')}?notice=archived-automations`, true);
   }, [resolved?.instanceLifecycle, instanceId, page]);
   useAdminAnchor(page, effective.kind === 'ready');
   return <Flex vertical gap={token.padding}>
@@ -92,37 +93,34 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
       status={resolved && <InstanceIdentityTags lifecycle={resolved.instanceLifecycle} definitionStatus={resolved.definitionStatus} />}
       notice={dirty && <Typography.Text type="warning" aria-live="polite">Unsaved changes retained in this Instance</Typography.Text>} />
     <AdminPageHeading page={instancePages.find(item => item.id === page)} />
-    {new URLSearchParams(window.location.search).get('notice') === 'archived-automations' && <Alert type="info" showIcon title="Automations are unavailable for this archived Instance" description="Unarchive from Profile & version before enabling or executing work." />}
+    {new URLSearchParams(window.location.search).get('notice') === 'archived-automations' && <Alert type="info" showIcon title="Automations are unavailable for this archived Instance" description="Unarchive from Lifecycle before enabling or executing work." />}
     {effective.kind === 'loading' && <Spin aria-label="Loading effective configuration" />}
     {effective.kind === 'error' && <Alert type={effective.unauthorized ? 'warning' : 'error'} showIcon title={effective.message} action={<AdminRetryAction onRetry={onRetryEffective} diagnosticId={effective.diagnosticId} />} />}
-    {resolved && <div inert={effective.kind !== 'ready'}>
-      <Flex vertical gap={token.padding}>
-        {archived && <Alert type="info" showIcon title="Archived Instance" description="Configuration is read-only. Automations cannot execute; unarchive from Profile & version to resume owner operations." />}
+    {resolved && <InstanceConfigurationProvider key={instanceId} revision={resolved.instanceRevision} disabled={archived || effective.kind !== 'ready'} onUpdated={onInstanceChanged}><div inert={effective.kind !== 'ready'}><Flex vertical gap={token.padding}><InstanceConfigurationActions /><InstanceConfigurationContent><Flex vertical gap={token.padding}>
+        {archived && <Alert type="info" showIcon title="Archived Instance" description="Configuration is read-only. Automations cannot execute; unarchive from Lifecycle to resume owner operations." />}
         <RetainedAdminPage active={page === 'overview'}><InstanceOverview config={resolved} /></RetainedAdminPage>
-        <RetainedAdminPage active={page === 'profile'}><InstanceManagedControls config={resolved} onUpdated={onInstanceChanged} onDeleted={() => { releaseConsumedInstance(); onInstanceDeleted(); }} onDirtyChange={value => reportDirty('profile', value)} /></RetainedAdminPage>
+        <RetainedAdminPage active={page === 'profile' || page === 'version' || page === 'lifecycle'}><InstanceManagedControls page={page === 'version' || page === 'lifecycle' ? page : 'profile'} config={resolved} onUpdated={onInstanceChanged} onDeleted={() => { releaseConsumedInstance(); onInstanceDeleted(); }} onDirtyChange={value => reportDirty('profile', value)} /></RetainedAdminPage>
         <RetainedAdminPage active={!!instanceSettingGroups[page]}>
           <div hidden={!instanceSettingGroups[page]}><AgentConfigurationPanel title="Instance settings" label="Instance settings" bodyGap="section">
-            {page === 'behavior' && <Flex wrap gap={token.paddingXS}><Typography.Text type="secondary">Looking for other settings?</Typography.Text>{(['models', 'access', 'memory', 'automations'] as const).map(p => <a key={p} href={adminInstancePath(instanceId, p)} onClick={followAppLink}>{instancePages.find(item => item.id === p)!.label}</a>)}</Flex>}
             <InstanceSettingsSection instanceId={instanceId} archived={archived} page={page} active={!!instanceSettingGroups[page]} onDirtyChange={setSettingsDirty} onUpdated={onInstanceChanged} />
           </AgentConfigurationPanel></div>
         </RetainedAdminPage>
-        <RetainedAdminPage active={page === 'models'}><Flex vertical gap={token.padding}><Typography.Text type="secondary">Interactive defaults apply to the next new Run. Unattended defaults are owned by Automations.</Typography.Text><a href={`${adminInstancePath(instanceId, 'automations')}#execution-defaults`} onClick={followAppLink}>Edit unattended execution defaults</a><InstanceExecutionBudgets instanceId={instanceId} archived={archived} onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('budgets', value)} /></Flex></RetainedAdminPage>
+        <RetainedAdminPage active={page === 'execution'}><Flex vertical gap={token.padding}><Typography.Text type="secondary">Interactive defaults apply to the next new Run. Unattended defaults are owned by Automations.</Typography.Text><a href={`${adminInstancePath(instanceId, 'unattended')}#execution-defaults`} onClick={followAppLink}>Edit unattended execution defaults</a><InstanceExecutionBudgets instanceId={instanceId} archived={archived} onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('budgets', value)} /></Flex></RetainedAdminPage>
         <RetainedAdminPage active={page === 'skills'}><InstanceSkillsSection instanceId={instanceId} archived={archived} active={page === 'skills'} onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('skills', value)} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'resources'}><InstanceResourcesSection instanceId={instanceId} archived={archived} active={page === 'resources'} onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('resources', value)} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'workspace'}><InstanceWorkspaceSection instanceId={instanceId} archived={archived} /></RetainedAdminPage>
-        <RetainedAdminPage active={page === 'access'}><section id="credentials" tabIndex={-1} className="admin-settings-anchor"><InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={archived} onUpdated={onInstanceChanged} /></section></RetainedAdminPage>
+        <RetainedAdminPage active={page === 'credentials'}><section id="credentials" tabIndex={-1} className="admin-settings-anchor"><InstanceCredentialsSection instanceId={instanceId} revision={resolved.instanceRevision} archived={archived} onUpdated={onInstanceChanged} /></section></RetainedAdminPage>
         <RetainedAdminPage active={page === 'self-management'}><Flex vertical gap={token.padding}><SelfManagementSection instanceId={instanceId} archived={archived} onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('management', value)} />{!archived && <HarnessManagementSection instanceId={instanceId} eligibleTools={resolved.effectiveToolAllowlist} onUpdated={onInstanceChanged} />}</Flex></RetainedAdminPage>
         <RetainedAdminPage active={page === 'automations'}>{!archived ? <Flex vertical gap={token.padding}>
           <section id="registrations" tabIndex={-1}><InstanceAutomationsSection instanceId={instanceId} active={page === 'automations'} onWork={viewRun} selection={page === 'automations' ? sourceSelection : undefined} onDirtyChange={value => reportDirty('automations', value)} /></section>
-          <section id="execution-defaults" tabIndex={-1} className="admin-settings-anchor"><InstanceMemoryAutomationPanel config={resolved} section="automation" onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('unattended', value)} /></section>
-        </Flex> : <Button href={adminInstancePath(instanceId, 'profile')} onClick={followAppLink}>Open Profile & version to unarchive</Button>}</RetainedAdminPage>
+        </Flex> : <Button href={adminInstancePath(instanceId, 'profile')} onClick={followAppLink}>Open Lifecycle to unarchive</Button>}</RetainedAdminPage>
+        <RetainedAdminPage active={page === 'unattended'}><section id="execution-defaults" tabIndex={-1} className="admin-settings-anchor"><InstanceMemoryAutomationPanel config={resolved} section="automation" onUpdated={onInstanceChanged} onDirtyChange={value => reportDirty('unattended', value)} /></section></RetainedAdminPage>
         <RetainedAdminPage active={page === 'memory'}><Flex vertical gap={token.padding}>{!archived && <IdentityMaintenanceSection instanceId={instanceId} />}<InstanceMemoryAutomationPanel config={resolved} section="memory" /></Flex></RetainedAdminPage>
-        <RetainedAdminPage active={page === 'experience'}>{!archived ? <ExperienceSection instanceId={instanceId} active={page === 'experience'} onWork={viewRun} selection={page === 'experience' ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Unarchive from Profile & version to inspect Experience." />}</RetainedAdminPage>
+        <RetainedAdminPage active={page === 'experience'}>{!archived ? <ExperienceSection instanceId={instanceId} active={page === 'experience'} onWork={viewRun} selection={page === 'experience' ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Unarchive from Lifecycle to inspect Experience." />}</RetainedAdminPage>
         <RetainedAdminPage active={page === 'sessions'}><InstanceSessionsSection instanceId={instanceId} archived={archived} open={page === 'sessions'} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'runs'}><InstanceRunsSection instanceId={instanceId} open={page === 'runs'} inline onRun={viewRun} onClose={() => go('sessions')} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'effective'}><AgentConfigurationPanel title="Resolved configuration" label="Effective configuration" description="Saved Definition and Instance values. Draft overrides are not included."><EffectiveConfigView config={resolved} hidePersona /></AgentConfigurationPanel></RetainedAdminPage>
-      </Flex>
-    </div>}
+      </Flex></InstanceConfigurationContent></Flex></div></InstanceConfigurationProvider>}
     {resolved && <InstanceRunsSection instanceId={instanceId} open={runDetailsOpen} detailsOnly selectedAgentRunId={selectedAgentRunId} onSource={viewSource} onClose={closeRun} afterClose={() => { if (restoreRunFocus.current && runOpener.current?.isConnected) runOpener.current.focus({ preventScroll: true }); }} />}
   </Flex>;
 }

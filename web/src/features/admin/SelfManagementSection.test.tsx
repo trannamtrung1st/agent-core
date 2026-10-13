@@ -23,7 +23,7 @@ describe('Agent self-management authority panel', () => {
   it('saves an explicit sparse grant without increasing inherited automatic allowances', async () => {
     vi.mocked(saveSelfManagement).mockResolvedValue(initial); mount();
     await screen.findByText('Definition defaults · policy revision 1 · Instance revision 1');
-    await chooseMode('Managed'); fireEvent.click(screen.getByRole('button', {name: 'Customize areas'}));
+    await chooseMode('Managed');
     fireEvent.click(screen.getByRole('checkbox', {name: /^Settings$/}));
     fireEvent.click(screen.getByRole('button', {name: 'Save self-management'}));
     await waitFor(() => expect(saveSelfManagement).toHaveBeenCalledWith('owner', {expectedRevision:1, mode:'Managed', scopes:['Settings'], managedAutoApply:null, configurationAssistance:null, harnessAuthoring:null}));

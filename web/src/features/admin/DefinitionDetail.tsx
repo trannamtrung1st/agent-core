@@ -1,5 +1,5 @@
 import { DeleteOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Flex, Result, Select, Spin, Table, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Empty, Flex, Result, Select, Spin, Table, Tag, Tooltip, Typography, theme } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { followAppLink } from "../../app/appLink";
 import { adminDefinitionPath, adminDraftPath, navigateToAppPath, type AdminDefinitionTab } from "../../app/appRoute";
@@ -88,7 +88,7 @@ export function DefinitionDetail({
 
   const [transientDirtyPages, setTransientDirtyPages] = useState<readonly string[]>([]);
   const dirtyCandidate = activeDraft !== null && !candidatesEqual(candidate, activeDraft.candidate);
-  const candidateAreas: Record<string, readonly string[]> = { profile: ['identity', 'goals'], behavior: ['systemInstructions', 'conversationPolicy', 'behaviorPolicy', 'initiativePolicy', 'voice'], models: ['modelDefaults', 'providerPreferences', 'executionBudgets'], skills: ['skills'], capabilities: ['environment'], policies: ['memoryPolicy', 'triggerPolicy', 'selfManagement', 'metadata'] };
+  const candidateAreas: Record<string, readonly string[]> = { profile: ['identity', 'goals'], instructions: ['systemInstructions'], conversation: ['conversationPolicy'], behavior: ['behaviorPolicy'], initiative: ['initiativePolicy'], voice: ['voice'], models: ['modelDefaults'], providers: ['providerPreferences'], execution: ['executionBudgets'], skills: ['skills'], capabilities: ['environment'], 'memory-policy': ['memoryPolicy'], 'trigger-policy': ['triggerPolicy'], 'self-management': ['selfManagement'], metadata: ['metadata'] };
   useAdminDraftStatus(activeDraft ? [...Object.entries(candidateAreas).filter(([, fields]) => fields.some(field => JSON.stringify(candidate[field]) !== JSON.stringify(activeDraft.candidate[field]))).map(([page]) => page), ...(jsonError ? ['advanced-json'] : []), ...transientDirtyPages] : []);
   const dirty = activeDraft !== null && (dirtyCandidate || jsonError !== null || transientDirtyPages.length > 0);
   const releaseConsumedDraft = useAdminUnsavedChanges(`draft:${definitionId}:${activeDraft?.draftId ?? draftId ?? ''}`, dirty);
@@ -598,10 +598,10 @@ export function DefinitionDetail({
                               onFilter: (value, item) => item.sourceKind === value },
                             { title: "Updated", dataIndex: "updatedAt", defaultSortOrder: "descend",
                               sorter: (a, b) => a.updatedAt.localeCompare(b.updatedAt), render: formatAdminTimestamp },
-                            { title: "Actions", key: "actions", width: 80, render: (_, item) => <Button type="text" size="small" danger
+                            { title: "Actions", key: "actions", width: 80, render: (_, item) => <Tooltip title="Delete draft"><Button type="text" size="small" danger
                               icon={<DeleteOutlined />} disabled={busy}
                               aria-label={`Delete ${item.sourceVersion != null ? `draft from v${item.sourceVersion}` : "draft"}, revision ${item.revision}`}
-                              onClick={() => confirmDeleteDraft(item, item.revision)} /> }
+                              onClick={() => confirmDeleteDraft(item, item.revision)} /></Tooltip> }
                           ]}
                         />
                       </div>

@@ -12,25 +12,26 @@ for (const width of [1440, 390]) test(`canonical Admin routes, drafts and histor
   expect(created.ok(), await created.text()).toBe(true); const { instanceId } = await created.json(); const base = `/admin/instances/${instanceId}`;
   await page.goto('/admin'); await expect(page).toHaveURL(/\/admin\/instances$/);
   await page.goto(base); await expect(page).toHaveURL(`${new URL(base, page.url())}/overview`);
-  await navigateAdmin(page, 'Profile & version'); await page.getByLabel('Persona name', { exact: true }).fill('Unsaved profile fixture');
+  await navigateAdmin(page, 'Profile'); await page.getByLabel('Persona name', { exact: true }).fill('Unsaved profile fixture');
   await page.waitForLoadState('networkidle');
   let reads = 0; page.on('request', r => { if (r.url().endsWith(`${instanceId}/effective-config`)) reads++; });
-  await navigateAdmin(page, 'Instructions & behavior');
-  await page.getByRole('button', { name: 'Customize Operating instructions', exact: true }).click();
+  await navigateAdmin(page, 'Instructions');
   await page.getByRole('textbox', { name: 'Operating instructions', exact: true }).fill('Unsaved instructions fixture');
-  await page.getByRole('button', { name: 'Customize Conversation', exact: true }).click();
+  await navigateAdmin(page, 'Conversation');
   await page.getByRole('textbox', { name: 'Language', exact: true }).fill('vi');
-  await navigateAdmin(page, 'Models & execution'); await navigateAdmin(page, 'Instructions & behavior');
+  await navigateAdmin(page, 'Models'); await navigateAdmin(page, 'Instructions');
   await expect(page.getByRole('textbox', { name: 'Operating instructions', exact: true })).toHaveValue('Unsaved instructions fixture');
+  await navigateAdmin(page, 'Conversation');
   await expect(page.getByRole('textbox', { name: 'Language', exact: true })).toHaveValue('vi');
   expect(reads).toBe(0);
-  await page.getByRole('button', { name: 'Save Conversation', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Save Conversation', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Save Operating instructions', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Save configuration', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save configuration', exact: true })).toBeDisabled();
+  await expect(page.getByRole('status').filter({ hasText: 'Configuration saved.' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Language', exact: true }).fill('vi-VN');
   await page.getByRole('link', { name: 'Chat', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Stay', exact: true }).click();
-  await expect(page).toHaveURL(`${new URL(base, page.url())}/behavior`);
-  await navigateAdmin(page, 'Profile & version'); await expect(page.getByLabel('Persona name', { exact: true })).toHaveValue('Unsaved profile fixture');
+  await expect(page).toHaveURL(`${new URL(base, page.url())}/conversation`);
+  await navigateAdmin(page, 'Profile'); await expect(page.getByLabel('Persona name', { exact: true })).toHaveValue('Unsaved profile fixture');
   await page.getByRole('link', { name: 'Chat', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Discard and leave', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
@@ -47,8 +48,8 @@ for (const width of [1440, 390]) test(`canonical Admin routes, drafts and histor
   await expect(page).toHaveURL(/\/drafts$/); await page.goForward(); await expect(page).toHaveURL(/\/versions$/);
   await page.getByRole('button', { name: /Fork v1 \(builtIn\)/ }).click(); await expect(page).toHaveURL(/\/drafts\/[0-9a-f-]+\/overview$/);
   const draftBase = new URL(page.url()).pathname.replace(/\/overview$/, '');
-  await navigateAdmin(page, 'Instructions & behavior'); await page.getByLabel('System instructions', { exact: true }).fill('Candidate retained through draft pages');
-  await navigateAdmin(page, 'Models & execution'); await navigateAdmin(page, 'Instructions & behavior');
+  await navigateAdmin(page, 'Instructions'); await page.getByLabel('System instructions', { exact: true }).fill('Candidate retained through draft pages');
+  await navigateAdmin(page, 'Models'); await navigateAdmin(page, 'Instructions');
   await expect(page.getByLabel('System instructions', { exact: true })).toHaveValue('Candidate retained through draft pages');
   await navigateAdmin(page, 'Advanced JSON'); await page.getByRole('textbox', { name: 'Advanced JSON', exact: true }).fill('{ invalid');
   await navigateAdmin(page, 'Skills'); await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toBeDisabled();
@@ -69,14 +70,14 @@ test('all legacy leaves preserve queries, fragments and exact owner destinations
   const headers = { 'X-AgentCore-Owner-Capability': (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))! };
   const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'examiner', version: 1 } }); expect(created.ok()).toBe(true);
   const { instanceId } = await created.json(); const base = `/admin/instances/${instanceId}`;
-  for (const [old, next] of [['identity','profile'], ['identity/profile','profile'], ['identity/settings','behavior'], ['identity/workspace','workspace'], ['skills/skills','skills'], ['skills/resources','resources'], ['continuity','continuity/memory'], ['automation','automations'], ['automation/automations','automations'], ['automation/controls','automations#execution-defaults'], ['automation/harness','self-management'], ['activity','activity/sessions'], ['runs','activity/runs'], ['credentials','access#credentials']]) {
+  for (const [old, next] of [['identity','profile'], ['identity/profile','profile'], ['identity/settings','instructions'], ['identity/workspace','workspace'], ['skills/skills','skills'], ['skills/resources','resources'], ['continuity','continuity/memory'], ['automation','automations'], ['automation/automations','automations'], ['automation/controls','unattended#execution-defaults'], ['automation/harness','self-management'], ['activity','activity/sessions'], ['runs','activity/runs'], ['access','capabilities']]) {
     await page.goto(`${base}/${old}?q=kept&token=removed`); const [path, hash] = next.split('#');
     await expect(page).toHaveURL(new URL(`${base}/${path}?q=kept${hash ? `#${hash}` : ''}`, page.url()).href);
     await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible();
   }
-  await page.goto(`${base}/profile`); await page.getByRole('button', { name: 'Archive instance', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Archive', exact: true }).click();
+  await page.goto(`${base}/lifecycle`); await page.getByRole('button', { name: 'Archive instance', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Archive', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Unarchive instance', exact: true })).toBeVisible();
-  await page.goto(`${base}/automation/controls`); await expect(page).toHaveURL(new RegExp(`${base}/profile\\?notice=archived-automations$`));
+  await page.goto(`${base}/automation/controls`); await expect(page).toHaveURL(new RegExp(`${base}/lifecycle\\?notice=archived-automations$`));
   await expect(page.getByText('Automations are unavailable for this archived Instance', { exact: true })).toBeVisible();
 });
 
@@ -104,15 +105,15 @@ test('Search Admin scopes approved labels, focuses anchors and recovers after de
   await page.setViewportSize({ width: 390, height: 900 });
   await page.getByRole('button', { name: 'Open Admin navigation', exact: true }).click();
   const nav = page.getByRole('navigation', { name: 'Admin navigation', exact: true });
-  await nav.getByRole('link', { name: 'Instructions & behavior', exact: true }).focus();
+  await nav.getByRole('link', { name: 'Instructions', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(nav).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'Instructions & behavior', exact: true, level: 2 })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Instructions', exact: true, level: 2 })).toBeFocused();
   await page.goto('/admin/definitions/examiner/versions');
   await page.getByRole('button', { name: /Fork v1 \(builtIn\)/ }).click();
   await expect(page).toHaveURL(/\/drafts\/[0-9a-f-]+\/overview$/);
   const draftUrl = page.url();
-  await navigateAdmin(page, 'Instructions & behavior');
+  await navigateAdmin(page, 'Instructions');
   await page.getByLabel('System instructions', { exact: true }).fill('Unsaved draft being explicitly deleted');
   await page.getByRole('button', { name: 'Search Admin', exact: true }).click();
   await search.getByRole('textbox').fill('browser privacy');

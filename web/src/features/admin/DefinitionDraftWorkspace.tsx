@@ -7,7 +7,7 @@ import { confirmAction } from "../../app/confirmAction";
 import { getAdminDefinitionDraft, getAdminToolRegistry, listAdminDraftResources, removeAdminDraftResource, uploadAdminDraftResourceContent, upsertAdminDraftResource, type AdminDefinitionDraft, type AdminDefinitionDraftResource } from "../../services/adminApi";
 import { describeAdminError, reportAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminRetryAction, showAdminFailure } from "./adminFailure";
-import { type DraftPage } from './adminNavigation';
+import { draftSettingGroups, type DraftPage } from './adminNavigation';
 import { AgentConfigurationPanel, AgentSkillsResourcesSections } from "./AgentConfigurationLayout";
 import { groupedCapabilityOptions, reconcileAlwaysCapabilities } from "./capabilityOptions";
 import { automationNumberErrors, type DefinitionCandidate } from "./definitionCandidate";
@@ -154,7 +154,7 @@ export function DefinitionDraftWorkspace({
   // Migrate an editable legacy candidate using its exact grants and fixed discoverable projection.
   // Published versions remain immutable; Core still owns context-only projection.
   useEffect(() => {
-    if (catalogReady && !candidateLocked && editorView === "form" && ["profile", "behavior", "models", "policies", "capabilities"].includes(page) && !capabilities.capabilityMode) {
+    if (catalogReady && !candidateLocked && editorView === "form" && ["profile", ...Object.keys(draftSettingGroups), "execution", "capabilities"].includes(page) && !capabilities.capabilityMode) {
       onCandidateChange(current => {
         const environment = readDraftEnvironment(current);
         return environment.capabilityMode ? current : applyDraftEnvironmentToCandidate(current, { ...environment, capabilityMode: "Selected",
@@ -397,11 +397,11 @@ export function DefinitionDraftWorkspace({
       </Flex>
       <DraftEditorActions
         dirty={dirty} busy={busy} publishEligible={publishEligible} saveBlocked={saveBlocked} saveBlockedMessage={saveBlockedMessage}
-        saveBlockedHref={adminDraftPath(activeDraft.definitionId, activeDraft.draftId, candidateLocked ? 'advanced-json' : !budgetsValid ? 'models' : numberErrors.length ? 'policies' : 'capabilities')}
+        saveBlockedHref={adminDraftPath(activeDraft.definitionId, activeDraft.draftId, candidateLocked ? 'advanced-json' : !budgetsValid ? 'execution' : numberErrors.length ? 'trigger-policy' : 'capabilities')}
         onSave={onSave} onPublish={onPublish} onDelete={onDelete}
       />
       {page === 'overview' && <AgentConfigurationPanel title="Draft status" label="Draft overview" bodyGap="section"><Typography.Text>{activeDraft.definitionId} · revision {activeDraft.revision} · {formatDraftSource(activeDraft.sourceKind)}</Typography.Text><Typography.Text>{dirty ? 'Unsaved candidate changes retained across draft pages' : 'Saved candidate'}</Typography.Text><Typography.Text type="secondary">Published versions remain immutable. Save, validate and evaluate this exact revision before publishing.</Typography.Text><a href={adminDraftPath(activeDraft.definitionId, activeDraft.draftId, 'test-publish')} onClick={followAppLink}>Open Test & Publish</a></AgentConfigurationPanel>}
-      <RetainedAdminPage active={['profile', 'behavior', 'models', 'policies', 'advanced-json'].includes(page)}>
+      <RetainedAdminPage active={['profile', ...Object.keys(draftSettingGroups), 'execution', 'advanced-json'].includes(page)}>
 
               <section className="admin-draft-tab" aria-label="Definition candidate">
                 <div className="admin-draft-tab-intro">
@@ -536,7 +536,7 @@ export function DefinitionDraftWorkspace({
                       { title: 'Media type', dataIndex: 'mediaType', width: 240 },
                       { title: 'Size (bytes)', dataIndex: 'byteLength', width: 130, align: 'right', render: (bytes: number) => bytes.toLocaleString() },
                       { title: 'Content hash', dataIndex: 'contentSha256', width: 200, ellipsis: true, render: (hash: string) => <Typography.Text type="secondary" title={hash}>{hash.slice(0, 12)}…</Typography.Text> },
-                      { title: 'Actions', width: 160, render: (_, item) => <Button type="text" danger aria-label="Remove" disabled={busy || resourcesLoading || !resourcesReady} onClick={() => confirmResourceDeletion([item])}>Remove resource</Button> }
+                      { title: 'Actions', width: 64, render: (_, item) => <Tooltip title="Remove resource"><Button type="text" danger icon={<DeleteOutlined aria-hidden />} aria-label="Remove" disabled={busy || resourcesLoading || !resourcesReady} onClick={() => confirmResourceDeletion([item])} /></Tooltip> }
                     ]}
                   />
                 ) : null}
@@ -770,7 +770,7 @@ function DraftEditorActions({
   onDelete: () => void;
 }) {
   return (
-    <div className="admin-draft-actions">
+    <div className="admin-draft-actions admin-owner-actions" role="region" aria-label="Draft actions">
       <Flex gap={16} wrap="wrap" align="center">
         <Flex gap={8} wrap="wrap">
         <Button type={dirty ? "primary" : "default"} onClick={onSave} disabled={busy || !dirty || saveBlocked}>

@@ -96,8 +96,8 @@ describe('Managed Instance canonical navigation', () => {
     const search = await screen.findByRole('dialog', { name: 'Search Admin' });
     const owner = within(search).getByRole('region', { name: 'Instance · Global Admin destinations' });
     const global = within(search).getByRole('region', { name: 'Global Admin destinations' });
-    expect(within(owner).getByRole('link', { name: /^Models & execution/ })).toHaveAttribute('href', adminInstancePath(config.instanceId, 'models'));
-    expect(within(global).queryByRole('link', { name: /^Models & execution/ })).not.toBeInTheDocument();
+    expect(within(owner).getByRole('link', { name: /^Models/ })).toHaveAttribute('href', adminInstancePath(config.instanceId, 'models'));
+    expect(within(global).queryByRole('link', { name: /^Models/ })).not.toBeInTheDocument();
     expect(within(global).getByRole('link', { name: /Credentials/ })).toHaveAttribute('href', '/admin/connections/credentials');
     fireEvent.change(within(search).getByRole('textbox', { name: 'Search Admin destinations' }), { target: { value: 'reasoning' } });
     await waitFor(() => expect(within(search).getByRole('region', { name: 'Instance · Global Admin destinations' })).toBeVisible());
@@ -125,7 +125,7 @@ describe('Managed Instance canonical navigation', () => {
     render(<Fixture archived start="runs" />);
     expect(screen.getByText('Run history')).toBeVisible();
     await go('Experience');
-    expect(screen.getByText('Unarchive from Profile & version to inspect Experience.')).toBeVisible();
+    expect(screen.getByText('Unarchive from Lifecycle to inspect Experience.')).toBeVisible();
     expect(screen.queryByText('Experience controls')).not.toBeInTheDocument();
   });
 });

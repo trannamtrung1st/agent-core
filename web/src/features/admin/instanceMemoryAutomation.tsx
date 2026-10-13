@@ -1,8 +1,10 @@
+import { DeleteOutlined } from '@ant-design/icons';
+import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { automationTriggerPermissionSummary } from "./AutomationTriggerPermissions";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App, Button, Descriptions, Flex, Select, Table, Tabs, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Descriptions, Flex, Select, Table, Tooltip, Tabs, Tag, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import type { ColumnsType } from "antd/es/table";
 import { listModels, type ModelDescriptor } from "../../services/api";
@@ -94,13 +96,13 @@ function UnattendedModelForm({
     : `Effective source: Conversation default (${config.effectiveModel.displayName})`;
 
   useEffect(() => { onDirtyChange?.(catalogKey !== savedCatalogKey || effort !== savedEffort); }, [catalogKey, savedCatalogKey, effort, savedEffort, onDirtyChange]);
-  async function save() {
+  async function save(expectedRevision?: number) {
     setBusy(true);
     setError(null);
     try {
       const updated = await setAdminUnattendedModel(
         config.instanceId,
-        revision,
+        expectedRevision ?? revision,
         catalogKey || null,
         effort || null
       );
@@ -109,14 +111,19 @@ function UnattendedModelForm({
       setCatalogKey(updated.unattendedModelCatalogKey ?? "");
       setEffort(updated.unattendedReasoningEffort ?? "");
       setSavedEffort(updated.unattendedReasoningEffort ?? "");
-      onUpdated?.();
+      if (expectedRevision === undefined) onUpdated?.();
+      return updated.revision;
     } catch (reason: unknown) {
       setError(describeAdminError(reason, "The unattended model could not be saved.").message);
+      if (expectedRevision !== undefined) throw reason;
     } finally {
       setBusy(false);
     }
   }
 
+  const configuration = useInstanceConfigurationEditor('Unattended model', { dirty: catalogKey !== savedCatalogKey || effort !== savedEffort, busy, revision,
+    save: async revision => { const updated = await save(revision); if (updated === undefined) throw new Error('Unattended model revision could not be confirmed.'); return updated; },
+    discard: () => { setCatalogKey(savedCatalogKey); setEffort(savedEffort); } });
   return (
     <Flex vertical gap={token.paddingSM} aria-label="Unattended model" className="admin-config-form">
       <Typography.Text>{source}</Typography.Text>
@@ -125,14 +132,14 @@ function UnattendedModelForm({
         reactive work unless an Automation sets its own model.
       </Typography.Text>
       {error ? <Alert type="error" showIcon title={error} /> : null}
-      <ExecutionModelFields models={models} modelKey={catalogKey} reasoningEffort={effort} disabled={busy} showLabels
+      <ExecutionModelFields models={models} modelKey={catalogKey} reasoningEffort={effort} disabled={busy || config.instanceLifecycle !== "Active"} showLabels
         modelLabel="Unattended model" effortLabel="Unattended reasoning effort" defaultLabel="Conversation default"
         onChange={(key, effort) => { setCatalogKey(key); setEffort(effort); }} />
-      <Flex wrap gap={token.paddingXS}>
+      {!configuration.managed && <Flex wrap gap={token.paddingXS}>
         <Button type="primary" loading={busy} disabled={busy} onClick={() => void save()}>
           Save unattended model
         </Button>
-      </Flex>
+      </Flex>}
     </Flex>
   );
 }
@@ -320,9 +327,11 @@ export function InstanceMemoryAutomationPanel({ config, section, onDirtyChange, 
     {
       title: "Actions",
       key: "actions",
-      width: 100,
+      width: 64,
       render: (_, row) => (
-        <Button
+        <Tooltip title="Delete"><Button
+          icon={<DeleteOutlined aria-hidden />}
+          aria-label="Delete"
           size="small"
           danger
           disabled={!memoryActionsEnabled}
@@ -335,9 +344,7 @@ export function InstanceMemoryAutomationPanel({ config, section, onDirtyChange, 
               onOk: () => void deleteMemoryItem(row.memoryId)
             })
           }
-        >
-          Delete
-        </Button>
+        /></Tooltip>
       )
     }
   ];

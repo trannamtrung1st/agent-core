@@ -1,4 +1,4 @@
-import { definitionPages, definitionPath, draftPages, draftPath, globalPages, globalPath, instancePages, instancePath, type AdminCollection, type DefinitionPage, type DraftPage, type InstancePage } from '../features/admin/adminNavigation';
+import { definitionPages, definitionPath, draftPages, draftPath, globalPages, globalPath, instancePages, instancePath, legacyDraftPages, type AdminCollection, type DefinitionPage, type DraftPage, type InstancePage } from '../features/admin/adminNavigation';
 export type { AdminCollection };
 export type AdminDefinitionTab = DefinitionPage;
 // Input compatibility for callers being migrated; parsed routes contain only canonical pages.
@@ -15,11 +15,11 @@ export type AppRoute = { area: 'chat' } | AdminRoute;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const missing: AdminRoute = { area: 'admin', view: 'not-found' };
 const legacyInstance: Record<string, InstancePage> = {
-  '': 'overview', identity: 'profile', 'identity/profile': 'profile', 'identity/settings': 'behavior',
+  '': 'overview', identity: 'profile', 'identity/profile': 'profile', 'identity/settings': 'instructions', behavior: 'instructions', access: 'capabilities',
   'identity/workspace': 'workspace', 'skills/skills': 'skills', 'skills/resources': 'resources',
   continuity: 'memory', automation: 'automations', 'automation/automations': 'automations',
   'automation/controls': 'automations', 'automation/harness': 'self-management', activity: 'sessions',
-  runs: 'runs', credentials: 'access',
+  runs: 'runs',
 };
 export function parseAppRoute(pathname: string): AppRoute {
   if (!/^\/admin(?:\/|$)/i.test(pathname)) return { area: 'chat' };
@@ -45,7 +45,8 @@ export function parseAppRoute(pathname: string): AppRoute {
     const draft = /^drafts\/([^/]+)(?:\/([^/]+))?$/.exec(leaf);
     if (draft && uuid.test(draft[1])) {
       const page = draft[2] ?? 'overview';
-      if (draftPages.some(p => p.id === page)) return { area: 'admin', view: 'draft', definitionId: id, draftId: draft[1].toLowerCase(), page: page as DraftPage };
+      const canonical = draftPages.find(p => p.path === page)?.id ?? legacyDraftPages[page];
+      if (canonical) return { area: 'admin', view: 'draft', definitionId: id, draftId: draft[1].toLowerCase(), page: canonical };
     }
   }
   return missing;
@@ -55,7 +56,7 @@ export const adminDefinitionPath = definitionPath;
 export const adminDraftPath = draftPath;
 export function adminInstancePath(id: string, page?: InstancePage | AdminInstanceTab, section?: AdminInstanceSection): string {
   const leaf = `${page ?? ''}${section ? `/${section}` : ''}`;
-  const canonical = legacyInstance[leaf] ?? instancePages.find(p => p.id === page)?.id;
+  const canonical = (!section ? instancePages.find(p => p.id === page)?.id : undefined) ?? legacyInstance[leaf];
   return instancePath(id, canonical ?? (page === 'activity' ? section === 'runs' ? 'runs' : 'sessions' : page === 'continuity' ? section === 'experience' ? 'experience' : 'memory' : 'overview'));
 }
 export function adminRoutePath(route: AdminRoute): string | null {
@@ -68,7 +69,17 @@ export function adminRoutePath(route: AdminRoute): string | null {
 /** Only meaningful presentation queries cross a legacy redirect. Never forward arbitrary credentials. */
 export function canonicalAppUrl(path: string): string {
   const url = new URL(path, window.location.origin);
-  const route = parseAppRoute(url.pathname);
+  let route = parseAppRoute(url.pathname);
+  const settingPage: Record<string, InstancePage> = { instructions: 'instructions', conversationPolicy: 'conversation', behaviorPolicy: 'behavior', initiativePolicy: 'initiative', voice: 'voice', modelDefaults: 'models', providerPreferences: 'providers', 'execution-budgets': 'execution', capabilities: 'capabilities', credentials: 'credentials', memoryPolicy: 'memory-policy', restrictions: 'trigger-policy', triggerPolicy: 'trigger-policy', 'execution-defaults': 'unattended', registrations: 'automations' };
+  const anchor = url.hash.slice(1);
+  if (route.area === 'admin' && route.view === 'instance') {
+    const page = /\/automation\/controls\/?$/.test(url.pathname) ? 'unattended' : settingPage[anchor];
+    if (page) route = { ...route, page };
+  }
+  if (route.area === 'admin' && route.view === 'draft') {
+    const page = anchor === 'metadata' ? 'metadata' : anchor === 'selfManagement' ? 'self-management' : settingPage[anchor];
+    if (page && draftPages.some(p => p.id === page)) route = { ...route, page: page as DraftPage };
+  }
   if (route.area !== 'admin') return path;
   const canonical = adminRoutePath(route);
   if (!canonical || canonical === url.pathname) return path;
@@ -78,7 +89,6 @@ export function canonicalAppUrl(path: string): string {
   }
   let hash = url.hash;
   if (/\/automation\/controls\/?$/.test(url.pathname)) hash = '#execution-defaults';
-  if (/\/credentials\/?$/.test(url.pathname) && route.view === 'instance') hash = '#credentials';
   return `${canonical}${safe.size ? `?${safe}` : ''}${hash}`;
 }
 const LAST_CHAT_URL_KEY = 'agent-core:last-chat-url';

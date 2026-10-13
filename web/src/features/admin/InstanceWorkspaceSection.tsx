@@ -1,7 +1,8 @@
+import { DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { AdminErrorNotice } from "./adminFailure";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App, Button, Empty, Flex, Spin, Table, Typography, theme } from "antd";
+import { Alert, App, Button, Empty, Flex, Spin, Table, Tooltip, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import { deleteAgentWorkspaceItem, downloadAgentWorkspaceItem, listAgentWorkspace,
   type AgentWorkspaceItem, type AgentWorkspacePage } from "../../services/agentWorkspace";
@@ -69,12 +70,12 @@ export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId:
             { title: "Size", dataIndex: "byteSize", align: "right", width: 90, render: artifactSize },
             { title: "Updated", dataIndex: "updatedAt", width: 165, render: (value: string) => <time dateTime={value}>{new Date(value).toLocaleString()}</time> },
             { title: "Source", dataIndex: "sourceSessionId", ellipsis: true, width: 140, render: (value: string | null) => value ? <span title={`Conversation ${value}`}>Conversation {value}</span> : "—" },
-            { title: "Actions", width: 220, render: (_, item) => <Flex className="admin-table-actions" gap={token.paddingXS}>
-              <Button aria-label={`Download ${item.logicalPath}`} disabled={!!busy || item.directory} onClick={() => void save(item)}>Download</Button>
-              <Button danger aria-label={`Delete ${item.logicalPath}`} disabled={archived || !!busy || loading} onClick={() => confirmAction(modal, {
+            { title: "Actions", width: 112, render: (_, item) => <Flex className="admin-table-actions" gap={token.paddingXS}>
+              <Tooltip title="Download"><Button icon={<DownloadOutlined aria-hidden />} aria-label={`Download ${item.logicalPath}`} disabled={!!busy || item.directory} onClick={() => void save(item)} /></Tooltip>
+              <Tooltip title="Delete"><Button icon={<DeleteOutlined aria-hidden />} danger aria-label={`Delete ${item.logicalPath}`} disabled={archived || !!busy || loading} onClick={() => confirmAction(modal, {
                 title: item.directory ? "Delete empty folder?" : "Delete workspace file?", content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,
                 okText: item.directory ? "Delete folder" : "Delete file", danger: true, onOk: () => remove(item)
-              })}>Delete</Button>
+              })} /></Tooltip>
             </Flex> }
           ]} />
         {page.nextPath ? <Button disabled={loading || !!busy} onClick={() => void reload(page.nextPath!)}>Load more items</Button> : null}

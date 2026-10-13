@@ -4,6 +4,8 @@ slug: "web-src-features-admin-adminapp-tsx"
 primary_target: "web/src/features/admin/AdminApp.tsx"
 related_targets:
   - web/src/features/admin/AdminShell.tsx
+  - web/src/features/admin/AdminNavigationIcon.tsx
+  - web/src/features/admin/InstanceConfigurationActions.tsx
   - web/src/features/admin/adminNavigation.ts
   - web/src/features/admin/InstanceDetail.tsx
   - web/src/features/admin/InstanceProfile.tsx
@@ -110,3 +112,5 @@ Identity & version → Settings contains the single management panel, above exis
 ## Admin reorganization polish (2026-10-13)
 
 The follow-up uses the same Ant Design world and shared 8/12/16 roles. One batched walkthrough covered all new global, Instance and draft destinations; mandatory functional/reflow repairs remained separate from discretionary visual iteration. The current polish report is [Admin UX polish verification](../../docs/reports/admin-ux-polish-verification.md). It records actual interactions, the six-width confirmation, test corrections and the hosted acceptance boundary; earlier reports remain historical.
+
+Focused configuration refinement: preserve Agent Core branding with a secondary Admin marker and desktop breadcrumb separator. Native outline icons accompany every canonical destination; remove the contextual Global integrations & platform shortcut. Separate unrelated settings into focused pages while preserving exact-owner candidates, field anchors, native links and draft guards. The sticky bordered actions frame is shared by Definition drafts and Instance configuration. Instance inherited settings accept edits immediately, retain sparse per-field source/reset semantics and fixed label-row height. Common table operations use accessible icon buttons; longer choices belong to an icon-labeled More menu with keyboard focus restoration. At 320px only brand/icon-header spacing uses native paddingXXS (4px); all normal shell/control/panel roles remain 8/12/16px. `/docs/13` remains authoritative.

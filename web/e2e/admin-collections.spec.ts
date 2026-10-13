@@ -147,7 +147,7 @@ test("Instance navigation ignores a delayed response for the previously opened i
     await backToInventory(page);
     await page.getByLabel("Search instances").fill(`${prefix}-Beta`);
     await page.getByRole("link", { name: `${prefix}-Beta · examiner`, exact: true }).click();
-    await navigateAdmin(page, "Profile & version");
+    await navigateAdmin(page, "Profile");
     await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue(`${prefix}-Beta`);
     const oldResponse = page.waitForResponse(response => response.url().endsWith(`/instances/${ids[0]}/effective-config`));
     release();
@@ -211,13 +211,16 @@ test("Lifecycle and version changes preserve unsaved persona edits", async ({ pa
   const { instanceId } = await created.json();
   await page.goto(`/admin/instances/${instanceId}/profile`);
   await page.getByLabel("Persona name", { exact: true }).fill("Retained unsaved persona");
+  await navigateAdmin(page, "Definition version");
   await page.getByLabel("Target definition version", { exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: "v2" }).click();
   await page.getByRole("button", { name: "Upgrade to v2", exact: true }).click(); await page.getByRole("button", {name:"Adopt version",exact:true}).click();
   await expect(page.getByText("Instance adopted v2.", { exact: true })).toBeVisible();
+  await navigateAdmin(page, "Profile");
   await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Retained unsaved persona");
   await page.getByRole("tab", { name: "JSON", exact: true }).click();
   await page.getByLabel("Persona JSON", { exact: true }).fill("{invalid json");
+  await navigateAdmin(page, "Lifecycle");
   await page.getByRole("button", { name: "Archive instance", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByRole("button", { name: "Unarchive instance", exact: true })).toBeVisible();
@@ -227,7 +230,7 @@ test("Lifecycle and version changes preserve unsaved persona edits", async ({ pa
   await expect(page.getByLabel("Persona JSON", { exact: true })).toHaveValue("{invalid json");
 });
 
-test("Behavior updates preserve persona edits through a failed refresh and retry", async ({ page }) => {
+test("Global configuration saves preserve persona values through a failed refresh and retry", async ({ page }) => {
   await page.goto("/");
   await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
   const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
@@ -244,12 +247,11 @@ test("Behavior updates preserve persona edits through a failed refresh and retry
   const management = page.getByRole("region", { name: "Agent self-management", exact: true });
   await management.getByRole("combobox", { name: "Self-management mode", exact: true }).click();
   await page.locator(".ant-select-item-option").filter({ hasText: "Assisted" }).click();
-  await management.getByRole("button", { name: "Customize areas", exact: true }).click();
   await management.getByRole("checkbox", { name: "Resources", exact: true }).check();
   const pattern = `**/admin/instances/${instanceId}/effective-config`;
   await page.route(pattern, route => route.fulfill({ status: 503, contentType: "application/problem+json",
     body: JSON.stringify({ title: "Configuration refresh unavailable", status: 503 }) }));
-  await management.getByRole("button", { name: "Save self-management", exact: true }).click();
+  await page.getByRole("button", { name: "Save configuration", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Configuration refresh unavailable" })).toBeVisible();
   await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Unsaved persona survives");
   await expect(page.locator("[inert]")).toHaveCount(1);
@@ -258,8 +260,7 @@ test("Behavior updates preserve persona edits through a failed refresh and retry
   await navigateAdmin(page, "Identity & version");
   await navigateAdmin(page, "Profile");
   await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Unsaved persona survives");
-  await page.getByRole("button", { name: "Save persona", exact: true }).click();
-  await expect(page.getByText("Persona updated.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save configuration", exact: true })).toBeDisabled();
   await page.reload();
   await expect(page.getByLabel("Persona name", { exact: true })).toHaveValue("Unsaved persona survives");
 });
@@ -349,7 +350,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await instanceDialog.getByRole("combobox", { name: "Definition", exact: true }).fill(definitionId);
   await page.locator(".ant-select-item-option").filter({ hasText: definitionId }).last().click();
   await instanceDialog.getByRole("button", { name: "Create instance", exact: true }).click();
-  await navigateAdmin(page, "Profile & version");
+  await navigateAdmin(page, "Profile");
   const persona = page.getByLabel("Persona name", { exact: true });
   await persona.fill("Unsaved inspector");
   for (const name of ["Continuity", "Automation", "Activity", "Credentials", "Effective configuration"]) {
@@ -361,7 +362,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   const toggle = page.getByRole('button', { name: 'Open Admin navigation', exact: true });
   await toggle.click();
-  for (const name of ['Memory', 'Automations', 'Sessions', 'Capabilities & credentials', 'Effective configuration']) await expect(page.getByRole('navigation', { name: 'Admin navigation' }).getByRole('link', { name, exact: true })).toBeVisible();
+  for (const name of ['Memory', 'Automations', 'Sessions', 'Credential bindings', 'Effective configuration']) await expect(page.getByRole('navigation', { name: 'Admin navigation' }).getByRole('link', { name, exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(toggle).toBeFocused();
   expect(errors).toEqual([]);

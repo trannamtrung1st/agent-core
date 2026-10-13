@@ -23,7 +23,7 @@ export async function navigateAdmin(target: Page | Locator, oldLabel: string) {
   // Immutable inspectors retain local read-only view controls; they are not workspace routes.
   if (await local.first().isVisible().catch(() => false)) { await local.first().click(); return; }
   const draft = /\/drafts\/[^/]+\//.test(new URL(page.url()).pathname);
-  const names: Record<string, string> = { 'Identity & version': draft ? 'Identity & goals' : 'Profile & version', Profile: draft ? 'Identity & goals' : 'Profile & version', Settings: 'Instructions & behavior', 'Skills & resources': 'Skills', Continuity: 'Memory', Automation: 'Automations', Triggers: 'Automations', 'Policies & models': 'Automations', Activity: 'Sessions', Credentials: /\/instances\//.test(page.url()) ? 'Capabilities & credentials' : 'Credentials', Connections: 'Credentials' };
+  const names: Record<string, string> = { 'Identity & version': draft ? 'Identity & goals' : 'Profile', Profile: draft ? 'Identity & goals' : 'Profile', Settings: 'Instructions', 'Skills & resources': 'Skills', Continuity: 'Memory', Automation: 'Automations', Triggers: 'Automations', 'Policies & models': 'Unattended model', Activity: 'Sessions', Credentials: /\/instances\//.test(page.url()) ? 'Credential bindings' : 'Credentials', Connections: 'Credentials' };
   const label = names[oldLabel] ?? oldLabel;
   const nav = await visibleAdminNavigation(page);
   await nav.getByRole('link', { name: label, exact: true }).click();
@@ -34,6 +34,9 @@ export async function expectAdminPage(page: Page, label: string) {
   await expect(page.getByRole('heading', { name: label, exact: true, level: 2 })).toBeVisible();
 }
 export async function expandAdminSection(target: Page | Locator, name: string) {
+  const page = 'goto' in target ? target : target.page();
+  const owners: Record<string, string> = { 'Operating instructions': 'Instructions', Conversation: 'Conversation', Behavior: 'Behavior', Initiative: 'Initiative', Voice: 'Voice', 'Model defaults': 'Models', 'Provider preferences': 'Providers', 'Memory policy': 'Memory policy', 'Trigger restrictions': 'Trigger restrictions' };
+  if (owners[name] && !await target.getByRole('button', { name: new RegExp('^' + name) }).first().isVisible().catch(() => false)) await navigateAdmin(page, owners[name]);
   const header = target.getByRole('button', { name: new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) });
   if (await header.getAttribute('aria-expanded') !== 'true') await header.click();
 }

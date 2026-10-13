@@ -72,7 +72,7 @@ async function createInstance(page: import("@playwright/test").Page) {
   await page.getByRole("combobox", { name: "Definition", exact: true }).press("Escape");
   await expect(page.getByRole("combobox", { name: "Definition", exact: true })).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("button", { name: "Create instance", exact: true }).click();
-  await navigateAdmin(page, "Profile & version");
+  await navigateAdmin(page, "Profile");
   await expect(page.getByLabel("Persona name", { exact: true })).toBeVisible();
   return page.url();
 }
@@ -184,7 +184,7 @@ test("Hidden automation keeps drafts, stops polling and saves a local picker tim
   // Browser navigation can leave the tab while its modal drawer is open.
   // Clicking a tab behind the drawer mask would never exercise this transition.
   await page.goBack();
-  await expect(page.getByRole("heading", { name: "Profile & version", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Profile", exact: true, level: 2 })).toBeVisible();
   const requests: string[] = [];
   const record = (request: import("@playwright/test").Request) => {
     if (/\/automations(?:\?|$)/.test(request.url())) requests.push(request.url());

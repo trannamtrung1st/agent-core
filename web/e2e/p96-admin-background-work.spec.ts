@@ -55,7 +55,7 @@ test("admin unattended model and event sources stay operable at wide and narrow 
   const saved = page.waitForResponse(
     (response) => response.url().includes("/unattended-model") && response.request().method() === "POST"
   );
-  await automation.getByRole("button", { name: "Save unattended model" }).click();
+  await page.getByRole("button", { name: "Save configuration" }).click();
   const savedResponse = await saved;
   expect(savedResponse.ok()).toBeTruthy();
   expect((await savedResponse.json()).unattendedModelCatalogKey).toBe("scripted-alpha");

@@ -1,7 +1,7 @@
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, App, Button, Descriptions, Drawer, Empty, Flex, Form, Grid, Input, Select, Spin, Switch, Table, Tooltip, Typography, Upload, theme } from 'antd';
-import { UndoOutlined, UploadOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Descriptions, Drawer, Dropdown, Empty, Flex, Form, Grid, Input, Select, Spin, Switch, Table, Tooltip, Typography, Upload, theme } from 'antd';
+import { UndoOutlined, UploadOutlined, EyeOutlined, DownloadOutlined, CopyOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from '@ant-design/icons';
 import { ResourceDeletionContent, ResourceSelectionToolbar } from './ResourceSelectionToolbar';
 import { confirmAction } from '../../app/confirmAction';
 import { AdminCollectionToolbar, useAdminCollectionSearch } from './AdminCollectionToolbar';
@@ -21,6 +21,7 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
   useEffect(() => { onDirtyChange?.(!!editor && !editor.readOnly); }, [editor, onDirtyChange]);
   const [progress, setProgress] = useState<string | null>(null);
   const { search, setSearch, pagination } = useAdminCollectionSearch(); const epoch = useRef(0); const owner = useRef(instanceId); owner.current = instanceId;
+  const menuOpener = useRef<HTMLElement | null>(null); const createOpener = useRef<HTMLButtonElement | null>(null);
   const previewEpoch = useRef(0); const opener = useRef<HTMLElement | null>(null); const drawerVisible = useRef(false);
   useEffect(() => { epoch.current++; setCatalog(null); setSelectedResources([]); setEditor(null); setError(null); setBusy(false); return () => { epoch.current++; }; }, [instanceId]);
   const reload = useCallback(async () => {
@@ -69,8 +70,8 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
       }
     });
   }
-  function open(resource: InstanceResource | null, readOnly = false) {
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  function open(resource: InstanceResource | null, readOnly = false, trigger?: HTMLElement) {
+    opener.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     previewEpoch.current++; setPreview(null);
     setError(null); setProgress(null);
     setEditor({ resource, logicalPath: resource?.logicalPath ?? '', kind: resource?.kind ?? 1, enabled: resource?.enabled ?? true, file: null, items: [], readOnly });
@@ -129,7 +130,7 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
   return <Flex vertical gap={token.padding}>
     <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Definition resources are inherited. Instance resources are independent files. Enabled content is frozen for each Run; edits apply to the next Run.</Typography.Paragraph>
     {archived && <Alert type="info" showIcon title="Archived resources are read-only" />}
-    <Flex wrap gap={token.paddingXS}><Button type="primary" disabled={archived || !ready} onClick={() => open(null)}>New Instance resource</Button><Button disabled={busy || loading} onClick={() => void reload()}>Reload resources</Button></Flex>
+    <Flex wrap gap={token.paddingXS}><Button type="primary" ref={createOpener} disabled={archived || !ready} onClick={() => open(null)}>New Instance resource</Button><Button disabled={busy || loading} onClick={() => void reload()}>Reload resources</Button></Flex>
     {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => void reload()}>Retry resources</Button>} />}
     {loading && <Spin aria-label="Loading resources" />}
     {catalog && <><Flex wrap align="center" gap={token.paddingSM}><AdminCollectionToolbar value={search} onChange={value => { setSelectedResources([]); setSearch(value); }} label="Resources" /><Select style={{ width: compact ? "100%" : 220 }} aria-label="Resource kind filter" allowClear placeholder="All resource kinds" options={kinds} value={kind} onChange={value => { setSelectedResources([]); setKind(value); }} /></Flex>
@@ -145,7 +146,15 @@ export function InstanceResourcesSection({ instanceId, archived, active = true, 
           { title: 'Size (bytes)', dataIndex: 'byteLength', width: 125, align: 'right', render: (bytes: number) => bytes.toLocaleString() },
           { title: 'State', width: 130, render: (_, r) => <Flex align="center" gap={token.paddingXS} style={{ whiteSpace: 'nowrap' }}><Switch aria-label={`Enable ${origin} resource ${r.logicalPath}`} checked={r.enabled} disabled={!ready || archived} onChange={enabled => confirmAction(modal, { title: `${enabled ? 'Enable' : 'Disable'} resource?`, content: r.dependencies.length && !enabled ? `Enabled Skills depend on this file: ${r.dependencies.join(', ')}. Disable those Skills first.` : 'Applies to the next new Run. Current Runs retain their original content.', okText: enabled ? 'Enable resource' : 'Disable resource', onOk: () => mutate(() => toggleInstanceResource(instanceId, catalog, r, enabled)) })} /><Typography.Text>{r.enabled ? 'Enabled' : 'Disabled'}</Typography.Text></Flex> },
           { title: 'Enablement source', width: 200, render: (_, r) => <Flex align="center" gap={token.paddingXS}><Typography.Text type="secondary">{origin === 'Instance' ? 'Instance-owned' : r.enabledOverride === null ? 'Definition default' : 'Instance override'}</Typography.Text>{origin === 'Definition' && r.enabledOverride !== null && <Tooltip title="Reset to Definition default"><Button aria-label="Reset to Definition default" icon={<UndoOutlined />} disabled={!ready || archived} onClick={() => void mutate(() => toggleInstanceResource(instanceId, catalog, r, null))} /></Tooltip>}</Flex> },
-          { title: 'Actions', width: 350, render: (_, r) => <Flex className="admin-table-actions" gap={token.paddingXS}><Button disabled={!ready} onClick={() => open(r, true)}>Inspect</Button><Button disabled={!ready} onClick={() => void downloadInstanceResource(instanceId, r).catch(e => setError(describeAdminError(e, 'Download failed. Retry.').message))}>Download</Button>{origin === 'Definition' && <Button disabled={archived || !ready} onClick={() => confirmAction(modal, { title: 'Copy to this Instance?', content: 'Creates an independent file with source provenance. The inherited original stays enabled. Changes to it will not update the copy.', okText: 'Copy resource', onOk: () => mutate(() => copyInstanceResource(instanceId, catalog, r)) })}>Copy to Instance</Button>}{origin === 'Instance' && <><Button disabled={archived || !ready} onClick={() => open(r)}>Edit</Button><Button danger disabled={archived || !ready} onClick={() => confirmAction(modal, { title: 'Delete Instance resource?', content: 'Removes this file from future Runs. Admitted Runs retain their immutable content.', okText: 'Delete resource', danger: true, onOk: () => mutate(() => deleteInstanceResource(instanceId, catalog, r)) })}>Delete</Button></>}</Flex> }
+          { title: 'Actions', width: 160, render: (_, r) => <Flex className="admin-table-actions" gap={token.paddingXS}>
+            <Tooltip title="Inspect"><Button icon={<EyeOutlined aria-hidden />} aria-label="Inspect" disabled={!ready} onClick={() => open(r, true)} /></Tooltip>
+            <Tooltip title="Download"><Button icon={<DownloadOutlined aria-hidden />} aria-label="Download" disabled={!ready} onClick={() => void downloadInstanceResource(instanceId, r).catch(e => setError(describeAdminError(e, 'Download failed. Retry.').message))} /></Tooltip>
+            <Dropdown trigger={['click']} menu={{ items: origin === 'Definition' ? [{ key: 'copy', icon: <CopyOutlined aria-hidden />, label: 'Copy to Instance', disabled: archived || !ready }] : [{ key: 'edit', icon: <EditOutlined aria-hidden />, label: 'Edit', disabled: archived || !ready }, { key: 'delete', icon: <DeleteOutlined aria-hidden />, label: 'Delete', danger: true, disabled: archived || !ready }], onClick: ({ key }) => {
+              if (key === 'edit') open(r, false, menuOpener.current ?? undefined);
+              else if (key === 'copy') confirmAction(modal, { title: 'Copy to this Instance?', content: 'Creates an independent file with source provenance. The inherited original stays enabled. Changes to it will not update the copy.', okText: 'Copy resource', afterClose: () => (menuOpener.current?.isConnected ? menuOpener.current : createOpener.current)?.focus(), onOk: () => mutate(() => copyInstanceResource(instanceId, catalog, r)) });
+              else confirmAction(modal, { title: 'Delete Instance resource?', content: 'Removes this file from future Runs. Admitted Runs retain their immutable content.', okText: 'Delete resource', danger: true, afterClose: () => (menuOpener.current?.isConnected ? menuOpener.current : createOpener.current)?.focus(), onOk: () => mutate(() => deleteInstanceResource(instanceId, catalog, r)) });
+            } }}><Button icon={<MoreOutlined aria-hidden />} aria-label={`More actions for ${origin} resource ${r.logicalPath}`} disabled={!ready} onClick={event => { menuOpener.current = event.currentTarget; }} /></Dropdown>
+          </Flex> }
          ]} /></AgentConfigurationPanel>)}
     </>}
     <Drawer styles={{ body: { padding: token.padding }, footer: { padding: token.padding }, wrapper: { maxWidth: "100vw" } }} title={editor?.readOnly ? 'Resource details' : editor?.resource ? 'Edit Instance resource' : 'Add Instance resources'} open={!!editor && active} size={compact ? '100%' : editor?.resource || editor?.readOnly ? 640 : 880} onClose={() => { if (!busy) { previewEpoch.current++; setEditor(null); } }} afterOpenChange={open => { drawerVisible.current = open; if (!open && opener.current?.isConnected) opener.current.focus(); }} footer={editor && !editor.readOnly ? <Flex vertical gap={token.paddingXS}>

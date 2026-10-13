@@ -794,7 +794,7 @@ function DefinitionCandidateForm({
               )
             },
           ].filter(item => !page || draftSettingGroups[page]?.includes(item.key)).map(item => ({ ...item, label: <span id={item.key} tabIndex={-1} className="admin-settings-anchor">{item.label}</span> }))} />
-          {(!page || page === "models") && <DefinitionExecutionBudgets candidate={candidate} busy={busy} readOnly={readOnly} onChange={onCandidateChange} />}
+          {(!page || page === "execution") && <DefinitionExecutionBudgets candidate={candidate} busy={busy} readOnly={readOnly} onChange={onCandidateChange} />}
         </Flex>
       }
     />

@@ -151,6 +151,7 @@ test("P8.5 sends one intermediate message, loads the missed skill, and keeps one
 
   await page.goto(`/admin/instances/${instance.instanceId}/profile`);
   const lifecycle = page.getByRole("region", { name: "Lifecycle controls" });
+  await navigateAdmin(page, "Lifecycle");
   await lifecycle.getByRole("button", { name: "Archive instance" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByText("Instance archived.")).toBeVisible({ timeout: 15_000 });

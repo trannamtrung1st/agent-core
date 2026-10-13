@@ -10,7 +10,7 @@ test('Shared Admin panels keep aligned insets and usable actions across viewport
   await page.getByRole('combobox', { name: 'Definition', exact: true }).click();
   await page.locator('.ant-select-item-option').filter({ hasText: 'General Assistant · general-assistant' }).click();
   await page.getByRole('button', { name: 'Create instance', exact: true }).click();
-  await navigateAdmin(page, 'Profile & version');
+  await navigateAdmin(page, 'Profile');
   await expect(page.getByLabel('Persona name', { exact: true })).toBeVisible();
   async function selectTab(name: string) { await navigateAdmin(page, name); }
 

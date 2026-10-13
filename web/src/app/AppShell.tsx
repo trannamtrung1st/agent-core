@@ -21,6 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     "--ac-color-border": token.colorBorderSecondary,
     "--ac-color-fill": token.colorFillTertiary,
     "--ac-color-bubble": token.colorFillSecondary,
+    "--ac-space-tight": `${token.paddingXXS}px`,
     "--ac-space-compact": `${token.paddingXS}px`,
     "--ac-space-default": `${token.paddingSM}px`,
     "--ac-space-section": `${token.padding}px`,

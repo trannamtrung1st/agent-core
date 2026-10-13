@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Breadcrumb, Button, Drawer, Empty, Flex, Input, Layout, Modal, Typography, theme } from 'antd';
+import { Breadcrumb, Button, Drawer, Empty, Flex, Input, Layout, Modal, Divider, Typography, theme } from 'antd';
 import { ArrowLeftOutlined, MenuOutlined, MessageOutlined, SearchOutlined } from '@ant-design/icons';
+import { AdminNavigationIcon } from './AdminNavigationIcon';
 import { followAppLink } from '../../app/appLink';
 import { adminDefinitionPath, adminDraftPath, adminHomePath, adminInstancePath, lastChatUrl, type AdminRoute } from '../../app/appRoute';
 import { AdminDraftStatus } from './AdminDraftStatus';
@@ -18,6 +19,7 @@ export function adminPage(route: AdminRoute): NavigationPage | undefined {
 }
 
 export function AdminShell({ route, ownerName, headingActions, headingMetadata, children }: { route: AdminRoute; ownerName?: string; headingActions?: ReactNode; headingMetadata?: ReactNode; children: ReactNode }) {
+  const { token } = theme.useToken();
   // The Admin navigation contract uses 1024px; AntD's default lg begins at 992px.
   const [desktop, setDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   useEffect(() => {
@@ -63,12 +65,11 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
   const nav = <nav aria-label="Admin navigation" className="admin-navigation">
     {scoped && <a className="admin-nav-back" href={adminHomePath(collection)} onClick={followAppLink}><ArrowLeftOutlined aria-hidden /> Back to {collection === 'instances' ? 'Instances' : 'Definitions'}</a>}
     {scoped && <Typography.Text strong className="admin-nav-owner" title={owner}>{owner}</Typography.Text>}
-    {route.view === 'draft' && <a className="admin-nav-back" href={adminDefinitionPath(route.definitionId, 'drafts')} onClick={followAppLink}>Back to drafts</a>}
+    {route.view === 'draft' && <a className="admin-nav-back" href={adminDefinitionPath(route.definitionId, 'drafts')} onClick={followAppLink}><ArrowLeftOutlined aria-hidden /> Back to drafts</a>}
     {[...new Set(items.map(p => p.group))].map(group => <div className="admin-nav-group" key={group}>
       {group && <Typography.Text type="secondary" className="admin-nav-group-title">{group}</Typography.Text>}
-      {items.filter(p => p.group === group).map(p => <a key={p.id} href={p.href} aria-label={p.label} aria-description={dirtyPages.includes(p.id) ? "Unsaved changes" : undefined} aria-current={active?.id === p.id ? 'page' : undefined} className="admin-nav-link" onClick={event => { followAppLink(event); if (event.defaultPrevented) { menuNavigation.current = true; setMenuOpen(false); } }}>{p.label}{dirtyPages.includes(p.id) && <span className="admin-nav-unsaved" aria-hidden="true"> · Unsaved</span>}</a>)}
+      {items.filter(p => p.group === group).map(p => <a key={p.id} href={p.href} aria-label={p.label} aria-description={dirtyPages.includes(p.id) ? "Unsaved changes" : undefined} aria-current={active?.id === p.id ? 'page' : undefined} className="admin-nav-link" onClick={event => { followAppLink(event); if (event.defaultPrevented) { menuNavigation.current = true; setMenuOpen(false); } }}><AdminNavigationIcon id={p.id} /><span>{p.label}</span>{dirtyPages.includes(p.id) && <span className="admin-nav-unsaved" aria-hidden="true"> · Unsaved</span>}</a>)}
     </div>)}
-    {scoped && <a className="admin-nav-back" href={adminHomePath('credentials')} onClick={followAppLink}>Global integrations & platform</a>}
   </nav>;
   const fieldResults = route.view === 'instance' || route.view === 'draft' ? settingSearch.filter(p => route.view === 'instance' ? !('draftOnly' in p) : !('instanceOnly' in p)).map(p => ({
     id: `setting:${p.label}`, label: p.label, description: 'Setting · ' + (route.view === 'instance' ? instancePages.find(item => item.id === p.page)?.label : draftPages.find(item => item.id === ('draftPage' in p ? p.draftPage : p.page))?.label), aliases: p.aliases, scope: 'owner' as const,
@@ -87,9 +88,8 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
     <Layout.Header className="admin-header">
       <Flex align="center" wrap gap="var(--ac-space-compact)" className="admin-header-inner">
         {!desktop && <Button icon={<MenuOutlined aria-hidden />} aria-label="Open Admin navigation" onClick={e => { opener.current = e.currentTarget; menuNavigation.current = false; setMenuOpen(true); }} />}
-        <Typography.Title level={3} className="admin-title">Admin</Typography.Title>
+        <Flex align="center" gap="var(--ac-space-compact)" className="admin-brand"><Typography.Title level={3} className="admin-title">Agent Core</Typography.Title><Typography.Text type="secondary" className="admin-brand-area" style={{ fontSize: token.fontSizeSM }}>Admin</Typography.Text></Flex><Divider orientation="vertical" className="admin-brand-divider" />
         <Breadcrumb aria-label="Admin breadcrumb" className={`admin-breadcrumbs${scoped ? ' admin-breadcrumbs-scoped' : ''}`} items={[
-          { title: <a href={adminHomePath()} onClick={followAppLink}>Admin</a> },
           ...(scoped ? [{ title: <a href={adminHomePath(collection)} onClick={followAppLink}>{collection === 'instances' ? 'Instances' : 'Definitions'}</a> }, { title: <span className="admin-breadcrumb-owner" title={owner}>{owner}</span> }] : []),
           ...(route.view === 'draft' ? [{ title: `Draft ${route.draftId.slice(0, 8)}` }] : []),
           { title: active?.label ?? 'Page not found' },

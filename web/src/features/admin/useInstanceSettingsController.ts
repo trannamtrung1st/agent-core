@@ -7,12 +7,12 @@ export const emptyDraft = (): SettingsDraft => ({ set: {}, clear: [] });
 /** Exact-owner reads and independent sparse section drafts; pages only select presentation. */
 export function useInstanceSettingsController(instanceId: string, archived: boolean, active: boolean, onUpdated: () => void) {
   const [sections, setSections] = useState<SettingsSection[] | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, SettingsDraft>>({}); const [customized, setCustomized] = useState<Record<string, boolean>>({});
+  const [drafts, setDrafts] = useState<Record<string, SettingsDraft>>({});
   const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [models, setModels] = useState<{ key: string; displayName: string; supportedReasoningEfforts: string[] }[]>([]);
   const [defaultModelKey, setDefaultModelKey] = useState<string | null>(null);
   const epoch = useRef(0); const saving = useRef(false); const owner = useRef(instanceId); owner.current = instanceId;
-  useEffect(() => { epoch.current++; saving.current = false; setSections(null); setDrafts({}); setCustomized({}); setError(null); setBusy(false); return () => { epoch.current++; }; }, [instanceId]);
+  useEffect(() => { epoch.current++; saving.current = false; setSections(null); setDrafts({}); setError(null); setBusy(false); return () => { epoch.current++; }; }, [instanceId]);
   const reload = useCallback(async () => {
     const request = ++epoch.current; setLoading(true); setError(null); setSections(null);
     try { const result = await listInstanceSettings(instanceId); if (owner.current === instanceId && request === epoch.current) setSections(result); }
@@ -42,7 +42,6 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
       if (request !== epoch.current || owner.current !== instanceId) return;
       committed = true;
       setDrafts(current => ({ ...current, [section.section]: emptyDraft() }));
-      if (reset) setCustomized(current => ({ ...current, [section.section]: false }));
       onUpdated();
       // Resolving one section can also change another (for example Voice disables speech aliases).
       setSections(null); setLoading(true);
@@ -53,5 +52,28 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
       : describeAdminError(e, 'Settings could not be saved. Reload while retaining your draft.').message); }
     finally { if (request === epoch.current) { saving.current = false; setBusy(false); setLoading(false); } }
   }
-  return { sections, drafts, setDrafts, customized, setCustomized, loading, busy, error, models, defaultModelKey, reload, change, inherit, save };
+  async function saveAll(expectedRevision: number): Promise<number> {
+    if (archived || saving.current || !sections) throw new Error('Read current settings before saving.');
+    const pending = sections.filter(section => { const draft = drafts[section.section]; return draft && (Object.keys(draft.set).length || draft.clear.length); });
+    const request = epoch.current; let nextRevision = expectedRevision; let committed = 0;
+    saving.current = true; setBusy(true); setError(null);
+    try {
+      for (const section of pending) {
+        const draft = drafts[section.section];
+        const updated = await patchInstanceSettings(instanceId, { ...section, instanceRevision: nextRevision }, draft.set, draft.clear);
+        if (request !== epoch.current || owner.current !== instanceId) throw new Error('The Instance owner changed.');
+        nextRevision = updated.instanceRevision; committed++;
+        setDrafts(current => ({ ...current, [section.section]: emptyDraft() }));
+      }
+      setSections(null); setLoading(true);
+      const refreshed = await listInstanceSettings(instanceId);
+      if (request === epoch.current && owner.current === instanceId) setSections(refreshed);
+      return nextRevision;
+    } catch (reason) {
+      const message = `${committed ? `${committed} settings section(s) were saved. ` : ''}${describeAdminError(reason, 'Settings could not be saved.').message} Refresh settings; uncommitted edits are retained.`;
+      if (request === epoch.current) setError(message);
+      throw new Error(message);
+    } finally { if (request === epoch.current) { saving.current = false; setBusy(false); setLoading(false); } }
+  }
+  return { sections, drafts, setDrafts, loading, busy, error, models, defaultModelKey, reload, change, inherit, save, saveAll };
 }

@@ -637,14 +637,14 @@ describe("AdminApp", () => {
       expect(screen.getByRole("link", { name: /Draft rev 2/ })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("link", { name: /Draft rev 2/ }));
-    await screen.findByRole("link", { name: "Instructions & behavior" });
+    await screen.findByRole("link", { name: "Instructions" });
     const draftTabs = within(screen.getByRole("navigation", { name: "Admin navigation" }));
-    const identityTab = draftTabs.getByRole("link", { name: "Instructions & behavior" });
+    const identityTab = draftTabs.getByRole("link", { name: "Instructions" });
     const publishTab = draftTabs.getByRole("link", { name: "Test & Publish" });
     const actions = within(document.querySelector(".admin-draft-actions")! as HTMLElement);
     const save = actions.getByRole("button", { name: "Save draft" });
     const publish = actions.getByRole("button", { name: "Publish…" });
-    fireEvent.click(screen.getByRole("link", { name: "Instructions & behavior" }));
+    fireEvent.click(screen.getByRole("link", { name: "Instructions" }));
     expandSection("Operating instructions");
     await waitFor(() => expect(screen.getByLabelText("System instructions")).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("System instructions"), {
@@ -758,11 +758,11 @@ describe("AdminApp", () => {
       expect(screen.getByRole("link", { name: /Draft rev 1/ })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("link", { name: /Draft rev 1/ }));
-    await screen.findByRole("link", { name: "Instructions & behavior" });
+    await screen.findByRole("link", { name: "Instructions" });
     const draftTabs = within(screen.getByRole("navigation", { name: "Admin navigation" }));
-    const identityTab = draftTabs.getByRole("link", { name: "Instructions & behavior" });
+    const identityTab = draftTabs.getByRole("link", { name: "Instructions" });
     const resourcesTab = draftTabs.getByRole("link", { name: "Skills" });
-    fireEvent.click(screen.getByRole("link", { name: "Instructions & behavior" }));
+    fireEvent.click(screen.getByRole("link", { name: "Instructions" }));
     expandSection("Operating instructions");
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
@@ -1420,12 +1420,13 @@ describe("AdminApp", () => {
     });
 
     fireEvent.change(screen.getByLabelText("Persona role"), { target: { value: "Coach" } });
-    const archiveButton = screen.getByRole("button", { name: "Archive instance" });
+    fireEvent.click(screen.getByRole("link", { name: "Lifecycle" }));
+    const archiveButton = await screen.findByRole("button", { name: "Archive instance" });
     fireEvent.click(archiveButton);
 
     await waitFor(
       () => {
-        expect(screen.getByText("Unsaved persona edits stay in this editor across lifecycle and version changes until you save or leave this instance.")).toBeInTheDocument();
+        expect(screen.getByText("Unsaved changes retained in this Instance")).toBeInTheDocument();
       },
       { timeout: 10_000 }
     );
@@ -1569,15 +1570,16 @@ describe("AdminApp", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Deprecate publication v2" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "More actions for publication v2" })).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: "Start managed chat for v2" })).toHaveTextContent("Chat");
+    expect(screen.getByRole("button", { name: "Start managed chat for v2" })).toHaveAccessibleName("Start managed chat for v2");
     const versionRow = screen.getByRole("button", { name: "View v2 (durable)" }).closest("tr")!;
     expect(within(versionRow).getByText("Durable")).toBeInTheDocument();
     expect(within(versionRow).getByText("Published")).toBeInTheDocument();
 
     const inventoryCallsBefore = vi.mocked(listAdminDefinitions).mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "Deprecate publication v2" }));
+    fireEvent.click(screen.getByRole("button", { name: "More actions for publication v2" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Deprecate publication" }));
     const deprecateDialog = await screen.findByRole("dialog");
     expect(deprecateDialog).toHaveTextContent("Deprecate publication v2?");
     fireEvent.click(within(deprecateDialog).getByRole("button", { name: /^Deprecate$/ }));
@@ -1641,7 +1643,8 @@ describe("AdminApp", () => {
     fireEvent.change(screen.getByLabelText("Persona JSON"), {
       target: { value: '{"name":"Alex","role":"Coach","description":"Practice speaking.","tone":"Supportive"}' }
     });
-    fireEvent.mouseDown(screen.getByLabelText("Target definition version"));
+    fireEvent.click(screen.getByRole("link", { name: "Definition version" }));
+    fireEvent.mouseDown(await screen.findByLabelText("Target definition version"));
     await waitFor(() => {
       expect(screen.getByText("v2 (builtIn · published)")).toBeInTheDocument();
     });
@@ -1901,8 +1904,8 @@ describe("AdminApp", () => {
       render(<AdminApp route={{ area: "admin", view: "draft", definitionId: "field-guide", draftId, page: "behavior" }} />);
     });
 
-    await screen.findByRole("link", { name: "Instructions & behavior" });
-    fireEvent.click(screen.getByRole("link", { name: "Instructions & behavior" }));
+    await screen.findByRole("link", { name: "Instructions" });
+    fireEvent.click(screen.getByRole("link", { name: "Instructions" }));
     expandSection("Operating instructions");
     await waitFor(() => {
       expect(screen.getByLabelText("System instructions")).toHaveValue("Stored starter instructions");

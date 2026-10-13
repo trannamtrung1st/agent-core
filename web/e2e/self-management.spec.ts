@@ -25,11 +25,9 @@ test('Admin enable, bounded save, exact rejection and approval, next Run readbac
   const panel=page.getByRole('region',{name:'Agent self-management',exact:true});
   await expect(panel).toContainText('Definition defaults');
   await select(page,'Self-management mode','Managed');
-  await panel.getByRole('button',{name:'Customize areas'}).click();
   for(const area of ['Settings','Skills','Resources'])await panel.getByRole('checkbox',{name:area,exact:true}).check();
-  await panel.getByRole('button',{name:'Customize automatic changes'}).click();
   await panel.getByRole('checkbox',{name:'Conversation preferences',exact:true}).check();
-  await panel.getByRole('button',{name:'Save self-management'}).click();await expect(panel).toContainText('policy revision 2');
+  await page.getByRole('button', {name:'Save configuration'}).click();await expect(panel).toContainText('policy revision 2');
   await page.locator('.admin-header').getByRole('link',{name:/Chat$/}).first().click();await select(page,'Identity',name,true);
   await send(page,'Always answer briefly.');await expect(page.getByText('Saved for my next Run. The current Run remains unchanged.',{exact:true}).last()).toBeVisible();
   const chat=page.url();
@@ -77,8 +75,8 @@ test('approval continues a diagnosed task automatically in exactly one fresh Run
   const id=new URL(page.url()).pathname.split('/')[3];
   await page.goto('/admin/instances/'+id+'/self-management');
   const panel=page.getByRole('region',{name:'Agent self-management',exact:true});
-  await select(page,'Self-management mode','Assisted');await panel.getByRole('button',{name:'Customize areas'}).click();
-  await panel.getByRole('checkbox',{name:'Settings',exact:true}).check();await panel.getByRole('button',{name:'Save self-management'}).click();
+  await select(page,'Self-management mode','Assisted');
+  await panel.getByRole('checkbox',{name:'Settings',exact:true}).check();await page.getByRole('button', {name:'Save configuration'}).click();
   await expect(panel).toContainText('policy revision 2');
   // Fixture setup: narrow one ordinary capability while retaining Definition authority.
   await page.evaluate(async id=>{

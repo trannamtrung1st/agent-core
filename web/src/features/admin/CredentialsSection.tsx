@@ -3,8 +3,8 @@ import { EmailConnectionTag, GmailConnectionPanel } from "./GmailConnectionPanel
 import { EmailAccountDialog } from "./EmailAccountDialog";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, Modal, Select, Spin, Table, Tag, Typography, theme } from "antd";
-import { MinusCircleOutlined, PlusOutlined } from "@ant-design/icons";
+import { Alert, App, Button, Descriptions, Dropdown, Empty, Flex, Form, Input, Modal, Select, Spin, Table, Tag, Tooltip, Typography, theme } from "antd";
+import { MinusCircleOutlined, PlusOutlined, EditOutlined, KeyOutlined, DeleteOutlined, MoreOutlined, DisconnectOutlined } from "@ant-design/icons";
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
 import { confirmAction } from "../../app/confirmAction";
 import { adminHomePath } from "../../app/appRoute";
@@ -116,6 +116,7 @@ function ProtectedValueField({ email = false }: { email?: boolean }) {
 
 export function CredentialsSection() {
   const { token } = theme.useToken(); const { modal, message } = App.useApp();
+  const menuOpener = useRef<HTMLElement | null>(null); const credentialOpener = useRef<HTMLElement | null>(null); const createOpener = useRef<HTMLButtonElement | null>(null);
   const emailTrigger = useRef<HTMLElement | null>(null); const emailTriggerAccount = useRef<string | undefined>(undefined); const addEmailTrigger = useRef<HTMLButtonElement | null>(null);
   const [emailDialog, setEmailDialog] = useState<{ account?: SystemCredential }>();
   const [statusFilter, setStatusFilter] = useState("All");
@@ -136,7 +137,8 @@ export function CredentialsSection() {
       metadata: Object.entries(item.metadata).map(([key, value]) => ({ key, value })), origins: item.allowedOrigins.join("\n") }
       : { kind: "Password", status: "Active", metadata: [], origins: "" });
   }, [dialog, form]);
-  function open(kind: "create" | "edit" | "replace", item?: SystemCredential) {
+  function open(kind: "create" | "edit" | "replace", item?: SystemCredential, trigger?: HTMLElement) {
+    credentialOpener.current = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setDialogError(undefined); setDialog({ kind, item });
   }
   function close() { form.resetFields(); setDialog(undefined); setDialogError(undefined); }
@@ -162,7 +164,7 @@ export function CredentialsSection() {
   }
   return <AgentConfigurationPanel title="System credentials" label="System credentials"
     description="Reusable protected values. Agents receive access through explicit bindings; bindings do not grant tools."
-    extra={<Flex gap={token.paddingXS} wrap><Button disabled={busy || loading || !loaded} ref={addEmailTrigger} onClick={event => openEmail(undefined, event.currentTarget)}>Add email account</Button><Button type="primary" disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button></Flex>} bodyGap="default">
+    extra={<Flex gap={token.paddingXS} wrap><Button disabled={busy || loading || !loaded} ref={addEmailTrigger} onClick={event => openEmail(undefined, event.currentTarget)}>Add email account</Button><Button type="primary" ref={createOpener} disabled={busy || loading || !loaded} onClick={() => open("create")}>Create credential</Button></Flex>} bodyGap="default">
     {error && <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void load()}>Retry</Button>} />}
     {loading ? <Spin aria-label="Loading credentials" /> : loaded && <>
       <AdminCollectionToolbar label="credentials" value={search} onChange={setSearch} filters={<Select aria-label="Credential status filter" value={statusFilter} onChange={value => { setStatusFilter(value); setSearch(search); }} options={[{ value: "All", label: "All statuses" }, { value: "Active", label: "Active" }, { value: "Disabled", label: "Disabled" }]} />} />
@@ -176,15 +178,17 @@ export function CredentialsSection() {
           { title: "Metadata & origins", width: 280, render: (_, c) => <CredentialPolicySummary credential={c} /> },
           { title: "Bindings", dataIndex: "bindingCount", width: 80, align: "right" },
           { title: "Updated", width: 180, render: (_, c) => <time dateTime={c.updatedAtUtc}>{new Date(c.updatedAtUtc).toLocaleString()}</time> },
-          { title: "Actions", width: 300, render: (_, c) => <Flex className="admin-table-actions" gap={token.paddingXS}>
-            <Button data-email-account-trigger={c.credentialId} disabled={busy} onClick={event => c.purpose === "EmailAccount" ? openEmail(c, event.currentTarget) : open("edit", c)}>Edit</Button>{c.emailAccount?.preset !== "Gmail" && <Button disabled={busy} onClick={() => open("replace", c)}>Replace value</Button>}
-            <Button danger disabled={busy || c.bindingCount > 0} onClick={() => confirmAction(modal, { title: `Delete ${c.displayName}?`, content: "This permanently removes the credential. Unbind all agents first.", okText: "Delete credential", danger: true, onOk: () => remove(c) })}>Delete</Button>
+          { title: "Actions", width: 112, render: (_, c) => <Flex className="admin-table-actions" gap={token.paddingXS}>
+            <Tooltip title="Edit"><Button icon={<EditOutlined aria-hidden />} aria-label="Edit" data-email-account-trigger={c.credentialId} disabled={busy} onClick={event => c.purpose === "EmailAccount" ? openEmail(c, event.currentTarget) : open("edit", c)} /></Tooltip>
+            <Dropdown trigger={['click']} menu={{ items: [ ...(c.emailAccount?.preset !== 'Gmail' ? [{ key: 'replace', label: 'Replace value', icon: <KeyOutlined aria-hidden />, disabled: busy }] : []), { key: 'delete', label: 'Delete', icon: <DeleteOutlined aria-hidden />, danger: true, disabled: busy || c.bindingCount > 0 } ], onClick: ({ key }) => {
+              if (key === 'replace') open('replace', c, menuOpener.current ?? undefined); else confirmAction(modal, { title: `Delete ${c.displayName}?`, content: "This permanently removes the credential. Unbind all agents first.", okText: "Delete credential", danger: true, afterClose: () => (menuOpener.current?.isConnected ? menuOpener.current : createOpener.current)?.focus(), onOk: () => remove(c) });
+            } }}><Button icon={<MoreOutlined aria-hidden />} aria-label={`More actions for ${c.displayName}`} disabled={busy} onClick={event => { menuOpener.current = event.currentTarget; }} /></Dropdown>
           </Flex> }
         ]} />
     </>}
     <EmailAccountDialog open={!!emailDialog} account={emailDialog?.account} onClose={() => setEmailDialog(undefined)} onClosed={() => (emailTrigger.current?.isConnected ? emailTrigger.current : emailTriggerAccount.current ? document.querySelector<HTMLButtonElement>(`button[data-email-account-trigger="${emailTriggerAccount.current}"]`) ?? addEmailTrigger.current : addEmailTrigger.current)?.focus()} onSaved={load} />
     <Modal className="admin-credential-dialog" centered width={dialog?.kind === "replace" ? 520 : 640} open={!!dialog} title={dialog?.kind === "create" ? "Create credential" : dialog?.kind === "replace" ? "Replace protected value" : "Edit credential"}
-      onCancel={close} onOk={() => void save().catch(() => {})} confirmLoading={busy} closable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }} okText="Save credential" okButtonProps={{ disabled: busy, "aria-label": "Save credential" }} mask={{ closable: false }} forceRender>
+      focusable={{ trap: !!dialog, focusTriggerAfterClose: false }} afterClose={() => (credentialOpener.current?.isConnected ? credentialOpener.current : createOpener.current)?.focus()} onCancel={close} onOk={() => void save().catch(() => {})} confirmLoading={busy} closable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }} okText="Save credential" okButtonProps={{ disabled: busy, "aria-label": "Save credential" }} mask={{ closable: false }} forceRender>
       <Flex vertical gap={token.padding}>
       {dialog?.kind === "replace" && <Flex align="center" gap={token.paddingXS} wrap><Typography.Text strong style={{ overflowWrap: "anywhere" }}>{dialog.item?.displayName}</Typography.Text><Tag>{dialog.item?.kind}</Tag></Flex>}
       {dialogError && <Alert type="error" showIcon title={<AdminErrorNotice message={dialogError.message} diagnosticId={dialogError.diagnosticId} showDetailsLabel />} />}
@@ -214,7 +218,7 @@ export function InstanceCredentialsSection({ instanceId, revision, archived, onU
     finally { setBusy(false); }
   }
   return <Flex vertical gap={token.padding}>
-    <AgentConfigurationPanel title="Credential bindings" label="Credential bindings"
+    <AgentConfigurationPanel title="Bound credentials" label="Credential bindings"
       extra={<Flex gap={token.paddingXS} wrap><Button href={adminHomePath("credentials")} onClick={followAppLink}>Manage system credentials</Button><Button type="primary" disabled={archived || busy || loading || !loaded} onClick={() => { setBindingError(undefined); setOpen(true); }}>Bind credential</Button></Flex>} bodyGap="default">
     {archived && <Alert type="info" title="Archived instance bindings are read-only and cannot be used." />}
     {error && <Alert type="error" title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} showIcon action={<Button onClick={() => void load()}>Retry</Button>} />}
@@ -227,7 +231,7 @@ export function InstanceCredentialsSection({ instanceId, revision, archived, onU
       { title: "Reference", dataIndex: "reference", width: 180, ellipsis: true, sorter: (a, b) => a.reference.localeCompare(b.reference) },
       { title: "Credential", width: 240, ellipsis: true, render: (_, b) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={b.credential.displayName}>{b.credential.displayName}</Typography.Text><Typography.Text type="secondary">{b.credential.kind} · {b.credential.status}</Typography.Text></Flex> },
       { title: "Metadata & origins", width: 320, render: (_, b) => <CredentialPolicySummary credential={b.credential} /> },
-      { title: "Action", width: 130, render: (_, b) => <Button danger disabled={archived || busy} onClick={() => confirmAction(modal, { title: `Unbind ${b.reference}?`, content: "Removes only this agent's grant. Other bindings and browser sign-in remain.", okText: "Unbind", danger: true, onOk: () => mutate(() => unbindCredential(instanceId, b, revision)) })}>Unbind</Button> }
+      { title: "Action", width: 80, render: (_, b) => <Tooltip title="Unbind"><Button icon={<DisconnectOutlined aria-hidden />} aria-label="Unbind" danger disabled={archived || busy} onClick={() => confirmAction(modal, { title: `Unbind ${b.reference}?`, content: "Removes only this agent's grant. Other bindings and browser sign-in remain.", okText: "Unbind", danger: true, onOk: () => mutate(() => unbindCredential(instanceId, b, revision)) })} /></Tooltip> }
     ]} /></>}
     </AgentConfigurationPanel>
     <AgentConfigurationPanel title="Browser state" label="Browser state"

@@ -107,7 +107,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
   await json.fill(validJson);
   await expect(editor.getByRole("alert").filter({ hasText: "Advanced JSON is invalid" })).toHaveCount(0);
   await navigateAdmin(editor, "Identity & version");
-  await navigateAdmin(editor, "Instructions & behavior");
+  await navigateAdmin(editor, "Instructions");
   await navigateAdmin(editor, "Skills & resources");
   const skills = editor.getByRole("region", { name: "Skills", exact: true });
   await skills.getByRole("row").filter({ hasText: "Refund" }).getByRole("button", { name: "Details", exact: true }).click();
@@ -227,6 +227,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
 
   await page.goto(`/admin/instances/${instance.instanceId}/profile`);
   const lifecycle = page.getByRole("region", { name: "Lifecycle controls" });
+  await navigateAdmin(page, "Lifecycle");
   await lifecycle.getByRole("button", { name: "Archive instance" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
   await expect(page.getByText("Instance archived.")).toBeVisible({ timeout: 15_000 });

@@ -68,13 +68,13 @@ test('Instance imports retry remaining files, preserve folder paths and edit exa
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(openImport).toBeFocused();
 
-  await page.getByRole('row').filter({ hasText: 'references/two.txt' }).getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByRole('row').filter({ hasText: 'references/two.txt' }).getByRole('button', { name: /More actions/ }).click(); await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
   await page.getByLabel('Resource logical path').fill('references/renamed.txt');
   await dialog.getByRole('button', { name: 'Save resource', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   let renamed = (await catalog()).resources.find((resource: { logicalPath: string }) => resource.logicalPath === 'references/renamed.txt');
   expect(await (await page.request.get(root + '/resources/' + encodeURIComponent(renamed.key) + '/content', { headers })).text()).toBe('second exact bytes');
-  await page.getByRole('row').filter({ hasText: 'references/renamed.txt' }).getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByRole('row').filter({ hasText: 'references/renamed.txt' }).getByRole('button', { name: /More actions/ }).click(); await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
   const replacement = { name: 'replacement.md', mimeType: 'text/markdown', buffer: Buffer.from('replacement exact bytes') };
   await dialog.locator('input[type=file]').setInputFiles(replacement);
   await dialog.getByRole('button', { name: 'Keep current file', exact: true }).click();

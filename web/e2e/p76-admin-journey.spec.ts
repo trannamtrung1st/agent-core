@@ -152,11 +152,13 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
   await expect(page).toHaveURL(/\/admin\/instances\/[0-9a-f-]+\/overview$/i);
   await expect(page.getByRole("heading", { name: personaName })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(`${definitionId} · v1`)).toBeVisible();
-  await navigateAdmin(page, "Profile & version");
+  await navigateAdmin(page, "Profile");
+  await navigateAdmin(page, "Definition version");
   await expect(page.getByRole("region", { name: "Active version" })).toBeVisible();
   await expect(page.getByLabel("Target definition version")).toBeVisible();
 
   const lifecycle = page.getByRole("region", { name: "Lifecycle controls" });
+  await navigateAdmin(page, "Lifecycle");
   await expect(lifecycle.getByText("Active", { exact: true })).toBeVisible();
   await lifecycle.getByRole("button", { name: "Archive instance" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Archive", exact: true }).click();
