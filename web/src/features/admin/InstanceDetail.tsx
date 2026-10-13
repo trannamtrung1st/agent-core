@@ -7,7 +7,7 @@ import type { AutomationSelection, RunSource } from "../chat/runPresentation";
 import { useAdminDraftStatus } from './AdminDraftStatus';
 import { AdminRetryAction } from "./adminFailure";
 import { instancePages, instanceSettingGroups, type InstancePage } from './adminNavigation';
-import { AdminPageHeading } from './AdminShell';
+import { AdminOwnerHeading, AdminPageHeading } from './AdminShell';
 import { AgentConfigurationPanel } from "./AgentConfigurationLayout";
 import { InstanceCredentialsSection } from "./CredentialsSection";
 import { InstanceExecutionBudgets } from './ExecutionBudgetsSection';
@@ -87,13 +87,10 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
   }, [resolved?.instanceLifecycle, instanceId, page]);
   useAdminAnchor(page, effective.kind === 'ready');
   return <Flex vertical gap={token.padding}>
-    <div className="admin-definition-heading admin-instance-heading">
-      <Typography.Title level={3}>{resolved?.persona.name ?? row?.personaName ?? 'Agent Instance'}</Typography.Title>
-      <Typography.Text>{resolved ? `${resolved.definitionId} · v${resolved.definitionVersion}` : row ? `${row.definitionId} · v${row.activeVersion}` : null}</Typography.Text>
-      <Typography.Text type="secondary" className="admin-instance-id">Instance {instanceId}</Typography.Text>
-      {resolved && <InstanceIdentityTags lifecycle={resolved.instanceLifecycle} definitionStatus={resolved.definitionStatus} />}
-      {dirty && <Typography.Text type="warning" aria-live="polite">Unsaved changes retained in this Instance</Typography.Text>}
-    </div>
+    <AdminOwnerHeading name={resolved?.persona.name ?? row?.personaName ?? 'Agent Instance'}
+      metadata={<><Typography.Text type="secondary">{resolved ? `${resolved.definitionId} · v${resolved.definitionVersion}` : row ? `${row.definitionId} · v${row.activeVersion}` : null}</Typography.Text><Typography.Text type="secondary" className="admin-instance-id" copyable={{ text: instanceId }}>Instance {instanceId}</Typography.Text></>}
+      status={resolved && <InstanceIdentityTags lifecycle={resolved.instanceLifecycle} definitionStatus={resolved.definitionStatus} />}
+      notice={dirty && <Typography.Text type="warning" aria-live="polite">Unsaved changes retained in this Instance</Typography.Text>} />
     <AdminPageHeading page={instancePages.find(item => item.id === page)} />
     {new URLSearchParams(window.location.search).get('notice') === 'archived-automations' && <Alert type="info" showIcon title="Automations are unavailable for this archived Instance" description="Unarchive from Profile & version before enabling or executing work." />}
     {effective.kind === 'loading' && <Spin aria-label="Loading effective configuration" />}

@@ -29,7 +29,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
   useEffect(() => { onDirtyChange?.(dirtySections.length > 0); }, [dirtySections.join(','), onDirtyChange]);
   useEffect(() => { if (requested) setExpanded(current => [...new Set([...current, ...requested])]); }, [page]);
   return <Flex vertical gap={token.padding}>
-    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.</Typography.Paragraph>
+    <Typography.Paragraph type="secondary" className="admin-settings-intro" style={{ margin: 0 }}>Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.</Typography.Paragraph>
     <Button style={{ alignSelf: "flex-start" }} disabled={busy || loading} onClick={() => void reload()}>Reload settings</Button>
     {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => void reload()}>Retry settings</Button>} />}
     {loading && <Spin aria-label="Loading Instance settings" />}

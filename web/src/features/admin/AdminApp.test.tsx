@@ -316,7 +316,7 @@ describe("AdminApp", () => {
     expect(within(definitionRow).getAllByText("v1")).toHaveLength(2);
     expect(within(definitionRow).getByText("Published")).toBeInTheDocument();
     await act(async () => fireEvent.click(screen.getByRole("navigation", { name: "Admin navigation" }).querySelector<HTMLElement>('a[aria-label="Instances"]')!));
-    expect(await within(screen.getByRole("region", { name: "Instances" })).findByText("1 instance")).toBeInTheDocument();
+    expect(await screen.findByText("1 instance")).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Instances" })).getByText("v1")).toBeInTheDocument();
     expect(screen.queryByText("Compatibility", { exact: true })).not.toBeInTheDocument();
   });
@@ -353,7 +353,7 @@ describe("AdminApp", () => {
     expect(within(definitions).getAllByText("v2")).toHaveLength(2);
     expect(within(definitions).getByRole("columnheader", { name: "Versions" })).toBeInTheDocument();
     expect(within(definitions).getByText("2")).toBeInTheDocument();
-    expect(within(definitions).getByText("1 definition")).toBeInTheDocument();
+    expect(screen.getByText("1 definition")).toBeInTheDocument();
   });
 
   it("offers only published definitions when creating an instance", async () => {

@@ -2,6 +2,68 @@ import { navigateAdmin } from "./support/admin-navigation";
 import { openDefinitionSettings } from "./admin-draft-editor-helpers";
 import { expect, test } from "@playwright/test";
 
+test("Admin chrome keeps creation, scope, search and navigation usable at narrow widths", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => localStorage.getItem("agent-core.owner-capability"));
+  const headers = { "X-AgentCore-Owner-Capability": (await page.evaluate(() => localStorage.getItem("agent-core.owner-capability")))! };
+  const response = await page.request.post("/api/v2/admin/agent-instances", { headers, data: {
+    definitionId: "examiner", version: 1,
+    persona: { name: "Synthetic polish · A long configuration owner name for navigation", role: "UI review", description: "Disposable layout verification fixture", tone: "Clear" }
+  } });
+  expect(response.ok()).toBe(true);
+  const { instanceId } = await response.json();
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto("/admin/instances");
+  await expect(page.getByRole("heading", { name: "Instances", exact: true })).toHaveCount(1);
+  const create = page.getByRole("button", { name: "New instance", exact: true });
+  await create.click();
+  await page.getByRole("dialog", { name: "New instance", exact: true }).getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(create).toBeFocused();
+  await page.getByRole("textbox", { name: "Search instances", exact: true }).fill(instanceId);
+  await page.locator(`a[href="/admin/instances/${instanceId}/overview"]`).click();
+  await expect(page.getByRole("region", { name: "Instance overview", exact: true })).toBeVisible();
+  let sidebarInset = 0;
+  for (const width of [1440, 1024, 1023, 768, 767, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator(".admin-sidebar")).toHaveCount(width >= 1024 ? 1 : 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    if (width >= 1024) {
+      sidebarInset = await page.getByRole("navigation", { name: "Admin navigation", exact: true }).getByRole("link", { name: "Back to Instances", exact: true }).evaluate(element => element.getBoundingClientRect().left + parseFloat(getComputedStyle(element).paddingInlineStart));
+    } else {
+      const menu = page.getByRole("button", { name: "Open Admin navigation", exact: true });
+      await menu.click();
+      const drawer = page.getByRole("dialog", { name: "Admin navigation", exact: true });
+      await expect(drawer).toBeVisible();
+      await expect.poll(() => drawer.getByRole("link", { name: "Back to Instances", exact: true }).evaluate(element => element.getBoundingClientRect().left + parseFloat(getComputedStyle(element).paddingInlineStart))).toBe(sidebarInset);
+      await page.keyboard.press("Escape");
+      await expect(menu).toBeFocused();
+    }
+    if (width < 768) {
+      expect((await page.locator(".admin-header").boundingBox())!.height).toBeLessThan(112);
+      expect(await page.locator(".admin-title").evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+      expect((await page.locator(".admin-title").boundingBox())!.height).toBeLessThan(32);
+      for (const control of [page.getByRole("button", { name: "Search Admin", exact: true }), page.getByRole("link", { name: "Chat", exact: true }), page.getByRole("link", { name: "Return to last chat", exact: true })]) {
+        const bounds = (await control.boundingBox())!;
+        expect(bounds.x).toBeGreaterThanOrEqual(0);
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+        expect(bounds.height).toBeGreaterThanOrEqual(40);
+      }
+    }
+  }
+  await page.getByRole("button", { name: "Search Admin", exact: true }).click();
+  const search = page.getByRole("dialog", { name: "Search Admin", exact: true });
+  await expect(search.getByRole("region", { name: "Global Admin destinations", exact: true })).toBeVisible();
+  await search.getByRole("textbox", { name: "Search Admin destinations" }).fill("reasoning");
+  await expect(search.getByRole("region", { name: "Global Admin destinations", exact: true })).toBeHidden();
+  await search.getByRole("link", { name: /Interactive model & reasoning/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/instances/${instanceId}/models#modelDefaults$`));
+  await expect(page.locator("#modelDefaults")).toBeFocused();
+  await page.goto("/admin/not-a-real-page");
+  await expect(page.getByRole("heading", { name: "Page not found", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New definition", exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: "New instance", exact: true })).toBeHidden();
+});
+
 async function createInstance(page: import("@playwright/test").Page) {
   await page.goto("/admin/instances");
   await page.getByRole("button", { name: "New instance", exact: true }).click();

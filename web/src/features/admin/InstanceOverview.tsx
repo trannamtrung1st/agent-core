@@ -1,4 +1,4 @@
-import { Descriptions, Flex, Typography, theme } from 'antd';
+import { Button, Descriptions, Flex, Typography, theme } from 'antd';
 import type { AdminEffectiveConfiguration } from '../../services/adminApi';
 import { adminInstancePath } from '../../app/appRoute';
 import { followAppLink } from '../../app/appLink';
@@ -17,6 +17,13 @@ export function InstanceOverview({ config }: { config: AdminEffectiveConfigurati
       <Descriptions.Item label="Effective tools">{config.effectiveToolAllowlist.length} · constrained by Definition and Host</Descriptions.Item>
       <Descriptions.Item label="Workspace">Durable /home · temporary Session /working</Descriptions.Item>
     </Descriptions>
-    <Flex wrap gap={token.paddingSM}>{instancePages.filter(p => p.id !== 'overview').map(p => <a key={p.id} href={adminInstancePath(config.instanceId, p.id)} onClick={followAppLink}>{p.label}</a>)}</Flex>
+    <Flex vertical gap={token.paddingSM}>
+      {[...new Set(instancePages.filter(page => page.id !== 'overview').map(page => page.group))].map(group => <Flex vertical gap={token.paddingXS} key={group}>
+        <Typography.Text type="secondary">{group}</Typography.Text>
+        <Flex wrap gap={token.paddingXS} className="admin-overview-destinations" role="group" aria-label={`${group} destinations`}>
+          {instancePages.filter(page => page.group === group).map(page => <Button type="link" size="small" key={page.id} href={adminInstancePath(config.instanceId, page.id)} onClick={followAppLink} style={{ paddingInline: token.paddingXS }}>{page.label}</Button>)}
+        </Flex>
+      </Flex>)}
+    </Flex>
   </AgentConfigurationPanel>;
 }

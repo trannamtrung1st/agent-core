@@ -178,7 +178,7 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
 
   return (
     <>
-      <Button disabled={loading} onClick={openModal}>New instance</Button>
+      <Button type="primary" disabled={loading} onClick={openModal}>New instance</Button>
       <Modal
         title="New instance"
         open={open}
@@ -314,7 +314,6 @@ function personaFieldsReady(persona: AdminCreateInstancePersona) {
 
 export function InventorySection({
   title,
-  countLabel,
   emptyLabel,
   loading,
   error,
@@ -324,7 +323,6 @@ export function InventorySection({
   items
 }: {
   title: string;
-  countLabel: string | null;
   emptyLabel: string;
   loading: boolean;
   error: string | null;
@@ -357,10 +355,6 @@ export function InventorySection({
   );
   return (
     <section aria-label={title} className="admin-inventory-section">
-      <Flex align="baseline" wrap gap="var(--ac-space-compact)" className="admin-inventory-heading">
-        <Typography.Title level={4}>{title}</Typography.Title>
-        {countLabel ? <Typography.Text type="secondary">{countLabel}</Typography.Text> : null}
-      </Flex>
       {error ? <Alert type={unauthorized ? "warning" : "error"} showIcon title={error}
         action={<AdminRetryAction onRetry={onRetry} diagnosticId={diagnosticId} />}
         className="admin-inventory-alert" /> : null}

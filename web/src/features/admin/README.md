@@ -6,6 +6,8 @@ The [design guide](../../../../.agents/context/DESIGN.md) owns presentation guid
 
 `AgentConfigurationPanel` in [AgentConfigurationLayout.tsx](AgentConfigurationLayout.tsx) owns the section border, heading and body insets, heading-to-description gap, and optional body stack. It serves Definition authoring/inspection, Instance configuration, and global Events/Credentials.
 
+`AdminPageHeading` owns the current task title, adjacent inventory count and creation actions. `AdminOwnerHeading` in [AdminShell.tsx](AdminShell.tsx) owns the shared selected-owner name/status row and secondary identity metadata for Instance and Definition workspaces. Use its slots instead of creating another owner header. The shell owns the compact narrow header, breadcrumb truncation, navigation's single outer inset and grouped scoped/global Search results. Overview uses the registry's categories for its native link buttons.
+
 - Heading and body each own one 16px inset through the shell's resolved Ant Design spacing token.
 - The heading owns an 8px gap and wraps its title/action row.
 - Use `bodyGap="compact"`, `"default"`, or `"section"` for 8/12/16px between content siblings. Leave `bodyGap` unset for a single table or a form that already owns its layout.

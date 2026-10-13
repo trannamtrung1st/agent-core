@@ -140,7 +140,7 @@ export function EventsSection({ onChanged, onCreated, embedded = false, initialS
   const subscriptionHref = (instanceId: string, automationId: string) => `${adminInstancePath(instanceId, "automations")}?automation=${automationId}`;
   const eventHref = (source: EventSourceReference) => `${adminHomePath("events")}?${source.kind === "builtin" ? `builtin=${encodeURIComponent(source.key)}` : `event=${source.eventId}`}`;
   const nameError = /[\u0000-\u001f\u007f-\u009f]/.test(name) ? "Use a name without control characters." : null;
-  return <AgentConfigurationPanel title="Events" label="Events"
+  return <AgentConfigurationPanel title="Event catalog" label="Events"
     description="Browse read-only Built-in definitions and manage authenticated Webhook Events. Automations choose how each agent responds." bodyGap="section">
       {loading ? <Spin aria-label="Loading Events" /> : null}
       {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} />} action={<AdminRetryAction onRetry={() => void reload()} />} /> : null}

@@ -11,7 +11,7 @@ import { describeAdminError } from "./adminErrors";
 import { AdminRetryAction, showAdminFailure } from "./adminFailure";
 import { startManagedPublicationChat } from "./adminManagedChat";
 import { definitionPages, draftPages, type DraftPage } from './adminNavigation';
-import { AdminPageHeading } from './AdminShell';
+import { AdminOwnerHeading, AdminPageHeading } from './AdminShell';
 import { applyCandidateJson, automationNumberErrors, candidateForPersistence, candidateToJson, candidatesEqual, cloneCandidate, type DefinitionCandidate } from "./definitionCandidate";
 import { type DefinitionEditorView } from "./definitionCandidateEditor";
 import { type DefinitionDraftEvidenceHandle } from "./definitionDraftPublishGatePanel";
@@ -423,10 +423,8 @@ export function DefinitionDetail({
   return (
     <Flex vertical gap={16}>
       {group ? (
-        <div className="admin-definition-heading">
-          <Flex align="start" justify="space-between" gap={12} wrap="wrap">
-            <Flex vertical gap={8} className="admin-inventory-row-copy">
-              <Typography.Title level={2}>{group.logicalName}</Typography.Title>
+        <AdminOwnerHeading name={group.logicalName}
+          metadata={<>
               <Typography.Text type="secondary" className="admin-inventory-row-secondary">
                 {group.definitionId}
               </Typography.Text>
@@ -438,24 +436,22 @@ export function DefinitionDetail({
               <Typography.Text type="secondary" className="admin-inventory-row-description">
                 {formatDefinitionVersionSummary(group)}
               </Typography.Text>
-            </Flex>
-            {canDeleteDefinition ? (
+          </>}
+          extra={canDeleteDefinition ? (
               <Button danger disabled={busy} onClick={confirmDeleteDefinition}>
                 Delete definition
               </Button>
             ) : null}
-          </Flex>
-          <Flex gap={8} wrap="wrap">
+          status={<Flex gap={8} wrap="wrap">
             <Tag>{formatDefinitionInventoryCounts(group)}</Tag>
-            <Tag>{group.draftOnly ? "Draft" : formatInventoryStatus(group.latestStatus)}</Tag>
+            <Tag>{group.draftOnly ? "Draft" : `Latest: ${formatInventoryStatus(group.latestStatus)}`}</Tag>
             {!group.draftOnly && latestActiveVersion(group.versions) !== null
               && latestActiveVersion(group.versions) !== group.latestVersion ? (
                 <Tag color="blue">Latest active v{latestActiveVersion(group.versions)}</Tag>
               ) : null}
-          </Flex>
-        </div>
+          </Flex>} />
       ) : (
-        <Typography.Title level={4}>{definitionId}</Typography.Title>
+        <AdminOwnerHeading name={definitionId} />
       )}
       <AdminPageHeading page={draftId ? draftPages.find(page => page.id === draftPage) : definitionPages.find(page => page.id === (tab ?? "versions"))} />
       {definitions.kind === "loading" ? <Spin /> : null}

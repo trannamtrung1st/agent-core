@@ -16,6 +16,7 @@ test("Definition tabs keep draft creation compact and return to the draft list",
   await expect(page.getByRole("region", { name: "Definition versions", exact: true })).toBeHidden();
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator(".admin-sidebar")).toHaveCount(width >= 1024 ? 1 : 0);
     const selector = page.locator(".admin-draft-version-select");
     const fork = page.getByRole("button", { name: /Fork v/ });
     await expect(selector).toBeVisible();
