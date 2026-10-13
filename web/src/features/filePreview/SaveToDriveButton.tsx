@@ -321,7 +321,7 @@ function SaveDialog({
           is kept.
         </Typography.Text>
         {metadata && (
-          <Typography.Text ellipsis title={metadata.displayName}>
+          <Typography.Text className="single-line-ellipsis" title={metadata.displayName}>
             {metadata.displayName}
           </Typography.Text>
         )}

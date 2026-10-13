@@ -1,3 +1,4 @@
+import { waitForResponseSettled } from "./support/response-settled";
 import { navigateAdmin } from "./support/admin-navigation";
 import { isCanceledEmailAccountPoll } from './support/request-failures';
 import { expect, test, type Page } from '@playwright/test';
@@ -27,8 +28,12 @@ async function chat(page: Page, name: string) {
   await choose(page, 'Identity', name);
 }
 async function send(page: Page, text: string) {
+  const before = await page.locator('.chat-message-assistant').count();
   await page.getByLabel('Message', { exact: true }).fill(text);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect.poll(async () => Boolean(await page.evaluate(() => window.__agentCore?.conversationExecution?.().responseId))
+    || await page.locator('.chat-message-assistant').count() > before, { timeout: 15_000 }).toBe(true);
+  await waitForResponseSettled(page);
 }
 
 test('Instance Skills: authorized Chat creation, next-turn load, owner editor and explicit customization', async ({ page }) => {

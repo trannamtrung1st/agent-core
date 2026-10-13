@@ -405,19 +405,18 @@ export function SessionRail({
                     >
                       <Flex vertical align="flex-start" gap={0} className="session-row-copy">
                         <Flex align="baseline" gap={8} className="session-row-title">
-                          <Typography.Text
-                            ellipsis={{ tooltip: { title: item.title, styles: { root: { pointerEvents: "none" } } } }}
-                            className="session-row-name"
+                          <Tooltip title={item.title} styles={{ root: { pointerEvents: "none" } }}><Typography.Text
+                            className="session-row-name single-line-ellipsis"
                           >
                             {item.title}
-                          </Typography.Text>
+                          </Typography.Text></Tooltip>
                           {updatedLabel ? (
                             <time dateTime={item.updatedAt} className="session-row-time">
                               {updatedLabel}
                             </time>
                           ) : null}
                         </Flex>
-                        <Typography.Text type="secondary" ellipsis className="session-row-meta">
+                        <Typography.Text type="secondary" className="session-row-meta single-line-ellipsis">
                           {`${agentLabel(agents, item)} · ${rowState(item)}`}
                         </Typography.Text>
                       </Flex>

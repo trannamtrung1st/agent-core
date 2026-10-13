@@ -322,23 +322,21 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
               timestamp={headerTimestamp}
               status={
                 <Flex align="center" gap={8} className="chat-header-meta">
-                  <Typography.Text
+                  <Tooltip title={profileText}><Typography.Text
                     data-testid="profile"
                     aria-label={profileText}
                     type="secondary"
-                    className="chat-header-profile"
-                    ellipsis={{ tooltip: profileText }}
+                    className="chat-header-profile single-line-ellipsis"
                   >
                     {profile || "…"}
-                  </Typography.Text>
-                  <Typography.Text
+                  </Typography.Text></Tooltip>
+                  <Tooltip title={connectionText}><Typography.Text
                     data-testid="connection"
                     type={connectionTone === "alarm" ? "danger" : "secondary"}
-                    className={`chat-header-status chat-header-status-${connectionTone}`}
-                    ellipsis={{ tooltip: connectionText }}
+                    className={`chat-header-status chat-header-status-${connectionTone} single-line-ellipsis`}
                   >
                     {connectionText}
-                  </Typography.Text>
+                  </Typography.Text></Tooltip>
                 </Flex>
               }
               additionalActions={onOpenAdmin ? (

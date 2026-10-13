@@ -238,7 +238,7 @@ export function FilePreview({
       centered
       destroyOnHidden
       title={
-        <Typography.Text strong ellipsis title={metadata?.displayName}>
+        <Typography.Text strong className="single-line-ellipsis" title={metadata?.displayName}>
           {metadata?.displayName ?? 'File preview'}
         </Typography.Text>
       }

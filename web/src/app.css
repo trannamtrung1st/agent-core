@@ -2829,3 +2829,6 @@ body,
 .file-preview-word { height: 100%; min-height: 0; }
 .file-preview-word-frame { flex: 1; width: 100%; min-height: 300px; border: 0; }
 .file-preview-cell { width: 100%; height: auto; min-height: 32px; text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Single-line labels use CSS truncation, avoiding measured Typography resize loops. */
+.single-line-ellipsis { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

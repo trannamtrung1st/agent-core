@@ -52,9 +52,9 @@ export function ChatHeader({
           {subtitle || status ? (
             <Flex align="center" gap={8} className="chat-header-details">
               {subtitle ? (
-                <Typography.Text type="secondary" className="chat-header-subtitle" ellipsis={{ tooltip: subtitle }}>
+                <Tooltip title={subtitle}><Typography.Text type="secondary" className="chat-header-subtitle single-line-ellipsis">
                   {subtitle}
-                </Typography.Text>
+                </Typography.Text></Tooltip>
               ) : null}
               {status}
             </Flex>

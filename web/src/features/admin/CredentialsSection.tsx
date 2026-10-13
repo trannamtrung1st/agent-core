@@ -60,7 +60,7 @@ function matchesCredential(credential: SystemCredential, search: string) {
 }
 
 function CredentialPolicySummary({ credential }: { credential: SystemCredential }) {
-  if (credential.driveAccount) return <Flex vertical style={{ minWidth: 0 }}><Typography.Text ellipsis title={credential.driveAccount.emailAddress}>{credential.driveAccount.emailAddress || 'Google Drive Account'}</Typography.Text><Typography.Text type="secondary">{credential.driveAccount.connectionStatus} · app-authorized files{credential.driveAccount.synthetic ? ' · Synthetic' : ''}</Typography.Text></Flex>;
+  if (credential.driveAccount) return <Flex vertical style={{ minWidth: 0 }}><Typography.Text className="single-line-ellipsis" title={credential.driveAccount.emailAddress}>{credential.driveAccount.emailAddress || 'Google Drive Account'}</Typography.Text><Typography.Text type="secondary">{credential.driveAccount.connectionStatus} · app-authorized files{credential.driveAccount.synthetic ? ' · Synthetic' : ''}</Typography.Text></Flex>;
   if (credential.emailAccount) return <Flex vertical style={{ minWidth: 0 }}>
     <Typography.Text ellipsis title={credential.emailAccount.emailAddress}>{credential.emailAccount.emailAddress}</Typography.Text>
     <Typography.Text type="secondary">{credential.emailAccount.preset} · {credential.emailAccount.preset === "Gmail" ? "Google OAuth" : "IMAP/SMTP"}</Typography.Text>
