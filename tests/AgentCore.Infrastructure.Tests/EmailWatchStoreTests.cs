@@ -1,0 +1,53 @@
+using AgentCore.Application.Ports;
+using AgentCore.Application.Sessions;
+using AgentCore.Domain.Credentials;
+using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Email;
+using AgentCore.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace AgentCore.Infrastructure.Tests;
+
+public sealed class EmailWatchStoreTests
+{
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Configuration_claims_cursor_reopen_and_revocation_are_independent_of_credentials(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"email-watch-{Guid.NewGuid():N}.db");
+        var factory = new Factory(path); var instances = new InMemoryAgentInstanceStore();
+        ICredentialStore credentials = sqlite ? new SqliteCredentialStore(factory) : new InMemoryCredentialStore(instances);
+        IEmailWatchStore watches = sqlite ? new SqliteEmailWatchStore(factory) : new InMemoryEmailWatchStore(instances, credentials, (IAgentCredentialBindingStore)credentials, new());
+        var now = DateTimeOffset.UtcNow; var id = Guid.NewGuid();
+        var c = new Credential(id, "Watch", CredentialKind.Password, CredentialStatus.Active, new Dictionary<string, string>(), [], "protected", 1, 1, now, now, CredentialPurpose.EmailAccount, EmailAccountProfile.Custom("test@example.test"));
+        try
+        {
+            if (sqlite) { await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
+            await credentials.SaveAsync(c, 0);
+            Assert.False((await watches.GetAsync(id)).Enabled); Assert.Empty(await watches.ClaimDueAsync(now, 8));
+            var config = await watches.ConfigureAsync(id, 0, true, 60, now);
+            Assert.Equal(1, config.ConfigurationRevision); Assert.Equal(1, (await credentials.GetAsync(id))!.Revision);
+            await Assert.ThrowsAsync<AgentCoreException>(() => watches.ConfigureAsync(id, 0, false, 300, now).AsTask());
+            var first = Assert.Single(await watches.ClaimDueAsync(now, 8)); Assert.Null(first.State.Cursor);
+            Assert.Empty(await watches.ClaimDueAsync(now, 8));
+            var expired = Assert.Single(await watches.ClaimDueAsync(now.AddSeconds(91), 8));
+            Assert.False(await watches.CommitAsync(first, new([], new(EmailWatchCursorKind.ImapUid, UidValidity: 1, LastUid: 100)), [], now.AddSeconds(92)));
+            var cursor = new EmailWatchCursor(EmailWatchCursorKind.ImapUid, UidValidity: 1, LastUid: 100);
+            Assert.True(await watches.CommitAsync(expired, new([], cursor), [], now.AddSeconds(92)));
+            if (sqlite) watches = new SqliteEmailWatchStore(factory);
+            Assert.Equal(cursor, (await watches.GetAsync(id)).Cursor);
+            config = await watches.ConfigureAsync(id, 1, true, 900, now.AddSeconds(93)); Assert.Equal(cursor, config.Cursor);
+            await watches.CheckNowAsync(id, 2, now.AddSeconds(94));
+            var running = Assert.Single(await watches.ClaimDueAsync(now.AddSeconds(94), 8));
+            config = await watches.ConfigureAsync(id, 2, false, 300, now.AddSeconds(95));
+            Assert.False(await watches.CommitAsync(running, new([], cursor), [], now.AddSeconds(96)));
+            Assert.Empty(await watches.ClaimDueAsync(now.AddHours(1), 8));
+            config = await watches.ConfigureAsync(id, 3, true, 300, now.AddSeconds(97)); Assert.Null(config.Cursor);
+            await credentials.SaveAsync(c with { Status = CredentialStatus.Disabled, Revision = 2 }, 1);
+            Assert.Empty(await watches.ClaimDueAsync(now.AddSeconds(98), 8));
+            await Assert.ThrowsAsync<AgentCoreException>(() => watches.CheckNowAsync(id, 4, now.AddSeconds(99)).AsTask());
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
+    private sealed class Factory(string path) : IDbContextFactory<AgentCoreDbContext>
+    { public AgentCoreDbContext CreateDbContext() => new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options); }
+}

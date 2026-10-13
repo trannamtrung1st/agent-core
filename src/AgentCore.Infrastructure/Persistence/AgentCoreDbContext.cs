@@ -239,8 +239,20 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<AgentInstanceSkillRecord> AgentInstanceSkills => Set<AgentInstanceSkillRecord>();
     public DbSet<AgentInstanceResourceRecord> AgentInstanceResources => Set<AgentInstanceResourceRecord>();
     public DbSet<AgentDefinitionResourceStateRecord> AgentDefinitionResourceStates => Set<AgentDefinitionResourceStateRecord>();
+    public DbSet<EmailWatchRecord> EmailWatches => Set<EmailWatchRecord>();
+    public DbSet<EmailWatchEventRecord> EmailWatchEvents => Set<EmailWatchEventRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<EmailWatchRecord>(e =>
+        {
+            e.HasKey(r => r.AccountId);
+            e.Property(r => r.RuntimeRevision).IsConcurrencyToken();
+            e.HasIndex(r => new { r.Enabled, r.NextCheckAtUtc });
+            e.HasOne<CredentialRecord>().WithMany().HasForeignKey(r => r.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<EmailWatchEventRecord>().HasKey(r => r.EventId);
+        modelBuilder.Entity<EmailWatchEventRecord>().HasOne<CoreEventRecord>().WithMany().HasForeignKey(r => r.EventId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<AgentInstanceResourceRecord>(e => {
             e.ToTable("AgentInstanceResources"); e.HasKey(r => new { r.InstanceId, r.ResourceId });
             e.Property(r => r.InstanceId).HasMaxLength(36); e.Property(r => r.ResourceId).HasMaxLength(36);

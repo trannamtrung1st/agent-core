@@ -1383,6 +1383,46 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("EmailSendOperations", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailWatchEventRecord", b =>
+                {
+                    b.Property<string>("EventId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AuthorityJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("EventId");
+
+                    b.ToTable("EmailWatchEvents");
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailWatchRecord", b =>
+                {
+                    b.Property<string>("AccountId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("NextCheckAtUtc")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("RuntimeRevision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StateJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("AccountId");
+
+                    b.HasIndex("Enabled", "NextCheckAtUtc");
+
+                    b.ToTable("EmailWatches");
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EntryRecord", b =>
                 {
                     b.Property<string>("EntryId")
@@ -2312,6 +2352,24 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithOne()
                         .HasForeignKey("AgentCore.Infrastructure.Persistence.EmailSendOperationRecord", "DraftId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailWatchEventRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.CoreEventRecord", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailWatchRecord", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.CredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
