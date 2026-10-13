@@ -109,6 +109,8 @@ The same provider aliases resolve to synthetic or real implementations by profil
 
 ## Agent Runtime and prompt/context builder
 
+Voice generation receives the resolved effective speech locale in `AgentContext`. Its mode section instructs the model to write spoken wording in that locale, since selecting a TTS voice does not translate text. The conversation-language policy continues to govern display text; a different speech language uses a separate spoken projection. Text-mode prompts omit this speech-language instruction. Locale changes apply to the next generation, including clearing the override back to Agent default.
+
 Implement a concrete PromptContextBuilder invoked by the default IAgentBrain. Keep named, independently testable sections in Application, not scattered concatenation inside endpoints or adapters. Order:
 
 1. System message: product interaction guardrails, identity, goals, systemInstructions, behavior and conversation policies.

@@ -231,6 +231,32 @@ public sealed class PromptContextBuilderTests
         Assert.DoesNotContain("several sentences long", modeSystem, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("en", "vi-VN", "vi-VN")]
+    [InlineData("auto", "vi-VN", "vi-VN")]
+    [InlineData("vi-VN", null, "vi-VN")]
+    [InlineData("auto", null, "en")]
+    public void Voice_prompt_uses_speech_locale_independently_of_display_language(
+        string language, string? speechLocale, string expected)
+    {
+        var definition = SampleDefinitions.Examiner with
+        {
+            ConversationPolicy = SampleDefinitions.Examiner.ConversationPolicy with { Language = language }
+        };
+        var context = new AgentContext(definition, [], "", null, SessionMode.Voice, null, false, null,
+            new(Guid.NewGuid(), TriggerKind.UserTurn, "Hello")) { EffectiveSpeechLocale = speechLocale };
+        var sections = new PromptContextBuilder().BuildSections(context);
+
+        Assert.Contains($"Spoken response language: {expected}.", sections.ModeSystem);
+        Assert.Contains("separate spoken wording", sections.ModeSystem);
+        Assert.Contains("voice selection does not translate", sections.ModeSystem);
+        Assert.Contains(ConversationLanguagePolicy.PromptInstruction(language), sections.IdentitySystem);
+
+        var text = new PromptContextBuilder().BuildSections(context with { Mode = SessionMode.Text });
+        Assert.DoesNotContain("Spoken response language:", text.ModeSystem);
+        Assert.Equal(sections.IdentitySystem, text.IdentitySystem);
+    }
+
     [Fact]
     public void Text_mode_system_prompt_omits_voice_output_guidance()
     {

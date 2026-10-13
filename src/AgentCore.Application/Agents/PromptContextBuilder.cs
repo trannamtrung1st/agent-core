@@ -6,6 +6,7 @@ using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Speech;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Triggers;
@@ -410,6 +411,8 @@ public sealed class PromptContextBuilder(
         if (context.Mode == SessionMode.Voice)
         {
             lines.Add(VoiceModeOutputGuidance);
+            var locale = SpeechLocale.Resolve(context.EffectiveSpeechLocale, context.Definition.ConversationPolicy.Language).Effective;
+            lines.Add($"Spoken response language: {locale}. Write spoken wording in this language; voice selection does not translate the words. The conversation language policy still governs on-screen text. When the display uses another language, provide separate spoken wording in {locale}. Reuse display wording for speech only when it is already in the spoken response language.");
         }
         if (!string.IsNullOrEmpty(context.InterruptedHeardText))
         {

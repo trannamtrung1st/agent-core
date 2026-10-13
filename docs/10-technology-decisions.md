@@ -179,6 +179,8 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 **Rationale:** Conversation language and speech locale must stay independent so missing voices never silently speak the wrong language or break text chat.
 
+The effective speech locale also governs the model's spoken wording during Voice mode. A different display language uses the existing separate speech projection; changing speech locale does not rewrite the conversation-language policy. Selecting a voice alone cannot translate generated text.
+
 **Consequence:** [Voice](06-realtime-voice.md) owns Browser/hosted speech behavior; [Interfaces](04-backend-interfaces.md) owns capability evaluation; [Protocol](14-api-and-realtime-protocol.md) owns readiness fields; [Frontend](13-frontend-implementation-spec.md) owns override/fallback presentation.
 
 ## Decision: session model selection and inference controls

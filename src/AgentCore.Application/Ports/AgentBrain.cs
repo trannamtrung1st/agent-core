@@ -67,6 +67,8 @@ public sealed record AgentContext(
     IReadOnlyList<string>? LoadedCapabilityIds = null, IReadOnlyList<EffectiveSkill>? PinnedSkillCatalog = null, Guid? OwnedSessionId = null, AgentRunOutputContract OutputContract = AgentRunOutputContract.ConversationResponse, bool AuthoredAutomation = false, bool HasBackgroundClaim = false, ComposerRunInput? ComposerInput = null, string? ConfigurationContinuationTarget = null)
 {
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
+
+    public string? EffectiveSpeechLocale { get; init; }
 }
 
 public abstract record AgentDecision;
