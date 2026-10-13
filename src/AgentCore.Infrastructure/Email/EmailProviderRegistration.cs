@@ -1,3 +1,4 @@
+using AgentCore.Infrastructure.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using AgentCore.Application.Ports;
@@ -14,9 +15,9 @@ internal static class EmailProviderRegistration
         services.AddHttpClient(GmailEmailProvider.HttpClientName, client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
-        }).RemoveAllLoggers().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, MaxConnectionsPerServer = 4 });
+        }).WithErrorDiagnostics().RemoveAllLoggers().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, MaxConnectionsPerServer = 4 });
 
-        services.AddHttpClient(GoogleEmailOAuthService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20)).RemoveAllLoggers()
+        services.AddHttpClient(GoogleEmailOAuthService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20)).WithErrorDiagnostics().RemoveAllLoggers()
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, MaxConnectionsPerServer = 4 });
         services.TryAddSingleton<GoogleEmailOAuthOptions>(p => p.GetService<IConfiguration>()?.GetSection("GoogleEmailOAuth").Get<GoogleEmailOAuthOptions>() ?? new());
         services.TryAddSingleton<GoogleEmailOAuthService>(p => new(p.GetRequiredService<ICredentialStore>(), p.GetRequiredService<ICredentialProtector>(),

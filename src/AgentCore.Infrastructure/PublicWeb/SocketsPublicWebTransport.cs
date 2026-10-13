@@ -1,8 +1,9 @@
 using System.Net.Http.Headers;
+using AgentCore.Infrastructure.Http;
 
 namespace AgentCore.Infrastructure.PublicWeb;
 
-internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns) : IPublicWebTransport
+internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns, HttpErrorDiagnostics? diagnostics = null) : IPublicWebTransport
 {
     public ValueTask<PublicWebTransportResponse> GetAsync(Uri uri, CancellationToken cancellationToken) =>
         SendAsync(
@@ -25,6 +26,7 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns) : IPu
             using var request = CreateRequest(outbound);
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
             var body = await ReadBoundedBodyAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            diagnostics?.Log((int)response.StatusCode, "public-web", body.AsMemory(0, Math.Min(body.Length, HttpErrorDiagnostics.MaxBodyBytes + 1)));
             Uri? redirect = null;
             if (response.Headers.Location is { } location)
             {

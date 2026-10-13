@@ -1,3 +1,4 @@
+using AgentCore.Infrastructure.Http;
 using AgentCore.Application.Ports;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -20,7 +21,7 @@ internal static class WebSearchProviderRegistration
         services.AddHttpClient(BraveWebSearchProvider.HttpClientName, client =>
         {
             client.Timeout = TimeSpan.FromSeconds(PublicWebLimits.TotalTimeoutSeconds);
-        });
+        }).WithErrorDiagnostics();
 
         if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
         {

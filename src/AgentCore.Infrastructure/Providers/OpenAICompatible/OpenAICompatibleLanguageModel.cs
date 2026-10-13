@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
+using AgentCore.Infrastructure.Http;
 using AgentCore.Infrastructure.Providers.SemanticResponses;
 using Microsoft.Extensions.Logging;
 
@@ -14,7 +15,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
 {
     public const string HttpClientName = "openai-compatible-llm";
     public const string RequestTelemetryStage = "llm.request";
-    private const int ProviderErrorBodyLimit = 4096;
+    private const int ProviderErrorBodyLimit = HttpErrorDiagnostics.MaxBodyBytes;
 
     private static readonly HashSet<string> ForbiddenHeaderNames =
         new(StringComparer.OrdinalIgnoreCase)
@@ -935,6 +936,16 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
         HttpResponseMessage response,
         CancellationToken cancellationToken)
     {
+        if (response.RequestMessage?.Options.TryGetValue(HttpErrorDiagnostics.ParsingEnabled, out var enabled) == true && !enabled)
+        {
+            return ProviderErrorDiagnostic.Empty;
+        }
+
+        if (response.RequestMessage?.Options.TryGetValue(HttpErrorDiagnostics.Inspection, out var inspected) == true)
+        {
+            return inspected.ReadState is null ? ParseProviderError(inspected.Body) : ProviderErrorDiagnostic.Empty;
+        }
+
         if (response.Content is null)
         {
             return ProviderErrorDiagnostic.Empty;
@@ -943,7 +954,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
         try
         {
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            var buffer = new byte[ProviderErrorBodyLimit];
+            var buffer = new byte[ProviderErrorBodyLimit + 1];
             var read = 0;
             while (read < buffer.Length)
             {
@@ -962,22 +973,22 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                 return ProviderErrorDiagnostic.Empty;
             }
 
-            var body = Encoding.UTF8.GetString(buffer, 0, read);
-            using var document = JsonDocument.Parse(body);
-            if (!document.RootElement.TryGetProperty("error", out var error) || error.ValueKind != JsonValueKind.Object)
-            {
-                return ProviderErrorDiagnostic.Empty;
-            }
-
-            return new ProviderErrorDiagnostic(
-                SanitizeProviderText(ReadScalar(error, "message"), 240),
-                SanitizeProviderText(ReadScalar(error, "code"), 80),
-                SanitizeProviderText(ReadScalar(error, "type"), 80));
+            return ParseProviderError(buffer.AsMemory(0, read));
         }
         catch (Exception ex) when (ex is JsonException or IOException or OperationCanceledException)
         {
             return ProviderErrorDiagnostic.Empty;
         }
+    }
+
+    private static ProviderErrorDiagnostic ParseProviderError(ReadOnlyMemory<byte> body)
+    {
+        var parsed = HttpErrorDiagnostics.Parse(body);
+        if (parsed.State != "parsed") return ProviderErrorDiagnostic.Empty;
+        using var document = JsonDocument.Parse(body, new JsonDocumentOptions { MaxDepth = 16 });
+        if (!document.RootElement.TryGetProperty("error", out var error) || error.ValueKind != JsonValueKind.Object)
+            return ProviderErrorDiagnostic.Empty;
+        return new ProviderErrorDiagnostic(SanitizeProviderText(ReadScalar(error, "message"), 240), parsed.Code, parsed.Type);
     }
 
     private static string? ReadScalar(JsonElement element, string name)

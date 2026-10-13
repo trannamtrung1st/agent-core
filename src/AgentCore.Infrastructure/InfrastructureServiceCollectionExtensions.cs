@@ -1,3 +1,4 @@
+using AgentCore.Infrastructure.Http;
 using AgentCore.Application.Workspaces;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Credentials;
@@ -49,6 +50,7 @@ public static class InfrastructureServiceCollectionExtensions
         SpeechProvidersOptions? speech = null,
         BrowserOptions? browser = null)
     {
+        services.AddHttpErrorDiagnostics();
         persistence ??= new PersistenceOptions();
         browser ??= new BrowserOptions();
         services.TryAddSingleton(browser);
@@ -289,11 +291,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHttpClient(OpenAICompatibleLanguageModel.HttpClientName, client =>
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
-        });
+        }).WithErrorDiagnostics();
         services.AddHttpClient(OpenAICompatibleBatchSpeechRecognizer.HttpClientName, client =>
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
-        });
+        }).WithErrorDiagnostics();
         services.TryAddSingleton(provider =>
             SpeechFactory.Create(provider, provider.GetService<SpeechProvidersOptions>()));
         services.TryAddSingleton(provider => provider.GetRequiredService<SpeechResolution>().Plan);
@@ -306,7 +308,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHttpClient(OpenAiSpeechSynthesizer.HttpClientName, client =>
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
-        });
+        }).WithErrorDiagnostics();
         services.TryAddSingleton<ILanguageModel>(provider =>
             LanguageModelFactory.Create(provider, profile, languageModel));
         services.TryAddSingleton<IApprovedKnowledgeCatalog>(provider =>

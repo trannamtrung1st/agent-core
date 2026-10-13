@@ -172,6 +172,7 @@ Bind/validate on startup with standard .NET options and ValidateOnStart. These o
 | VoiceOptions / Voice | Canonical format, frame size, queue budgets, utterance limit, playback progress |
 | PersistenceOptions / Persistence | Provider, connection string, checkpoint interval, busy timeout, attachment blob root (`data/attachments`), workspace root (`data/workspaces`), template root (`agents/templates`), artifact blob root (`data/artifacts`); never under `local/` |
 | ObservabilityOptions / Observability | Logging level, timeline limit, content logging opt-in, OTLP enable/endpoint |
+| HttpErrorDiagnosticsOptions / Observability:HttpErrorResponses | Enabled (default true): bounded third-party HTTP error-body parsing and safe structured warnings |
 | HostingOptions / Hosting | Same-origin/default local binding, allowed development origins, development proxy behavior, Compose published-port gateway trust (`TrustPublishedPortGateway`, default false; resolves only inside a container) |
 
 Complete conceptual appsettings.json example, **Markdown only**:
@@ -265,7 +266,7 @@ Complete conceptual appsettings.json example, **Markdown only**:
     "Segmentation": {"MinCharacters": 20, "ClauseMinCharacters": 40, "MaxDelayMs": 300, "SoftMaxCharacters": 120, "HardMaxCharacters": 240, "MaxPendingSegments": 4}
   },
   "Persistence": {"Provider": "InMemory", "ConnectionString": "Data Source=data/agent-core.db", "CheckpointMs": 1000, "BusyTimeoutMs": 5000, "AttachmentRoot": "data/attachments", "WorkspaceRoot": "data/workspaces", "TemplateRoot": "agents/templates", "ArtifactRoot": "data/artifacts", "DefinitionResourceRoot": "data/definition-resources"},
-  "Observability": {"LogLevel": "Information", "TimelineCapacity": 500, "LogConversationContent": false, "OtlpEnabled": false, "OtlpEndpoint": "http://localhost:4317"},
+  "Observability": {"HttpErrorResponses": {"Enabled": true}, "LogLevel": "Information", "TimelineCapacity": 500, "LogConversationContent": false, "OtlpEnabled": false, "OtlpEndpoint": "http://localhost:4317"},
   "Logging": {"LogLevel": {"Default": "Information", "Microsoft.AspNetCore": "Warning", "Microsoft.EntityFrameworkCore.Database.Command": "Warning"}},
   "Hosting": {"BindUrl": "http://localhost:5080", "AllowedOrigins": ["http://localhost:5173"], "UseViteProxy": true, "TrustPublishedPortGateway": false}
 }
