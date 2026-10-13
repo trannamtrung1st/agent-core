@@ -5,6 +5,10 @@ async function openInNewTab(page: Page, link: Locator, gesture: 'modifier' | 'mi
   const popup = page.context().waitForEvent('page');
   await link.click(gesture === 'middle' ? { button: 'middle' } : { modifiers: ['ControlOrMeta'] });
   const opened = await popup; await opened.waitForURL(new URL(href!, source).href);
+  // A modifier-click opens a background tab; select it before asserting its hydrated UI.
+  await opened.bringToFront();
+  await opened.waitForLoadState('domcontentloaded');
+  await expect(opened.locator('.admin-layout')).toBeVisible();
   await expect(page).toHaveURL(source); return opened;
 }
 for (const width of [1440, 390]) test(`native canonical links preserve source drafts at ${width}px`, async ({ page }) => {
