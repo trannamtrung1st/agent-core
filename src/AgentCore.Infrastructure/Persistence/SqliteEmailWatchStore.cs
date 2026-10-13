@@ -110,10 +110,10 @@ public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> 
     {
         if (occurrence.SourceKind != AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent || occurrence.SourceEventId is not Guid sourceId) return true;
         var key = await db.CoreEvents.Where(e => e.EventId == sourceId.ToString("D")).Select(e => e.PayloadJson).SingleOrDefaultAsync(ct);
-        if (key is not null && JsonSerializer.Deserialize<AgentCore.Domain.Events.CoreEventOccurrence>(key, CoreEventPersistence.Json)!.Key == "email.message.received")
+        if (key?.Contains("\"Key\":\"email.message.received\"", StringComparison.Ordinal) == true)
             return await CanDeliver(db, sourceId, ct);
         var bucketJson = await db.CoreEventBuckets.Where(b => b.BucketId == sourceId.ToString("D")).Select(b => b.PayloadJson).SingleOrDefaultAsync(ct);
-        if (bucketJson is not null)
+        if (bucketJson?.Contains("\"Key\":\"email.message.received\"", StringComparison.Ordinal) == true)
             foreach (var source in JsonSerializer.Deserialize<CoreEventBucket>(bucketJson, CoreEventPersistence.Json)!.Sources.Where(e => e.Key == "email.message.received"))
                 if (!await CanDeliver(db, source.EventId, ct)) return false;
         return true;

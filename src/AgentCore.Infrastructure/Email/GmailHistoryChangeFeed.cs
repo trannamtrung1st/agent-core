@@ -34,7 +34,10 @@ internal sealed class GmailHistoryChangeFeed(Guid accountId, GmailEmailProvider 
             {
                 var message = entries[index]; var id = message.GetProperty("id").GetString()!;
                 if (id.Length is < 1 or > 128 || !id.All(char.IsAsciiLetterOrDigit)) throw new InvalidDataException("Invalid mailbox reference.");
-                if (!seen.Add(id) || !message.TryGetProperty("labelIds", out var labels) || !labels.EnumerateArray().Any(l => l.GetString() == "INBOX")) continue;
+                if (!seen.Add(id)) continue;
+                // History normally includes only id/threadId. Labels, when present, may
+                // exclude a non-inbox addition; missing labels require the minimal read.
+                if (message.TryGetProperty("labelIds", out var labels) && !labels.EnumerateArray().Any(l => l.GetString() == "INBOX")) continue;
                 try
                 {
                     using var metadata = await provider.Get("messages/" + Uri.EscapeDataString(id) + "?format=minimal&fields=id,labelIds", ct);

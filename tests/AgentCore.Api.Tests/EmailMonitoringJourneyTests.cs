@@ -41,10 +41,12 @@ public sealed class EmailMonitoringJourneyTests
         var events = services.GetRequiredService<ICoreEventStore>(); var providers = services.GetRequiredService<AccountEmailProviderFactory>();
         await monitor.ConfigureAsync(account.CredentialId, 0, true, 60);
         Assert.Equal(1, await monitor.RunOnceAsync()); Assert.Empty(await events.PendingAsync()); Assert.Equal(0, model.Invocations);
-        model.MessageRef = $"syn-{account.CredentialId:N}:fresh1";
         providers.AddSyntheticArrival(account.CredentialId, new("fresh1", "thread", "sender@example.test", ["monitor@example.test"], [], clock.GetUtcNow(), "Private subject", "Original untrusted email", false, []));
         clock.Advance(61);
         Assert.Equal(1, await monitor.RunOnceAsync()); var receipt = Assert.Single(await events.PendingAsync(), e => e.Event.Key == "email.message.received");
+        using var eventData = JsonDocument.Parse(receipt.Event.DataJson);
+        Assert.Equal($"syn-{account.CredentialId:N}:fresh1", eventData.RootElement.GetProperty("messageRef").GetString());
+        Assert.Equal("inbox", eventData.RootElement.GetProperty("accountRef").GetString());
         Assert.DoesNotContain("Private subject", receipt.Event.DataJson); Assert.DoesNotContain("Original untrusted", receipt.Event.DataJson); Assert.Equal(0, model.Invocations);
         Assert.True(await watches.CanDeliverAsync(receipt.Event.EventId));
         Assert.Equal(1, await services.GetRequiredService<CoreEventDispatcher>().RunOnceAsync());
@@ -67,14 +69,46 @@ public sealed class EmailMonitoringJourneyTests
     }
     private sealed class ReadModel : ILanguageModel
     {
-        public string MessageRef = ""; public int Invocations; public bool ReadOriginal; public List<ModelRequest> Requests = [];
+        public int Invocations; public bool ReadOriginal; public List<ModelRequest> Requests = [];
         public ModelCapabilities Capabilities => new(true, true, Tools: true, StructuredOutput: true);
+        private static JsonElement? FindMail(JsonElement value)
+        {
+            if (value.ValueKind == JsonValueKind.Object)
+            {
+                if (value.TryGetProperty("messageRef", out _) && value.TryGetProperty("accountRef", out _)) return value.Clone();
+                foreach (var property in value.EnumerateObject()) if (FindMail(property.Value) is { } result) return result;
+            }
+            else if (value.ValueKind == JsonValueKind.Array)
+            { foreach (var item in value.EnumerateArray()) if (FindMail(item) is { } result) return result; }
+            else if (value.ValueKind == JsonValueKind.String && value.GetString() is { } text && text.Contains("messageRef", StringComparison.Ordinal))
+            {
+                var first = text.IndexOf('{'); var last = text.LastIndexOf('}');
+                if (first >= 0 && last >= first)
+                    try { using var json = JsonDocument.Parse(text[first..(last + 1)]); return FindMail(json.RootElement); } catch (JsonException) { }
+            }
+            return null;
+        }
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Invocations++; Requests.Add(request);
             var tool = request.Messages.LastOrDefault(m => m.Role == ModelRole.Tool);
             if (tool is null)
-            { Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.EmailRead); yield return new ModelToolCallEvent(new("read-mail", ToolCatalog.EmailRead, JsonSerializer.Serialize(new { accountRef = "inbox", messageId = MessageRef }))); yield return new ModelCompleted(ModelStopReason.ToolCalls); }
+            {
+                Assert.Contains(request.Tools!, t => t.Name == ToolCatalog.EmailRead);
+                JsonElement? source = null;
+                foreach (var message in request.Messages.Where(m => m.Text.Contains("messageRef", StringComparison.Ordinal)))
+                {
+                    var first = message.Text.IndexOf('{'); var last = message.Text.LastIndexOf('}');
+                    if (first < 0 || last < first) continue;
+                    try { using var evidence = JsonDocument.Parse(message.Text[first..(last + 1)]); source = FindMail(evidence.RootElement); }
+                    catch (JsonException) { }
+                    if (source is not null) break;
+                }
+                Assert.True(source.HasValue, string.Join("\n", request.Messages.Where(m => m.Role == ModelRole.User).Select(m => m.Text)));
+                yield return new ModelToolCallEvent(new("read-mail", ToolCatalog.EmailRead, JsonSerializer.Serialize(new
+                { accountRef = source.Value.GetProperty("accountRef").GetString(), messageId = source.Value.GetProperty("messageRef").GetString() })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls);
+            }
             else
             { ReadOriginal |= tool.Text.Contains("Original untrusted email");
                 if (request.Tools?.Any(t => t.Name == "work.complete") == true)

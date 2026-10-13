@@ -20,6 +20,8 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
         if (triggers is InMemoryTriggerStore memory)
         {
             memory.EmailAdmissionGate = instances.CredentialGate;
+            memory.EmailNeedsFence = occurrence => occurrence.SourceKind == AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent
+                && occurrence.SourceEventId is Guid id && events.EmailSources(id).Count > 0;
             memory.EmailCanAdmit = occurrence => occurrence.SourceKind != AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent
                 || occurrence.SourceEventId is not Guid id || events.EmailSources(id).All(source => CanDeliverAsync(source).Result);
         }

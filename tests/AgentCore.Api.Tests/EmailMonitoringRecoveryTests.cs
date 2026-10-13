@@ -67,11 +67,13 @@ public sealed class EmailMonitoringRecoveryTests
         feed.Permanent = true; await monitoring.CheckAsync(account.CredentialId, 1); await monitoring.RunOnceAsync();
         Assert.Equal("Paused", (await monitoring.GetAsync(account.CredentialId)).Status);
         Assert.False(await watches.CanDeliverAsync(pending[0].Event.EventId));
+        await monitoring.ConfigureAsync(account.CredentialId, 1, true, 300);
+        Assert.Equal("Paused", (await monitoring.GetAsync(account.CredentialId)).Status);
         var pollsAtPause = feed.Polls; clock.Advance(901); await monitoring.RunOnceAsync(); Assert.Equal(pollsAtPause, feed.Polls);
         feed.Permanent = false;
-        feed.Block = true; await monitoring.CheckAsync(account.CredentialId, 1); var inFlight = monitoring.RunOnceAsync().AsTask();
+        feed.Block = true; await monitoring.CheckAsync(account.CredentialId, 2); var inFlight = monitoring.RunOnceAsync().AsTask();
         await feed.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await monitoring.ConfigureAsync(account.CredentialId, 1, false, 60); feed.Release.SetResult(); await inFlight;
+        await monitoring.ConfigureAsync(account.CredentialId, 2, false, 60); feed.Release.SetResult(); await inFlight;
         Assert.Null((await watches.GetAsync(account.CredentialId)).Cursor); Assert.False(await watches.CanDeliverAsync(pending[0].Event.EventId));
         Assert.Equal(0, await services.GetRequiredService<CoreEventDispatcher>().RunOnceAsync());
         Assert.Empty(await services.GetRequiredService<ITriggerStore>().ListByDispositionAsync(AgentCore.Domain.Triggers.OccurrenceRoutingDisposition.Pending, 20));

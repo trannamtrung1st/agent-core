@@ -22,7 +22,7 @@ internal static class EmailWatchTransitions
         return s with { Enabled = enabled, IntervalSeconds = interval, ConfigurationRevision = s.ConfigurationRevision + 1,
             RuntimeRevision = s.RuntimeRevision + 1, Generation = s.Generation + (changed ? 1 : 0),
             Cursor = changed ? null : s.Cursor, AuthorizationFingerprint = changed ? null : s.AuthorizationFingerprint,
-            LeaseId = null, LeaseExpiresAtUtc = null, Paused = false, LastErrorCode = null, LastDiagnosticId = null,
+            LeaseId = null, LeaseExpiresAtUtc = null, Paused = changed ? false : s.Paused, LastErrorCode = changed ? null : s.LastErrorCode, LastDiagnosticId = changed ? null : s.LastDiagnosticId,
             LastGapAtUtc = enabled && changed && s.Generation > 0 ? now : s.LastGapAtUtc,
             NextCheckAtUtc = enabled ? changed ? now : now.AddSeconds(interval) : null };
     }

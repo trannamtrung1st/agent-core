@@ -326,6 +326,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     }
 
     internal object? EmailAdmissionGate { get; set; }
+    internal Func<TriggerOccurrence, bool>? EmailNeedsFence { get; set; }
     internal Func<TriggerOccurrence, bool>? EmailCanAdmit { get; set; }
     public ValueTask<TriggerOccurrenceAdmitResult> AdmitOccurrenceAsync(
         TriggerOccurrence occurrence,
@@ -333,7 +334,7 @@ public sealed class InMemoryTriggerStore : ITriggerStore
     {
         ArgumentNullException.ThrowIfNull(occurrence);
         RequireFreshOccurrence(occurrence);
-        lock (EmailAdmissionGate ?? _state.Gate)
+        lock (EmailNeedsFence?.Invoke(occurrence) == true ? EmailAdmissionGate ?? _state.Gate : _state.Gate)
         lock (_state.Gate)
         {
             if (_state.DedupeKeys.TryGetValue(Dedupe(occurrence.Owner, occurrence.DedupeKey), out var existingId))

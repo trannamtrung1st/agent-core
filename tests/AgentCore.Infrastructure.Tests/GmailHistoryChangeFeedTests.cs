@@ -10,10 +10,10 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class GmailHistoryChangeFeedTests
 {
-    [Fact]
-    public async Task From_now_baseline_paged_backlog_dedupe_and_label_updates_are_safe()
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task From_now_baseline_paged_backlog_dedupe_and_label_updates_are_safe(bool idsOnly)
     {
-        var handler = new Transport(); var id = Guid.NewGuid(); var feed = Feed(handler, id);
+        var handler = new Transport { IdsOnly = idsOnly }; var id = Guid.NewGuid(); var feed = Feed(handler, id);
         var cursor = await feed.BaselineAsync(default); Assert.Equal("100", cursor.HistoryId); Assert.Single(handler.Paths);
         var refs = new List<string>();
         do { var batch = await feed.PollAsync(cursor, default); refs.AddRange(batch.MessageRefs); cursor = batch.NextCursor; if (!batch.HasMore) break; } while (true);
@@ -37,7 +37,7 @@ public sealed class GmailHistoryChangeFeedTests
     private sealed class Clients(Transport handler) : IHttpClientFactory { public HttpClient CreateClient(string name) => new(handler, false); }
     private sealed class Transport : HttpMessageHandler
     {
-        public bool Expired, Denied; public List<string> Paths = [];
+        public bool Expired, Denied, IdsOnly; public List<string> Paths = [];
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var path = request.RequestUri!.PathAndQuery; Paths.Add(path); object body;
@@ -46,7 +46,7 @@ public sealed class GmailHistoryChangeFeedTests
             else if (path.Contains("history?"))
             {
                 var second = path.Contains("pageToken=second");
-                var messages = Enumerable.Range(second ? 30 : 0, second ? 1 : 30).Select(i => new { message = new { id = "m" + i, labelIds = new[] { "INBOX" } } }).ToArray();
+                var messages = Enumerable.Range(second ? 30 : 0, second ? 1 : 30).Select(i => new { message = IdsOnly ? (object)new { id = "m" + i, threadId = "t" + i } : new { id = "m" + i, labelIds = new[] { "INBOX" } } }).ToArray();
                 body = second ? (object)new { historyId = "200", history = new[] { new { id = "199", messagesAdded = messages } } }
                     : new { historyId = "200", nextPageToken = "second", history = new object[] { new { id = "101", messagesAdded = messages }, new { id = "102", messagesAdded = messages.Take(1) }, new { id = "103", labelsAdded = messages } } };
             }

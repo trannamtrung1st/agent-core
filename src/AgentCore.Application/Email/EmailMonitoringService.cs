@@ -49,7 +49,7 @@ public sealed class EmailMonitoringService(IEmailWatchStore watches, IEmailChang
         var pending = s.LeaseExpiresAtUtc > now || s.Enabled && s.NextCheckAtUtc <= now;
         var authChanged = s.AuthorizationFingerprint is not null && s.AuthorizationFingerprint != EmailWatchAuthorization.Fingerprint(c);
         var status = !s.Enabled ? "Off" : !HostAvailable ? "HostDisabled" : !Available(c) || s.Paused && !authChanged ? "Paused"
-            : s.LeaseExpiresAtUtc > now ? s.Cursor is null ? "Initializing" : "Checking" : s.LastErrorCode is not null ? "Retrying"
+            : authChanged ? "Initializing" : s.LeaseExpiresAtUtc > now ? s.Cursor is null ? "Initializing" : "Checking" : s.LastErrorCode is not null ? "Retrying"
             : s.Cursor is null || authChanged ? "Initializing" : s.LastGapAtUtc is not null ? "Gap" : "Monitoring";
         return new(id, s.Enabled, s.IntervalSeconds, s.ConfigurationRevision, status, HostAvailable, Available(c), (await Recipients(id, ct)).Count,
             s.LastCheckedAtUtc, s.LastSuccessAtUtc, s.LastEventAtUtc, s.NextCheckAtUtc, s.LastGapAtUtc, s.LastErrorCode, s.LastDiagnosticId, pending && HostAvailable && Available(c));
@@ -72,7 +72,7 @@ public sealed class EmailMonitoringService(IEmailWatchStore watches, IEmailChang
             using var activity = RuntimeTelemetry.Activity.StartActivity("email." + operation);
             try
             {
-                if (!HostAvailable || !Available(await Account(claim.State.AccountId, linked.Token))) return;
+                if (!HostAvailable || !Available(await Account(claim.State.AccountId, linked.Token))) { outcome = "denied"; return; }
                 var batch = claim.State.Cursor is null ? new EmailWatchBatch([], await feed.BaselineAsync(claim.Account, linked.Token))
                     : await feed.PollAsync(claim.Account, claim.State.Cursor, linked.Token);
                 if (batch.MessageRefs.Count > 25 || batch.MessageRefs.Any(r => r.Length is < 1 or > 512 || r.Any(char.IsControl))) throw new InvalidDataException("Invalid change-feed references.");
@@ -87,9 +87,11 @@ public sealed class EmailMonitoringService(IEmailWatchStore watches, IEmailChang
                         JsonSerializer.Serialize(new { accountId = claim.State.AccountId, accountRef = binding.Reference, messageRef = reference, provider = claim.Account.EmailAccount!.Preset.ToString() }));
                     notifications.Add(new(e, binding.BindingId, binding.Revision, claim.State.AccountId, claim.State.Generation, claim.State.AuthorizationFingerprint!));
                 }
-                if (!HostAvailable) return;
-                await watches.CommitAsync(claim, batch, notifications, time.GetUtcNow(), linked.Token);
-                RuntimeTelemetry.RecordEmailOperation(Provider(claim.Account), batch.CursorGap ? "watch.gap" : "watch.commit", "success", feed.IsSynthetic, 0);
+                if (!HostAvailable) { outcome = "denied"; return; }
+                var commitStarted = time.GetTimestamp();
+                var committed = await watches.CommitAsync(claim, batch, notifications, time.GetUtcNow(), linked.Token);
+                outcome = committed ? "success" : "denied";
+                RuntimeTelemetry.RecordEmailOperation(Provider(claim.Account), batch.CursorGap ? "watch.gap" : "watch.commit", outcome, feed.IsSynthetic, time.GetElapsedTime(commitStarted).TotalMilliseconds);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { outcome = "cancelled"; }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
