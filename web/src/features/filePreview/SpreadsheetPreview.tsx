@@ -115,8 +115,11 @@ export function SpreadsheetPreview({
         <Table<{ key: string; cells: OfficeCell[] }>
           className="file-preview-grid"
           size="small"
-          virtual
-          pagination={false}
+          pagination={{
+            pageSize: 50,
+            hideOnSinglePage: true,
+            showSizeChanger: false,
+          }}
           rowKey="key"
           bordered
           dataSource={rows.map((cells, i) => ({

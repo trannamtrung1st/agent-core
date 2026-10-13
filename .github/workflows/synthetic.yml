@@ -115,7 +115,9 @@ jobs:
   playwright-core:
     name: Synthetic Playwright core (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The expanded core suite exceeded the old 30-minute job allocation;
+    # preserve one worker, every project and all individual test timeouts.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:

@@ -50,6 +50,10 @@ export function CsvPreview({
   const rows = result?.rows ?? [];
   const body = headers ? rows.slice(1) : rows;
   const count = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  const pageRows = Math.min(
+    previewLimits.pageRows,
+    Math.max(1, Math.floor(4000 / Math.max(1, count))),
+  );
   return (
     <Flex vertical gap={token.paddingSM} style={{ minWidth: 0 }}>
       <Flex wrap align="center" gap={token.paddingXS}>
@@ -96,17 +100,13 @@ export function CsvPreview({
             size="small"
             className="file-preview-grid"
             bordered
-            virtual
             pagination={false}
             loading={!result}
             rowKey="key"
             dataSource={body
-              .slice(
-                (page - 1) * previewLimits.pageRows,
-                page * previewLimits.pageRows,
-              )
+              .slice((page - 1) * pageRows, page * pageRows)
               .map((cells, i) => ({
-                key: (page - 1) * previewLimits.pageRows + i,
+                key: (page - 1) * pageRows + i,
                 cells,
               }))}
             scroll={{ x: Math.max(600, count * 140), y: 400 }}
@@ -126,7 +126,7 @@ export function CsvPreview({
             size="small"
             simple
             current={page}
-            pageSize={previewLimits.pageRows}
+            pageSize={pageRows}
             total={body.length}
             onChange={setPage}
             showSizeChanger={false}

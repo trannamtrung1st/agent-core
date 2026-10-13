@@ -7,7 +7,7 @@ test('owned home images, inert code/Markdown, native media and unsupported files
 }) => {
   test.setTimeout(120000);
   const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => errors.push(error.stack ?? error.message));
   await page.goto('/');
   const owner = await selectInstanceIdentity(page, {
     id: 'general-assistant',
@@ -36,6 +36,16 @@ test('owned home images, inert code/Markdown, native media and unsupported files
       'rows.tsv',
       'text/tab-separated-values',
       Buffer.from('id\tnote\n0001\ta,b\n'),
+    ],
+    [
+      'wide.csv',
+      'text/csv',
+      Buffer.from(
+        [
+          Array.from({ length: 129 }, (_, i) => `column${i}`).join(','),
+          Array.from({ length: 129 }, (_, i) => `row1-col${i}`).join(','),
+        ].join('\n'),
+      ),
     ],
     [
       'inert.xml',
@@ -88,6 +98,20 @@ test('owned home images, inert code/Markdown, native media and unsupported files
   await tsv.getByText('Grid', { exact: true }).click();
   await expect(tsv.getByText('0001', { exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
+  const wide = await open('wide.csv');
+  await wide.getByText('row1-col128', { exact: true }).scrollIntoViewIfNeeded();
+  await expect(wide.getByText('row1-col128', { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 900 });
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    )
+    .toBe(true);
+  await expect(
+    wide.getByRole('button', { name: 'Download wide.csv' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1440, height: 900 });
   const xml = await open('inert.xml');
   await expect(xml.locator('pre')).toContainText('<script>alert');
   expect(

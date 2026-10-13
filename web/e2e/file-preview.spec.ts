@@ -11,7 +11,7 @@ test('protected attachment preview preserves CSV source, download, keyboard and 
 }) => {
   test.setTimeout(120000);
   const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => errors.push(error.stack ?? error.message));
   const requests: string[] = [];
   page.on('request', (request) => {
     if (/attachments\/[^/]+\/content$/.test(request.url())) {
@@ -31,6 +31,10 @@ test('protected attachment preview preserves CSV source, download, keyboard and 
     mimeType: 'text/csv',
     buffer: Buffer.from(source),
   });
+  // With an empty composer, Send becomes enabled only after the attachment is ready.
+  await expect(
+    page.getByRole('button', { name: 'Send', exact: true }),
+  ).toBeEnabled();
   await page.getByLabel('Message').fill('Read the attached CSV for order 91.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByTestId('connection')).toHaveText('Ready');

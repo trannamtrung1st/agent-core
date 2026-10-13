@@ -7,7 +7,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
 }) => {
   test.setTimeout(180000);
   const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('pageerror', (error) => errors.push(error.stack ?? error.message));
   await page.goto('/');
   const owner = await selectInstanceIdentity(page, {
     id: 'general-assistant',

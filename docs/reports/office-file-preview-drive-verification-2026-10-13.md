@@ -2,7 +2,7 @@
 
 Started 13 October 2026; updated 14 October 2026. Implementation began from clean `d6472746`; the proposal inspected `5b2d42d4`, followed by a TODO-only commit. Concurrent approval reconnect correction `3f46ce1e` is preserved. Historical freezes remain intact; P10/P11 remain unopened.
 
-**Implementation complete; required exact-commit hosted verification pending.** Final behavior SHA/run will be recorded after publication and verification. This successor does not retroactively expand historical acceptance.
+**Implementation complete; required exact-commit hosted verification pending.** Initial implementation [`26e20b82`](https://github.com/trannamtrung1st/agent-core/commit/26e20b82b91bd8f5c8110a7294346117cc3c5501) is **not accepted**: its [workflow](https://github.com/trannamtrung1st/agent-core/actions/runs/38457840262) completed six jobs successfully, but core browser shard 1 exceeded the 30-minute job budget and reported three preview failures. A corrected final candidate remains to be verified. This successor does not retroactively expand historical acceptance.
 
 ## Implemented scope
 
@@ -50,10 +50,24 @@ Document scroll width equals viewport at **1440, 1024, 768, 390 and 320**; grid/
 
 Initial: [CSV desktop](assets/file-preview/file-preview-csv-1440.png), [CSV mobile](assets/file-preview/file-preview-csv-320.png). Final: [Word desktop](assets/file-preview/word-preview-1440.png), [Word mobile](assets/file-preview/word-preview-320.png), [Excel desktop](assets/file-preview/excel-preview-1440.png), [Excel mobile](assets/file-preview/excel-preview-320.png), [Drive desktop](assets/file-preview/drive-files-1440.png), [Drive mobile](assets/file-preview/drive-files-320.png). Canonical behavior owners, Admin composition guidance, DESIGN.md, relevant Impeccable briefs and schema-2 design JSON match implemented source.
 
-Relative Markdown paths/fences checked across 21 documents: zero issues. New definitions/design JSON parse and `git diff --check` pass.
+Relative Markdown paths/fences checked across 21 documents and 214 fragments across changed Markdown files: zero issues. New definitions/design JSON parse and `git diff --check` pass.
 
 ## Remaining acceptance evidence
 
 - Seven required exact-behavior-SHA jobs: backend; two frontend shards; two core browser shards; acceptance browser; Compose. Pending publication/verification, so final acceptance is not claimed yet.
 - Optional dedicated real-Google consent/refresh/upload/query/download/revocation remains unverified; no account/client credentials supplied. Synthetic receipts do not establish live Google connectivity.
 - Desktop Office GUI fidelity and actual browser UI 200% zoom remain manual verification gaps, with practical fallbacks explicitly recorded above.
+
+## Initial exact-source hosted gates (`26e20b82`)
+
+| Required job | Result |
+| --- | --- |
+| Synthetic backend | Passed: Domain 195; Infrastructure 1,350; Application 1,807; API 578 = **3,930 passed**, 21 opt-in live + 6 opt-in Docker sandbox skips. Event-storage Python checks: 3 passed. |
+| Synthetic frontend 1/2 | Passed: 62 files / 579 tests; production build. |
+| Synthetic frontend 2/2 | Passed: 62 files / 423 tests; production build. Total **124 files / 1,002 tests**. |
+| Synthetic core browser 1/2 | Cancelled by the 30-minute budget at 109/115 scenarios. Three earlier failures: Drive flow recorded React maximum update depth; TSV grid failed to show content; attachment preview lost its dialog during viewport changes. No overall acceptance. |
+| Synthetic core browser 2/2 | Passed: **113** scenarios, no flaky retries. |
+| Synthetic acceptance browser | Passed: **16** scenarios across all seven acceptance projects, no flaky retries. |
+| Synthetic Compose smoke | Passed: owner-capability/SQLite volume and Email watcher cursor/generation restart checks, including the new Drive receipt/bytes survival assertions. |
+
+These results apply only to the initial SHA. The previous successful baseline shard took 29m46s; adding the preview scenarios exhausted that allocation. Core job budget increases to 40 minutes with all projects, one worker and individual test timeouts preserved. CSV/XLSX now use bounded ordinary table pages (CSV at most 4,000 visible cells, XLSX 50 rows/page), avoiding measured virtual-row layout. All four affected Office/Drive/attachment/common-format browser scenarios passed locally in **38.4s**, focused unit checks **16 passed** and production build passed after correction. The attachment fixture additionally waits for upload readiness before sending: an earlier local rerun sent while uploading, correctly retaining the file as pending for the next turn. Browser failures now retain stack details. Final hosted verification must confirm the complete corrected source.
