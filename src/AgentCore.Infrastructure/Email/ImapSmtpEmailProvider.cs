@@ -104,7 +104,7 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
         }
         finally { if (acquired) connections.Release(); }
     }
-    private string Reference(uint validity, uint uid) => $"imap-{account.AccountId:N}:{validity}:{uid}";
+    private string Reference(uint validity, uint uid) => EmailMessageReferences.Imap(account.AccountId, validity, uid);
     public async ValueTask<EmailMessageResult> ReadAsync(EmailReadRequest request, CancellationToken cancellationToken = default)
     {
         var parts = request.MessageId.Split(':');
@@ -135,6 +135,51 @@ public sealed class ImapSmtpEmailProvider(EmailAccountContext account, EmailTran
             throw new AgentCoreException("ValidationError", "mail_read_failed: Message could not be safely read within mail limits.", 400) { DiagnosticId = id };
         }
         finally { if (acquired) connections.Release(); }
+    }
+    // Uses the exact same TLS, pinned DNS, timeout and connection ceiling as reads.
+    internal async ValueTask<EmailWatchBatch> WatchAsync(AgentCore.Domain.Email.EmailWatchCursor? cursor, CancellationToken cancellationToken)
+    {
+        using var deadline = Deadline(cancellationToken); var ct = deadline.Token;
+        await connections.WaitAsync(ct);
+        try
+        {
+            using var client = new ImapClient(); await AuthenticateAsync(client, false, ct);
+            var inbox = client.Inbox; await inbox.OpenAsync(FolderAccess.ReadOnly, ct);
+            async Task<uint> Latest()
+            {
+                if (inbox.UidNext is { } next) return next.Id - 1;
+                if (inbox.Count == 0) return 0;
+                var last = await inbox.FetchAsync(inbox.Count - 1, inbox.Count - 1, MessageSummaryItems.UniqueId, ct);
+                return last.Single().UniqueId.Id;
+            }
+            AgentCore.Domain.Email.EmailWatchCursor Position(uint uid) => new(AgentCore.Domain.Email.EmailWatchCursorKind.ImapUid, UidValidity: inbox.UidValidity, LastUid: uid);
+            if (cursor is null) return new([], Position(await Latest()));
+            if (cursor.Kind != AgentCore.Domain.Email.EmailWatchCursorKind.ImapUid || cursor.UidValidity != inbox.UidValidity)
+                return new([], Position(await Latest()), CursorGap: true);
+            if (cursor.LastUid == uint.MaxValue) return new([], cursor);
+            if (inbox.Count == 0) return new([], Position(Math.Max(cursor.LastUid, await Latest())));
+            if (inbox.UidNext is null)
+            {
+                // Sequence fallback inspects UID identity only. A bounded scan must cover the
+                // committed UID; otherwise explicitly disclose the gap and baseline from now.
+                var first = Math.Max(0, inbox.Count - 500);
+                var recent = await inbox.FetchAsync(first, inbox.Count - 1, MessageSummaryItems.UniqueId, ct);
+                var uids = recent.Select(m => m.UniqueId.Id).Order().ToArray();
+                if (first > 0 && (uids.Length == 0 || uids[0] > cursor.LastUid)) return new([], Position(await Latest()), CursorGap: true);
+                var newUids = uids.Where(uid => uid > cursor.LastUid).Take(25).ToArray();
+                return new(newUids.Select(uid => Reference(inbox.UidValidity, uid)).ToArray(),
+                    Position(newUids.LastOrDefault(cursor.LastUid)), uids.Count(uid => uid > cursor.LastUid) > 25);
+            }
+            var ceiling = inbox.UidNext.Value.Id - 1;
+            if (ceiling <= cursor.LastUid) return new([], cursor);
+            // Bound by UID range, not recent inbox search; sparse/deleted UIDs still advance.
+            var end = (uint)Math.Min(ceiling, (ulong)cursor.LastUid + 500);
+            var matches = await inbox.SearchAsync(SearchQuery.Uids(new UniqueIdRange(new UniqueId(cursor.LastUid + 1), new UniqueId(end))), ct);
+            var ids = matches.OrderBy(u => u.Id).Take(25).ToArray();
+            var lastUid = matches.Count > 25 ? ids[^1].Id : end;
+            return new(ids.Select(u => Reference(inbox.UidValidity, u.Id)).ToArray(), Position(lastUid), lastUid < ceiling);
+        }
+        finally { connections.Release(); }
     }
     public ValueTask<EmailDraftResult> CreateDraftAsync(EmailCreateDraftRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException("Core owns drafts.");
     public ValueTask<EmailDraftSnapshot?> GetDraftAsync(string draftId, CancellationToken cancellationToken = default) => throw new NotSupportedException("Core owns drafts.");

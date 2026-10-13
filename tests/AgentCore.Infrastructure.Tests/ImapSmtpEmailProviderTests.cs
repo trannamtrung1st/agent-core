@@ -16,6 +16,23 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class ImapSmtpEmailProviderTests
 {
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Watch_baseline_and_UID_scan_never_fetch_body_or_mark_seen(bool missingUidNext)
+    {
+        var account = Context();
+        await using var baseline = new FakeMailServer(smtp: false, omitUidNext: missingUidNext);
+        var start = await Provider(baseline, account).WatchAsync(null, default);
+        Assert.Empty(start.MessageRefs); Assert.Equal(123u, start.NextCursor.UidValidity);
+        await using var poll = new FakeMailServer(smtp: false, omitUidNext: missingUidNext);
+        var changes = await Provider(poll, account).WatchAsync(start.NextCursor with { LastUid = 6 }, default);
+        Assert.Equal($"imap-{account.AccountId:N}:123:7", Assert.Single(changes.MessageRefs));
+        Assert.Contains(poll.Commands, c => c.StartsWith("EXAMINE"));
+        Assert.DoesNotContain(poll.Commands, c => c.Contains("BODY") || c.Contains("STORE") || c.Contains("ENVELOPE"));
+        await using var rollover = new FakeMailServer(smtp: false, validity: 124, omitUidNext: missingUidNext);
+        var gap = await Provider(rollover, account).WatchAsync(start.NextCursor, default);
+        Assert.True(gap.CursorGap); Assert.Empty(gap.MessageRefs);
+    }
+
     [Theory]
     [InlineData(false, EmailSendOutcome.Sent)]
     [InlineData(true, EmailSendOutcome.Indeterminate)]
