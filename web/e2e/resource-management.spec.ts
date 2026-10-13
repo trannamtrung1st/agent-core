@@ -75,7 +75,7 @@ test('Definition deletion locks stale revisions and recovers after repeated refr
   const stored = await upload.json();
   const bound = await page.request.put(root + '/resources/batch', { headers, data: { expectedRevision: draft.revision, items: ['one.csv', 'two.csv'].map(logicalPath => ({ logicalPath, kind: 'Knowledge', ...stored })) } });
   expect(bound.ok()).toBe(true);
-  await page.goto(`/admin/definitions/${draft.definitionId}`);
+  await page.goto(`/admin/definitions/${draft.definitionId}/drafts/${draft.draftId}/resources`);
   await navigateAdmin(page, "Skills & resources");
   await navigateAdmin(page, 'Resources');
   const resources = page.locator('section[aria-label="Draft resources"]');
@@ -155,7 +155,7 @@ test('Definition deletion retains a partial failure notice across the draft refr
   const stored = await upload.json();
   const bound = await page.request.put(root + '/resources/batch', { headers, data: { expectedRevision: draft.revision, items: ['one.csv', 'two.csv'].map(logicalPath => ({ logicalPath, kind: 'Knowledge', ...stored })) } });
   expect(bound.ok()).toBe(true);
-  await page.goto(`/admin/definitions/${draft.definitionId}`);
+  await page.goto(`/admin/definitions/${draft.definitionId}/drafts/${draft.draftId}/resources`);
   await navigateAdmin(page, "Skills & resources");
   await navigateAdmin(page, 'Resources');
   const resources = page.locator('section[aria-label="Draft resources"]');
