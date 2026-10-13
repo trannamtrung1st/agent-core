@@ -36,7 +36,7 @@ public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> 
         var s = r is null ? new(id) : Read(r); EmailWatchTransitions.Revision(s, expected);
         if (!s.Enabled || !EmailWatchTransitions.Usable(account)) throw AgentCoreErrors.Conflict("Enable monitoring on an available account before checking.");
         if (s.LeaseExpiresAtUtc > now) return;
-        Write(r!, s with { NextCheckAtUtc = now, Paused = false, RuntimeRevision = s.RuntimeRevision + 1 });
+        Write(r!, s with { NextCheckAtUtc = now, RecoveryCheckRequested = true, RuntimeRevision = s.RuntimeRevision + 1 });
         await Save(db, ct); await tx.CommitAsync(ct);
     }
     public async ValueTask<IReadOnlyList<EmailWatchClaim>> ClaimDueAsync(DateTimeOffset now, int limit, CancellationToken ct = default)
@@ -49,7 +49,7 @@ public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> 
         {
             var c = await Account(db, Guid.Parse(r.AccountId), ct); var s = Read(r);
             if (s.LeaseExpiresAtUtc > now) continue;
-            if (!EmailWatchTransitions.Usable(c) || s.Paused && s.AuthorizationFingerprint == EmailWatchTransitions.Fingerprint(c))
+            if (!EmailWatchTransitions.Usable(c) || s.Paused && !s.RecoveryCheckRequested && s.AuthorizationFingerprint == EmailWatchTransitions.Fingerprint(c))
             { Write(r, s with { NextCheckAtUtc = now.AddMinutes(15), RuntimeRevision = s.RuntimeRevision + 1 }); continue; }
             s = EmailWatchTransitions.Claim(s, c, now); Write(r, s); result.Add(new(s, c));
         }
@@ -70,7 +70,11 @@ public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> 
         {
             if (batch.CursorGap || n.AccountId != s.AccountId || n.Generation != s.Generation || n.AuthorizationFingerprint != s.AuthorizationFingerprint
                 || !await BindingValid(db, n, ct) || await db.CoreEvents.AnyAsync(e => e.DedupeKey == n.Event.DedupeKey, ct)) continue;
-            CoreEventPersistence.Stage(db, n.Event);
+            var rows = await db.Automations.Include(a => a.Triggers).Where(a => a.AgentInstanceId == n.Event.Owner.AgentInstanceId.ToString("D")
+                && a.ProfileId == n.Event.Owner.ProfileId.ToString("D") && a.Status == (int)AgentCore.Domain.Triggers.AutomationStatus.Active).ToArrayAsync(ct);
+            var subscriptions = EmailWatchTransitions.Subscriptions(rows.Select(TriggerStoreMapping.ToRegistration), n.Event.Owner);
+            if (subscriptions.Count == 0) continue;
+            CoreEventPersistence.Stage(db, n.Event, subscriptions);
             db.EmailWatchEvents.Add(new() { EventId = n.Event.EventId.ToString("D"), AuthorityJson = JsonSerializer.Serialize(n) }); emitted = true;
         }
         Write(r, EmailWatchTransitions.Success(s, batch, emitted, now));
@@ -114,8 +118,12 @@ public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> 
             return await CanDeliver(db, sourceId, ct);
         var bucketJson = await db.CoreEventBuckets.Where(b => b.BucketId == sourceId.ToString("D")).Select(b => b.PayloadJson).SingleOrDefaultAsync(ct);
         if (bucketJson?.Contains("\"Key\":\"email.message.received\"", StringComparison.Ordinal) == true)
-            foreach (var source in JsonSerializer.Deserialize<CoreEventBucket>(bucketJson, CoreEventPersistence.Json)!.Sources.Where(e => e.Key == "email.message.received"))
-                if (!await CanDeliver(db, source.EventId, ct)) return false;
+        {
+            var sources = EmailWatchTransitions.AdmissionSources(JsonSerializer.Deserialize<CoreEventBucket>(bucketJson, CoreEventPersistence.Json)!, occurrence.EvidenceJson);
+            if (sources is null) return false;
+            foreach (var source in sources)
+                if (!await CanDeliver(db, source, ct)) return false;
+        }
         return true;
     }
     private static async Task Save(AgentCoreDbContext db, CancellationToken ct)

@@ -101,12 +101,17 @@ it('names the Custom incoming test in paused recovery and leaves explicit Check 
   expect(screen.getByRole('button', { name: 'Check now' })).toBeEnabled();
 });
 
-it('uses canonical contextual Automations and reports retained drafts to the Instance workspace', async () => {
+it('shows account-wide status read-only in an Instance with canonical management and Automation links', async () => {
   const report = vi.fn();
-  const mounted = render(<ConfigProvider><App><EmailMonitoringSection account={account} instanceId="AABBCCDD-0000-0000-0000-000000000001" onDirtyChange={report} /></App></ConfigProvider>);
-  const toggle = await screen.findByRole('switch');
+  render(<ConfigProvider><App><EmailMonitoringSection account={account} instanceId="AABBCCDD-0000-0000-0000-000000000001" onDirtyChange={report} /></App></ConfigProvider>);
+  await screen.findByText('Monitoring Off');
   expect(screen.getByRole('link', { name: 'Configure an Instance Automation' })).toHaveAttribute('href', '/admin/instances/aabbccdd-0000-0000-0000-000000000001/automations');
-  fireEvent.click(toggle); await waitFor(() => expect(report).toHaveBeenLastCalledWith(true));
-  fireEvent.click(screen.getByRole('button', { name: 'Cancel changes' })); await waitFor(() => expect(report).toHaveBeenLastCalledWith(false));
-  fireEvent.click(toggle); mounted.unmount(); expect(report).toHaveBeenLastCalledWith(false);
+  expect(screen.getByRole('link', { name: 'Manage monitoring in Connections → Credentials' })).toHaveAttribute('href', '/admin/connections/credentials');
+  expect(screen.getByText(/Monitoring is account-wide/)).toBeVisible();
+  expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Save monitoring' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Check now' })).not.toBeInTheDocument();
+  expect(report).not.toHaveBeenCalledWith(true);
+  expect(api.saveEmailMonitoring).not.toHaveBeenCalled(); expect(api.checkEmailMonitoring).not.toHaveBeenCalled();
 });

@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { navigateAdmin } from './support/admin-navigation';
 
 for (const width of [1440, 768, 390, 320]) test(`email monitoring saved settings and queued scan at ${width}px`, async ({ page }) => {
   test.setTimeout(120_000); await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
@@ -64,20 +63,21 @@ for (const width of [1440, 768, 390, 320]) test(`email monitoring saved settings
   await expect(page.getByRole('heading', { name: 'Credential bindings', exact: true, level: 2 })).toBeVisible();
   await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name: 'Expand row', exact: true }).click();
   const bound = page.getByRole('region', { name: 'Email monitoring', exact: true });
-  await bound.getByRole('switch', { name: 'New inbox messages', exact: true }).click();
-  await expect(page.getByText('Unsaved changes retained in this Instance', { exact: true })).toBeVisible();
+  await expect(bound.getByText(/Monitoring is account-wide/)).toBeVisible();
+  await expect(bound.getByRole('switch')).toHaveCount(0);
+  await expect(bound.getByRole('button', { name: 'Save monitoring', exact: true })).toHaveCount(0);
+  await expect(bound.getByRole('button', { name: 'Check now', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Unsaved changes retained in this Instance', { exact: true })).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const setup = bound.getByRole('link', { name: 'Configure an Instance Automation', exact: true });
   await expect(setup).toHaveAttribute('href', `/admin/instances/${instance.instanceId}/automations`);
   await setup.click();
   await expect(page.getByRole('heading', { name: 'Automations', exact: true, level: 2 })).toBeVisible();
-  await navigateAdmin(page, 'Credential bindings');
-  await expect(bound.getByRole('switch', { name: 'New inbox messages', exact: true })).not.toBeChecked();
-  await expect(bound.getByRole('button', { name: 'Save monitoring', exact: true })).toBeEnabled();
-  await page.getByRole('link', { name: 'Chat', exact: true }).click();
-  const guard = page.getByRole('dialog', { name: 'Discard unsaved changes?', exact: true });
-  await guard.getByRole('button', { name: 'Stay', exact: true }).click();
-  await expect(bound.getByText('Unsaved monitoring changes', { exact: true })).toBeVisible();
-  await bound.getByRole('button', { name: 'Cancel changes', exact: true }).click();
-  await expect(bound.getByRole('switch', { name: 'New inbox messages', exact: true })).toBeChecked();
-  await expect(page.getByText('Unsaved changes retained in this Instance', { exact: true })).toBeHidden();
+  await page.goto(`/admin/instances/${instance.instanceId}/credentials`);
+  await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name: 'Expand row', exact: true }).click();
+  await bound.getByRole('link', { name: 'Manage monitoring in Connections → Credentials', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Credentials', exact: true, level: 2 })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Search credentials', exact: true }).fill(name);
+  await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name: 'Expand row', exact: true }).click();
+  await expect(monitor.getByRole('switch', { name: 'New inbox messages', exact: true })).toBeVisible();
 });

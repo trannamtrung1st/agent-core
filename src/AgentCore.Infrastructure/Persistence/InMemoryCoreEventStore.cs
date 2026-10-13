@@ -64,16 +64,25 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
             { buckets.Remove(id); inspected.RemoveWhere(i => i.BucketId == id); }
         }
     }
-    internal IReadOnlyList<Guid> EmailSources(Guid id)
+    internal IReadOnlyList<Guid>? EmailSources(Guid id, string? evidence = null)
     {
         lock (gate)
         {
             if (receipts.TryGetValue(id, out var receipt)) return receipt.Event.Key == "email.message.received" ? [id] : [];
-            return buckets.TryGetValue(id, out var bucket) ? bucket.Sources.Where(s => s.Key == "email.message.received").Select(s => s.EventId).ToArray() : [];
+            return buckets.TryGetValue(id, out var bucket) ? evidence is null
+                ? bucket.Sources.Where(s => s.Key == "email.message.received").Select(s => s.EventId).ToArray()
+                : EmailWatchTransitions.AdmissionSources(bucket, evidence) : [];
         }
     }
-    internal void Append(CoreEventOccurrence? e)
-    { if (e is null) return; lock (gate) receipts.TryAdd(e.EventId, new(e, e.OccurredAtUtc, false)); }
+    internal void Append(CoreEventOccurrence? e, IReadOnlyList<EventSubscriptionSnapshot>? subscriptions = null)
+    {
+        if (e is null) return;
+        lock (gate)
+        {
+            if (!receipts.TryAdd(e.EventId, new(e, e.OccurredAtUtc, false))) return;
+            if (subscriptions is not null) SnapshotAsync(e.EventId, subscriptions).GetAwaiter().GetResult();
+        }
+    }
     public ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default, EventRecoveryCursor? after = null)
     {
         lock (gate)

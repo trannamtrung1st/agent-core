@@ -21,9 +21,9 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
         {
             memory.EmailAdmissionGate = instances.CredentialGate;
             memory.EmailNeedsFence = occurrence => occurrence.SourceKind == AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent
-                && occurrence.SourceEventId is Guid id && events.EmailSources(id).Count > 0;
+                && occurrence.SourceEventId is Guid id && events.EmailSources(id) is { Count: > 0 };
             memory.EmailCanAdmit = occurrence => occurrence.SourceKind != AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent
-                || occurrence.SourceEventId is not Guid id || events.EmailSources(id).All(source => CanDeliverAsync(source).Result);
+                || occurrence.SourceEventId is not Guid id || events.EmailSources(id, occurrence.EvidenceJson) is { } sources && sources.All(source => CanDeliverAsync(source).Result);
         }
     }
     private readonly ITriggerStore? triggers;
@@ -38,7 +38,7 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         { var c = Account(id); var s = states.GetValueOrDefault(id) ?? new(id); EmailWatchTransitions.Revision(s, expected);
             if (!s.Enabled || !EmailWatchTransitions.Usable(c)) throw AgentCoreErrors.Conflict("Enable monitoring on an available account before checking.");
-            if (s.LeaseExpiresAtUtc <= now || s.LeaseId is null) states[id] = s with { NextCheckAtUtc = now, Paused = false, RuntimeRevision = s.RuntimeRevision + 1 };
+            if (s.LeaseExpiresAtUtc <= now || s.LeaseId is null) states[id] = s with { NextCheckAtUtc = now, RecoveryCheckRequested = true, RuntimeRevision = s.RuntimeRevision + 1 };
         } return ValueTask.CompletedTask;
     }
     public ValueTask<IReadOnlyList<EmailWatchClaim>> ClaimDueAsync(DateTimeOffset now, int limit, CancellationToken ct = default)
@@ -51,7 +51,7 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
                 if (s.LeaseExpiresAtUtc > now) continue;
                 var c = credentials.GetAsync(s.AccountId).Result;
                 if (c is null) { states.Remove(s.AccountId); continue; }
-                if (!EmailWatchTransitions.Usable(c) || s.Paused && s.AuthorizationFingerprint == EmailWatchTransitions.Fingerprint(c))
+                if (!EmailWatchTransitions.Usable(c) || s.Paused && !s.RecoveryCheckRequested && s.AuthorizationFingerprint == EmailWatchTransitions.Fingerprint(c))
                 { states[s.AccountId] = s with { NextCheckAtUtc = now.AddMinutes(15), RuntimeRevision = s.RuntimeRevision + 1 }; continue; }
                 var claimed = states[s.AccountId] = EmailWatchTransitions.Claim(s, c, now); result.Add(new(claimed, c));
             }
@@ -71,8 +71,9 @@ public sealed class InMemoryEmailWatchStore : IEmailWatchStore
             foreach (var n in proposed)
             {
                 if (batch.CursorGap || n.AccountId != s.AccountId || n.Generation != s.Generation || n.AuthorizationFingerprint != s.AuthorizationFingerprint || !BindingValid(n)) continue;
-                if (!notifications.TryAdd(n.Event.EventId, n)) continue;
-                events.Append(n.Event); emitted = true;
+                var subscriptions = EmailWatchTransitions.Subscriptions(triggers!.ListAsync(n.Event.Owner, null).Result, n.Event.Owner);
+                if (subscriptions.Count == 0 || !notifications.TryAdd(n.Event.EventId, n)) continue;
+                events.Append(n.Event, subscriptions); emitted = true;
             }
             states[s.AccountId] = EmailWatchTransitions.Success(s, batch, emitted, now); return ValueTask.FromResult(true);
         }

@@ -75,6 +75,34 @@ public sealed class EmailWatchStoreTests
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
     }
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Paused_recovery_request_survives_reopen_and_expired_claim_without_releasing_fence(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"watch-paused-recovery-{Guid.NewGuid():N}.db");
+        var factory = new Factory(path); var instances = new InMemoryAgentInstanceStore();
+        ICredentialStore credentials = sqlite ? new SqliteCredentialStore(factory) : new InMemoryCredentialStore(instances);
+        IEmailWatchStore watches = sqlite ? new SqliteEmailWatchStore(factory) : new InMemoryEmailWatchStore(instances, credentials, (IAgentCredentialBindingStore)credentials, new());
+        var now = DateTimeOffset.UtcNow; var id = Guid.NewGuid();
+        try
+        {
+            if (sqlite) { await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); }
+            await credentials.SaveAsync(new(id, "Recovery", CredentialKind.Password, CredentialStatus.Active,
+                new Dictionary<string, string>(), [], "protected", 1, 1, now, now, CredentialPurpose.EmailAccount, EmailAccountProfile.Custom("recovery@example.test")), 0);
+            await watches.ConfigureAsync(id, 0, true, 60, now);
+            var baseline = Assert.Single(await watches.ClaimDueAsync(now, 1));
+            await watches.RecordFailureAsync(baseline, new("email_watch_access_required", null, true), now);
+            await watches.CheckNowAsync(id, 1, now.AddSeconds(1));
+            if (sqlite) watches = new SqliteEmailWatchStore(factory);
+            var queued = await watches.GetAsync(id); Assert.True(queued.Paused); Assert.True(queued.RecoveryCheckRequested);
+            var interrupted = Assert.Single(await watches.ClaimDueAsync(now.AddSeconds(1), 1)); Assert.True(interrupted.State.Paused);
+            if (sqlite) watches = new SqliteEmailWatchStore(factory);
+            var recovered = Assert.Single(await watches.ClaimDueAsync(now.AddSeconds(92), 1)); Assert.True(recovered.State.Paused);
+            Assert.False(await watches.CommitAsync(interrupted, new([], new(EmailWatchCursorKind.Synthetic)), [], now.AddSeconds(93)));
+            Assert.True(await watches.CommitAsync(recovered, new([], new(EmailWatchCursorKind.Synthetic)), [], now.AddSeconds(93)));
+            var success = await watches.GetAsync(id); Assert.False(success.Paused); Assert.False(success.RecoveryCheckRequested);
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
     private sealed class Factory(string path) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options); }
 }

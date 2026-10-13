@@ -16,6 +16,7 @@ const statusText: Record<EmailMonitoring['status'], string> = {
   Initializing: 'Establishing baseline from now', Checking: 'Checking inbox', Retrying: 'Retrying', Gap: 'Monitoring · coverage gap', Monitoring: 'Monitoring On',
 };
 export function EmailMonitoringSection({ account, instanceId, onDirtyChange }: { account: SystemCredential; instanceId?: string; onDirtyChange?: (dirty: boolean) => void }) {
+  const readOnly = !!instanceId;
   const { token } = theme.useToken(); const layout = useAdminDetailLayout();
   const [status, setStatus] = useState<EmailMonitoring>(); const [saved, setSaved] = useState<EmailMonitoring>();
   const [enabled, setEnabled] = useState(false); const [interval, setInterval] = useState(300);
@@ -78,9 +79,13 @@ export function EmailMonitoringSection({ account, instanceId, onDirtyChange }: {
       <Typography.Text type="secondary" style={{ maxInlineSize: '75ch' }}>Observe new inbox messages from now and notify subscribed Automations. Existing mail is skipped. Monitoring does not grant agents account access or approve sending.</Typography.Text>
     </Flex>
     {loading ? <Skeleton active paragraph={{ rows: 2 }} title={false} /> : status && saved && <>
+      {readOnly && <Typography.Text type="secondary" style={{ maxInlineSize: '75ch' }}>Monitoring is account-wide and affects every Instance using this account. <a href={adminHomePath('credentials')} onClick={followAppLink}>Manage monitoring in Connections → Credentials</a>.</Typography.Text>}
       {warning && <Alert showIcon type="warning" title={status.status === 'Gap' ? 'Some messages may have been missed' : statusText[status.status]}
         description={status.status === 'HostDisabled' ? 'Ask the operator to enable Email and EmailMonitoring. Your saved settings remain.' : status.status === 'Retrying' ? 'A temporary mailbox failure will retry automatically. Check now requests another attempt.' : status.status === 'Gap' ? 'The mailbox cursor changed or expired. Monitoring resumed from a new baseline; old mail will not be replayed.' : account.emailAccount?.preset === 'Custom' ? 'Review account status and Test incoming above. Update Custom credentials, then Check now.' : 'Review account status and Test access above. Reconnect Gmail, then Check now.'} />}
-      <Flex vertical gap={token.paddingSM}>
+      {readOnly ? <Descriptions size="small" column={1} {...layout} items={[
+        { key: 'enabled', label: 'New inbox messages', children: status.enabled ? 'On' : 'Off' },
+        { key: 'interval', label: 'Check every', children: `${status.intervalSeconds / 60} ${status.intervalSeconds === 60 ? 'minute' : 'minutes'}` },
+      ]} /> : <Flex vertical gap={token.paddingSM}>
         <Flex className="admin-email-monitor-controls" wrap gap={token.padding} align="center">
           <Flex gap={token.paddingXS} align="center"><Switch id={`email-monitor-${account.credentialId}`} aria-label="New inbox messages" checked={enabled} disabled={!!busy} onChange={value => editDraft(() => setEnabled(value))} /><label htmlFor={`email-monitor-${account.credentialId}`}>New inbox messages</label></Flex>
           <Flex gap={token.paddingXS} align="center"><label htmlFor={`email-interval-${account.credentialId}`}>Check every</label><Select virtual={false} id={`email-interval-${account.credentialId}`} aria-label="Check every" value={interval} disabled={!!busy} onChange={value => editDraft(() => setInterval(value))}
@@ -95,7 +100,7 @@ export function EmailMonitoringSection({ account, instanceId, onDirtyChange }: {
         </Flex>
         {feedback && <Typography.Text role="status" type={feedback === 'Monitoring settings saved.' ? 'success' : undefined}>{feedback}</Typography.Text>}
         <Typography.Text type="secondary" style={{ maxInlineSize: '75ch' }}>Check now queues a mailbox scan and may trigger Automations. Test access only checks the connection.</Typography.Text>
-      </Flex>
+      </Flex>}
       <Descriptions size="small" column={1} {...layout} items={[
         { key: 'success', label: 'Last successful check', children: <LocalTime value={status.lastSuccessAtUtc} /> },
         { key: 'next', label: 'Next check', children: !status.enabled ? 'Monitoring is off' : !status.hostAvailable ? 'Unavailable by operator' : !status.accountAvailable || status.status === 'Paused' ? 'Paused' : <LocalTime value={status.nextCheckAtUtc} /> },

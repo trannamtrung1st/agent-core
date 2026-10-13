@@ -10,7 +10,7 @@ public sealed record EmailWatchState(Guid AccountId, bool Enabled = false, int I
     DateTimeOffset? LastCheckedAtUtc = null, DateTimeOffset? LastSuccessAtUtc = null,
     DateTimeOffset? LastEventAtUtc = null, DateTimeOffset? NextCheckAtUtc = null,
     DateTimeOffset? LastGapAtUtc = null, string? LastErrorCode = null, Guid? LastDiagnosticId = null,
-    int ConsecutiveFailures = 0, bool Paused = false, Guid? LeaseId = null, DateTimeOffset? LeaseExpiresAtUtc = null);
+    int ConsecutiveFailures = 0, bool Paused = false, Guid? LeaseId = null, DateTimeOffset? LeaseExpiresAtUtc = null, bool RecoveryCheckRequested = false);
 
 public static class EmailWatchAuthorization
 {

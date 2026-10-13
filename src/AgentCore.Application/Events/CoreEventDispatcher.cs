@@ -114,26 +114,24 @@ public sealed class CoreEventDispatcher(ICoreEventStore events, ITriggerStore tr
                 var pin = current.ExecutionTarget.Kind == AutomationExecutionTargetKind.ExistingSession ? null : await ExecutionModelAdmission.ResolveAsync(catalog, instances, definitions, triggers, s.Owner, s.AutomationId, ct);
                 if (pin is { FailureCode: not null }) { await events.CompleteBucketAsync(bucket.BucketId, ct, "model-unavailable"); continue; }
                 var now = TriggerScheduleCalculator.Truncate(time.GetUtcNow());
-                if (bucket.Sources.Any(e => e.Key == "email.message.received"))
-                {
-                    var authorized = true;
-                    foreach (var source in bucket.Sources.Where(e => e.Key == "email.message.received")) authorized &= await EmailAllowed(source.EventId, ct);
-                    if (!authorized) { await events.CompleteBucketAsync(bucket.BucketId, ct, "email-authority-revoked"); continue; }
-                }
-                var sources = bucket.Sources;
+                var sources = new List<EventBucketSource>();
+                foreach (var source in bucket.Sources)
+                    if (source.Key != "email.message.received" || await EmailAllowed(source.EventId, ct)) sources.Add(source);
+                if (sources.Count == 0)
+                { await events.CompleteBucketAsync(bucket.BucketId, ct, "email-authority-revoked"); continue; }
                 string evidence;
                 try
                 {
                     evidence = AutomationRules.Evidence(current, new
                     {
                         bucketId = bucket.BucketId,
-                        count = bucket.Sources.Count,
+                        count = sources.Count,
                         sources = sources.Select(e => new { eventId = e.EventId, data = JsonSerializer.Deserialize<JsonElement>(e.DataJson) }),
                         causation = new
                         {
-                            rootAgentRunId = bucket.Sources[0].RootAgentRunId,
-                            triggerDepth = bucket.Sources.Max(e => e.TriggerDepth) + 1,
-                            visitedAutomationIds = bucket.Sources.SelectMany(e => e.VisitedAutomationIds ?? []).Append(s.AutomationId).Distinct().ToArray()
+                            rootAgentRunId = sources[0].RootAgentRunId,
+                            triggerDepth = sources.Max(e => e.TriggerDepth) + 1,
+                            visitedAutomationIds = sources.SelectMany(e => e.VisitedAutomationIds ?? []).Append(s.AutomationId).Distinct().ToArray()
                         }
                     }, current.Triggers.Single(t => t.TriggerId == s.TriggerId));
                 }

@@ -117,11 +117,16 @@ internal static class CoreEventPersistence
         }
         return result;
     }
-    internal static void Stage(AgentCoreDbContext db, CoreEventOccurrence? e)
+    internal static void Stage(AgentCoreDbContext db, CoreEventOccurrence? e, IReadOnlyList<EventSubscriptionSnapshot>? subscriptions = null)
     {
         if (e is null) return;
         db.CoreEvents.Add(new() { EventId = e.EventId.ToString("D"), DedupeKey = e.DedupeKey,
             AgentInstanceId = e.Owner.AgentInstanceId.ToString("D"), ProfileId = e.Owner.ProfileId.ToString("D"),
-            ReceivedAtUtc = e.OccurredAtUtc.ToUnixTimeMilliseconds(), PayloadJson = JsonSerializer.Serialize(e, Json) });
+            ReceivedAtUtc = e.OccurredAtUtc.ToUnixTimeMilliseconds(), PayloadJson = JsonSerializer.Serialize(e, Json), Snapshotted = subscriptions is not null });
+        if (subscriptions is not null)
+            foreach (var subscription in subscriptions.Where(s => s.Owner == e.Owner))
+                db.CoreEventDeliveries.Add(new() { EventId = e.EventId.ToString("D"), AutomationId = subscription.AutomationId.ToString("D"),
+                    TriggerId = subscription.TriggerId.ToString("D"), AgentInstanceId = e.Owner.AgentInstanceId.ToString("D"),
+                    ProfileId = e.Owner.ProfileId.ToString("D"), SnapshotJson = JsonSerializer.Serialize(subscription, Json) });
     }
 }
