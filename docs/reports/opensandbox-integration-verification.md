@@ -211,13 +211,34 @@ Combined local verification on this main/branch source:
 - Full backend regression was attempted locally with provider spending
   disabled. The initial sandboxed run could not open MSBuild named pipes;
   that owned failed process was stopped, and a permitted `-m:1` rerun was
-  started. Domain **195 pass** and Application **1,807 pass / 8 opt-in skips**
-  were observed while the remaining suites were running. Final full-suite and
-  hosted PR results belong to the PR checks; these interim results are not
-  full-suite acceptance.
+  completed. Domain **195 pass**, Application **1,807 pass / 8 opt-in skips**,
+  Infrastructure **1,327 pass / 10 opt-in skips**, API **575 pass / 3 opt-in
+  skips**, and OrderEvents **4 pass**: **3,908 pass / 21 opt-in skips / zero
+  failures**. Hosted results belong to [PR #15](https://github.com/trannamtrung1st/agent-core/pull/15)
+  and its exact-head checks; product regression success does not accept Stage A.
 - Python/JSON/Markdown links/fences, workflow YAML and `git diff --check` pass.
 
 The PR delivers **preparation and offline CI coverage only**. The full
 OpenSandbox feature remains unimplemented/unaccepted, with the original
 isolated-runner and security requirements intact. Publishing this preparation
 does not authorize a privileged test runner or close OSB-01–18.
+
+### Hosted readiness-test correction
+
+The first [PR workflow](https://github.com/trannamtrung1st/agent-core/actions/runs/38430290967)
+on `c23b7bef` failed frontend shard 1: **569 pass / 1 fail**. The existing
+`InstanceSkillsSection` test found its panel wrapper before AntD committed
+the Core Skill row, then synchronously asserted `Core v1`. This was a test
+readiness race, not evidence of altered capability authority.
+
+The corrected fixture deliberately holds the inventory response, verifies
+loading/no Core row, releases it, then awaits the actual Core row. Read-only,
+missing-authority, suppression, enabled-choice and forbidden-action assertions
+remain intact. An initial local correction waited for the absent panel while
+holding the response; that ordering failed locally and was corrected before
+publication. Product UI/services have no behavior changes.
+
+Local combined Skills/approval/realtime regressions now pass **21 tests**, and
+the TypeScript/Vite build passes. The PR must rerun all seven hosted gates on
+the corrected head; the failed first candidate and prior successful jobs do
+not establish final acceptance. Stage A remains blocked throughout.

@@ -14,6 +14,12 @@ must remain visible; it is not a mocked/optional success or an accepted
 deployment. See [the verification ledger](reports/opensandbox-integration-verification.md)
 and [ordered gates](18-implementation-plan.md#p10-opensandbox-cutover-authorized-2026-10-13).
 
+The combined regression check preserves Core Skill ownership/authority
+coverage with delayed inventory resolution: assert the loading state, release
+the response, then await the actual Core Skill row before inspecting its
+read-only and authority states. Finding the containing panel alone is not
+evidence that Ant Design has committed its asynchronous table rows.
+
 ## Activation and AgentRun cutover gates
 
 Atomic occurrence tests run BackgroundOccurrenceIntake with actual InMemory and SQLite admission stores. They verify one child per receipt, fresh candidate-ID replay without orphan children, collision/stale-revision rollback, separate recurring Sessions, canonical instructions/evidence and frozen Skills/model/persona, cancelled Automation and archived-owner refusal, native detached provenance, and reopen. Historical migration assertions continue comparing every original value and verify that newly added receipt links remain null rather than converting old executions.
