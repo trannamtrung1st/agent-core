@@ -129,3 +129,23 @@ test('Search Admin scopes approved labels, focuses anchors and recovers after de
   await expect(page.getByText(/Failed to load draft|Draft could not be loaded|Draft not found|not found|404/i).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toHaveCount(0);
 });
+
+test('Admin navigation changes at exactly 1024px', async ({ page }) => {
+  await page.goto('/admin/instances');
+  for (const width of [1024, 1023, 1000, 992, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    const opener = page.getByRole('button', { name: 'Open Admin navigation', exact: true });
+    if (width >= 1024) {
+      await expect(page.locator('.admin-sidebar')).toBeVisible();
+      await expect(opener).toHaveCount(0);
+    } else {
+      await expect(opener).toBeVisible();
+      await expect(page.locator('.admin-sidebar')).toHaveCount(0);
+      await opener.click();
+      await expect(page.getByRole('navigation', { name: 'Admin navigation', exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(opener).toBeFocused();
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  }
+});

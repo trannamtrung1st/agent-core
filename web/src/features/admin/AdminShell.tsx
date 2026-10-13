@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Breadcrumb, Button, Drawer, Empty, Flex, Grid, Input, Layout, Modal, Typography } from 'antd';
+import { Breadcrumb, Button, Drawer, Empty, Flex, Input, Layout, Modal, Typography } from 'antd';
 import { ArrowLeftOutlined, MenuOutlined, MessageOutlined, SearchOutlined } from '@ant-design/icons';
 import { followAppLink } from '../../app/appLink';
 import { adminDefinitionPath, adminDraftPath, adminHomePath, adminInstancePath, lastChatUrl, type AdminRoute } from '../../app/appRoute';
@@ -18,8 +18,14 @@ export function adminPage(route: AdminRoute): NavigationPage | undefined {
 }
 
 export function AdminShell({ route, ownerName, children }: { route: AdminRoute; ownerName?: string; children: ReactNode }) {
-  const screens = Grid.useBreakpoint();
-  const desktop = !!screens.lg;
+  // The Admin navigation contract uses 1024px; AntD's default lg begins at 992px.
+  const [desktop, setDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const update = () => setDesktop(media.matches);
+    update(); media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dirtySources, setDirtySources] = useState<Record<string, readonly string[]>>({});
