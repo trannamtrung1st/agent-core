@@ -82,14 +82,24 @@ export function WordPreview({
         Best-effort Word preview · additional Office layout/features may be
         present in the download.
       </Typography.Text>
-      <Slider
-        aria-label="Document zoom"
-        min={50}
-        max={150}
-        step={25}
-        value={zoom}
-        onChange={setZoom}
-      />
+      <Flex
+        className="file-preview-toolbar"
+        gap={token.paddingSM}
+        align="center"
+      >
+        <Slider
+          style={{ flex: 1 }}
+          aria-label="Document zoom"
+          min={50}
+          max={150}
+          step={25}
+          value={zoom}
+          onChange={setZoom}
+        />
+        <Typography.Text type="secondary" className="file-preview-zoom-value">
+          {zoom}%
+        </Typography.Text>
+      </Flex>
       {failed ? (
         <Alert
           type="warning"

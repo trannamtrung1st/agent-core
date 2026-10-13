@@ -56,7 +56,12 @@ export function CsvPreview({
   );
   return (
     <Flex vertical gap={token.paddingSM} style={{ minWidth: 0 }}>
-      <Flex wrap align="center" gap={token.paddingXS}>
+      <Flex
+        className="file-preview-toolbar"
+        wrap
+        align="center"
+        gap={token.paddingXS}
+      >
         <Segmented
           aria-label="CSV view"
           options={['Grid', 'Text']}
@@ -122,15 +127,17 @@ export function CsvPreview({
               ),
             }))}
           />
-          <Pagination
-            size="small"
-            simple
-            current={page}
-            pageSize={pageRows}
-            total={body.length}
-            onChange={setPage}
-            showSizeChanger={false}
-          />
+          {body.length > pageRows && (
+            <Pagination
+              size="small"
+              simple
+              current={page}
+              pageSize={pageRows}
+              total={body.length}
+              onChange={setPage}
+              showSizeChanger={false}
+            />
+          )}
         </>
       )}
     </Flex>

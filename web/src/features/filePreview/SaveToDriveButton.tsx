@@ -8,6 +8,7 @@ import {
   Modal,
   Select,
   Spin,
+  Tooltip,
   Typography,
   theme,
 } from 'antd';
@@ -73,14 +74,16 @@ function SaveEntry({
     return null;
   return (
     <>
-      <Button
-        type="text"
-        icon={<CloudUploadOutlined aria-hidden />}
-        aria-label={`Save ${displayName} to Drive`}
-        onClick={() => setOpen(true)}
-      >
-        {iconOnly ? null : 'Save to Drive'}
-      </Button>
+      <Tooltip title={iconOnly ? 'Save to Drive' : undefined}>
+        <Button
+          type="text"
+          icon={<CloudUploadOutlined aria-hidden />}
+          aria-label={`Save ${displayName} to Drive`}
+          onClick={() => setOpen(true)}
+        >
+          {iconOnly ? null : 'Save to Drive'}
+        </Button>
+      </Tooltip>
       <SaveDialog
         key={JSON.stringify(file)}
         file={file}
@@ -110,6 +113,7 @@ function SaveDialog({
   const [receipt, setReceipt] = useState<DriveReceipt | null>(null);
   const [pending, setPending] = useState<DrivePendingError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const work = useRef<AbortController | null>(null);
   const operationKey = useRef<string | null>(null);
   const identity = JSON.stringify(file);
@@ -151,20 +155,28 @@ function SaveDialog({
       controller.abort();
       work.current?.abort();
     };
-  }, [open, identity]);
+  }, [open, identity, attempt]);
   const account = accounts?.find((a) => a.accountRef === alias);
   const [folders, setFolders] = useState<DriveFile[]>([]);
   const [folderQuery, setFolderQuery] = useState('');
   const [folderCursor, setFolderCursor] = useState<string | null>(null);
+  const [folderBusy, setFolderBusy] = useState(false);
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [folderAttempt, setFolderAttempt] = useState(0);
   const folderWork = useRef<AbortController | null>(null);
   useEffect(() => {
     setFolder('root');
-  }, [account?.bindingId]);
+    setFolders([]);
+    setFolderQuery('');
+  }, [open, account?.bindingId]);
   useEffect(() => {
     const controller = new AbortController();
     folderWork.current = controller;
     setFolderCursor(null);
+    setFolderError(null);
+    setFolderBusy(false);
     if (!open || !account?.available) return () => controller.abort();
+    setFolderBusy(true);
     const timer = setTimeout(() => {
       void listDriveFiles(
         instance,
@@ -189,19 +201,31 @@ function SaveDialog({
         })
         .catch(() => {
           if (!controller.signal.aborted)
-            setError(
+            setFolderError(
               'Available folders could not be read. Retry the search or use root.',
             );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setFolderBusy(false);
         });
     }, 200);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [open, instance, account?.bindingId, account?.authEpoch, folderQuery]);
+  }, [
+    open,
+    instance,
+    account?.bindingId,
+    account?.authEpoch,
+    folderQuery,
+    folderAttempt,
+  ]);
   async function moreFolders() {
     const controller = folderWork.current;
-    if (!account || !folderCursor) return;
+    if (!account || !folderCursor || folderBusy) return;
+    setFolderBusy(true);
+    setFolderError(null);
     try {
       const page = await listDriveFiles(
         instance,
@@ -214,11 +238,23 @@ function SaveDialog({
       if (controller?.signal.aborted || controller !== folderWork.current)
         return;
       setFolders((previous) =>
-        [...previous, ...page.items.filter((file) => file.folder)].slice(-100),
+        [
+          ...new Map(
+            [...previous, ...page.items.filter((file) => file.folder)].map(
+              (item) => [item.id, item],
+            ),
+          ).values(),
+        ].slice(-100),
       );
       setFolderCursor(page.nextCursor);
     } catch {
-      setError('Available folders could not be read. Retry the search.');
+      if (!controller?.signal.aborted && controller === folderWork.current)
+        setFolderError(
+          'Available folders could not be read. Retry the search.',
+        );
+    } finally {
+      if (!controller?.signal.aborted && controller === folderWork.current)
+        setFolderBusy(false);
     }
   }
   async function save() {
@@ -307,12 +343,35 @@ function SaveDialog({
   }
   return (
     <Modal
+      className="drive-save-modal"
       open={open}
       closable={{ 'aria-label': 'Close Drive save' }}
       centered
       title="Save as new file in Drive"
       onCancel={onClose}
-      footer={null}
+      footer={
+        <Flex wrap gap={token.paddingXS} justify="end">
+          {pending ? (
+            <Button loading={busy} onClick={() => void inspect()}>
+              Check operation
+            </Button>
+          ) : (
+            !receipt && (
+              <Button
+                type="primary"
+                loading={busy}
+                disabled={
+                  !account?.available || !metadata || !name.trim() || !folder
+                }
+                onClick={() => void save()}
+              >
+                Save new file
+              </Button>
+            )
+          )}
+          <Button onClick={onClose}>Close</Button>
+        </Flex>
+      }
       destroyOnHidden
     >
       <Flex vertical gap={token.paddingSM}>
@@ -321,11 +380,27 @@ function SaveDialog({
           is kept.
         </Typography.Text>
         {metadata && (
-          <Typography.Text className="single-line-ellipsis" title={metadata.displayName}>
+          <Typography.Text
+            className="single-line-ellipsis"
+            title={metadata.displayName}
+          >
             {metadata.displayName}
           </Typography.Text>
         )}
-        {error && <Alert type="warning" showIcon title={error} />}
+        {error && (
+          <Alert
+            type="warning"
+            showIcon
+            title={error}
+            action={
+              !accounts ? (
+                <Button onClick={() => setAttempt((value) => value + 1)}>
+                  Retry destinations
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
         {receipt && (
           <Alert
             type="success"
@@ -349,6 +424,7 @@ function SaveDialog({
             <Form.Item label="Drive account">
               <Select
                 aria-label="Drive account"
+                placeholder="Choose a connected account"
                 value={alias}
                 onChange={setAlias}
                 options={accounts
@@ -384,6 +460,8 @@ function SaveDialog({
             >
               <Select
                 aria-label="Drive folder"
+                disabled={!account?.available}
+                loading={folderBusy}
                 showSearch={{ filterOption: false, onSearch: setFolderQuery }}
                 value={folder}
                 onChange={setFolder}
@@ -396,36 +474,31 @@ function SaveDialog({
                 ]}
               />
               {folderCursor && (
-                <Button type="link" onClick={() => void moreFolders()}>
+                <Button
+                  type="link"
+                  loading={folderBusy}
+                  onClick={() => void moreFolders()}
+                >
                   More available folders
                 </Button>
+              )}
+              {folderError && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  title={folderError}
+                  action={
+                    <Button
+                      onClick={() => setFolderAttempt((value) => value + 1)}
+                    >
+                      Retry folders
+                    </Button>
+                  }
+                />
               )}
             </Form.Item>
           </Form>
         )}
-        <Flex wrap gap={token.paddingXS}>
-          {pending ? (
-            <Button loading={busy} onClick={() => void inspect()}>
-              Check operation
-            </Button>
-          ) : (
-            <Button
-              type="primary"
-              loading={busy}
-              disabled={
-                !account?.available ||
-                !metadata ||
-                !name ||
-                !folder ||
-                !!receipt
-              }
-              onClick={() => void save()}
-            >
-              Save new file
-            </Button>
-          )}
-          <Button onClick={onClose}>Close</Button>
-        </Flex>
       </Flex>
     </Modal>
   );

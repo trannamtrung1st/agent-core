@@ -7,6 +7,7 @@ import {
   Modal,
   Slider,
   Spin,
+  Tooltip,
   Typography,
   theme,
 } from 'antd';
@@ -91,18 +92,20 @@ function PreviewEntry({
   }, [disabled]);
   return (
     <>
-      <Button
-        type="text"
-        icon={<EyeOutlined aria-hidden />}
-        disabled={disabled}
-        aria-label={
-          label ??
-          `Preview ${'metadata' in file ? file.metadata.displayName : 'file'}`
-        }
-        onClick={() => setOpen(true)}
-      >
-        {iconOnly ? null : 'Preview'}
-      </Button>
+      <Tooltip title={iconOnly ? 'Preview' : undefined}>
+        <Button
+          type="text"
+          icon={<EyeOutlined aria-hidden />}
+          disabled={disabled}
+          aria-label={
+            label ??
+            `Preview ${'metadata' in file ? file.metadata.displayName : 'file'}`
+          }
+          onClick={() => setOpen(true)}
+        >
+          {iconOnly ? null : 'Preview'}
+        </Button>
+      </Tooltip>
       <FilePreview file={file} open={open} onClose={() => setOpen(false)} />
     </>
   );
@@ -238,7 +241,11 @@ export function FilePreview({
       centered
       destroyOnHidden
       title={
-        <Typography.Text strong className="single-line-ellipsis" title={metadata?.displayName}>
+        <Typography.Text
+          strong
+          className="single-line-ellipsis"
+          title={metadata?.displayName}
+        >
           {metadata?.displayName ?? 'File preview'}
         </Typography.Text>
       }
@@ -252,13 +259,24 @@ export function FilePreview({
           align="center"
           gap={token.paddingXS}
         >
-          <Typography.Text type="secondary">
-            {sourceLabel[file.kind]}
-            {file.kind === 'drive' && file.synthetic ? ' (Synthetic)' : ''}
-            {metadata
-              ? ` · ${artifactSize(metadata.byteSize)} · ${metadata.contentType}`
-              : ''}
-          </Typography.Text>
+          <Flex className="file-preview-metadata" wrap gap={token.paddingXXS}>
+            <Typography.Text type="secondary">
+              {sourceLabel[file.kind]}
+              {file.kind === 'drive' && file.synthetic ? ' (Synthetic)' : ''}
+              {metadata ? ` · ${artifactSize(metadata.byteSize)}` : ''}
+            </Typography.Text>
+            {metadata && (
+              <Tooltip title={metadata.contentType}>
+                <Typography.Text
+                  type="secondary"
+                  className="single-line-ellipsis file-preview-mime"
+                  title={metadata.contentType}
+                >
+                  · {metadata.contentType}
+                </Typography.Text>
+              </Tooltip>
+            )}
+          </Flex>
           <Flex gap={token.paddingXS}>
             <Button
               icon={<DownloadOutlined />}
@@ -385,7 +403,12 @@ function ImagePreview({
   }
   return (
     <Flex vertical gap={token.paddingSM}>
-      <Flex wrap gap={token.paddingXS} align="center">
+      <Flex
+        className="file-preview-toolbar"
+        wrap
+        gap={token.paddingXS}
+        align="center"
+      >
         <Button disabled={!natural} onClick={() => fit()}>
           Fit image
         </Button>

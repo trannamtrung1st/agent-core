@@ -21,6 +21,7 @@ import {
 } from '../../services/drive';
 import { FilePreviewButton } from '../filePreview/FilePreview';
 import { artifactSize } from '../../services/artifacts';
+import { FolderOutlined, ReloadOutlined } from '@ant-design/icons';
 export function DriveFilesButton({
   instanceId,
   accountRef,
@@ -118,6 +119,7 @@ function DriveFiles({
       open={open}
       centered
       title="Files available to Agent Core"
+      closable={{ 'aria-label': 'Close Drive files' }}
       width="90vw"
       style={{ maxWidth: 1200 }}
       footer={null}
@@ -135,8 +137,10 @@ function DriveFiles({
           and Shared Drives are deferred.
           {account?.synthetic ? ' Synthetic fixture; no Google call.' : ''}
         </Typography.Text>
-        <Flex wrap gap={token.paddingXS}>
+        <Flex className="file-preview-toolbar" wrap gap={token.paddingXS}>
           <Input.Search
+            className="drive-file-search"
+            allowClear
             aria-label="Search app-authorized Drive files"
             placeholder="Search available file names"
             value={query}
@@ -149,9 +153,9 @@ function DriveFiles({
                 attempt: request.attempt + 1,
               })
             }
-            style={{ width: 320, maxWidth: '100%' }}
           />
           <Button
+            icon={<ReloadOutlined aria-hidden />}
             onClick={() =>
               setRequest({
                 ...request,
@@ -189,99 +193,112 @@ function DriveFiles({
           ) : !page ? (
             <Spin aria-label="Loading Drive files" />
           ) : (
-            <Table<DriveFile>
-              size="small"
-              className="admin-collection-table"
-              rowKey="id"
-              pagination={false}
-              scroll={{ x: 800 }}
-              dataSource={page.items}
-              locale={{
-                emptyText: (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description="No files available to Agent Core in this view"
-                  />
-                ),
-              }}
-              columns={[
-                {
-                  title: 'Name',
-                  dataIndex: 'name',
-                  ellipsis: true,
-                  width: 300,
-                  render: (name: string, file) => (
-                    <Typography.Text title={name}>
-                      {file.folder ? (
-                        <Button
-                          type="link"
-                          onClick={() =>
-                            setRequest({
-                              folder: file.id,
-                              attempt: request.attempt + 1,
-                            })
-                          }
-                        >
-                          {name}
-                        </Button>
-                      ) : (
-                        name
-                      )}
-                    </Typography.Text>
+            <>
+              <Typography.Text
+                type="secondary"
+                className="drive-file-scroll-hint"
+              >
+                Scroll horizontally for file details and actions.
+              </Typography.Text>
+              <Table<DriveFile>
+                size="small"
+                className="admin-collection-table"
+                rowKey="id"
+                pagination={false}
+                scroll={{ x: 800 }}
+                dataSource={page.items}
+                locale={{
+                  emptyText: (
+                    <Empty
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      description="No files available to Agent Core in this view"
+                    />
                   ),
-                },
-                {
-                  title: 'Type',
-                  dataIndex: 'mimeType',
-                  ellipsis: true,
-                  width: 200,
-                },
-                {
-                  title: 'Size',
-                  dataIndex: 'byteSize',
-                  width: 90,
-                  render: artifactSize,
-                },
-                {
-                  title: 'Actions',
-                  width: 180,
-                  render: (_, file) => (
-                    <Flex gap={token.paddingXS}>
-                      {!file.folder && !file.nativeDocument && account && (
-                        <FilePreviewButton
-                          disabled={!open}
-                          file={{
-                            kind: 'drive',
-                            instanceId,
-                            accountRef,
-                            fileId: file.id,
-                            version: file.version,
-                            authEpoch: account.authEpoch,
-                            bindingId: account.bindingId,
-                            synthetic: account.synthetic,
-                            metadata: {
-                              displayName: file.name,
-                              contentType: file.mimeType,
-                              byteSize: file.byteSize,
-                            },
-                          }}
-                        />
-                      )}{' '}
-                      {safeDriveLink(file.webViewLink) && (
-                        <Button
-                          type="link"
-                          href={safeDriveLink(file.webViewLink)!}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                        >
-                          Open in Drive
-                        </Button>
-                      )}
-                    </Flex>
-                  ),
-                },
-              ]}
-            />
+                }}
+                columns={[
+                  {
+                    title: 'Name',
+                    dataIndex: 'name',
+                    ellipsis: true,
+                    width: 300,
+                    render: (name: string, file) => (
+                      <Typography.Text
+                        title={name}
+                        className="single-line-ellipsis"
+                      >
+                        {file.folder ? (
+                          <Button
+                            type="link"
+                            icon={<FolderOutlined aria-hidden />}
+                            className="drive-file-folder"
+                            onClick={() =>
+                              setRequest({
+                                folder: file.id,
+                                attempt: request.attempt + 1,
+                              })
+                            }
+                          >
+                            <span className="single-line-ellipsis">{name}</span>
+                          </Button>
+                        ) : (
+                          name
+                        )}
+                      </Typography.Text>
+                    ),
+                  },
+                  {
+                    title: 'Type',
+                    dataIndex: 'mimeType',
+                    ellipsis: true,
+                    width: 200,
+                  },
+                  {
+                    title: 'Size',
+                    dataIndex: 'byteSize',
+                    width: 90,
+                    render: artifactSize,
+                  },
+                  {
+                    title: 'Actions',
+                    width: 180,
+                    render: (_, file) => (
+                      <Flex gap={token.paddingXS}>
+                        {!file.folder && !file.nativeDocument && account && (
+                          <FilePreviewButton
+                            disabled={!open}
+                            file={{
+                              kind: 'drive',
+                              instanceId,
+                              accountRef,
+                              fileId: file.id,
+                              version: file.version,
+                              authEpoch: account.authEpoch,
+                              bindingId: account.bindingId,
+                              synthetic: account.synthetic,
+                              metadata: {
+                                displayName: file.name,
+                                contentType: file.mimeType,
+                                byteSize: file.byteSize,
+                              },
+                            }}
+                          />
+                        )}{' '}
+                        {safeDriveLink(file.webViewLink) && (
+                          <Button
+                            type="link"
+                            href={safeDriveLink(file.webViewLink)!}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                          >
+                            Open in Drive
+                          </Button>
+                        )}
+                      </Flex>
+                    ),
+                  },
+                ]}
+              />
+            </>
           )}
         </div>
         {page?.nextCursor && (

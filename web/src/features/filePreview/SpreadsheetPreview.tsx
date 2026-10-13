@@ -34,6 +34,7 @@ export function SpreadsheetPreview({
   const [result, setResult] = useState<OfficePreview | null>(initial);
   const [selected, setSelected] = useState<OfficeCell | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const identity = JSON.stringify(file);
   useEffect(() => {
     const controller = new AbortController();
     setSelected(null);
@@ -57,7 +58,7 @@ export function SpreadsheetPreview({
           );
       });
     return () => controller.abort();
-  }, [query, initial, file]);
+  }, [query, initial, identity]);
   const rows = result?.rows ?? [];
   const count = rows[0]?.length ?? 0;
   return (
@@ -67,6 +68,7 @@ export function SpreadsheetPreview({
         features may be present in the download.
       </Typography.Text>
       <Tabs
+        className="file-preview-sheets"
         aria-label="Worksheets"
         activeKey={sheet}
         items={initial.sheets!.map((name) => ({ key: name, label: name }))}
@@ -75,13 +77,18 @@ export function SpreadsheetPreview({
           setQuery({ sheet: name, range });
         }}
       />
-      <Flex wrap align="center" gap={token.paddingXS}>
+      <Flex
+        className="file-preview-toolbar"
+        wrap
+        align="center"
+        gap={token.paddingXS}
+      >
         <Input
           aria-label="Worksheet range"
+          className="file-preview-range"
           value={range}
           onChange={(event) => setRange(event.target.value)}
           onPressEnter={() => setQuery({ sheet, range })}
-          style={{ width: 180, maxWidth: '100%' }}
         />
         <Button onClick={() => setQuery({ sheet, range })}>Load range</Button>
       </Flex>

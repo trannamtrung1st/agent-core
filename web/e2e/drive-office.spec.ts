@@ -71,10 +71,27 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   ).toBeVisible({ timeout: 60000 });
   await expect(page.getByText(/Verified report ID:/)).toBeVisible();
   const session = page.url();
+  // A transient destination failure must be recoverable without closing the form.
+  await page.route(
+    '**/drive-accounts',
+    (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'unavailable' }),
+      }),
+    { times: 1 },
+  );
   await page
     .getByRole('button', { name: 'Save q3-report.docx to Drive' })
     .click();
   const save = page.getByRole('dialog', { name: 'Save as new file in Drive' });
+  await save
+    .getByRole('button', { name: 'Retry destinations', exact: true })
+    .click();
+  await expect(
+    save.getByRole('combobox', { name: 'Drive account' }),
+  ).toBeEnabled();
   await save.getByLabel('Drive file name').fill('review-copy.docx');
   await save
     .getByRole('button', { name: 'Save new file', exact: true })
@@ -94,6 +111,44 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     name: 'Files available to Agent Core',
   });
   await expect(files).toContainText('App-authorized files only');
+  await files.getByRole('button', { name: 'Preview q3-sales.xlsx' }).click();
+  const workbook = page.getByRole('dialog', {
+    name: 'q3-sales.xlsx',
+    exact: true,
+  });
+  await workbook.getByLabel('Worksheet range').fill('A1:C4');
+  await workbook
+    .getByRole('button', { name: 'Load range', exact: true })
+    .click();
+  await workbook
+    .getByRole('button', { name: 'B4 empty formula', exact: true })
+    .click();
+  await expect(workbook).toContainText('B4 · =SUM(B2:B3)');
+  const rangeReads: string[] = [];
+  const trackRange = (request: import('@playwright/test').Request) => {
+    if (request.url().includes('/office-preview'))
+      rangeReads.push(request.url());
+  };
+  page.on('request', trackRange);
+  for (const width of [1440, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: 700 });
+    await expect(
+      workbook.getByRole('button', { name: 'A1 Region', exact: true }),
+    ).toBeVisible();
+    await expect(workbook).toContainText('B4 · =SUM(B2:B3)');
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+  expect(rangeReads).toEqual([]);
+  page.off('request', trackRange);
+  await page.keyboard.press('Escape');
+  await expect(
+    files.getByRole('button', { name: 'Preview q3-sales.xlsx' }),
+  ).toBeFocused();
+  await page.setViewportSize({ width: 1440, height: 900 });
   await files.getByRole('button', { name: 'Preview review-copy.docx' }).click();
   const preview = page.getByRole('dialog', { name: 'review-copy.docx' });
   await expect(

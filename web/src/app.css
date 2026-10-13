@@ -2805,7 +2805,18 @@ body,
 .file-preview-modal { max-width: 1440px; }
 .file-preview-shell { height: min(80dvh, 900px); min-width: 0; }
 .file-preview-actions { flex: 0 0 auto; min-width: 0; }
-.file-preview-actions > .ant-typography { flex: 1 1 200px; overflow-wrap: anywhere; }
+.file-preview-metadata { flex: 1 1 200px; min-width: 0; }
+.file-preview-metadata > .ant-typography { min-width: 0; }
+.file-preview-mime { flex: 0 1 auto; }
+.file-preview-toolbar { min-width: 0; }
+.file-preview-range { width: 180px; max-width: 100%; }
+.file-preview-sheets .ant-tabs-nav { margin-bottom: 0; }
+.file-preview-zoom-value { min-width: 4ch; text-align: end; font-variant-numeric: tabular-nums; }
+.drive-file-search { flex: 1 1 240px; max-width: 400px; min-width: 0; }
+.drive-file-folder { max-width: 100%; height: auto; white-space: normal; justify-content: flex-start; }
+.drive-file-scroll-hint { display: none; }
+.drive-save-modal .ant-modal-body { max-height: calc(100dvh - 180px); overflow: auto; overscroll-behavior: contain; }
+.drive-save-modal .ant-form-item:last-child { margin-bottom: 0; }
 .file-preview-content { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .file-preview-code { margin: 0; padding: var(--ac-space-default); overflow: auto; background: var(--ac-color-container); tab-size: 4; }
 .file-preview-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -2821,14 +2832,23 @@ body,
   .file-preview-modal .ant-modal-container { height: 100dvh; display: flex; flex-direction: column; border-radius: 0; padding: var(--ac-space-default); }
   .file-preview-modal .ant-modal-body { flex: 1; min-height: 0; }
   .file-preview-shell { height: 100%; }
-  .file-preview-actions .ant-btn, .file-preview-content .ant-segmented-item-label { min-height: 40px; }
+  .file-preview-modal .ant-btn, .file-preview-modal .ant-input, .file-preview-modal .ant-input-affix-wrapper,
+  .file-preview-modal .ant-checkbox-wrapper, .file-preview-modal .ant-tabs-tab,
+  .file-preview-modal .ant-segmented-item-label, .drive-save-modal .ant-btn,
+  .drive-save-modal .ant-input, .drive-save-modal .ant-select { min-height: 40px; }
+  .file-preview-modal .ant-input-affix-wrapper .ant-input { min-height: 0; }
+  .file-preview-modal .ant-modal-close, .drive-save-modal .ant-modal-close { min-width: 40px; min-height: 40px; }
+  .file-preview-modal .ant-checkbox-wrapper { align-items: center; }
+  .file-preview-range { flex: 1 1 140px; width: auto; }
+  .file-preview-mime { flex-basis: 100%; }
+  .drive-file-scroll-hint { display: block; margin-bottom: var(--ac-space-compact); font-size: var(--ac-font-size-label); }
 }
 .file-preview-code mark { background: var(--ac-color-primary-bg); color: var(--ac-color-text); }
 .history-file-actions { min-width: 0; }
 .history-file-actions .file-chip { max-width: 100%; overflow-wrap: anywhere; }
 .file-preview-word { height: 100%; min-height: 0; }
 .file-preview-word-frame { flex: 1; width: 100%; min-height: 300px; border: 0; }
-.file-preview-cell { width: 100%; height: auto; min-height: 32px; text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; }
+.file-preview-cell { width: 100%; height: auto; min-height: 32px; justify-content: flex-start; text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Single-line labels use CSS truncation, avoiding measured Typography resize loops. */
 .single-line-ellipsis { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

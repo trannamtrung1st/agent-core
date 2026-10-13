@@ -31,7 +31,12 @@ export function TextPreview({
     : 0;
   return (
     <Flex vertical gap={token.paddingSM} style={{ minWidth: 0 }}>
-      <Flex wrap gap={token.paddingXS} align="center">
+      <Flex
+        className="file-preview-toolbar"
+        wrap
+        gap={token.paddingXS}
+        align="center"
+      >
         {markdown && (
           <Segmented
             aria-label="Markdown view"
@@ -59,6 +64,7 @@ export function TextPreview({
           {copyStatus}
         </Button>
         <Input
+          allowClear
           type="search"
           aria-label="Find in file"
           placeholder="Find in file"
