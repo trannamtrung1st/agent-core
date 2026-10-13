@@ -171,8 +171,8 @@ export function CredentialsSection() {
         dataSource={items.filter(c => (statusFilter === "All" || c.status === statusFilter) && matchesCredential(c, search))}
         expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, c) => setExpanded(open ? [c.credentialId] : []), expandedRowRender: c => <CredentialDetails credential={c} onChanged={load} /> }}
         columns={[
-          { title: "Credential", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a, b) => a.displayName.localeCompare(b.displayName), render: (name, c) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={name}>{name}</Typography.Text><Typography.Text type="secondary">{c.kind} · {c.purpose === "EmailAccount" ? "Email account" : "General"}</Typography.Text>{c.emailAccount && <EmailConnectionTag account={c} />}</Flex> },
-          { title: "Status", dataIndex: "status", width: 100, render: s => <Tag>{s}</Tag> },
+          { title: "Credential", dataIndex: "displayName", width: 220, ellipsis: true, sorter: (a, b) => a.displayName.localeCompare(b.displayName), render: (name, c) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={name}>{name}</Typography.Text><Typography.Text type="secondary">{c.kind} · {c.purpose === "EmailAccount" ? "Email account" : "General"}</Typography.Text></Flex> },
+          { title: "Status", dataIndex: "status", width: 180, render: (s, c) => <Flex vertical align="start" gap={token.paddingXS}><Tag>{s}</Tag>{c.emailAccount && <EmailConnectionTag account={c} />}</Flex> },
           { title: "Metadata & origins", width: 280, render: (_, c) => <CredentialPolicySummary credential={c} /> },
           { title: "Bindings", dataIndex: "bindingCount", width: 80, align: "right" },
           { title: "Updated", width: 180, render: (_, c) => <time dateTime={c.updatedAtUtc}>{new Date(c.updatedAtUtc).toLocaleString()}</time> },
