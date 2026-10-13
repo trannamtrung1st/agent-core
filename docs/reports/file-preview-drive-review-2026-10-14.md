@@ -1,6 +1,6 @@
 # Preview/Drive consistency review — 2026-10-14
 
-Fixes are committed on `0763058db8113f57b85f096a59616eea2738396d`. Reviewed the frontend polish and design-document synchronization after `b7911b79`, including shared preview ownership, responsive source identity, source cancellation, Drive search, destination state, receipt recovery and static design-context parity. This is a bounded successor follow-up; historical hosted acceptance and P10/P11 status remain unchanged.
+Frontend fixes are committed on `0763058db8113f57b85f096a59616eea2738396d`. Reviewed the frontend polish and design-document synchronization after `b7911b79`, including shared preview ownership, responsive source identity, source cancellation, Drive search, destination state, receipt recovery and static design-context parity. The later hosted-history check also corrected the Automation reliability fixture described below. This is a bounded successor follow-up; historical hosted acceptance and P10/P11 status remain unchanged.
 
 ## Findings corrected
 
@@ -9,7 +9,9 @@ Fixes are committed on `0763058db8113f57b85f096a59616eea2738396d`. Reviewed the 
 3. **Loading changed recovery action names.** The native loading icon could remain in the accessible name as `loading Check operation`, including its invisible exit transition. Save new file, Check operation and More available folders now have explicit stable names. Loading feedback remains visible.
 4. **Design sidecar freshness.** The guide was last touched after the preceding sidecar generation, producing a hook freshness warning despite narrative parity. The current behavioral notes and sidecar timestamp were synchronized together. Existing palette, type, spacing and radius primitives remain unchanged.
 
-No backend/API, dependency, storage, authority or layout redesign was needed. Server receipt inspection was traced to the existing Succeeded-or-error contract; authenticated source/version/binding/epoch guards remain in their current owners.
+5. **Automation reliability fixture raced Runtime owners.** The prior hosted run `38478119257` failed its task/history isolation assertion, and that failure reproduced locally. The fixture constructed a second standalone Runtime for chat edits while the SessionHost already owned occurrence execution. It now uses the same managed SessionHost through authenticated attach/send/detach and its manual dispatcher, then waits for accepted work to settle before advancing logical time. An internal observer delegates to the existing Runtime settlement barrier; it adds no public endpoint or execution policy. Historical evidence is asserted as decoded JSON with the complete expected text. The three unique completed occurrences, two Hello replies, one Welcome after the owner edit, historical-data isolation and no further occurrence after disable remain required.
+
+Dependencies, storage, authority, public API/protocol and presentation remain on their existing owners. Server receipt inspection was traced to the existing Succeeded-or-error contract; authenticated source/version/binding/epoch guards remain in place.
 
 ## Runtime verification
 
@@ -27,4 +29,13 @@ Playwright MCP used the known disposable local Synthetic SQLite/fixture host.
 - Final four Synthetic browser scenarios: **4 passed in 57.0s**, using a fresh isolated database. Includes the new clear-search and verified-completion folder-lock assertions.
 - Design YAML/JSON, unchanged token/component primitives, narrative/rule parity, sidecar freshness, source targets, **72 relative links/fragments** and `git diff --check`: passed. The canonical docs checker also passed 21 files with zero issues.
 
-The prior full frontend run remains **1,004 passes on `8e053018`**; it is not relabeled as a fresh full-suite result. The new changes add two focused regressions. Backend and Compose were not rerun for these frontend-only corrections. Fresh hosted workflow status after the authorized push is separate from local evidence. Real Google, native browser zoom, physical touch/screen-reader and installed Office-client fidelity retain the limitations in the [successor ledger](office-file-preview-drive-verification-2026-10-13.md).
+The prior full frontend run remains **1,004 passes on `8e053018`**; it is not relabeled as a fresh full-suite result. The new changes add two focused regressions. Full backend and Compose were not rerun locally; targeted backend checks are recorded below. Fresh hosted workflow status after the authorized push is separate from local evidence. Real Google, native browser zoom, physical touch/screen-reader and installed Office-client fidelity retain the limitations in the [successor ledger](office-file-preview-drive-verification-2026-10-13.md).
+
+## Prior hosted-failure follow-up
+
+- The earlier 390px Email editor failed waiting for Last checked. A fresh local Synthetic rerun passed in **36.1s**; that does not establish the failure's root cause or guarantee hosted stability. No assertion timeout was increased and no outcome was weakened.
+- The Automation test failed on its historical-data predicate locally. Parsing JSON alone passed in some diagnostic runs but did not establish causality, so the duplicate-owner fixture was corrected instead. An intermediate managed fixture exposed the need to detach for its disabled/manual dispatcher and to await accepted-work settlement rather than mailbox drain. Temporary evidence-file instrumentation was removed.
+- Final managed-owner Automation case: **1 passed in 6s**.
+- Unchanged prompt-context boundaries: **21 passed**.
+- Complete reliability/SessionHost race filter: **43 passed in 1m 15s**.
+- The first authorized push reached `7106e330`; its hosted workflow is superseded by the subsequent fixture correction push. Hosted acceptance is not claimed while the final run is pending.

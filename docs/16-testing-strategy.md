@@ -54,6 +54,8 @@ Static inspection, compilation, a screenshot or `/health` alone is not functiona
 
 ## Synthetic fixtures
 
+Journeys that mix conversation and Automation occurrences use one managed SessionHost Runtime per Session. Submit chat through authenticated attach/send and the fixture's explicit detach/dispatcher lifecycle rather than constructing a second Runtime over its live durable state. Await accepted-work settlement before advancing logical time; mailbox drain alone does not prove asynchronous admission/response callbacks have settled. Historical JSON evidence assertions compare decoded content while retaining the current-task, unique-occurrence, owner-edit and disable outcomes. The internal SessionHost settlement observer adds no public test endpoint.
+
 | Implementation | Contract and behavior |
 | --- | --- |
 | ScriptedLanguageModel | ILanguageModel; exact text chunks, explicit release gates, controlled terminal failures, optional intentional late results after cancellation |
