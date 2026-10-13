@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
@@ -14,8 +11,7 @@ internal static class EmailWatchTransitions
         ? c : throw AgentCoreErrors.NotFound("Email account was not found.");
     internal static bool Usable(Credential c) => c.Status == CredentialStatus.Active && c.EmailAccount?.IsUsable == true;
     // OAuth secret rotation is independent; Custom password/profile changes fence the cursor.
-    internal static string Fingerprint(Credential c) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-        JsonSerializer.Serialize(new { c.EmailAccount, CustomRevision = c.EmailAccount?.AuthMethod == EmailAuthMethod.Password ? c.Revision : 0 }))));
+    internal static string Fingerprint(Credential c) => EmailWatchAuthorization.Fingerprint(c);
     internal static void Revision(EmailWatchState s, long expected)
     { if (expected < 0 || s.ConfigurationRevision != expected) throw AgentCoreErrors.Conflict("Monitoring revision is stale. Reload and review your changes."); }
     internal static EmailWatchState Configure(EmailWatchState s, long expected, bool enabled, int interval, DateTimeOffset now)

@@ -42,3 +42,16 @@ it('recovers initial read failure and renders saved operator-disabled choices', 
   view(); expect(await screen.findByRole('alert')).toHaveTextContent('Account unavailable.'); fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
   await screen.findByText('Ask the operator to enable Email and EmailMonitoring. Your saved settings remain.'); expect(screen.getByRole('button', { name: 'Check now' })).toBeDisabled(); expect(screen.getByRole('switch')).toBeChecked();
 });
+it('fences a delayed account-status read so it cannot overwrite edits or their CAS revision', async () => {
+  let resolve!: (v: api.EmailMonitoring) => void;
+  const on = { ...initial, enabled: true, status: 'Monitoring' as const, configurationRevision: 1 };
+  vi.mocked(api.getEmailMonitoring).mockResolvedValueOnce(on).mockReturnValueOnce(new Promise(r => { resolve = r; }));
+  vi.mocked(api.saveEmailMonitoring).mockResolvedValue({ ...on, enabled: false, status: 'Off', configurationRevision: 2 });
+  const wrapped = (revision: number) => <ConfigProvider><App><EmailMonitoringSection account={{ ...account, revision }} /></App></ConfigProvider>;
+  const mounted = render(wrapped(1)); const toggle = await screen.findByRole('switch'); expect(toggle).toBeChecked();
+  mounted.rerender(wrapped(2)); await waitFor(() => expect(api.getEmailMonitoring).toHaveBeenCalledTimes(2));
+  fireEvent.click(toggle); await act(async () => resolve({ ...on, configurationRevision: 2 }));
+  expect(toggle).not.toBeChecked(); expect(screen.getByRole('button', { name: 'Save monitoring' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Save monitoring' }));
+  await waitFor(() => expect(api.saveEmailMonitoring).toHaveBeenCalledWith('fixture', { expectedRevision: 1, enabled: false, intervalSeconds: 300 }));
+});

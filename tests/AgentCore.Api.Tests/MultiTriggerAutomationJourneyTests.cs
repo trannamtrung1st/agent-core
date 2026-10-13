@@ -85,7 +85,8 @@ public sealed class MultiTriggerAutomationJourneyTests
             instanceId = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 22)).InstanceId;
             using var client = TestOwnerCapability.CreateOwnerClient(host);
             var catalog = await client.GetFromJsonAsync<JsonElement>("/api/v2/admin/connections/events/catalog?kind=builtin");
-            Assert.Equal(6, catalog.GetArrayLength());
+            Assert.Equal(7, catalog.GetArrayLength());
+            Assert.Contains(catalog.EnumerateArray(), e => e.GetProperty("key").GetString() == "email.message.received");
             Assert.All(catalog.EnumerateArray(), e => { Assert.Equal("builtin", e.GetProperty("source").GetProperty("kind").GetString()); Assert.Equal(JsonValueKind.Null, e.GetProperty("webhook").ValueKind); });
             var created = await client.PostAsJsonAsync("/api/v2/admin/connections/events", new { displayName = "Orders", eventKey = "multi.orders" });
             created.EnsureSuccessStatusCode();

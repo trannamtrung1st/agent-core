@@ -11,7 +11,7 @@ public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> 
 {
     private static EmailWatchState Read(EmailWatchRecord r) => JsonSerializer.Deserialize<EmailWatchState>(r.StateJson)!;
     private static void Write(EmailWatchRecord r, EmailWatchState s)
-    { r.Enabled = s.Enabled; r.RuntimeRevision = s.RuntimeRevision; r.NextCheckAtUtc = s.NextCheckAtUtc?.ToUnixTimeMilliseconds() ?? long.MaxValue; r.StateJson = JsonSerializer.Serialize(s); }
+    { r.Enabled = s.Enabled; r.RuntimeRevision = s.RuntimeRevision; r.NextCheckAtUtc = Math.Max(s.NextCheckAtUtc?.ToUnixTimeMilliseconds() ?? long.MaxValue, s.LeaseExpiresAtUtc?.ToUnixTimeMilliseconds() ?? 0); r.StateJson = JsonSerializer.Serialize(s); }
     private static async Task<Credential> Account(AgentCoreDbContext db, Guid id, CancellationToken ct) => EmailWatchTransitions.Require(
         (await db.Credentials.Include(c => c.EmailAccount).SingleOrDefaultAsync(c => c.CredentialId == id.ToString("D"), ct)) is { } r ? SqliteCredentialStore.Map(r) : null);
     public async ValueTask<EmailWatchState> GetAsync(Guid id, CancellationToken ct = default)
@@ -96,11 +96,27 @@ public sealed class SqliteEmailWatchStore(IDbContextFactory<AgentCoreDbContext> 
     public async ValueTask<bool> CanDeliverAsync(Guid eventId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
+        return await CanDeliver(db, eventId, ct);
+    }
+    internal static async Task<bool> CanDeliver(AgentCoreDbContext db, Guid eventId, CancellationToken ct)
+    {
         var receipt = await db.EmailWatchEvents.AsNoTracking().SingleOrDefaultAsync(r => r.EventId == eventId.ToString("D"), ct); if (receipt is null) return false;
         var n = JsonSerializer.Deserialize<EmailWatchNotification>(receipt.AuthorityJson)!;
         var r = await db.EmailWatches.AsNoTracking().SingleOrDefaultAsync(r => r.AccountId == n.AccountId.ToString("D"), ct); if (r is null) return false;
         var s = Read(r); Credential c; try { c = await Account(db, n.AccountId, ct); } catch (AgentCoreException) { return false; }
         return s.Enabled && s.Generation == n.Generation && EmailWatchTransitions.Usable(c) && EmailWatchTransitions.Fingerprint(c) == n.AuthorizationFingerprint && await BindingValid(db, n, ct);
+    }
+    internal static async Task<bool> CanAdmit(AgentCoreDbContext db, AgentCore.Domain.Triggers.TriggerOccurrence occurrence, CancellationToken ct)
+    {
+        if (occurrence.SourceKind != AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent || occurrence.SourceEventId is not Guid sourceId) return true;
+        var key = await db.CoreEvents.Where(e => e.EventId == sourceId.ToString("D")).Select(e => e.PayloadJson).SingleOrDefaultAsync(ct);
+        if (key is not null && JsonSerializer.Deserialize<AgentCore.Domain.Events.CoreEventOccurrence>(key, CoreEventPersistence.Json)!.Key == "email.message.received")
+            return await CanDeliver(db, sourceId, ct);
+        var bucketJson = await db.CoreEventBuckets.Where(b => b.BucketId == sourceId.ToString("D")).Select(b => b.PayloadJson).SingleOrDefaultAsync(ct);
+        if (bucketJson is not null)
+            foreach (var source in JsonSerializer.Deserialize<CoreEventBucket>(bucketJson, CoreEventPersistence.Json)!.Sources.Where(e => e.Key == "email.message.received"))
+                if (!await CanDeliver(db, source.EventId, ct)) return false;
+        return true;
     }
     private static async Task Save(AgentCoreDbContext db, CancellationToken ct)
     { try { await db.SaveChangesAsync(ct); } catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Monitoring changed concurrently. Reload and review your changes."); } }

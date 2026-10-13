@@ -11,3 +11,11 @@ public sealed record EmailWatchState(Guid AccountId, bool Enabled = false, int I
     DateTimeOffset? LastEventAtUtc = null, DateTimeOffset? NextCheckAtUtc = null,
     DateTimeOffset? LastGapAtUtc = null, string? LastErrorCode = null, Guid? LastDiagnosticId = null,
     int ConsecutiveFailures = 0, bool Paused = false, Guid? LeaseId = null, DateTimeOffset? LeaseExpiresAtUtc = null);
+
+public static class EmailWatchAuthorization
+{
+    // Logical account updates fence all in-flight work; OAuth secret refresh alone does not.
+    public static string Fingerprint(AgentCore.Domain.Credentials.Credential account) => Convert.ToHexString(
+        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+            System.Text.Json.JsonSerializer.Serialize(new { account.EmailAccount, AccountRevision = account.Revision }))));
+}

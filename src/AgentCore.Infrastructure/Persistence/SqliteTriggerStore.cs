@@ -393,6 +393,8 @@ public sealed class SqliteTriggerStore(IDbContextFactory<AgentCoreDbContext> con
             if (parent?.Status != (int)AutomationStatus.Active || !parent.Triggers.Any(t => t.TriggerId == childId.ToString() && t.Enabled))
                 throw AgentCoreErrors.Conflict("Event trigger was removed or disabled before admission.");
         }
+        if (!await SqliteEmailWatchStore.CanAdmit(db, occurrence, cancellationToken))
+            throw AgentCoreErrors.Conflict("Email source authority was revoked before admission.");
         db.TriggerOccurrences.Add(TriggerStoreMapping.ToRecord(occurrence));
         try
         {

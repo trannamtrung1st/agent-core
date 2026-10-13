@@ -10,6 +10,7 @@ public sealed class AccountEmailChangeFeed(ICredentialStore credentials, ICreden
     EmailTransportOptions options, GoogleEmailOAuthService oauth, IHttpClientFactory clients, TimeProvider time,
     AccountEmailProviderFactory providers, bool synthetic) : IEmailChangeFeed
 {
+    public bool IsSynthetic => synthetic;
     private async ValueTask Recheck(Credential account, CancellationToken ct)
     {
         var current = await credentials.GetAsync(account.CredentialId, ct);

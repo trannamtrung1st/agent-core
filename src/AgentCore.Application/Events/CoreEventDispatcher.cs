@@ -76,6 +76,8 @@ public sealed class CoreEventDispatcher(ICoreEventStore events, ITriggerStore tr
                         var occurrence = new TriggerOccurrence(ids.NewId(), key, s.AutomationId, e.Owner, TriggerSourceKind.CoreEvent, null, e.OccurredAtUtc, now,
                             evidence, e.EventId, s.TriggerRevision, OccurrenceRoutingDisposition.Pending, null, 0, null, null, null,
                             modelPin: pin?.Pin, executionTarget: current.ExecutionTarget, completionDelivery: current.CompletionDelivery, triggerId: s.TriggerId);
+                        if (e.Key == "email.message.received" && !await EmailAllowed(e.EventId, ct))
+                        { await FinishDeliveryAsync(e.EventId, s.TriggerId, EventMatchStatus.PolicySkipped, "email-authority-revoked", ct); continue; }
                         var admitted = await triggers.AdmitOccurrenceAsync(occurrence, ct);
                         await FinishDeliveryAsync(e.EventId, s.TriggerId, EventMatchStatus.Admitted, null, ct);
                         if (admitted.Kind == TriggerOccurrenceAdmitKind.Admitted) admittedCount++;

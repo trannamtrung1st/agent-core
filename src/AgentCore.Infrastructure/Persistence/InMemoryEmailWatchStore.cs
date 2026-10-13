@@ -6,10 +6,25 @@ using AgentCore.Domain.Email;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryEmailWatchStore(InMemoryAgentInstanceStore instances, ICredentialStore credentials,
-    IAgentCredentialBindingStore bindings, InMemoryCoreEventStore events, ITriggerStore? triggers = null) : IEmailWatchStore
+public sealed class InMemoryEmailWatchStore : IEmailWatchStore
 {
+    private readonly InMemoryAgentInstanceStore instances;
+    private readonly ICredentialStore credentials;
+    private readonly IAgentCredentialBindingStore bindings;
+    private readonly InMemoryCoreEventStore events;
     private readonly Dictionary<Guid, EmailWatchState> states = [];
+    public InMemoryEmailWatchStore(InMemoryAgentInstanceStore instances, ICredentialStore credentials,
+        IAgentCredentialBindingStore bindings, InMemoryCoreEventStore events, ITriggerStore? triggers = null)
+    {
+        this.instances = instances; this.credentials = credentials; this.bindings = bindings; this.events = events; this.triggers = triggers;
+        if (triggers is InMemoryTriggerStore memory)
+        {
+            memory.EmailAdmissionGate = instances.CredentialGate;
+            memory.EmailCanAdmit = occurrence => occurrence.SourceKind != AgentCore.Domain.Triggers.TriggerSourceKind.CoreEvent
+                || occurrence.SourceEventId is not Guid id || events.EmailSources(id).All(source => CanDeliverAsync(source).Result);
+        }
+    }
+    private readonly ITriggerStore? triggers;
     private readonly Dictionary<Guid, EmailWatchNotification> notifications = [];
     private Credential Account(Guid id) => EmailWatchTransitions.Require(credentials.GetAsync(id).GetAwaiter().GetResult());
     public ValueTask<EmailWatchState> GetAsync(Guid id, CancellationToken ct = default)
@@ -29,7 +44,7 @@ public sealed class InMemoryEmailWatchStore(InMemoryAgentInstanceStore instances
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
             var result = new List<EmailWatchClaim>();
-            foreach (var s in states.Values.Where(s => s.Enabled && s.NextCheckAtUtc <= now).OrderBy(s => s.NextCheckAtUtc).ThenBy(s => s.AccountId).Take(Math.Clamp(limit, 1, 8)).ToArray())
+            foreach (var s in states.Values.Where(s => s.Enabled && s.NextCheckAtUtc <= now && (s.LeaseId == null || s.LeaseExpiresAtUtc <= now)).OrderBy(s => s.NextCheckAtUtc).ThenBy(s => s.AccountId).Take(Math.Clamp(limit, 1, 8)).ToArray())
             {
                 if (s.LeaseExpiresAtUtc > now) continue;
                 var c = credentials.GetAsync(s.AccountId).Result;

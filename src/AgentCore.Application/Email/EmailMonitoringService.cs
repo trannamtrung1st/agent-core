@@ -47,9 +47,10 @@ public sealed class EmailMonitoringService(IEmailWatchStore watches, IEmailChang
     {
         var c = await Account(id, ct); var s = await watches.GetAsync(id, ct); var now = time.GetUtcNow();
         var pending = s.LeaseExpiresAtUtc > now || s.Enabled && s.NextCheckAtUtc <= now;
-        var status = !s.Enabled ? "Off" : !HostAvailable ? "HostDisabled" : !Available(c) || s.Paused ? "Paused"
+        var authChanged = s.AuthorizationFingerprint is not null && s.AuthorizationFingerprint != EmailWatchAuthorization.Fingerprint(c);
+        var status = !s.Enabled ? "Off" : !HostAvailable ? "HostDisabled" : !Available(c) || s.Paused && !authChanged ? "Paused"
             : s.LeaseExpiresAtUtc > now ? s.Cursor is null ? "Initializing" : "Checking" : s.LastErrorCode is not null ? "Retrying"
-            : s.Cursor is null ? "Initializing" : s.LastGapAtUtc is not null ? "Gap" : "Monitoring";
+            : s.Cursor is null || authChanged ? "Initializing" : s.LastGapAtUtc is not null ? "Gap" : "Monitoring";
         return new(id, s.Enabled, s.IntervalSeconds, s.ConfigurationRevision, status, HostAvailable, Available(c), (await Recipients(id, ct)).Count,
             s.LastCheckedAtUtc, s.LastSuccessAtUtc, s.LastEventAtUtc, s.NextCheckAtUtc, s.LastGapAtUtc, s.LastErrorCode, s.LastDiagnosticId, pending && HostAvailable && Available(c));
     }
@@ -88,19 +89,19 @@ public sealed class EmailMonitoringService(IEmailWatchStore watches, IEmailChang
                 }
                 if (!HostAvailable) return;
                 await watches.CommitAsync(claim, batch, notifications, time.GetUtcNow(), linked.Token);
-                RuntimeTelemetry.RecordEmailOperation(Provider(claim.Account), batch.CursorGap ? "watch.gap" : "watch.commit", "success", claim.Account.EmailAccount!.Synthetic, 0);
+                RuntimeTelemetry.RecordEmailOperation(Provider(claim.Account), batch.CursorGap ? "watch.gap" : "watch.commit", "success", feed.IsSynthetic, 0);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { outcome = "cancelled"; }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
             {
-                var permanent = ex is AgentCoreException { StatusCode: 403 or 404 } or MailAuthorizationUnavailableException;
+                var permanent = ex is AgentCoreException { StatusCode: 403 or 404 } or MailAuthorizationUnavailableException or HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden };
                 // Provider exceptions can contain transport challenges; log a normalized cause only.
                 var code = permanent ? "email_watch_access_required" : "email_watch_temporary_failure";
                 var id = HandledFailureLog.Warning(logger, new InvalidOperationException(code), "email." + operation, code,
                     new DiagnosticContext(ProviderAlias: Provider(claim.Account), CredentialId: claim.State.AccountId), diagnostics: diagnostics);
                 await watches.RecordFailureAsync(claim, new(code, id, permanent), time.GetUtcNow(), token); outcome = permanent ? "reconnect_required" : "temporary_failure";
             }
-            finally { RuntimeTelemetry.RecordEmailOperation(Provider(claim.Account), operation, outcome, claim.Account.EmailAccount!.Synthetic, time.GetElapsedTime(started).TotalMilliseconds); }
+            finally { RuntimeTelemetry.RecordEmailOperation(Provider(claim.Account), operation, outcome, feed.IsSynthetic, time.GetElapsedTime(started).TotalMilliseconds); }
         });
         return claims.Count;
     }

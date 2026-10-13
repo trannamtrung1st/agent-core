@@ -42,9 +42,36 @@ public sealed class EmailWatchStoreTests
             Assert.False(await watches.CommitAsync(running, new([], cursor), [], now.AddSeconds(96)));
             Assert.Empty(await watches.ClaimDueAsync(now.AddHours(1), 8));
             config = await watches.ConfigureAsync(id, 3, true, 300, now.AddSeconds(97)); Assert.Null(config.Cursor);
+            var revokedClaim = Assert.Single(await watches.ClaimDueAsync(now.AddSeconds(97), 8));
             await credentials.SaveAsync(c with { Status = CredentialStatus.Disabled, Revision = 2 }, 1);
+            await credentials.SaveAsync(c with { Revision = 3 }, 2);
+            Assert.False(await watches.CommitAsync(revokedClaim, new([], cursor), [], now.AddSeconds(98)));
+            await credentials.SaveAsync(c with { Status = CredentialStatus.Disabled, Revision = 4 }, 3);
             Assert.Empty(await watches.ClaimDueAsync(now.AddSeconds(98), 8));
             await Assert.ThrowsAsync<AgentCoreException>(() => watches.CheckNowAsync(id, 4, now.AddSeconds(99)).AsTask());
+        }
+        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
+    }
+    [Theory] [InlineData(false)] [InlineData(true)]
+    public async Task Leased_accounts_do_not_starve_other_due_accounts(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"watch-fairness-{Guid.NewGuid():N}.db");
+        var factory = new Factory(path); var instances = new InMemoryAgentInstanceStore();
+        ICredentialStore credentials = sqlite ? new SqliteCredentialStore(factory) : new InMemoryCredentialStore(instances);
+        IEmailWatchStore watches = sqlite ? new SqliteEmailWatchStore(factory) : new InMemoryEmailWatchStore(instances, credentials, (IAgentCredentialBindingStore)credentials, new());
+        var now = DateTimeOffset.UtcNow;
+        try
+        {
+            if (sqlite) { await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); }
+            for (var i = 0; i < 2; i++)
+            {
+                var id = Guid.NewGuid(); await credentials.SaveAsync(new(id, "Due account", CredentialKind.Password, CredentialStatus.Active,
+                    new Dictionary<string, string>(), [], "protected", 1, 1, now, now, CredentialPurpose.EmailAccount, EmailAccountProfile.Custom("fair@example.test")), 0);
+                await watches.ConfigureAsync(id, 0, true, 60, now);
+            }
+            var first = Assert.Single(await watches.ClaimDueAsync(now, 1));
+            var second = Assert.Single(await watches.ClaimDueAsync(now, 1));
+            Assert.NotEqual(first.State.AccountId, second.State.AccountId); Assert.Empty(await watches.ClaimDueAsync(now, 1));
         }
         finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix); }
     }

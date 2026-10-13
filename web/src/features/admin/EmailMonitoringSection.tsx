@@ -76,9 +76,9 @@ export function EmailMonitoringSection({ account, instanceId }: { account: Syste
       </Flex>
       {dirty && <Typography.Text type="secondary">Unsaved monitoring changes</Typography.Text>}
       <Flex gap={token.paddingXS} wrap>
-        <Button type="primary" disabled={!dirty || !!busy} loading={busy === 'save'} onClick={() => void act('save')}>Save monitoring</Button>
+        <Button aria-label="Save monitoring" type="primary" disabled={!dirty || !!busy} loading={busy === 'save'} onClick={() => void act('save')}>Save monitoring</Button>
         {dirty && <Button disabled={!!busy} onClick={() => { draftSequence.current++; apply(saved, true); setError(undefined); }}>Cancel changes</Button>}
-        <Button disabled={!!busy || dirty || !status.enabled || !status.hostAvailable || !status.accountAvailable || status.checkPending} loading={busy === 'check'} onClick={() => void act('check')}>Check now</Button>
+        <Button aria-label="Check now" disabled={!!busy || dirty || !status.enabled || !status.hostAvailable || !status.accountAvailable || status.checkPending} loading={busy === 'check'} onClick={() => void act('check')}>Check now</Button>
         <Button disabled={!!busy} onClick={() => void load(true)}>Reload monitoring</Button>
       </Flex>
       <Typography.Text type="secondary" style={{ maxInlineSize: '75ch' }}>Check now queues a mailbox scan and may trigger Automations. Test access only checks the connection.</Typography.Text>

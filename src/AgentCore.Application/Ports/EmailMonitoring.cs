@@ -12,6 +12,7 @@ public sealed record EmailWatchNotification(CoreEventOccurrence Event, Guid Bind
 public sealed record SafeEmailWatchFailure(string Code, Guid? DiagnosticId, bool Permanent);
 public interface IEmailChangeFeed
 {
+    bool IsSynthetic => false;
     ValueTask<EmailWatchCursor> BaselineAsync(Credential account, CancellationToken ct);
     ValueTask<EmailWatchBatch> PollAsync(Credential account, EmailWatchCursor cursor, CancellationToken ct);
 }

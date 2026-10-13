@@ -64,6 +64,14 @@ public sealed class InMemoryCoreEventStore : ICoreEventStore
             { buckets.Remove(id); inspected.RemoveWhere(i => i.BucketId == id); }
         }
     }
+    internal IReadOnlyList<Guid> EmailSources(Guid id)
+    {
+        lock (gate)
+        {
+            if (receipts.TryGetValue(id, out var receipt)) return receipt.Event.Key == "email.message.received" ? [id] : [];
+            return buckets.TryGetValue(id, out var bucket) ? bucket.Sources.Where(s => s.Key == "email.message.received").Select(s => s.EventId).ToArray() : [];
+        }
+    }
     internal void Append(CoreEventOccurrence? e)
     { if (e is null) return; lock (gate) receipts.TryAdd(e.EventId, new(e, e.OccurredAtUtc, false)); }
     public ValueTask<IReadOnlyList<CoreEventReceipt>> PendingAsync(CancellationToken ct = default, EventRecoveryCursor? after = null)

@@ -16,6 +16,19 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class ImapSmtpEmailProviderTests
 {
+    [Fact]
+    public async Task Watch_unknown_UIDNEXT_truncation_discloses_gap_and_deleted_recent_mail_does_not_replay()
+    {
+        var account = Context();
+        await using var missing = new FakeMailServer(smtp: false, omitUidNext: true, count: 600);
+        var gap = await Provider(missing, account).WatchAsync(new(AgentCore.Domain.Email.EmailWatchCursorKind.ImapUid, UidValidity: 123, LastUid: 7), default);
+        Assert.True(gap.CursorGap); Assert.Empty(gap.MessageRefs); Assert.Equal(6007u, gap.NextCursor.LastUid);
+        await using var empty = new FakeMailServer(smtp: false, count: 0);
+        var batch = await Provider(empty, account).WatchAsync(new(AgentCore.Domain.Email.EmailWatchCursorKind.ImapUid, UidValidity: 123, LastUid: 6), default);
+        Assert.Empty(batch.MessageRefs); Assert.Equal(7u, batch.NextCursor.LastUid);
+        Assert.DoesNotContain(empty.Commands, c => c.Contains("BODY") || c.Contains("STORE"));
+    }
+
     [Theory] [InlineData(false)] [InlineData(true)]
     public async Task Watch_baseline_and_UID_scan_never_fetch_body_or_mark_seen(bool missingUidNext)
     {
