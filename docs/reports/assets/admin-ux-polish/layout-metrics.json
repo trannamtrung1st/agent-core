@@ -1,0 +1,68 @@
+[
+  {
+    "width": 1440,
+    "overflow": 0,
+    "header": 56,
+    "breadcrumbHeight": 22,
+    "ownerFont": "16px",
+    "metadataFont": "12px",
+    "mainInset": "16px",
+    "panelHeadingInset": "16px",
+    "panelBodyInset": "16px"
+  },
+  {
+    "width": 1024,
+    "overflow": 0,
+    "header": 56,
+    "breadcrumbHeight": 22,
+    "ownerFont": "16px",
+    "metadataFont": "12px",
+    "mainInset": "16px",
+    "panelHeadingInset": "16px",
+    "panelBodyInset": "16px"
+  },
+  {
+    "width": 768,
+    "overflow": 0,
+    "header": 89,
+    "breadcrumbHeight": 22,
+    "ownerFont": "16px",
+    "metadataFont": "12px",
+    "mainInset": "16px",
+    "panelHeadingInset": "16px",
+    "panelBodyInset": "16px"
+  },
+  {
+    "width": 767,
+    "overflow": 0,
+    "header": 87,
+    "breadcrumbHeight": 22,
+    "ownerFont": "16px",
+    "metadataFont": "12px",
+    "mainInset": "12px",
+    "panelHeadingInset": "16px",
+    "panelBodyInset": "16px"
+  },
+  {
+    "width": 390,
+    "overflow": 0,
+    "header": 87,
+    "breadcrumbHeight": 22,
+    "ownerFont": "16px",
+    "metadataFont": "12px",
+    "mainInset": "12px",
+    "panelHeadingInset": "16px",
+    "panelBodyInset": "16px"
+  },
+  {
+    "width": 320,
+    "overflow": 0,
+    "header": 87,
+    "breadcrumbHeight": 22,
+    "ownerFont": "16px",
+    "metadataFont": "12px",
+    "mainInset": "12px",
+    "panelHeadingInset": "16px",
+    "panelBodyInset": "16px"
+  }
+]
