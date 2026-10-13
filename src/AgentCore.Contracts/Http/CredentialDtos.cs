@@ -20,3 +20,6 @@ public sealed record AdminUpdateEmailAccountRequest(long ExpectedRevision, strin
 public sealed record AdminTestEmailAccountRequest(long ExpectedRevision, string Protocol);
 
 public sealed record AdminEmailOAuthRequest(long ExpectedRevision, bool Confirm = false);
+
+public sealed record AdminEmailMonitoringRequest(long ExpectedRevision, bool Enabled, int IntervalSeconds);
+public sealed record AdminEmailMonitoringCheckRequest(long ExpectedRevision);

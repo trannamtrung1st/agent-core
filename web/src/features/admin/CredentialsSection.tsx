@@ -1,5 +1,6 @@
 import { followAppLink } from "../../app/appLink";
 import { EmailConnectionTag, GmailConnectionPanel } from "./GmailConnectionPanel";
+import { EmailMonitoringSection } from "./EmailMonitoringSection";
 import { EmailAccountDialog } from "./EmailAccountDialog";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -71,7 +72,7 @@ function CredentialPolicySummary({ credential }: { credential: SystemCredential 
   </Flex>;
 }
 
-function CredentialDetails({ credential, onChanged }: { credential: SystemCredential; onChanged?: () => Promise<void> }) {
+function CredentialDetails({ credential, onChanged, instanceId }: { credential: SystemCredential; onChanged?: () => Promise<void>; instanceId?: string }) {
   const detailLayout = useAdminDetailLayout(); const { token } = theme.useToken();
   const [tests, setTests] = useState<Partial<Record<'imap' | 'smtp', EmailConnectionTest>>>({});
   const [testing, setTesting] = useState<'imap' | 'smtp'>(); const [testError, setTestError] = useState<AdminFailureNotice>();
@@ -82,7 +83,7 @@ function CredentialDetails({ credential, onChanged }: { credential: SystemCreden
     catch (e) { setTestError(describeAdminError(e, 'Connection test failed. Refresh the account and retry.')); }
     finally { setTesting(undefined); }
   }
-  return <div role="region" aria-label={`Details for ${credential.displayName}`} style={{ whiteSpace: "normal" }}>
+  return <div className="admin-credential-details" role="region" aria-label={`Details for ${credential.displayName}`} style={{ whiteSpace: "normal", maxInlineSize: `calc(100cqi - ${token.padding * 2}px)` }}>
     <Descriptions bordered column={1} size="small" {...detailLayout} items={[
       { key: "kind", label: "Kind / purpose", children: `${credential.kind} · ${credential.purpose === 'EmailAccount' ? 'Email account' : 'General'}` },
       ...(credential.emailAccount?.preset === "Custom" ? [
@@ -106,6 +107,7 @@ function CredentialDetails({ credential, onChanged }: { credential: SystemCreden
         {tests[protocol]?.error && <Typography.Text type="danger">{tests[protocol]!.error}</Typography.Text>}
       </Flex>)}
     </Flex>}
+    {credential.emailAccount && <EmailMonitoringSection account={credential} instanceId={instanceId} />}
   </div>;
 }
 function ProtectedValueField({ email = false }: { email?: boolean }) {
@@ -223,7 +225,7 @@ export function InstanceCredentialsSection({ instanceId, revision, archived, onU
     <Table<CredentialBinding> aria-label="Credential bindings table" className="admin-collection-table" size="small" rowKey="bindingId" pagination={pagination} scroll={{ x: 920 }}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search.trim() || bindings.length > 0 ? "No matches. Clear search or filters to see all results." : "No credentials bound"} /> }}
       dataSource={bindings.filter(b => b.reference.toLowerCase().includes(search.trim().toLowerCase()) || matchesCredential(b.credential, search))}
-      expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, b) => setExpanded(open ? [b.bindingId] : []), expandedRowRender: b => <CredentialDetails credential={b.credential} onChanged={load} /> }} columns={[
+      expandable={{ fixed: "left", expandedRowKeys: expanded, onExpand: (open, b) => setExpanded(open ? [b.bindingId] : []), expandedRowRender: b => <CredentialDetails credential={b.credential} onChanged={load} instanceId={instanceId} /> }} columns={[
       { title: "Reference", dataIndex: "reference", width: 180, ellipsis: true, sorter: (a, b) => a.reference.localeCompare(b.reference) },
       { title: "Credential", width: 240, ellipsis: true, render: (_, b) => <Flex vertical style={{ minWidth: 0 }}><Typography.Text strong ellipsis title={b.credential.displayName}>{b.credential.displayName}</Typography.Text><Typography.Text type="secondary">{b.credential.kind} · {b.credential.status}</Typography.Text></Flex> },
       { title: "Metadata & origins", width: 320, render: (_, b) => <CredentialPolicySummary credential={b.credential} /> },

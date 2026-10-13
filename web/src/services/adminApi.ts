@@ -1165,3 +1165,15 @@ export const getEmailConnection = (c: SystemCredential) => credentialRequest<Ema
 export const startEmailOAuth = (c: SystemCredential) => credentialRequest<{ authorizationUrl: string; expiresAtUtc: string; synthetic: boolean }>(`email-accounts/${c.credentialId}/oauth/start`, 'POST', { expectedRevision: c.revision });
 export const checkEmailConnection = (c: SystemCredential) => credentialRequest<EmailOAuthConnection>(`email-accounts/${c.credentialId}/connection/check`, 'POST', { expectedRevision: c.revision });
 export const disconnectEmailOAuth = (c: SystemCredential) => credentialRequest<EmailOAuthConnection>(`email-accounts/${c.credentialId}/oauth/disconnect`, 'POST', { expectedRevision: c.revision, confirm: true });
+
+
+export type EmailMonitoring = {
+  accountId: string; enabled: boolean; intervalSeconds: number; configurationRevision: number;
+  status: 'Off' | 'HostDisabled' | 'Paused' | 'Initializing' | 'Checking' | 'Retrying' | 'Gap' | 'Monitoring';
+  hostAvailable: boolean; accountAvailable: boolean; subscribedInstances: number; checkPending: boolean;
+  lastCheckedAtUtc: string | null; lastSuccessAtUtc: string | null; lastEventAtUtc: string | null;
+  nextCheckAtUtc: string | null; lastGapAtUtc: string | null; errorCode: string | null; diagnosticId: string | null;
+};
+export const getEmailMonitoring = (id: string) => credentialRequest<EmailMonitoring>(`email-accounts/${id}/monitoring`, 'GET');
+export const saveEmailMonitoring = (id: string, body: { expectedRevision: number; enabled: boolean; intervalSeconds: number }) => credentialRequest<EmailMonitoring>(`email-accounts/${id}/monitoring`, 'PUT', body);
+export const checkEmailMonitoring = (id: string, expectedRevision: number) => credentialRequest<EmailMonitoring>(`email-accounts/${id}/monitoring/check`, 'POST', { expectedRevision });

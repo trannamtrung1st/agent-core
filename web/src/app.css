@@ -2704,3 +2704,7 @@ body,
   color: inherit;
   text-decoration: none;
 }
+
+/* Expanded Credential details stay within the collection viewport while the table scrolls. */
+.admin-collection-table { container-type: inline-size; }
+.admin-credential-details { overflow-wrap: anywhere; }
