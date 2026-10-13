@@ -172,3 +172,52 @@ Review results:
   fast-forwarded without altering those eight files or overwriting this work.
   The OpenSandbox preparation has no application or frontend behavior changes;
   product-wide suites and hosted feature acceptance remain unrun.
+
+## Main synchronization and PR preparation
+
+The owner explicitly authorized current-main synchronization, careful conflict
+resolution, combined verification and a PR to main. The fetched main is
+`3f46ce1ec119adde55c5cdc163dd25c6f73d593e`, already an ancestor of branch
+`61897029b4d870728bba2bb6739083733298fb2c`. Git found no new commits or conflicts;
+no merge or conflict-resolution changes were necessary. Main's approval
+recovery behavior and the standalone proof remain separate modules.
+
+The existing Synthetic backend CI job now restores/builds the locked proof,
+runs its no-infrastructure help path and executes the six offline receipt
+regressions alongside the existing application suites. It starts no
+OpenSandbox service and does not waive the failing live isolation assertion.
+The existing CI jobs/matrix are preserved. This closes the preparation's
+missing automated regression coverage, not Stage A acceptance.
+
+Combined local verification on this main/branch source:
+
+- Proof build: zero warnings/errors; locked restore and no-network help pass.
+  Offline Python receipt/guard regressions: **6 pass**.
+- `pnpm run test --run src/features/chat/ApprovalModal.test.tsx src/services/realtime.approval.test.ts`:
+  **13 pass**; `pnpm run build` passes.
+- Synthetic Playwright `e2e/approval-flow.spec.ts --project=synthetic`:
+  **6 pass** in 46.6 s. Actions cover approve, reject, keyboard decisions,
+  refresh retaining the same Run/Response, and disconnect rejection/retry.
+  Approval executes once; rejected decisions never execute; recovery retains
+  the exact pending decision and clears the modal after confirmation.
+  The CLI runner used API `6080`, web `6173`, fixture `6091` and disposable
+  `/private/tmp/agent-core-osb-sync-browser` SQLite/blob/key roots; the existing
+  host on `5080` was untouched. Playwright MCP separately inspected the
+  Synthetic UI; a later navigation failed after the CLI runner tore down its
+  server. MCP inspection is not counted as functional verification.
+- The real unprivileged execd fallback again passes six functional assertions,
+  actual restriction checks and cleanup, and **fails** its localhost execd
+  isolation assertion (exit 1). No broader host/peer/network access is claimed.
+- Full backend regression was attempted locally with provider spending
+  disabled. The initial sandboxed run could not open MSBuild named pipes;
+  that owned failed process was stopped, and a permitted `-m:1` rerun was
+  started. Domain **195 pass** and Application **1,807 pass / 8 opt-in skips**
+  were observed while the remaining suites were running. Final full-suite and
+  hosted PR results belong to the PR checks; these interim results are not
+  full-suite acceptance.
+- Python/JSON/Markdown links/fences, workflow YAML and `git diff --check` pass.
+
+The PR delivers **preparation and offline CI coverage only**. The full
+OpenSandbox feature remains unimplemented/unaccepted, with the original
+isolated-runner and security requirements intact. Publishing this preparation
+does not authorize a privileged test runner or close OSB-01–18.

@@ -1,5 +1,19 @@
 # Testing Strategy
 
+## P10 OpenSandbox preparation checks
+
+The Synthetic backend CI job builds the standalone digest/version-pinned SDK
+probe from its locked NuGet graph, runs its no-infrastructure help path and
+executes offline receipt/guard regressions. These checks run alongside the
+existing product suites without enabling sandbox tools or requiring an
+OpenSandbox service. They establish preparation compatibility only.
+
+Stage A still requires a real authenticated isolated-runner proof. The
+unprivileged execd fallback's local loopback isolation assertion fails and
+must remain visible; it is not a mocked/optional success or an accepted
+deployment. See [the verification ledger](reports/opensandbox-integration-verification.md)
+and [ordered gates](18-implementation-plan.md#p10-opensandbox-cutover-authorized-2026-10-13).
+
 ## Activation and AgentRun cutover gates
 
 Atomic occurrence tests run BackgroundOccurrenceIntake with actual InMemory and SQLite admission stores. They verify one child per receipt, fresh candidate-ID replay without orphan children, collision/stale-revision rollback, separate recurring Sessions, canonical instructions/evidence and frozen Skills/model/persona, cancelled Automation and archived-owner refusal, native detached provenance, and reopen. Historical migration assertions continue comparing every original value and verify that newly added receipt links remain null rather than converting old executions.

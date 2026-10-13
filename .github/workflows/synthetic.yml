@@ -56,6 +56,14 @@ jobs:
       - name: Event storage monitoring tests
         run: python3 -m unittest discover -s scripts/tests -p test_event_storage_snapshot.py -v
 
+      # These are offline preparation checks, not the blocked live Stage A gate.
+      - name: OpenSandbox proof build and offline receipt tests
+        run: |
+          dotnet restore scripts/opensandbox-proof/OpenSandboxProof.csproj --locked-mode
+          dotnet build scripts/opensandbox-proof/OpenSandboxProof.csproj --no-restore --nologo
+          dotnet run --project scripts/opensandbox-proof/OpenSandboxProof.csproj --no-build -- --help
+          python3 -m unittest discover -s scripts/opensandbox-proof -p 'test_*.py' -v
+
       - name: Build Infrastructure tests
         run: dotnet build tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --nologo
 
