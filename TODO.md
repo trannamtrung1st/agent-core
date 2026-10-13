@@ -1,5 +1,15 @@
 # TODO
 
+## Email monitoring follow-up (2026-10-13)
+
+- [x] Independent watch configuration/CAS, additive migrations and InMemory/SQLite baseline/lease/reopen proof.
+- [x] Gmail History and shared verified-TLS read-only IMAP UID feeds; central worker and atomic owner Event handoff.
+- [x] Existing Automation/Run → authorized original email.read, duplicate/failure/multi-Instance and revocation evidence.
+- [x] Owner HTTP and existing Credential detail saved Monitoring controls; four responsive Synthetic browser journeys.
+- [x] Isolated Compose SQLite/key-ring and monitoring cursor/generation recreation checks.
+- [ ] Final full backend/frontend/Synthetic regression and exact-source hosted jobs; update [the evidence report](docs/reports/email-monitoring-verification-2026-10-13.md) with final outcomes.
+- [ ] Separate dedicated-mailbox Real Gmail/IMAP UAT, only after explicit owner opt-in. No live acceptance is claimed.
+
 ## Stable original Background Work results (2026-10-09)
 
 - [x] Non-UI CI fixture repairs on main: arrange direct-store B/C before foregrounding, project authorized Secretary Automation schemas and align the bootstrap capability expectation. Local checks: 3 API, 27 Application and 6 Synthetic browser journeys passed; UI selector repairs remain owned by the other session.
