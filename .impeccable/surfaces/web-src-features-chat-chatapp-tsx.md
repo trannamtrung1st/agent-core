@@ -21,6 +21,8 @@ related_targets:
   - web/src/features/chat/ArtifactView.tsx
   - web/src/features/chat/DrawerListFooter.tsx
   - web/src/app/antdTheme.ts
+  - web/src/features/filePreview/FilePreview.tsx
+  - web/src/features/filePreview/SaveToDriveButton.tsx
   - web/src/app.css
 ---
 
@@ -86,6 +88,10 @@ The [current review](../../docs/reports/frontend-design-system-review.md) inspec
 
 The [header review](../../docs/reports/chat-header-status-review.md) verifies stable action coordinates through generation and reconnect at 1440/1200/1199/768/767/390/320px, long identity/error containment, keyboard actions, reload, pending Voice and paused-session recovery. DESIGN.md and the schema-v2 header excerpt now match role/profile/status grouping, 8/12px row gaps, 1200px layout transition and 24px Speech locale Select. This is local Synthetic verification, not hosted or physical-device acceptance.
 
-FILE PREVIEW: Existing Attachment/Artifact/Workspace/Resource actions open one protected read-only FilePreview. The dialog owns canvas sizing and gaps; collections retain their action spacing. Desktop is 90vw/max 1440px, mobile full viewport, grids/code scroll locally. CSV defaults Grid; Word uses an isolated sanitized frame; XLSX has sheet tabs/range/formula inspection. Closing restores its surviving source trigger. Exact behavior remains in docs/13; evidence/status is in docs/reports/office-file-preview-drive-verification-2026-10-13.md. Optional bound Drive browsing/save flows are implemented and share this canvas.
+## Shared preview and Drive — current source 8e053018 (2026-10-14)
 
-Office/Drive successor visual truth: shared full-viewport mobile preview, stable close/focus lifecycle, white Word pages in neutral canvas, named-sheet/range grids and cached-value labels, and wrapping Artifact actions. Existing Credentials owns separate Drive connection controls and bounded Instance alias file lists. Saves are new binary files with verified/Synthetic receipts; uncertainty offers read-only recovery. Captured evidence lives in docs/reports/assets/file-preview. No additional navigation portal or UI kit.
+Existing Attachment/Artifact/Workspace/Resource actions reuse the [FilePreview Read surface](web-src-features-filepreview-filepreview-tsx.md). The source collection owns its compact wrapping action row; the preview owns metadata, renderer toolbars and a bounded locally scrolling canvas. Artifact cards retain a readable filename above full-width Preview, optional Save to Drive and Download/Retry actions. Familiar icon-only source actions use native tooltips.
+
+Credentials owns Drive connections and Instance binding details own the app-authorized browser. That browser shares the preview canvas, a flexible search/control row, local column scrolling and a mobile scroll hint. Save to Drive retains a compact account/name/folder form with a native footer outside its bounded scrolling body. Loading and Retry stay beside destination/folder reads; changing accounts clears prior folder choices/search. Verified success leaves Close, and uncertainty retains read-only Check operation. Synthetic identity/receipts are explicit. These remain Operate flows; their behavior is owned by docs/13 and docs/14.
+
+The [current polish report](../../docs/reports/file-preview-drive-ui-polish-2026-10-14.md) supplies five-width and short-screen captures, keyboard/focus recovery, 1,004 unit passes and four browser journeys on 8e053018. The [successor ledger](../../docs/reports/office-file-preview-drive-verification-2026-10-13.md) owns the earlier exact-source hosted acceptance and manual/Real gaps. This documentation refresh introduces no runtime change or new acceptance.
