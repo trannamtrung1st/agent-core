@@ -3,10 +3,10 @@ import { App } from 'antd';
 import { parseAppRoute, registerNavigationGuard } from '../../app/appRoute';
 import { confirmAction } from '../../app/confirmAction';
 
-/** Exact-owner draft protection; same-owner section changes retain the workspace. */
-export function useAdminUnsavedChanges(owner: string, dirty: boolean) {
+/** Exact-owner protection; retained editors reset via onDiscard before departure is approved. */
+export function useAdminUnsavedChanges(owner: string, dirty: boolean, onDiscard?: () => void) {
   const { modal } = App.useApp();
-  const current = useRef({ owner, dirty }); current.current = { owner, dirty };
+  const current = useRef({ owner, dirty, onDiscard }); current.current = { owner, dirty, onDiscard };
   const pending = useRef(false);
   useEffect(() => registerNavigationGuard(path => {
     if (!current.current.dirty) return true;
@@ -20,7 +20,7 @@ export function useAdminUnsavedChanges(owner: string, dirty: boolean) {
     const fromMenu = !!previousFocus?.closest('.admin-navigation-drawer');
     let stayed = false;
     return new Promise<boolean>(resolve => {
-      confirmAction(modal, { title: 'Discard unsaved changes?', content: 'Only unsaved edits in this workspace will be discarded. Saved data remains available.', okText: 'Discard and leave', cancelText: 'Stay', onOk: () => { current.current.dirty = false; resolve(true); }, onCancel: () => { stayed = true; resolve(false); }, afterClose: () => {
+      confirmAction(modal, { title: 'Discard unsaved changes?', content: 'Only unsaved edits in this workspace will be discarded. Saved data remains available.', okText: 'Discard and leave', cancelText: 'Stay', onOk: () => { current.current.onDiscard?.(); current.current.dirty = false; resolve(true); }, onCancel: () => { stayed = true; resolve(false); }, afterClose: () => {
         pending.current = false;
         if (stayed) {
           const target = previousFocus?.isConnected && previousFocus !== document.body && previousFocus.getClientRects().length && getComputedStyle(previousFocus).visibility !== 'hidden'

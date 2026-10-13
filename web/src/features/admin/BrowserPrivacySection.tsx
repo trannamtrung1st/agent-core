@@ -26,7 +26,12 @@ export function BrowserPrivacySection() {
   const active = useRef<AbortController | null>(null);
 
   const dirty = !!policy && !!fields && JSON.stringify(fields) !== JSON.stringify({ mode: policy.saved.mode, unmaskedOrigins: policy.saved.unmaskedOrigins, trustedGraphicsOrigins: policy.saved.trustedGraphicsOrigins });
-  useAdminUnsavedChanges('global:browser-privacy', dirty);
+  useAdminUnsavedChanges('global:browser-privacy', dirty, () => {
+    if (!policy) return;
+    form.resetFields();
+    accept(policy);
+    setError(null); setNotice(null);
+  });
   function accept(value: BrowserPrivacy) {
     setPolicy(value);
     form.setFieldsValue({ mode: value.saved.mode, unmaskedOrigins: value.saved.unmaskedOrigins,

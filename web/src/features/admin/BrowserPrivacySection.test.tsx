@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App as AntApp, ConfigProvider } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserPrivacySection } from "./BrowserPrivacySection";
 import { getBrowserPrivacy, saveBrowserPrivacy, type BrowserPrivacy } from "../../services/adminApi";
+import { approveAppNavigation } from "../../app/appRoute";
 
 vi.mock("../../services/adminApi", () => ({ getBrowserPrivacy: vi.fn(), saveBrowserPrivacy: vi.fn() }));
 const policy: BrowserPrivacy = { saved: { mode: "Protected", revision: 0, unmaskedOrigins: [], trustedGraphicsOrigins: [] },
@@ -16,6 +17,40 @@ async function choose(label: string, option: string) {
 }
 describe("BrowserPrivacySection", () => {
   beforeEach(() => { vi.mocked(getBrowserPrivacy).mockReset().mockResolvedValue(structuredClone(policy)); vi.mocked(saveBrowserPrivacy).mockReset(); });
+  it("keeps retained edits on Stay and restores saved fields and unload state on Discard", async () => {
+    mount(); await screen.findByText("Protected · revision 0 · active as saved");
+    await choose("Saved screenshot privacy mode", "Disabled — no screenshots");
+    await waitFor(() => { const before = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(before); expect(before.defaultPrevented).toBe(true); });
+    let leave!: Promise<boolean>;
+    act(() => { leave = approveAppNavigation('/admin/instances'); });
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })).getByRole('button', { name: 'Stay' }));
+    expect(await leave).toBe(false);
+    expect(screen.getByRole('combobox', { name: 'Saved screenshot privacy mode' }).closest('.ant-select')).toHaveTextContent('Disabled — no screenshots');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Discard unsaved changes?' })).not.toBeInTheDocument());
+    act(() => { leave = approveAppNavigation('/admin/definitions'); });
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })).getByRole('button', { name: 'Discard and leave' }));
+    expect(await leave).toBe(true);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Saved screenshot privacy mode' }).closest('.ant-select')).toHaveTextContent('Protected — mask sensitive pixels'));
+    const after = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+    expect(saveBrowserPrivacy).not.toHaveBeenCalled(); expect(getBrowserPrivacy).toHaveBeenCalledTimes(1);
+  });
+  it("restores saved origin selections and clears a failed-save error when discarding", async () => {
+    vi.mocked(getBrowserPrivacy).mockResolvedValue({ ...policy, saved: { ...policy.saved, trustedGraphicsOrigins: ['https://example.test'] } });
+    vi.mocked(saveBrowserPrivacy).mockRejectedValue(new Error('Temporary privacy write failure'));
+    mount(); await screen.findByText('Protected · revision 0 · active as saved');
+    await choose('Trusted graphics origins in Protected mode', 'https://example.test');
+    await choose('Saved screenshot privacy mode', 'Disabled — no screenshots');
+    fireEvent.click(screen.getByRole('button', { name: 'Save screenshot privacy' }));
+    await screen.findByText('Temporary privacy write failure');
+    let leave!: Promise<boolean>; act(() => { leave = approveAppNavigation('/admin/instances'); });
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })).getByRole('button', { name: 'Discard and leave' }));
+    expect(await leave).toBe(true);
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Saved screenshot privacy mode' }).closest('.ant-select')).toHaveTextContent('Protected — mask sensitive pixels'));
+    expect(screen.getByRole('combobox', { name: 'Trusted graphics origins in Protected mode' }).closest('.ant-select')).toHaveTextContent('https://example.test');
+    expect(screen.queryByText('Temporary privacy write failure')).not.toBeInTheDocument();
+    expect(saveBrowserPrivacy).toHaveBeenCalledTimes(1);
+  });
   it("reports same-revision deployment constraints without calling the saved policy active or asking for restart", async () => {
     vi.mocked(getBrowserPrivacy).mockResolvedValue({ ...policy, saved: { ...policy.saved, mode: "Unmasked", revision: 3 },
       effective: { ...policy.effective, revision: 3 }, constrainedByDeployment: true,

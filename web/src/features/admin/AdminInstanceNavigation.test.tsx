@@ -90,6 +90,14 @@ function Fixture({ archived = false, start = 'memory' }: { archived?: boolean; s
 }
 async function go(name: string) { await act(async () => fireEvent.click(within(screen.getByRole('navigation', { name: 'Admin navigation' })).getByRole('link', { name }))); }
 describe('Managed Instance canonical navigation', () => {
+  it.each(['automations', 'unattended'] as const)('preserves an archived exact Run requested through %s', async page => {
+    const runId = '90000000-0000-4000-8000-000000000020';
+    window.history.replaceState(null, '', `${adminInstancePath(config.instanceId, page)}?run=${runId}`);
+    render(<App><InstanceDetail instanceId={config.instanceId} page={page} instances={{ kind: 'ready', data: [] }} effective={{ kind: 'ready', data: { ...config, instanceLifecycle: 'Archived' } }} onBack={vi.fn()} onRetryEffective={vi.fn()} onInstanceChanged={vi.fn()} onInstanceDeleted={vi.fn()} /></App>);
+    await waitFor(() => expect(window.location.pathname).toBe(adminInstancePath(config.instanceId, 'runs')));
+    expect(new URLSearchParams(window.location.search).get('run')).toBe(runId);
+    expect(within(await screen.findByRole('dialog', { name: 'Run details' })).getByText(`Run history ${runId}`)).toBeVisible();
+  });
   it('keeps owner search results separate when the Instance is named Global Admin', async () => {
     render(<App><AdminShell route={{ area: 'admin', view: 'instance', instanceId: config.instanceId, page: 'overview' }} ownerName="Global Admin"><div>Instance overview</div></AdminShell></App>);
     fireEvent.click(screen.getByRole('button', { name: 'Search Admin' }));

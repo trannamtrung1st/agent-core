@@ -85,7 +85,11 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
   const resolved = effective.data?.instanceId === instanceId ? effective.data : null;
   const archived = resolved?.instanceLifecycle !== 'Active';
   useEffect(() => {
-    if (resolved && archived && (page === 'automations' || page === 'unattended')) navigateToAppPath(`${adminInstancePath(instanceId, 'lifecycle')}?notice=archived-automations`, true);
+    if (resolved && archived && (page === 'automations' || page === 'unattended')) {
+      const run = new URLSearchParams(window.location.search).get('run');
+      navigateToAppPath(run ? `${adminInstancePath(instanceId, 'runs')}?${new URLSearchParams({ run })}`
+        : `${adminInstancePath(instanceId, 'lifecycle')}?notice=archived-automations`, true);
+    }
   }, [resolved?.instanceLifecycle, instanceId, page]);
   useAdminAnchor(page, effective.kind === 'ready');
   return <Flex vertical gap={token.padding}>
