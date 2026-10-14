@@ -115,7 +115,7 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 ## Decision: local git CLI now; GitHub Actions is intended CI
 
-**Decision:** Day-to-day implementation uses the local `git` CLI. Intended repository CI is **GitHub Actions**. Do not create full application workflow files until the corresponding .NET/`web` projects and test scripts exist. When introduced, core CI must remain offline: `dotnet` build/test, frontend install/build/unit tests, then synthetic Playwright after those milestones, never requiring OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider smokes stay opt-in.
+**Decision:** Day-to-day implementation uses the local `git` CLI. Repository CI is **GitHub Actions**, optional and manual-only via `workflow_dispatch`. Dispatch, rerun or wait for CI only on explicit user request; routine tasks use focused local verification. Optional unrun CI does not block task completion. This supersedes earlier automatic/mandatory hosted CI expectations for current work; historical acceptance evidence remains unchanged. Do not create full application workflow files until the corresponding .NET/`web` projects and test scripts exist. When introduced, core CI must remain offline: `dotnet` build/test, frontend install/build/unit tests, then synthetic Playwright after those milestones, never requiring OpenAI/OpenRouter keys, internet inference, microphone, speaker or GPU. Real-provider smokes stay opt-in.
 
 **Rationale:** Keep early work unblocked, then make the promised offline gates reproducible on the repository host.
 

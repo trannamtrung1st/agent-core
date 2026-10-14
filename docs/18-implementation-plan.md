@@ -1,5 +1,11 @@
 # Implementation Plan
 
+## Verification policy for current work
+
+Complete ordinary requests within their scope using focused local checks; they do not start milestone closure or require full backend/frontend/browser/Compose suites. Broaden local verification only for affected boundaries, failures or explicitly requested milestone acceptance. [Testing Strategy](16-testing-strategy.md#verification-scope-and-optional-ci) owns the current policy.
+
+CI is optional and runs only on explicit user request. This policy supersedes older mandatory hosted/exact-SHA CI language below for current work, including milestone acceptance unless the user explicitly requests CI as part of it. Preserve historical acceptance criteria, freeze SHAs and CI receipts as records of their original versions. Report local completion separately from milestone acceptance and never claim unrun checks passed.
+
 ## Browser semantic-action redesign
 
 User-authorized complete cutover on `develop/branch-1a` from behavior baseline `09e20afea2ffbc381fce1b43f5c49fd3722e50e8`. This follow-up preserves existing milestone invariants and leaves P10/P11 unopened. Application now owns one closed typed command family and direct semantic target grammar; Infrastructure delegates matching/actionability to public Microsoft.Playwright 1.63 APIs. Optional find mints no authority. General Assistant v21 / Secretary v8 replace executable old browser instructions, and old browser checkpoints cannot resume.

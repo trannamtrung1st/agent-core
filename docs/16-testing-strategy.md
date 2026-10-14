@@ -1,5 +1,13 @@
 # Testing Strategy
 
+## Verification scope and optional CI
+
+Routine implementation, fix and review requests use focused local verification of the affected behavior. Run broader local suites only when affected boundaries, failures or explicitly requested milestone acceptance justify them. Documentation and instruction changes use documentation consistency checks. Follow the shared [task rules](../AGENTS.md#completion) and [testing workflow](../.agents/skills/testing/SKILL.md).
+
+CI is optional and runs only on explicit user request through the manual [Synthetic workflow](../.github/workflows/synthetic.yml). Requests to implement, review, commit, push or complete a milestone do not implicitly request CI dispatch, reruns or waiting. Optional unrun CI does not block completion of the requested change; report checks actually performed and any unverified behavior.
+
+This policy supersedes older instructions below that require hosted CI or broad suites for routine tasks. Historical CI receipts and frozen acceptance records remain evidence for their original commits. An explicitly requested milestone acceptance still requires its applicable local acceptance criteria; hosted CI becomes an acceptance gate only when the user explicitly requests it for that acceptance. Never describe an unrun check as passed.
+
 ## Activation and AgentRun cutover gates
 
 Atomic occurrence tests run BackgroundOccurrenceIntake with actual InMemory and SQLite admission stores. They verify one child per receipt, fresh candidate-ID replay without orphan children, collision/stale-revision rollback, separate recurring Sessions, canonical instructions/evidence and frozen Skills/model/persona, cancelled Automation and archived-owner refusal, native detached provenance, and reopen. Historical migration assertions continue comparing every original value and verify that newly added receipt links remain null rather than converting old executions.
@@ -48,7 +56,7 @@ For manual Real-profile checks of **display versus speech**, prefer the `general
 
 ## Runtime evidence for development and review
 
-Frontend and backend behavior changes should be verified by executing a representative affected use case when the environment supports it, alongside applicable unit/build and milestone gates. Behavior reviews should also reproduce or exercise the relevant path where practical. Frontend verification interacts with the running Synthetic app and observes the resulting UI state; backend verification uses an integration fixture or a local Synthetic host to assert observable outputs and relevant state effects. Cover a relevant failure/recovery or boundary case when the changed behavior warrants it. An existing scenario suffices if it exercises the change; add or extend regression coverage when a behavior change lacks it.
+Frontend and backend behavior changes should be verified by executing a representative affected use case when the environment supports it, alongside focused unit/build checks appropriate to the change. Milestone-wide local gates apply only to explicitly requested milestone acceptance; CI remains optional under the verification policy above. Behavior reviews should also reproduce or exercise the relevant path where practical. Frontend verification interacts with the running Synthetic app and observes the resulting UI state; backend verification uses an integration fixture or a local Synthetic host to assert observable outputs and relevant state effects. Cover a relevant failure/recovery or boundary case when the changed behavior warrants it. An existing scenario suffices if it exercises the change; add or extend regression coverage when a behavior change lacks it.
 
 Static inspection, compilation, a screenshot or `/health` alone is not functional evidence. Record the scenario, expected and observed outcomes, commands/tools, and any unverified behavior. If execution is blocked, try a practical fallback and distinguish setup failures from product failures. Plans and documentation-only changes do not require application execution. The shared [testing skill](../.agents/skills/testing/SKILL.md#runtime-verification) owns the Codex/Cursor execution workflow, including Playwright MCP preference and fallback steps. These checks preserve the offline default and explicit opt-in policy above; a real use case does not require a live provider.
 

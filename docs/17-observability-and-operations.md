@@ -227,7 +227,7 @@ Do not split frontend and backend into separate production runtime containers. V
 
 Future Compose topologies may add `local-stt`, `local-llm` and `local-tts` services beside `agent-core`. Hybrid mode enables only the desired local capabilities; fully on-prem mode uses all three local services. These are inference services at the Infrastructure boundary, not a redesign into Agent Core microservices. SQLite may later be replaced by PostgreSQL through the existing persistence boundary without changing the one-application-container philosophy.
 
-**Invariants:** Provider location is an infrastructure concern. Hosted, hybrid and on-prem provider topologies must not change core Agent Runtime semantics. Docker is an orchestration/deployment tool, not an architectural dependency of Agent Core. Day-to-day source control is the local `git` CLI. Intended repository CI is GitHub Actions after project scripts exist.
+**Invariants:** Provider location is an infrastructure concern. Hosted, hybrid and on-prem provider topologies must not change core Agent Runtime semantics. Docker is an orchestration/deployment tool, not an architectural dependency of Agent Core. Day-to-day source control is the local `git` CLI. Optional repository CI is the manual-only GitHub Actions Synthetic workflow. Dispatch, rerun or wait for it only on explicit user request; ordinary work uses focused local checks under [Testing Strategy](16-testing-strategy.md#verification-scope-and-optional-ci).
 
 ## Hosted, hybrid and on-prem deployment
 

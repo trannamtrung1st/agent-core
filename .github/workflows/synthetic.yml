@@ -1,15 +1,8 @@
 name: synthetic
 
+# CI is optional: run manually when explicitly requested.
 on:
   workflow_dispatch:
-  push:
-    branches: [main, master]
-    # Skip when the push changes only root TODO.md; still run if TODO.md changes with any other file.
-    paths-ignore:
-      - "TODO.md"
-  pull_request:
-    paths-ignore:
-      - "TODO.md"
 
 # A newer candidate replaces obsolete work only within the same branch or PR.
 # Keep PR runs separate from push runs and from other branches.
