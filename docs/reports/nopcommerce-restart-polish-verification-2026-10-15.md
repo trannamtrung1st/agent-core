@@ -59,3 +59,28 @@ Docker initialization/recovery path was not rerun; this follow-up uses the
 executed HTTP/Docker fixture fallback for the changed selection behavior.
 Existing user data and unrelated Docker workloads were left intact. No live
 provider, hardware or new milestone acceptance is claimed.
+
+## CI correction
+
+[The first hosted run](https://github.com/trannamtrung1st/agent-core/actions/runs/38603306859)
+on `040d7921` passed backend (including the new launcher regressions), frontend
+shard 2, Compose, browser acceptance and real OpenSandbox acceptance. Frontend
+shard 1 exposed one existing Admin fixture gap: its effective-configuration test
+did not mock the newly added Sandbox configuration read. The resulting failed
+read rendered Retry, contradicting the test's successful read-only-view assertion.
+
+The exact test failed locally before correction. The fixture now supplies an
+explicit disabled Sandbox response and waits for its loaded summary before
+checking the unchanged read-only assertions. No product component or recovery
+behavior changed. The full affected files pass **46 tests**:
+
+```bash
+cd web
+pnpm exec vitest run src/features/admin/AdminApp.test.tsx src/features/admin/InstanceSandboxSummary.test.tsx --maxWorkers=1
+```
+
+The design hook also requested a sidecar refresh. Its existing color tokens and
+named rules were validated against the current DESIGN.md; only generated
+metadata was refreshed. Design guidance and component samples are unchanged.
+A fresh full hosted run is requested on the final correction commit; cancelled
+or superseded jobs from the earlier run are not passing evidence.

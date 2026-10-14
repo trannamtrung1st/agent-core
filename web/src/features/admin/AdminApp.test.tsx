@@ -16,6 +16,15 @@ import {
 } from "./AdminApp";
 import type { AdminDefinitionPublicationResource, AdminEffectiveConfiguration } from "../../services/adminApi";
 import { DefinitionDetail } from "./DefinitionDetail";
+import { getInstanceSandbox } from "../../services/sandboxes";
+
+vi.mock("../../services/sandboxes", () => ({
+  getInstanceSandbox: vi.fn().mockResolvedValue({
+    policy: null, profile: null, state: "Disabled", message: "Sandbox is disabled in this fixture.",
+    instanceRevision: 1, instanceInitializationScript: null, verification: null
+  }),
+  verifyInstanceSandbox: vi.fn()
+}));
 
 vi.mock("../../services/instanceConfiguration", () => ({
   previewInstanceVersion: vi.fn(async (_id: string, version: number) => ({instanceRevision:1,currentVersion:1,targetVersion:version,changedDefinitionFields:[],preservedInstanceOverrides:[],newInheritedItems:[],removedInheritedItems:[],activationNotice:"Applies to the next Run."})),
@@ -522,6 +531,8 @@ describe("AdminApp", () => {
       limits: { operationTimeoutMs: 25000, capturesPerScope: 3, downloadsPerScope: 1, findMatches: 10,
         waitTimeoutMs: 2500, textInputLength: 200, automaticSettleMs: 1600 }
     } }} />); });
+    await screen.findByText("No authorized configured profile");
+    expect(getInstanceSandbox).toHaveBeenCalledWith(sampleEffective.instanceId, expect.any(AbortSignal));
     const browser = screen.getByRole("region", { name: "Browser provider" });
     expect(within(browser).getByText("chromium")).toBeInTheDocument();
     expect(within(browser).getByText("Unavailable")).toBeInTheDocument();
