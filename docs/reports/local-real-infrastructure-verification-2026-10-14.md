@@ -49,10 +49,12 @@ Focused local verification:
   Existing nopCommerce containers, their data and unrelated resources were left
   untouched. Final inspection shows no Docker Agent Core app. Another live Sandbox workload
   was observed and left untouched; our image-check workload was cleaned up.
-- Final native API/Vite health reports Real and OpenSandbox status is Ready.
-  The shared checkout and normal stack were independently restarted during this
-  work; the existing store is still running. No attempt was made to override
-  another startup's component selections.
+- Successful post-start checks reported native API/Vite in Real mode and
+  OpenSandbox Ready. The shared checkout/normal stack were independently
+  restarted during this work. A later shutdown removed native PID tracking;
+  the API remained unavailable during a bounded readiness wait. No further
+  startup was forced over that shutdown. Use the documented default start
+  command when resuming local testing; current running state is not a test result.
 - Bash syntax, Python compilation and scoped whitespace checks passed. README,
   Operations, deployment/configuration guidance, architecture and plan summaries
   were synchronized with these launch defaults.
