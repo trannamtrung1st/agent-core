@@ -19,7 +19,7 @@ seed="$root/deploy/nopcommerce/seed/demo-conditions.sql"
 env_file="$root/.env"
 
 usage() {
-  echo "usage: scripts/nopcommerce-demo.sh start|stop|reset" >&2
+  echo "usage: scripts/nopcommerce-demo.sh start [--refresh] | stop | reset" >&2
 }
 
 require_docker() {
@@ -314,6 +314,41 @@ PY
   rm -f "$catalog"
 }
 
+demo_ready() {
+  # Inspect only safe state fields, and require this Compose project's services.
+  # HTTP alone could belong to another process or an uninitialized installer.
+  local db_state web_state install_response
+  db_state="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }} {{ index .Config.Labels "com.docker.compose.service" }} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' nopcommerce-demo-db 2>/dev/null)" || return 1
+  [[ "$db_state" == "$project nopcommerce-db running healthy" ]] || return 1
+  web_state="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }} {{ index .Config.Labels "com.docker.compose.service" }} {{.State.Status}}' nopcommerce-demo-web 2>/dev/null)" || return 1
+  [[ "$web_state" == "$project nopcommerce-web running" ]] || return 1
+  if ! docker exec nopcommerce-demo-web sh -c '
+    test -s /app/Plugins/AgentCore.OrderEvents/AgentCore.OrderEvents.dll &&
+    test -s /app/Plugins/AgentCore.OrderEvents/AgentCore.OrderEvents.deps.json &&
+    test -s /app/Plugins/AgentCore.OrderEvents/plugin.json &&
+    cat /app/App_Data/plugins.json
+  ' 2>/dev/null | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    installed = data.get("InstalledPlugins", [])
+    ready = any(isinstance(item, dict) and item.get("SystemName") == "AgentCore.OrderEvents"
+                for item in installed)
+except (ValueError, TypeError, AttributeError):
+    ready = False
+sys.exit(0 if ready else 1)
+'; then
+    return 1
+  fi
+  install_response="$(curl -sS -o /dev/null --max-time 5 -w '%{http_code} %{redirect_url}' "$origin/install" 2>/dev/null)" || return 1
+  case "$install_response" in
+    "301 $origin/"|"302 $origin/"|"303 $origin/"|"307 $origin/"|"308 $origin/"|\
+    "301 $origin"|"302 $origin"|"303 $origin"|"307 $origin"|"308 $origin") ;;
+    *) return 1 ;;
+  esac
+  assert_origins >/dev/null 2>&1 || return 1
+}
+
 bring_up() {
   prepare_env
   echo "Starting nopCommerce demo containers..."
@@ -334,10 +369,21 @@ bring_up() {
 }
 
 cmd="${1:-}"
+refresh=0
+if [[ $# == 2 && "$cmd" == start && "$2" == --refresh ]]; then
+  refresh=1
+elif [[ $# != 1 || ( "$cmd" != start && "$cmd" != stop && "$cmd" != reset ) ]]; then
+  usage
+  exit 2
+fi
 require_docker
 case "$cmd" in
   start)
-    bring_up
+    if [[ "$refresh" == 0 ]] && demo_ready; then
+      echo "Reusing healthy nopCommerce demo at ${origin}."
+    else
+      bring_up
+    fi
     ;;
   stop)
     "${compose[@]}" stop

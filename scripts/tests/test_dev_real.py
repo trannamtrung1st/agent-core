@@ -206,6 +206,30 @@ print('OpenSandbox: authenticated fixture readiness')
         result=self.run_script('start','--with-store');self.assertEqual(result.returncode,0,result.stderr)
         trace=(self.root/'trace').read_text();self.assertIn('sandbox:up',trace);self.assertIn('store:start',trace)
 
+    def test_full_restart_executes_real_store_launcher_without_reinitializing_healthy_demo(self):
+        from scripts.tests.test_nopcommerce_reuse import ready_store
+        self.sandbox_stubs()
+        with ready_store(self.root, self.env):
+            # Native readiness is stubbed; store-origin checks use real local HTTP.
+            (self.bin / 'curl').unlink()
+            real_curl = shutil.which('curl')
+            # The store fixture selects an isolated HTTP port in the copied scripts.
+            store_script = (self.root / 'scripts/nopcommerce-demo.sh').read_text()
+            import re
+            store_port = re.search(r'origin="http://127.0.0.1:(\d+)"', store_script).group(1)
+            self.command('curl', f'case "$*" in *127.0.0.1:{store_port}*) exec "{real_curl}" "$@";; esac\n'
+                         'printf \'{"profile":"Real"}\\n\'')
+            launcher = self.root / 'scripts/dev-real.sh'
+            launcher.write_text(launcher.read_text().replace('5088', store_port))
+            for action in ('start', 'restart'):
+                result = self.run_script(action, '--full')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('Reusing healthy nopCommerce', result.stdout)
+            import json
+            calls = [json.loads(line) for line in (self.root / 'store-trace').read_text().splitlines()]
+            self.assertFalse(any(args[0] in ('compose', 'restart', 'cp') for args in calls))
+            self.assertNotIn('sandbox:stop', (self.root / 'trace').read_text())
+
     def test_api_only_status_does_not_require_sandbox_or_docker(self):
         self.sandbox_stubs()
         self.command('dotnet','exec sleep 300')

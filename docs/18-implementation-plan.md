@@ -18,6 +18,8 @@ prior acceptance below remains evidence for its original behavior SHA.
 
 The owner authorized enhancing the completed integration with a dedicated sparse Instance Sandbox destination, Profile-then-Instance initialization and bounded durable owner evidence, disposable setup verification, lifecycle visibility and optional Compose-managed server. `dev-real.sh start` now selects only the pinned OpenSandbox infrastructure plus native Real API/Vite; `--with-store`/`--full` explicitly adds the existing store demo. Native-only `--api-only` explicitly disables OpenSandbox unless `--with-sandbox` is selected. Ordinary restart, including `--full`, reuses infrastructure; generation-fenced cleanup/recreation requires `restart --recreate-sandbox`. Packaged app deployment remains separate. This scope does not open P11 or introduce production isolation. Focused local backend/frontend/browser/real Docker/deployment verification is required; hosted CI was explicitly not requested. The [enhancement ledger](reports/opensandbox-configuration-deployment-verification-2026-10-14.md) owns current evidence and hardware limitations; older accepted behavior retains its historical evidence below.
 
+The final [nopCommerce restart polish](reports/nopcommerce-restart-polish-verification-2026-10-15.md) adds healthy initialized-store reuse to the existing launcher. Explicit refresh retains reseeding/plugin/configuration initialization. Hosted Synthetic CI is requested for this follow-up; the earlier local-only verification policy above describes the original enhancement. This bounded operations change does not reopen OpenSandbox architecture or P11.
+
 ## P10 OpenSandbox cutover (authorized 2026-10-13)
 
 The owner requested complete implementation of the final local OpenSandbox
