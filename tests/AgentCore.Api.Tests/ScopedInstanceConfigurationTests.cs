@@ -275,7 +275,14 @@ public sealed class ScopedInstanceConfigurationTests
     {
         await using var host = Host(sqlite, Path.Combine(Path.GetTempPath(), $"scoped-promote-{Guid.NewGuid():N}.db"));
         var services = host.Services; var admin = services.GetRequiredService<AdminAgentInstanceService>();
-        var owner = await admin.CreateManagedAsync("general-assistant", 21); var other = await admin.CreateManagedAsync("general-assistant", 21);
+        // This shared-promotion scenario begins on an explicitly repaired publication, without sandbox authority.
+        var lifecycle = services.GetRequiredService<AgentDefinitionLifecycleService>();
+        var baselineDraft = await lifecycle.ForkDraftAsync("general-assistant",21,DefinitionDraftSourceKind.ForkBuiltIn);
+        var baselineCandidate = HarnessLegacyFixture.WithoutRetiredSandboxTool(baselineDraft.Candidate);
+        baselineDraft = await lifecycle.UpdateDraftAsync(baselineDraft.DraftId,baselineDraft.Revision,
+            baselineCandidate with {Environment=baselineCandidate.Environment! with {KnowledgeSources=[]}});
+        var baseline = await services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(baselineDraft.DraftId,baselineDraft.Revision);
+        var owner = await admin.CreateManagedAsync("general-assistant", baseline.Version); var other = await admin.CreateManagedAsync("general-assistant", baseline.Version);
         var harness = services.GetRequiredService<HarnessManagementService>();
         owner = await harness.ConfigureAsync(owner.InstanceId, owner.Revision, new(HarnessManagementMode.Managed, [HarnessManagementScope.Instructions], [], []));
         var settings = services.GetRequiredService<AgentInstanceSettingsService>();
@@ -295,7 +302,7 @@ public sealed class ScopedInstanceConfigurationTests
         Assert.Equal("Selected reusable instructions.", proposed.Draft!.Candidate.SystemInstructions);
         Assert.NotEqual(2048, proposed.Draft.Candidate.ConversationPolicy!.MaxOutputTokens);
         var reviewedDraft = await services.GetRequiredService<AgentDefinitionLifecycleService>().UpdateDraftAsync(
-            proposed.Draft.DraftId, proposed.Draft.Revision, proposed.Draft.Candidate with {
+            proposed.Draft.DraftId, proposed.Draft.Revision, HarnessLegacyFixture.WithoutRetiredSandboxTool(proposed.Draft.Candidate) with {
                 Skills = [.. proposed.Draft.Candidate.SkillList, new("scoped-reference", "Scoped reference", "Read scoped reference", "Consult the selected reference.", SkillProjection.OnDemand, true, [], ["instance-promoted/selected.md"])]
             });
         owner = await harness.RecordAgentEvidenceAsync(owner.InstanceId, owner.HarnessManagement!.Preparation!.PreparationId,
@@ -305,8 +312,8 @@ public sealed class ScopedInstanceConfigurationTests
         var ready = await harness.ReviewAsync(owner.InstanceId);
         Assert.Equal(HarnessPreparationStatus.Ready, ready.State.Preparation!.Status);
         owner = await harness.PromoteAsync(owner.InstanceId, owner.Revision, ready.Draft!.Revision);
-        Assert.True(owner.ActiveVersion > 21);
-        Assert.Equal(21, (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(other.InstanceId))!.ActiveVersion);
+        Assert.True(owner.ActiveVersion > baseline.Version);
+        Assert.Equal(baseline.Version, (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(other.InstanceId))!.ActiveVersion);
         Assert.Equal(2048, (await settings.ReadAsync(owner.InstanceId, "conversationPolicy")).Effective["maxOutputTokens"]);
         var published = await services.GetRequiredService<IAgentDefinitionResourceAdminStore>().ListPublicationResourcesAsync(owner.DefinitionId, owner.ActiveVersion);
         var shared = Assert.Single(published, r => r.LogicalPath == "instance-promoted/selected.md");

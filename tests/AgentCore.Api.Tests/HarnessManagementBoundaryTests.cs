@@ -17,6 +17,7 @@ public sealed class HarnessManagementBoundaryTests
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(mode, scopes, ["knowledge:support-order-policy"], tools ?? []));
         instance = await service.StartAsync(instance.InstanceId, instance.Revision, "Prepare an operations harness.");
+        await HarnessLegacyFixture.RepairDraftAsync(factory.Services, instance.InstanceId);
         return (instance, await service.ReviewAsync(instance.InstanceId));
     }
 
@@ -96,6 +97,7 @@ public sealed class HarnessManagementBoundaryTests
             instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision,
                 new(mode, [HarnessManagementScope.ToolSelection], [], [tool]));
             instance = await service.StartAsync(instance.InstanceId, instance.Revision, "Configure attachment readability.");
+            await HarnessLegacyFixture.RepairDraftAsync(factory.Services, instance.InstanceId);
             review = await service.ReviewAsync(instance.InstanceId);
         }
         var before = review.Draft!.Candidate;

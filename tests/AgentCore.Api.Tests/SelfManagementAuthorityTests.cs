@@ -131,8 +131,9 @@ public sealed class SelfManagementAuthorityTests
             Assert.False(policy.Overrides.ConfigurationAssistance!.Value);
             var lifecycle = services.GetRequiredService<AgentDefinitionLifecycleService>();
             var draft = await lifecycle.ForkDraftAsync("general-assistant", 23, DefinitionDraftSourceKind.ForkBuiltIn);
-            draft = await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, draft.Candidate with {
-                Environment = draft.Candidate.Environment! with { KnowledgeSources = [] },
+            var candidate = HarnessLegacyFixture.WithoutRetiredSandboxTool(draft.Candidate);
+            draft = await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with {
+                Environment = candidate.Environment! with { KnowledgeSources = [] },
                 SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
             var published = await services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
             await admin.ReassociateActiveVersionAsync(owner.InstanceId, published.Version, policy.InstanceRevision);
@@ -185,8 +186,9 @@ public sealed class SelfManagementAuthorityTests
             await using AgentCoreApiFactory host = sqlite ? new HarnessSqliteFactory(root) : new AgentCoreApiFactory();
             var lifecycle = host.Services.GetRequiredService<AgentDefinitionLifecycleService>();
             var draft = await lifecycle.ForkDraftAsync("general-assistant", 23, DefinitionDraftSourceKind.ForkBuiltIn);
-            draft = await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, draft.Candidate with {
-                Environment = draft.Candidate.Environment! with { KnowledgeSources = [] },
+            var candidate = HarnessLegacyFixture.WithoutRetiredSandboxTool(draft.Candidate);
+            draft = await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with {
+                Environment = candidate.Environment! with { KnowledgeSources = [] },
                 SelfManagement = new(HarnessManagementMode.Managed, [HarnessManagementScope.Settings], [], []) });
             var published = await host.Services.GetRequiredService<AgentDefinitionDraftPublishService>().PublishDraftAsync(draft.DraftId, draft.Revision);
             var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", published.Version);
