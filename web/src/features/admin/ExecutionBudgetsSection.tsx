@@ -7,9 +7,9 @@ import type { DefinitionCandidate } from './definitionCandidate';
 
 const classes = ['standard', 'interactiveBrowser', 'unattendedBoundBrowser'] as const;
 const labels = { standard: 'Standard', interactiveBrowser: 'Interactive Browser', unattendedBoundBrowser: 'Unattended Bound Browser' };
-const fields = ['maxSteps', 'durationSeconds', 'perToolSeconds'] as const;
-const fieldLabels = { maxSteps: 'Steps', durationSeconds: 'Duration (seconds)', perToolSeconds: 'Per-tool timeout (seconds)' };
-const minimums = { maxSteps: 8, durationSeconds: 60, perToolSeconds: 1 };
+const fields = ['maxSteps', 'durationSeconds', 'perToolSeconds', 'sandboxCommandSeconds'] as const;
+const fieldLabels = { maxSteps: 'Steps', durationSeconds: 'Duration (seconds)', perToolSeconds: 'Per-tool timeout (seconds)', sandboxCommandSeconds: 'Sandbox command timeout (seconds)' };
+const minimums = { maxSteps: 8, durationSeconds: 60, perToolSeconds: 1, sandboxCommandSeconds: 1 };
 const emptyPolicy: ExecutionBudgetPolicy = {};
 function ExecutionBudgetPanel({ children, needsAttention }: { children: ReactNode; needsAttention?: boolean }) {
   const { token } = theme.useToken();
@@ -23,24 +23,26 @@ function ExecutionBudgetPanel({ children, needsAttention }: { children: ReactNod
 }
 function preset(kind: typeof classes[number], value: number): ExecutionBudgetProfile {
   const [steps, seconds] = kind === 'interactiveBrowser' ? [48, 300] : kind === 'unattendedBoundBrowser' ? [32, 240] : [24, 180];
-  return { maxSteps: steps * (value + 1), durationSeconds: seconds * (value + 1), perToolSeconds: 30, preset: value };
+  return { maxSteps: steps * (value + 1), durationSeconds: seconds * (value + 1), perToolSeconds: 30, preset: value, sandboxCommandSeconds: 120 };
 }
 export function validExecutionBudgets(policy: ExecutionBudgetPolicy, limits: ExecutionBudgetLimits | null = null) {
   if (!policy || typeof policy !== 'object' || Array.isArray(policy)) return false;
   return classes.every(kind => { const p = policy[kind]; return p == null || limits !== null && typeof p === 'object' && Number.isInteger(p.preset) && p.preset >= 0 && p.preset <= 3
-    && (p.preset === 3 || JSON.stringify(preset(kind, p.preset)) === JSON.stringify({ maxSteps: p.maxSteps, durationSeconds: p.durationSeconds, perToolSeconds: p.perToolSeconds, preset: p.preset }))
+    && (p.preset === 3 || JSON.stringify(preset(kind, p.preset)) === JSON.stringify({ maxSteps: p.maxSteps, durationSeconds: p.durationSeconds, perToolSeconds: p.perToolSeconds, preset: p.preset, sandboxCommandSeconds: p.sandboxCommandSeconds ?? 120 }))
     && Number.isInteger(p.maxSteps) && p.maxSteps >= 8 && p.maxSteps <= limits.maxSteps
     && Number.isInteger(p.durationSeconds) && p.durationSeconds >= 60 && p.durationSeconds <= limits.durationSeconds
-    && Number.isInteger(p.perToolSeconds) && p.perToolSeconds >= 1 && p.perToolSeconds <= limits.perToolSeconds; });
+    && Number.isInteger(p.perToolSeconds) && p.perToolSeconds >= 1 && p.perToolSeconds <= limits.perToolSeconds
+    && Number.isInteger(p.sandboxCommandSeconds ?? 120) && (p.sandboxCommandSeconds ?? 120) >= 1 && (p.sandboxCommandSeconds ?? 120) <= (limits.sandboxCommandSeconds ?? 180); });
 }
 const BudgetFields = memo(function BudgetFields({ value, inherited, instance, disabled, limits, onChange }: {
   limits: ExecutionBudgetLimits; value: ExecutionBudgetPolicy; inherited?: ExecutionBudgetPolicy; instance?: boolean; disabled?: boolean; onChange: (v: ExecutionBudgetPolicy) => void;
 }) {
   const { token } = theme.useToken();
   const id = useId();
+  const ceilings = { ...limits, sandboxCommandSeconds: limits.sandboxCommandSeconds ?? 180 };
   return <Flex vertical gap={token.padding} className="admin-settings-form">
     <Typography.Text type="secondary">Host limits: {limits.maxSteps} steps · {limits.durationSeconds / 60} minutes · {limits.perToolSeconds} seconds per tool. Cleanup and final reply share the total budget. Changes apply to the next run.</Typography.Text>
-    {classes.map(kind => { const own = value[kind]; const effective = own ?? inherited?.[kind] ?? preset(kind, 0);
+    {classes.map(kind => { const own = value[kind]; const base = own ?? inherited?.[kind] ?? preset(kind, 0); const effective = { ...base, sandboxCommandSeconds: base.sandboxCommandSeconds ?? 120 };
       const update = (p: ExecutionBudgetProfile | null) => onChange({ ...value, [kind]: p });
       return <Flex vertical gap={token.paddingXS} key={kind} role="group" aria-label={`${labels[kind]} budget`}>
         <Typography.Text strong>{labels[kind]}</Typography.Text>
@@ -58,12 +60,12 @@ const BudgetFields = memo(function BudgetFields({ value, inherited, instance, di
         <Typography.Text type="secondary">{effective.maxSteps} steps · {effective.durationSeconds / 60} minutes · {effective.perToolSeconds}s per tool · {own ? instance ? 'Instance override' : 'Definition default' : inherited?.[kind] ? 'Inherited Definition default' : 'System default'}</Typography.Text>
         {(!instance || own) && <>
           <Collapse items={[{ key: 'advanced', label: 'Advanced limits', children: <Flex wrap gap={token.paddingSM}>
-            {fields.map(field => { const invalid = !Number.isInteger(effective[field]) || effective[field] < minimums[field] || effective[field] > limits[field];
+            {fields.map(field => { const invalid = !Number.isInteger(effective[field]) || effective[field] < minimums[field] || effective[field] > ceilings[field];
               return <Form.Item key={field} label={fieldLabels[field]} layout="vertical" htmlFor={`${id}-${kind}-${field}`}
                 style={{ flex: '1 1 12rem', margin: 0 }} validateStatus={invalid ? 'error' : undefined}
-                help={invalid ? `Enter a whole number from ${minimums[field]} to ${limits[field]}.` : undefined}>
+                help={invalid ? `Enter a whole number from ${minimums[field]} to ${ceilings[field]}.` : undefined}>
               <InputNumber id={`${id}-${kind}-${field}`} aria-label={`${labels[kind]} ${field}`} aria-invalid={invalid} disabled={disabled} step={1} min={minimums[field]}
-                style={{ width: '100%' }} max={limits[field]} value={effective[field]} onInput={text => update({ ...effective, [field]: Number(text), preset: 3 })} onChange={v => update({ ...effective, [field]: v ?? 0, preset: 3 })} />
+                style={{ width: '100%' }} max={ceilings[field]} value={effective[field]} onInput={text => update({ ...effective, [field]: Number(text), preset: 3 })} onChange={v => update({ ...effective, [field]: v ?? 0, preset: 3 })} />
             </Form.Item>; })}
           </Flex> }]} />
         </>}

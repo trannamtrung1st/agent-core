@@ -1,5 +1,5 @@
-import { selectSpreadsheetCell } from './support/spreadsheet';
 import { test, expect } from '@playwright/test';
+import { selectSpreadsheetCell } from './support/spreadsheet';
 import { selectInstanceIdentity } from './support/instance-identity';
 import { readFile } from 'node:fs/promises';
 test.use({ actionTimeout: 15000 });
@@ -12,7 +12,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   await page.goto('/');
   const owner = await selectInstanceIdentity(page, {
     id: 'general-assistant',
-    version: 28,
+    version: 30,
   });
   const name = `Office Drive ${owner.slice(-8)}`;
   await page.goto('/admin/connections/credentials');
@@ -223,11 +223,16 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     await page
       .getByLabel('Message', { exact: true })
       .fill('synthetic-drive-trash: batch');
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const send = page.getByRole('button', { name: 'Send', exact: true });
+    await send.hover();
+    await expect(page.getByRole('tooltip').filter({ hasText: 'Send (Enter)' })).toBeVisible();
+    await send.click();
     const approval = page.getByRole('dialog', {
       name: 'Move 7 listed Drive files to Trash?',
     });
     await expect(approval).toBeVisible({ timeout: 30000 });
+    await expect(approval).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:-|\b)/);
+    await expect(page.getByRole('tooltip').filter({ hasText: /^(?:Stop|Send \(Enter\))/ })).toHaveCount(0);
     await expect(approval).toContainText('7 listed app-authorized Drive files');
     await expect(approval).toContainText(name);
     await expect(approval).toContainText('Can be restored');

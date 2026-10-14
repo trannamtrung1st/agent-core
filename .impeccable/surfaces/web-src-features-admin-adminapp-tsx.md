@@ -133,3 +133,7 @@ Artifact cards now use one centered horizontal row with file icon, shrinking fil
 Credentials owns one Add credential purpose selector with reused Drive/Gmail/Custom/General fields and immutable-purpose specialist edits. Saved connection Tags remain separate from Active/Disabled status. Instance bindings own app-authorized Drive browsing; conversational tools own mutations. The shared ApprovalModal uses trusted file/name/version details, a full-width narrow-screen list, action-specific Trash/Rename/Move wording, recoverable-subset copy and the existing keyboard/Reject/footer behavior. Behavior remains owned by docs/13 and docs/14.
 
 The [successor verification ledger](../../docs/reports/drive-credentials-ux-verification-2026-10-14.md) owns current local evidence and exact source identity. Earlier reports are historical; Real Trash requires an authorized disposable account scope and remains unverified.
+
+## P10 local sandbox extension
+
+Platform profiles and the Session sandbox drawer preserve the incumbent Ant Design operate surface and shared Office/Drive file preview. Theme tokens own spacing; output uses Collapse/copyable text and existing confirmations. A bounded 1440/1024/768/390/320px runtime review found no horizontal overflow after transitions settled. Save/Discard/navigation protection, actual artifacts, cancellation/reset and Core restart were exercised. Canonical docs and the OpenSandbox verification ledger own scope/remaining acceptance; this is local evidence, not production hardening.

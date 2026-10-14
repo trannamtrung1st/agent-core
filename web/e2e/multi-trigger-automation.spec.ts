@@ -23,8 +23,12 @@ test('Mixed Event rows preserve drafts, samples and stable identities through ne
   await add('session.ended');
   await mode('Schedule'); await expect(drawer.getByLabel('Schedule local time')).toHaveValue('14:30'); await mode('Events');
   await drawer.getByRole('button',{name:/^run.failed Built-in/}).click(); await expect(first.getByLabel('Sample event JSON')).toHaveValue(fixture);
-  const managerButton=first.getByRole('button',{name:'Create or manage Events',exact:true}); await managerButton.click();
-  const manager=page.getByRole('dialog',{name:'Global Events',exact:true}); await manager.getByRole('button',{name:'New webhook Event',exact:true}).click();
+  // The expanded subscription moves during Collapse layout motion. Exercise
+  // its keyboard action without relying on a transient pointer coordinate.
+  const managerButton=first.getByRole('button',{name:'Create or manage Events',exact:true});
+  await managerButton.focus(); await expect(managerButton).toBeFocused(); await page.keyboard.press('Enter');
+  const manager=page.getByRole('dialog',{name:'Global Events',exact:true}); await expect(manager).toBeVisible();
+  await manager.getByRole('button',{name:'New webhook Event',exact:true}).press('Enter');
   const sourceEditor=page.getByRole('dialog',{name:'New webhook Event',exact:true}); const eventName='Mixed orders '+Date.now();
   await sourceEditor.getByLabel('Event name').fill(eventName); await sourceEditor.getByLabel('Event key').fill('mixed.'+Date.now());
   await sourceEditor.getByRole('button',{name:'Create Event',exact:true}).click(); await page.getByRole('dialog',{name:'Copy this credential',exact:true}).getByRole('button',{name:'Done',exact:true}).click();

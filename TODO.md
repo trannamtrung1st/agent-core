@@ -1,5 +1,11 @@
 # TODO
 
+The OpenSandbox cutover is synchronized with the owner-selected main snapshot
+`ed943429`. General Assistant v30 preserves main's immutable v29 and combines
+its current public-download/Drive/Office authority with sandbox execution. Combined
+verification and hosted gate status are tracked in the [OpenSandbox ledger](docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
+prior acceptance below remains evidence for its original behavior SHA.
+
 Keep this file focused on open work and maintainer ideas. [README](README.md) summarizes the shipped product; the [Implementation Plan](docs/18-implementation-plan.md) owns milestone order and gates. Verification history, exact behavior commits and test results belong in [reports](docs/reports/).
 
 ## Current status
@@ -8,7 +14,13 @@ The MVP and phases through P9.10 have closed/frozen evidence. Later bounded enha
 
 Email accounts, Gmail OAuth and monitoring have accepted non-live scopes. The contextual Admin/email integration also has exact-source hosted acceptance; see [integration verification](docs/reports/email-monitoring-main-integration-2026-10-13.md). Real mailbox acceptance remains separate.
 
-P10 (Sandbox evolution) and P11 (Multi-user and production infrastructure) remain unopened and requirement-triggered.
+P10's scoped OpenSandbox cutover is closed for trusted single-user local Docker
+development/demo on behavior `4c8f2507`, with all eight
+[exact-source hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016)
+passed. [Verification](docs/reports/opensandbox-integration-verification.md)
+records OSB-01–18, actual runtime evidence and historical failures. Own execd
+loopback and absent writable-layer quota remain disclosed local-demo limits;
+production hardening is deferred. P11 remains unopened and requirement-triggered.
 
 ## Open work and acceptance gaps
 
@@ -25,7 +37,7 @@ Other bounded successor verification limits remain in their linked reports under
 
 ## Future work — start only for a concrete requirement
 
-- **P10 — Sandbox:** keep Docker while it meets workflow needs. Add a second provider, stronger isolation, pools or remote execution only when a workflow requires it.
+- **Sandbox beyond approved P10:** pools, Kubernetes, multi-host scheduling and a second execution engine remain deferred. The trusted-local OpenSandbox cutover is accepted above; public/multi-tenant isolation, writable-layer quota and signed attestation remain deferred.
 - **P11 — Production:** introduce authentication and tenant ownership for an external pilot; adopt PostgreSQL, object storage or external secret protection when hosting requires them. Add TLS, operational monitoring, backup/restore and rollback evidence for that deployment. Distributed workers, coordination services and orchestration require a measured need.
 - **Application participation:** define Application Bindings when a real client application embeds or invokes an identity. Website automation already uses explicit Credential grants and instance-owned Browser state. Broader messaging, shared application/task workspaces and portable worker packages need separate requirements.
 - **Extensions and packaging:** add provider seams and reusable evaluations when another concrete implementation needs them. Marketplaces, universal plugins, package import/export, Git/folder sync and remote file browsing remain deferred.

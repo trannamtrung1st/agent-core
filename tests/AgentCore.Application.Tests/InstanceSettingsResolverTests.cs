@@ -64,7 +64,7 @@ public sealed class InstanceSettingsResolverTests
         foreach (var section in InstanceSettingsResolver.Sections)
             foreach (var (field, constraint) in InstanceSettingsResolver.Constraints(baseline, section))
             {
-                var invalid = constraint.RequiredBoolean is { } required ? Value(!required)
+                var invalid = constraint.Choices is not null ? Value("not-authorized") : constraint.RequiredBoolean is { } required ? Value(!required)
                     : constraint.Minimum is { } min ? Value(min - 1) : Value(constraint.Maximum!.Value + 1);
                 var patch = InstanceSettingsResolver.Patch(new(), section, new Dictionary<string, JsonElement> { [field] = invalid }, []);
                 var rejected = Assert.Throws<AgentCoreException>(() => InstanceSettingsResolver.Resolve(baseline, patch));

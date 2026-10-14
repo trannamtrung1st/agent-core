@@ -8,7 +8,7 @@ namespace AgentCore.Application.Execution;
 public sealed record RunBudgetDiagnostics(string Class, string Source, int MaxSteps, int DurationSeconds,
     int PerToolSeconds, int StepsConsumed, int ActiveExecutionMs, string Phase, string? TerminationReason,
     string CleanupStatus, bool ClosureConfirmed, bool? ClosureRequested, bool? LogoutRequested,
-    bool LogoutVerified, bool CleanupBlocked);
+    bool LogoutVerified, bool CleanupBlocked, int SandboxCommandSeconds = 120);
 
 public static class RunBudgetDiagnosticProjection
 {
@@ -63,7 +63,7 @@ public static class RunBudgetDiagnosticProjection
             run.Checkpoint?.StepCount ?? 0, run.Checkpoint?.ActiveExecutionMs ?? Math.Max(0, pin.Profile.DurationSeconds * 1000 - remaining),
             finalization is not null ? "finalization" : cleanup ? "cleanup" : "work",
             finalization ?? (blocked && pin.RequestedCleanup ? "cleanupBlocked" : null) ?? run.Failure?.Code switch { "tool-step-limit" => "stepLimit", "run-deadline" => "runDeadline", "tool-output-limit" => "outputLimit", _ => null },
-            cleanupStatus, closure, intent?.ClosureRequested, intent?.LogoutRequested, false, blocked);
+            cleanupStatus, closure, intent?.ClosureRequested, intent?.LogoutRequested, false, blocked, pin.Profile.SandboxCommandSeconds);
     }
     private static string? ReadString(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;

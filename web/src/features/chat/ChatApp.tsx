@@ -52,6 +52,7 @@ import { terminalSessionNote } from "./sessionLifecycle";
 import { ChatHeader } from "./ChatHeader";
 import { getSession, listBackgroundSessions, listSessionAutomations, cancelSessionAutomation, type AgentRun } from "../../services/api";
 import { BackgroundWorkDrawer } from "./BackgroundWorkDrawer";
+import { SessionSandboxDrawer } from './SessionSandboxDrawer';
 import { AutomationDrawer } from "./AutomationDrawer";
 import { Composer } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -97,6 +98,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
+  const [sandboxOpen, setSandboxOpen] = useState(false);
   const [attentionItems, setAttentionItems] = useState<{ run: AgentRun; delivery?: string }[]>([]);
   const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
   const { isUnread } = useWorkReadState();
@@ -381,6 +383,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
               inSession={inSession && !readonly}
               onSchedules={inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
               onBackgroundWork={state.sessionId ? () => setWorkOpen(true) : undefined}
+              onSandbox={state.sessionId ? () => setSandboxOpen(true) : undefined}
               attentionCount={attentionCount}
               onEnd={() => void hangUp()}
             />
@@ -499,6 +502,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
                       onPartsChange={setDraftParts}
                       canSend={canSend}
                       canStop={canStop}
+                      approvalPending={state.pendingApproval !== null}
                       sendLabel={sendLabel}
                       pendingSendQueue={state.pendingSendQueue}
                       ready={composerReady}
@@ -540,6 +544,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
         </Layout>
         {backgroundInstanceId ? <BackgroundWorkDrawer instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
           onClose={() => setWorkOpen(false)} onAddReference={(sessionId,label) => addResourceToDraft({kind:"backgroundSession",sessionId},label)} /> : null}
+        {state.sessionId && <SessionSandboxDrawer key={state.sessionId} sessionId={state.sessionId} open={sandboxOpen} narrow={isNarrow} readOnly={readonly} onClose={() => setSandboxOpen(false)} />}
 
         {state.sessionId ? (
           <AutomationDrawer

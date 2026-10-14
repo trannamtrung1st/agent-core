@@ -4,6 +4,10 @@ Method: dual-agent (A: `/root/design_review` · B: `/root/detector_review`), wit
 
 Date: 2026-10-14. Source: `d279abfe`, including the existing working-tree report correction. Scope: all 22 commits in `8e053018..d279abfe`, the interval since the preceding preview/UI polish baseline. This is a focused review and documentation refresh, not milestone acceptance.
 
+## Integrated follow-up
+
+The OpenSandbox/main integration subsequently corrects both findings below: pending approvals unmount Composer Send/Stop tooltips so the first Escape reaches the modal, and XLSX renders its shortened-text notice with smaller-range/original Download guidance. The [integration ledger](opensandbox-integration-verification.md#current-main-integration--2026-10-14) records the passing combined Drive journey and focused preview recovery. The original source, failed reproductions and verification limits below remain historical evidence for `d279abfe`.
+
 ## Open review finding
 
 **[P2] Explain shortened XLSX cell text.** `web/src/features/filePreview/SpreadsheetPreview.tsx:26` receives `projected.truncated` but never displays it. `spreadsheetAdapter.ts:25` shortens cell/window values; `ReadonlySpreadsheet.tsx:17` also uses this shortened projection for the selected-cell readout. CSV displays a shortening notice; XLSX does not. The ordinary “Partial workbook” label explains range coverage, not omitted cell text.

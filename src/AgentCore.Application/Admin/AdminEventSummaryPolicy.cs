@@ -28,6 +28,7 @@ public static class AdminEventSummaryPolicy
             "providers",
             "modelDefaults",
             "capabilities",
+            "sandboxPolicy",
             "memoryPolicy",
             "triggerPolicy",
             "selfManagement",
@@ -196,6 +197,15 @@ public static class AdminEventSummaryPolicy
 
         using (document)
         {
+            if (append.Operation == AdminEventOperationKind.SandboxProfileChanged)
+            {
+                if (document.RootElement.ValueKind != JsonValueKind.Object || document.RootElement.EnumerateObject().Any(p => p.Name is not ("profileId" or "revision" or "enabled")))
+                    throw AgentCoreErrors.Validation("Unsupported sandbox profile history metadata.");
+                RequireString(document.RootElement,"profileId");
+                if (document.RootElement.GetProperty("revision").GetInt64() < 1 || document.RootElement.GetProperty("enabled").ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                    throw AgentCoreErrors.Validation("Invalid sandbox profile history metadata.");
+                return;
+            }
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
                 throw AgentCoreErrors.Validation("Admin event summary metadata must be a JSON object.");

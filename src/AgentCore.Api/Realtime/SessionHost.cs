@@ -710,6 +710,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
                 cancellationToken)
             .ConfigureAwait(false);
         await CancelLiveRuntimeAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        await _sessions.StopSandboxAsync(sessionId, cancellationToken);
     }
 
     public async Task<SessionSnapshot> TransitionLifecycleAsync(

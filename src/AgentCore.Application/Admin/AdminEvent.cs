@@ -31,7 +31,8 @@ public enum AdminEventOperationKind
     InstanceSettingsChanged,
     InstanceResourcesChanged,
     BrowserPrivacyChanged,
-    CredentialBindingChanged
+    CredentialBindingChanged,
+    SandboxProfileChanged
 }
 
 public sealed record AdminEvent(

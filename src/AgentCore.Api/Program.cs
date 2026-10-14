@@ -25,6 +25,7 @@ builder.Services.Configure<JsonOptions>(options =>
 });
 
 builder.Services.AddSingleton<SchedulerReadiness>();
+builder.Services.AddHostedService<OpenSandboxHostedService>();
 var agentDirectory = ResolveAgentDirectory(builder);
 var profile = builder.Configuration["AgentCore:Profile"] ?? "Synthetic";
 var languageModel = builder.Configuration.GetSection("Providers:LanguageModels:primary-llm")
@@ -144,6 +145,7 @@ HostSessionEndpoints.Map(app);
 LegacySessionEndpoints.Map(app);
 AttachmentEndpoints.Map(app);
 WorkspaceEndpoints.Map(app);
+SandboxEndpoints.Map(app);
 AgentWorkspaceEndpoints.Map(app);
 ComposerEndpoints.Map(app);
 ArtifactEndpoints.Map(app);

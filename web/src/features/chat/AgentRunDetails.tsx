@@ -85,6 +85,7 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
       ] : []),
       ...(run.budget ? [
         { key: "budget", label: "Execution budget", children: `${runBudgetLabel(run.budget.class)} · ${runBudgetLabel(run.budget.source)} · ${run.budget.maxSteps} steps · ${run.budget.durationSeconds / 60} minutes` },
+        { key: 'toolTimeout', label: 'Tool limits', children: `${run.budget.perToolSeconds}s ordinary · ${run.budget.sandboxCommandSeconds ?? 120}s sandbox · remaining Run deadline still applies` },
         { key: "consumed", label: "Consumed", children: `${run.budget.stepsConsumed} / ${run.budget.maxSteps} steps · ${(run.budget.activeExecutionMs / 1000).toFixed(1)}s active` },
         { key: "phase", label: "Phase", children: runBudgetLabel(run.budget.phase) },
         { key: "reason", label: "Termination reason", children: run.budget.terminationReason ? runBudgetLabel(run.budget.terminationReason) : 'None recorded' },

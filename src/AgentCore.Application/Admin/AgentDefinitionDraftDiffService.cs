@@ -93,6 +93,8 @@ public sealed class AgentDefinitionDraftDiffService(
         AgentDefinitionCandidate current,
         AgentDefinitionCandidate baseline)
     {
+        if (current.SandboxPolicy is not null || baseline.SandboxPolicy is not null)
+            yield return TextSection("sandboxPolicy", "Sandbox profile policy", System.Text.Json.JsonSerializer.Serialize(baseline.SandboxPolicy), System.Text.Json.JsonSerializer.Serialize(current.SandboxPolicy));
         yield return TextSection("instructions", "Instructions", baseline.SystemInstructions, current.SystemInstructions);
         yield return TextSection("goals", "Goals", FormatGoals(baseline.Goals), FormatGoals(current.Goals));
         yield return TextSection(
@@ -151,6 +153,7 @@ public sealed class AgentDefinitionDraftDiffService(
 
     private static IEnumerable<DefinitionDiffSection> AddedCandidateSections(AgentDefinitionCandidate current)
     {
+        if (current.SandboxPolicy is not null) yield return AddedSection("sandboxPolicy", "Sandbox profile policy", System.Text.Json.JsonSerializer.Serialize(current.SandboxPolicy));
         if (current.SelfManagement is not null) yield return AddedSection("selfManagement", "Agent self-management defaults", System.Text.Json.JsonSerializer.Serialize(current.SelfManagement));
         yield return AddedSection("instructions", "Instructions", current.SystemInstructions);
         yield return AddedSection("goals", "Goals", FormatGoals(current.Goals));

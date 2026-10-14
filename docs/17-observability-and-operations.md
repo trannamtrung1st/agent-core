@@ -589,6 +589,28 @@ Enable `web.download` through normal Definition publication and Instance adoptio
 
 Download policy is bounded by [configuration](15-persistence-and-configuration.md#public-file-download-configuration) and existing Workspace quotas. Network failures use safe `web.download` diagnostic warnings and operation timing; raw downloaded bytes, URL queries and headers are excluded from logs. Do not retry an uncertain Workspace commit automatically: inspect destination metadata/content and retain the Run's effect fence. Downloads never execute content. Legacy `.doc` can be downloaded and returned, but Office editing supports `.docx`; complex unsupported structures and paragraph/run normalization retain existing warnings. No external CI wait is required for the authorized local delivery; [verification](reports/public-binary-download-verification-2026-10-14.md) separates local evidence from unrun live-web/desktop-client checks.
 
+## Trusted local OpenSandbox
+
+This optional execution subsystem targets trusted single-user local development/demo. Ordinary Core startup remains Docker-free. Use Node 22, .NET 10, Python 3 and the existing local Docker daemon. One OpenSandbox server per daemon is required; the runner refuses another pinned server because upstream sidecar reconciliation is daemon-wide. It never starts DinD, changes daemon/security settings or removes unrelated containers/networks/images/volumes.
+
+```sh
+python3 scripts/opensandbox-local.py up
+# Start native Core with the private overrides described below for manual use.
+python3 scripts/opensandbox-local.py down
+# Acceptance provisions and tears down its own server; run after manual teardown.
+python3 scripts/opensandbox-local.py accept --ui --name agent-core-opensandbox-acceptance
+```
+
+Run `down` for the existing owned runner before starting acceptance with another name; do not run two servers together. `up` builds the pinned Workbench, pulls exact server/execd/egress digests, creates a random 0600 private env file under gitignored `local/opensandbox-runners/<name>/`, starts a labeled server on `127.0.0.1:18080`, and exports `image.json`, installed SPDX inventory and retained license notices. Core is native; the dedicated runner is the tested deployment path. The server alone mounts the host Docker socket plus its private config and state volume. Workloads have empty host-bind allowlists. Never publish the Docker API or copy the server key into Core source/browser/Chat.
+
+Docker Desktop uses `host.docker.internal` for server-side egress readiness and workload ports published to workstation loopback. A VM bridge gateway is not bindable on the workstation. Native Linux instead publishes workload ports on the inspected Docker bridge gateway, allowing private server proxy routing. Lifecycle publication remains workstation loopback. A wide upstream port range avoids the observed narrow-range collisions; upstream port reservation is not atomic across server/host namespaces. Keep one server and use the reproducible topology probes.
+
+For native Core, pass backend environment overrides `OpenSandbox__Enabled=true`, `OpenSandbox__Endpoint=http://127.0.0.1:18080`, `OpenSandbox__ApiKey` from the private env file, `OpenSandbox__WorkbenchImage` from the exported immutable image ID and explicit `OpenSandbox__AllowLocalImageIds=true`. Do not print the key or load named local secret files through application configuration. Existing provider/storage overrides stay independent. The runner's acceptance supplies these overrides through a private child-process environment and uses isolated SQLite/files/ports. `accept --ui` requires installed web dependencies and Playwright Chromium; it stops only its own child processes/server in `finally`. Its state volume/image are retained for inspection.
+
+Only canonical `/working` storage is quota-enforced (250 MiB ceiling, 50 MiB/file). The Docker writable layer is not disk-quota-enforced. Execd shares workload loopback and remains reachable from commands. This is an accepted local-demo limitation; public/multi-tenant deployment, stronger sandbox isolation and verified supply-chain attestation require separate production work. SPDX export is an installed-component inventory, not vulnerability assessment or signed provenance. Preserve the shipped third-party notices when redistributing the Workbench; project source remains proprietary.
+
+On outage or unknown command outcome, retain the receipt and canonical files, restore private server readiness, inspect the Session sandbox and explicitly reset when required. No automatic shell replay or BusyBox fallback occurs. Cleanup supervision has a bounded pass and retries durable receipts even with disabled profiles/unavailable readiness. Back up SQLite with the existing procedure before migration; migration adds only sandbox tables. Disable sandbox offering for rollback while retaining canonical Workspace/Artifacts.
+
 ## Configuring file preview
 
 Use the normal host configuration under `FilePreview`; [configuration](15-persistence-and-configuration.md#file-preview-host-policy) owns the defaults, validated safety bounds and restart behavior. For example `FilePreview__Limits__TextBytes=1048576` lowers text preview to 1 MiB, and `FilePreview__Spreadsheet__RowsPerWindow=100` lowers each sheet window. The owner-protected options endpoint shows effective values, including immutable Office caps. An invalid configuration fails startup instead of widening browser policy. Original downloads retain their existing limits and authorization.

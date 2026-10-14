@@ -1,4 +1,6 @@
 import {
+  act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -6,7 +8,8 @@ import {
   within,
 } from '@testing-library/react';
 import { App, ConfigProvider } from 'antd';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { useState } from 'react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AddCredentialDialog } from './AddCredentialDialog';
 import * as api from '../../services/adminApi';
 import * as drive from '../../services/drive';
@@ -20,8 +23,17 @@ vi.mock('../../services/drive', () => ({
   createDriveAccount: vi.fn(),
   getDriveOptions: vi.fn(),
 }));
+const nativeSetTimeout = globalThis.setTimeout;
+const ownedTimers = new Set<ReturnType<typeof setTimeout>>();
 beforeEach(() => {
   vi.clearAllMocks();
+  // AntD's delayed field-error state can outlive an unmounted form. Keep real
+  // timing during assertions, and cancel only this fixture's timers at teardown.
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation((...args) => {
+    const handle = Reflect.apply(nativeSetTimeout, globalThis, args) as ReturnType<typeof setTimeout>;
+    ownedTimers.add(handle);
+    return handle;
+  });
   vi.mocked(api.emailOAuthConfiguration).mockResolvedValue({
     configured: true,
     synthetic: true,
@@ -33,16 +45,23 @@ beforeEach(() => {
     scope: 'drive.file',
   });
 });
+afterEach(async () => {
+  cleanup();
+  await act(async () => { await Promise.resolve(); });
+  for (const handle of ownedTimers) clearTimeout(handle);
+  ownedTimers.clear();
+  vi.restoreAllMocks();
+});
 function show() {
+  function Owner() {
+    const [open, setOpen] = useState(true);
+    return <AddCredentialDialog open={open} onClose={() => setOpen(false)}
+      onSaved={vi.fn().mockResolvedValue(undefined)} onClosed={vi.fn()} />;
+  }
   render(
     <ConfigProvider>
       <App>
-        <AddCredentialDialog
-          open
-          onClose={vi.fn()}
-          onSaved={vi.fn().mockResolvedValue(undefined)}
-          onClosed={vi.fn()}
-        />
+        <Owner />
       </App>
     </ConfigProvider>,
   );
@@ -113,6 +132,8 @@ it('switching purposes clears transient secrets and names and submits a typed Cu
   expect(d.getByLabelText('Display name', { exact: true })).toHaveValue(
     'Custom fixture',
   );
+  fireEvent.click(d.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add credential' })).not.toBeInTheDocument());
 });
 it('failed Gmail consent start reuses the saved account and locks purpose on retry', async () => {
   const account = {
@@ -137,5 +158,8 @@ it('failed Gmail consent start reuses the saved account and locks purpose on ret
   ).toBeDisabled();
   fireEvent.click(connect);
   await waitFor(() => expect(api.startEmailOAuth).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(connect).toBeEnabled());
   expect(api.createEmailAccount).toHaveBeenCalledTimes(1);
+  fireEvent.click(d.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add credential' })).not.toBeInTheDocument());
 });

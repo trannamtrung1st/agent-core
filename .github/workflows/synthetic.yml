@@ -14,6 +14,49 @@ concurrency:
 # critical path without changing test workers, project coverage, or SQLite isolation.
 # Repeated tool/dependency setup is cheaper than serial developer feedback.
 jobs:
+  opensandbox:
+    name: Trusted local OpenSandbox acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DOTNET_NOLOGO: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "9.6.0"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install browser acceptance dependencies
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          sudo python3 ../scripts/prepare-ci-apt.py
+          pnpm exec playwright install --with-deps chromium
+      - name: Real Docker SDK, Workspace, browser and restart acceptance
+        run: python3 scripts/opensandbox-local.py accept --ui --name agent-core-opensandbox-ci
+      - name: Preserve bounded evidence without private configuration
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opensandbox-acceptance
+          path: |
+            tests/AgentCore.Infrastructure.Tests/TestResults/opensandbox-acceptance.trx
+            web/opensandbox-results/
+            web/opensandbox-report/
+            local/opensandbox-runners/*/workbench.spdx.json
+            local/opensandbox-runners/*/workbench-licenses.tar.gz
+            local/opensandbox-runners/*/image.json
   backend:
     name: Synthetic backend
     runs-on: ubuntu-latest
@@ -48,6 +91,14 @@ jobs:
 
       - name: Event storage monitoring tests
         run: python3 -m unittest discover -s scripts/tests -p test_event_storage_snapshot.py -v
+
+      # Offline fixtures complement the real-Docker job when CI is requested.
+      - name: OpenSandbox proof build and offline receipt tests
+        run: |
+          dotnet restore scripts/opensandbox-proof/OpenSandboxProof.csproj --locked-mode
+          dotnet build scripts/opensandbox-proof/OpenSandboxProof.csproj --no-restore --nologo
+          dotnet run --project scripts/opensandbox-proof/OpenSandboxProof.csproj --no-build -- --help
+          python3 -m unittest discover -s scripts/opensandbox-proof -p 'test_*.py' -v
 
       - name: Build Infrastructure tests
         run: dotnet build tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --nologo

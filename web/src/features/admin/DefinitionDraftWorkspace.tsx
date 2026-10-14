@@ -21,6 +21,7 @@ import { ResourceImportPanel } from "./resourceImportPanel";
 import { RESOURCE_FILE_HELP, resourceBatchLimitProblem, resourceMediaType, resourcePreviewProblem } from "./resourcePreview";
 import { ResourceDeletionContent, ResourceSelectionToolbar } from "./ResourceSelectionToolbar";
 import { RetainedAdminPage } from './RetainedAdminPage';
+import { DefinitionSandboxPolicy } from './DefinitionSandboxPolicy';
 
 import { adminCollectionPagination } from "./AdminCollectionToolbar";
 
@@ -548,6 +549,7 @@ export function DefinitionDraftWorkspace({
       </RetainedAdminPage>
       <RetainedAdminPage active={page === 'capabilities'}>
               <AgentConfigurationPanel id="capabilities" title="Capabilities" label="Draft capabilities" description="Choose the tools, workspace behavior, and knowledge references available to this definition." bodyClassName="admin-draft-tab">
+                <DefinitionSandboxPolicy candidate={candidate} disabled={busy || candidateLocked} onChange={onCandidateChange} />
                 {candidateLocked ? (
                   <Alert
                     type="error"

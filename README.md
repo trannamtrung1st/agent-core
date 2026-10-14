@@ -1,5 +1,25 @@
 # Agent Core MVP
 
+The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application
+behavior through `d279abfe`, followed by its documentation review).
+General Assistant v30 preserves main's immutable v29 and combines its current
+public-download/Drive/Office authority with sandbox execution. Main's Drive upload
+recovery, binary attachments and shared Office/file preview styling are retained.
+Focused local verification and historical hosted results are tracked in the [OpenSandbox ledger](docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
+prior acceptance below remains evidence for its original behavior SHA.
+
+The owner-authorized P10 OpenSandbox cutover is implemented and accepted for a
+**trusted, single-user local demo** on behavior `4c8f2507`. All eight
+[hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016)
+pass, including real Linux SDK/Workbench, atomic scratch, coding/Office,
+command recovery and Core/server recreation through the browser. Main's
+Office/Drive behavior is preserved. Own-container execd loopback remains an
+explicit local-demo limitation; production hardening is separate. Only the
+trusted OpenSandbox server may mount the host Docker socket. See
+[verification](docs/reports/opensandbox-integration-verification.md).
+Earlier P10/P11 statements below describe their historical slice boundaries;
+this accepted P10 cutover supersedes the former unopened P10 status. P11 remains unopened.
+
 The spreadsheet preview follow-up uses one read-only FortuneSheet canvas for XLSX and CSV/TSV Grid, with backend-owned host limits and bounded range navigation. [Local verification](docs/reports/fortune-sheet-preview-verification-2026-10-14.md) records runtime evidence, formatting limits and remaining gate gaps; the original Office/Drive acceptance below remains unchanged.
 
 The Office/file-preview/Drive successor is implemented: one protected Chat/Admin preview, guarded DOCX/XLSX authoring and optional bound Google Drive integration. All seven [exact-source Synthetic/Compose gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38474865644) passed on `a451600a`. See the [implementation gates](docs/18-implementation-plan.md#office-file-preview-and-drive-successor) and [verification ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md) for evidence and manual/Real verification gaps.

@@ -4,6 +4,8 @@ slug: "web-src-features-chat-approvalmodal-tsx"
 primary_target: "web/src/features/chat/ApprovalModal.tsx"
 related_targets:
   - web/src/app.css
+  - web/src/features/chat/Composer.tsx
+  - web/src/features/chat/ChatApp.tsx
   - src/AgentCore.Application/Tools/SessionToolExecutor.DriveApproval.cs
   - web/src/features/admin/HarnessManagementSection.tsx
 ---
@@ -31,3 +33,5 @@ Ordinary sensitive fields use small one-column Ant Design Descriptions with a sh
 ## Trusted Drive decisions (2026-10-14)
 
 The shared ApprovalModal uses action-specific Drive titles and destructive Trash CTAs, an 880px maximum viewport-bounded dialog and compact native Ant Design table for exact file/name/version targets. Reuse admin-collection-table cell wrapping, tabular numerals and native 8px padding with fixed layout. Name/File ID/Version columns use 36%/52%/12% on desktop so typical IDs fit on one line; longer values still wrap. Below 768px the exact 12px ID sits beneath the filename with a native 4px Flex gap, and Version remains separate. Metadata wraps completely without pagination, selection or ellipsis. Drive review content may use 60vh and shrinks inside the existing viewport-bounded container; other approvals retain 40vh. Titles reserve 32px for the native close control; footer, keyboard focus and Reject/Escape behavior remain. Trash/Rename/Move titles and confirmation verbs identify the exact operation; batch Trash shows every trusted name/ID/version, verified account, app-authorized subset count and restore explanation. Destructive confirmation uses native danger tokens. Reject, Escape, focus recovery and stale-identity scroll reset remain shared. Invalid target projections disable confirmation; server preparation and execution own exact authority, never the display labels. The [successor ledger](../../docs/reports/drive-credentials-ux-verification-2026-10-14.md) records actual Synthetic rejection/Enter and scope readback.
+
+Composer Send/Stop tooltips are unmounted while an approval is pending so a popup behind the modal cannot consume its first Escape; normal hover help resumes after the decision.

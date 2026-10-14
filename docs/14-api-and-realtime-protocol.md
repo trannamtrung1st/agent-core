@@ -333,7 +333,7 @@ Categories: Provider, Session, Protocol, Audio, Validation, Connection, Transpor
 
 ## Post-MVP planned until verified
 
-Phases A–H are observed on the runtime (including Docker `sandbox.run`). Historical Phase I WorkItems were not-applicable until the future trigger in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified). Full R1–R6 text is in that same section. Phase D initiative/deactivation and Phase F workspace execution view are observed above.
+Historical Phases A–H included Docker `sandbox.run`; [current sandbox contracts](#owner-scoped-sandbox-http-contract) supersede that executor. Historical Phase I WorkItems were not-applicable until the future trigger in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified). Full R1–R6 text is in that same section. Phase D initiative/deactivation and Phase F workspace execution view are observed above.
 
 **Lease versus Attachment.** Wire `attachmentId` is the hub **connection lease**. User-uploaded files are HTTP `Attachment` records with `AttachmentId`. Never send attachment binaries or base64 on SignalR.
 
@@ -776,6 +776,24 @@ Only `url`, `path` and `expectedSha256` are accepted. `url` is an absolute crede
 ```
 
 Transfer failures return `status=failed`, `error` and `message`, with no bytes; mismatches include actual declared content type. Workspace validation/conflict/quota failures use existing structured tool errors. Cancellation propagates through the existing Run contract. Public GET cannot reuse browser authentication, cookies, bearer credentials or CAPTCHA state. A saved file is not automatically an Artifact; inspect/edit and publish explicitly.
+
+## Owner-scoped sandbox HTTP contract
+
+All routes below use existing owner-capability authorization and safe problem details. No public arbitrary-execution endpoint is added; command dispatch uses the authorized Session tool/Run path.
+
+| Method and route | Behavior |
+| --- | --- |
+| `GET /api/v2/admin/sandboxes` | Safe readiness, latest profiles, image policy, local-demo/storage limits; no endpoint/key/provider IDs |
+| `GET /api/v2/admin/sandbox-profiles/{id}?revision=N` | Latest or exact immutable historical revision |
+| `PUT /api/v2/admin/sandbox-profiles/{id}` | Validate and append `expectedRevision + 1`; exact CAS, redacted history |
+| `POST /api/v2/admin/sandbox-profiles/{id}/verify` | Exact expected revision; bounded non-root image smoke and cleanup; append observation revision |
+| `GET /api/v2/admin/agent-instances/{id}/sandbox` | Effective exact policy/profile plus safe readiness |
+| `GET /api/v2/sessions/{id}/sandbox` | Owned generation, profile revision, lifecycle/expiry, Core active/latest execution ID, diagnostic ID |
+| `GET /api/v2/sessions/{id}/sandbox/executions/{executionId}` | Owned bounded command receipt/status/output; Core ID only |
+| `POST .../executions/{executionId}/stop` | Stop/confirm owned tracked execution and validate file synchronization |
+| `POST /api/v2/sessions/{id}/sandbox/reset` | Explicit owner request with `expectedGeneration`; changed generation returns conflict |
+
+Profile saves use the existing validation/conflict semantics and retain immutable history. Tools are `sandbox.exec`, `sandbox.status`, `sandbox.process.status`, `sandbox.process.stop`, approval-gated `sandbox.reset`, and legacy bounded `sandbox.run`. Commands/stop/reset are non-replayable. Foreground streams are separate; background logs are explicitly combined. Command progress uses safe existing Run progress plus owner-scoped HTTP receipt polling, without changing the audio/MessagePack protocol or exposing upstream routes. Run budget diagnostics add `sandboxCommandSeconds`; ordinary per-tool budget remains independent.
 
 ## Effective file preview options
 

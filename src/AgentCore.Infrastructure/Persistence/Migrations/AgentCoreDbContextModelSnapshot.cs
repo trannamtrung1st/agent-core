@@ -1805,6 +1805,82 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("UserProfiles", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxExecutionRow", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentRunId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ToolCallId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId", "AgentRunId", "ToolCallId")
+                        .IsUnique();
+
+                    b.ToTable("SandboxExecutions", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxLeaseRow", b =>
+                {
+                    b.Property<string>("SessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ExpiresAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("State")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("SessionId");
+
+                    b.HasIndex("AgentInstanceId", "ExpiresAt");
+
+                    b.ToTable("SandboxSessionLeases", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxProfileRow", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id", "Revision");
+
+                    b.ToTable("SandboxProfiles", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SessionRecord", b =>
                 {
                     b.Property<string>("SessionId")

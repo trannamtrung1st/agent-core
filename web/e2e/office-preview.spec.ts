@@ -2,6 +2,62 @@ import { selectSpreadsheetCell } from './support/spreadsheet';
 import { test, expect } from '@playwright/test';
 import { selectInstanceIdentity } from './support/instance-identity';
 import { readFile } from 'node:fs/promises';
+
+test('XLSX shortening is disclosed and smaller windows preserve original downloads', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await selectInstanceIdentity(page, { id: 'general-assistant', version: 30 });
+  await page.getByLabel('Message').fill('synthetic-office: q3-sales');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const opener = page.getByRole('button', { name: 'Preview q3-sales.xlsx', exact: true });
+  await expect(opener).toBeVisible({ timeout: 45000 });
+  await opener.click();
+  const dialog = page.getByRole('dialog', { name: 'q3-sales.xlsx', exact: true });
+  const notice = dialog.getByText('Some cell text is shortened in this preview. Load a smaller range to reduce window limits, or download the original for complete values.', { exact: true });
+  await selectSpreadsheetCell(dialog, 'A1', 'Region');
+  await expect(notice).toHaveCount(0);
+  async function originalBytes() {
+    const pending = page.waitForEvent('download');
+    await dialog.getByRole('button', { name: 'Download q3-sales.xlsx', exact: true }).click();
+    return readFile((await (await pending).path())!);
+  }
+  const original = await originalBytes();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  let perCell = true;
+  await page.route('**/api/v2/file-preview/options', async route => {
+    const response = await route.fetch();
+    const policy = await response.json();
+    if (perCell) policy.spreadsheet.maxCellCharacters = 4;
+    else policy.spreadsheet.maxWindowCharacters = 10;
+    await route.fulfill({ response, json: policy });
+  });
+  for (const cellLimit of [true, false]) {
+    perCell = cellLimit;
+    await page.setViewportSize({ width: cellLimit ? 390 : 1440, height: 900 });
+    await page.reload();
+    await opener.click();
+    await expect(notice).toBeVisible();
+    await dialog.getByLabel('Worksheet range').fill('A1:A1');
+    await dialog.getByRole('button', { name: 'Load range', exact: true }).click();
+    await selectSpreadsheetCell(dialog, 'A1');
+    if (cellLimit) {
+      await expect(notice).toBeVisible();
+      await expect(dialog.locator('.file-preview-cell-detail')).toContainText('Reg…');
+    } else {
+      await expect(notice).toHaveCount(0);
+      await expect(dialog.locator('.file-preview-cell-detail')).toContainText('Region');
+    }
+    expect(await originalBytes()).toEqual(original);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(opener).toBeFocused();
+  }
+  expect(errors).toEqual([]);
+});
+
 test('agent creates real Office files, previews sheets/formulas and isolated Word pages, then downloads originals', async ({
   page,
 }) => {

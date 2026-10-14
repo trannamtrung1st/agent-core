@@ -243,3 +243,15 @@ Native Synthetic setup is key-free. Select a newly created General Assistant v26
 For the integrated fixture, keep GoogleDrive:Enabled=true, add/connect a Synthetic Drive account through Add credential and bind its alias to a new v28 Instance. Send `synthetic-office: q3-sales-drive` for normal Office creation/upload, or `synthetic-office: q3-sales-drive-trash-fixtures` to add eight disposable app-authorized fixtures. `synthetic-drive-trash: batch` requests one trusted exact seven-file approval; Reject leaves all eight, then fresh approval trashes seven and preserves the eighth. The fixture refuses Real accounts. Browse/preview/download still use bound-account details; generic file cards have no provider-specific save. Disconnect fences all bound Instances, and reconnect advances authorization epoch. Synthetic IDs are fixtures, not Google links.
 
 Optional email delivery uses existing independently connected Email Account, Core draft and exact send approval; it is not part of the automatic fixture. Do not claim live Drive upload or recipient delivery from Synthetic evidence. Real Google UAT and human Office-client fidelity remain separately recorded in the [successor ledger](reports/office-file-preview-drive-verification-2026-10-13.md).
+
+## Real local Workbench demo
+
+Use the [trusted-local runner](17-observability-and-operations.md#trusted-local-opensandbox), then in Platform → Sandboxes inspect readiness and explicitly Verify the General Workbench. Create an Instance of General Assistant v28, inspect its approved Execution sandbox selection and start a text Session. Synthetic mode performs real commands for these exact fixture messages:
+
+- `synthetic-sandbox:demo`: print Python/Node versions, run an intentionally failing Python test, fix and pass it, run a Node test, generate/validate XLSX and DOCX, then publish both through authenticated Artifacts. Open the shared previews or download the files.
+- `synthetic-sandbox:retain`: verify same-Session Python/Office files after reconnect, Core/server restart or approved sandbox reset/expiry.
+- `synthetic-sandbox:long`: stream `started`, execute for 31 seconds and report completion beyond the ordinary 30-second cap.
+- `synthetic-sandbox:cancel`: inspect running output, use Chat Stop, inspect canceled/uncertain synchronization, explicitly reset and rerun retained-file inspection.
+- `[test:background-start] [test:opensandbox-background]`: run the coding/Office scenario in an independent owned Background Session and inspect its original result/files.
+
+The deterministic model chooses actual tools; it does not fabricate successful command results. Wrong exits/unavailable profiles stop the demo with evidence. Office/Drive previews/save remain the existing optional capability and bound-credential flows; sandbox generation does not grant Drive credentials. Own execd loopback and writable-layer quota limitations stay disclosed. Exact executed evidence belongs to [verification](reports/opensandbox-integration-verification.md).

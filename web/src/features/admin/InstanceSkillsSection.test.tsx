@@ -13,10 +13,15 @@ describe('Instance Skills ownership', () => {
     const builtin: InstanceSkill = { ...definition, key: 'builtin:configuration-assistance.v1', origin: 'BuiltIn',
       name: 'Configuration assistance', enabled: false, enabledChoice: true, definitionVersion: null,
       missingCapabilities: ['configuration.inspect'] };
-    vi.mocked(listInstanceSkills).mockResolvedValue([builtin]);
+    let resolveSkills!: (skills: InstanceSkill[]) => void;
+    vi.mocked(listInstanceSkills).mockReturnValue(new Promise(resolve => { resolveSkills = resolve; }));
     render(view());
-    const region = within(await screen.findByRole('region', { name: 'Built-in Skills' }));
-    expect(region.getByText('Core v1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Loading Skills')).toBeInTheDocument();
+    expect(screen.queryByText('Core v1')).toBeNull();
+    resolveSkills([builtin]);
+    const region = within(await screen.findByRole('region', { name: 'Built-in Skills' }, { timeout: 5000 }));
+    // The resolved panel can appear before AntD commits its rows; await the row itself.
+    expect(await region.findByText('Core v1', {}, { timeout: 5000 })).toBeInTheDocument();
     expect(region.getByText('Missing required capabilities')).toBeInTheDocument();
     expect(region.queryByText('Suppressed by management policy')).toBeNull();
     expect(region.queryByRole('button', { name: 'Customize' })).toBeNull();

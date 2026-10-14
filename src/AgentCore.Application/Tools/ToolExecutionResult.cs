@@ -12,7 +12,8 @@ public sealed record ToolExecutionResult(
     IReadOnlyList<ModelContentPart>? Parts = null,
     bool ReplaceTriggerProposal = false,
     PendingTriggerProposal? TriggerProposal = null,
-    string? WorkspaceCwd = null)
+    string? WorkspaceCwd = null,
+    bool OutcomeUnknown = false)
 {
     public static ToolExecutionResult FromText(string text) => new(text);
 }

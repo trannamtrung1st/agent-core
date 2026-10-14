@@ -30,7 +30,7 @@ public sealed record InstanceActivitySessionPageResponse(IReadOnlyList<InstanceA
 
 public sealed record AgentRunBudgetResponse(string Class, string Source, int MaxSteps, int DurationSeconds, int PerToolSeconds,
     int StepsConsumed, int ActiveExecutionMs, string Phase, string? TerminationReason, string CleanupStatus, bool ClosureConfirmed, bool? ClosureRequested = null, bool? LogoutRequested = null,
-    bool LogoutVerified = false, bool CleanupBlocked = false);
+    bool LogoutVerified = false, bool CleanupBlocked = false, int SandboxCommandSeconds = 120);
 
 public sealed record AutomationTriggerOriginResponse(string? TriggerId, string Kind, EventSourceReferenceDto? Source, string Summary, long? TriggerRevision = null);
 

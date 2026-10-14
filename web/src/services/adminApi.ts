@@ -1104,7 +1104,7 @@ export type AutomationPolicy = { allowOneShot: boolean; allowDaily: boolean; all
   allowIndefiniteRecurrence: boolean; oneShotHorizonDays: number; minRecurrenceDays: number; minFixedIntervalSeconds: number; maxActiveRegistrations: number; allowEvents?: boolean; allowCoreEvents?: boolean };
 export type AutomationReview = { items: Automation[]; policy?: AutomationPolicy | null };
 
-export type ExecutionBudgetProfile = { maxSteps: number; durationSeconds: number; perToolSeconds: number; preset: number };
+export type ExecutionBudgetProfile = { maxSteps: number; durationSeconds: number; perToolSeconds: number; preset: number; sandboxCommandSeconds?: number };
 export type ExecutionBudgetPolicy = Partial<Record<'standard' | 'interactiveBrowser' | 'unattendedBoundBrowser', ExecutionBudgetProfile | null>>;
 export async function getExecutionBudgets(instanceId: string): Promise<{ revision: number; executionBudgets: ExecutionBudgetPolicy | null; definitionDefaults: ExecutionBudgetPolicy | null }> {
   const response = await ownerFetch(`/api/v2/admin/agent-instances/${instanceId}/execution-budgets`);
@@ -1119,7 +1119,7 @@ export async function setExecutionBudgets(instanceId: string, expectedRevision: 
   return response.json();
 }
 
-export type ExecutionBudgetLimits = { maxSteps: number; durationSeconds: number; perToolSeconds: number };
+export type ExecutionBudgetLimits = { maxSteps: number; durationSeconds: number; perToolSeconds: number; sandboxCommandSeconds?: number };
 export async function getExecutionBudgetLimits(): Promise<ExecutionBudgetLimits> {
   const response = await ownerFetch('/api/v2/admin/execution-budget-limits');
   if (!response.ok) throw new Error('Execution limits could not be loaded.');

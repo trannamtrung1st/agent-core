@@ -65,6 +65,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
             ThrowIfDeleted(sessionId);
             var physical = SessionRoot(sessionId);
             DenyEscapingLinks(physical, _root);
+            RecoverSandboxStages(physical);
             Directory.CreateDirectory(Path.Combine(physical, "working"));
             var marker = Path.Combine(physical, ".provisioned");
             if (File.Exists(marker))

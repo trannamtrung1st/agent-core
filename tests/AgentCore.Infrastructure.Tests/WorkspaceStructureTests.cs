@@ -10,6 +10,41 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class WorkspaceStructureTests
 {
+    [Fact]
+    public async Task Sandbox_commit_is_exact_atomic_and_rejects_stale_unsafe_or_over_quota_trees()
+    {
+        using var f = await Fixture.Create(0, 12);
+        await f.Write("old", "original"u8.ToArray());
+        var snapshot = await f.Scratch!.CaptureScratchAsync(f.Id, Definition);
+        var tree = new WorkspaceTransfer([new("", true, "inode/directory", []), new("folder", true, "inode/directory", []), new("folder/exact", false, "application/octet-stream", [0, 255, 128])]);
+        await f.Write("concurrent", "new"u8.ToArray());
+        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, snapshot.Fingerprint));
+        Assert.Equal("original"u8.ToArray(), await f.Read("old"));
+        snapshot = await f.Scratch.CaptureScratchAsync(f.Id, Definition);
+        foreach (var invalid in new WorkspaceTransfer[] {
+            new([new("",true,"",[]),new("../escape",false,"",[1])]),
+            new([new("",true,"",[]),new(".env",false,"",[1])]),
+            new([new("",true,"",[]),new("x",false,"",[1]),new("X",false,"",[2])]),
+            new([new("",true,"",[]),new("folder",true,"",[]),new("Folder/file",false,"",[1])]),
+            new([new("",true,"",[]),new("big",false,"",new byte[13])]),
+            new([new("",true,"",[]),new("missing/child",false,"",[1])]) })
+        {
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.CommitScratchAsync(f.Id, invalid, snapshot.Fingerprint));
+            Assert.Equal(snapshot.Fingerprint, (await f.Scratch.CaptureScratchAsync(f.Id, Definition)).Fingerprint);
+        }
+        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, snapshot.Fingerprint,
+            validateCommit: _ => throw AgentCoreErrors.Conflict("Run claim revoked during staging.")));
+        Assert.Equal(snapshot.Fingerprint, (await f.Scratch.CaptureScratchAsync(f.Id, Definition)).Fingerprint);
+        using (var canceled = new CancellationTokenSource())
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, snapshot.Fingerprint, canceled.Token,
+                _ => { canceled.Cancel(); return ValueTask.CompletedTask; }));
+        }
+        Assert.Equal(snapshot.Fingerprint, (await f.Scratch.CaptureScratchAsync(f.Id, Definition)).Fingerprint);
+        await f.Scratch.CommitScratchAsync(f.Id, tree, snapshot.Fingerprint);
+        Assert.Equal(new byte[] { 0,255,128 }, await f.Read("folder/exact"));
+        Assert.DoesNotContain(f.P("old"), await f.Paths());
+    }
     [Theory]
     [InlineData(0)] [InlineData(1)] [InlineData(2)]
     public async Task Restructure_exact_tree_empty_directories_and_ordered_batch(int profile)

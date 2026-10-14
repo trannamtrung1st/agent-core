@@ -34,4 +34,6 @@ Current generic file actions are Preview and Download. The [Drive credentials su
 
 Upload-session continuation remains an agent capability with exact source/destination/epoch receipts; the generic source-save component and its routes are removed.
 
-The [recent UI review](../../docs/reports/recent-git-ui-design-review-2026-10-14.md#open-review-finding) records an open XLSX notice gap: shortened cell/window text is not explicitly explained in that renderer. Keep the intended disclosure requirement; do not infer that the canvas or selected-cell readout contains complete cell text.
+The [recent UI review](../../docs/reports/recent-git-ui-design-review-2026-10-14.md#open-review-finding) preserves the original XLSX notice gap. The integrated correction below resolves the missing notice; the canvas and selected-cell readout still use bounded text, and original Download preserves complete values.
+
+The integrated XLSX correction displays a native informational Alert when projected cell/window text is shortened, reusing the shared preview stack. Smaller ranges can recover window-budget clipping; the original Download retains complete values when the cell-length limit still applies. The OpenSandbox integration ledger records actual browser recovery and original-byte verification.

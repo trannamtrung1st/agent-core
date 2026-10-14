@@ -36,6 +36,7 @@ public sealed class SessionManager
     private readonly IBrowserLease? _browserLease;
     private readonly ExperienceService? _experience;
     private readonly Execution.AgentRunConfigurationResolver? _configurations;
+    private readonly ISandboxService? _sandboxes;
 
     public SessionManager(
         IAgentDefinitionStore definitions,
@@ -55,7 +56,7 @@ public sealed class SessionManager
         AdminLifecycleCoordinator? lifecycleGate = null,
         IBrowserLease? browserLease = null,
         ExperienceService? experience = null,
-        AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null, Execution.AgentRunConfigurationResolver? configurations = null)
+        AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null, Execution.AgentRunConfigurationResolver? configurations = null, ISandboxService? sandboxes = null)
     {
         _definitions = definitions;
         _store = store;
@@ -65,6 +66,7 @@ public sealed class SessionManager
         _attachments = attachments;
         _knowledge = knowledge;
         _workspace = workspace;
+        _sandboxes = sandboxes;
         _agentWorkspace = agentWorkspace;
         _artifacts = artifacts;
         _models = models;
@@ -299,13 +301,15 @@ public sealed class SessionManager
 
     public async Task<SessionSnapshot> ArchiveAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
-        return await MutateAsync(
+        var archived = await MutateAsync(
                 sessionId,
                 snapshot => snapshot.ArchivedAt is not null
                     ? snapshot
                     : snapshot with { ArchivedAt = _time.GetUtcNow() },
                 cancellationToken)
             .ConfigureAwait(false);
+        await StopSandboxAsync(sessionId, cancellationToken);
+        return archived;
     }
 
     public async Task<SessionSnapshot> UnarchiveAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -408,6 +412,8 @@ public sealed class SessionManager
             await _attachments.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
         }
 
+        await StopSandboxAsync(sessionId, cancellationToken);
+
         if (_workspace is not null)
         {
             await _workspace.DeleteSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
@@ -429,6 +435,13 @@ public sealed class SessionManager
         }
 
         RuntimeTelemetry.Record("cleanup", RuntimeTelemetry.ElapsedMs(started));
+    }
+
+    public async Task StopSandboxAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        if (_sandboxes is null) return;
+        try { await _sandboxes.StopSessionAsync(sessionId, ct); }
+        catch (AgentCoreException) { /* Terminating receipt persists; reconciliation owns retry. */ }
     }
 
     public async Task EnsureAttachmentsReadableAsync(Guid sessionId, CancellationToken cancellationToken = default)
@@ -521,7 +534,8 @@ public sealed class SessionManager
         CancellationToken cancellationToken = default) =>
         (await ReadHistoryPageAsync(sessionId, after, before: null, limit, cancellationToken).ConfigureAwait(false)).Items;
 
-    public async Task EndAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+    public async Task EndAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
         await TransitionLifecycleAsync(
                 sessionId,
                 SessionLifecycleStatus.Ended,
@@ -529,6 +543,8 @@ public sealed class SessionManager
                 cancellationToken,
                 "ended")
             .ConfigureAwait(false);
+        await StopSandboxAsync(sessionId, cancellationToken);
+    }
 
     public async Task<SessionSnapshot> TransitionLifecycleAsync(
         Guid sessionId,

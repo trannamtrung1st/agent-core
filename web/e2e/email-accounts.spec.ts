@@ -62,9 +62,14 @@ for (const width of [1440, 768, 390, 320])
     await expect(connected).toBeVisible();
     await expect(connected).toContainText('Verified mailbox');
     await expect(connected).toContainText('Synthetic — no Google connection');
+    // OAuth reopens a zooming modal; settle pointer geometry before checking.
+    await expect(connected).not.toHaveClass(/ant-zoom-(?:appear|enter)-active/);
+    const accessCheck = page.waitForResponse(response => response.request().method() === 'POST'
+      && response.url().endsWith('/connection/check'));
     await connected
       .getByRole('button', { name: 'Test access', exact: true })
       .click();
+    expect((await accessCheck).ok()).toBe(true);
     await expect(connected).toContainText('Last checked');
     await connected
       .getByRole('button', { name: 'Disconnect', exact: true })

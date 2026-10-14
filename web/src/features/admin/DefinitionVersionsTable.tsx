@@ -143,6 +143,7 @@ function DefinitionVersionDetails({ row, renderResources }: {
           /> },
           { key: "capabilities", label: "Capabilities", children: <Descriptions {...detailLayout} bordered column={1} size="small">
             <Descriptions.Item label="Capability access">{environment?.capabilityMode ?? "Legacy projection"}</Descriptions.Item>
+            <Descriptions.Item label="Sandbox profiles">{candidate.sandboxPolicy ? JSON.stringify(candidate.sandboxPolicy) : 'Historical bounded sandbox.run compatibility'}</Descriptions.Item>
             <Descriptions.Item label="Authorized capabilities">{environment?.toolAllowlist.join(", ") || "None"}</Descriptions.Item>
             {environment?.capabilityMode ? <Descriptions.Item label="Always projected">{environment.alwaysCapabilities?.join(", ") || "None"}</Descriptions.Item> : null}
             <Descriptions.Item label="Harness references">{environment?.harness.join(", ") || "None"}</Descriptions.Item>
