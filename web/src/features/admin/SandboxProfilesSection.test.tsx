@@ -7,6 +7,7 @@ import { getSandboxPlatform, saveSandboxProfile, verifySandboxProfile, checkSand
 vi.mock('../../services/sandboxes', async (importOriginal) => ({...await importOriginal<typeof import('../../services/sandboxes')>(), getSandboxPlatform: vi.fn(), saveSandboxProfile: vi.fn(), verifySandboxProfile: vi.fn(),checkSandboxImage:vi.fn() }));
 vi.mock('../../services/adminApi', async (importOriginal) => ({...await importOriginal<typeof import('../../services/adminApi')>(), listCredentials:vi.fn().mockResolvedValue([])}));
 const profile: SandboxProfile = { id:'workbench',revision:1,name:'Workbench',description:'Coding',enabled:true,availability:'Eligible',imageReference:'sha256:'+'a'.repeat(64),initializationScript:null,cpu:1,memoryMiB:1024,pids:64,maxCommandSeconds:120,idleTtlSeconds:1800,maxLifetimeSeconds:7200,storageBytes:262144000,lastVerifiedAt:null,verificationReason:null };
+const savedProfile: SandboxProfile = {...profile,revision:2,description:'Office',availability:'NeedsVerification'};
 const platform: SandboxPlatform = { state:'Ready',message:'Local server ready.',profiles:[profile],allowedImagePrefixes:[],localImageIdsAllowed:true,securityScope:'Trusted local demo.',storageScope:'Canonical scratch quota; no writable-layer quota.' };
 beforeEach(() => { vi.mocked(getSandboxPlatform).mockReset().mockResolvedValue(structuredClone(platform)); vi.mocked(saveSandboxProfile).mockReset(); vi.mocked(verifySandboxProfile).mockReset(); vi.mocked(checkSandboxImage).mockReset(); });
 const mount = () => render(<ConfigProvider theme={{ token:{ motion:false } }}><App><SandboxProfilesSection /></App></ConfigProvider>);
@@ -51,33 +52,50 @@ it('refreshes source status while retaining dirty fields across credential and c
 
 it('retains a conflicting revision draft and discards explicitly without granting verification',async () => {
   await mountReady();
-  expect(screen.getByRole('button',{name:'Save profile'})).toBeDisabled();
-  fireEvent.change(screen.getByRole('textbox',{name:'Sandbox profile name'}),{target:{value:'Changed'}});
-  await waitFor(() => expect(screen.getByRole('button',{name:'Verify profile'})).toBeDisabled());
+  const save=screen.getByRole('button',{name:'Save profile'});
+  const verify=screen.getByRole('button',{name:'Verify profile'});
+  const name=screen.getByRole('textbox',{name:'Sandbox profile name'});
+  const discard=screen.getByRole('button',{name:'Discard edits'});
+  expect(save).toBeDisabled();
+  fireEvent.change(name,{target:{value:'Changed'}});
+  await waitFor(() => expect(verify).toBeDisabled());
   vi.mocked(saveSandboxProfile).mockRejectedValueOnce(new Error('Revision changed.'));
-  fireEvent.click(screen.getByRole('button',{name:'Save profile'}));
+  await waitFor(()=>expect(save).toBeEnabled());
+  fireEvent.click(save);
   await screen.findByText('Revision changed.');
-  expect(screen.getByRole('textbox',{name:'Sandbox profile name'})).toHaveValue('Changed');
+  expect(name).toHaveValue('Changed');
   expect(saveSandboxProfile).toHaveBeenCalledWith(expect.objectContaining({id:'workbench',revision:1,name:'Changed'}));
-  fireEvent.click(screen.getByRole('button',{name:'Discard edits'}));
-  expect(screen.getByRole('textbox',{name:'Sandbox profile name'})).toHaveValue('Workbench');
+  await waitFor(()=>expect(discard).toBeEnabled());
+  fireEvent.click(discard);
+  await screen.findByDisplayValue('Workbench');
+  expect(verifySandboxProfile).not.toHaveBeenCalled();
 });
-it('saves a profile revision then verifies the exact saved image',async () => {
+it('saves the next profile revision and keeps it unverified with a clean form',async () => {
   await mountReady();
-  const saved = {...profile,revision:2,description:'Office'};
-  vi.mocked(saveSandboxProfile).mockResolvedValue(saved); vi.mocked(getSandboxPlatform).mockResolvedValue({...platform,profiles:[saved]});
+  const save=screen.getByRole('button',{name:'Save profile'});
+  const verify=screen.getByRole('button',{name:'Verify profile'});
+  vi.mocked(saveSandboxProfile).mockResolvedValue(savedProfile); vi.mocked(getSandboxPlatform).mockResolvedValue({...platform,profiles:[savedProfile]});
   fireEvent.change(screen.getByRole('textbox',{name:'Sandbox profile description'}),{target:{value:'Office'}});
-  await waitFor(() => expect(screen.getByRole('button',{name:'Save profile'})).toBeEnabled());
-  fireEvent.click(screen.getByRole('button',{name:'Save profile'}));
-  await waitFor(() => expect(saveSandboxProfile).toHaveBeenCalled());
-  await waitFor(() => expect(screen.getByRole('button',{name:'Save profile'})).toBeDisabled());
-  const verified = {...saved,revision:2,lastVerifiedAt:'2026-10-14T00:00:00Z',verificationReason:'Image passed.'};
+  await waitFor(() => expect(save).toBeEnabled());
+  fireEvent.click(save);
+  await screen.findByText('Needs verification · revision 2');
+  expect(saveSandboxProfile).toHaveBeenCalledWith(expect.objectContaining({id:'workbench',revision:1,description:'Office'}));
+  await waitFor(() => expect(save).toBeDisabled());
+  await waitFor(() => expect(verify).toBeEnabled());
+  expect(verifySandboxProfile).not.toHaveBeenCalled();
+});
+it('verifies the exact saved revision without appending another configuration revision',async () => {
+  vi.mocked(getSandboxPlatform).mockResolvedValue({...platform,profiles:[savedProfile]});
+  await mountReady();
+  const verify=screen.getByRole('button',{name:'Verify profile'});
+  const verified = {...savedProfile,availability:'Eligible',lastVerifiedAt:'2026-10-14T00:00:00Z',verificationReason:'Image passed.'};
   vi.mocked(verifySandboxProfile).mockResolvedValue({passed:true,message:'Image passed.',profile:verified});
   vi.mocked(getSandboxPlatform).mockResolvedValue({...platform,profiles:[verified]});
-  await waitFor(() => expect(screen.getByRole('button',{name:'Verify profile'})).toBeEnabled());
-  fireEvent.click(screen.getByRole('button',{name:'Verify profile'}));
-  await waitFor(() => expect(verifySandboxProfile).toHaveBeenCalledWith(saved));
+  fireEvent.click(verify);
+  await waitFor(() => expect(verifySandboxProfile).toHaveBeenCalledWith(savedProfile));
   await screen.findByText(/Image passed.*·/);
+  expect(screen.getByText('Verified · eligible · revision 2')).toBeInTheDocument();
+  expect(saveSandboxProfile).not.toHaveBeenCalled();
 });
 it('shows a local failure and recovers without fabricating readiness',async () => {
   vi.mocked(getSandboxPlatform).mockRejectedValueOnce(new Error('Server unavailable.')); mount();
