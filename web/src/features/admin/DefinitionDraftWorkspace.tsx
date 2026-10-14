@@ -378,7 +378,7 @@ export function DefinitionDraftWorkspace({
   });
 
   return (
-    <Flex vertical gap={12} className="admin-draft-editor">
+    <Flex vertical gap={token.padding} className="admin-draft-editor">
       <Flex vertical gap={token.paddingXS} className="admin-draft-editor-heading">
         <Flex align="baseline" wrap gap={token.paddingXS}>
           <Typography.Title level={5}>
@@ -404,7 +404,7 @@ export function DefinitionDraftWorkspace({
         onSave={onSave} onPublish={onPublish} onDelete={onDelete}
       />
       {page === 'overview' && <AgentConfigurationPanel title="Draft status" label="Draft overview" bodyGap="section"><Typography.Text>{activeDraft.definitionId} · revision {activeDraft.revision} · {formatDraftSource(activeDraft.sourceKind)}</Typography.Text><Typography.Text>{dirty ? 'Unsaved candidate changes retained across draft pages' : 'Saved candidate'}</Typography.Text><Typography.Text type="secondary">Published versions remain immutable. Save, validate and evaluate this exact revision before publishing.</Typography.Text><a href={adminDraftPath(activeDraft.definitionId, activeDraft.draftId, 'test-publish')} onClick={followAppLink}>Open Test & Publish</a></AgentConfigurationPanel>}
-      <RetainedAdminPage active={['profile', ...Object.keys(draftSettingGroups), 'execution', 'advanced-json'].includes(page)}>
+      <RetainedAdminPage active={page !== 'capabilities' && ['profile', ...Object.keys(draftSettingGroups), 'execution', 'advanced-json'].includes(page)}>
 
               <section className="admin-draft-tab" aria-label="Definition candidate">
                 <div className="admin-draft-tab-intro">

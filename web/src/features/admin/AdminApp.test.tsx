@@ -995,6 +995,7 @@ describe("AdminApp", () => {
       expect(screen.getByRole("link", { name: "Capabilities" })).toBeInTheDocument();
     });
     fireEvent.click(screen.getByRole("link", { name: "Capabilities" }));
+    expect(screen.queryByRole("region", { name: "Definition candidate" })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Workspace template id"), {
       target: { value: "examiner-default" }
     });

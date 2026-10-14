@@ -1691,8 +1691,6 @@ body,
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-default);
-  padding-block-start: var(--ac-space-section);
-  border-block-start: 1px solid var(--ac-color-border);
 }
 
 .admin-instance-lifecycle > .ant-typography-secondary {
@@ -1867,19 +1865,21 @@ body,
   flex-shrink: 0;
 }
 
+.admin-definition-drafts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ac-space-section);
+  min-width: 0;
+}
+
+.admin-definition-drafts > .ant-typography {
+  margin: 0;
+}
+
 .admin-draft-list {
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-default);
-}
-
-.admin-definition-drafts .admin-draft-status {
-  margin-block-start: var(--ac-space-default);
-}
-
-.admin-draft-list-heading {
-  padding-inline: var(--ac-space-compact);
-  padding-block-end: var(--ac-space-compact);
 }
 
 .admin-draft-list-heading .ant-typography-secondary {
@@ -1887,9 +1887,7 @@ body,
 }
 
 .admin-draft-editor {
-  margin-block-start: var(--ac-space-section);
-  padding-block-start: var(--ac-space-section);
-  border-block-start: 1px solid var(--ac-color-border);
+  min-width: 0;
 }
 
 .admin-draft-focused {
@@ -1906,12 +1904,6 @@ body,
 
 .admin-draft-focused > .ant-alert {
   margin: 0;
-}
-
-.admin-draft-focused > .admin-draft-editor {
-  margin: 0;
-  padding: 0;
-  border: 0;
 }
 
 .admin-draft-editor-heading h5.ant-typography {
@@ -1948,7 +1940,7 @@ body,
 }
 
 .admin-draft-tab-intro .ant-typography {
-  margin-block: var(--ac-space-compact) 0;
+  margin-block: 0;
   max-inline-size: 72ch;
 }
 
@@ -1965,11 +1957,6 @@ body,
 
 .admin-draft-form-stack {
   min-width: 0;
-}
-
-.admin-draft-form-section:not(:first-child) {
-  padding-block-start: var(--ac-space-section);
-  border-block-start: 1px solid var(--ac-color-border);
 }
 
 .admin-draft-section-heading {
@@ -2335,10 +2322,6 @@ body,
 .admin-configuration-sections .ant-tabs-content-holder { min-width: 0; }
 .admin-settings-form { width: 100%; max-width: 48rem; min-width: 0; }
 .admin-settings-form.admin-settings-instructions { max-width: none; }
-.admin-definition-settings .admin-draft-form-section:not(:first-child) {
-  padding-block-start: 0;
-  border-block-start: 0;
-}
 .admin-settings-field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2609,7 +2592,6 @@ body,
   display: flex;
   flex-direction: column;
   gap: var(--ac-space-default);
-  margin-block-end: var(--ac-space-section);
 }
 
 .admin-version-details {
