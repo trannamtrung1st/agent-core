@@ -73,6 +73,11 @@ public sealed class OpenSandboxIntegrationTests
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:f.Session.AgentInstanceId, AgentRunId:f.Run.AgentRunId, OwnedSessionId:f.Session.SessionId);
         var legacy = await executor.ExecuteAsync(definition,f.Session.SessionId,new("legacy-once",ToolCatalog.SandboxRun,"""{"verb":"echo","arguments":["legacy-real"]}"""),8192,admission:admission);
         Assert.Contains("\"ok\":true",legacy.Text); Assert.Contains("legacy-real",legacy.Text);
+        Assert.Equal(0,(await f.Exec("printf canonical > legacy.txt")).ExitCode);
+        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
+        var exported = await f.Executor(artifacts).ExecuteAsync(definition,f.Session.SessionId,new("legacy-export",ToolCatalog.SandboxRun,"""{"verb":"cat","arguments":["legacy.txt"],"exportPath":"legacy.txt"}"""),8192,admission:admission);
+        Assert.Contains("\"ok\":true",exported.Text); Assert.Contains("\"artifactId\":",exported.Text); Assert.Contains("canonical",exported.Text);
+        Assert.Single(await artifacts.ListAsync(f.Session.SessionId));
         foreach (var arguments in new[] { """{"verb":"sh","arguments":["-c","true"]}""", """{"verb":"echo","arguments":["$(true)"]}""" })
             Assert.Contains("forbidden",(await executor.ExecuteAsync(definition,f.Session.SessionId,new(Guid.NewGuid().ToString(),ToolCatalog.SandboxRun,arguments),8192,admission:admission)).Text);
         foreach (var arguments in new[] { """{"command":"true","timeoutSeconds":"120"}""", """{"command":"true","background":"false"}""", """{"command":123}""" })
@@ -235,7 +240,7 @@ public sealed class OpenSandboxIntegrationTests
         public AgentDefinition Definition { get; private set; } = null!; public SessionSnapshot Session { get; private set; } = null!;
         public AgentRun Run { get; private set; } = null!; public OpenSandboxService Service { get; private set; } = null!;
         public SandboxProfile Profile => _profile;
-        public SessionToolExecutor Executor() => new(profiles:_memory,emailRuns:_runs,sandboxService:Service,sandboxStore:Store);
+        public SessionToolExecutor Executor(IArtifactStore? artifacts = null) => new(workspace:Workspace,artifacts:artifacts,profiles:_memory,emailRuns:_runs,sandboxService:Service,sandboxStore:Store);
         public FileSessionWorkspace Workspace { get; private set; } = null!; public ISandboxStore Store { get; private set; } = null!;
         private Factory _factory = null!; private SqliteMemoryStore _memory = null!; private SqliteAgentRunStore _runs = null!;
         private OpenSandboxOptions _options = null!; private SandboxProfile _profile = null!;

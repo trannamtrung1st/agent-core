@@ -135,3 +135,7 @@ Automation is one owner-authored future behavior: a concise Name, bounded Instru
 ## Using a background result during a conversation
 
 A conversation can use a requested, owned background task’s result while its current Run is still open. Explicit short waits retain that Run and release its worker. Successful answers account for results they acknowledge; remaining requested results return after the conversation is available. This extends same-Agent background work without introducing delegation or a workflow engine.
+
+## Approved trusted-local coding and Office work
+
+The scoped P10 successor permits bounded coding/data/Office work in a persistent Session-owned OpenSandbox Workbench. Core keeps canonical Workspace, Artifacts and existing Office/Drive previews; exact Definition/Instance authority and non-replayable Run receipts govern execution. This is trusted single-user local development/demo, not an autonomous platform or public/multi-tenant deployment. Only the trusted server uses the existing Docker daemon. Own execd loopback and writable-layer quota limits remain disclosed; production hardening is separate. Current acceptance is recorded in the [verification ledger](reports/opensandbox-integration-verification.md), superseding the historical Docker sandbox above.

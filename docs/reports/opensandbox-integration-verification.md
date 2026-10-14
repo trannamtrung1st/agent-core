@@ -2,7 +2,7 @@
 
 ## Current local-demo continuation — 2026-10-14
 
-Branch `develop/branch-1`; current main `a63194ba` was merged as `e9089734`. Office/Drive/file-preview code and immutable General Assistant v26/v27 are preserved. New v28 combines their capabilities with modern sandbox tools. This ledger's final exact-behavior SHA and hosted links are pending the publication gate; **full milestone acceptance is not yet claimed**.
+Branch `develop/branch-1`; main `a63194ba` was merged as `e9089734`, followed by current main `719ac6c5` merged as `928b8ccd`. Office/Drive/file-preview code and immutable General Assistant v26/v27 are preserved. New v28 combines their capabilities with modern sandbox tools. This ledger's final exact-behavior SHA and hosted links are pending the publication gate; **full milestone acceptance is not yet claimed**.
 
 The owner explicitly approved trusted single-user local development/demo on the existing Docker daemon. Only the trusted OpenSandbox server may mount its socket; neither Core nor workloads do. DinD, an extra VM and other execution platforms are excluded. Own execd loopback is an acknowledged local-demo exception; public/multi-tenant isolation, writable-layer disk quota and signed supply-chain attestation remain deferred. Earlier stronger failed/rejected evidence below remains historical.
 
@@ -20,7 +20,7 @@ Actual environment: macOS arm64, .NET 10.0.401, supported Node 22.18.0 and Docke
 | Full merged frontend Vitest | **1,021 passed / 129 files**, supported Node 22. Host pnpm had selected Node 26, producing undefined localStorage failures; the supported runtime fixes all 73 affected storage/transport tests. Dedicated Playwright suite is excluded from Vitest |
 | Frontend TypeScript/Vite build | Pass; existing chunk-size and Rollup annotation warnings retained |
 | Full Application suite | **1,807 passed, 8 optional live skips** after catalog/constraint fixes; 33 focused tool/runtime/configuration checks also pass |
-| Full initial merged backend | Domain 195 pass; API 585 pass / 3 optional live skips; plugin 4 pass. Four stale catalog/choice assertions were corrected; Infrastructure final rerun is pending, with its focused recheck **30 pass** |
+| Full initial merged backend | Domain 195 pass; API 585 pass / 3 optional live skips; plugin 4 pass. Four stale catalog/choice assertions were corrected; final Infrastructure rerun **1,362 pass / 21 explicit optional skips**, with focused recheck **30 pass** |
 | Focused frontend final checks | 23 pass across profile/drawer/budget/Instance settings; drawer keyboard/output follow-up recheck **4 pass** |
 | Reproducible Workbench inventory | Pass: owned runner build/start; installed SPDX 2.3 inventory contains 498 package identities and 277 notice hashes; license bundle retains 547 files. Exact local image content ID recorded alongside inventory. Inventory is not signed attestation/legal conclusion/vulnerability acceptance |
 | Complete browser/process-recreation gate | In progress. Before phase passes actual coding/artifacts/copy/responsive/Escape/focus. After phase verifies unchanged generation/init/artifact hashes across Core + server recreation, actual partial output while Running, 31-second completion, cancellation/reset/recovery. Independent Background Session fixture wrapping corrected; **both phases passed** (22.5 seconds before / approximately 1.3 minutes after), including child coding/Office completion, separate generation and child-only init marker. Cleanup removed owned workloads/server |
@@ -37,9 +37,13 @@ The migration is additive and preserves a populated pre-cutover Session record a
 - File imports recheck live authority inside the filesystem gate immediately before swap and reject inconsistent parent casing. Unknown dispatch evidence survives text-output clipping; persistence follow-up failures cannot mask an uncertain effect, and post-commit errors report committed scratch honestly.
 - Browser tests wait for actual terminal/output evidence and settled drawer geometry. Exact dialog names distinguish reset confirmation. Save/Verify names remain stable while busy. Cold server readiness is separate from ordinary Core health.
 
+## Additional combined regression evidence
+
+Eight ordinary Synthetic browser cases passed on isolated 6480/6473 ports and disposable roots: guarded scratch/home filesystem, exact Artifact download/reload/error recovery, shared Office/Drive OAuth/binding/preview/epoch behavior, and Instance settings Save/Reset/CAS/recovery. No sandbox service was required for these existing journeys. The isolated Compose project on port 6580 passed SQLite volume recreation, exact home/scratch isolation, Workspace source deletion, Admin/resources, protected credential/binding, Synthetic OAuth and Drive remote bytes/same operation identity. Its container/network were removed and unrelated services preserved. The historical sandbox.run real-SDK export recheck passed, preserving ok/exit/output/truncation/artifact/message fields and refusing to present indeterminate execution as success. Six offline probe receipt/guard tests passed. Markdown file-target audit found zero missing targets across 22 canonical/overview/deployment documents.
+
 ## Remaining closure gates
 
-Finish final Infrastructure/frontend follow-up checks, normal Synthetic Playwright regressions (including shared Office/Drive), isolated Compose survival, documentation/link/schema audit and exact-SHA hosted jobs. The new mandatory Trusted local OpenSandbox acceptance job must pass on Linux; optional native SDK skips do not substitute for it. Commit/push and update the attached PR after a reviewable candidate is verified. Do not merge without explicit merge instruction.
+Finish documentation evidence closure and exact-SHA hosted jobs. The new mandatory Trusted local OpenSandbox acceptance job must pass on Linux; optional native SDK skips do not substitute for it. Commit/push and update the attached PR after a reviewable candidate is verified. Do not merge without explicit merge instruction.
 
 ## Historical Stage A evidence — 2026-10-13
 

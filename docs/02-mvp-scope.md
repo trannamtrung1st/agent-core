@@ -160,3 +160,7 @@ The current implementation and outstanding verification gates are recorded in [u
 ## Durable completion handoff and short waits
 
 The included enhancement adds an owner-scoped completion inbox, explicit list/inspect/take/acknowledge capabilities, and bounded duration or owned-child waits. Only initial child outcomes create reporting obligations. Quiet outcomes settle without a message; follow-up turns do not create another initial completion. Existing-session Automations execute directly in their destination and create no redundant child inbox item. Cross-Agent results, arbitrary condition subscriptions and long-running wait engines remain excluded.
+
+## Approved P10 local execution scope
+
+The owner-approved local-demo cutover includes one per-Session SDK environment, prebuilt Python/Node/data/Office tooling, revisioned Global profiles, Definition/Instance selection, canonical /working snapshot synchronization, authenticated Artifact delivery, tracked background commands and independent existing Background Sessions. Direct host process/filesystem/daemon authority is not granted to agents. Core startup remains Docker-free when disabled. Public/multi-tenant deployment, writable-layer quota, stronger own-loopback isolation, pools, another execution engine, DinD/extra VM, Kubernetes and new orchestration remain outside this target. P11 remains unopened. [Implementation order](18-implementation-plan.md#p10-opensandbox-cutover-authorized-2026-10-13) and [verification](reports/opensandbox-integration-verification.md) own gates and evidence.

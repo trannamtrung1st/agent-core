@@ -50,15 +50,20 @@ public sealed partial class SessionToolExecutor
                 if (verb.Trim().Equals("cat",StringComparison.OrdinalIgnoreCase) && arguments.Length == 1) arguments[0] = AgentWorkspacePaths.Resolve(arguments[0],sessionId,"/working");
                 if (!LegacySandboxCommands.TryTranslate(verb, arguments, out var oldArgv)) return SandboxError("forbidden", "Historical sandbox.run permits only its original bounded verbs.");
                 result = await sandboxService.ExecuteAsync(access, new(null, oldArgv, TimeoutSeconds: 8), ct);
+                Guid? artifactId = null;
                 if (TryString(args, "exportPath", out var export) && !string.IsNullOrWhiteSpace(export) && result.Status == "Completed")
                 {
                     var canonical = AgentWorkspacePaths.Resolve(export, sessionId, "/working");
                     using var exportArgs = JsonDocument.Parse(JsonSerializer.Serialize(new { path = canonical, displayName = Path.GetFileName(canonical) }));
-                    return TextResult(await CreateArtifactFromWorkspaceAsync(definition, sessionId, exportArgs.RootElement, admission.AgentRunId, ct));
+                    var exported = await CreateArtifactFromWorkspaceAsync(definition, sessionId, exportArgs.RootElement, admission.AgentRunId, ct);
+                    using var artifact = JsonDocument.Parse(exported);
+                    if (!artifact.RootElement.TryGetProperty("artifactId",out var id) || !Guid.TryParse(id.GetString(),out var parsedId)) return TextResult(exported);
+                    artifactId = parsedId;
                 }
-                return FitResult(remainingBytes, JsonSerializer.Serialize(new { ok = result.ExitCode == 0 && result.WorkspaceSyncStatus == "committed", result.ExitCode,
+                return FitResult(remainingBytes, JsonSerializer.Serialize(new { ok = result.Status == "Completed" && result.ExitCode == 0 && result.WorkspaceSyncStatus == "committed", result.ExitCode,
                     output = ToolJsonResults.ClipUtf8Prefix(result.Stdout + result.Stderr, Math.Max(0, remainingBytes - 500)), result.Truncated,
-                    executionId = result.ExecutionId, result.WorkspaceSyncStatus, result.DiagnosticId }, SandboxJson)) with { OutcomeUnknown = result.Status == "Indeterminate" };
+                    artifactId, message = result.Status == "Indeterminate" ? "Outcome unknown; inspect before retrying." : "Observed through the owned Workbench.",
+                    executionId = result.ExecutionId, result.Status, result.WorkspaceSyncStatus, result.DiagnosticId }, SandboxJson)) with { OutcomeUnknown = result.Status == "Indeterminate" };
             }
             if (args.TryGetProperty("command", out var commandValue) && commandValue.ValueKind != JsonValueKind.String
                 || args.TryGetProperty("cwd", out var cwdValue) && cwdValue.ValueKind != JsonValueKind.String
