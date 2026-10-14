@@ -12,7 +12,7 @@ services:
       - "127.0.0.1:${AGENTCORE_COMPOSE_PORT:-5080}:8080"
     environment:
       AgentCore__Profile: Synthetic
-      GoogleDrive__Enabled: "${AGENTCORE_DRIVE_ENABLED:-false}"
+      GoogleDrive__Enabled: "${AGENTCORE_DRIVE_ENABLED:-true}"
       AgentCore__AgentDirectory: /app/agents
       Persistence__Provider: Sqlite
       Persistence__ConnectionString: Data Source=/data/agent-core.db

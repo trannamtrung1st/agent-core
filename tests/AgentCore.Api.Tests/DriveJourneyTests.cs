@@ -13,7 +13,27 @@ namespace AgentCore.Api.Tests;
 public sealed partial class DriveJourneyTests
 {
     private sealed class Factory : AgentCoreApiFactory
-    { protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => new Dictionary<string, string?> { ["GoogleDrive:Enabled"] = "true", ["GoogleDriveOAuth:PublicAppUrl"] = "http://localhost" }; }
+    { protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => new Dictionary<string, string?> { ["GoogleDriveOAuth:PublicAppUrl"] = "http://localhost" }; }
+    private sealed class DisabledFactory : AgentCoreApiFactory
+    { protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => new Dictionary<string, string?> { ["GoogleDrive:Enabled"] = "false" }; }
+
+    [Fact]
+    public async Task Explicit_host_disable_blocks_account_connection()
+    {
+        using var host = new DisabledFactory();
+        var client = host.CreateClient();
+        client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
+        var options = await client.GetFromJsonAsync<JsonElement>("/api/v2/integrations/google-drive/options");
+        Assert.False(options.GetProperty("enabled").GetBoolean());
+        Assert.False(options.GetProperty("configured").GetBoolean());
+        var created = await client.PostAsJsonAsync("/api/v2/admin/credentials/google-drive", new { displayName = "Disabled Drive" });
+        created.EnsureSuccessStatusCode();
+        var account = (await created.Content.ReadFromJsonAsync<AdminCredentialResponse>())!;
+        var start = await client.PostAsJsonAsync($"/api/v2/admin/credentials/{account.CredentialId}/drive-connect", new { expectedRevision = account.Revision });
+        Assert.Equal(HttpStatusCode.Forbidden, start.StatusCode);
+        Assert.Contains("drive_host_disabled", await start.Content.ReadAsStringAsync());
+    }
+
     [Fact]
     public async Task Synthetic_connect_bind_upload_verify_download_and_epoch_fences_share_only_explicit_grants()
     {
