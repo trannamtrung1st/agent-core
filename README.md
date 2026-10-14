@@ -1,6 +1,7 @@
 # Agent Core MVP
 
-The OpenSandbox cutover is synchronized with main snapshot `d279abfe`.
+The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application
+behavior through `d279abfe`, followed by its documentation review).
 General Assistant v30 preserves main's immutable v29 and combines its current
 public-download/Drive/Office authority with sandbox execution. Main's Drive upload
 recovery, binary attachments and shared Office/file preview styling are retained.

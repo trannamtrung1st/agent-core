@@ -6,7 +6,8 @@ Complete ordinary requests within their scope using focused local checks; they d
 
 CI is optional and runs only on explicit user request. This policy supersedes older mandatory hosted/exact-SHA CI language below for current work, including milestone acceptance unless the user explicitly requests CI as part of it. Preserve historical acceptance criteria, freeze SHAs and CI receipts as records of their original versions. Report local completion separately from milestone acceptance and never claim unrun checks passed.
 
-The OpenSandbox cutover is synchronized with main snapshot `d279abfe`.
+The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application
+behavior through `d279abfe`, followed by its documentation review).
 General Assistant v30 preserves main's immutable v29 and combines its current
 public-download/Drive/Office authority with sandbox execution. Main's Drive upload
 recovery, binary attachments and shared Office/file preview styling are retained.

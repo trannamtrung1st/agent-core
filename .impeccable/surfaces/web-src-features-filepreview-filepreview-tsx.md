@@ -7,6 +7,8 @@ related_targets:
   - web/src/features/filePreview/TextPreview.tsx
   - web/src/features/filePreview/WordPreview.tsx
   - web/src/features/filePreview/SpreadsheetPreview.tsx
+  - web/src/features/filePreview/ReadonlySpreadsheet.tsx
+  - web/src/features/filePreview/spreadsheetAdapter.ts
   - web/src/features/filePreview/HighlightedCode.tsx
 ---
 
@@ -31,3 +33,7 @@ Current generic file actions are Preview and Download. The [Drive credentials su
 [Frontend behavior](../../docs/13-frontend-implementation-spec.md#shared-source-owned-file-preview) is authoritative. [DESIGN.md](../../.agents/context/DESIGN.md) owns shared presentation policy; `.impeccable/design.json` contains static excerpts, not operational controls or a replacement UI library.
 
 Upload-session continuation remains an agent capability with exact source/destination/epoch receipts; the generic source-save component and its routes are removed.
+
+The [recent UI review](../../docs/reports/recent-git-ui-design-review-2026-10-14.md#open-review-finding) preserves the original XLSX notice gap. The integrated correction below resolves the missing notice; the canvas and selected-cell readout still use bounded text, and original Download preserves complete values.
+
+The integrated XLSX correction displays a native informational Alert when projected cell/window text is shortened, reusing the shared preview stack. Smaller ranges can recover window-budget clipping; the original Download retains complete values when the cell-length limit still applies. The OpenSandbox integration ledger records actual browser recovery and original-byte verification.

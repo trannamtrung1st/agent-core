@@ -26,7 +26,7 @@ Full hosted CI, live-provider interpretation and physical-device checks were not
 
 ## Scoped review before commit/push
 
-The user selected only this chat's attachment and approval changes; separate spreadsheet-preview and Drive work stays outside the commit. An isolated candidate was reconstructed from `4bd1e194`, then rebased onto the documentation-only parent advance `def339b6`, plus these changes and checked without the separate working-tree features.
+The user selected only this chat's attachment and approval changes; separate spreadsheet-preview and Drive work stays outside the commit. An isolated candidate was reconstructed from parent `4bd1e194` plus these changes and checked without the separate working-tree features.
 
 Review fixes validate the complete text body before extraction/reread, report invalid UTF-8/control bytes as unsupported rather than replacement characters or base64, preserve the server's `readable` flag in composer/queue projections, and avoid requiring vision for images stored without extraction. Active Instance override badges ignore the retired unread-storage flag. Approval geometry waits for native entrance motion to settle before asserting width. The composer regression has its own small deterministic OOXML fixture, independent of the separate spreadsheet-formatting fixture.
 

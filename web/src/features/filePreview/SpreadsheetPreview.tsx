@@ -43,6 +43,7 @@ export function SpreadsheetPreview({ file, initial, policy }: { file: FileRef; i
       {view && view.firstColumn + columnStep <= view.totalColumns && <Button onClick={() => navigate(0, columnStep)}>Next columns</Button>}
     </Flex>
     {view?.merges.some(merge => merge.clipped) && <Alert type="info" showIcon title="A merged range crosses this window. Its visible cells are shown separately; load the complete range to see the merge." />}
+    {result && projected.truncated && <Alert type="info" showIcon title="Some cell text is shortened in this preview. Load a smaller range to reduce window limits, or download the original for complete values." />}
     {error ? <Alert type="warning" showIcon title={error} action={<Button onClick={() => setQuery({ sheet, range })}>Retry range</Button>} /> : !result ? <Spin aria-label="Loading worksheet" /> : !cells.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="This worksheet range is empty" /> : <Suspense fallback={<Spin aria-label="Loading spreadsheet" />}>
       <ReadonlySpreadsheet key={`${result.sheet}:${result.range}`} sheet={projected.sheet} cells={cells} firstRow={view?.firstRow} firstColumn={view?.firstColumn} />
     </Suspense>}

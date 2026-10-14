@@ -4,6 +4,12 @@
 
 The renewed owner-authorized synchronization merges main
 **`d279abfe6c40d9835123396607f4f7f843a7f9bf`** into `develop/branch-1`.
+The final main snapshot **`aef7ffe56a28725d4534734050f9a32a1b41e57f`** adds
+its documentation-only UI review. Its presentation corrections retain the sandbox
+context; the identified Drive Escape issue is already fixed and verified here.
+The XLSX shortened-text finding is corrected through the existing Ant Design
+information Alert, without widening any preview or file-read limit.
+
 Main's Drive upload completion/terminal recovery, binary attachment intake,
 bounded paged Office attachment reading, backend preview policy, shared
 read-only FortuneSheet renderer and unified sent-file cards are retained.
@@ -52,6 +58,20 @@ paid provider, real Google account or physical-device acceptance was run.
 The coding/Office demo remains ready within the trusted-local scope described
 below; production hardening limitations are unchanged.
 
+The final UI follow-up adds one conditional shortened-text notice and a focused
+browser regression. MCP observes `A1 · Reg…` under a valid four-character
+client preview ceiling, the explicit notice, enabled original Download, 390px
+containment, Escape/focus recovery and zero console errors. The CLI case covers
+both cell and aggregate window limits, smaller-window recovery, notice removal
+when content fits, exact original download bytes and desktop/mobile focus.
+TypeScript/Vite builds pass after that follow-up. All three Office browser cases
+pass (**42.9 seconds**), including the new clipping recovery regression and the
+existing formula/original-download/read-only guards. Combined browser evidence
+now covers **12 unique ordinary scenarios** plus the two real Workbench phases.
+The broad focused integration evidence above applies to behavior `3a70cb62`;
+this follow-up changes only that conditional preview notice, its browser fixture
+and documentation. Backend and native execution sources remain unchanged.
+
 ## Earlier selected-main integration — 2026-10-14
 
 The owner selected **main `ed943429c619d1e28f0878222328a8c6af4b43b9`** as the synchronization
@@ -73,8 +93,8 @@ pass (36.2 seconds before / approximately 1.5 minutes after actual Core/server
 recreation), including owned coding/Office artifacts, independent background
 work, output streaming, cancellation and reset/recovery. MCP separately opens
 Add credential, switches purpose, cancels and confirms closed dialog/focus
-returned to Add credential; zero console errors. The required exact-source hosted results for the corrected source are published
-in [PR #15 checks](https://github.com/trannamtrung1st/agent-core/pull/15/checks).
+returned to Add credential; zero console errors. The corrected historical source `425ee624` passed all eight jobs in
+[workflow 38545247384](https://github.com/trannamtrung1st/agent-core/actions/runs/38545247384).
 
 The first selected-snapshot hosted candidate `6c03a1fc` in
 [workflow 38531482334](https://github.com/trannamtrung1st/agent-core/actions/runs/38531482334)
@@ -112,7 +132,7 @@ NeedsReconciliation plus safe diagnostic evidence, then metadata-only cleanup
 to Terminated without replay. **All seven offline recovery cases pass**; the
 real full rerun passes **31 cases / zero skips** and both browser restart phases
 (20.6 seconds before / approximately 1.4 minutes after). The prior hosted failure
-remains recorded; the final corrected source still requires the PR's native gate.
+remains recorded; the corrected source `425ee624` later passed that hosted native gate as recorded below.
 
 On `f9bf52bd`, **seven hosted gates pass**, including 4,023 backend passes/32
 opt-in skips, 1,028 frontend passes/128 files, both builds, Compose and native
