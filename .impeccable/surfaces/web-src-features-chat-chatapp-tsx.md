@@ -19,6 +19,8 @@ related_targets:
   - web/src/features/chat/AgentRunDetails.tsx
   - web/src/features/chat/SessionArtifacts.tsx
   - web/src/features/chat/ArtifactView.tsx
+  - web/src/features/chat/AttachmentPreview.tsx
+  - web/src/features/chat/ChatFileCard.tsx
   - web/src/features/chat/DrawerListFooter.tsx
   - web/src/app/antdTheme.ts
   - web/src/features/filePreview/FilePreview.tsx

@@ -7,6 +7,8 @@ related_targets:
   - web/src/features/filePreview/TextPreview.tsx
   - web/src/features/filePreview/WordPreview.tsx
   - web/src/features/filePreview/SpreadsheetPreview.tsx
+  - web/src/features/filePreview/ReadonlySpreadsheet.tsx
+  - web/src/features/filePreview/spreadsheetAdapter.ts
   - web/src/features/filePreview/HighlightedCode.tsx
 ---
 
@@ -31,3 +33,5 @@ Current generic file actions are Preview and Download. The [Drive credentials su
 [Frontend behavior](../../docs/13-frontend-implementation-spec.md#shared-source-owned-file-preview) is authoritative. [DESIGN.md](../../.agents/context/DESIGN.md) owns shared presentation policy; `.impeccable/design.json` contains static excerpts, not operational controls or a replacement UI library.
 
 Upload-session continuation remains an agent capability with exact source/destination/epoch receipts; the generic source-save component and its routes are removed.
+
+The [recent UI review](../../docs/reports/recent-git-ui-design-review-2026-10-14.md#open-review-finding) records an open XLSX notice gap: shortened cell/window text is not explicitly explained in that renderer. Keep the intended disclosure requirement; do not infer that the canvas or selected-cell readout contains complete cell text.
