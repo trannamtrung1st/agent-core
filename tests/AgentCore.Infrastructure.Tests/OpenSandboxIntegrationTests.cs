@@ -287,7 +287,25 @@ public sealed class OpenSandboxIntegrationTests
         public ValueTask<SandboxCommandResult> Exec(string command) => Service.ExecuteAsync(Access(),new(command));
         public async Task<string> Read(string name) => Encoding.UTF8.GetString((await Workspace.ReadAsync(Session.SessionId,Definition,"/workspace/working/"+name)).Bytes);
         public async ValueTask DisposeAsync()
-        { try { await Service.StopSessionAsync(Session.SessionId); } finally { _logs.Dispose(); Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(Root,true); } }
+        {
+            var cleaned = false;
+            try
+            {
+                // Create may fail before returning an ID. Use the production
+                // generation-metadata reconciliation path; adopt/replay nothing.
+                if (await Store.GetLeaseAsync(Session.SessionId) is { ProviderId: null, State: not SandboxLeaseState.Terminated })
+                    await Service.ReconcileAsync();
+                await Service.StopSessionAsync(Session.SessionId);
+                cleaned = true;
+            }
+            finally
+            {
+                _logs.Dispose();
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                // A pending cleanup must retain the durable evidence for inspection.
+                if (cleaned) Directory.Delete(Root, true);
+            }
+        }
     }
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext> { public AgentCoreDbContext CreateDbContext() => new(options); }
 }

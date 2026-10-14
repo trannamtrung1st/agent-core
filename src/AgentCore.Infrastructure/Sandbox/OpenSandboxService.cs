@@ -210,8 +210,14 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             }
             return await SaveAsync(lease with { State = SandboxLeaseState.Ready, InitializedAt = time.GetUtcNow(), ScratchFingerprint = scratch.Fingerprint }, ct);
         }
-        catch
+        catch (Exception error)
         {
+            // Retain a safe cause even when orphan cleanup later reports pending.
+            // SDK messages/bodies, provider IDs and credentials are never logged.
+            var failure = error is SandboxApiException ? "http" : error is OperationCanceledException ? "canceled"
+                : error is HttpRequestException ? "transport" : "setup";
+            logger?.LogWarning("Sandbox provisioning failed. SessionId={SessionId} Generation={Generation} Failure={Failure} StatusCode={StatusCode} ProviderLinked={ProviderLinked}",
+                lease.SessionId, lease.Generation, failure, (error as SandboxApiException)?.StatusCode, lease.ProviderId is not null);
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             var terminated = lease.ProviderId is not null && await TryTerminateAsync(lease, cleanup.Token);
             await SaveAsync(lease with { State = terminated ? SandboxLeaseState.Failed : SandboxLeaseState.NeedsReconciliation, DiagnosticId = Guid.CreateVersion7().ToString("D") }, CancellationToken.None);

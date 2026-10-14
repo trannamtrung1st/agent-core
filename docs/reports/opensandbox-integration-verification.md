@@ -46,6 +46,22 @@ exact seven-target Reject/Escape/approval and desktop/mobile version wrapping,
 with the existing assertions and timeout bounds. No user
 database reset or unrelated service cleanup is authorized.
 
+A later hosted candidate `4bb5a790` in
+[workflow 38533358603](https://github.com/trannamtrung1st/agent-core/actions/runs/38533358603)
+reported **30 native passes / one teardown cleanup failure** in the deadline
+case. The underlying provisioning cause was masked and is not recoverable from
+its retained TRX. Fixture teardown now uses the existing metadata reconciliation
+path when create did not return an identity, confirms Stop and retains its
+SQLite evidence if cleanup remains pending. Provisioning failures log only
+Core Session/generation, normalized category/status and whether an identity was
+linked; no SDK body/message/provider identity/key is logged. A real SDK/Kestrel
+regression returns HTTP 500 with a secret sentinel, asserts one create POST,
+NeedsReconciliation plus safe diagnostic evidence, then metadata-only cleanup
+to Terminated without replay. **All seven offline recovery cases pass**; the
+real full rerun passes **31 cases / zero skips** and both browser restart phases
+(20.6 seconds before / approximately 1.4 minutes after). The prior hosted failure
+remains recorded; the final corrected source still requires the PR's native gate.
+
 The preceding combined source **`b26291d249a19fb194bb825389419f396ba3ea08`**
 (main `d2bada99`, combined v29) passed all eight
 [hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38526559158).

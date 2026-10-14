@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Execution;
+using AgentCore.Infrastructure.Identity;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Persistence;
@@ -74,13 +76,58 @@ public sealed class OpenSandboxCleanupTests
         if (alwaysHang) Assert.Contains("Failure=timeout", Assert.Single(logs.Warnings));
     }
 
+    [Fact]
+    public async Task Unknown_create_keeps_safe_cause_and_reconciles_without_replaying_provisioning()
+    {
+        var creates = 0; var lists = 0; string? generation = null;
+        await using var host = await Host.Create(_ => Task.CompletedTask, async context =>
+        {
+            creates++;
+            context.Response.StatusCode = 500;
+            await context.Response.WriteAsync("private-upstream-body");
+        }, async context =>
+        {
+            lists++;
+            Assert.Contains(generation!, Uri.UnescapeDataString(context.Request.QueryString.Value!));
+            await context.Response.WriteAsJsonAsync(new { items = Array.Empty<object>(), pagination = new { page = 1, pageSize = 100, totalItems = 0, totalPages = 0 } });
+        });
+        var now = DateTimeOffset.UtcNow;
+        var owner = new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid());
+        var definition = new AgentDefinition(1,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("fixture",["fixture"]));
+        var snapshot = new SessionSnapshot(1,Guid.NewGuid(),1,definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId);
+        var memory = new InMemoryMemoryStore(); await memory.SaveAsync(snapshot, 0);
+        var runs = new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource());
+        var activation = new Activation(Guid.NewGuid(),snapshot.SessionId,ActivationKind.Initiative,[],Guid.NewGuid(),null,null,null,"sandbox-test",now);
+        var run = AgentRun.Create(Guid.NewGuid(),owner,new(activation,definition.Id,1,definition.Identity,Guid.NewGuid(),AgentRunOutputContract.ConversationResponse),new("synthetic","synthetic","synthetic",null),3,now);
+        await runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
+        run = await runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));
+        var store = new InMemorySandboxStore(); var image = "docker.io/agent-core/workbench@sha256:" + new string('a', 64);
+        var profile = new SandboxProfile("fixture",1,"Fixture","",true,image); await store.SaveProfileAsync(profile, 0);
+        var logs = new Logs();
+        var service = new OpenSandboxService(new() { Enabled = true, Endpoint = host.Endpoint, ApiKey = "private-fixture-key", WorkbenchImage = image },store,null!,memory,runs,TimeProvider.System,logger:logs);
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(new(snapshot.SessionId,owner.AgentInstanceId,run.AgentRunId,run.Claim!.Generation,"create-once",profile,definition),new("true")).AsTask());
+        var lease = (await store.GetLeaseAsync(snapshot.SessionId))!;
+        Assert.Null(lease.ProviderId); Assert.Equal(SandboxLeaseState.NeedsReconciliation, lease.State);
+        generation = lease.Generation.ToString("N");
+        var warning = Assert.Single(logs.Warnings);
+        Assert.Contains("Failure=http", warning); Assert.Contains("StatusCode=500", warning); Assert.Contains("ProviderLinked=False", warning);
+        Assert.DoesNotContain("private-upstream-body", warning); Assert.DoesNotContain("private-fixture-key", warning);
+        Assert.Empty(logs.Exceptions);
+        await service.ReconcileAsync();
+        Assert.Equal(SandboxLeaseState.Terminated, (await store.GetLeaseAsync(snapshot.SessionId))!.State);
+        Assert.Equal(1, creates); Assert.Equal(1, lists);
+    }
+
     private sealed class Host(WebApplication app, string endpoint) : IAsyncDisposable
     {
-        public static async Task<Host> Create(RequestDelegate delete)
+        public string Endpoint => endpoint;
+        public static async Task<Host> Create(RequestDelegate delete, RequestDelegate? create = null, RequestDelegate? list = null)
         {
             var builder = WebApplication.CreateBuilder(); builder.Logging.ClearProviders();
             builder.WebHost.UseUrls("http://127.0.0.1:0");
             var app = builder.Build(); app.MapDelete("/v1/sandboxes/{id}", delete);
+            if (create is not null) app.MapPost("/v1/sandboxes", create);
+            if (list is not null) app.MapGet("/v1/sandboxes", list);
             await app.StartAsync();
             return new(app, app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single());
         }
@@ -101,9 +148,10 @@ public sealed class OpenSandboxCleanupTests
     private sealed class Logs : ILogger<OpenSandboxService>
     {
         public List<string> Warnings { get; } = [];
+        public List<Exception> Exceptions { get; } = [];
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel level, EventId id, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        { if (level == LogLevel.Warning) Warnings.Add(formatter(state, exception)); }
+        { if (exception is not null) Exceptions.Add(exception); if (level == LogLevel.Warning) Warnings.Add(formatter(state, exception)); }
     }
 }
