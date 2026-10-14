@@ -31,19 +31,23 @@ public sealed partial class FileSessionWorkspace
     }
 
     public async ValueTask CommitScratchAsync(Guid sessionId, WorkspaceTransfer transfer, string expectedFingerprint, CancellationToken ct = default,
-        Func<CancellationToken, ValueTask>? validateCommit = null)
+        Func<CancellationToken, ValueTask>? validateCommit = null, Guid? commitId = null)
     {
         // Stage and compare while holding the SAME gate as canonical writes, copies,
         // reads and deletion. A failed validation or stale tree never changes scratch.
         await WithFilesystemAsync(sessionId, async token =>
         {
+            RecoverSandboxStages(SessionRoot(sessionId));
             ValidateScratchTransfer(sessionId, transfer);
             var before = await CaptureScratchLockedAsync(sessionId, token);
             if (before.Fingerprint != expectedFingerprint) throw AgentCoreErrors.Conflict("Scratch changed while the command ran. Reset the sandbox before another mutation.");
             var root = SessionRoot(sessionId);
             var working = Path.Combine(root, "working");
-            var stage = Path.Combine(root, ".sandbox-stage-" + Guid.NewGuid().ToString("N"));
-            var backup = Path.Combine(root, ".sandbox-backup-" + Guid.NewGuid().ToString("N"));
+            var id = commitId ?? Guid.CreateVersion7();
+            var journal = CommitJournalPath(root, id);
+            if (File.Exists(journal)) throw AgentCoreErrors.Conflict("Scratch commit already has durable evidence. Reconcile; never repeat the import.");
+            var stage = Path.Combine(root, ".sandbox-stage-" + id.ToString("N"));
+            var backup = Path.Combine(root, ".sandbox-backup-" + id.ToString("N"));
             Directory.CreateDirectory(stage);
             try
             {
@@ -62,19 +66,31 @@ public sealed partial class FileSessionWorkspace
                 }
                 // Revalidate authority after staging, inside the canonical write gate.
                 // No asynchronous work occurs between this fence and the tree swap.
+                if (BeforeScratchCommitValidation is not null) await BeforeScratchCommitValidation(token);
                 if (validateCommit is not null) await validateCommit(token);
                 token.ThrowIfCancellationRequested();
                 ThrowIfDeleted(sessionId);
+                WriteCommitEvidence(root, id, "prepared");
+                ScratchCommitFault?.Invoke("beforeSwap");
                 Directory.Move(working, backup);
+                ScratchCommitFault?.Invoke("afterBackup");
                 try { Directory.Move(stage, working); }
                 catch { Directory.Move(backup, working); throw; }
+                ScratchCommitFault?.Invoke("afterSwap");
+                WriteCommitEvidence(root, id, "committed");
+                ScratchCommitFault?.Invoke("afterEvidence");
                 // Commit has succeeded; cancellation cannot turn it into a partial tree.
                 try { Directory.Delete(backup, true); }
                 catch (IOException) { /* Recovery removes the now-unreferenced backup. */ }
                 catch (UnauthorizedAccessException) { /* Canonical commit already succeeded. */ }
                 return 0;
             }
-            finally { if (Directory.Exists(stage)) Directory.Delete(stage, true); }
+            finally
+            {
+                // A prepared journal owns its stage/backup until recovery resolves
+                // the swap. Deleting either here would destroy crash evidence.
+                if (!File.Exists(journal) && Directory.Exists(stage)) Directory.Delete(stage, true);
+            }
         }, ct);
     }
 
@@ -116,10 +132,64 @@ public sealed partial class FileSessionWorkspace
     private static string ScratchFingerprint(WorkspaceTransfer transfer) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
         transfer.Entries.OrderBy(e => e.RelativePath, StringComparer.Ordinal).Select(e => new { e.RelativePath, e.Directory, Size = e.Bytes.LongLength, Hash = ComputeSha256Hex(e.Bytes) })))).ToLowerInvariant();
 
+    // Test-only synchronous crash points; no async gap is added after the authority fence.
+    internal Func<CancellationToken, ValueTask>? BeforeScratchCommitValidation { get; set; }
+    internal Action<string>? ScratchCommitFault { get; set; }
+    private static string CommitJournalPath(string root, Guid id) => Path.Combine(root, ".sandbox-commit-" + id.ToString("N") + ".json");
+
+    private static void WriteCommitEvidence(string root, Guid id, string state)
+    {
+        var path = CommitJournalPath(root, id);
+        var temp = path + ".tmp";
+        using (var file = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            JsonSerializer.Serialize(file, state);
+            file.Flush(flushToDisk: true);
+        }
+        File.Move(temp, path, overwrite: true);
+    }
+
+    private static string ReadCommitEvidence(string root, Guid id)
+    {
+        var path = CommitJournalPath(root, id);
+        if (!File.Exists(path)) return "notCommitted";
+        var state = JsonSerializer.Deserialize<string>(File.ReadAllText(path));
+        if (state is "committed" or "notCommitted") return state;
+        if (state != "prepared") return "unknown";
+        var stage = Directory.Exists(Path.Combine(root, ".sandbox-stage-" + id.ToString("N")));
+        var backup = Directory.Exists(Path.Combine(root, ".sandbox-backup-" + id.ToString("N")));
+        var working = Directory.Exists(Path.Combine(root, "working"));
+        if (backup && !stage && working) return "committed";
+        if (stage && (working && !backup || !working && backup)) return "notCommitted";
+        return "unknown";
+    }
+
+    public ValueTask<string> GetScratchCommitStatusAsync(Guid sessionId, Guid commitId, CancellationToken ct = default) =>
+        WithFilesystemAsync(sessionId, _ =>
+        {
+            var root = SessionRoot(sessionId);
+            DenyEscapingLinks(root, _root);
+            return ValueTask.FromResult(ReadCommitEvidence(root, commitId));
+        }, ct);
+
     private static void RecoverSandboxStages(string root)
     {
         if (!Directory.Exists(root)) return;
         var working = Path.Combine(root, "working");
+        foreach (var journal in Directory.GetFiles(root, ".sandbox-commit-*.json"))
+        {
+            if (!Guid.TryParseExact(Path.GetFileName(journal)[16..^5], "N", out var id))
+                throw AgentCoreErrors.Persistence("Scratch commit evidence is invalid.");
+            var status = ReadCommitEvidence(root, id);
+            if (status == "unknown") throw AgentCoreErrors.Persistence("Scratch commit requires recovery; its outcome is uncertain.");
+            var backup = Path.Combine(root, ".sandbox-backup-" + id.ToString("N"));
+            var stage = Path.Combine(root, ".sandbox-stage-" + id.ToString("N"));
+            if (!Directory.Exists(working) && Directory.Exists(backup)) Directory.Move(backup, working);
+            WriteCommitEvidence(root, id, status);
+            foreach (var tree in new[] { backup, stage }.Where(Directory.Exists)) { DenyAllLinks(tree, root); Directory.Delete(tree, true); }
+        }
+        // Compatibility recovery for pre-journal stages, and staging failures
+        // before a prepared record was flushed. No command is ever replayed.
         var backups = Directory.GetDirectories(root, ".sandbox-backup-*");
         if (!Directory.Exists(working) && backups.Length == 1) Directory.Move(backups[0], working);
         else if (!Directory.Exists(working) && backups.Length > 1) throw AgentCoreErrors.Persistence("Scratch commit requires recovery.");

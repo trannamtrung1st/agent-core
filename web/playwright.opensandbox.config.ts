@@ -7,7 +7,7 @@ if (process.env.AGENTCORE_OPENSANDBOX_TESTS !== '1' || !process.env.AGENTCORE_OS
 export default defineConfig({
   testDir: './opensandbox-e2e', workers: 1, retries: 0, timeout: 180000,
   reporter: [['list'], ['html', { outputFolder: 'opensandbox-report', open: 'never' }]],
-  outputDir: 'opensandbox-results',
+  outputDir: `opensandbox-results/${process.env.AGENTCORE_OSB_UI_PHASE ?? 'current'}`,
   use: { ...devices['Desktop Chrome'], baseURL: process.env.AGENTCORE_OSB_UI_URL ?? 'http://127.0.0.1:6273',
     trace: 'retain-on-failure', permissions: ['clipboard-read', 'clipboard-write'] },
 });

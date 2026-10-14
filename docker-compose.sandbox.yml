@@ -1,0 +1,36 @@
+# Trusted-local infrastructure only. This file never starts an Agent Core app.
+# scripts/opensandbox-compose.py up prepares private files and starts this service.
+# Native Real development: scripts/dev-real.sh start
+services:
+  opensandbox:
+    image: ${AGENTCORE_SANDBOX_SERVER_IMAGE:?Run scripts/opensandbox-compose.py prepare}
+    entrypoint: [python, /opt/agent-core/server-bootstrap.py]
+    environment:
+      AGENTCORE_SANDBOX_SERVER_IMAGE: ${AGENTCORE_SANDBOX_SERVER_IMAGE}
+    labels:
+      agent-core.opensandbox.server: "true"
+    ports:
+      - "127.0.0.1:${AGENTCORE_SANDBOX_PORT:-18080}:8080"
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    secrets:
+      - opensandbox_api_key
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${AGENTCORE_SANDBOX_CONFIG_FILE:?Run sandbox prepare}:/etc/opensandbox/config.toml:ro
+      - ./deploy/sandbox/server-bootstrap.py:/opt/agent-core/server-bootstrap.py:ro
+      - opensandbox-metadata:/var/lib/opensandbox
+      - opensandbox-auth:/run/agent-core-auth
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, /opt/agent-core/server-bootstrap.py, health]
+      interval: 5s
+      timeout: 4s
+      retries: 24
+      start_period: 10s
+volumes:
+  opensandbox-metadata:
+  opensandbox-auth:
+secrets:
+  opensandbox_api_key:
+    file: ${AGENTCORE_SANDBOX_KEY_FILE:?Run scripts/opensandbox-compose.py prepare}

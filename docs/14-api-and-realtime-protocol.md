@@ -788,7 +788,7 @@ All routes below use existing owner-capability authorization and safe problem de
 | `PUT /api/v2/admin/sandbox-profiles/{id}` | Validate and append `expectedRevision + 1`; exact CAS, redacted history |
 | `POST /api/v2/admin/sandbox-profiles/{id}/verify` | Exact expected revision; bounded non-root image smoke and cleanup; append observation revision |
 | `GET /api/v2/admin/agent-instances/{id}/sandbox` | Effective exact policy/profile plus safe readiness |
-| `GET /api/v2/sessions/{id}/sandbox` | Owned generation, profile revision, lifecycle/expiry, Core active/latest execution ID, diagnostic ID |
+| `GET /api/v2/sessions/{id}/sandbox` | Owned generation, profile revision, lifecycle/expiry, Core active/latest execution ID, diagnostic ID; no environment returns HTTP 200 with an empty body (clients also accept JSON `null`) |
 | `GET /api/v2/sessions/{id}/sandbox/executions/{executionId}` | Owned bounded command receipt/status/output; Core ID only |
 | `POST .../executions/{executionId}/stop` | Stop/confirm owned tracked execution and validate file synchronization |
 | `POST /api/v2/sessions/{id}/sandbox/reset` | Explicit owner request with `expectedGeneration`; changed generation returns conflict |
@@ -813,3 +813,18 @@ Sparse `inspection` includes `mode: "sparse"`, `sha256`, `sheets`, `sheet`, `she
 For full-workbook summaries, combine all required returned pages/sheets within the admitted execution budgets and disclose missing coverage when stopping early. A final cursor alone does not prove earlier pages were processed. Formula caches remain inert; original coordinates are never compacted.
 
 Invalid package errors remain distinct from `office_feature_unsupported` and `office_processing_limit`; callers must not infer corruption solely from a feature/limit rejection. Original protected downloads remain available.
+
+### OpenSandbox reliability observations
+
+POST profile `/verify` returns the existing `{passed,message,profile}` envelope with the **same configuration revision**. Safe `lastVerifiedAt` / `verificationReason` fields in Admin profile reads project a separate observation of that exact revision. New profile revisions have independent verification evidence. GET Session `/sandbox/executions/{executionId}` and `sandbox.process.status` are read-only; background completion/log persistence is owned by the periodic supervisor or explicit stop. `workspaceSyncStatus` additionally admits `committing` and `unknown`; neither proves files were not committed. Session environment inspection adds optional sanitized `message` for setup recovery, without provider IDs or exception bodies.
+
+### Sandbox setup and verification owner routes
+
+All routes below require the existing local owner capability; scripts and output never enter realtime agent conversation messages.
+
+- `POST /api/v2/admin/sandbox-profiles/{id}/check-image` with `expectedRevision`: ephemeral non-root Python readiness only, explicitly no script execution.
+- `POST /api/v2/admin/sandbox-profiles/{id}/verify` with `expectedRevision`: full saved Profile initialization and scratch validation; persisted observation and unchanged Profile revision.
+- `POST /api/v2/admin/agent-instances/{id}/sandbox/verify` with `expectedInstanceRevision`: effective Profile then Instance setup in a disposable environment; persisted exact Instance/Profile observation.
+- `GET /api/v2/admin/agent-instances/{id}/sandbox`: effective limits, image, scripts, saved Instance revision, readiness and current exact verification observation.
+
+Verification responses include safe message, passed, exit code, bounded stdout/stderr, truncation, duration, diagnostic, verification time and configuration pins. Profile inventory includes its exact-revision verification observation. Existing Session sandbox GET adds initialization evidence plus created/activity/maximum-lifetime and cleanup reason/pending/pass/last-attempt metadata. GET execution remains read-only. Reset accepts the observed generation and can clear a retained initialization retry fence after remote cleanup; changed generations conflict. Settings PATCH retains existing sparse `set`/`clear` and Instance revision/CAS.

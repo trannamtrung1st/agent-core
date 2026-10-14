@@ -244,6 +244,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<SandboxInstanceVerificationRow>(e => { e.ToTable("SandboxInstanceVerifications"); e.HasKey(r => new { r.InstanceId, r.InstanceRevision }); });
+        modelBuilder.Entity<SandboxVerificationRow>(e => { e.ToTable("SandboxProfileVerifications"); e.HasKey(r => new { r.ProfileId, r.ProfileRevision }); });
         modelBuilder.Entity<SandboxProfileRow>(e => { e.ToTable("SandboxProfiles"); e.HasKey(r => new { r.Id, r.Revision }); });
         modelBuilder.Entity<SandboxLeaseRow>(e => { e.ToTable("SandboxSessionLeases"); e.HasKey(r => r.SessionId); e.Property(r => r.Revision).IsConcurrencyToken(); e.HasIndex(r => new { r.AgentInstanceId, r.ExpiresAt }); });
         modelBuilder.Entity<SandboxExecutionRow>(e => { e.ToTable("SandboxExecutions"); e.HasKey(r => r.Id); e.HasIndex(r => new { r.SessionId, r.AgentRunId, r.ToolCallId }).IsUnique(); });

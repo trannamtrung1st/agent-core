@@ -11,7 +11,10 @@ public sealed record SandboxCommandRequest(string? Command, IReadOnlyList<string
 public sealed record SandboxCommandResult(Guid ExecutionId, string Status, int? ExitCode, string Stdout,
     string Stderr, bool Truncated, long DurationMs, string WorkspaceSyncStatus, string? DiagnosticId = null, bool Background = false, string CommandText = "");
 public sealed record SandboxEnvironmentInfo(Guid SessionId, Guid Generation, string State, string ProfileId,
-    long ProfileRevision, DateTimeOffset ExpiresAt, Guid? ActiveExecutionId, string? DiagnosticId, Guid? LastExecutionId = null);
+    long ProfileRevision, DateTimeOffset ExpiresAt, Guid? ActiveExecutionId, string? DiagnosticId, Guid? LastExecutionId = null, string? Message = null,
+    DateTimeOffset? CreatedAt = null, DateTimeOffset? LastActivityAt = null, DateTimeOffset? MaximumLifetimeAt = null,
+    string? CleanupReason = null, bool CleanupPending = false, int CleanupPasses = 0, DateTimeOffset? LastCleanupAttemptAt = null,
+    SandboxInitializationEvidence? Initialization = null);
 public sealed record ScratchSnapshot(WorkspaceTransfer Transfer, string Fingerprint);
 
 public interface ISandboxService
@@ -29,6 +32,10 @@ public interface ISandboxStore
     ValueTask<IReadOnlyList<SandboxProfile>> ListProfilesAsync(CancellationToken ct = default);
     ValueTask<SandboxProfile?> GetProfileAsync(string id, long? revision = null, CancellationToken ct = default);
     ValueTask SaveProfileAsync(SandboxProfile profile, long expectedRevision, CancellationToken ct = default, AdminEventAppend? history = null);
+    ValueTask<SandboxProfileVerification?> GetVerificationAsync(string id, long revision, CancellationToken ct = default);
+    ValueTask SaveVerificationAsync(SandboxProfileVerification verification, CancellationToken ct = default);
+    ValueTask<SandboxInstanceVerification?> GetInstanceVerificationAsync(Guid instanceId, long revision, CancellationToken ct = default);
+    ValueTask SaveInstanceVerificationAsync(SandboxInstanceVerification verification, CancellationToken ct = default);
     ValueTask<SandboxLease?> GetLeaseAsync(Guid sessionId, CancellationToken ct = default);
     ValueTask<IReadOnlyList<SandboxLease>> ListLeasesAsync(CancellationToken ct = default);
     ValueTask SaveLeaseAsync(SandboxLease lease, long expectedRevision, CancellationToken ct = default);

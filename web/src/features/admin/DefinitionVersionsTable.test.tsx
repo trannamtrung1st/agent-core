@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DefinitionVersionsTable } from "./DefinitionVersionsTable";
 import { getAdminDefinitionVersion, listAdminAuthoringOptions } from "../../services/adminApi";
 
+vi.mock('../../services/sandboxes', () => ({ getSandboxPlatform: vi.fn().mockResolvedValue({ state: 'Disabled', message: 'Fixture disabled', profiles: [] }) }));
+
 import { exposedRoles } from "../../test/exposedRoles";
 
 vi.mock("../../services/adminApi", () => ({
@@ -62,6 +64,11 @@ describe("Definition version inspection", () => {
     expect(within(skills).getByText("Sample hello")).toBeInTheDocument();
     expect(within(skills).queryByRole("button", { name: "Add skill" })).not.toBeInTheDocument();
     expect(within(skills).queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    fireEvent.click(exposedRoles(details).getByRole("tab", { name: "Sandbox" }));
+    const sandbox = exposedRoles(details).getByRole("region", { name: "Published sandbox" });
+    expect(within(sandbox).getByText("No explicit profile policy")).toBeInTheDocument();
+    expect(within(sandbox).queryByRole("combobox")).not.toBeInTheDocument();
+    expect(within(sandbox).queryByRole("button", { name: /Verify/ })).not.toBeInTheDocument();
     fireEvent.click(exposedRoles(details).getByRole("tab", { name: "Identity & version" }));
     fireEvent.click(within(details).getByText("Advanced JSON", { exact: true }));
     expect(within(details).getByLabelText("Advanced JSON", { selector: "textarea" })).toHaveAttribute("readonly");

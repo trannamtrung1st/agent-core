@@ -16,6 +16,7 @@ public sealed partial class SessionToolExecutor
         try
         {
             if (ConfigurationTools.IsTool(call.Name)) ConfigurationTools.Validate(call.Name, args);
+            if (OwnerOnlySandboxFields(call.Name, args)) throw AgentCoreErrors.Forbidden("Sandbox initialization and limit changes are managed in the owner Admin interface.");
             var policy = await selfManagement.ReadAsync(id, ct);
             var revision = args.GetProperty("expectedInstanceRevision").GetInt64();
             if (revision != policy.InstanceRevision) throw AgentCoreErrors.Conflict("Instance revision changed; inspect before approval.");

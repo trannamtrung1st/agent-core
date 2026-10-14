@@ -28,7 +28,10 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
             if (current?.Revision != owner.Revision) continue;
             var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
             if (sandboxes is not null)
-                effective = effective with { ExecutionSandboxProfile = await sandboxes.GetProfileAsync(effective.SandboxPolicy?.DefaultProfileId ?? "general-workbench", ct: ct) };
+                {
+                var profile = await sandboxes.GetProfileAsync(effective.SandboxPolicy?.DefaultProfileId ?? "general-workbench", ct: ct);
+                effective = effective with { ExecutionSandboxProfile = profile is null ? null : SandboxSetupResolver.Resolve(profile, owner.SettingsOverrides, owner.Revision) };
+            }
             var manifest = AgentInstanceResourceService.Resolve(effective, published, resourceState, skillState);
             var environment = RoleEnvironments.Of(effective);
             // A disabled inherited file removes its knowledge binding; a local knowledge file adds an origin-qualified one.

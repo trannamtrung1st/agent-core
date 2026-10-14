@@ -99,6 +99,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
   const [sandboxOpen, setSandboxOpen] = useState(false);
+  const sandboxButtonRef = useRef<HTMLButtonElement>(null);
   const [attentionItems, setAttentionItems] = useState<{ run: AgentRun; delivery?: string }[]>([]);
   const [backgroundInstanceId, setBackgroundInstanceId] = useState<string | null>(null);
   const { isUnread } = useWorkReadState();
@@ -383,6 +384,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
               inSession={inSession && !readonly}
               onSchedules={inSession && !readonly && state.sessionId ? () => setSchedulesOpen(true) : undefined}
               onBackgroundWork={state.sessionId ? () => setWorkOpen(true) : undefined}
+              sandboxButtonRef={sandboxButtonRef}
               onSandbox={state.sessionId ? () => setSandboxOpen(true) : undefined}
               attentionCount={attentionCount}
               onEnd={() => void hangUp()}
@@ -544,7 +546,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
         </Layout>
         {backgroundInstanceId ? <BackgroundWorkDrawer instanceId={backgroundInstanceId} open={workOpen} wide={!isNarrow}
           onClose={() => setWorkOpen(false)} onAddReference={(sessionId,label) => addResourceToDraft({kind:"backgroundSession",sessionId},label)} /> : null}
-        {state.sessionId && <SessionSandboxDrawer key={state.sessionId} sessionId={state.sessionId} open={sandboxOpen} narrow={isNarrow} readOnly={readonly} onClose={() => setSandboxOpen(false)} />}
+        {state.sessionId && <SessionSandboxDrawer key={state.sessionId} sessionId={state.sessionId} open={sandboxOpen} openerRef={sandboxButtonRef} narrow={isNarrow} readOnly={readonly} onClose={() => setSandboxOpen(false)} />}
 
         {state.sessionId ? (
           <AutomationDrawer

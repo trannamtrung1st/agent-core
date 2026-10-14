@@ -12,6 +12,7 @@ import socket
 import subprocess
 import time
 import urllib.request
+from opensandbox_config import server_config
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS = json.loads((ROOT / "scripts/opensandbox-proof/images.json").read_text())
@@ -47,12 +48,11 @@ def prepare(args):
             out.write("OPENSANDBOX_SERVER_API_KEY=" + secrets.token_hex(32) + "\n")
     if secret.stat().st_mode & 0o077:
         raise RuntimeError("The private server.env must have mode 0600.")
-    config = (ROOT / "scripts/opensandbox-proof/server.toml.example").read_text()
     platform = run("docker", "info", "--format", "{{.OperatingSystem}}", capture=True)
+    gateway = ""
     if "Docker Desktop" not in platform:
         gateway = json.loads(run("docker", "network", "inspect", "bridge", capture=True))[0]["IPAM"]["Config"][0]["Gateway"]
-        config = config.replace('host_ip = "host.docker.internal"', f'host_ip = "{gateway}"')
-        config = config.replace('publish_host = "127.0.0.1"', f'publish_host = "{gateway}"')
+    config = server_config("Docker Desktop" in platform, gateway)
     (state / "server.toml").write_text(config)
     return state
 

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { App as AntApp, Badge, Button, Flex, Tooltip, Typography } from "antd";
 import { CalendarOutlined, CodeOutlined, InboxOutlined, PoweroffOutlined } from "@ant-design/icons";
 import { confirmAction } from "../../app/confirmAction";
@@ -15,6 +15,7 @@ export function ChatHeader({
   onSchedules,
   onBackgroundWork,
   onSandbox,
+  sandboxButtonRef,
   attentionCount = 0,
   onEnd,
   inSession
@@ -29,6 +30,7 @@ export function ChatHeader({
   onSchedules?: () => void;
   onBackgroundWork?: () => void;
   onSandbox?: () => void;
+  sandboxButtonRef?: Ref<HTMLButtonElement>;
   attentionCount?: number;
   onEnd: () => void;
   inSession: boolean;
@@ -64,56 +66,58 @@ export function ChatHeader({
         </div>
       </Flex>
       {speechLocale || inSession || onBackgroundWork || additionalActions ? (
-        <Flex align="center" gap={8} className="chat-header-actions">
-          {onSandbox && <Tooltip title="Session sandbox"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session sandbox" icon={<CodeOutlined />} onClick={onSandbox} /></Tooltip>}
+        <Flex align="center" wrap gap={8} className="chat-header-actions">
           {speechLocale}
-          {onBackgroundWork ? (
-            <Badge count={attentionCount} size="small" offset={[-4, 4]}>
-              <Tooltip title="Background work">
+          <Flex align="center" gap={8} className="chat-header-session-actions">
+            {onSandbox && <Tooltip title="Session sandbox"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session sandbox" ref={sandboxButtonRef} icon={<CodeOutlined />} onClick={onSandbox} /></Tooltip>}
+            {onBackgroundWork ? (
+              <Badge count={attentionCount} size="small" offset={[-4, 4]}>
+                <Tooltip title="Background work">
+                  <Button
+                    type="text"
+                    size="small"
+                    className="chat-header-icon-action chat-header-background-work"
+                    aria-label={attentionCount > 0 ? `Background work, ${attentionCount} need attention` : "Background work"}
+                    icon={<InboxOutlined />}
+                    onClick={onBackgroundWork}
+                  />
+                </Tooltip>
+              </Badge>
+            ) : null}
+            {inSession && onSchedules ? (
+              <Tooltip title="Automations">
                 <Button
                   type="text"
                   size="small"
-                  className="chat-header-icon-action chat-header-background-work"
-                  aria-label={attentionCount > 0 ? `Background work, ${attentionCount} need attention` : "Background work"}
-                  icon={<InboxOutlined />}
-                  onClick={onBackgroundWork}
+                  className="chat-header-icon-action"
+                  aria-label="Automations"
+                  icon={<CalendarOutlined />}
+                  onClick={onSchedules}
                 />
               </Tooltip>
-            </Badge>
-          ) : null}
-          {inSession && onSchedules ? (
-            <Tooltip title="Automations">
-              <Button
-                type="text"
-                size="small"
-                className="chat-header-icon-action"
-                aria-label="Automations"
-                icon={<CalendarOutlined />}
-                onClick={onSchedules}
-              />
-            </Tooltip>
-          ) : null}
-          {inSession ? (
-            <Tooltip title="End conversation">
-              <Button
-                type="text"
-                size="small"
-                className="chat-header-icon-action"
-                aria-label="End"
-                icon={<PoweroffOutlined />}
-                onClick={() => {
-                  confirmAction(modal, {
-                    title: "End this conversation?",
-                    content: "This conversation will become read-only and cannot be resumed.",
-                    okText: "End",
-                    danger: true,
-                    onOk: onEnd
-                  });
-                }}
-              />
-            </Tooltip>
-          ) : null}
-          {additionalActions}
+            ) : null}
+            {inSession ? (
+              <Tooltip title="End conversation">
+                <Button
+                  type="text"
+                  size="small"
+                  className="chat-header-icon-action"
+                  aria-label="End"
+                  icon={<PoweroffOutlined />}
+                  onClick={() => {
+                    confirmAction(modal, {
+                      title: "End this conversation?",
+                      content: "This conversation will become read-only and cannot be resumed.",
+                      okText: "End",
+                      danger: true,
+                      onOk: onEnd
+                    });
+                  }}
+                />
+              </Tooltip>
+            ) : null}
+            {additionalActions}
+          </Flex>
         </Flex>
       ) : null}
     </Flex>

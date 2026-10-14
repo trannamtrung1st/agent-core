@@ -45,3 +45,15 @@ describe('Admin canonical routes', () => {
     expect(adminInstancePath(id, 'automation', 'controls')).toBe(`${base}/automations`);
   });
 });
+
+it('redirects saved Execution sandbox anchors to the dedicated Instance Sandbox owner', () => {
+  const id='11111111-1111-1111-1111-111111111111';
+  expect(canonicalAppUrl(`/admin/instances/${id}/execution#sandboxPolicy`)).toBe(`/admin/instances/${id}/sandbox#sandboxPolicy`);
+});
+
+ it('relocates Definition Sandbox anchors and shares navigation placement with Instances', () => {
+  const draft = `/admin/definitions/examiner/drafts/${id}`;
+  expect(canonicalAppUrl(`${draft}/capabilities#sandboxPolicy`)).toBe(`${draft}/sandbox#sandboxPolicy`);
+  expect(draftPages.findIndex(page => page.id === 'sandbox')).toBe(draftPages.findIndex(page => page.id === 'execution') + 1);
+  expect(instancePages.findIndex(page => page.id === 'sandbox')).toBe(instancePages.findIndex(page => page.id === 'execution') + 1);
+});

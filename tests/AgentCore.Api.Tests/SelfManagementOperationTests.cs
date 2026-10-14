@@ -11,6 +11,37 @@ namespace AgentCore.Api.Tests;
 
 public sealed class SelfManagementOperationTests
 {
+    [Fact]
+    public async Task Existing_sandbox_profile_management_remains_available_without_disclosing_or_approving_setup_scripts()
+    {
+        await using var factory=new AgentCoreApiFactory();var services=factory.Services;
+        var store=services.GetRequiredService<ISandboxStore>();
+        var oldProfileRevision=(await store.GetProfileAsync("general-workbench"))?.Revision ?? 0;
+        await store.SaveProfileAsync(new("general-workbench",oldProfileRevision+1,"Workbench","",true,"docker.io/agent-core/workbench@sha256:"+new string('a',64),"profile-private-sentinel"),oldProfileRevision);
+        var owner=await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant",30);
+        var policy=await services.GetRequiredService<SelfManagementService>().UpdateAsync(owner.InstanceId,owner.Revision,new(new(HarnessManagementMode.Managed),new([HarnessManagementScope.Settings]),new([])));
+        var settings=services.GetRequiredService<AgentInstanceSettingsService>();
+        var saved=await settings.PatchAsync(owner.InstanceId,"sandboxPolicy",policy.InstanceRevision,new Dictionary<string,JsonElement>{["initializationScript"]=JsonSerializer.SerializeToElement("instance-private-sentinel")},[]);
+        var definition=(await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
+        var executor=services.GetRequiredService<SessionToolExecutor>();var admission=new ToolExecutionAdmission(false,TriggerKind.UserTurn,AgentInstanceId:owner.InstanceId);
+        foreach(var (name,json) in new[]{("settings.list","{}"),("settings.inspect","{\"section\":\"sandboxPolicy\"}"),("configuration.inspect","{}")})
+        {
+            var result=await executor.ExecuteAsync(definition,Guid.NewGuid(),new("inspect",name,json),100000,admission:admission);
+            Assert.DoesNotContain("private-sentinel",result.Text);Assert.Contains("profileId",result.Text);Assert.DoesNotContain("initializationScript",result.Text);
+        }
+        var args=JsonSerializer.SerializeToElement(new{expectedInstanceRevision=saved.InstanceRevision,section="sandboxPolicy",set=new{profileId="general-workbench"},clear=Array.Empty<string>()});
+        var call=new ModelToolCall("choose","settings.patch",args.GetRawText());
+        var profilePreview=await executor.PrepareManagementApprovalAsync(call,args,admission,default);
+        Assert.Null(profilePreview.ErrorJson);Assert.NotNull(profilePreview.Preparation);
+        var grant=new ToolApprovalGrant(Guid.NewGuid(),call.Name,ToolActionHash.Compute(call.Name,args),Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid());
+        var applied=await executor.ExecuteAsync(definition,Guid.NewGuid(),call,100000,approvalGrant:grant,admission:admission);
+        Assert.Contains("\"outcome\":",applied.Text);Assert.DoesNotContain("private-sentinel",applied.Text);
+        args=JsonSerializer.SerializeToElement(new{expectedInstanceRevision=saved.InstanceRevision,section="sandboxPolicy",set=new{},clear=new[]{"initializationScript"}});
+        var preview=await executor.PrepareManagementApprovalAsync(new("blocked","settings.patch",args.GetRawText()),args,admission,default);
+        Assert.Null(preview.Preparation);Assert.DoesNotContain("private-sentinel",preview.ErrorJson!);
+        using var denied=JsonDocument.Parse(preview.ErrorJson!);Assert.Equal("Forbidden",denied.RootElement.GetProperty("error").GetString());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

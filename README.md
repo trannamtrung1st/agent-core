@@ -20,6 +20,20 @@ trusted OpenSandbox server may mount the host Docker socket. See
 Earlier P10/P11 statements below describe their historical slice boundaries;
 this accepted P10 cutover supersedes the former unopened P10 status. P11 remains unopened.
 
+The owner-authorized [Sandbox configuration/deployment enhancement](docs/reports/opensandbox-configuration-deployment-verification-2026-10-14.md) adds Instance → Sandbox, ordered observable initialization and disposable Profile/Instance setup verification. Normal local development uses an infrastructure-only OpenSandbox Compose file and the existing Docker daemon. The app runs natively in Real mode; optional packaged app overlays remain separate. See [Operations](docs/17-observability-and-operations.md#compose-sandbox-and-full-native-real-demo) for private setup, optional deployment modes and safe cleanup.
+
+```bash
+scripts/dev-real.sh start                         # OpenSandbox + native Real API + Vite
+scripts/dev-real.sh restart                       # reuse infrastructure; restart native app
+scripts/dev-real.sh status
+scripts/dev-real.sh stop                          # native app only; Docker data/services retained
+scripts/dev-real.sh start --with-store            # optional nopCommerce demo as well
+scripts/dev-real.sh start --full                  # equivalent complete store demo
+scripts/dev-real.sh stop --full                   # owned infrastructure too; data retained
+scripts/dev-real.sh start --api-only              # native API/Vite without managed Docker
+scripts/dev-real.sh start --api-only --with-sandbox # explicit Sandbox, no store
+```
+
 The [sparse XLSX reading enhancement](docs/reports/closedxml-sparse-reading-verification-2026-10-14.md) uses bounded ClosedXML content pages for attachment and Workspace reads, preserves original addresses and stateless continuation, and separates formatted-template scanning from populated-cell budgets. Explicit ranges, preview and edits retain their strict profile. Focused local tests and generated-fixture measurements verify this change; real-file verification remains owner-run and hosted CI was not requested.
 
 The [Office productivity stabilization](docs/reports/office-productivity-stabilization-2026-10-14.md) fixes empty spreadsheet inspections, passes a fresh audited dependency restore and focused local checks, and records a live public DOCX → edit → Artifact → exact-byte Google Drive upload/rename/Trash/recovery workflow. Dense CSV measurements and remaining runtime/device/Office fidelity boundaries are explicit; hosted CI was not run.

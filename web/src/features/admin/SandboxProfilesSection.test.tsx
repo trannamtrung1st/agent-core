@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App, ConfigProvider } from 'antd';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { SandboxProfilesSection } from './SandboxProfilesSection';
-import { getSandboxPlatform, saveSandboxProfile, verifySandboxProfile, type SandboxPlatform, type SandboxProfile } from '../../services/sandboxes';
+import { getSandboxPlatform, saveSandboxProfile, verifySandboxProfile, checkSandboxImage, type SandboxPlatform, type SandboxProfile } from '../../services/sandboxes';
 
-vi.mock('../../services/sandboxes', () => ({ getSandboxPlatform: vi.fn(), saveSandboxProfile: vi.fn(), verifySandboxProfile: vi.fn() }));
+vi.mock('../../services/sandboxes', () => ({ getSandboxPlatform: vi.fn(), saveSandboxProfile: vi.fn(), verifySandboxProfile: vi.fn(),checkSandboxImage:vi.fn() }));
 const profile: SandboxProfile = { id:'workbench',revision:1,name:'Workbench',description:'Coding',enabled:true,imageReference:'sha256:'+'a'.repeat(64),initializationScript:null,cpu:1,memoryMiB:1024,pids:64,maxCommandSeconds:120,idleTtlSeconds:1800,maxLifetimeSeconds:7200,storageBytes:262144000,lastVerifiedAt:null,verificationReason:null };
 const platform: SandboxPlatform = { state:'Ready',message:'Local server ready.',profiles:[profile],allowedImagePrefixes:[],localImageIdsAllowed:true,securityScope:'Trusted local demo.',storageScope:'Canonical scratch quota; no writable-layer quota.' };
 beforeEach(() => { vi.mocked(getSandboxPlatform).mockReset().mockResolvedValue(structuredClone(platform)); vi.mocked(saveSandboxProfile).mockReset(); vi.mocked(verifySandboxProfile).mockReset(); });
@@ -13,7 +13,7 @@ it('retains a conflicting revision draft and discards explicitly without grantin
   mount(); await screen.findByDisplayValue('Workbench');
   expect(screen.getByRole('button',{name:'Save profile'})).toBeDisabled();
   fireEvent.change(screen.getByRole('textbox',{name:'Sandbox profile name'}),{target:{value:'Changed'}});
-  await waitFor(() => expect(screen.getByRole('button',{name:'Verify image'})).toBeDisabled());
+  await waitFor(() => expect(screen.getByRole('button',{name:'Verify profile'})).toBeDisabled());
   vi.mocked(saveSandboxProfile).mockRejectedValueOnce(new Error('Revision changed.'));
   fireEvent.click(screen.getByRole('button',{name:'Save profile'}));
   await screen.findByText('Revision changed.');
@@ -31,17 +31,35 @@ it('saves a profile revision then verifies the exact saved image',async () => {
   fireEvent.click(screen.getByRole('button',{name:'Save profile'}));
   await waitFor(() => expect(saveSandboxProfile).toHaveBeenCalled());
   await waitFor(() => expect(screen.getByRole('button',{name:'Save profile'})).toBeDisabled());
-  const verified = {...saved,revision:3,lastVerifiedAt:'2026-10-14T00:00:00Z',verificationReason:'Image passed.'};
+  const verified = {...saved,revision:2,lastVerifiedAt:'2026-10-14T00:00:00Z',verificationReason:'Image passed.'};
   vi.mocked(verifySandboxProfile).mockResolvedValue({passed:true,message:'Image passed.',profile:verified});
-  await waitFor(() => expect(screen.getByRole('button',{name:'Verify image'})).toBeEnabled());
-  fireEvent.click(screen.getByRole('button',{name:'Verify image'}));
+  await waitFor(() => expect(screen.getByRole('button',{name:'Verify profile'})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button',{name:'Verify profile'}));
   await waitFor(() => expect(verifySandboxProfile).toHaveBeenCalledWith(saved));
   await screen.findByText(/Image passed.*·/);
 });
 it('shows a local failure and recovers without fabricating readiness',async () => {
   vi.mocked(getSandboxPlatform).mockRejectedValueOnce(new Error('Server unavailable.')); mount();
   await screen.findByText('Server unavailable.');
-  expect(screen.queryByRole('button',{name:'Verify image'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Verify profile'})).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Retry'}));
   await screen.findByText('Local server ready.');
+});
+
+it('retains a failed initialization observation on the exact profile revision', async () => {
+  mount(); await screen.findByDisplayValue('Workbench');
+  const failed = {...profile, lastVerifiedAt:'2026-10-14T00:00:00Z', verificationReason:'Initialization failed with exit code 7. Correct the script and verify again.'};
+  vi.mocked(verifySandboxProfile).mockResolvedValue({passed:false,message:failed.verificationReason!,profile:failed});
+  fireEvent.click(screen.getByRole('button', {name:'Verify profile'}));
+  await screen.findByRole('status');
+  expect(screen.getByRole('status')).toHaveTextContent('Initialization failed with exit code 7');
+  expect(saveSandboxProfile).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', {name:'Save profile'})).toBeDisabled();
+});
+
+it('checks only image readiness without mutating or verifying the saved setup',async()=>{
+ mount();await screen.findByDisplayValue('Workbench');
+ vi.mocked(checkSandboxImage).mockResolvedValue({passed:true,message:'Image readiness passed. Initialization was not executed.',profileId:'workbench',profileRevision:1,instanceRevision:null,verifiedAt:'2026-10-14T00:00:00Z',exitCode:null,stdout:'',stderr:'',truncated:false,durationMs:1000,diagnosticId:null});
+ fireEvent.click(screen.getByRole('button',{name:'Check image readiness'}));await waitFor(()=>expect(checkSandboxImage).toHaveBeenCalledWith(profile));
+ expect(verifySandboxProfile).not.toHaveBeenCalled();expect(saveSandboxProfile).not.toHaveBeenCalled();
 });

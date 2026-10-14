@@ -21,10 +21,16 @@ public sealed partial class SessionToolExecutor
         if (run?.SessionId != sessionId || run.Claim is null || run.CancellationRequested)
             return SandboxError("forbidden", "The current Run claim is unavailable.");
         if (call.Name == ToolCatalog.SandboxStatus)
-            return TextResult(JsonSerializer.Serialize(new { environment = await sandboxService.InspectAsync(sessionId, ct), selectedProfile = definition.ExecutionSandboxProfile?.Id }, SandboxJson));
+        {
+            var environment = await sandboxService.InspectAsync(sessionId, ct);
+            // Owner UI evidence stays out of ordinary model/conversation context.
+            return TextResult(JsonSerializer.Serialize(new { environment = environment is null ? null : environment with { Initialization = null },
+                initializationState = environment?.Initialization?.State, selectedProfile = definition.ExecutionSandboxProfile?.Id }, SandboxJson));
+        }
         if (call.Name == ToolCatalog.SandboxReset)
         {
-            await sandboxService.StopSessionAsync(sessionId, ct);
+            var observed = await sandboxService.InspectAsync(sessionId, ct);
+            await sandboxService.StopSessionAsync(sessionId, ct, observed?.Generation);
             return TextResult("""{"ok":true,"status":"terminated","message":"Sandbox-only state was discarded. Canonical /working, /home and Artifacts are preserved; the next command provisions a new generation."}""");
         }
         SandboxCommandResult result;

@@ -1834,6 +1834,23 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("SandboxExecutions", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxInstanceVerificationRow", b =>
+                {
+                    b.Property<string>("InstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("InstanceRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("InstanceId", "InstanceRevision");
+
+                    b.ToTable("SandboxInstanceVerifications", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxLeaseRow", b =>
                 {
                     b.Property<string>("SessionId")
@@ -1879,6 +1896,23 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasKey("Id", "Revision");
 
                     b.ToTable("SandboxProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxVerificationRow", b =>
+                {
+                    b.Property<string>("ProfileId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ProfileRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ProfileId", "ProfileRevision");
+
+                    b.ToTable("SandboxProfileVerifications", (string)null);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SessionRecord", b =>

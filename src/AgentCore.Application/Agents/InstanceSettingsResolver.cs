@@ -4,7 +4,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Agents;
 
-public sealed record InstanceSettingConstraint(string Reason, bool? RequiredBoolean = null, int? Minimum = null, int? Maximum = null, IReadOnlyList<string>? Choices = null);
+public sealed record InstanceSettingConstraint(string Reason, bool? RequiredBoolean = null, double? Minimum = null, double? Maximum = null, IReadOnlyList<string>? Choices = null);
 
 public static class InstanceSettingsResolver
 {
@@ -12,7 +12,7 @@ public static class InstanceSettingsResolver
     public static IReadOnlyList<string> Sections { get; } = ["instructions", "conversationPolicy", "behaviorPolicy", "initiativePolicy", "voice", "modelDefaults", "memoryPolicy", "capabilities", "triggerPolicy", "providerPreferences", "sandboxPolicy"];
     public static IReadOnlyList<string> Fields(string section) => section switch
     {
-        "sandboxPolicy" => ["profileId"],
+        "sandboxPolicy" => ["profileId", "initializationScript", "cpu", "memoryMiB", "maxCommandSeconds", "idleTtlSeconds", "maxLifetimeSeconds", "storageBytes"],
         "instructions" => ["systemInstructions"],
         "conversationPolicy" => ["responseLength", "askOneQuestionAtATime", "language", "maxOutputTokens"],
         "behaviorPolicy" => ["interruptionStyle", "acknowledgeInterruption", "avoidUnsupportedClaims"],
@@ -42,6 +42,14 @@ public static class InstanceSettingsResolver
                 next = (section, field) switch
                 {
                     ("sandboxPolicy", "profileId") => next with { SandboxProfileId = remove ? null : new(Read<string>(set[field])) },
+                    ("sandboxPolicy", "initializationScript") => next with { SandboxInitializationScript = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
+                    ("sandboxPolicy", "cpu") => next with { SandboxCpu = remove ? null : new(Read<double>(set[field])) },
+                    ("sandboxPolicy", "memoryMiB") => next with { SandboxMemoryMiB = remove ? null : new(Read<int>(set[field])) },
+                    ("sandboxPolicy", "maxCommandSeconds") => next with { SandboxMaxCommandSeconds = remove ? null : new(Read<int>(set[field])) },
+                    ("sandboxPolicy", "idleTtlSeconds") => next with { SandboxIdleTtlSeconds = remove ? null : new(Read<int>(set[field])) },
+                    ("sandboxPolicy", "maxLifetimeSeconds") => next with { SandboxMaxLifetimeSeconds = remove ? null : new(Read<int>(set[field])) },
+                    ("sandboxPolicy", "storageBytes") => next with { SandboxStorageBytes = remove ? null : new(Read<long>(set[field])) },
+
                     ("instructions", "systemInstructions") => next with { SystemInstructions = remove ? null : new(Read<string>(set[field])) },
                     ("conversationPolicy", "responseLength") => next with { ResponseLength = remove ? null : new(Read<string>(set[field])) },
                     ("conversationPolicy", "askOneQuestionAtATime") => next with { AskOneQuestionAtATime = remove ? null : new(Read<bool>(set[field])) },
@@ -115,7 +123,18 @@ public static class InstanceSettingsResolver
         }
         switch (section)
         {
-            case "sandboxPolicy": result["profileId"] = new("Choose only a profile authorized by this Definition; changes apply to the next Run.", Choices: baseline.SandboxPolicy?.AllowedProfileIds ?? []); break;
+            case "sandboxPolicy":
+                result["profileId"] = new("Choose only a profile authorized by this Definition. Live generations retain their pinned setup until expiry or reset.", Choices: baseline.SandboxPolicy?.AllowedProfileIds ?? []);
+                if (baseline.ExecutionSandboxProfile is { } p)
+                {
+                    result["cpu"] = new("Cannot exceed the Global Profile CPU ceiling.", Minimum:0.25, Maximum:p.Cpu);
+                    result["memoryMiB"] = new("Cannot exceed the Global Profile memory ceiling.", Minimum:256, Maximum:p.MemoryMiB);
+                    result["maxCommandSeconds"] = new("Cannot exceed the Global Profile command ceiling.", Minimum:1, Maximum:p.MaxCommandSeconds);
+                    result["idleTtlSeconds"] = new("Idle time starts after completed work; cannot exceed the Global Profile ceiling.", Minimum:60, Maximum:p.IdleTtlSeconds);
+                    result["maxLifetimeSeconds"] = new("Cannot exceed the Global Profile lifetime ceiling or be shorter than idle expiry.", Minimum:60, Maximum:p.MaxLifetimeSeconds);
+                    result["storageBytes"] = new("Canonical /working quota; cannot exceed the Global Profile ceiling.", Minimum:1, Maximum:p.StorageBytes);
+                }
+                break;
             case "behaviorPolicy":
                 if (baseline.BehaviorPolicy.AvoidUnsupportedClaims)
                     result["avoidUnsupportedClaims"] = new("Avoid unsupported claims is required by the selected Definition and cannot be disabled for this Instance.", RequiredBoolean: true);
@@ -153,11 +172,13 @@ public static class InstanceSettingsResolver
     {
         if (overrides is null) return baseline;
         var o = overrides;
+        SandboxSetupResolver.ValidateOverrides(o);
         var trigger = TriggerOf(baseline);
         var d = baseline with
         {
             SandboxPolicy = o.SandboxProfileId is { } choice && baseline.SandboxPolicy is { } policy
                 && policy.AllowedProfileIds.Contains(choice.Value, StringComparer.Ordinal) ? policy with { DefaultProfileId = choice.Value } : baseline.SandboxPolicy,
+            ExecutionSandboxProfile = baseline.ExecutionSandboxProfile is { } sandbox ? SandboxSetupResolver.Resolve(sandbox, o, sandbox.InstanceRevision) : null,
             SystemInstructions = o.SystemInstructions is { } instructions ? instructions.Value : baseline.SystemInstructions,
             ConversationPolicy = baseline.ConversationPolicy with
             {
@@ -274,7 +295,11 @@ public static class InstanceSettingsResolver
 
     public static IReadOnlyDictionary<string, object?> Values(AgentDefinition d, string section) => section switch
     {
-        "sandboxPolicy" => new Dictionary<string, object?> { ["profileId"] = d.SandboxPolicy?.DefaultProfileId },
+        "sandboxPolicy" => new Dictionary<string, object?> { ["profileId"] = d.SandboxPolicy?.DefaultProfileId,
+            ["initializationScript"] = d.ExecutionSandboxProfile?.InstanceInitializationScript,
+            ["cpu"] = d.ExecutionSandboxProfile?.Cpu, ["memoryMiB"] = d.ExecutionSandboxProfile?.MemoryMiB,
+            ["maxCommandSeconds"] = d.ExecutionSandboxProfile?.MaxCommandSeconds, ["idleTtlSeconds"] = d.ExecutionSandboxProfile?.IdleTtlSeconds,
+            ["maxLifetimeSeconds"] = d.ExecutionSandboxProfile?.MaxLifetimeSeconds, ["storageBytes"] = d.ExecutionSandboxProfile?.StorageBytes },
         "instructions" => new Dictionary<string, object?> {
             ["systemInstructions"] = d.SystemInstructions,
         },
@@ -347,7 +372,16 @@ public static class InstanceSettingsResolver
         var result = new Dictionary<string, object?>();
         switch (section)
         {
-            case "sandboxPolicy": if (o.SandboxProfileId is { } profile) result["profileId"] = profile.Value; break;
+            case "sandboxPolicy":
+                if (o.SandboxProfileId is { } profile) result["profileId"] = profile.Value;
+                if (o.SandboxInitializationScript is { } initializationScript) result["initializationScript"] = initializationScript.Value;
+                if (o.SandboxCpu is { } cpu) result["cpu"] = cpu.Value;
+                if (o.SandboxMemoryMiB is { } memoryMiB) result["memoryMiB"] = memoryMiB.Value;
+                if (o.SandboxMaxCommandSeconds is { } maxCommandSeconds) result["maxCommandSeconds"] = maxCommandSeconds.Value;
+                if (o.SandboxIdleTtlSeconds is { } idleTtlSeconds) result["idleTtlSeconds"] = idleTtlSeconds.Value;
+                if (o.SandboxMaxLifetimeSeconds is { } maxLifetimeSeconds) result["maxLifetimeSeconds"] = maxLifetimeSeconds.Value;
+                if (o.SandboxStorageBytes is { } storageBytes) result["storageBytes"] = storageBytes.Value;
+                break;
             case "instructions":
                 if (o.SystemInstructions is { } systemInstructions) result["systemInstructions"] = systemInstructions.Value;
                 break;

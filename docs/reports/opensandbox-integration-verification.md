@@ -1,5 +1,7 @@
 # OpenSandbox integration verification
 
+The [2026-10-14 reliability review](opensandbox-reliability-review-2026-10-14.md) adds local TTL, durable swap evidence, initialization verification and read-only process inspection regressions. It records 49 affected backend/Docker, 7 API/Office, 21 Application and 22 frontend tests plus real browser/Core recreation evidence. Historical hosted acceptance below retains its original scope; no new CI was requested.
+
 ## Current main integration — 2026-10-14
 
 The renewed owner-authorized synchronization merges main

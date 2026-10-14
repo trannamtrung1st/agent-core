@@ -10,6 +10,7 @@ import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollect
 import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definitionCandidateEditor";
 import { candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
 import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
+import { DefinitionSandboxPolicy } from './DefinitionSandboxPolicy';
 import { readDraftEnvironment } from "./draftEnvironment";
 
 export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDeprecate, renderResources }: {
@@ -141,9 +142,12 @@ function DefinitionVersionDetails({ row, renderResources }: {
             resources={<AgentConfigurationPanel title="Resources" label="Published resources">{row.source === "durable"
             ? renderResources(row.version) : <Typography.Text type="secondary">Built-in resources use the shipped role environment and knowledge sources.</Typography.Text>}</AgentConfigurationPanel>}
           /> },
+          { key: "sandbox", label: "Sandbox", children: <AgentConfigurationPanel title="Sandbox profiles" label="Published sandbox" bodyGap="default"
+            description="This published profile policy is immutable. Fork this version to change its allowed profiles or default.">
+            <DefinitionSandboxPolicy candidate={candidate} readOnly />
+          </AgentConfigurationPanel> },
           { key: "capabilities", label: "Capabilities", children: <Descriptions {...detailLayout} bordered column={1} size="small">
             <Descriptions.Item label="Capability access">{environment?.capabilityMode ?? "Legacy projection"}</Descriptions.Item>
-            <Descriptions.Item label="Sandbox profiles">{candidate.sandboxPolicy ? JSON.stringify(candidate.sandboxPolicy) : 'Historical bounded sandbox.run compatibility'}</Descriptions.Item>
             <Descriptions.Item label="Authorized capabilities">{environment?.toolAllowlist.join(", ") || "None"}</Descriptions.Item>
             {environment?.capabilityMode ? <Descriptions.Item label="Always projected">{environment.alwaysCapabilities?.join(", ") || "None"}</Descriptions.Item> : null}
             <Descriptions.Item label="Harness references">{environment?.harness.join(", ") || "None"}</Descriptions.Item>

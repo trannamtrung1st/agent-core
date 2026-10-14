@@ -89,3 +89,7 @@ web/opensandbox-report/
 .agents/skills/impeccable/scripts/bin/
 .cursor/skills/impeccable/
 .cursor/agents/impeccable-*.md
+
+# Python helper bytecode
+__pycache__/
+*.pyc

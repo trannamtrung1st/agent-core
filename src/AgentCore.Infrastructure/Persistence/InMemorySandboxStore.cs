@@ -11,6 +11,8 @@ public sealed class InMemorySandboxStore(InMemoryAdminEventStore? events = null)
 {
     private readonly object _gate = new();
     private readonly Dictionary<(string Id, long Revision), SandboxProfile> _profiles = [];
+    private readonly Dictionary<(string, long), SandboxProfileVerification> _verifications = [];
+    private readonly Dictionary<(Guid, long), SandboxInstanceVerification> _instanceVerifications = [];
     private readonly Dictionary<Guid, SandboxLease> _leases = [];
     private readonly Dictionary<Guid, SandboxExecution> _executions = [];
     public ValueTask<IReadOnlyList<SandboxProfile>> ListProfilesAsync(CancellationToken ct = default)
@@ -27,6 +29,21 @@ public sealed class InMemorySandboxStore(InMemoryAdminEventStore? events = null)
             _profiles.Add((profile.Id, profile.Revision), profile with { });
         } return ValueTask.CompletedTask;
     }
+    public ValueTask<SandboxProfileVerification?> GetVerificationAsync(string id, long revision, CancellationToken ct = default)
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_verifications.GetValueOrDefault((id, revision))); }
+    public ValueTask SaveVerificationAsync(SandboxProfileVerification verification, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested(); lock (_gate)
+        {
+            if (!_profiles.ContainsKey((verification.ProfileId, verification.ProfileRevision))) throw AgentCoreErrors.NotFound("Verified profile revision was not found.");
+            _verifications[(verification.ProfileId, verification.ProfileRevision)] = verification;
+        }
+        return ValueTask.CompletedTask;
+    }
+    public ValueTask<SandboxInstanceVerification?> GetInstanceVerificationAsync(Guid id, long revision, CancellationToken ct = default)
+    { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_instanceVerifications.GetValueOrDefault((id, revision))); }
+    public ValueTask SaveInstanceVerificationAsync(SandboxInstanceVerification verification, CancellationToken ct = default)
+    { ct.ThrowIfCancellationRequested(); lock (_gate) _instanceVerifications[(verification.InstanceId, verification.InstanceRevision)] = verification; return ValueTask.CompletedTask; }
     public ValueTask<SandboxLease?> GetLeaseAsync(Guid sessionId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_leases.GetValueOrDefault(sessionId)); }
     public ValueTask<IReadOnlyList<SandboxLease>> ListLeasesAsync(CancellationToken ct = default)

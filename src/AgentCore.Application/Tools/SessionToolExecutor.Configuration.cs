@@ -12,6 +12,18 @@ namespace AgentCore.Application.Tools;
 public sealed partial class SessionToolExecutor
 {
     private static readonly JsonSerializerOptions ManagementJson = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
+    private static bool OwnerOnlySandboxFields(string name, JsonElement args) =>
+        name is "settings.patch" or "configuration.propose" && args.GetProperty("section").GetString() == "sandboxPolicy"
+        && args.GetProperty("set").EnumerateObject().Select(p => p.Name).Concat(args.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!)).Any(f => f != "profileId");
+
+    private static InstanceSettingsSection ModelSettings(InstanceSettingsSection view) => view.Section != "sandboxPolicy" ? view : view with {
+        Overrides = view.Overrides.Where(p => p.Key == "profileId").ToDictionary(p => p.Key, p => p.Value),
+        Effective = view.Effective.Where(p => p.Key == "profileId").ToDictionary(p => p.Key, p => p.Value),
+        Sources = view.Sources.Where(p => p.Key == "profileId").ToDictionary(p => p.Key, p => p.Value),
+        DefinitionDefaults = view.DefinitionDefaults.Where(p => p.Key == "profileId").ToDictionary(p => p.Key, p => p.Value),
+        Constraints = view.Constraints.Where(p => p.Key == "profileId").ToDictionary(p => p.Key, p => p.Value)
+    };
+
     private ToolPolicyDecision ManagementDecision(AgentDefinition definition, string name, JsonElement args,
         ToolExecutionAdmission? admission, ToolApprovalGrant? grant, ToolPolicyDecision fallback)
     {
@@ -19,6 +31,7 @@ public sealed partial class SessionToolExecutor
         try
         {
             ConfigurationTools.Validate(name, args);
+            if (OwnerOnlySandboxFields(name, args)) return ToolPolicyDecision.Deny;
             if (grant is not null) return grant.ToolName == name && grant.ActionHash == ToolActionHash.Compute(name, args)
                 ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
             // Core permits only these specific local preferences; max tokens, instructions and every authority field retain approval.
@@ -45,7 +58,7 @@ public sealed partial class SessionToolExecutor
         var goalScoped = args.TryGetProperty("goal", out _) || args.TryGetProperty("target", out _);
         var diagnosedTarget = DiagnosisTarget(args);
         var settingsViews = state.Allows(HarnessManagementScope.Settings) && admitted.SelfManagement?.Allows(HarnessManagementScope.Settings) != false && instanceSettings is not null
-            ? await instanceSettings.ReadAllAsync(id, ct) : [];
+            ? (await instanceSettings.ReadAllAsync(id, ct)).Select(ModelSettings).ToArray() : [];
         if (goalScoped && diagnosedTarget is null) settingsViews = [];
         else if (goalScoped) settingsViews = settingsViews.Where(s => s.Section == (diagnosedTarget == "settings.patch" ? "conversationPolicy" : "capabilities")).ToArray();
         object? blocker = null;
@@ -105,6 +118,7 @@ public sealed partial class SessionToolExecutor
         try
         {
             ConfigurationTools.Validate(call.Name, args);
+            if (OwnerOnlySandboxFields(call.Name, args)) throw AgentCoreErrors.Forbidden("Sandbox initialization and limit changes are managed in the owner Admin interface.");
             var policy = await selfManagement.ReadAsync(id, ct);
             // A current revision binds every mutation to the policy/configuration reviewed before approval.
             if (ToolRegistry.Get(call.Name).Effect != ToolEffect.ReadOnly && args.GetProperty("expectedInstanceRevision").GetInt64() != policy.InstanceRevision)
@@ -134,8 +148,9 @@ public sealed partial class SessionToolExecutor
                         Scopes = new(args.GetProperty("scopes").EnumerateArray().Select(a => Enum.Parse<HarnessManagementScope>(a.GetString()!, false)).ToArray()),
                         AutoApply = new(args.GetProperty("managedAutoApply").EnumerateArray().Select(a => Enum.Parse<ManagementAutoApply>(a.GetString()!, false)).ToArray()) };
                     result = new { outcome = "applied", policy = await selfManagement.UpdateAsync(id, revision, overrides, agent: true, ct: ct), changesApplyTo = "nextRun", revocationsApplyTo = "immediate" }; break;
-                case "settings.list": result = await instanceSettings!.ReadAllAsync(id, ct); break;
-                case "settings.inspect": result = await instanceSettings!.ReadAsync(id, args.GetProperty("section").GetString()!, ct); break;
+                case "settings.list": result = (await instanceSettings!.ReadAllAsync(id, ct)).Select(ModelSettings).ToArray(); break;
+                case "settings.inspect":
+                    result = ModelSettings(await instanceSettings!.ReadAsync(id, args.GetProperty("section").GetString()!, ct)); break;
                 case "configuration.propose":
                 case "settings.patch":
                     if (!policy.Effective.Allows(HarnessManagementScope.Settings) || definition.SelfManagement?.Allows(HarnessManagementScope.Settings) == false)
@@ -145,7 +160,7 @@ public sealed partial class SessionToolExecutor
                     var set = args.GetProperty("set").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
                     var clear = args.GetProperty("clear").EnumerateArray().Select(p => p.GetString()!).ToArray();
                     var updated = await instanceSettings!.PatchAsync(id, section, revision, set, clear, ct, AdminEventActorKind.Agent);
-                    result = new { outcome = updated.InstanceRevision == revision ? "unchanged" : "applied", state = updated, changesApplyTo = "nextRun",
+                    result = new { outcome = updated.InstanceRevision == revision ? "unchanged" : "applied", state = ModelSettings(updated), changesApplyTo = "nextRun",
                         pendingTask = call.Name == "configuration.propose" && args.TryGetProperty("target", out var taskTarget)
                             && admission.AgentRunId is { } sourceRun && args.TryGetProperty("goal", out var taskGoal)
                             ? new AgentCore.Application.Execution.ConfigurationPendingTask(sourceRun, taskTarget.GetString()!, taskGoal.GetString()!, updated.InstanceRevision) : null,

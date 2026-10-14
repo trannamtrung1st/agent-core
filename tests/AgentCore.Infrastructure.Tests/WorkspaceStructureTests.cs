@@ -46,6 +46,32 @@ public sealed class WorkspaceStructureTests
         Assert.DoesNotContain(f.P("old"), await f.Paths());
     }
     [Theory]
+    [InlineData("beforeSwap", "notCommitted")]
+    [InlineData("afterBackup", "notCommitted")]
+    [InlineData("afterSwap", "committed")]
+    [InlineData("afterEvidence", "committed")]
+    public async Task Sandbox_swap_crashes_recover_durable_evidence_and_never_reapply_a_commit(string point, string expected)
+    {
+        using var f = await Fixture.Create(0);
+        await f.Write("original", "old"u8.ToArray());
+        var before = await f.Scratch!.CaptureScratchAsync(f.Id, Definition);
+        var tree = new WorkspaceTransfer([new("", true, "", []), new("result", false, "", "new"u8.ToArray())]);
+        var id = Guid.NewGuid();
+        f.Scratch.ScratchCommitFault = phase => { if (phase == point) throw new IOException("Injected process crash"); };
+        await Assert.ThrowsAsync<IOException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, before.Fingerprint, commitId: id));
+        f.ReopenScratch();
+        Assert.Equal(expected, await f.Scratch.GetScratchCommitStatusAsync(f.Id, id));
+        await f.Scratch.EnsureAsync(f.Id, Definition);
+        Assert.Equal(expected, await f.Scratch.GetScratchCommitStatusAsync(f.Id, id));
+        Assert.Equal(expected == "committed" ? "new"u8.ToArray() : "old"u8.ToArray(), await f.Read(expected == "committed" ? "result" : "original"));
+        var current = await f.Scratch.CaptureScratchAsync(f.Id, Definition);
+        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, current.Fingerprint, commitId: id));
+        Assert.Equal(current.Fingerprint, (await f.Scratch.CaptureScratchAsync(f.Id, Definition)).Fingerprint);
+        await f.Write("later", "later"u8.ToArray());
+        Assert.Equal(expected, await f.Scratch.GetScratchCommitStatusAsync(f.Id, id));
+        Assert.Equal("notCommitted", await f.Scratch.GetScratchCommitStatusAsync(f.Id, Guid.NewGuid()));
+    }
+    [Theory]
     [InlineData(0)] [InlineData(1)] [InlineData(2)]
     public async Task Restructure_exact_tree_empty_directories_and_ordered_batch(int profile)
     {
@@ -207,15 +233,16 @@ public sealed class WorkspaceStructureTests
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(),"workspace-structure-tests",Guid.NewGuid().ToString("N"));
         public Guid Id { get; } = Guid.NewGuid(); public FileSessionWorkspace? Scratch; public FileAgentInstanceWorkspaceStore? Home;
-        private Factory? factory; private long quota;
+        private Factory? factory; private long quota; private readonly WorkspaceTestSessions scratchSessions = new();
         public string P(string path) => (Scratch is null ? "/home/" : "/workspace/working/")+path;
         public static async Task<Fixture> Create(int profile,long quota=1000)
         {
             var f = new Fixture { quota=quota }; Directory.CreateDirectory(f.Root);
-            if(profile==0) { f.Scratch=new(Path.Combine(f.Root,"scratch"),Path.Combine(f.Root,"templates"),maxWritableBytes:quota, sessions: new WorkspaceTestSessions()); await f.Scratch.EnsureAsync(f.Id,Definition); }
+            if(profile==0) { f.Scratch=new(Path.Combine(f.Root,"scratch"),Path.Combine(f.Root,"templates"),maxWritableBytes:quota, sessions: f.scratchSessions); await f.Scratch.EnsureAsync(f.Id,Definition); }
             else { if(profile==2) {f.factory=new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db").Options); await new SqliteMemoryStore(f.factory,TimeProvider.System).EnsureCreatedAsync();} f.Reopen(); }
             return f;
         }
+        public void ReopenScratch() => Scratch = new(Path.Combine(Root,"scratch"),Path.Combine(Root,"templates"),maxWritableBytes:quota,sessions:scratchSessions);
         public void Reopen() => Home=new(Path.Combine(Root,"blobs"),TimeProvider.System,new SystemIdGenerator(TimeProvider.System),factory,maxFileBytes:quota,maxInstanceBytes:quota);
         public async Task Write(string path,byte[] bytes) { if(Scratch is not null) await Scratch.WriteAsync(Id,P(path),bytes); else await Home!.WriteFileAsync(Id,P(path),"application/octet-stream",bytes,null,null,null); }
         public async Task<byte[]> Read(string path) => Scratch is not null ? (await Scratch.ReadAsync(Id,Definition,P(path))).Bytes : (await Home!.ReadAsync(Id,null,P(path))).Bytes;

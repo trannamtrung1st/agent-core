@@ -118,6 +118,21 @@ public sealed class OpenSandboxCleanupTests
         Assert.Equal(1, creates); Assert.Equal(1, lists);
     }
 
+    [Fact]
+    public async Task Explicit_generation_fenced_reset_clears_initialization_retry_fence_after_cleanup_without_remote_replay()
+    {
+        var deletes=0;
+        await using var host=await Host.Create(context => { deletes++;context.Response.StatusCode=204;return Task.CompletedTask; });
+        var (service,store,lease,_)=await host.Service();
+        lease=lease with { Revision=2,State=SandboxLeaseState.Terminated,CleanupReason="initializationUncertain",
+            Initialization=new("Running",lease.Profile.Id,lease.Profile.Revision,null) };
+        await store.SaveLeaseAsync(lease,1);
+        await Assert.ThrowsAsync<AgentCoreException>(()=>service.StopSessionAsync(lease.SessionId,expectedGeneration:Guid.NewGuid()).AsTask());
+        await service.StopSessionAsync(lease.SessionId,expectedGeneration:lease.Generation);
+        Assert.Equal("reset",(await store.GetLeaseAsync(lease.SessionId))!.CleanupReason);
+        Assert.Equal(0,deletes);Assert.Equal("Running",(await store.GetLeaseAsync(lease.SessionId))!.Initialization!.State);
+    }
+
     private sealed class Host(WebApplication app, string endpoint) : IAsyncDisposable
     {
         public string Endpoint => endpoint;
@@ -140,7 +155,7 @@ public sealed class OpenSandboxCleanupTests
             await store.SaveLeaseAsync(lease, 0); var logs = new Logs();
             // StopSession touches only the durable sandbox store and SDK lifecycle.
             var service = new OpenSandboxService(new() { Endpoint = endpoint, ApiKey = "private-fixture-key" },
-                store, null!, null!, null!, TimeProvider.System, logger: logs);
+                store, null!, new InMemoryMemoryStore(), null!, TimeProvider.System, logger: logs);
             return (service, store, lease, logs);
         }
         public async ValueTask DisposeAsync() { await app.StopAsync(); await app.DisposeAsync(); }

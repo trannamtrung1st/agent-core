@@ -50,7 +50,14 @@ public sealed record InstanceSettingsOverrides(
     InstanceField<string?>? ProviderSpeechRecognizer = null,
     InstanceField<string?>? ProviderSpeechSynthesizer = null,
     InstanceField<string>? ProviderInterruptionClassifier = null,
-    InstanceField<string>? SandboxProfileId = null)
+    InstanceField<string>? SandboxProfileId = null,
+    InstanceField<string?>? SandboxInitializationScript = null,
+    InstanceField<double>? SandboxCpu = null,
+    InstanceField<int>? SandboxMemoryMiB = null,
+    InstanceField<int>? SandboxMaxCommandSeconds = null,
+    InstanceField<int>? SandboxIdleTtlSeconds = null,
+    InstanceField<int>? SandboxMaxLifetimeSeconds = null,
+    InstanceField<long>? SandboxStorageBytes = null)
 {
     public InstanceSettingsOverrides Copy() => this with {
         InitiativeTriggers = InitiativeTriggers is { } initiative ? new(initiative.Value.ToArray()) : null,

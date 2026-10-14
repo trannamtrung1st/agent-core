@@ -14,6 +14,7 @@
 
 services:
   agent-core:
+    image: agent-core:real
     environment:
       AgentCore__Profile: Real
       GoogleOAuth__ClientId: ${GOOGLE_OAUTH_CLIENT_ID:-}

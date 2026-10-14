@@ -25,6 +25,141 @@ public sealed class OpenSandboxFactAttribute : FactAttribute
 public sealed class OpenSandboxIntegrationTests
 {
     [OpenSandboxFact]
+    public async Task One_second_combined_setup_budget_can_execute_short_scripts_and_verify_without_rounding_it_to_zero()
+    {
+        await using var f=await Fixture.Create("printf Profile",maxCommand:1);
+        f.SetInstanceSetup("printf Instance",1);
+        var result=await f.Service.ExecuteAsync(f.Access(),new("true",TimeoutSeconds:1));
+        Assert.Equal(0,result.ExitCode);
+        Assert.Equal("ProfileInstance",(await f.Service.InspectAsync(f.Session.SessionId))!.Initialization!.Stdout);
+        var verification=await f.Service.VerifyProfileAsync(f.Profile,CancellationToken.None);
+        Assert.True(verification.Passed,verification.Message);Assert.Equal("ProfileInstance",verification.Stdout);
+    }
+
+    [OpenSandboxFact]
+    public async Task Instance_setup_runs_after_profile_once_with_observable_bounded_output_and_no_partial_commit_on_failure()
+    {
+        await using var f = await Fixture.Create("printf Profile; printf ProfileErr >&2; printf P > setup-order.txt");
+        f.SetInstanceSetup("test $(cat setup-order.txt) = P; printf Instance; printf InstanceErr >&2; printf I >> setup-order.txt",7);
+        Assert.Equal(0,(await f.Exec("cat setup-order.txt")).ExitCode);
+        var first=(await f.Service.InspectAsync(f.Session.SessionId))!;
+        Assert.Equal("Succeeded",first.Initialization!.State);Assert.Equal("ProfileInstance",first.Initialization.Stdout);
+        Assert.Equal("ProfileErrInstanceErr",first.Initialization.Stderr);Assert.Equal(7,first.Initialization.InstanceRevision);Assert.Equal("PI",await f.Read("setup-order.txt"));
+        f.Reopen();f.SetInstanceSetup("printf changed",8);Assert.Equal(0,(await f.Exec("true")).ExitCode);
+        Assert.Equal(first.Generation,(await f.Service.InspectAsync(f.Session.SessionId))!.Generation);
+        Assert.Equal(7,(await f.Service.InspectAsync(f.Session.SessionId))!.Initialization!.InstanceRevision);Assert.Equal("PI",await f.Read("setup-order.txt"));
+        var verified=await f.Service.VerifyProfileAsync(f.Profile,CancellationToken.None);Assert.True(verified.Passed,verified.Message);Assert.Contains("changed",verified.Stdout);
+        var image=await f.Service.VerifyProfileAsync(f.Profile with {InstanceInitializationScript="exit 7"},CancellationToken.None,imageOnly:true);
+        Assert.True(image.Passed);Assert.Empty(image.Stdout);
+        await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:first.Generation);
+        f.SetInstanceSetup("printf broken > partial.txt; echo failed >&2; exit 7",9);
+        var before=(await f.Workspace.CaptureScratchAsync(f.Session.SessionId,f.Definition)).Fingerprint;
+        await Assert.ThrowsAsync<AgentCoreException>(async()=>await f.Exec("true"));
+        Assert.Equal(before,(await f.Workspace.CaptureScratchAsync(f.Session.SessionId,f.Definition)).Fingerprint);
+        var failed=(await f.Service.InspectAsync(f.Session.SessionId))!;Assert.Equal("Failed",failed.Initialization!.State);Assert.Equal(7,failed.Initialization.ExitCode);Assert.Contains("failed",failed.Initialization.Stderr);
+        await Assert.ThrowsAsync<AgentCoreException>(async()=>await f.Exec("true"));
+        Assert.Equal(failed.Generation,(await f.Service.InspectAsync(f.Session.SessionId))!.Generation);
+    }
+
+    [OpenSandboxFact]
+    public async Task Short_idle_ttl_does_not_kill_foreground_background_or_initialization_within_permitted_deadlines()
+    {
+        async Task Exercise(bool background, bool initialization)
+        {
+            await using var f = await Fixture.Create(initialization ? "sleep 65; printf initialized > initialized.txt" : null, idleTtl: 60, maxCommand: 90);
+            var access = f.Access();
+            var result = await f.Service.ExecuteAsync(access, new(initialization ? "cat initialized.txt" : "sleep 65; printf completed > result.txt", TimeoutSeconds: 90, Background: background));
+            if (background)
+            {
+                var lease = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
+                Assert.True(lease.ExpiresAt > DateTimeOffset.UtcNow.AddSeconds(120));
+                await Task.Delay(68000);
+                await f.Service.ReconcileAsync();
+                result = await f.Service.InspectProcessAsync(f.Session.SessionId, result.ExecutionId);
+            }
+            Assert.Equal("Completed", result.Status);
+            Assert.Equal(0, result.ExitCode);
+            Assert.Equal("committed", result.WorkspaceSyncStatus);
+            Assert.Equal(initialization ? "initialized" : "completed", await f.Read(initialization ? "initialized.txt" : "result.txt"));
+            var current = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
+            Assert.True(current.ExpiresAt <= current.CreatedAt.AddSeconds(current.Profile.MaxLifetimeSeconds));
+        }
+        await Task.WhenAll(Exercise(false, false), Exercise(true, false), Exercise(false, true));
+    }
+
+    [OpenSandboxFact]
+    public async Task Hard_maximum_lifetime_rejects_dispatch_without_replay_or_canonical_changes()
+    {
+        await using var f = await Fixture.Create(idleTtl: 60, maxLifetime: 60);
+        var access = f.Access("too-long");
+        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Service.ExecuteAsync(access, new("printf forbidden > forbidden.txt", TimeoutSeconds: 120)));
+        Assert.Null(await f.Store.GetOperationAsync(f.Session.SessionId, f.Run.AgentRunId, access.ToolCallId));
+        Assert.Empty((await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Transfer.Entries.Skip(1));
+    }
+
+    [OpenSandboxFact]
+    public async Task Crash_after_swap_and_lost_terminal_receipt_recovers_commit_evidence_without_replaying_or_overwriting_newer_files()
+    {
+        await using var f = await Fixture.Create();
+        var access = f.Access("commit-crash");
+        f.Workspace.ScratchCommitFault = point => { if (point == "afterSwap") throw new IOException("Injected crash after tree replacement"); };
+        f.Service.ExecutionReceiptFault = receipt => { if (receipt.WorkspaceSyncStatus == "committed") throw new IOException("Injected terminal persistence failure"); };
+        var command = new SandboxCommandRequest("printf once > once.txt");
+        var result = await f.Service.ExecuteAsync(access, command);
+        Assert.Equal("committed", result.WorkspaceSyncStatus);
+        Assert.Equal("committing", (await f.Store.GetExecutionAsync(f.Session.SessionId, result.ExecutionId))!.WorkspaceSyncStatus);
+        f.Reopen();
+        Assert.Equal("once", await f.Read("once.txt"));
+        await f.Workspace.WriteAsync(f.Session.SessionId, "/workspace/working/later.txt", "later"u8.ToArray());
+        await f.Service.ReconcileAsync();
+        var recovered = await f.Service.InspectProcessAsync(f.Session.SessionId, result.ExecutionId);
+        Assert.Equal("Indeterminate", recovered.Status);
+        Assert.Equal("committed", recovered.WorkspaceSyncStatus);
+        Assert.Equal(recovered, await f.Service.ExecuteAsync(access, command));
+        Assert.Equal("once", await f.Read("once.txt"));
+        Assert.Equal("later", await f.Read("later.txt"));
+    }
+
+    [OpenSandboxFact]
+    public async Task Verification_executes_initialization_rejects_broken_scripts_and_does_not_change_profile_configuration()
+    {
+        await using var f = await Fixture.Create("printf harmless > initialization.txt; exit 7");
+        var broken = await f.Service.VerifyProfileAsync(f.Profile, CancellationToken.None);
+        Assert.False(broken.Passed); Assert.Equal("initialization", broken.FailureCode); Assert.Equal(7, broken.ExitCode);
+        await f.Store.SaveVerificationAsync(broken);
+        Assert.Equal(f.Profile, await f.Store.GetProfileAsync(f.Profile.Id, f.Profile.Revision));
+        var passed = await f.Service.VerifyProfileAsync(f.Profile with { InitializationScript = "printf initialized > initialization.txt" }, CancellationToken.None);
+        Assert.True(passed.Passed, passed.Message);
+        var invalid = await f.Service.VerifyProfileAsync(f.Profile with { InitializationScript = "touch .env" }, CancellationToken.None);
+        Assert.False(invalid.Passed); Assert.Equal("validation", invalid.FailureCode);
+        var privateOutput = await f.Service.VerifyProfileAsync(f.Profile with { InitializationScript = "printf secret-sentinel >&2; exit 9" }, CancellationToken.None);
+        Assert.False(privateOutput.Passed); Assert.DoesNotContain("secret-sentinel", privateOutput.Message);
+        Assert.Null(await f.Store.GetLeaseAsync(f.Session.SessionId));
+    }
+
+    [OpenSandboxFact]
+    public async Task Status_is_read_only_and_reconciliation_fences_revocation_during_background_import()
+    {
+        await using var f = await Fixture.Create();
+        var background = await f.Service.ExecuteAsync(f.Access(), new("printf background > background.txt", Background: true));
+        await Task.Delay(1000);
+        var firstLease = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
+        Assert.Equal("Running", (await f.Service.InspectProcessAsync(f.Session.SessionId, background.ExecutionId)).Status);
+        Assert.Equal(firstLease.Revision, (await f.Store.GetLeaseAsync(f.Session.SessionId))!.Revision);
+        Assert.Empty((await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Transfer.Entries.Skip(1));
+        await f.Service.ReconcileAsync();
+        Assert.Equal("Completed", (await f.Service.InspectProcessAsync(f.Session.SessionId, background.ExecutionId)).Status);
+        Assert.Equal("background", await f.Read("background.txt"));
+        var canceled = await f.Service.ExecuteAsync(f.Access(), new("printf unintended > late.txt", Background: true));
+        await Task.Delay(1000);
+        f.Workspace.BeforeScratchCommitValidation = async _ => await f.CancelRun();
+        await f.Service.ReconcileAsync();
+        var receipt = await f.Service.InspectProcessAsync(f.Session.SessionId, canceled.ExecutionId);
+        Assert.Equal("Indeterminate", receipt.Status); Assert.Equal("notCommitted", receipt.WorkspaceSyncStatus);
+        Assert.DoesNotContain((await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Transfer.Entries, e => e.RelativePath == "late.txt");
+    }
+
+    [OpenSandboxFact]
     public async Task Real_sdk_deadline_quarantines_the_generation_without_importing_partial_files()
     {
         await using var f = await Fixture.Create();
@@ -246,7 +381,7 @@ public sealed class OpenSandboxIntegrationTests
         private Factory _factory = null!; private SqliteMemoryStore _memory = null!; private SqliteAgentRunStore _runs = null!;
         private OpenSandboxOptions _options = null!; private SandboxProfile _profile = null!;
         private readonly ILoggerFactory _logs = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
-        public static async Task<Fixture> Create(string? initializationScript = null)
+        public static async Task<Fixture> Create(string? initializationScript = null, int idleTtl = 300, int maxCommand = 120, int maxLifetime = 900)
         {
             var f = new Fixture(); Directory.CreateDirectory(f.Root);
             f._factory = new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + Path.Combine(f.Root,"core.db"))
@@ -254,7 +389,7 @@ public sealed class OpenSandboxIntegrationTests
             f._memory = new(f._factory, TimeProvider.System); await f._memory.EnsureCreatedAsync();
             f._options = new() { Enabled = true, AllowLocalImageIds = true, Endpoint = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_URL") ?? "http://127.0.0.1:18080",
                 ApiKey = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_KEY"), WorkbenchImage = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_IMAGE") };
-            f._profile = new("general-workbench",1,"Workbench","Test",true,f._options.WorkbenchImage!,InitializationScript:initializationScript,IdleTtlSeconds:300,MaxLifetimeSeconds:900);
+            f._profile = new("general-workbench",1,"Workbench","Test",true,f._options.WorkbenchImage!,InitializationScript:initializationScript,IdleTtlSeconds:idleTtl,MaxCommandSeconds:maxCommand,MaxLifetimeSeconds:maxLifetime);
             f.Definition = new(1,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("general-workbench",["general-workbench"]));
             var now = DateTimeOffset.UtcNow; var owner = new AgentRunOwner(Guid.NewGuid(),Guid.NewGuid());
             f.Session = new(1,Guid.NewGuid(),1,f.Definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId,PinnedPersona:f.Definition.Identity);
@@ -272,8 +407,15 @@ public sealed class OpenSandboxIntegrationTests
             Service = new(_options,Store,Workspace,_memory,_runs,TimeProvider.System,logger:_logs.CreateLogger<OpenSandboxService>());
         }
         public SandboxAccess Access(string? call = null) => new(Session.SessionId,Session.AgentInstanceId,Run.AgentRunId,Run.Claim!.Generation,call ?? Guid.NewGuid().ToString("N"),_profile,Definition);
+        public void SetInstanceSetup(string script,long revision) => _profile = _profile with {InstanceInitializationScript=script,InstanceRevision=revision};
         public async Task ReviseScript(string script) { var next = _profile with { Revision=_profile.Revision+1,InitializationScript=script }; await Store.SaveProfileAsync(next,_profile.Revision); _profile=next; }
         public async Task LimitStorage(long bytes) { var next=_profile with { Revision=_profile.Revision+1,StorageBytes=bytes };await Store.SaveProfileAsync(next,_profile.Revision);_profile=next; }
+        public async ValueTask CancelRun()
+        {
+            var owner = new AgentRunOwner(Session.AgentInstanceId, Session.ProfileId!.Value);
+            var current = (await _runs.GetAsync(owner, Run.AgentRunId))!;
+            Run = await _runs.ApplyAsync(owner, Run.AgentRunId, new AgentRunCommand.RequestCancellation(current.Revision, DateTimeOffset.UtcNow, null));
+        }
         public async Task Pause(string reason)
         {
             var current = (await _memory.LoadAsync(Session.SessionId))!;

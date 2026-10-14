@@ -9,6 +9,8 @@ using AgentCore.Application.Admin;
 namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SandboxProfileRow { public string Id { get; set; } = ""; public long Revision { get; set; } public string Json { get; set; } = ""; }
+public sealed class SandboxVerificationRow { public string ProfileId { get; set; } = ""; public long ProfileRevision { get; set; } public string Json { get; set; } = ""; }
+public sealed class SandboxInstanceVerificationRow { public string InstanceId { get; set; } = ""; public long InstanceRevision { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxLeaseRow { public string SessionId { get; set; } = ""; public string AgentInstanceId { get; set; } = ""; public long Revision { get; set; } public long ExpiresAt { get; set; } public int State { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxExecutionRow { public string Id { get; set; } = ""; public string SessionId { get; set; } = ""; public string AgentRunId { get; set; } = ""; public string ToolCallId { get; set; } = ""; public string Json { get; set; } = ""; }
 
@@ -41,6 +43,44 @@ public sealed class SqliteSandboxStore(IDbContextFactory<AgentCoreDbContext> fac
             if (history is not null) AdminEventPersistence.StageAppend(db,history,Guid.CreateVersion7());
             await db.SaveChangesAsync(ct);
         } finally { _gate.Release(); }
+    }
+    public async ValueTask<SandboxProfileVerification?> GetVerificationAsync(string id, long revision, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var row = await db.Set<SandboxVerificationRow>().AsNoTracking().SingleOrDefaultAsync(r => r.ProfileId == id && r.ProfileRevision == revision, ct);
+        return row is null ? null : Read<SandboxProfileVerification>(row.Json);
+    }
+    public async ValueTask SaveVerificationAsync(SandboxProfileVerification verification, CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            await using var db = await factory.CreateDbContextAsync(ct);
+            if (!await db.Set<SandboxProfileRow>().AnyAsync(r => r.Id == verification.ProfileId && r.Revision == verification.ProfileRevision, ct))
+                throw AgentCoreErrors.NotFound("Verified profile revision was not found.");
+            var row = await db.Set<SandboxVerificationRow>().SingleOrDefaultAsync(r => r.ProfileId == verification.ProfileId && r.ProfileRevision == verification.ProfileRevision, ct);
+            if (row is null) { row = new() { ProfileId = verification.ProfileId, ProfileRevision = verification.ProfileRevision }; db.Add(row); }
+            row.Json = JsonSerializer.Serialize(verification, Json); await db.SaveChangesAsync(ct);
+        }
+        finally { _gate.Release(); }
+    }
+    public async ValueTask<SandboxInstanceVerification?> GetInstanceVerificationAsync(Guid id, long revision, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var row = await db.Set<SandboxInstanceVerificationRow>().AsNoTracking().SingleOrDefaultAsync(r => r.InstanceId == id.ToString("D") && r.InstanceRevision == revision, ct);
+        return row is null ? null : Read<SandboxInstanceVerification>(row.Json);
+    }
+    public async ValueTask SaveInstanceVerificationAsync(SandboxInstanceVerification verification, CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            await using var db = await factory.CreateDbContextAsync(ct);
+            var row = await db.Set<SandboxInstanceVerificationRow>().SingleOrDefaultAsync(r => r.InstanceId == verification.InstanceId.ToString("D") && r.InstanceRevision == verification.InstanceRevision, ct);
+            if (row is null) { row = new() { InstanceId = verification.InstanceId.ToString("D"), InstanceRevision = verification.InstanceRevision }; db.Add(row); }
+            row.Json = JsonSerializer.Serialize(verification, Json); await db.SaveChangesAsync(ct);
+        }
+        finally { _gate.Release(); }
     }
     public async ValueTask<SandboxLease?> GetLeaseAsync(Guid sessionId, CancellationToken ct = default)
     {

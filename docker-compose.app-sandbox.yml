@@ -1,0 +1,18 @@
+# Explicit app integration overlay; never used by dev-real or the infrastructure helper.
+# Combine docker-compose.yml, optionally docker-compose.real.yml,
+# docker-compose.sandbox.yml and this file with the generated private compose.env.
+services:
+  agent-core:
+    environment:
+      OpenSandbox__Enabled: "true"
+      OpenSandbox__Endpoint: http://opensandbox:8080
+      OpenSandbox__ApiKeyFile: /run/secrets/opensandbox_api_key
+      OpenSandbox__TrustLocalComposeEndpoint: "true"
+      OpenSandbox__WorkbenchImage: ${AGENTCORE_SANDBOX_WORKBENCH_IMAGE:?Run scripts/opensandbox-compose.py prepare}
+      OpenSandbox__AllowLocalImageIds: "true"
+    # Server prepares a 0400 key owned by the image's non-root app UID (1654).
+    volumes:
+      - opensandbox-auth:/run/secrets:ro
+    depends_on:
+      opensandbox:
+        condition: service_healthy

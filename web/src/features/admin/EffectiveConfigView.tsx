@@ -19,7 +19,7 @@ export function EffectiveConfigView({
   const { token } = theme.useToken();
   return (
     <div className="admin-effective-config-grid">
-      <InstanceSandboxSummary instanceId={config.instanceId} />
+      <InstanceSandboxSummary instanceId={config.instanceId} revision={config.instanceRevision} />
       <section
         className={`admin-effective-config-section admin-instance-identity${hidePersona ? " admin-effective-config-wide" : ""}`}
         aria-label="Instance identity"

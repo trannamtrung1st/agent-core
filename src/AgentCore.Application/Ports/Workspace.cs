@@ -20,8 +20,10 @@ public interface ISessionWorkspace
     ValueTask<ScratchSnapshot> CaptureScratchAsync(Guid sessionId, AgentDefinition definition, CancellationToken ct = default) =>
         throw new NotSupportedException("Atomic scratch capture is unavailable.");
     ValueTask CommitScratchAsync(Guid sessionId, WorkspaceTransfer transfer, string expectedFingerprint, CancellationToken ct = default,
-        Func<CancellationToken, ValueTask>? validateCommit = null) =>
+        Func<CancellationToken, ValueTask>? validateCommit = null, Guid? commitId = null) =>
         throw new NotSupportedException("Atomic scratch commit is unavailable.");
+    ValueTask<string> GetScratchCommitStatusAsync(Guid sessionId, Guid commitId, CancellationToken ct = default) =>
+        ValueTask.FromResult("unknown");
     ValueTask<WorkspaceTransfer> ExportAsync(Guid sessionId, string path, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Workspace tree export is unavailable.");
     ValueTask ImportAsync(Guid sessionId, string destination, WorkspaceTransfer transfer,

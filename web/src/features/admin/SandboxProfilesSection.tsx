@@ -1,6 +1,7 @@
+import { SandboxEvidence } from "../sandbox/SandboxEvidence";
 import { useEffect, useRef, useState } from 'react';
 import { Alert, App, Button, Descriptions, Empty, Flex, Form, Input, InputNumber, Select, Spin, Switch, Tag, Typography, theme } from 'antd';
-import { getSandboxPlatform, saveSandboxProfile, verifySandboxProfile, type SandboxPlatform, type SandboxProfile } from '../../services/sandboxes';
+import { getSandboxPlatform, saveSandboxProfile, verifySandboxProfile, checkSandboxImage, type SandboxPlatform, type SandboxProfile } from '../../services/sandboxes';
 import { describeAdminError, type AdminFailureNotice } from './adminErrors';
 import { AdminErrorNotice } from './adminFailure';
 import { useAdminUnsavedChanges } from './useAdminUnsavedChanges';
@@ -16,10 +17,11 @@ export function SandboxProfilesSection() {
   const [form] = Form.useForm<SandboxProfile>(); const fields = Form.useWatch([], form);
   const [platform, setPlatform] = useState<SandboxPlatform | null>(null); const [baseline, setBaseline] = useState<SandboxProfile | null>(null);
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState<AdminFailureNotice | null>(null);
+  const [verificationOutput,setVerificationOutput] = useState<{stdout:string;stderr:string;truncated:boolean}|null>(null);
   const active = useRef<AbortController | null>(null);
   const dirty = !!baseline && !!fields && draftShape(fields) !== draftShape(baseline);
   const dirtyRef = useRef(dirty); dirtyRef.current = dirty;
-  function accept(profile: SandboxProfile) { setBaseline(profile); form.resetFields(); form.setFieldsValue(profile); setError(null); }
+  function accept(profile: SandboxProfile) { setBaseline(profile); setVerificationOutput(profile.verification??null); form.resetFields(); form.setFieldsValue(profile); setError(null); }
   useAdminUnsavedChanges('global:sandboxes', dirty, () => { if (baseline) accept(baseline); });
   async function load(initial = false) {
     active.current?.abort(); const controller = new AbortController(); active.current = controller;
@@ -42,9 +44,14 @@ export function SandboxProfilesSection() {
   async function verify() {
     if (!baseline || dirty || busy || !baseline.revision) return;
     setBusy(true); setError(null);
-    try { const result = await verifySandboxProfile(baseline); accept(result.profile); await load(); result.passed ? message.success(result.message) : message.error(result.message); }
-    catch (e) { setError(describeAdminError(e, 'Image verification failed. Reload status before retrying.')); }
+    try { const result = await verifySandboxProfile(baseline); accept(result.profile); setVerificationOutput({stdout:result.stdout??"",stderr:result.stderr??"",truncated:result.truncated??false}); await load(); result.passed ? message.success(result.message) : message.error(result.message); }
+    catch (e) { setError(describeAdminError(e, 'Profile verification failed. Reload status before retrying.')); }
     finally { setBusy(false); }
+  }
+  async function checkImage() {
+    if (!baseline || dirty || busy || !baseline.revision) return;setBusy(true);
+    try {const result=await checkSandboxImage(baseline);result.passed?message.success(result.message):message.error(result.message);}
+    catch(e){setError(describeAdminError(e,'Image readiness could not be checked. Retry.'));}finally{setBusy(false);}
   }
   return <Flex vertical gap={token.padding}>
     {error && <Alert type="error" showIcon title={<AdminErrorNotice {...error} />} action={<Button onClick={() => void load()}>Retry</Button>} />}
@@ -67,14 +74,16 @@ export function SandboxProfilesSection() {
           {([['cpu','CPU cores',0.25,2,0.25],['memoryMiB','Memory (MiB)',256,2048,256],['maxCommandSeconds','Maximum command (seconds)',1,180,1],['idleTtlSeconds','Idle expiry (seconds)',60,3600,60],['maxLifetimeSeconds','Maximum lifetime (seconds)',60,86400,60]] as const).map(([key,label,min,max,step]) =>
             <Form.Item key={key} name={key} label={label} style={{ flex: '1 1 12rem' }} rules={[{ required: true, type: 'number', min, max }]}><InputNumber aria-label={label} min={min} max={max} step={step} style={{ width: '100%' }} /></Form.Item>)}
         </Flex>
-        <Form.Item name="initializationScript" label="Optional initialization script" extra="Runs once after readiness and scratch hydration, as the non-root workload user. Reconnect does not rerun it. Preinstall packages in the image; default commands have no external network."><Input.TextArea aria-label="Sandbox initialization script" maxLength={16384} autoSize={{ minRows: 4, maxRows: 14 }} /></Form.Item>
+        <Form.Item name="initializationScript" label="Optional initialization script" extra="Runs once after readiness and scratch hydration, as the non-root workload user. Verify profile tests this script in a separate disposable environment without changing Session files. Reconnect does not rerun it. Preinstall packages in the image; default commands have no external network."><Input.TextArea aria-label="Sandbox initialization script" maxLength={16384} autoSize={{ minRows: 4, maxRows: 14 }} /></Form.Item>
         <Flex vertical gap={token.padding}>
           <Flex wrap gap={token.paddingXS}>
             <Button type="primary" htmlType="submit" aria-label="Save profile" aria-busy={busy} loading={busy} disabled={!dirty}>Save profile</Button>
             <Button disabled={!dirty || busy} onClick={() => accept(baseline)}>Discard edits</Button>
-            <Button aria-label="Verify image" aria-busy={busy} disabled={dirty || busy || !baseline.revision || platform.state !== 'Ready'} onClick={() => void verify()}>Verify image</Button>
+            <Button disabled={dirty||busy||!baseline.revision||platform.state!=="Ready"} onClick={()=>void checkImage()}>Check image readiness</Button>
+            <Button aria-label="Verify profile" aria-busy={busy} disabled={dirty || busy || !baseline.revision || platform.state !== 'Ready'} onClick={() => void verify()}>Verify profile</Button>
           </Flex>
-          {baseline.lastVerifiedAt && <Typography.Text type="secondary">{baseline.verificationReason} · {formatAdminTimestamp(baseline.lastVerifiedAt)}</Typography.Text>}
+          {verificationOutput && <Flex vertical gap={token.paddingXS}><SandboxEvidence {...verificationOutput} label="Profile verification" />{baseline.verification && <Typography.Text type="secondary">{baseline.verification.exitCode===null?"Exit unknown":`Exit ${baseline.verification.exitCode}`} · {(baseline.verification.durationMs/1000).toFixed(1)}s{baseline.verification.diagnosticId?` · Diagnostic ${baseline.verification.diagnosticId}`:""}</Typography.Text>}</Flex>}
+          {baseline.lastVerifiedAt && <Typography.Text role="status" type="secondary">{baseline.verificationReason} · {formatAdminTimestamp(baseline.lastVerifiedAt)}</Typography.Text>}
         </Flex>
       </Form>}
       <Descriptions {...detail} bordered size="small" column={1}>

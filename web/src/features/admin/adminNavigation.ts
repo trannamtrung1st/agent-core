@@ -19,6 +19,7 @@ export const instancePages = [
   {"id": "models", "path": "models", "label": "Models", "group": "Configuration", "description": "Interactive model defaults and reasoning effort.", "aliases": ["reasoning effort", "LLM"]},
   {"id": "providers", "path": "providers", "label": "Providers", "group": "Configuration", "description": "Independently selected language, recognition and synthesis providers.", "aliases": ["STT", "TTS", "classifier"]},
   {"id": "execution", "path": "execution", "label": "Execution budgets", "group": "Configuration", "description": "Step, duration and per-tool limits.", "aliases": ["deadline", "budget"]},
+  {"id": "sandbox", "path": "sandbox", "label": "Sandbox", "group": "Configuration", "description": "Inherited environment, initialization, resource and lifecycle limits.", "aliases": ["Workbench", "Python", "Node", "sandboxPolicy"]},
   {"id": "skills", "path": "skills", "label": "Skills", "group": "Configuration", "description": "Definition and Instance procedures with distinct ownership.", "aliases": ["procedures", "on demand"]},
   {"id": "resources", "path": "resources", "label": "Resources", "group": "Configuration", "description": "Definition evidence and independently owned Instance resources.", "aliases": ["import", "files", "knowledge"]},
   {"id": "workspace", "path": "workspace", "label": "Workspace", "group": "Configuration", "description": "Inspect durable /home files, download and guarded deletion.", "aliases": ["home", "folders", "download"]},
@@ -51,6 +52,7 @@ export const draftPages = [
   {"id": "models", "path": "models", "label": "Models", "group": "Configuration", "description": "Interactive model defaults and reasoning effort.", "aliases": ["reasoning effort", "LLM"]},
   {"id": "providers", "path": "providers", "label": "Providers", "group": "Configuration", "description": "Independently selected language, recognition and synthesis providers.", "aliases": ["STT", "TTS", "classifier"]},
   {"id": "execution", "path": "execution", "label": "Execution budgets", "group": "Configuration", "description": "Step, duration and per-tool limits.", "aliases": ["deadline", "budget"]},
+  {"id": "sandbox", "path": "sandbox", "label": "Sandbox", "group": "Configuration", "description": "Authorize Global profiles and choose the default inherited by Instances.", "aliases": ["Workbench", "Python", "Node", "sandboxPolicy", "allowed profiles"]},
   {"id": "skills", "path": "skills", "label": "Skills", "group": "Configuration", "description": "Definition procedures and projection defaults.", "aliases": ["procedures", "on demand", "always"]},
   {"id": "resources", "path": "resources", "label": "Resources", "group": "Configuration", "description": "Immutable uploaded and imported Definition evidence.", "aliases": ["import", "files", "knowledge binding"]},
   {"id": "capabilities", "path": "capabilities", "label": "Capabilities", "group": "Governance", "description": "Exact capability authority, projection and knowledge references.", "aliases": ["selected", "always", "tools", "attachments", "workspace template"]},
@@ -71,7 +73,7 @@ export const instanceSettingGroups: Partial<Record<InstancePage, readonly string
   instructions: ['instructions'], conversation: ['conversationPolicy'], behavior: ['behaviorPolicy'],
   initiative: ['initiativePolicy'], voice: ['voice'], models: ['modelDefaults'], providers: ['providerPreferences'],
   capabilities: ['capabilities'], 'trigger-policy': ['triggerPolicy'], 'memory-policy': ['memoryPolicy'],
-  execution: ['sandboxPolicy'],
+  sandbox: ['sandboxPolicy'],
 };
 export const draftSettingGroups: Partial<Record<DraftPage, readonly string[]>> = {
   ...instanceSettingGroups, execution: undefined, 'self-management': ['selfManagement'], metadata: ['metadata'],
@@ -99,6 +101,7 @@ export const settingSearch = [
   { label: 'Interactive model & reasoning', page: 'models', anchor: 'modelDefaults', aliases: ['default model', 'reasoning effort'] },
   { label: 'Provider preferences', page: 'providers', anchor: 'providerPreferences', aliases: ['language model', 'STT', 'TTS', 'classifier'] },
   { label: 'Execution budgets', page: 'execution', anchor: 'execution-budgets', aliases: ['deadline', 'steps', 'duration', 'per tool'] },
+  { label: 'Sandbox environment', page: 'sandbox', draftPage: 'sandbox', anchor: 'sandboxPolicy', aliases: ['Workbench', 'Python', 'Node', 'allowed profiles', 'initialization'] },
   { label: 'Memory policy', page: 'memory-policy', draftPage: 'memory-policy', anchor: 'memoryPolicy', aliases: ['promotion', 'retrieval', 'Session memory'] },
   { label: 'Trigger restrictions', page: 'trigger-policy', draftPage: 'trigger-policy', anchor: 'restrictions', draftAnchor: 'triggerPolicy', aliases: ['Schedule', 'Event', 'source kinds', 'recurrence'] },
   { label: 'Unattended execution defaults', page: 'unattended', anchor: 'execution-defaults', instanceOnly: true, aliases: ['unattended model', 'reasoning'] },

@@ -28,7 +28,7 @@ public static class ConfigurationTools
                 if (name == "configuration.propose") { Field("option", Text(64)); Field("target", Text(64)); Field("goal", Text(200)); }
                 // Field names are strictly validated by the existing typed settings owner. Cross-section fields fail closed.
                 var settingFields = new JsonObject();
-                foreach (var field in InstanceSettingsResolver.Sections.SelectMany(InstanceSettingsResolver.Fields).Distinct())
+                foreach (var field in InstanceSettingsResolver.Sections.SelectMany(section => section == "sandboxPolicy" ? new[] { "profileId" } : InstanceSettingsResolver.Fields(section)).Distinct())
                     settingFields[field] = SettingSchema(field);
                 Field("set", new() { ["type"] = "object", ["maxProperties"] = 24, ["additionalProperties"] = false, ["properties"] = settingFields });
                 Field("clear", new() { ["type"] = "array", ["maxItems"] = 24, ["uniqueItems"] = true, ["items"] = Text(64) });
@@ -76,6 +76,7 @@ public static class ConfigurationTools
 
     private static JsonObject SettingSchema(string field)
     {
+        if (field == "profileId") return new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 64 };
         if (field is "triggers" or "selected" or "always" or "allowedSourceKinds")
             return new() { ["type"] = "array", ["maxItems"] = 256, ["uniqueItems"] = true, ["items"] = new JsonObject { ["type"] = "string", ["maxLength"] = 128 } };
         if (field is "speakingRate") return new() { ["type"] = "number", ["minimum"] = 0.25, ["maximum"] = 4 };

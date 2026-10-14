@@ -20,7 +20,7 @@ public sealed class SandboxStoreTests
         {
             await using (var old = factory.CreateDbContext())
             {
-                var previous = old.Database.GetMigrations().Last(m => m != "20261014003355_OpenSandboxOwnership");
+                var previous = old.Database.GetMigrations().Last(m => string.CompareOrdinal(m, "20261014003355_OpenSandboxOwnership") < 0);
                 await old.GetService<IMigrator>().MigrateAsync(previous);
                 old.Sessions.Add(new SessionRecord { SessionId=Guid.NewGuid().ToString(),AgentInstanceId=Guid.NewGuid().ToString(),
                     AgentId="preserved",AgentVersion=1,DefinitionJson="{\"exact\":\"before sandbox\"}",Status="Paused",Mode="Text",Revision=7,Title="Retained conversation" });
@@ -38,6 +38,33 @@ public sealed class SandboxStoreTests
             }
         }
         finally { SqliteClear(); if(File.Exists(path)) File.Delete(path); }
+    }
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Verification_observations_do_not_change_immutable_configuration_and_survive_reopen(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "sandbox-verification-" + Guid.NewGuid().ToString("N") + ".db");
+        var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + path).Options);
+        try
+        {
+            if (sqlite) { await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); }
+            ISandboxStore store = sqlite ? new SqliteSandboxStore(factory) : new InMemorySandboxStore();
+            var profile = new SandboxProfile("workbench", 1, "Workbench", "Coding", true, "sha256:" + new string('a',64));
+            await store.SaveProfileAsync(profile, 0);
+            var observation = new SandboxProfileVerification(profile.Id, profile.Revision, DateTimeOffset.UtcNow, false, "Initialization failed with exit code 7.", "initialization", 7);
+            await store.SaveVerificationAsync(observation);
+            var instanceObservation = new SandboxInstanceVerification(Guid.NewGuid(), 7, observation with { Stdout = "Hello, world!", Stderr = "bounded-error", DurationMs = 1234 });
+            await store.SaveInstanceVerificationAsync(instanceObservation);
+            await store.SaveProfileAsync(profile with { Revision = 2, InitializationScript = "true" }, 1);
+            if (sqlite) store = new SqliteSandboxStore(factory);
+            Assert.Equal(profile, await store.GetProfileAsync(profile.Id, 1));
+            Assert.Equal(observation, await store.GetVerificationAsync(profile.Id, 1));
+            Assert.Equal(instanceObservation, await store.GetInstanceVerificationAsync(instanceObservation.InstanceId, 7));
+            Assert.Null(await store.GetInstanceVerificationAsync(instanceObservation.InstanceId, 8));
+            Assert.Null(await store.GetVerificationAsync(profile.Id, 2));
+            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.SaveVerificationAsync(observation with { ProfileRevision = 3 }));
+        }
+        finally { SqliteClear(); if (File.Exists(path)) File.Delete(path); }
     }
     [Theory]
     [InlineData(false)] [InlineData(true)]

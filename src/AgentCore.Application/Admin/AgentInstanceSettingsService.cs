@@ -15,19 +15,19 @@ public sealed record InstanceSettingsSection(string Section, long InstanceRevisi
 
 public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
     IIdGenerator ids, TimeProvider time, IModelCatalog? models = null, ProviderAliasSet? aliases = null,
-    Triggers.InstanceAutomationPolicy? automationPolicy = null)
+    Triggers.InstanceAutomationPolicy? automationPolicy = null, ISandboxStore? sandboxes = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public async ValueTask<IReadOnlyList<InstanceSettingsSection>> ReadAllAsync(Guid id, CancellationToken ct = default)
     {
         var owner = await RequireAsync(id, ct);
-        var definition = await DefinitionAsync(owner, ct);
+        var definition = await BindSandboxAsync(await DefinitionAsync(owner, ct), owner.SettingsOverrides ?? new(), ct);
         return InstanceSettingsResolver.Sections.Select(section => View(owner, definition, section)).ToArray();
     }
     public async ValueTask<InstanceSettingsSection> ReadAsync(Guid id, string section, CancellationToken ct = default)
     {
         var owner = await RequireAsync(id, ct);
-        return View(owner, await DefinitionAsync(owner, ct), section);
+        return await ViewAsync(owner, await DefinitionAsync(owner, ct), section, ct);
     }
 
     public async ValueTask ValidatePatchAsync(Guid id, string section, long expectedRevision,
@@ -35,7 +35,11 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
     {
         var owner = await RequireAsync(id, ct);
         RequireWritableRevision(owner, expectedRevision);
-        _ = ResolvePatch(await DefinitionAsync(owner, ct), owner.SettingsOverrides ?? new(), section, set, clear);
+        var definition = await DefinitionAsync(owner, ct);
+        var candidate = InstanceSettingsResolver.Patch(owner.SettingsOverrides ?? new(), section, set, clear);
+        definition = await BindSandboxAsync(definition, candidate, ct);
+        if (section == "sandboxPolicy" && definition.ExecutionSandboxProfile is { } profile) _ = SandboxSetupResolver.Resolve(profile, candidate, owner.Revision, rejectExpansion:true);
+        _ = ResolvePatch(definition, owner.SettingsOverrides ?? new(), section, set, clear);
     }
 
     public async ValueTask<InstanceSettingsSection> PatchAsync(Guid id, string section, long expectedRevision,
@@ -46,8 +50,11 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         RequireWritableRevision(owner, expectedRevision);
         var definition = await DefinitionAsync(owner, ct);
         var current = owner.SettingsOverrides ?? new();
-        var (next, effective) = ResolvePatch(definition, current, section, set, clear);
-        if (JsonSerializer.Serialize(current, Json) == JsonSerializer.Serialize(next, Json)) return View(owner, definition, section);
+        var candidate = InstanceSettingsResolver.Patch(current, section, set, clear);
+        var bound = await BindSandboxAsync(definition, candidate, ct);
+        if (section == "sandboxPolicy" && bound.ExecutionSandboxProfile is { } profile) _ = SandboxSetupResolver.Resolve(profile, candidate, owner.Revision, rejectExpansion:true);
+        var (next, effective) = ResolvePatch(bound, current, section, set, clear);
+        if (JsonSerializer.Serialize(current, Json) == JsonSerializer.Serialize(next, Json)) return await ViewAsync(owner, definition, section, ct);
         var now = time.GetUtcNow();
         var history = new AdminEventAppend(ids.NewId(), now, actor, AdminEventOperationKind.InstanceSettingsChanged,
             "agent.instance", id.ToString("D"), owner.Revision + 1, definition.Version,
@@ -55,7 +62,7 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         var reconciliation = section == "triggerPolicy" && automationPolicy is not null ? await automationPolicy.PlanAsync(owner, effective, now, ct) : null;
         var updated = await instances.UpdateWithExpectedRevisionAsync(new(id, expectedRevision,
             History: history, SetSettingsOverrides: true, SettingsOverrides: next, AutomationPolicyChanges: reconciliation, HarnessManagement: harnessManagement), now, ct);
-        return View(updated, definition, section);
+        return await ViewAsync(updated, definition, section, ct);
     }
 
     private static void RequireWritableRevision(AgentInstance owner, long expectedRevision)
@@ -78,13 +85,25 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         return (next, effective);
     }
 
+    private async Task<AgentDefinition> BindSandboxAsync(AgentDefinition definition, InstanceSettingsOverrides settings, CancellationToken ct)
+    {
+        if (sandboxes is null) return definition;
+        var selected = InstanceSettingsResolver.Resolve(definition, settings).SandboxPolicy?.DefaultProfileId ?? "general-workbench";
+        return definition with { ExecutionSandboxProfile = await sandboxes.GetProfileAsync(selected, ct:ct) };
+    }
+
+    private async Task<InstanceSettingsSection> ViewAsync(AgentInstance owner, AgentDefinition definition, string section, CancellationToken ct)
+    {
+        definition = await BindSandboxAsync(definition, owner.SettingsOverrides ?? new(), ct);
+        return View(owner, definition, section);
+    }
     private static InstanceSettingsSection View(AgentInstance owner, AgentDefinition definition, string section)
     {
         var overrides = InstanceSettingsResolver.Overrides(owner.SettingsOverrides ?? new(), section);
         var effective = InstanceSettingsResolver.Resolve(definition, owner.SettingsOverrides);
         return new(section, owner.Revision, definition.Id, definition.Version, overrides,
             InstanceSettingsResolver.Values(effective, section), InstanceSettingsResolver.Fields(section).ToDictionary(
-                f => f, f => overrides.ContainsKey(f) ? "instance" : "definition", StringComparer.Ordinal),
+                f => f, f => overrides.ContainsKey(f) ? "instance" : section == "sandboxPolicy" && f != "profileId" ? "profile" : "definition", StringComparer.Ordinal),
             Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { definition = effective, owner.Revision }, Json))).ToLowerInvariant(),
             InstanceSettingsResolver.Values(definition, section), InstanceSettingsResolver.Constraints(definition, section));
     }

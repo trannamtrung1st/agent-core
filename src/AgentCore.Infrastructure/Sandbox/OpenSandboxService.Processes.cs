@@ -7,7 +7,15 @@ namespace AgentCore.Infrastructure.Sandbox;
 
 public sealed partial class OpenSandboxService
 {
-    public ValueTask<SandboxCommandResult> InspectProcessAsync(Guid trustedSessionId, Guid processId, CancellationToken ct = default) => ProcessAsync(trustedSessionId, processId, false, ct);
+    public async ValueTask<SandboxCommandResult> InspectProcessAsync(Guid trustedSessionId, Guid processId, CancellationToken ct = default)
+    {
+        var execution = await store.GetExecutionAsync(trustedSessionId, processId, ct) ?? throw AgentCoreErrors.NotFound("Owned execution was not found.");
+        // GET/status observes durable receipts. Only reconciliation or explicit
+        // stop may finalize a process; reading never imports files or interrupts it.
+        if (execution.WorkspaceSyncStatus == "committing")
+            execution = execution with { WorkspaceSyncStatus = await CommitStatusAsync(execution, ct) };
+        return Result(execution);
+    }
     public ValueTask<SandboxCommandResult> StopProcessAsync(Guid trustedSessionId, Guid processId, CancellationToken ct = default) => ProcessAsync(trustedSessionId, processId, true, ct);
     private async ValueTask<SandboxCommandResult> ProcessAsync(Guid sessionId, Guid processId, bool stop, CancellationToken ct)
     {
@@ -47,33 +55,43 @@ public sealed partial class OpenSandboxService
             var scratchCommitted = false;
             try
             {
+                await ValidateProcessCommitAsync(lease, execution, ct);
                 await ConfirmQuiescentAsync(sdk, lease, ct);
-                await workspace.CommitScratchAsync(lease.SessionId, await CollectAsync(sdk, lease.Profile, ct), lease.ScratchFingerprint!, ct,
-                    token => ValidateProcessCommitAsync(lease, token));
+                var transfer = await CollectAsync(sdk, lease.Profile, ct);
+                execution = execution with { WorkspaceSyncStatus = "committing" };
+                await SaveReceiptAsync(execution, false, ct);
+                await workspace.CommitScratchAsync(lease.SessionId, transfer, lease.ScratchFingerprint!, ct,
+                    token => ValidateProcessCommitAsync(lease, execution, token), execution.Id);
                 scratchCommitted = true;
                 execution = execution with { State = stop ? SandboxExecutionState.Canceled : SandboxExecutionState.Completed, ExitCode = status.ExitCode,
                     FinishedAt = time.GetUtcNow(), WorkspaceSyncStatus = "committed" };
-                await SaveAsync(lease with { State = SandboxLeaseState.Ready, ActiveExecutionId = null,
+                await SaveReceiptAsync(execution, false, CancellationToken.None);
+                await SaveAsync(lease with { State = SandboxLeaseState.Ready, ActiveExecutionId = null, LastActivityAt = time.GetUtcNow(), ExpiresAt = await RenewIdleAsync(sdk, lease, ct),
                     ScratchFingerprint = (await workspace.CaptureScratchAsync(lease.SessionId, session.Definition, ct)).Fingerprint }, ct);
             }
             catch (Exception error)
             {
-                execution = execution with { State = SandboxExecutionState.Indeterminate, FinishedAt=time.GetUtcNow(), WorkspaceSyncStatus = scratchCommitted ? "committed" : "notCommitted", DiagnosticId = Guid.CreateVersion7().ToString("D") };
+                execution = execution with { State = SandboxExecutionState.Indeterminate, FinishedAt=time.GetUtcNow(), WorkspaceSyncStatus = scratchCommitted ? "committed" : await CommitStatusAsync(execution, CancellationToken.None), DiagnosticId = Guid.CreateVersion7().ToString("D") };
                 try
                 {
                     await SaveAsync(lease with { State = SandboxLeaseState.NeedsResync, DiagnosticId = execution.DiagnosticId }, CancellationToken.None);
-                    await store.SaveExecutionAsync(execution, false, CancellationToken.None);
+                    await SaveReceiptAsync(execution, false, CancellationToken.None);
                 }
                 catch { /* Preserve uncertainty even if its follow-up receipt cannot be saved. */ }
                 if (error is OperationCanceledException) throw;
                 return Result(execution);
             }
         }
-        await store.SaveExecutionAsync(execution, false, ct); return Result(execution);
+        await SaveReceiptAsync(execution, false, ct); return Result(execution);
     }
-    private async ValueTask ValidateProcessCommitAsync(SandboxLease lease, CancellationToken ct)
+    private async ValueTask ValidateProcessCommitAsync(SandboxLease lease, SandboxExecution execution, CancellationToken ct)
     {
         var owner = await sessions.LoadMetadataAsync(lease.SessionId, ct);
+        var run = owner?.ProfileId is { } profile ? await runs.GetAsync(new(lease.AgentInstanceId, profile), execution.AgentRunId, ct) : null;
+        if (lease.ExpiresAt <= time.GetUtcNow() || (execution.DeadlineAt ?? execution.StartedAt.AddSeconds(lease.Profile.MaxCommandSeconds)) <= time.GetUtcNow())
+            throw AgentCoreErrors.Conflict("Process deadline expired; scratch cannot be committed.");
+        if (run is null || run.CancellationRequested || run.Status is AgentRunStatus.Cancelled or AgentRunStatus.Failed)
+            throw AgentCoreErrors.Conflict("Process Run was canceled or revoked; scratch cannot be committed.");
         if (instances is not null && (await instances.FindAsync(lease.AgentInstanceId,ct))?.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active)
             throw AgentCoreErrors.Conflict("Process Instance is no longer active; scratch cannot be committed.");
         if (!options.Enabled || owner?.AgentInstanceId != lease.AgentInstanceId || owner.DurablyDeletedAt is not null || owner.ArchivedAt is not null

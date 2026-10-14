@@ -70,7 +70,7 @@ export function adminRoutePath(route: AdminRoute): string | null {
 export function canonicalAppUrl(path: string): string {
   const url = new URL(path, window.location.origin);
   let route = parseAppRoute(url.pathname);
-  const settingPage: Record<string, InstancePage> = { instructions: 'instructions', conversationPolicy: 'conversation', behaviorPolicy: 'behavior', initiativePolicy: 'initiative', voice: 'voice', modelDefaults: 'models', providerPreferences: 'providers', 'execution-budgets': 'execution', capabilities: 'capabilities', credentials: 'credentials', memoryPolicy: 'memory-policy', restrictions: 'trigger-policy', triggerPolicy: 'trigger-policy', 'execution-defaults': 'unattended', registrations: 'automations' };
+  const settingPage: Record<string, InstancePage> = { instructions: 'instructions', conversationPolicy: 'conversation', behaviorPolicy: 'behavior', initiativePolicy: 'initiative', voice: 'voice', modelDefaults: 'models', providerPreferences: 'providers', sandboxPolicy: 'sandbox', 'execution-budgets': 'execution', capabilities: 'capabilities', credentials: 'credentials', memoryPolicy: 'memory-policy', restrictions: 'trigger-policy', triggerPolicy: 'trigger-policy', 'execution-defaults': 'unattended', registrations: 'automations' };
   const anchor = url.hash.slice(1);
   if (route.area === 'admin' && route.view === 'instance') {
     const page = /\/automation\/controls\/?$/.test(url.pathname) ? 'unattended' : settingPage[anchor];
