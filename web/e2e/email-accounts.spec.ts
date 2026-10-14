@@ -27,7 +27,14 @@ for (const width of [1440, 768, 390, 320]) test(`email account editor, tests and
   const connected = page.getByRole('dialog', { name: 'Edit email account' });
   await expect(connected).toBeVisible(); await expect(connected).toContainText('Verified mailbox');
   await expect(connected).toContainText('Synthetic — no Google connection');
+  // OAuth reopens a centered modal. Its zoom changes pointer coordinates even
+  // after the content is visible; wait for the same settled motion boundary as
+  // the other Admin modal journeys before sending the real pointer action.
+  await expect(connected).not.toHaveClass(/ant-zoom-(?:appear|enter)-active/);
+  const accessCheck = page.waitForResponse(response => response.request().method() === 'POST'
+    && response.url().endsWith('/connection/check'));
   await connected.getByRole('button', { name: 'Test access', exact: true }).click();
+  expect((await accessCheck).ok()).toBe(true);
   await expect(connected).toContainText('Last checked');
   await connected.getByRole('button', { name: 'Disconnect', exact: true }).click();
   const confirm = page.getByRole('dialog', { name: 'Disconnect this Google account for all agents?' });

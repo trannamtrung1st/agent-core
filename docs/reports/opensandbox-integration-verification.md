@@ -2,7 +2,7 @@
 
 ## Current local-demo continuation — 2026-10-14
 
-Branch `develop/branch-1`; main `a63194ba` was merged as `e9089734`, followed by current main `719ac6c5` merged as `928b8ccd`. Office/Drive/file-preview code and immutable General Assistant v26/v27 are preserved. New v28 combines their capabilities with modern sandbox tools. This ledger's final exact-behavior SHA and hosted links are pending the publication gate; **full milestone acceptance is not yet claimed**.
+Branch `develop/branch-1`; main `a63194ba` was merged as `e9089734`, followed by `719ac6c5` as `928b8ccd` and `32f5f244` as `81a39b87`. Office/Drive/file-preview code and immutable General Assistant v26/v27 are preserved. New v28 combines their capabilities with modern sandbox tools. Behavior `51fb6fd95ed55fa58e9d1b87770fc3d67f903503` passed the mandatory Linux OpenSandbox job in [workflow 38512857065](https://github.com/trannamtrung1st/agent-core/actions/runs/38512857065). Its combined browser regression found the modal motion race described below; **full milestone acceptance is not yet claimed**.
 
 The owner explicitly approved trusted single-user local development/demo on the existing Docker daemon. Only the trusted OpenSandbox server may mount its socket; neither Core nor workloads do. DinD, an extra VM and other execution platforms are excluded. Own execd loopback is an acknowledged local-demo exception; public/multi-tenant isolation, writable-layer disk quota and signed supply-chain attestation remain deferred. Earlier stronger failed/rejected evidence below remains historical.
 
@@ -23,7 +23,7 @@ Actual environment: macOS arm64, .NET 10.0.401, supported Node 22.18.0 and Docke
 | Full initial merged backend | Domain 195 pass; API 585 pass / 3 optional live skips; plugin 4 pass. Four stale catalog/choice assertions were corrected; final Infrastructure rerun **1,362 pass / 21 explicit optional skips**, with focused recheck **30 pass** |
 | Focused frontend final checks | 23 pass across profile/drawer/budget/Instance settings; drawer keyboard/output follow-up recheck **4 pass** |
 | Reproducible Workbench inventory | Pass: owned runner build/start; installed SPDX 2.3 inventory contains 498 package identities and 277 notice hashes; license bundle retains 547 files. Exact local image content ID recorded alongside inventory. Inventory is not signed attestation/legal conclusion/vulnerability acceptance |
-| Complete browser/process-recreation gate | In progress. Before phase passes actual coding/artifacts/copy/responsive/Escape/focus. After phase verifies unchanged generation/init/artifact hashes across Core + server recreation, actual partial output while Running, 31-second completion, cancellation/reset/recovery. Independent Background Session fixture wrapping corrected; **both phases passed** (22.5 seconds before / approximately 1.3 minutes after), including child coding/Office completion, separate generation and child-only init marker. Cleanup removed owned workloads/server |
+| Complete browser/process-recreation gate | Pass. Before phase verifies actual coding/artifacts/copy/responsive/Escape/focus. After phase verifies unchanged generation/init/artifact hashes across Core + server recreation, actual partial output while Running, 31-second completion, cancellation/reset/recovery. Independent Background Session fixture wrapping corrected; **both phases passed** (22.5 seconds before / approximately 1.3 minutes after), including child coding/Office completion, separate generation and child-only init marker. Cleanup removed owned workloads/server |
 
 The migration is additive and preserves a populated pre-cutover Session record and Drive schema; no user database reset was performed. Testing uses isolated `local/opensandbox-runners/.../ui-*` databases/roots, private 0600 keys and project-owned resources. Unrelated local API and nopCommerce services are left running. Failed acceptance cleanup confirmed removal of its owned workloads/server, retaining only its test image/state volume.
 
@@ -43,7 +43,15 @@ Eight ordinary Synthetic browser cases passed on isolated 6480/6473 ports and di
 
 ## Remaining closure gates
 
-Finish documentation evidence closure and exact-SHA hosted jobs. The new mandatory Trusted local OpenSandbox acceptance job must pass on Linux; optional native SDK skips do not substitute for it. Commit/push and update the attached PR after a reviewable candidate is verified. Do not merge without explicit merge instruction.
+Finish documentation evidence closure and all exact-SHA hosted jobs after the combined browser correction. The mandatory Linux job has passed with 31 executed/31 passed/zero skips and both browser phases (31.1 seconds before / approximately 1.4 minutes after). Its retained [acceptance artifact](https://github.com/trannamtrung1st/agent-core/actions/runs/38512857065/artifacts/11870803440) contains the TRX, browser report, image identity, installed SPDX inventory (498 packages) and license bundle; no private key or database is uploaded. Optional native SDK skips do not substitute for that execution. Commit/push and update the attached PR after a reviewable candidate is verified. Do not merge without explicit merge instruction.
+
+### Combined hosted correction and latest-main review
+
+The same workflow passed backend (Domain 195, Infrastructure 1,362, Application 1,807, API 586; 32 explicit optional live skips), frontend (589 + 432 tests / 129 files, both builds), acceptance browser and Compose. Core browser shard 1 passed 114 cases and failed the 390px Gmail access-check assertion. The trace contains no POST to `/connection/check`: the click occurred during the reopened centered modal's zoom animation, with a scaled 21.5px button. The test now waits for the existing settled AntD motion boundary and asserts the actual successful access-check response before the unchanged visible receipt assertion. No email product behavior, authorization or timeout is altered.
+
+The correction passes all five isolated Synthetic email cases (1440/768/390/320px plus Custom endpoint defaults), including authorization/check/disconnect/reconnect, draft restoration, durable chooser reload and cancel. Existing pointer, keyboard, responsive and exact-owner assertions remain. A Vite proxy EPIPE during server teardown did not fail these journeys.
+
+Latest main `32f5f244` only removes obsolete border/padding on focused Instance assignments. It merged without conflicts. All three isolated Synthetic Instance settings cases pass after that merge, exercising Save/Reset, conflict and failed-refresh recovery, resource ownership and responsive containment. Unrelated processes/data were untouched.
 
 ## Historical Stage A evidence — 2026-10-13
 
