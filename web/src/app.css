@@ -2847,8 +2847,6 @@ body,
 .file-preview-code { margin: 0; padding: var(--ac-space-default); overflow: auto; background: var(--ac-color-container); tab-size: 4; }
 .file-preview-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .file-preview-line-number { display: inline-block; width: 5ch; padding-inline-end: 1ch; color: var(--ac-color-text-secondary); user-select: none; }
-.file-preview-grid { min-width: 0; }
-.file-preview-grid .ant-table-cell { vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
 .file-preview-image { overflow: auto; height: min(55vh, 600px); min-height: 120px; max-width: 100%; cursor: grab; touch-action: pan-x pan-y; }
 .file-preview-image:active { cursor: grabbing; }
 .file-preview-image img { display: block; height: auto; margin-inline: auto; }
@@ -2874,7 +2872,20 @@ body,
 .history-file-actions .file-chip { max-width: 100%; overflow-wrap: anywhere; }
 .file-preview-word { height: 100%; min-height: 0; }
 .file-preview-word-frame { flex: 1; width: 100%; min-height: 300px; border: 0; }
-.file-preview-cell { width: 100%; height: auto; min-height: 32px; justify-content: flex-start; text-align: start; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Single-line labels use CSS truncation, avoiding measured Typography resize loops. */
 .single-line-ellipsis { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* FortuneSheet owns its canvas; preview containment never styles other renderers. */
+.file-preview-spreadsheet { inline-size: 100%; block-size: clamp(240px, 48dvh, 520px); min-inline-size: 0; position: relative; overflow: hidden; color: #111; background: #fff; }
+.file-preview-spreadsheet:focus-visible { outline: 2px solid var(--ant-color-primary, #1677ff); outline-offset: 2px; }
+.file-preview-sheet-zoom { inline-size: 120px; margin-block: 0; }
+.file-preview-cell-detail { max-block-size: 6rem; overflow: auto; overflow-wrap: anywhere; }
+.file-preview-spreadsheet .luckysheet-input-box, .file-preview-spreadsheet [id="shortcut-list"] { display: none !important; }
+@media (max-width: 767px) {
+  .file-preview-spreadsheet { block-size: clamp(240px, 42dvh, 420px); }
+}
+
+.file-preview-spreadsheet .fortune-cols-change-size, .file-preview-spreadsheet .fortune-rows-change-size,
+.file-preview-spreadsheet .fortune-cols-freeze-handle, .file-preview-spreadsheet .fortune-rows-freeze-handle,
+.file-preview-spreadsheet .luckysheet-cs-fillhandle, .file-preview-spreadsheet .luckysheet-cs-draghandle { display: none; pointer-events: none; }

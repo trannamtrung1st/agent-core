@@ -126,7 +126,7 @@ export async function readFile(
   if (metadata.byteSize > maxBytes)
     throw new PreviewError(
       'preview_too_large',
-      'This file exceeds the preview limit. Download the original to open it.',
+      `This file is ${(metadata.byteSize / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB; its preview limit is ${(maxBytes / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB. Download the original.`,
     );
   const response = await ownerFetch(
     `${sourcePath(ref)}/content${ref.kind === 'drive' ? '?' + driveReadQuery(ref) : ''}`,
@@ -137,7 +137,7 @@ export async function readFile(
     await response.body?.cancel();
     throw new PreviewError(
       'preview_too_large',
-      'This file exceeds the preview limit. Download the original to open it.',
+      `The received file exceeds its ${(maxBytes / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB preview limit. Download the original.`,
     );
   }
   const reader = response.body?.getReader();
@@ -157,7 +157,7 @@ export async function readFile(
       if (size > maxBytes)
         throw new PreviewError(
           'preview_too_large',
-          'This file exceeds the preview limit. Download the original to open it.',
+          `The received file exceeds its ${(maxBytes / 1048576).toLocaleString(undefined, { maximumFractionDigits: 2 })} MiB preview limit. Download the original.`,
         );
       chunks.push(value.slice().buffer as ArrayBuffer);
     }

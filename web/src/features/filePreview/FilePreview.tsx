@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -14,13 +14,13 @@ import {
 import { DownloadOutlined, EyeOutlined } from '@ant-design/icons';
 import { OwnerCapabilityError } from '../../services/api';
 import { readOfficePreview, type OfficePreview } from './officeSource';
+import { PreviewRenderBoundary } from './PreviewRenderBoundary';
 import { TextPreview } from './TextPreview';
 import { artifactSize } from '../../services/artifacts';
 import {
   decodeText,
   formatLimit,
   previewFormat,
-  previewLimits,
   validateImageDimensions,
   validateSignature,
   type PreviewFormat,
@@ -35,18 +35,17 @@ import {
   type FileMetadata,
   type FileRef,
 } from './fileSource';
-const CsvPreview = lazy(() =>
-  import('./CsvPreview').then((module) => ({ default: module.CsvPreview })),
-);
-const WordPreview = lazy(() =>
-  import('./WordPreview').then((module) => ({ default: module.WordPreview })),
-);
-const SpreadsheetPreview = lazy(() =>
+import { loadPreviewOptions, mib, type PreviewOptions } from './previewOptions';
+const loadCsvPreview = () =>
+  import('./CsvPreview').then((module) => ({ default: module.CsvPreview }));
+const loadWordPreview = () =>
+  import('./WordPreview').then((module) => ({ default: module.WordPreview }));
+const loadSpreadsheetPreview = () =>
   import('./SpreadsheetPreview').then((module) => ({
     default: module.SpreadsheetPreview,
-  })),
-);
+  }));
 type Loaded = {
+  policy?: PreviewOptions;
   metadata: FileMetadata;
   format: PreviewFormat;
   text?: string;
@@ -124,10 +123,15 @@ export function FilePreview({
   const [metadata, setMetadata] = useState<FileMetadata | null>(null);
   const [error, setError] = useState<PreviewError | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // A rejected React.lazy loader is cached; Retry needs fresh loader identities.
+  const CsvPreview = useMemo(() => lazy(loadCsvPreview), [attempt]);
+  const WordPreview = useMemo(() => lazy(loadWordPreview), [attempt]);
+  const SpreadsheetPreview = useMemo(() => lazy(loadSpreadsheetPreview), [attempt]);
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
   const identity = JSON.stringify(file);
   const download = useRef<AbortController | null>(null);
+  const previewShell = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     setBusy(false);
     setDownloadError(false);
@@ -148,16 +152,15 @@ export function FilePreview({
       setMetadata(value);
       const format = previewFormat(value);
       if (format === 'unsupported') {
-        setLoaded({ metadata: value, format });
+        setLoaded({ metadata: value, format, policy: undefined });
         return;
       }
+      const policy = await loadPreviewOptions();
+      controller.signal.throwIfAborted();
+      const limit = formatLimit(format, policy);
+      if (value.byteSize > limit) throw new PreviewError('preview_too_large', `This file is ${mib(value.byteSize)}; its preview limit is ${mib(limit)}. Download the original.`);
       if (format === 'docx' || format === 'xlsx') {
-        if (value.byteSize > formatLimit(format))
-          throw new PreviewError(
-            'preview_too_large',
-            'The Office file exceeds 10 MiB. Download the original.',
-          );
-        const office = await readOfficePreview(file, controller.signal);
+        const office = await readOfficePreview(file, controller.signal, policy);
         if (
           value.sha256 &&
           value.sha256.toLowerCase() !== office.sha256.toLowerCase()
@@ -168,31 +171,31 @@ export function FilePreview({
             ? await readFile(
                 file,
                 { ...value, sha256: office.sha256 },
-                formatLimit(format),
+                limit,
                 controller.signal,
               )
             : undefined;
         controller.signal.throwIfAborted();
-        setLoaded({ metadata: value, format, office, blob });
+        setLoaded({ metadata: value, format, policy, office, blob });
         return;
       }
       const blob = await readFile(
         file,
         value,
-        formatLimit(format),
+        limit,
         controller.signal,
       );
       if (['text', 'markdown', 'csv'].includes(format)) {
-        const text = await decodeText(blob, format);
+        const text = await decodeText(blob, format, policy);
         controller.signal.throwIfAborted();
-        setLoaded({ metadata: value, format, text });
+        setLoaded({ metadata: value, format, policy, text });
       } else {
         await validateSignature(blob, value.contentType);
         if (format === 'image')
-          await validateImageDimensions(blob, value.contentType);
+          await validateImageDimensions(blob, value.contentType, policy);
         controller.signal.throwIfAborted();
         url = URL.createObjectURL(blob);
-        setLoaded({ metadata: value, format, url });
+        setLoaded({ metadata: value, format, policy, url });
       }
     })().catch((reason) => {
       if (!controller.signal.aborted)
@@ -213,6 +216,21 @@ export function FilePreview({
       if (url) URL.revokeObjectURL(url);
     };
   }, [identity, attempt, open]);
+  useEffect(() => {
+    if (!open) return;
+    // Sheet replacement can temporarily retire the library's focused DOM node.
+    // Escape still belongs to the innermost preview while it is open.
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const dialog = previewShell.current?.closest('[role="dialog"]');
+      if (!dialog?.getClientRects().length) return;
+      const focusedDialog = document.activeElement?.closest('[role="dialog"]');
+      if (focusedDialog && focusedDialog !== dialog) return;
+      event.preventDefault(); event.stopImmediatePropagation(); onClose();
+    };
+    document.addEventListener('keydown', dismiss, true);
+    return () => document.removeEventListener('keydown', dismiss, true);
+  }, [open, onClose]);
   async function save() {
     if (busy) return;
     const controller = new AbortController();
@@ -251,7 +269,7 @@ export function FilePreview({
       }
       styles={{ body: { minWidth: 0 } }}
     >
-      <Flex className="file-preview-shell" vertical gap={token.paddingSM}>
+      <Flex ref={previewShell} className="file-preview-shell" vertical gap={token.paddingSM}>
         <Flex
           className="file-preview-actions"
           wrap
@@ -293,7 +311,8 @@ export function FilePreview({
         {downloadError && (
           <Alert type="error" showIcon title="Download failed. Try again." />
         )}
-        <div className="file-preview-content">
+        <div className="file-preview-content" onKeyDownCapture={event => { if (event.key === 'Escape') { event.stopPropagation(); onClose(); } }}>
+          <PreviewRenderBoundary key={`${identity}:${attempt}:${open}`} onRetry={() => setAttempt(value => value + 1)}>
           {error ? (
             <Alert
               type="warning"
@@ -322,11 +341,12 @@ export function FilePreview({
             </Suspense>
           ) : loaded.format === 'xlsx' ? (
             <Suspense fallback={<Spin aria-label="Loading Excel preview" />}>
-              <SpreadsheetPreview file={file} initial={loaded.office!} />
+              <SpreadsheetPreview file={file} initial={loaded.office!} policy={loaded.policy!} />
             </Suspense>
           ) : loaded.format === 'csv' ? (
             <Suspense fallback={<Spin aria-label="Loading grid" />}>
               <CsvPreview
+                policy={loaded.policy!}
                 source={loaded.text!}
                 name={loaded.metadata.displayName}
                 tabSeparated={
@@ -337,6 +357,7 @@ export function FilePreview({
             </Suspense>
           ) : loaded.text !== undefined ? (
             <TextPreview
+              policy={loaded.policy!}
               key={attempt}
               text={loaded.text}
               name={loaded.metadata.displayName}
@@ -344,6 +365,7 @@ export function FilePreview({
             />
           ) : loaded.format === 'image' ? (
             <ImagePreview
+              policy={loaded.policy!}
               url={loaded.url!}
               name={loaded.metadata.displayName}
               onError={setError}
@@ -356,16 +378,19 @@ export function FilePreview({
               onError={setError}
             />
           )}
+          </PreviewRenderBoundary>
         </div>
       </Flex>
     </Modal>
   );
 }
 function ImagePreview({
+  policy,
   url,
   name,
   onError,
 }: {
+  policy: PreviewOptions;
   url: string;
   name: string;
   onError: (error: PreviewError) => void;
@@ -473,11 +498,11 @@ function ImagePreview({
               width: image.naturalWidth,
               height: image.naturalHeight,
             };
-            if (size.width * size.height > previewLimits.imagePixels)
+            if (size.width * size.height > policy.image.maxPixels)
               onError(
                 new PreviewError(
-                  'preview_too_large',
-                  'This image exceeds 40 million preview pixels. Download the original.',
+                  'preview_structure_limit',
+                  'This image exceeds the configured preview pixel limit. Download the original.',
                 ),
               );
             else {
@@ -513,7 +538,7 @@ function MediaPreview({
     onError(
       new PreviewError(
         'file_codec_unsupported',
-        'This media codec is unavailable or the file is corrupt. Download the original to play it.',
+        'This media codec is unavailable in the browser. Download the original to play it.',
       ),
     );
   useEffect(() => {
@@ -527,7 +552,10 @@ function MediaPreview({
       controls
       preload="metadata"
       src={url}
-      onError={failed}
+      onError={event => {
+        const code = event.currentTarget.error?.code;
+        onError(code === 3 ? new PreviewError('preview_corrupt', 'The media could not be decoded. Download the original to inspect it.') : code === 2 ? new PreviewError('preview_failed', 'Media loading failed. Retry or download the original.') : new PreviewError('file_codec_unsupported', 'This media codec is unavailable in the browser. Download the original to play it.'));
+      }}
     />
   ) : (
     <audio
@@ -536,7 +564,10 @@ function MediaPreview({
       controls
       preload="metadata"
       src={url}
-      onError={failed}
+      onError={event => {
+        const code = event.currentTarget.error?.code;
+        onError(code === 3 ? new PreviewError('preview_corrupt', 'The media could not be decoded. Download the original to inspect it.') : code === 2 ? new PreviewError('preview_failed', 'Media loading failed. Retry or download the original.') : new PreviewError('file_codec_unsupported', 'This media codec is unavailable in the browser. Download the original to play it.'));
+      }}
     />
   );
 }

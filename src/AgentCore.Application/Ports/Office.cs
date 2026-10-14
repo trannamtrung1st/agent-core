@@ -27,8 +27,16 @@ public sealed record OfficeDocumentElement(string Selector, string Kind, string 
 public sealed record OfficeDocumentInspection(string Sha256, IReadOnlyList<OfficeDocumentElement> Elements, int TotalElements, bool Truncated, IReadOnlyList<string> Warnings);
 public sealed record OfficeDocumentEdit(string Operation, string Selector, string? Text = null, string? Style = null);
 public sealed record OfficeSpreadsheetEdit(string Operation, string Sheet, string? Range = null, IReadOnlyList<IReadOnlyList<OfficeCell>>? Cells = null, string? Name = null, string? Formula = null, string? Format = null);
-public sealed record OfficeCellView(string Address, string Type, string Value, string? Formula, string ValueStatus, string NumberFormat);
-public sealed record OfficeWorkbookInspection(string Sha256, IReadOnlyList<string> Sheets, string Sheet, string Range, IReadOnlyList<IReadOnlyList<OfficeCellView>> Rows, IReadOnlyList<string> Warnings);
+public sealed record OfficeCellView(string Address, string Type, string Value, string? Formula, string ValueStatus, string NumberFormat, OfficeCellStyle? Style = null);
+public sealed record OfficeWorkbookInspection(string Sha256, IReadOnlyList<string> Sheets, string Sheet, string Range, IReadOnlyList<IReadOnlyList<OfficeCellView>> Rows, IReadOnlyList<string> Warnings, OfficeWorksheetView? Presentation = null);
+public sealed record OfficeBorder(string Style, string? Color);
+public sealed record OfficeCellStyle(string FontFamily, double FontSize, bool Bold, bool Italic, string? FontColor, string? FillColor,
+    string Horizontal, string Vertical, bool Wrap, OfficeBorder Top, OfficeBorder Right, OfficeBorder Bottom, OfficeBorder Left);
+public sealed record OfficeMerge(int Row, int Column, int Rows, int Columns, bool Clipped);
+public sealed record OfficeDimension(double Pixels, bool Hidden);
+public sealed record OfficeWorksheetView(int FirstRow, int FirstColumn, int TotalRows, int TotalColumns,
+    IReadOnlyList<OfficeDimension> RowDimensions, IReadOnlyList<OfficeDimension> ColumnDimensions,
+    IReadOnlyList<OfficeMerge> Merges, int FrozenRows, int FrozenColumns);
 public sealed record OfficeProcessedFile(byte[] Bytes, IReadOnlyList<string> Warnings);
 
 /// <summary>Bounded semantic OOXML processing. Caller owns all source authorization and guarded storage commits.</summary>
@@ -39,5 +47,6 @@ public interface IOfficeProcessor
     OfficeProcessedFile EditDocument(ReadOnlyMemory<byte> bytes, IReadOnlyList<OfficeDocumentEdit> operations, CancellationToken ct);
     OfficeProcessedFile CreateWorkbook(OfficeWorkbookSpec spec, CancellationToken ct);
     OfficeWorkbookInspection InspectWorkbook(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct);
+    OfficeWorkbookInspection PreviewWorkbook(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct);
     OfficeProcessedFile EditWorkbook(ReadOnlyMemory<byte> bytes, IReadOnlyList<OfficeSpreadsheetEdit> operations, CancellationToken ct);
 }

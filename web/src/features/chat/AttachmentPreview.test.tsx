@@ -1,3 +1,5 @@
+import { loadPreviewOptions } from "../filePreview/previewOptions";
+import { testPolicy } from "../filePreview/previewTestPolicy";
 import { Blob as NodeBlob } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { downloadFile, readFile, resolveFile } from "../filePreview/fileSource";
@@ -6,10 +8,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryAttachmentView, PendingAttachmentView } from "./AttachmentPreview";
 
 
+vi.mock("../filePreview/previewOptions", async original => ({ ...await original<typeof import("../filePreview/previewOptions")>(), loadPreviewOptions: vi.fn() }));
+
 vi.mock("../filePreview/fileSource", async original => ({...await original<typeof import("../filePreview/fileSource")>(),downloadFile:vi.fn(),readFile:vi.fn(),resolveFile:vi.fn()}));
 const png=readFileSync("e2e/fixtures/file-preview/image.png");
 describe("AttachmentPreview", () => {
   beforeEach(() => {
+    vi.mocked(loadPreviewOptions).mockResolvedValue(testPolicy);
     vi.clearAllMocks();vi.mocked(downloadFile).mockResolvedValue(undefined);
     vi.stubGlobal("URL", {
       createObjectURL: vi.fn(() => "blob:history"),

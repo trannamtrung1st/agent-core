@@ -675,3 +675,17 @@ Drive batch receipts reuse IDriveOperationStore and the existing single-effect t
 ## Public file download configuration
 
 Infrastructure reads `PublicWeb:MaxDownloadBytes` (default 10485760, range 1–52428800) and `PublicWeb:DownloadTimeoutSeconds` (default 15, range 1–30) when constructing the singleton public fetcher. Invalid values fail configuration rather than silently disabling bounds. Environment equivalents are `PublicWeb__MaxDownloadBytes` and `PublicWeb__DownloadTimeoutSeconds`. Restart the host after changing these limits. Downloads use existing Workspace immutable blobs, metadata transactions, revisions/hash guards, scratch imports and quotas; no schema/migration or new persistence root is introduced. Run checkpoints retain only download metadata and existing effect receipts.
+
+## File preview host policy
+
+`FilePreviewOptions` binds `FilePreview` from normal appsettings/environment layers and validates at startup. No database settings or Admin editor exists. Changing the host policy requires a host restart; the browser loads effective options once per application lifetime. `FilePreview__Limits__DelimitedBytes` is canonical; `FilePreview__Limits__CsvBytes` is a supported binding alias for the same property (set one spelling).
+
+| Group | Defaults | Immutable validation ceiling / coherence |
+| --- | --- | --- |
+| Limits (bytes) | MaxBytes 33,554,432; TextBytes 2,097,152; DelimitedBytes 5,242,880; DocxBytes/XlsxBytes 10,485,760; ImageBytes 15,728,640; AudioBytes/VideoBytes 33,554,432 | Each positive and <=67,108,864; effective per-format minimum of global, configured format and processing cap. Office never exceeds the immutable 10 MiB package guard. |
+| Text | MaxLines 10,000; HighlightMaxBytes 262,144; HighlightMaxLines 3,000 | MaxLines <=100,000; highlighting positive and no larger than configured text budgets; effective highlighting also clamps to effective text bytes. |
+| Image | MaxPixels 40,000,000; MaxDimension 32,768 | Positive and no larger than those hard decoder safety bounds. |
+| Spreadsheet | RowsPerWindow 200; ColumnsPerWindow 64; MaxCellsPerWindow 12,800; CsvMaxParsedRows 50,000; CsvMaxParsedColumns 256; MaxCellCharacters 4,096; MaxWindowCharacters 64,000 | Positive; dimensions <=200/64 and product <=cell budget<=12,800; parser and character values no larger than their listed safety ceilings. |
+| WorkerTimeoutMs | 5,000 | Positive and <=10,000; cancellation terminates stale workers immediately. |
+
+Global/per-format budgets may be configured independently; the effective policy clamps them rather than widening a global ceiling. Invalid zero/negative/excessive or incoherent dimensions fail startup. Byte equality is allowed; one byte above the effective ceiling is rejected. Immutable Office package/expansion/sheet/cell/text guards, source ownership, Workspace quotas and download/transfer limits remain independent. The UI formats bytes as MiB; no frontend policy constants duplicate these defaults.

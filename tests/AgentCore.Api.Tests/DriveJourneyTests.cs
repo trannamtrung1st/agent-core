@@ -132,6 +132,7 @@ public sealed partial class DriveJourneyTests
             if (owner.Mode == "after") throw new HttpRequestException("lost response");
         }
         public ValueTask<byte[]> DownloadAsync(DriveFile file, CancellationToken ct) => inner.DownloadAsync(file, ct);
+        public ValueTask<byte[]> DownloadAsync(DriveFile file, int maxBytes, CancellationToken ct) => inner.DownloadAsync(file, maxBytes, ct);
         public ValueTask RenameAsync(string id, string name, CancellationToken ct) { owner.Renames++; return inner.RenameAsync(id, name, ct); }
         public ValueTask MoveAsync(string id, string source, string destination, CancellationToken ct) => inner.MoveAsync(id, source, destination, ct);
         public async ValueTask TrashAsync(string id, CancellationToken ct)

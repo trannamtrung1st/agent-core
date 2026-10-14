@@ -1,160 +1,50 @@
-import { useEffect, useState } from 'react';
-import {
-  Alert,
-  Button,
-  Empty,
-  Flex,
-  Input,
-  Spin,
-  Table,
-  Tabs,
-  Typography,
-  theme,
-} from 'antd';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { Alert, Button, Empty, Flex, Input, Spin, Tabs, Typography, theme } from 'antd';
 import { type FileRef, PreviewError, readFailure } from './fileSource';
-import {
-  readOfficePreview,
-  type OfficeCell,
-  type OfficePreview,
-} from './officeSource';
-export function SpreadsheetPreview({
-  file,
-  initial,
-}: {
-  file: FileRef;
-  initial: OfficePreview;
-}) {
+import { readOfficePreview, type OfficePreview } from './officeSource';
+import type { PreviewOptions } from './previewOptions';
+import { columnName, spreadsheetSheet } from './spreadsheetAdapter';
+export function SpreadsheetPreview({ file, initial, policy }: { file: FileRef; initial: OfficePreview; policy: PreviewOptions }) {
+  const ReadonlySpreadsheet = useMemo(() => lazy(() => import('./ReadonlySpreadsheet').then(module => ({ default: module.ReadonlySpreadsheet }))), []);
   const { token } = theme.useToken();
-  const [sheet, setSheet] = useState(initial.sheet!);
-  const [range, setRange] = useState(initial.range!);
-  const [query, setQuery] = useState({
-    sheet: initial.sheet!,
-    range: initial.range!,
-  });
-  const [result, setResult] = useState<OfficePreview | null>(initial);
-  const [selected, setSelected] = useState<OfficeCell | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [sheet, setSheet] = useState(initial.sheet!), [range, setRange] = useState(initial.range!);
+  const [query, setQuery] = useState({ sheet: initial.sheet!, range: initial.range! });
+  const [result, setResult] = useState<OfficePreview | null>(initial), [error, setError] = useState<string | null>(null);
   const identity = JSON.stringify(file);
   useEffect(() => {
-    const controller = new AbortController();
-    setSelected(null);
-    setError(null);
-    if (query.sheet === initial.sheet && query.range === initial.range) {
-      setResult(initial);
-      return;
-    }
+    const controller = new AbortController(); setError(null);
+    if (query.sheet === initial.sheet && query.range === initial.range) { setResult(initial); return; }
     setResult(null);
-    void readOfficePreview(file, controller.signal, query.sheet, query.range)
-      .then((value) => {
-        if (value.sha256 !== initial.sha256) throw readFailure(409);
-        if (!controller.signal.aborted) setResult(value);
-      })
-      .catch((reason) => {
-        if (!controller.signal.aborted)
-          setError(
-            reason instanceof PreviewError
-              ? reason.message
-              : 'The worksheet could not be loaded. Retry or reload this file.',
-          );
-      });
+    void readOfficePreview(file, controller.signal, policy, query.sheet, query.range).then(value => {
+      if (value.sha256 !== initial.sha256) throw readFailure(409);
+      if (!controller.signal.aborted) setResult(value);
+    }).catch(reason => { if (!controller.signal.aborted) setError(reason instanceof PreviewError ? reason.message : 'The worksheet could not be loaded. Retry or reload this file.'); });
     return () => controller.abort();
-  }, [query, initial, identity]);
-  const rows = result?.rows ?? [];
-  const count = rows[0]?.length ?? 0;
-  return (
-    <Flex vertical gap={token.paddingSM} style={{ minWidth: 0 }}>
-      <Typography.Text type="secondary">
-        Read-only range · formulas are not recalculated. Additional Office
-        features may be present in the download.
-      </Typography.Text>
-      <Tabs
-        className="file-preview-sheets"
-        aria-label="Worksheets"
-        activeKey={sheet}
-        items={initial.sheets!.map((name) => ({ key: name, label: name }))}
-        onChange={(name) => {
-          setSheet(name);
-          setQuery({ sheet: name, range });
-        }}
-      />
-      <Flex
-        className="file-preview-toolbar"
-        wrap
-        align="center"
-        gap={token.paddingXS}
-      >
-        <Input
-          aria-label="Worksheet range"
-          className="file-preview-range"
-          value={range}
-          onChange={(event) => setRange(event.target.value)}
-          onPressEnter={() => setQuery({ sheet, range })}
-        />
-        <Button onClick={() => setQuery({ sheet, range })}>Load range</Button>
-      </Flex>
-      {selected && (
-        <Typography.Paragraph style={{ margin: 0 }} aria-live="polite">
-          {selected.address}
-          {selected.formula
-            ? ` · =${selected.formula} · ${selected.valueStatus.replaceAll('_', ' ')}`
-            : ` · ${selected.value} · ${selected.type}`}
-        </Typography.Paragraph>
-      )}
-      {error ? (
-        <Alert
-          type="warning"
-          showIcon
-          title={error}
-          action={
-            <Button onClick={() => setQuery({ sheet, range })}>
-              Retry range
-            </Button>
-          }
-        />
-      ) : !result ? (
-        <Spin aria-label="Loading worksheet" />
-      ) : !rows.length ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="This worksheet range is empty"
-        />
-      ) : (
-        <Table<{ key: string; cells: OfficeCell[] }>
-          className="file-preview-grid"
-          size="small"
-          pagination={{
-            pageSize: 50,
-            hideOnSinglePage: true,
-            showSizeChanger: false,
-          }}
-          rowKey="key"
-          bordered
-          dataSource={rows.map((cells, i) => ({
-            key: cells[0]?.address ?? String(i),
-            cells,
-          }))}
-          scroll={{ x: Math.max(600, count * 140), y: 400 }}
-          columns={Array.from({ length: count }, (_, index) => ({
-            title: rows[0][index].address.replace(/[0-9]+$/, ''),
-            width: 140,
-            render: (_: unknown, row: { cells: OfficeCell[] }) => {
-              const cell = row.cells[index];
-              return (
-                <Button
-                  type="text"
-                  className="file-preview-cell"
-                  aria-label={`${cell.address} ${cell.value || 'empty'}${cell.formula ? ' formula' : ''}`}
-                  title={cell.address}
-                  onClick={() => setSelected(cell)}
-                >
-                  {cell.value ||
-                    (cell.formula ? 'Cached value unavailable' : '')}
-                </Button>
-              );
-            },
-          }))}
-        />
-      )}
+  }, [query, initial, identity, policy]);
+  const cells = result?.rows ?? [];
+  const view = result?.presentation;
+  const projected = useMemo(() => spreadsheetSheet(sheet, result?.rows ?? [], policy.spreadsheet, result?.presentation), [sheet, result, policy]);
+  const rowStep = Math.max(1, view?.rowDimensions.length ?? policy.spreadsheet.rowsPerWindow), columnStep = Math.max(1, view?.columnDimensions.length ?? policy.spreadsheet.columnsPerWindow);
+  function navigate(rows: number, columns: number) {
+    if (!view) return;
+    const r = Math.max(1, view.firstRow + rows), c = Math.max(1, view.firstColumn + columns);
+    const next = `${columnName(c)}${r}:${columnName(Math.min(16384, c + columnStep - 1))}${Math.min(1048576, r + rowStep - 1)}`;
+    setRange(next); setQuery({ sheet, range: next });
+  }
+  return <Flex vertical gap={token.paddingSM} style={{ minWidth: 0 }}>
+    <Typography.Text type="secondary">Partial workbook · {result?.range ?? query.range} · read-only, cached formula values.</Typography.Text>
+    <Tabs className="file-preview-sheets" aria-label="Worksheets" activeKey={sheet} items={initial.sheets!.map(name => ({ key: name, label: name }))} onChange={name => { setSheet(name); setQuery({ sheet: name, range }); }} />
+    <Flex className="file-preview-toolbar" wrap align="center" gap={token.paddingXS}>
+      <Input aria-label="Worksheet range" className="file-preview-range" value={range} onChange={e => setRange(e.target.value)} onPressEnter={() => setQuery({ sheet, range })} />
+      <Button onClick={() => setQuery({ sheet, range })}>Load range</Button>
+      {view && view.firstRow > 1 && <Button onClick={() => navigate(-rowStep, 0)}>Previous rows</Button>}
+      {view && view.firstRow + rowStep <= view.totalRows && <Button onClick={() => navigate(rowStep, 0)}>Next rows</Button>}
+      {view && view.firstColumn > 1 && <Button onClick={() => navigate(0, -columnStep)}>Previous columns</Button>}
+      {view && view.firstColumn + columnStep <= view.totalColumns && <Button onClick={() => navigate(0, columnStep)}>Next columns</Button>}
     </Flex>
-  );
+    {view?.merges.some(merge => merge.clipped) && <Alert type="info" showIcon title="A merged range crosses this window. Its visible cells are shown separately; load the complete range to see the merge." />}
+    {error ? <Alert type="warning" showIcon title={error} action={<Button onClick={() => setQuery({ sheet, range })}>Retry range</Button>} /> : !result ? <Spin aria-label="Loading worksheet" /> : !cells.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="This worksheet range is empty" /> : <Suspense fallback={<Spin aria-label="Loading spreadsheet" />}>
+      <ReadonlySpreadsheet key={`${result.sheet}:${result.range}`} sheet={projected.sheet} cells={cells} firstRow={view?.firstRow} firstColumn={view?.firstColumn} />
+    </Suspense>}
+  </Flex>;
 }

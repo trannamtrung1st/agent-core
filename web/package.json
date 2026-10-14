@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
+    "@fortune-sheet/react": "1.0.4",
     "@lexical/clipboard": "0.52.0",
     "@lexical/history": "0.52.0",
     "@lexical/plain-text": "0.52.0",

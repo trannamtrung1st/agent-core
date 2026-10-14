@@ -137,6 +137,7 @@ public sealed class DrivePersistenceTests
         public ValueTask CreateFolderAsync(string id, string name, string parent, CancellationToken ct) => inner.CreateFolderAsync(id, name, parent, ct);
         public ValueTask UploadAsync(string id, string name, string parent, string mime, ReadOnlyMemory<byte> bytes, DriveOperation op, CancellationToken ct) => inner.UploadAsync(id, name, parent, mime, bytes, op, ct);
         public ValueTask<byte[]> DownloadAsync(DriveFile file, CancellationToken ct) => inner.DownloadAsync(file, ct);
+        public ValueTask<byte[]> DownloadAsync(DriveFile file, int maxBytes, CancellationToken ct) => inner.DownloadAsync(file, maxBytes, ct);
         public ValueTask RenameAsync(string id, string name, CancellationToken ct) => inner.RenameAsync(id, name, ct);
         public ValueTask MoveAsync(string id, string source, string destination, CancellationToken ct) => inner.MoveAsync(id, source, destination, ct);
         public async ValueTask TrashAsync(string id, CancellationToken ct) { count.Trashes++; await inner.TrashAsync(id, ct); if (count.AfterTrash is not null) await count.AfterTrash(id, ct); }

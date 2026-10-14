@@ -93,12 +93,16 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
             throw;
         }
     }
-    public async ValueTask<(DriveFile File, byte[] Bytes)> ReadAsync(DriveAccess access, string id, string? expectedVersion, CancellationToken ct)
+    public async ValueTask<(DriveFile File, byte[] Bytes)> ReadAsync(DriveAccess access, string id, string? expectedVersion, CancellationToken ct, int? previewMaxBytes = null)
     {
         var file = await GetAsync(access, id, ct); if (file.Folder || file.NativeDocument) throw Failure("drive_native_unsupported", "Preview/download supports binary files. Google-native export and folder download are deferred.");
         if (expectedVersion is not null && file.Version != expectedVersion) throw Failure("drive_remote_conflict", "Drive file changed. Reload its source list.", 409);
         if (file.ByteSize > MaxTransferBytes) throw Failure("drive_transfer_too_large", "Drive file exceeds 50 MiB.", 413);
-        var bytes = await access.Provider.DownloadAsync(file, ct); if (bytes.Length > MaxTransferBytes || bytes.LongLength != file.ByteSize || file.Md5Checksum is not null && !string.Equals(Convert.ToHexStringLower(MD5.HashData(bytes)), file.Md5Checksum, StringComparison.OrdinalIgnoreCase)) throw Failure("drive_remote_conflict", "Drive content changed during download. No local bytes were committed.", 409);
+        if (previewMaxBytes is <= 0 or > MaxTransferBytes) throw new ArgumentOutOfRangeException(nameof(previewMaxBytes));
+        if (previewMaxBytes is int limit && file.ByteSize > limit) throw Failure("preview_too_large", "Drive file exceeds its effective preview limit. Download the original.", 413);
+        var bytes = previewMaxBytes is int maxBytes ? await access.Provider.DownloadAsync(file, maxBytes, ct) : await access.Provider.DownloadAsync(file, ct);
+        if (previewMaxBytes is int ceiling && bytes.Length > ceiling) throw Failure("preview_too_large", "Drive file exceeds its effective preview limit. Download the original.", 413);
+        if (bytes.Length > MaxTransferBytes || bytes.LongLength != file.ByteSize || file.Md5Checksum is not null && !string.Equals(Convert.ToHexStringLower(MD5.HashData(bytes)), file.Md5Checksum, StringComparison.OrdinalIgnoreCase)) throw Failure("drive_remote_conflict", "Drive content changed during download. No local bytes were committed.", 409);
         var after = await GetAsync(access, id, ct); if (after.Version != file.Version) throw Failure("drive_remote_conflict", "Drive file changed during download. No local bytes were committed.", 409); return (file, bytes);
     }
     public async ValueTask<DriveReceipt> EffectAsync(DriveAccess access, Guid operationId, string tool, long expectedEpoch, string? fileId, DriveEffect effect, ReadOnlyMemory<byte> bytes, CancellationToken ct)

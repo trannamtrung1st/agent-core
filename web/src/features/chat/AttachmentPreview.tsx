@@ -6,7 +6,8 @@ import { type PendingAttachment } from "../../services/attachments";
 import type { HistoryAttachment } from "../../state/sessionStore";
 
 import { downloadFile, readFile, resolveFile, type FileRef } from "../filePreview/fileSource";
-import { previewFormat, previewLimits, validateImageDimensions, validateSignature } from "../filePreview/previewPolicy";
+import { previewFormat, formatLimit, validateImageDimensions, validateSignature } from "../filePreview/previewPolicy";
+import { loadPreviewOptions } from "../filePreview/previewOptions";
 import { FilePreviewButton } from "../filePreview/FilePreview";
 
 export function HistoryAttachmentView({ sessionId, file }: { sessionId: string; file: HistoryAttachment }) {
@@ -21,8 +22,9 @@ function HistoryFile({ sessionId, file }: { sessionId: string; file: HistoryAtta
     if (file.contentType.startsWith('image/')) void (async () => {
       const metadata = await resolveFile(ref, controller.signal);
       if (previewFormat(metadata) !== 'image') return;
-      const blob = await readFile(ref, metadata, previewLimits.image, controller.signal);
-      await validateSignature(blob, metadata.contentType); await validateImageDimensions(blob, metadata.contentType); controller.signal.throwIfAborted();
+      const policy = await loadPreviewOptions();
+      const blob = await readFile(ref, metadata, formatLimit('image', policy), controller.signal);
+      await validateSignature(blob, metadata.contentType); await validateImageDimensions(blob, metadata.contentType, policy); controller.signal.throwIfAborted();
       url = URL.createObjectURL(blob); setHref(url);
     })().catch(() => undefined);
     return () => { controller.abort(); downloads.current?.abort(); if (url) URL.revokeObjectURL(url); };

@@ -80,6 +80,7 @@ public sealed partial class GoogleDriveTests
         public HttpMethod? LastFileMethod; public string LastFilePath = "", LastFileBody = "";
         public string Scope = DriveAccountProfile.Scope, IdentityEmail = "work@example.test", ExchangeBody = "", UploadLocation = "https://www.googleapis.com/upload/drive/v3/files?upload_id=opaque"; public bool MissingRefresh; public int Refreshes, FileRequests, UploadPuts; public HttpStatusCode FileStatus = HttpStatusCode.OK;
         public Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>? UploadHandler;
+        public Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>? DownloadHandler;
         public HttpClient CreateClient(string name) => new(this, false);
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
@@ -90,6 +91,7 @@ public sealed partial class GoogleDriveTests
             if (path.StartsWith("/upload/")) { if (UploadHandler is not null) return await UploadHandler(request, ct); if (request.Method == HttpMethod.Put) { UploadPuts++; return Json(new { id = "file-1" }); } var r = Json(new { }); r.Headers.Location = new Uri(UploadLocation); return r; }
             LastFileMethod = request.Method; LastFilePath = path; LastFileBody = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
             FileRequests++; if (FileStatus != HttpStatusCode.OK) return Json(new { error = "provider-secret" }, FileStatus);
+            if (request.RequestUri!.Query.Contains("alt=media", StringComparison.Ordinal) && DownloadHandler is not null) return await DownloadHandler(request, ct);
             return Json(new { id = "file-1", name = "report.txt", mimeType = "text/plain", size = "2", version = "1", md5Checksum = "49f68a5c8493ec2c0bf489821c21fc3b", parents = new[] { "root" }, trashed = false });
         }
         private static HttpResponseMessage Json(object value, HttpStatusCode status = HttpStatusCode.OK) => new(status) { Content = new StringContent(JsonSerializer.Serialize(value)) };

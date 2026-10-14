@@ -1,8 +1,8 @@
+import { testPolicy } from './previewTestPolicy';
 import { describe, expect, it } from 'vitest';
 import {
   previewFormat,
   formatLimit,
-  previewLimits,
   decodeText,
   validateSignature,
 } from './previewPolicy';
@@ -29,21 +29,21 @@ describe('Preview format and limits', () => {
         byteSize: 1,
       }),
     ).toBe('text');
-    expect(formatLimit('video')).toBe(previewLimits.media);
+    expect(formatLimit('video', testPolicy)).toBe(testPolicy.limits.videoBytes);
   });
   it('decodes UTF BOM source without rewriting CRLF or BOM and rejects invalid encodings/binary text', async () => {
     const source = '\uFEFFa,b\r\n001,"x\r\ny"\r\n';
-    expect(await decodeText(blob(source), 'csv')).toBe(source);
+    expect(await decodeText(blob(source), 'csv', testPolicy)).toBe(source);
     expect(
       await decodeText(
         blob(new Uint8Array([255, 254, 65, 0, 13, 0, 10, 0])),
-        'text',
+        'text', testPolicy,
       ),
     ).toBe('\uFEFFA\r\n');
     await expect(
-      decodeText(blob(new Uint8Array([255])), 'text'),
+      decodeText(blob(new Uint8Array([255])), 'text', testPolicy),
     ).rejects.toMatchObject({ code: 'preview_encoding' });
-    await expect(decodeText(blob('a\0b'), 'text')).rejects.toMatchObject({
+    await expect(decodeText(blob('a\0b'), 'text', testPolicy)).rejects.toMatchObject({
       code: 'preview_signature',
     });
   });
@@ -60,7 +60,7 @@ describe('CSV source fidelity', () => {
   it('preserves embedded delimiters, quotes, newlines, empty columns and leading zeros as inert strings', () => {
     const source =
       '\uFEFFid,note,formula,empty\r\n001,"a,b\r\n""quoted""",=HYPERLINK("evil"),\r\n';
-    const result = parseDelimited(source, ',');
+    const result = parseDelimited(source, ',', testPolicy.spreadsheet);
     expect(result.rows[1]).toEqual([
       '001',
       'a,b\r\n"quoted"',
@@ -70,14 +70,13 @@ describe('CSV source fidelity', () => {
     expect(result.partial).toBe(false);
   });
   it('uses explicit TSV delimiter and rejects malformed quotes/oversized columns', () => {
-    expect(parseDelimited('id\tvalue\n0001\ta,b', '\t').rows[1]).toEqual([
+    expect(parseDelimited('id\tvalue\n0001\ta,b', '\t', testPolicy.spreadsheet).rows[1]).toEqual([
       '0001',
       'a,b',
     ]);
-    expect(() => parseDelimited('a,b\n"open', ',')).toThrow(/malformed/);
-    expect(() =>
-      parseDelimited(Array.from({ length: 257 }, () => 'x').join(','), ','),
-    ).toThrow(/256/);
+    expect(() => parseDelimited('a,b\n"open', ',', testPolicy.spreadsheet)).toThrow(/malformed/);
+    const wide = parseDelimited(Array.from({ length: 257 }, () => 'x').join(','), ',', testPolicy.spreadsheet);
+    expect(wide.partial).toBe(true); expect(wide.rows[0]).toHaveLength(256);
   });
   it('routes extensionless resource keys by allowlisted MIME while retaining mismatched-extension fallback', () => {
     expect(
@@ -115,5 +114,15 @@ describe('CSV source fidelity', () => {
         byteSize: 10,
       }),
     ).toBe('unsupported');
+  });
+});
+
+describe('Host-policy thresholds', () => {
+  it('selects the minimum global/per-format policy for every supported format', () => {
+    for (const format of ['text','markdown','csv','docx','xlsx','image','audio','video'] as const) {
+      const limit = formatLimit(format, testPolicy);
+      expect(limit).toBeGreaterThan(0);
+      expect(formatLimit(format, { ...testPolicy, limits: { ...testPolicy.limits, maxBytes: limit - 1 } })).toBe(limit - 1);
+    }
   });
 });

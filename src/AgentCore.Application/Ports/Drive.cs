@@ -31,6 +31,8 @@ public interface IGoogleDriveProvider
     ValueTask CreateFolderAsync(string fileId, string name, string parentId, CancellationToken ct);
     ValueTask UploadAsync(string fileId, string name, string parentId, string mimeType, ReadOnlyMemory<byte> bytes, DriveOperation operation, CancellationToken ct);
     ValueTask<byte[]> DownloadAsync(DriveFile file, CancellationToken ct);
+    /// <summary>Preview-specific byte ceiling, enforced before and during transfer. Original downloads retain their separate ceiling.</summary>
+    ValueTask<byte[]> DownloadAsync(DriveFile file, int maxBytes, CancellationToken ct);
     ValueTask RenameAsync(string fileId, string name, CancellationToken ct);
     ValueTask MoveAsync(string fileId, string sourceParent, string destinationParent, CancellationToken ct);
     ValueTask TrashAsync(string fileId, CancellationToken ct);

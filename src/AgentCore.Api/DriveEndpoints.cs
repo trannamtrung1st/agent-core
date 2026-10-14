@@ -22,11 +22,11 @@ internal static class DriveEndpoints
             var access = await ReadAccess(service, instanceId, accountRef, authEpoch, bindingId, ct); var source = await service.ReadAsync(access, fileId, expectedVersion, ct);
             http.Response.Headers.CacheControl = "private, no-store"; http.Response.Headers.XContentTypeOptions = "nosniff"; return Results.Bytes(source.Bytes, source.File.MimeType, source.File.Name);
         }));
-        g.MapGet("/accounts/{accountRef}/files/{fileId}/office-preview", (Guid instanceId, string accountRef, string fileId, string? expectedVersion, long? authEpoch, Guid? bindingId, string? sheet, string? range, DriveService service, IOfficeProcessor office, CancellationToken ct) => Respond(async () =>
+        g.MapGet("/accounts/{accountRef}/files/{fileId}/office-preview", (Guid instanceId, string accountRef, string fileId, string? expectedVersion, long? authEpoch, Guid? bindingId, string? sheet, string? range, DriveService service, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct) => Respond(async () =>
         {
             var access = await ReadAccess(service, instanceId, accountRef, authEpoch, bindingId, ct); var metadata = await service.GetAsync(access, fileId, ct);
-            if (metadata.ByteSize > OfficeLimits.MaxPackageBytes) return Results.Problem(statusCode: 413, title: "preview_too_large", detail: "The file exceeds 10 MiB. Download the original.");
-            var source = await service.ReadAsync(access, fileId, expectedVersion, ct); return OfficePreviewEndpoints.Project(source.File.Name, source.File.MimeType, source.Bytes, sheet, range, office, ct);
+            policy.RequireOfficeSize(metadata.Name, metadata.MimeType, metadata.ByteSize);
+            var source = await service.ReadAsync(access, fileId, expectedVersion, ct, policy.OfficeLimit(metadata.Name, metadata.MimeType)); return OfficePreviewEndpoints.Project(source.File.Name, source.File.MimeType, source.Bytes, sheet, range, office, policy, ct);
         }));
         g.MapGet("/accounts/{accountRef}/operations/{operationId:guid}", (Guid instanceId, string accountRef, Guid operationId, DriveService service, CancellationToken ct) => Respond(async () => Results.Json(await service.InspectOperationAsync(await service.ResolveAsync(instanceId, accountRef, null, false, ct), operationId, ct))));
 

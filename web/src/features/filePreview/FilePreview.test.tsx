@@ -1,3 +1,6 @@
+import { testPolicy } from './previewTestPolicy';
+import { loadPreviewOptions } from './previewOptions';
+vi.mock('./previewOptions', async original => ({ ...(await original<typeof import('./previewOptions')>()), loadPreviewOptions: vi.fn() }));
 import {
   act,
   fireEvent,
@@ -24,6 +27,7 @@ const metadata = {
   byteSize: 15,
 };
 beforeEach(() => {
+  vi.mocked(loadPreviewOptions).mockReset().mockResolvedValue(testPolicy);
   vi.mocked(resolveFile).mockReset().mockResolvedValue(metadata);
   vi.mocked(readFile)
     .mockReset()
@@ -64,4 +68,23 @@ describe('Shared preview lifecycle', () => {
       screen.getByRole('button', { name: 'Download report.pdf' }),
     ).toBeEnabled();
   });
+});
+
+it('fails closed when policy is unavailable and recovers with Retry while preserving Download', async () => {
+  vi.mocked(loadPreviewOptions).mockRejectedValueOnce(new Error('offline'));
+  render(<FilePreviewButton file={file} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
+  await screen.findByRole('button', { name: 'Retry' });
+  expect(readFile).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Download readme.txt' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  await screen.findByText('current content');
+});
+it('uses the effective limit before reading oversized content', async () => {
+  vi.mocked(resolveFile).mockResolvedValue({ ...metadata, byteSize: testPolicy.limits.textBytes + 1 });
+  render(<FilePreviewButton file={file} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Preview file' }));
+  await screen.findByText(/preview limit is 2 MiB/);
+  expect(readFile).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Download readme.txt' })).toBeEnabled();
 });

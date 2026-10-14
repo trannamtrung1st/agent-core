@@ -750,7 +750,7 @@ Common preview reads reuse existing owner-capability routes: Session Attachment/
 
 ## Office projection and Drive HTTP
 
-Owner-protected `GET {existing file source}/office-preview?sheet=Sales&range=A1:J50` supports Attachment, Artifact, home item, Instance Resource and Definition draft Resource. Returns format, SHA, warnings, and for XLSX sheet names/selection/range and typed rows with address/value/formula/valueStatus/numberFormat. DOCX returns validation proof and emptyBody before reading exact source bytes. No vendor DTO, binary base64, public file URL or new hub event.
+Owner-protected `GET {existing file source}/office-preview?sheet=Sales&range=A1:J50` supports Attachment, Artifact, home item, Instance Resource and Definition draft Resource. Returns format, SHA, warnings, and for XLSX sheet names/selection/range and typed rows with address/value/formula/valueStatus/numberFormat and optional normalized style. `presentation` includes firstRow/firstColumn (one-based source origin), totalRows/totalColumns, bounded pixel/hidden row/column dimensions, zero-based local merges with a clipped flag and frozen row/column counts. Active formulas remain metadata only. DOCX returns validation proof and emptyBody before reading exact source bytes. No vendor DTO, binary base64, public file URL or new hub event.
 
 `GET /api/v2/integrations/google-drive/options` returns enabled/configured/synthetic/scope. `POST /api/v2/admin/credentials/google-drive` creates `{displayName}`; existing safe Credential GET/list/binding responses include driveAccount email/connectionStatus/authEpoch/timestamps/synthetic. Under existing `/admin/credentials/{id}`, GET drive-connection and POST drive-connect/drive-check/drive-disconnect use expectedRevision. Correlated one-use callback/Synthetic consent is under `/integrations/google-drive/oauth`; no owner token in query.
 
@@ -776,3 +776,9 @@ Only `url`, `path` and `expectedSha256` are accepted. `url` is an absolute crede
 ```
 
 Transfer failures return `status=failed`, `error` and `message`, with no bytes; mismatches include actual declared content type. Workspace validation/conflict/quota failures use existing structured tool errors. Cancellation propagates through the existing Run contract. Public GET cannot reuse browser authentication, cookies, bearer credentials or CAPTCHA state. A saved file is not automatically an Artifact; inspect/edit and publish explicitly.
+
+## Effective file preview options
+
+Owner-protected `GET /api/v2/file-preview/options` returns `limits` (maxBytes, textBytes, delimitedBytes, docxBytes, xlsxBytes, imageBytes, audioBytes, videoBytes), `text` (maxLines, highlightMaxBytes, highlightMaxLines), `image` (maxPixels, maxDimension), `spreadsheet` (rowsPerWindow, columnsPerWindow, maxCellsPerWindow, csvMaxParsedRows, csvMaxParsedColumns, maxCellCharacters, maxWindowCharacters) and workerTimeoutMs. Values are positive integers, byte units stay bytes, effective format ceilings include the global and immutable safety caps, and responses use private/no-store and nosniff. No secrets, mutable Admin settings or persistence are introduced. Defaults/binding/validation belong to [configuration](15-persistence-and-configuration.md#file-preview-host-policy).
+
+Office preview 413 distinguishes `preview_too_large` bytes from `preview_structure_limit` range/cell/text complexity. Smaller-range recovery remains available for structural limits; original content/download routes remain independent. Invalid packages stay 400, permission/stale identity retains source-specific statuses, and unsupported browser codecs remain browser fallback states.

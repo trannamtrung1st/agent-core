@@ -46,6 +46,12 @@ builder.Services.AddAgentCoreInfrastructure(
         MaxUtteranceSeconds: Math.Clamp(builder.Configuration.GetValue("Voice:MaxUtteranceSeconds", 120), 1, 180)),
     browser: builder.Configuration.GetSection(BrowserOptions.SectionName).Get<BrowserOptions>() ?? new BrowserOptions());
 
+builder.Services.AddOptions<FilePreviewOptions>()
+    .Bind(builder.Configuration.GetSection(FilePreviewOptions.SectionName))
+    .Validate(options => options.IsValid(), "FilePreview must use positive, coherent limits within immutable safety ceilings.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(services => services.GetRequiredService<Microsoft.Extensions.Options.IOptions<FilePreviewOptions>>().Value.Effective());
+
 builder.Services.Configure<AgentCoreOptions>(builder.Configuration.GetSection("AgentCore"));
 builder.Services.AddOptions<ObservabilityOptions>()
     .Bind(builder.Configuration.GetSection("Observability"))

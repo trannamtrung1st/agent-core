@@ -1,5 +1,7 @@
+import type { PreviewOptions } from './previewOptions';
 import { useState } from 'react';
 import {
+  Alert,
   Button,
   Checkbox,
   Empty,
@@ -13,10 +15,12 @@ import { MarkdownMessage } from '../chat/MarkdownMessage';
 import { HighlightedCode } from './HighlightedCode';
 import { extension } from './previewPolicy';
 export function TextPreview({
+  policy,
   text,
   name,
   markdown,
 }: {
+  policy: PreviewOptions;
   text: string;
   name: string;
   markdown: boolean;
@@ -26,6 +30,7 @@ export function TextPreview({
   const [wrap, setWrap] = useState(false);
   const [query, setQuery] = useState('');
   const [copyStatus, setCopyStatus] = useState('Copy');
+  const exceedsLines = text.split('\n', policy.text.maxLines + 1).length > policy.text.maxLines;
   const hits = query
     ? text.toLocaleLowerCase().split(query.toLocaleLowerCase()).length - 1
     : 0;
@@ -78,7 +83,7 @@ export function TextPreview({
           </Typography.Text>
         )}
       </Flex>
-      {!text ? (
+      {exceedsLines ? <Alert type="info" showIcon title="The source exceeds the configured text line limit. Copy or download the original for all lines." /> : !text ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Empty document"
@@ -87,6 +92,7 @@ export function TextPreview({
         <MarkdownMessage source={text} />
       ) : (
         <HighlightedCode
+          policy={policy}
           source={text}
           language={extension(name)}
           wrap={wrap}
