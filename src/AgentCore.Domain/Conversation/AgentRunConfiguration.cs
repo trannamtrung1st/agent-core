@@ -36,6 +36,7 @@ public sealed class AgentRunConfiguration
 
     private static IReadOnlyList<T> Copy<T>(IReadOnlyList<T> values) => Array.AsReadOnly(values.ToArray());
     private static AgentDefinition Freeze(AgentDefinition d) => d with {
+        SandboxPolicy = d.SandboxPolicy is { } sandbox ? sandbox with { AllowedProfileIds = Copy(sandbox.AllowedProfileIds) } : null,
         SelfManagement = d.SelfManagement is { } management ? management with { Scopes = Copy(management.Scopes), Sources = Copy(management.Sources), EligibleTools = Copy(management.EligibleTools), ManagedAutoApply = Copy(management.ManagedAutoApply ?? []) } : null,
         Goals = Copy(d.Goals), Metadata = new ReadOnlyDictionary<string, string>(d.Metadata.ToDictionary(p => p.Key, p => p.Value)),
         InitiativePolicy = d.InitiativePolicy with { Triggers = Copy(d.InitiativePolicy.Triggers) },

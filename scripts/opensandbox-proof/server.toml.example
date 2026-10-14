@@ -1,10 +1,10 @@
-# Candidate for a DISPOSABLE isolated Linux runner only. Not accepted deployment config.
-# Inject a random private key through OPENSANDBOX_SERVER_API_KEY on the isolated runner.
+# Trusted single-user local demo; only the server mounts the Docker socket.
+# Inject a random private key through OPENSANDBOX_SERVER_API_KEY.
 # No known placeholder key is provided. Never acknowledge insecure/key-free startup.
 [server]
 host = "0.0.0.0"
 port = 8080
-max_sandbox_timeout_seconds = 300
+max_sandbox_timeout_seconds = 86400
 
 [proxy]
 resolve_internal = true
@@ -15,12 +15,15 @@ execd_image = "opensandbox/execd@sha256:cda2bc35409bbf57561599b316cafb899598f7dc
 
 [docker]
 network_mode = "bridge"
+# Docker Desktop publishes on the workstation, where the VM bridge address is
+# not bindable. Native Linux uses its inspected bridge gateway instead (runner).
+host_ip = "host.docker.internal"
 publish_host = "127.0.0.1"
 drop_capabilities = ["ALL"]
 no_new_privileges = true
 pids_limit = 64
 port_range_min = 40000
-port_range_max = 40199
+port_range_max = 60000
 sandbox_binds = []
 
 [storage]

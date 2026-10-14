@@ -150,6 +150,11 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in officeEvents) yield return item;
             yield break;
         }
+        if (OpenSandboxScript.Generate(request) is { } sandboxEvents)
+        {
+            foreach (var item in sandboxEvents) yield return item;
+            yield break;
+        }
         if (AgentWorkspaceScript.Generate(request) is { } workspaceEvents)
         {
             foreach (var item in workspaceEvents) yield return item;

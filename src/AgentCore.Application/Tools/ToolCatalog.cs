@@ -40,6 +40,11 @@ public static class ToolCatalog
     public const string ArtifactsCreateFromWorkspace = "artifacts.create_from_workspace";
     public const string ArtifactsVerify = "artifacts.verify";
     public const string SandboxRun = "sandbox.run";
+    public const string SandboxExec = "sandbox.exec";
+    public const string SandboxStatus = "sandbox.status";
+    public const string SandboxProcessStatus = "sandbox.process.status";
+    public const string SandboxProcessStop = "sandbox.process.stop";
+    public const string SandboxReset = "sandbox.reset";
     public const string WebSearch = "web.search";
     public const string WebFetch = "web.fetch";
     public const string HttpRequest = "http.request";

@@ -25,7 +25,7 @@ Use deterministic lexical discovery through one `capabilities.load` bootstrap. P
 
 Every Session requires a real active Agent Instance at creation and pins its active Definition/persona. Every instance owns durable `/home`; every Session owns temporary `/working`. The runtime catalog contains supported built-ins, including capability-aware General Assistant v18 with `background.start` and deliberately retained published versions for pinned owners. Unsupported historical versions remain in Git history. A fresh Chat with no instances directs the owner to Admin. No identity backfill, Definition-based Session creation, version fallback or workspace mode discriminator exists.
 
-Choose transient mailbox-owned Session cwd with `/home` initialization and deterministic reset on runtime reconstruction. Reject moving/deleting cwd or ancestors. Resolve relative model paths from cwd within an authorized logical root; `/agent` and `/attachments` are read-only. HTTP execution-view paths default to `/home`, independent of runtime cwd. Sandbox remains explicitly `/working`-oriented through its private adapter mount; a home sandbox mount remains deferred.
+Choose transient mailbox-owned Session cwd with `/home` initialization and deterministic reset on runtime reconstruction. Reject moving/deleting cwd or ancestors. Resolve relative model paths from cwd within an authorized logical root; `/agent` and `/attachments` are read-only. HTTP execution-view paths default to `/home`, independent of runtime cwd. Sandbox remains `/working`-oriented through exact replica transfer, with no canonical host bind; `/home` remains Core-managed.
 
 Keep SQLite metadata and opaque immutable blobs for home, with scratch nested beneath its owner. Stable item IDs, revision/hash CAS, whole-tree tokens, exact bytes, trusted source-Session provenance, portability validation, quotas and symlink denial remain authoritative. Ordinary home write/patch requires current revision/hash when replacing a file. `workspace.copy` transfers exact files or complete trees, including empty directories, within or across `/home` and `/working`; it never merges and only guarded durable-file replacement can overwrite. Same-root home structural copy requires the current tree token. Cross-root move and cross-store batches are excluded.
 
@@ -275,7 +275,7 @@ Hub **connection lease** (`attachmentId` on SignalR commands) remains a per-conn
 
 ### Decision: A–H mandatory; Phase I conditional; concrete sandbox (R6)
 
-**Decision:** Phases A–H are mandatory, including rename and archive/unarchive. Phase H is a concrete container sandbox behind the execution capability boundary (not unit fakes alone). **Observed:** `sandbox.run` via `DockerSandboxExecutor` (`busybox:1.36`, network none, read-only root, dropped capabilities, 64 MiB / 0.5 CPU / 32 PIDs / 8 s, session working-dir bind only, kill/reap, bounded output, `IArtifactStore` export). Broad `process`/`shell` remain disabled and are not granted by H. **Phase I observed not-applicable:** implemented G/H workflows do not require typed persisted WorkItems. In-flight tools are off-mailbox and epoch-guarded (`ToolWorkflowRuntimeTests.Deactivation_rejects_stale_workspace_write`); sandbox containers are killed and reaped; shipped Support/Compliance allowlists omit `sandbox.run`. Session-owned attachments, workspace files, and artifacts already survive deactivation through Phases D and F. **Historical Phase I trigger:** add detached workflow recovery only if a later accepted Support, Compliance, or `sandbox.run` workflow must continue or resume after SessionRuntime deactivation without repeating the user turn. Until then do not leave untracked host processes as a substitute. P6 durable work for trigger occurrences is a separate observed capability and does not satisfy this trigger.
+**Decision:** Phases A–H are mandatory, including rename and archive/unarchive. Phase H is a concrete container sandbox behind the execution capability boundary (not unit fakes alone). **Historical Phase H, superseded by the [trusted-local OpenSandbox decision](#trusted-local-opensandbox-decision):** `sandbox.run` used `DockerSandboxExecutor` (`busybox:1.36`, network none, read-only root, dropped capabilities, 64 MiB / 0.5 CPU / 32 PIDs / 8 s, session working-dir bind only, kill/reap, bounded output, `IArtifactStore` export). Broad `process`/`shell` remain disabled and are not granted by H. **Phase I observed not-applicable:** implemented G/H workflows do not require typed persisted WorkItems. In-flight tools are off-mailbox and epoch-guarded (`ToolWorkflowRuntimeTests.Deactivation_rejects_stale_workspace_write`); sandbox containers are killed and reaped; shipped Support/Compliance allowlists omit `sandbox.run`. Session-owned attachments, workspace files, and artifacts already survive deactivation through Phases D and F. **Historical Phase I trigger:** add detached workflow recovery only if a later accepted Support, Compliance, or `sandbox.run` workflow must continue or resume after SessionRuntime deactivation without repeating the user turn. Until then do not leave untracked host processes as a substitute. P6 durable work for trigger occurrences is a separate observed capability and does not satisfy this trigger.
 
 ### Planned resource limits
 
@@ -305,11 +305,11 @@ Unless a later item records a tested change:
 | Overall active execution deadline, unattended bound browser | Default 240 s; independent class profile |
 | Tool output | 8 MiB |
 | Durable Run checkpoint | 256 KiB system ceiling after measured compaction |
-| Sandbox memory | 64 MiB |
-| Sandbox CPUs | 0.5 |
-| Sandbox PIDs | 32 |
-| Sandbox timeout | 8 s |
-| Sandbox output | 64 KiB |
+| Sandbox memory | 1024 MiB default, 2048 MiB ceiling |
+| Sandbox CPUs | 1 default, 2 ceiling |
+| Sandbox PIDs | 64 (server enforced) |
+| Sandbox command timeout | 120 s default, 180 s ceiling, profile/Run/deadline clamped |
+| Sandbox foreground output | 32 KiB stdout + 32 KiB stderr |
 
 P9.5 records a tested change to the tool-loop rows above. Real external-application browser workflows use a larger Core-owned execution budget than ordinary tool workflows. The original 24-step/180-second values remain the standard profile. A user turn whose authorized tools include a browser tool uses 48 steps and 300 seconds. A scheduled or application-event AgentRun that holds the bound application-browser lease uses 32 steps and 240 seconds. Core resolves that profile from trusted execution context before the loop. The model has no tool or argument that raises the budget. Per-tool timeout, tool output, `skills.load`, `app.message.send`, approval semantics, and browser origin policy stay unchanged. Infrastructure recovery retries still count toward the same step budget. The change exists because a real nopCommerce product-publish-and-verify journey exhausted the standard profile before its storefront postcondition could be established.
 
@@ -473,3 +473,13 @@ Exact new frontend production package inventory:
 | setimmediate | 1.0.5 | MIT |
 | shiki | 4.5.0 | MIT |
 | xmlchars | 2.2.0 | MIT |
+
+## Trusted-local OpenSandbox decision
+
+The approved P10 execution backend is `Alibaba.OpenSandbox` exactly 1.1.1, paired with the 1.1.1 server/execd/egress digests in [images.json](../scripts/opensandbox-proof/images.json). The SDK stays in Infrastructure. No Docker CLI or daemon client remains in production Core. Deployment/acceptance scripts may operate only their disposable project resources. A single trusted server uses the existing local Docker daemon; no DinD, additional VM, Kubernetes or alternate runtime is introduced for this local-demo target.
+
+Profiles pin immutable OCI registry digests; explicit local-development configuration may allow a content-addressed local image ID. General Workbench preinstalls Python 3.13.7, Node 22.20.0, TypeScript 5.9.3, pandas/numpy/openpyxl/python-docx/matplotlib/pytest/reportlab, LibreOffice and utilities. Python hashes, base-image digests and a Debian snapshot fix build inputs. Initialization is optional, bounded and once per generation, after scratch hydration; it is not a dependency installer.
+
+Workloads run as non-root with capabilities dropped, no-new-privileges, 64 PIDs, bounded CPU/memory/TTL and deny-default egress. The actual SDK acceptance probes resource enforcement, DNS/external IP, metadata, private lifecycle and gateway access. Own execd loopback remains reachable; trusted local use explicitly accepts that limitation. Canonical scratch has a 250 MiB ceiling (50 MiB per transferred file, 4096 files, 8192 entries); Docker writable-layer disk quota is not enforced. Production isolation and signed supply-chain attestation remain separate deferred hardening.
+
+Ordinary per-tool ceilings remain 30 seconds. Sandbox commands have a separate pinned Run allowance, default 120 seconds and maximum 180 seconds, clamped to the profile and remaining Run deadline. Legacy `sandbox.run` retains only its bounded original verb grammar over the same SDK backend. Earlier BusyBox limits below are historical Phase H values, superseded by this decision.

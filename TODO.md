@@ -8,15 +8,17 @@ The MVP and phases through P9.10 have closed/frozen evidence. Later bounded enha
 
 Email accounts, Gmail OAuth and monitoring have accepted non-live scopes. The contextual Admin/email integration also has exact-source hosted acceptance; see [integration verification](docs/reports/email-monitoring-main-integration-2026-10-13.md). Real mailbox acceptance remains separate.
 
-P10's scoped OpenSandbox cutover is owner-authorized, with Stage A blocked on
-isolated-runner approval and unresolved command/control-plane isolation.
+P10's scoped OpenSandbox cutover is owner-authorized for trusted single-user
+local Docker development/demo. The real SDK bridge proof passes; durable
+ownership, lifecycle, coding/Office, deadline/recovery and atomic scratch checks
+pass. Full merged frontend tests pass; final runtime/hosted closure is in progress.
 [Verification](docs/reports/opensandbox-integration-verification.md) records the
 actual fallback failure and remaining gates. P11 remains unopened and
 requirement-triggered.
 
 ## Open work and acceptance gaps
 
-- [ ] **OpenSandbox cutover:** pass the real Stage A compatibility/isolation gate before dependent implementation; then complete contracts/persistence, lifecycle, atomic Workspace bridge, non-replayable tools, Admin/Chat and all OSB-01–18 acceptance. The privileged disposable runner requires explicit approval; the unprivileged fallback reproduced loopback execd reachability. See [verification](docs/reports/opensandbox-integration-verification.md).
+- [ ] **OpenSandbox cutover:** close remaining combined browser/restart/Compose and exact-source hosted acceptance for the implemented SDK/Workbench/tool/UI cutover. Own execd loopback is a disclosed limitation; public/multi-tenant production hardening is deferred. DinD and extra execution platforms are excluded. See [verification](docs/reports/opensandbox-integration-verification.md).
 
 
 - [ ] **Office/Drive manual and Real acceptance:** implementation and all seven automated Synthetic/Compose gates passed on `a451600a`. Dedicated real Google UAT, desktop Office-client fidelity and actual native browser 200% zoom remain unverified; see the [successor ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md).

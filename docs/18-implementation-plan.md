@@ -7,9 +7,9 @@ proposal. This opens the scoped P10 execution integration; P11 remains
 unopened. Use one vendor-neutral Application service and Infrastructure-only
 official C# SDK, one per-Session execution replica, Core-owned authoritative
 Workspace/Artifacts, exact Definition authority and pinned Run/generation
-policy. The existing Docker/BusyBox implementation remains the observed
-product until a verified coherent cutover; no second production executor or
-automatic host fallback is authorized.
+policy. The direct Docker/BusyBox backend is retired in the current implementation.
+One SDK backend owns execution; no parallel executor or automatic host fallback
+is authorized. Final milestone acceptance requires the remaining integrated gates.
 
 Required order: A real upstream compatibility and isolation proof → B typed
 contracts/policy/persistence → C Workbench/lifecycle → D atomic Workspace
@@ -20,11 +20,16 @@ processes, historical Definition compatibility, data-preserving migrations,
 Office Artifact delivery, responsive runtime UX, Compose/runner restart and
 real network isolation evidence. Mocked SDK tests cannot accept Stage A.
 
-Current status: **Stage A blocked/not accepted**. The published 1.1.1 SDK
-compiles; a real unprivileged execd fallback reproduced command access to
-local execd despite network-none. The isolated privileged test runner was
-rejected by automatic approval review. No product cutover has begun. Exact
-evidence, pending runner approval and remaining gates are recorded in the
+Current scope was clarified on **2026-10-14**: trusted single-user local
+Docker development/demo, with the trusted OpenSandbox server authorized to
+use the host socket. DinD, a separate VM and extra execution platforms are
+excluded. Own-container execd loopback is accepted as a disclosed limitation;
+production control-plane isolation remains deferred. The real 1.1.1 SDK proof
+passes on the authenticated bridge deployment. The local SDK, durable ownership, atomic scratch, coding/Office, command
+interruption/recovery and responsive Admin/Chat flows have executed successfully.
+All 1,021 merged frontend tests pass. The reproducible runner exports installed
+SPDX/license evidence. Final combined backend/browser/restart/Compose and exact-SHA
+hosted acceptance are still in progress; no complete milestone acceptance is claimed. Exact evidence is recorded in the
 [verification ledger](reports/opensandbox-integration-verification.md).
 Earlier P10/P11 status statements below record their historical slice
 boundaries and do not override this newly authorized P10 gate.

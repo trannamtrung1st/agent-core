@@ -11,6 +11,7 @@ internal static class AutomationRunScript
     {
         if (!request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal))) return null;
         var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
+        if (prompt.Contains("synthetic-sandbox:demo", StringComparison.Ordinal)) return OpenSandboxScript.Generate(request);
         bool Offers(string name) => request.Tools?.Any(t => t.Name == name) == true;
         var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
         if (prompt.Contains("synthetic-background-files", StringComparison.Ordinal))

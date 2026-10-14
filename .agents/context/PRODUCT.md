@@ -130,3 +130,8 @@ Operators create/edit/test/rotate protected mail accounts under Connections → 
 Current Gmail owner journey uses one explicit Google consent in global Credentials, protected backend refresh, verified mailbox and connect/check/reconnect/disconnect. Custom mail remains the advanced TLS/password choice. Synthetic clearly identifies offline authorization and no real delivery; binding and exact send approval stay separate. See docs/13 and the OAuth verification report for canonical behavior and acceptance.
 
 Current Drive correctness follow-up: [review verification](../../docs/reports/file-preview-drive-review-2026-10-14.md) records source `0763058d`, 17 focused tests, four Synthetic browser journeys, clear-search restoration and one-upload receipt recovery with locked destinations. This adds no new capability, authority or hosted closure.
+
+
+## Trusted-local execution tooling context
+
+The approved P10 local-demo cutover adds one Session-owned OpenSandbox environment and a prebuilt coding/data/Office Workbench. Profiles configure environments; Definition/Instance capabilities own authority. One trusted server uses the existing local Docker daemon; Core/workloads receive no socket or canonical host mounts. Canonical /working, durable /home and Artifacts remain distinct. Current Office/Drive/file-preview behavior stays in the shared surfaces. Own execd loopback and absent Docker writable-layer quota are disclosed local-demo limitations; production hardening remains separate. /docs owns all product and acceptance facts.

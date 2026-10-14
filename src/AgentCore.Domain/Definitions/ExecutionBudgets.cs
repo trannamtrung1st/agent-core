@@ -5,7 +5,7 @@ public enum ExecutionBudgetPreset { Standard, Extended, DeepWorkflow, Custom }
 
 /// <summary>Resource policy only; never an authorization grant.</summary>
 public sealed record ExecutionBudgetProfile(int MaxSteps, int DurationSeconds, int PerToolSeconds = 30,
-    ExecutionBudgetPreset Preset = ExecutionBudgetPreset.Custom)
+    ExecutionBudgetPreset Preset = ExecutionBudgetPreset.Custom, int SandboxCommandSeconds = 120)
 {
     public static ExecutionBudgetProfile For(ExecutionBudgetClass kind, ExecutionBudgetPreset preset)
     {
@@ -28,15 +28,17 @@ public sealed record ExecutionBudgetProfile(int MaxSteps, int DurationSeconds, i
             || DurationSeconds < 60 || DurationSeconds > ceilings.DurationSeconds
             || PerToolSeconds < 1 || PerToolSeconds > ceilings.PerToolSeconds || PerToolSeconds > DurationSeconds)
             throw new ArgumentException($"Execution budget requires 8–{ceilings.MaxSteps} steps, 60–{ceilings.DurationSeconds} seconds and 1–{ceilings.PerToolSeconds} seconds per tool.");
+        if (SandboxCommandSeconds < 1 || SandboxCommandSeconds > ceilings.SandboxCommandSeconds)
+            throw new ArgumentException($"Sandbox command budget requires 1–{ceilings.SandboxCommandSeconds} seconds.");
     }
 }
 
-public sealed record ExecutionBudgetCeilings(int MaxSteps = 144, int DurationSeconds = 900, int PerToolSeconds = 30)
+public sealed record ExecutionBudgetCeilings(int MaxSteps = 144, int DurationSeconds = 900, int PerToolSeconds = 30, int SandboxCommandSeconds = 180)
 {
     public static ExecutionBudgetCeilings Default { get; } = new();
     public void Validate()
     {
-        if (MaxSteps is < 8 or > 144 || DurationSeconds is < 60 or > 900 || PerToolSeconds is < 1 or > 30)
+        if (MaxSteps is < 8 or > 144 || DurationSeconds is < 60 or > 900 || PerToolSeconds is < 1 or > 30 || SandboxCommandSeconds is < 1 or > 180)
             throw new ArgumentException("Host execution ceilings must stay within 144 steps, 900 seconds and 30 seconds per tool.");
     }
 }

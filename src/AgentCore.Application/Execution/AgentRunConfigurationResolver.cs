@@ -11,7 +11,7 @@ public sealed record ResolvedAgentRunConfiguration(AgentRunConfiguration Configu
     IReadOnlyList<EffectiveSkill> Skills, ExecutionBudgetPolicy? InstanceBudgets);
 
 public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
-    IAgentDefinitionResourceAdminStore resources, InheritedDefinitionResourceCatalog? inheritedResources = null, IAgentCredentialBindingStore? credentialBindings = null)
+    IAgentDefinitionResourceAdminStore resources, InheritedDefinitionResourceCatalog? inheritedResources = null, IAgentCredentialBindingStore? credentialBindings = null, ISandboxStore? sandboxes = null)
 {
     public async ValueTask<ResolvedAgentRunConfiguration> ResolveAsync(Guid id, CancellationToken ct = default, bool allowArchived = false)
     {
@@ -27,6 +27,8 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
             var current = await instances.FindAsync(id, ct);
             if (current?.Revision != owner.Revision) continue;
             var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
+            if (sandboxes is not null)
+                effective = effective with { ExecutionSandboxProfile = await sandboxes.GetProfileAsync(effective.SandboxPolicy?.DefaultProfileId ?? "general-workbench", ct: ct) };
             var manifest = AgentInstanceResourceService.Resolve(effective, published, resourceState, skillState);
             var environment = RoleEnvironments.Of(effective);
             // A disabled inherited file removes its knowledge binding; a local knowledge file adds an origin-qualified one.

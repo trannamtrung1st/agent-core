@@ -540,3 +540,12 @@ The [FilePreview surface brief](../../.impeccable/surfaces/web-src-features-file
 - **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
 - **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
 - **Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`.
+
+
+## Session sandbox presentation (P10 local demo)
+
+Platform Sandboxes reuses retained Admin configuration panels, AntD vertical Form and existing control-width/navigation-guard rules. Global state and safe limitations precede editable profiles; Save/Discard/Verify share the compact action gap. Definition and Instance selections reuse existing capability/settings sections and Effective Configuration.
+
+Chat adds a quiet Code icon beside existing header actions. Session sandbox uses the existing 640px desktop/full-width mobile Drawer pattern, bordered descriptions, wrapping status/exit/duration metadata, copyable code and AntD Collapse for output. Foreground stdout/stderr stay distinct; background output is labeled combined. Recovery errors retain prior evidence and consequential actions require the shared confirmation with stale-selection fencing. Files stay in shared Artifact/file-preview surfaces from current main; no second viewer or kit is added.
+
+One bounded local review inspected Admin and Chat at 1440/1024/768/390/320px after drawer transitions settled, with no horizontal overflow. Runtime Save/Discard/navigation guarding, real coding/Office downloads, cancel/reset and Core restart were exercised. The merged 1,021 frontend tests and build passed; final runner/hosted acceptance remains in the verification ledger. This records local evidence, not production or physical-device acceptance.

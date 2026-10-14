@@ -3644,7 +3644,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         await MarkRunEffectAsync(cause, request.ResponseId, call, actionHash, AgentRunSideEffectDisposition.InFlight, overallCts.Token).ConfigureAwait(false);
                                     }
                                     using var toolCts = CancellationTokenSource.CreateLinkedTokenSource(overallCts.Token);
-                                    using var toolTimer = ScheduleCancel(_time, toolCts, ToolLimits.PerTool);
+                                    var toolDuration = call.Name == ToolCatalog.SandboxExec
+                                        ? budget.SandboxPerTool ?? TimeSpan.FromSeconds(120) : budget.PerTool;
+                                    if (overallDeadline is { } deadline && toolDuration > deadline - _time.GetUtcNow()) toolDuration = deadline - _time.GetUtcNow();
+                                    using var toolTimer = ScheduleCancel(_time, toolCts, toolDuration > TimeSpan.Zero ? toolDuration : TimeSpan.FromMilliseconds(1));
                                     executionResult = await _tools.ExecuteAsync(
                                             ExecutionDefinition,
                                             SessionId,
@@ -3724,8 +3727,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         return;
                     }
 
+                    // Safety evidence survives clipping/aggregate output exhaustion.
+                    var sandboxUnknown = executionResult.OutcomeUnknown || SandboxOutcomeUnknown(call.Name, executionResult.Text);
                     if (effectFenced)
-                        await MarkRunEffectAsync(cause, request.ResponseId, call, effectHash!, RejectedEffect(executionResult.Text)
+                        await MarkRunEffectAsync(cause, request.ResponseId, call, effectHash!, sandboxUnknown ? AgentRunSideEffectDisposition.Indeterminate : RejectedEffect(executionResult.Text)
                             ? AgentRunSideEffectDisposition.DefinitelyFailed : AgentRunSideEffectDisposition.Succeeded, generateToken).ConfigureAwait(false);
                     if (_boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight
                         && call.Name is ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserNavigate && !RejectedEffect(executionResult.Text))
@@ -3827,7 +3832,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         ToolCallId: call.Id,
                         Name: call.Name));
                     await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
-                    if (effectFenced)
+                    if (sandboxUnknown)
+                    {
+                        await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest,
+                            "Sandbox execution outcome is unknown. The command was not repeated. Inspect the Session sandbox and explicitly reset before another mutation.", FailureReason: "sandboxOutcomeUnknown")), CancellationToken.None).ConfigureAwait(false);
+                        return;
+                    }
+                    if (effectFenced && !sandboxUnknown)
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                     if (IsInitialBackgroundRun && AgentCore.Application.Email.EmailAttentionSafety.RequiresOwnerAttention(call.Name, executionResult.Text))
                     {
@@ -6751,9 +6762,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     }
 
     private static string ToolProgressMessage(string toolName) =>
+        toolName.StartsWith("sandbox.", StringComparison.Ordinal) ? "Using sandbox…" :
         toolName.StartsWith("browser.", StringComparison.Ordinal)
             ? ResponseProgressMessages.UsingBrowser
             : ResponseProgressMessages.RunningTools;
+
+    private static bool SandboxOutcomeUnknown(string name, string json)
+    {
+        if (!name.StartsWith("sandbox.", StringComparison.Ordinal)) return false;
+        try { using var doc = JsonDocument.Parse(json); return doc.RootElement.TryGetProperty("error", out var value) && value.ValueKind == JsonValueKind.String && value.GetString() == "outcome_unknown"; }
+        catch (JsonException) { return false; }
+    }
 
     private const string ChallengedBrowserInstruction =
         """

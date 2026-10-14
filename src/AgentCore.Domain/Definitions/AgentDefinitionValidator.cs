@@ -153,6 +153,7 @@ public static class AgentDefinitionValidator
         ValidateTriggerPolicy(definition.TriggerPolicy);
         ValidateSkills(definition.Skills);
         definition.ExecutionBudgets?.Validate();
+        definition.SandboxPolicy?.Validate();
     }
 
     private static void ValidateSkills(IReadOnlyList<SkillSpec>? skills)

@@ -20,7 +20,6 @@ public sealed partial class SessionToolExecutor(
     IAttachmentProcessor? processor = null,
     ISessionWorkspace? workspace = null,
     IArtifactStore? artifacts = null,
-    ISandboxExecutor? sandbox = null,
     IWebSearchProvider? webSearch = null,
     IPublicWebFetcher? publicWebFetcher = null,
     IEmailProvider? emailProvider = null,
@@ -41,7 +40,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
     AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null)
+    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -91,7 +90,7 @@ public sealed partial class SessionToolExecutor(
     public async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct)
     {
         if (_agentInstances is not null && _agentDefinitions is not null && definitionResources is not null)
-            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources, credentialBindings).ResolveAsync(session.AgentInstanceId, ct);
+            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources, credentialBindings, sandboxStore).ResolveAsync(session.AgentInstanceId, ct);
         // Isolated fixtures can supply their immutable Definition directly. Production wires all stores.
         var owner = _agentInstances is null ? null : await _agentInstances.FindAsync(session.AgentInstanceId, ct);
         var bindings = credentialBindings is null ? [] : await credentialBindings.ListBindingsAsync(session.AgentInstanceId, ct);
@@ -483,9 +482,9 @@ public sealed partial class SessionToolExecutor(
                     await CreateArtifactFromWorkspaceAsync(definition, sessionId, args, admission?.AgentRunId, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsVerify => TextResult(
                     await VerifyArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.SandboxRun => FitResult(
-                    remainingOutputBytes,
-                    await RunSandboxAsync(definition, sessionId, args, remainingOutputBytes, admission?.AgentRunId, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.SandboxRun => await ExecuteSandboxToolAsync(definition, sessionId, call, args, admission, remainingOutputBytes, cancellationToken),
+                ToolCatalog.SandboxExec or ToolCatalog.SandboxStatus or ToolCatalog.SandboxProcessStatus or ToolCatalog.SandboxProcessStop or ToolCatalog.SandboxReset
+                    => await ExecuteSandboxToolAsync(definition, sessionId, call, args, admission, remainingOutputBytes, cancellationToken),
                 ToolCatalog.WebSearch => FitResult(
                     remainingOutputBytes,
                     await SearchWebAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
@@ -1146,83 +1145,6 @@ public sealed partial class SessionToolExecutor(
                 contentType = result.ContentType,
                 text,
                 truncated = truncated || result.Truncated
-            }));
-    }
-
-    private async Task<string> RunSandboxAsync(
-        AgentDefinition definition,
-        Guid sessionId,
-        JsonElement args,
-        int remainingOutputBytes,
-        Guid? agentRunId,
-        CancellationToken cancellationToken)
-    {
-        if (sandbox is null)
-        {
-            return Error("unavailable", "Container sandbox is unavailable.");
-        }
-
-        if (!TryString(args, "verb", out var verb))
-        {
-            return Error("invalid", "verb is required.");
-        }
-
-        var arguments = new List<string>();
-        if (args.TryGetProperty("arguments", out var list) && list.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in list.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.String)
-                {
-                    return Error("invalid", "arguments must be strings.");
-                }
-
-                arguments.Add(item.GetString() ?? "");
-            }
-        }
-
-        TryString(args, "exportPath", out var export);
-        if (!string.IsNullOrWhiteSpace(export)) export = AgentWorkspacePaths.Resolve(export, sessionId, "/working");
-        if (verb == "cat" && arguments.Count == 1) arguments[0] = AgentWorkspacePaths.Resolve(arguments[0], sessionId, "/working");
-        if (!string.IsNullOrWhiteSpace(export)
-            && !TryResolveWorkspacePath(export, sessionId, out export, out var exportError))
-        {
-            return exportError;
-        }
-
-        if (string.Equals(verb, "cat", StringComparison.OrdinalIgnoreCase) && arguments.Count == 1)
-        {
-            if (!TryResolveWorkspacePath(arguments[0], sessionId, out var resolvedCatPath, out var catError))
-            {
-                return catError;
-            }
-
-            arguments[0] = resolvedCatPath;
-        }
-
-        var started = Stopwatch.GetTimestamp();
-        var result = await sandbox.RunAsync(
-                new SandboxRequest(
-                    sessionId,
-                    Guid.CreateVersion7(),
-                    definition,
-                    verb,
-                    arguments,
-                    string.IsNullOrWhiteSpace(export) ? null : export, agentRunId),
-                cancellationToken)
-            .ConfigureAwait(false);
-        RuntimeTelemetry.Record("sandbox", RuntimeTelemetry.ElapsedMs(started), verb);
-        return ToolJsonResults.FitJsonWithContentField(
-            remainingOutputBytes,
-            result.Output,
-            (output, truncated) => JsonSerializer.Serialize(new
-            {
-                ok = result.Succeeded,
-                exitCode = result.ExitCode,
-                output,
-                truncated = truncated || result.Truncated,
-                artifactId = result.ArtifactId,
-                message = result.SafeMessage
             }));
     }
 

@@ -54,7 +54,7 @@ internal static class BackgroundSessionScript
                 return Call(ToolCatalog.CapabilitiesLoad, new { query = "start an immediate background task", limit = 1 });
             return [new ModelTextDelta("This Agent is not authorized to start background tasks."), new ModelCompleted(ModelStopReason.Completed)];
         }
-        return Call(ToolCatalog.BackgroundStart, new { objective = prompt.Contains("[test:background-prose]", StringComparison.Ordinal) ? "synthetic-background-prose: verify bounded failure reporting" : prompt.Contains("[test:background-files]", StringComparison.Ordinal) ? "synthetic-background-files: create the original task report" : "synthetic-automation-attention: check the requested progress and report the outcome", title = "Background progress check", reportCompletion = true });
+        return Call(ToolCatalog.BackgroundStart, new { objective = prompt.Contains("[test:opensandbox-background]", StringComparison.Ordinal) ? "synthetic-sandbox:demo" : prompt.Contains("[test:background-prose]", StringComparison.Ordinal) ? "synthetic-background-prose: verify bounded failure reporting" : prompt.Contains("[test:background-files]", StringComparison.Ordinal) ? "synthetic-background-files: create the original task report" : "synthetic-automation-attention: check the requested progress and report the outcome", title = "Background progress check", reportCompletion = true });
     }
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object arguments) =>
         [new ModelToolCallEvent(new("background-fixture-" + name, name, JsonSerializer.Serialize(arguments))), new ModelCompleted(ModelStopReason.ToolCalls)];

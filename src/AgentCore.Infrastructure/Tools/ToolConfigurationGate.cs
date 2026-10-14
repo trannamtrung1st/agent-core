@@ -9,7 +9,7 @@ public sealed class ToolConfigurationGate(
     IPublicWebFetcher? publicWebFetcher,
     IEmailProvider? emailProvider,
     IBrowser? browserSession = null,
-    bool browserEnabled = false, IEmailProviderFactory? emailFactory = null, IGoogleDriveProviderFactory? driveFactory = null) : IToolConfigurationGate
+    bool browserEnabled = false, IEmailProviderFactory? emailFactory = null, IGoogleDriveProviderFactory? driveFactory = null, ISandboxReadiness? sandbox = null) : IToolConfigurationGate
 {
     public bool IsExecutionConfigured(string toolName) => toolName == ToolCatalog.BrowserConfiguration
         ? browserSession is not null
@@ -22,6 +22,7 @@ public sealed class ToolConfigurationGate(
         toolName switch
         {
             _ when toolName.StartsWith("drive.", StringComparison.Ordinal) => driveFactory is { Enabled: true, Configured: true },
+            _ when toolName.StartsWith("sandbox.", StringComparison.Ordinal) => sandbox?.IsAvailable == true,
             ToolCatalog.WebSearch => webSearch?.IsAvailable == true,
             ToolCatalog.WebFetch => publicWebFetcher is not null,
             ToolCatalog.EmailAccounts or ToolCatalog.EmailRequestAccount or ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft

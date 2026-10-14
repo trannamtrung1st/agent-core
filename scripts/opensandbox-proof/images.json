@@ -6,6 +6,6 @@
   "execd": "opensandbox/execd@sha256:cda2bc35409bbf57561599b316cafb899598f7dce671332e7ceda14eb1cfeded",
   "egress": "opensandbox/egress@sha256:bce2cc2e4dc3a3594678b91ac29efb0669fccebfdfc137727018d3b087fbb13a",
   "pythonBase": "python@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689",
-  "disposableDindRunner": "docker@sha256:1e08cdb63405ca788aea94ef35b792d1e299607c667d33d7bcbcae1fd2611ced",
-  "status": "Registry digests resolved; SDK compiled separately; server/execd/egress pulled; standalone execd fallback exercised with loopback isolation failure; full SDK/lifecycle execution and supply-chain attestation acceptance unrun."
+  "status": "Exact 1.1.1 SDK/server/execd/egress pins exercised on trusted local Docker Desktop; installed Workbench SPDX/license inventory exported. Own execd loopback accepted only for local demo; production isolation/attestation deferred. Final acceptance evidence belongs to the verification ledger.",
+  "nodeBase": "node@sha256:b21fe589dfbe5cc39365d0544b9be3f1f33f55f3c86c87a76ff65a02f8f5848e"
 }

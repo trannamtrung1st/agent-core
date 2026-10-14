@@ -1,11 +1,13 @@
 # Agent Core MVP
 
-The owner-authorized P10 OpenSandbox cutover is at **Stage A, blocked/not
-accepted**. The published SDK probe compiles; a real unprivileged execd test
-reproduced workload access to local execd despite network-none. Isolated
-runner approval and verified command/control-plane isolation are required
-before dependent implementation. The current shipped sandbox remains the
-Docker/BusyBox runner. See [verification](docs/reports/opensandbox-integration-verification.md).
+The owner-authorized P10 OpenSandbox cutover is in progress for a **trusted,
+single-user local demo**. The real authenticated Docker-bridge SDK proof and
+durable ownership/atomic scratch gates pass. The SDK backend, Workbench, lifecycle/command recovery, tools and Admin/Chat
+cutover are implemented. Real SDK/migration/Workspace checks and all 1,021 merged
+frontend tests pass; final browser/restart/Compose and exact-source hosted gates
+are in progress, so full milestone acceptance is not yet claimed. Own-container execd loopback is
+an explicit local-demo limitation. Only the trusted OpenSandbox server may
+mount the host Docker socket. See [verification](docs/reports/opensandbox-integration-verification.md).
 Earlier P10/P11 statements below describe the boundaries of their historical
 slices; this approved Stage A work supersedes the former unopened P10 status.
 

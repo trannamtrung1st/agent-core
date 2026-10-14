@@ -32,7 +32,7 @@ try
         throw new InvalidOperationException("Use loopback HTTP or isolated-runner HTTPS without user info, path, query or fragment.");
 
     image = Required("AGENTCORE_OSB_PROOF_IMAGE");
-    if (!Regex.IsMatch(image, @"^[a-zA-Z0-9./:_-]+@sha256:[a-f0-9]{64}$"))
+    if (!Regex.IsMatch(image, @"^(?:[a-zA-Z0-9./:_-]+@)?sha256:[a-f0-9]{64}$"))
         throw new InvalidOperationException("The disposable test image must be pinned by SHA-256 digest.");
 
     connection = new ConnectionConfig(new ConnectionConfigOptions
@@ -73,6 +73,8 @@ try
     Check(nonRoot, "non-root-command");
     if (!nonRoot) throw new InvalidOperationException("The proof requires confirmed non-root execution.");
     Check(identity.Complete is { ExecutionTimeMs: >= 0 }, "command-duration");
+    var limits = await first.Commands.RunAsync(["python", "-I", "-c", "from pathlib import Path; s=Path('/proc/self/status').read_text(); assert 'NoNewPrivs:\\t1' in s; assert 'CapBnd:\\t0000000000000000' in s; c=Path('/sys/fs/cgroup'); assert (c/'pids.max').read_text().strip()=='64'; assert int((c/'memory.max').read_text())==512*1024*1024; q,p=map(int,(c/'cpu.max').read_text().split()); assert q/p==1"], CommandOptions(), cancellationToken: ct);
+    Check(limits.ExitCode == 0, "enforced-cgroup-memory-cpu-pids-and-no-privileges");
 
     var bytes = Enumerable.Range(0, 256).Select(i => (byte)i).ToArray();
     await first.Files.WriteFilesAsync([new WriteEntry { Path = "/working/exact.bin", Data = bytes }], ct);
@@ -110,11 +112,29 @@ try
     }
     Check(stopped, "background-stop-confirmed");
 
-    // Probe only the sandbox's OWN loopback execd. No operator host or external network target.
-    // The proposal requires command code to lack control-plane endpoint access. Reachability
-    // is an explicit failed gate even if ordinary SDK execution succeeds.
-    var localProbe = await RunAsync(first, "python -c \"import socket; s=socket.socket(); s.settimeout(2); r=s.connect_ex(('127.0.0.1',44772)); s.close(); raise SystemExit(1 if r==0 else 0)\"");
-    Check(localProbe.ExitCode == 0, "workload-cannot-connect-to-execd-loopback");
+    // execd intentionally shares the workload network namespace. Upstream egress
+    // permits its own loopback. This is an acknowledged trusted-local limitation,
+    // not evidence that the host Docker socket or lifecycle key is available.
+    var localProbe = await RunAsync(first, "python -c \"import socket; s=socket.socket(); s.settimeout(2); r=s.connect_ex(('127.0.0.1',44772)); s.close(); print('own-execd-reachable' if r==0 else 'own-execd-blocked')\"");
+    Check(localProbe.ExitCode == 0, "own-loopback-topology-observed");
+    Console.WriteLine(JsonSerializer.Serialize(new { limitation = Stdout(localProbe).Trim(), productionIsolationAccepted = false }));
+    var hostProtection = await RunAsync(first, "test ! -S /var/run/docker.sock && test -z \"$OPENSANDBOX_SERVER_API_KEY\" && test ! -e /etc/opensandbox/config.toml && test ! -e /home/sandbox/.ssh");
+    Check(hostProtection.ExitCode == 0, "no-host-socket-server-key-or-config");
+    var offline = await first.Commands.RunAsync(["python","-I","-c","import socket; targets=[('1.1.1.1',443),('169.254.169.254',80)];\nfor host,port in targets:\n s=socket.socket(); s.settimeout(2); r=s.connect_ex((host,port)); s.close(); assert r!=0\ntry: socket.getaddrinfo('example.com',443)\nexcept socket.gaierror: pass\nelse: raise AssertionError('external DNS was available')"],CommandOptions(),cancellationToken:ct);
+    Check(offline.ExitCode == 0,"offline-external-ip-metadata-and-dns-blocked");
+    if (Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_PRIVATE_TARGET") is { Length: > 0 } target)
+    {
+        if (!IPAddress.TryParse(target,out var ip) || !target.StartsWith("172.",StringComparison.Ordinal))
+            throw new InvalidOperationException("Private topology target must be the disposable server's inspected Docker bridge IP.");
+        var privateProbe = await first.Commands.RunAsync(["python","-I","-c","import socket,sys; s=socket.socket(); s.settimeout(2); r=s.connect_ex((sys.argv[1],8080)); s.close(); raise SystemExit(1 if r==0 else 0)",target],CommandOptions(),cancellationToken:ct);
+        Check(privateProbe.ExitCode == 0,"workload-cannot-connect-to-private-lifecycle-server");
+    }
+    if (Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_GATEWAY") is { Length: > 0 } gateway)
+    {
+        if (!IPAddress.TryParse(gateway,out _)) throw new InvalidOperationException("Gateway target must be an inspected numeric address.");
+        var gatewayProbe = await first.Commands.RunAsync(["python","-I","-c","import socket,sys;\nfor port in [8080,18080,6280]:\n s=socket.socket(); s.settimeout(2); r=s.connect_ex((sys.argv[1],port)); s.close(); assert r!=0",gateway],CommandOptions(),cancellationToken:ct);
+        Check(gatewayProbe.ExitCode == 0,"workload-cannot-connect-to-host-gateway-services");
+    }
 }
 catch (Exception)
 {
@@ -134,7 +154,7 @@ finally
     }
 }
 
-Console.WriteLine(JsonSerializer.Serialize(new { compatibilityPassed = failures.Count == 0, failures, securityAccepted = false }));
+Console.WriteLine(JsonSerializer.Serialize(new { compatibilityPassed = failures.Count == 0, trustedLocalDemoPassed = failures.Count == 0, failures, productionIsolationAccepted = false }));
 Environment.ExitCode = failures.Count == 0 ? 0 : 1;
 
 Task<Sandbox> CreateAsync(string label) => Sandbox.CreateAsync(new SandboxCreateOptions

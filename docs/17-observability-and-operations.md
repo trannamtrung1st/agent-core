@@ -575,3 +575,23 @@ Continue upload is offered only for a saved session under its original authoriza
 The Synthetic browser runner explicitly enables Drive only on its isolated test hosts and pins the callback UI origin. Use disposable database/workspace/artifact/key paths. Dedicated Real Google UAT is optional and separately recorded: consent, restart/refresh, upload/query/download, revocation/reconnect/disconnect. Missing live credentials never fail default CI.
 
 Official contracts: [scope boundaries](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), [pre-generated IDs and duplicate create behavior](https://developers.google.com/workspace/drive/api/guides/create-file), [resumable upload](https://developers.google.com/workspace/drive/api/guides/manage-uploads).
+
+## Trusted local OpenSandbox
+
+This optional execution subsystem targets trusted single-user local development/demo. Ordinary Core startup remains Docker-free. Use Node 22, .NET 10, Python 3 and the existing local Docker daemon. One OpenSandbox server per daemon is required; the runner refuses another pinned server because upstream sidecar reconciliation is daemon-wide. It never starts DinD, changes daemon/security settings or removes unrelated containers/networks/images/volumes.
+
+```sh
+python3 scripts/opensandbox-local.py up
+python3 scripts/opensandbox-local.py accept --ui --name agent-core-opensandbox-acceptance
+python3 scripts/opensandbox-local.py down
+```
+
+Run `down` for the existing owned runner before starting acceptance with another name; do not run two servers together. `up` builds the pinned Workbench, pulls exact server/execd/egress digests, creates a random 0600 private env file under gitignored `local/opensandbox-runners/<name>/`, starts a labeled server on `127.0.0.1:18080`, and exports `image.json`, installed SPDX inventory and retained license notices. Core is native; the dedicated runner is the tested deployment path. The server alone mounts the host Docker socket plus its private config and state volume. Workloads have empty host-bind allowlists. Never publish the Docker API or copy the server key into Core source/browser/Chat.
+
+Docker Desktop uses `host.docker.internal` for server-side egress readiness and workload ports published to workstation loopback. A VM bridge gateway is not bindable on the workstation. Native Linux instead publishes workload ports on the inspected Docker bridge gateway, allowing private server proxy routing. Lifecycle publication remains workstation loopback. A wide upstream port range avoids the observed narrow-range collisions; upstream port reservation is not atomic across server/host namespaces. Keep one server and use the reproducible topology probes.
+
+For native Core, pass backend environment overrides `OpenSandbox__Enabled=true`, `OpenSandbox__Endpoint=http://127.0.0.1:18080`, `OpenSandbox__ApiKey` from the private env file, `OpenSandbox__WorkbenchImage` from the exported immutable image ID and explicit `OpenSandbox__AllowLocalImageIds=true`. Do not print the key or load named local secret files through application configuration. Existing provider/storage overrides stay independent. The runner's acceptance supplies these overrides through a private child-process environment and uses isolated SQLite/files/ports. `accept --ui` requires installed web dependencies and Playwright Chromium; it stops only its own child processes/server in `finally`. Its state volume/image are retained for inspection.
+
+Only canonical `/working` storage is quota-enforced (250 MiB ceiling, 50 MiB/file). The Docker writable layer is not disk-quota-enforced. Execd shares workload loopback and remains reachable from commands. This is an accepted local-demo limitation; public/multi-tenant deployment, stronger sandbox isolation and verified supply-chain attestation require separate production work. SPDX export is an installed-component inventory, not vulnerability assessment or signed provenance. Preserve the shipped third-party notices when redistributing the Workbench; project source remains proprietary.
+
+On outage or unknown command outcome, retain the receipt and canonical files, restore private server readiness, inspect the Session sandbox and explicitly reset when required. No automatic shell replay or BusyBox fallback occurs. Cleanup supervision has a bounded pass and retries durable receipts even with disabled profiles/unavailable readiness. Back up SQLite with the existing procedure before migration; migration adds only sandbox tables. Disable sandbox offering for rollback while retaining canonical Workspace/Artifacts.

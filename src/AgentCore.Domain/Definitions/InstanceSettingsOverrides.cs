@@ -49,7 +49,8 @@ public sealed record InstanceSettingsOverrides(
     InstanceField<string>? ProviderLanguageModel = null,
     InstanceField<string?>? ProviderSpeechRecognizer = null,
     InstanceField<string?>? ProviderSpeechSynthesizer = null,
-    InstanceField<string>? ProviderInterruptionClassifier = null)
+    InstanceField<string>? ProviderInterruptionClassifier = null,
+    InstanceField<string>? SandboxProfileId = null)
 {
     public InstanceSettingsOverrides Copy() => this with {
         InitiativeTriggers = InitiativeTriggers is { } initiative ? new(initiative.Value.ToArray()) : null,

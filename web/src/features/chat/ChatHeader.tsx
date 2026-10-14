@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { App as AntApp, Badge, Button, Flex, Tooltip, Typography } from "antd";
-import { CalendarOutlined, InboxOutlined, PoweroffOutlined } from "@ant-design/icons";
+import { CalendarOutlined, CodeOutlined, InboxOutlined, PoweroffOutlined } from "@ant-design/icons";
 import { confirmAction } from "../../app/confirmAction";
 import { formatChatTime } from "./chatTime";
 
@@ -14,6 +14,7 @@ export function ChatHeader({
   speechLocale,
   onSchedules,
   onBackgroundWork,
+  onSandbox,
   attentionCount = 0,
   onEnd,
   inSession
@@ -27,6 +28,7 @@ export function ChatHeader({
   speechLocale?: ReactNode;
   onSchedules?: () => void;
   onBackgroundWork?: () => void;
+  onSandbox?: () => void;
   attentionCount?: number;
   onEnd: () => void;
   inSession: boolean;
@@ -63,6 +65,7 @@ export function ChatHeader({
       </Flex>
       {speechLocale || inSession || onBackgroundWork || additionalActions ? (
         <Flex align="center" gap={8} className="chat-header-actions">
+          {onSandbox && <Tooltip title="Session sandbox"><Button type="text" size="small" className="chat-header-icon-action" aria-label="Session sandbox" icon={<CodeOutlined />} onClick={onSandbox} /></Tooltip>}
           {speechLocale}
           {onBackgroundWork ? (
             <Badge count={attentionCount} size="small" offset={[-4, 4]}>

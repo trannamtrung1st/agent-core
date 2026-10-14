@@ -1,4 +1,47 @@
-# OpenSandbox integration verification — Stage A blocked
+# OpenSandbox integration verification
+
+## Current local-demo continuation — 2026-10-14
+
+Branch `develop/branch-1`; current main `a63194ba` was merged as `e9089734`. Office/Drive/file-preview code and immutable General Assistant v26/v27 are preserved. New v28 combines their capabilities with modern sandbox tools. This ledger's final exact-behavior SHA and hosted links are pending the publication gate; **full milestone acceptance is not yet claimed**.
+
+The owner explicitly approved trusted single-user local development/demo on the existing Docker daemon. Only the trusted OpenSandbox server may mount its socket; neither Core nor workloads do. DinD, an extra VM and other execution platforms are excluded. Own execd loopback is an acknowledged local-demo exception; public/multi-tenant isolation, writable-layer disk quota and signed supply-chain attestation remain deferred. Earlier stronger failed/rejected evidence below remains historical.
+
+Actual environment: macOS arm64, .NET 10.0.401, supported Node 22.18.0 and Docker Desktop 29.8.2. Exact SDK/server/execd/egress release 1.1.1 pins are in `scripts/opensandbox-proof/images.json`. The authenticated server uses default Docker bridge, private loopback publication, deny-default dns+nft, no workload host binds, non-root commands, dropped capabilities, no-new-privileges, CPU/memory/64-PID/TTL limits. Only one server per daemon is supported: upstream sidecar reconciliation interfered when two disposable servers ran together. The runner now refuses another server or orphan workload topology rather than touching unrelated resources.
+
+## Executed current checks
+
+| Gate / action | Expected versus observed |
+| --- | --- |
+| Real SDK/topology proof | Pass: auth rejection, non-root, enforced CPU/memory/PIDs/no privileges, exact 256-byte transfer, separated streams/exit 7, argv, reconnect, separate files, tracked background stop, absent socket/server key/config, blocked external DNS/IP/metadata/private lifecycle/gateway; own execd loopback explicitly reachable; both workloads killed |
+| Real SDK + durable migration/store + atomic Workspace acceptance | **31 passed, 0 failed, 0 skipped**: actual Python fail/fix, Node, XLSX/DOCX library validation; pinned initialization/reconnect/expiry; terminal receipt preservation; generation CAS; global disable; legacy SDK path; UTF-8 output bounds; traversal/protected/case/parent/link/FIFO/socket/quota/conflict guards; authority revoked during staging; SDK deadline; abandoned provisioning; clipped uncertainty metadata |
+| Original affected Playwright MCP journey | Pass: save/verify profile, create owned Instance/Session, run five real coding/Office commands, publish/download both authenticated Artifacts; inspect/collapse command output, actual >30-second command, cancel/reset/recreate, retained-file read; 0 application console errors during working flows |
+| Actual Core process restart | Pass: same SQLite root retained exact generation/provider identity/initialization timestamp and init-marker bytes; subsequent real command read retained files. Idle disconnected/shutdown Ready leases now persist until TTL; manual deactivate still terminates |
+| Bounded Impeccable runtime review | Admin + Chat inspected at 1440/1024/768/390/320px after transitions settled; no horizontal overflow. Profile Discard and navigation Stay preserve baseline/draft; keyboard Escape/focus correction and output regions added through existing AntD patterns. DESIGN/context/sidecar synchronized without replacing main's file preview |
+| Full merged frontend Vitest | **1,021 passed / 129 files**, supported Node 22. Host pnpm had selected Node 26, producing undefined localStorage failures; the supported runtime fixes all 73 affected storage/transport tests. Dedicated Playwright suite is excluded from Vitest |
+| Frontend TypeScript/Vite build | Pass; existing chunk-size and Rollup annotation warnings retained |
+| Full Application suite | **1,807 passed, 8 optional live skips** after catalog/constraint fixes; 33 focused tool/runtime/configuration checks also pass |
+| Full initial merged backend | Domain 195 pass; API 585 pass / 3 optional live skips; plugin 4 pass. Four stale catalog/choice assertions were corrected; Infrastructure final rerun is pending, with its focused recheck **30 pass** |
+| Focused frontend final checks | 23 pass across profile/drawer/budget/Instance settings; drawer keyboard/output follow-up recheck **4 pass** |
+| Reproducible Workbench inventory | Pass: owned runner build/start; installed SPDX 2.3 inventory contains 498 package identities and 277 notice hashes; license bundle retains 547 files. Exact local image content ID recorded alongside inventory. Inventory is not signed attestation/legal conclusion/vulnerability acceptance |
+| Complete browser/process-recreation gate | In progress. Before phase passes actual coding/artifacts/copy/responsive/Escape/focus. After phase verifies unchanged generation/init/artifact hashes across Core + server recreation, actual partial output while Running, 31-second completion, cancellation/reset/recovery. Independent Background Session fixture wrapping corrected; **both phases passed** (22.5 seconds before / approximately 1.3 minutes after), including child coding/Office completion, separate generation and child-only init marker. Cleanup removed owned workloads/server |
+
+The migration is additive and preserves a populated pre-cutover Session record and Drive schema; no user database reset was performed. Testing uses isolated `local/opensandbox-runners/.../ui-*` databases/roots, private 0600 keys and project-owned resources. Unrelated local API and nopCommerce services are left running. Failed acceptance cleanup confirmed removal of its owned workloads/server, retaining only its test image/state volume.
+
+## Corrections observed through execution
+
+- Use the exact published SDK namespace/status API and restore the solution's transitive assets. Background logs are authenticated plain text, bounded through an Infrastructure shim; SDK accumulation is disabled.
+- Docker Desktop rejects binding its VM bridge gateway on the workstation. Use host.docker.internal/loopback there; native Linux uses its inspected gateway. A narrow port range collided with a host allocation; use the wider upstream range and record the allocator's cross-namespace limitation.
+- Workbench disables pytest's optional `.pytest_cache/.gitignore` producer, while retaining actual pytest execution and all protected-path guards.
+- Production SQLite uses WAL/busy-timeout interception. The real integration fixture now uses that same configuration after lock errors in cancellation/polling; all concurrency assertions are retained.
+- Idle shutdown/disconnection must retain a Ready environment; explicit deactivation remains cleanup. Supervision runs when profiles/readiness are disabled, reconciles abandoned provisioning and checks Instance lifecycle. Finished receipts are not rewritten during reset.
+- File imports recheck live authority inside the filesystem gate immediately before swap and reject inconsistent parent casing. Unknown dispatch evidence survives text-output clipping; persistence follow-up failures cannot mask an uncertain effect, and post-commit errors report committed scratch honestly.
+- Browser tests wait for actual terminal/output evidence and settled drawer geometry. Exact dialog names distinguish reset confirmation. Save/Verify names remain stable while busy. Cold server readiness is separate from ordinary Core health.
+
+## Remaining closure gates
+
+Finish final Infrastructure/frontend follow-up checks, normal Synthetic Playwright regressions (including shared Office/Drive), isolated Compose survival, documentation/link/schema audit and exact-SHA hosted jobs. The new mandatory Trusted local OpenSandbox acceptance job must pass on Linux; optional native SDK skips do not substitute for it. Commit/push and update the attached PR after a reviewable candidate is verified. Do not merge without explicit merge instruction.
+
+## Historical Stage A evidence — 2026-10-13
 
 Date: 2026-10-13 (Asia/Ho_Chi_Minh). Branch: `develop/branch-1`.
 Request: implement `local/proposals/agent-core-opensandbox-final-proposal.md` as

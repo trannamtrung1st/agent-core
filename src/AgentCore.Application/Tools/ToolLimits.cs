@@ -23,7 +23,7 @@ public readonly record struct ToolExecutionBudget(
     ToolExecutionClass Class,
     int MaxSteps,
     TimeSpan Overall,
-    TimeSpan PerTool)
+    TimeSpan PerTool, TimeSpan? SandboxPerTool = null)
 {
     // The final reply shares the existing hard deadline; it does not extend the Run.
     public TimeSpan CleanupReserve => Class == ToolExecutionClass.InteractiveBrowser ? TimeSpan.FromSeconds(60) : TimeSpan.Zero;
@@ -31,7 +31,7 @@ public readonly record struct ToolExecutionBudget(
     public int CleanupStepReserve => Class == ToolExecutionClass.InteractiveBrowser ? Math.Min(12, Math.Max(4, MaxSteps / 4)) : 0;
     public int CleanupCheckpointReserve => Class == ToolExecutionClass.InteractiveBrowser ? 8192 : 0;
     public static ToolExecutionBudget FromPin(EffectiveExecutionBudget pin) => new(
-        (ToolExecutionClass)pin.Class, pin.Profile.MaxSteps, TimeSpan.FromSeconds(pin.Profile.DurationSeconds), TimeSpan.FromSeconds(pin.Profile.PerToolSeconds));
+        (ToolExecutionClass)pin.Class, pin.Profile.MaxSteps, TimeSpan.FromSeconds(pin.Profile.DurationSeconds), TimeSpan.FromSeconds(pin.Profile.PerToolSeconds), TimeSpan.FromSeconds(pin.Profile.SandboxCommandSeconds));
     public static ToolExecutionBudget Standard { get; } = new(
         ToolExecutionClass.Standard,
         ToolLimits.MaxSteps,

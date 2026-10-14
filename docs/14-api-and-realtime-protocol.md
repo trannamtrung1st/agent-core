@@ -333,7 +333,7 @@ Categories: Provider, Session, Protocol, Audio, Validation, Connection, Transpor
 
 ## Post-MVP planned until verified
 
-Phases A–H are observed on the runtime (including Docker `sandbox.run`). Historical Phase I WorkItems were not-applicable until the future trigger in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified). Full R1–R6 text is in that same section. Phase D initiative/deactivation and Phase F workspace execution view are observed above.
+Historical Phases A–H included Docker `sandbox.run`; [current sandbox contracts](#owner-scoped-sandbox-http-contract) supersede that executor. Historical Phase I WorkItems were not-applicable until the future trigger in [Technology Decisions](10-technology-decisions.md#post-mvp-planned-until-verified). Full R1–R6 text is in that same section. Phase D initiative/deactivation and Phase F workspace execution view are observed above.
 
 **Lease versus Attachment.** Wire `attachmentId` is the hub **connection lease**. User-uploaded files are HTTP `Attachment` records with `AttachmentId`. Never send attachment binaries or base64 on SignalR.
 
@@ -757,3 +757,21 @@ Owner-protected `GET {existing file source}/office-preview?sheet=Sales&range=A1:
 `/api/v2/agent-instances/{instanceId}/drive/accounts` lists safe aliases; `/{accountRef}/files` lists with folderId/query/cursor/limit; `/{fileId}` reads metadata; content and office-preview accept expectedVersion/authEpoch/bindingId and recheck authority; `/{accountRef}/operations/{operationId}` is owner-scoped read-only reconciliation. All are owner protected. Artifact/home source `/drive-accounts` returns `{instanceId,accounts}`; POST `/drive-upload` accepts `{accountRef,authEpoch,bindingId,expectedSha256,operationId,folderId,name}` and derives source owner server-side.
 
 Drive receipts expose operationId/status/file/reconciled/synthetic/limitation only. Indeterminate HTTP 409 has error drive_effect_indeterminate, safe message, operationId/fileId/causeCode, retryAllowed:false and resumeAllowed. True resumeAllowed permits only explicit continuation with the same operation ID, source and current original authEpoch; it does not permit another create. Read-only Check operation never sends upload content. Confirmed non-execution returns a 409 Problem titled drive_operation_failed with safe recovery detail; that ID remains terminal and only an explicit new save may use a fresh ID. Expired upload sessions remain uncertain with no replacement session. Other cases: 401 owner capability absent, 403 host/account/binding/scope revoked, 404 unavailable item, 409 stale revision/remote state, 413 transfer/preview cap, 429 provider rate limit, 502 normalized provider failure. Office invalid/unsafe/range requests return 400 and over-limit preview 413.
+
+## Owner-scoped sandbox HTTP contract
+
+All routes below use existing owner-capability authorization and safe problem details. No public arbitrary-execution endpoint is added; command dispatch uses the authorized Session tool/Run path.
+
+| Method and route | Behavior |
+| --- | --- |
+| `GET /api/v2/admin/sandboxes` | Safe readiness, latest profiles, image policy, local-demo/storage limits; no endpoint/key/provider IDs |
+| `GET /api/v2/admin/sandbox-profiles/{id}?revision=N` | Latest or exact immutable historical revision |
+| `PUT /api/v2/admin/sandbox-profiles/{id}` | Validate and append `expectedRevision + 1`; exact CAS, redacted history |
+| `POST /api/v2/admin/sandbox-profiles/{id}/verify` | Exact expected revision; bounded non-root image smoke and cleanup; append observation revision |
+| `GET /api/v2/admin/agent-instances/{id}/sandbox` | Effective exact policy/profile plus safe readiness |
+| `GET /api/v2/sessions/{id}/sandbox` | Owned generation, profile revision, lifecycle/expiry, Core active/latest execution ID, diagnostic ID |
+| `GET /api/v2/sessions/{id}/sandbox/executions/{executionId}` | Owned bounded command receipt/status/output; Core ID only |
+| `POST .../executions/{executionId}/stop` | Stop/confirm owned tracked execution and validate file synchronization |
+| `POST /api/v2/sessions/{id}/sandbox/reset` | Explicit owner request with `expectedGeneration`; changed generation returns conflict |
+
+Profile saves use the existing validation/conflict semantics and retain immutable history. Tools are `sandbox.exec`, `sandbox.status`, `sandbox.process.status`, `sandbox.process.stop`, approval-gated `sandbox.reset`, and legacy bounded `sandbox.run`. Commands/stop/reset are non-replayable. Foreground streams are separate; background logs are explicitly combined. Command progress uses safe existing Run progress plus owner-scoped HTTP receipt polling, without changing the audio/MessagePack protocol or exposing upstream routes. Run budget diagnostics add `sandboxCommandSeconds`; ordinary per-tool budget remains independent.

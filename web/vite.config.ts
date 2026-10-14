@@ -38,7 +38,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: "./src/test/setup.ts",
-    exclude: ["e2e/**", "node_modules/**", "dist/**"],
+    exclude: ["e2e/**", "opensandbox-e2e/**", "node_modules/**", "dist/**"],
     // Large Ant Design Admin integration trees exceed 15 seconds on hosted CPU.
     // Keep behavior assertions intact while allowing measured rendering headroom.
     testTimeout: 30_000

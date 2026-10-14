@@ -5,6 +5,7 @@ export const globalPages = [
   { id: 'credentials', path: 'connections/credentials', label: 'Credentials', group: 'Integrations', description: 'Manage shared protected credentials and email accounts.', aliases: ['Gmail', 'OAuth', 'IMAP', 'SMTP', 'emailAccount'] },
   { id: 'events', path: 'connections/events', label: 'Events', group: 'Integrations', description: 'Inspect Built-in Events and manage shared Webhook Events.', aliases: ['Webhook', 'subscribers', 'deliveries'] },
   { id: 'browser-privacy', path: 'platform/browser-privacy', label: 'Browser privacy', group: 'Platform', description: 'Global host screenshot privacy, constrained by deployment policy.', aliases: ['screenshots', 'protected', 'unmasked', 'restart'] },
+  { id: 'sandboxes', path: 'platform/sandboxes', label: 'Sandboxes', group: 'Platform', description: 'Manage prebuilt Session environments and local execution readiness.', aliases: ['Python', 'Node', 'Workbench', 'Office', 'sandbox'] },
 ] as const;
 export const instancePages = [
   {"id": "overview", "path": "overview", "label": "Overview", "group": "", "description": "Saved identity, configuration sources and operational destinations.", "aliases": []},
@@ -70,9 +71,10 @@ export const instanceSettingGroups: Partial<Record<InstancePage, readonly string
   instructions: ['instructions'], conversation: ['conversationPolicy'], behavior: ['behaviorPolicy'],
   initiative: ['initiativePolicy'], voice: ['voice'], models: ['modelDefaults'], providers: ['providerPreferences'],
   capabilities: ['capabilities'], 'trigger-policy': ['triggerPolicy'], 'memory-policy': ['memoryPolicy'],
+  execution: ['sandboxPolicy'],
 };
 export const draftSettingGroups: Partial<Record<DraftPage, readonly string[]>> = {
-  ...instanceSettingGroups, 'self-management': ['selfManagement'], metadata: ['metadata'],
+  ...instanceSettingGroups, execution: undefined, 'self-management': ['selfManagement'], metadata: ['metadata'],
 };
 export const legacyDraftPages: Record<string, DraftPage> = { behavior: 'instructions', policies: 'memory-policy' };
 

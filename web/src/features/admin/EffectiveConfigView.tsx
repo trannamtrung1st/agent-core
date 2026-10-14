@@ -5,6 +5,7 @@ import { type AdminEffectiveConfiguration } from "../../services/adminApi";
 import { InstanceIdentityTags } from './AdminRecordSummaries';
 import { automationTriggerPermissionSummary } from "./AutomationTriggerPermissions";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
+import { InstanceSandboxSummary } from './InstanceSandboxSummary';
 
 export function EffectiveConfigView({
   config,
@@ -18,6 +19,7 @@ export function EffectiveConfigView({
   const { token } = theme.useToken();
   return (
     <div className="admin-effective-config-grid">
+      <InstanceSandboxSummary instanceId={config.instanceId} />
       <section
         className={`admin-effective-config-section admin-instance-identity${hidePersona ? " admin-effective-config-wide" : ""}`}
         aria-label="Instance identity"

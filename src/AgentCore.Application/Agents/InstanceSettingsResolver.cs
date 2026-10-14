@@ -4,14 +4,15 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Agents;
 
-public sealed record InstanceSettingConstraint(string Reason, bool? RequiredBoolean = null, int? Minimum = null, int? Maximum = null);
+public sealed record InstanceSettingConstraint(string Reason, bool? RequiredBoolean = null, int? Minimum = null, int? Maximum = null, IReadOnlyList<string>? Choices = null);
 
 public static class InstanceSettingsResolver
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict };
-    public static IReadOnlyList<string> Sections { get; } = ["instructions", "conversationPolicy", "behaviorPolicy", "initiativePolicy", "voice", "modelDefaults", "memoryPolicy", "capabilities", "triggerPolicy", "providerPreferences"];
+    public static IReadOnlyList<string> Sections { get; } = ["instructions", "conversationPolicy", "behaviorPolicy", "initiativePolicy", "voice", "modelDefaults", "memoryPolicy", "capabilities", "triggerPolicy", "providerPreferences", "sandboxPolicy"];
     public static IReadOnlyList<string> Fields(string section) => section switch
     {
+        "sandboxPolicy" => ["profileId"],
         "instructions" => ["systemInstructions"],
         "conversationPolicy" => ["responseLength", "askOneQuestionAtATime", "language", "maxOutputTokens"],
         "behaviorPolicy" => ["interruptionStyle", "acknowledgeInterruption", "avoidUnsupportedClaims"],
@@ -40,6 +41,7 @@ public static class InstanceSettingsResolver
                 var remove = !set.ContainsKey(field);
                 next = (section, field) switch
                 {
+                    ("sandboxPolicy", "profileId") => next with { SandboxProfileId = remove ? null : new(Read<string>(set[field])) },
                     ("instructions", "systemInstructions") => next with { SystemInstructions = remove ? null : new(Read<string>(set[field])) },
                     ("conversationPolicy", "responseLength") => next with { ResponseLength = remove ? null : new(Read<string>(set[field])) },
                     ("conversationPolicy", "askOneQuestionAtATime") => next with { AskOneQuestionAtATime = remove ? null : new(Read<bool>(set[field])) },
@@ -113,6 +115,7 @@ public static class InstanceSettingsResolver
         }
         switch (section)
         {
+            case "sandboxPolicy": result["profileId"] = new("Choose only a profile authorized by this Definition; changes apply to the next Run.", Choices: baseline.SandboxPolicy?.AllowedProfileIds ?? []); break;
             case "behaviorPolicy":
                 if (baseline.BehaviorPolicy.AvoidUnsupportedClaims)
                     result["avoidUnsupportedClaims"] = new("Avoid unsupported claims is required by the selected Definition and cannot be disabled for this Instance.", RequiredBoolean: true);
@@ -153,6 +156,8 @@ public static class InstanceSettingsResolver
         var trigger = TriggerOf(baseline);
         var d = baseline with
         {
+            SandboxPolicy = o.SandboxProfileId is { } choice && baseline.SandboxPolicy is { } policy
+                && policy.AllowedProfileIds.Contains(choice.Value, StringComparer.Ordinal) ? policy with { DefaultProfileId = choice.Value } : baseline.SandboxPolicy,
             SystemInstructions = o.SystemInstructions is { } instructions ? instructions.Value : baseline.SystemInstructions,
             ConversationPolicy = baseline.ConversationPolicy with
             {
@@ -254,6 +259,8 @@ public static class InstanceSettingsResolver
                     || constraint.Maximum is { } maximum && values[field] is int high && high > maximum)
                     throw AgentCoreErrors.Validation(constraint.Reason);
         }
+        if (o.SandboxProfileId is { } sandboxSelection && baseline.SandboxPolicy?.AllowedProfileIds.Contains(sandboxSelection.Value, StringComparer.Ordinal) != true)
+            throw AgentCoreErrors.Validation(Constraints(baseline,"sandboxPolicy")["profileId"].Reason);
         if (d.InitiativePolicy.Triggers.Any(t => !baseline.InitiativePolicy.Triggers.Contains(t, StringComparer.Ordinal)))
             throw AgentCoreErrors.Validation("Initiative triggers must be permitted by the selected Definition.");
         var t = TriggerOf(d);
@@ -267,6 +274,7 @@ public static class InstanceSettingsResolver
 
     public static IReadOnlyDictionary<string, object?> Values(AgentDefinition d, string section) => section switch
     {
+        "sandboxPolicy" => new Dictionary<string, object?> { ["profileId"] = d.SandboxPolicy?.DefaultProfileId },
         "instructions" => new Dictionary<string, object?> {
             ["systemInstructions"] = d.SystemInstructions,
         },
@@ -339,6 +347,7 @@ public static class InstanceSettingsResolver
         var result = new Dictionary<string, object?>();
         switch (section)
         {
+            case "sandboxPolicy": if (o.SandboxProfileId is { } profile) result["profileId"] = profile.Value; break;
             case "instructions":
                 if (o.SystemInstructions is { } systemInstructions) result["systemInstructions"] = systemInstructions.Value;
                 break;

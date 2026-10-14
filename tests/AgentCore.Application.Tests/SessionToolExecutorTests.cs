@@ -89,8 +89,7 @@ public sealed class SessionToolExecutorTests
             new ModelToolCall("c2", ToolCatalog.KnowledgeRetrieve, "{"));
         Assert.Contains("invalid", malformed, StringComparison.OrdinalIgnoreCase);
 
-        var sandbox = new RecordingSandbox();
-        var withSandbox = new SessionToolExecutor(sandbox: sandbox);
+        var withSandbox = new SessionToolExecutor();
         foreach (var name in new[] { "process", "shell", "bash", "cmd", "powershell", "exec" })
         {
             var denied = await ExecuteTextAsync(
@@ -101,7 +100,6 @@ public sealed class SessionToolExecutorTests
             Assert.Contains("forbidden", denied, StringComparison.OrdinalIgnoreCase);
         }
 
-        Assert.Null(sandbox.Last);
     }
 
     [Fact]
@@ -127,26 +125,22 @@ public sealed class SessionToolExecutorTests
     }
 
     [Fact]
-    public async Task Sandbox_run_requires_allowlist_and_uses_the_executor()
+    public async Task Sandbox_run_requires_allowlist_and_the_owned_OpenSandbox_service()
     {
-        var sandbox = new RecordingSandbox();
-        var executor = new SessionToolExecutor(sandbox: sandbox);
+        var executor = new SessionToolExecutor();
         var forbidden = await ExecuteTextAsync(
             executor,
             Support(),
             Guid.NewGuid(),
             new ModelToolCall("c1", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""));
         Assert.Contains("forbidden", forbidden, StringComparison.OrdinalIgnoreCase);
-        Assert.Null(sandbox.Last);
 
         var allowed = await ExecuteTextAsync(
             executor,
             Sandboxed(),
             Guid.NewGuid(),
             new ModelToolCall("c2", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""));
-        Assert.Contains("\"ok\":true", allowed, StringComparison.Ordinal);
-        Assert.NotNull(sandbox.Last);
-        Assert.Equal("echo", sandbox.Last!.Verb);
+        Assert.Contains("unavailable", allowed, StringComparison.OrdinalIgnoreCase);
 
         var missing = new SessionToolExecutor();
         var unavailable = await ExecuteTextAsync(
@@ -365,17 +359,6 @@ trailer<< /Root 1 0 R >>
     {
         Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.ArtifactsCreate])
     };
-
-    private sealed class RecordingSandbox : ISandboxExecutor
-    {
-        public SandboxRequest? Last { get; private set; }
-
-        public ValueTask<SandboxResult> RunAsync(SandboxRequest request, CancellationToken cancellationToken = default)
-        {
-            Last = request;
-            return ValueTask.FromResult(new SandboxResult(true, 0, "hi", null, "ok"));
-        }
-    }
 
     private sealed class RecordingWorkspace : ISessionWorkspace
     {

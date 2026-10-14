@@ -133,3 +133,8 @@ Credentials owns Drive connections and Instance binding details own the app-auth
 The [current polish report](../../docs/reports/file-preview-drive-ui-polish-2026-10-14.md) supplies five-width and short-screen captures, keyboard/focus recovery, 1,004 unit passes and four browser journeys on 8e053018. The [successor ledger](../../docs/reports/office-file-preview-drive-verification-2026-10-13.md) owns the earlier exact-source hosted acceptance and manual/Real gaps. This documentation refresh introduces no runtime change or new acceptance.
 
 The [correctness review](../../docs/reports/file-preview-drive-review-2026-10-14.md) verifies clear-search restoration and one-upload/read-only receipt recovery on `0763058d`. Folder consumes the same form lock as the other fields during upload, pending recovery and verified completion. Action names stay stable through loading; earlier geometry captures remain valid.
+
+
+## P10 local sandbox extension
+
+Platform profiles and the Session sandbox drawer preserve the incumbent Ant Design operate surface and shared Office/Drive file preview. Theme tokens own spacing; output uses Collapse/copyable text and existing confirmations. A bounded 1440/1024/768/390/320px runtime review found no horizontal overflow after transitions settled. Save/Discard/navigation protection, actual artifacts, cancellation/reset and Core restart were exercised. Canonical docs and the OpenSandbox verification ledger own scope/remaining acceptance; this is local evidence, not production hardening.

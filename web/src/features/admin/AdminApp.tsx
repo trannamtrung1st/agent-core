@@ -7,6 +7,7 @@ import { formatAdminLoadError } from "./adminErrors";
 import { AdminShell } from './AdminShell';
 import { AgentConfigurationPanel } from "./AgentConfigurationLayout";
 import { BrowserPrivacySection } from "./BrowserPrivacySection";
+import { SandboxProfilesSection } from './SandboxProfilesSection';
 import { CredentialsSection } from "./CredentialsSection";
 import { EventsSection } from "./EventsSection";
 import { ExecutionBudgetLimitsProvider } from "./executionBudgetLimits";
@@ -173,6 +174,7 @@ function AdminAppContent({ route }: { route: AdminRoute }) {
             <RetainedAdminPage active={collection === "credentials"}><CredentialsSection /></RetainedAdminPage>
             <RetainedAdminPage active={collection === "events"}><EventsSection /></RetainedAdminPage>
             <RetainedAdminPage active={collection === "browser-privacy"}><AgentConfigurationPanel title="Host Browser privacy" label="Global Browser privacy" bodyGap="section"><BrowserPrivacySection /></AgentConfigurationPanel></RetainedAdminPage>
+            <RetainedAdminPage active={collection === 'sandboxes'}><AgentConfigurationPanel title="Sandboxes" label="Global Sandboxes" bodyGap="section"><SandboxProfilesSection /></AgentConfigurationPanel></RetainedAdminPage>
           </div>
         ) : null}
 
