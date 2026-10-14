@@ -14,7 +14,7 @@ namespace AgentCore.Api.Tests;
 
 public sealed partial class DriveJourneyTests
 {
-    private static async Task<(DriveService Service, DriveAccess Access, LostFactory Fault)> Recovery(Factory host, string mode)
+    private static async Task<(DriveService Service, DriveAccess Access, LostFactory Fault)> Recovery(Factory host, string mode, int version = 27)
     {
         var client = host.CreateClient(new() { AllowAutoRedirect = false });
         client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
@@ -25,7 +25,7 @@ public sealed partial class DriveJourneyTests
         var start = await oauth.StartAsync(account.CredentialId, 1, profile, default);
         var state = QueryHelpers.ParseQuery(start.AuthorizationUrl[start.AuthorizationUrl.IndexOf('?')..])["state"].ToString();
         await oauth.CompleteAsync(state, start.Correlation, profile, "consent", null, default);
-        var made = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version = 27 });
+        var made = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version });
         made.EnsureSuccessStatusCode(); using var json = JsonDocument.Parse(await made.Content.ReadAsStringAsync());
         var owner = json.RootElement.GetProperty("instanceId").GetGuid();
         await credentials.BindAsync(owner, account.CredentialId, "drive", 1);

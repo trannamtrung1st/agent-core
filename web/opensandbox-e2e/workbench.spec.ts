@@ -93,7 +93,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     await expect(page.getByRole('button', { name: 'Save profile', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Verify image', exact: true }).click();
     await expect(page.getByText(/Non-root Python image smoke passed/).first()).toBeVisible({ timeout: 60000 });
-    const instance = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 28 } });
+    const instance = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 29 } });
     expect(instance.ok(), await instance.text()).toBe(true);
     const session = await page.request.post('/api/v2/sessions', { headers, data: { agentInstanceId: (await instance.json()).instanceId, mode: 'text' } });
     expect(session.ok()).toBe(true); sessionId = (await session.json()).sessionId;

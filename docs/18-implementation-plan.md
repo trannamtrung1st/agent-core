@@ -1,5 +1,11 @@
 # Implementation Plan
 
+The previously accepted OpenSandbox cutover is being integrated with newer main
+`a04e6a76`. General Assistant v29 preserves main's immutable v28 and combines
+its current Drive/Office authority with sandbox execution. Current combined
+verification is tracked in the [OpenSandbox ledger](reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
+prior acceptance below remains evidence for its original behavior SHA.
+
 ## P10 OpenSandbox cutover (authorized 2026-10-13)
 
 The owner requested complete implementation of the final local OpenSandbox
@@ -643,3 +649,5 @@ Approved bounded successor, implemented from `d6472746` (proposal baseline `5b2d
 Implementation and required automated gates are verified: 3,930 backend passes / 27 configured opt-in skips, 1,002 frontend passes, 244 browser passes and both Compose checks. The [verification ledger](reports/office-file-preview-drive-verification-2026-10-13.md) preserves resolved failures, design/licensing/runtime evidence and the remaining dedicated real Google, desktop Office-client fidelity and actual native browser zoom checks. Full manual/Real acceptance is not claimed.
 
 The bounded [Drive upload/recovery follow-up](reports/drive-upload-recovery-2026-10-14.md) distinguishes proven non-execution from uncertain effects and adds status-checked continuation of the same protected upload session. It preserves the existing successor owners and non-goals. Verification for this follow-up is local at the user's explicit request; the original exact-source hosted closure and remaining manual/Real checks are unchanged.
+
+The [Drive credentials/Trash UX successor](reports/drive-credentials-ux-verification-2026-10-14.md) adds operation-specific preflight, trusted approvals, bounded per-item batch recovery, provider-neutral compact file actions, unified credential creation/status and shared OAuth client configuration with staged grant migration. General Assistant v28 explicitly authorizes the new batch tool; old versions do not gain it. Local verification replaces waiting for hosted CI by explicit user instruction. Dedicated Real Trash, migration in an actual Google account and previously deferred manual Office/browser checks remain separate acceptance requirements; the successor ledger records actual local gate status and blockers.

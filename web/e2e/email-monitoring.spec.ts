@@ -1,83 +1,270 @@
 import { expect, test } from '@playwright/test';
 
-for (const width of [1440, 768, 390, 320]) test(`email monitoring saved settings and queued scan at ${width}px`, async ({ page }) => {
-  test.setTimeout(120_000); await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-  await page.goto('/admin/connections/credentials');
-  await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));
-  await expect(page.getByRole('textbox', { name: 'Search credentials', exact: true })).toBeVisible();
-  const name = `Monitor ${width} ${Date.now()} long account name for responsive details`;
-  const add = page.getByRole('button', { name: 'Add email account', exact: true });
-  await add.focus(); await page.keyboard.press('Enter');
-  const create = page.getByRole('dialog', { name: 'Add email account', exact: true });
-  await create.getByLabel('Display name', { exact: true }).fill(name);
-  await create.getByRole('button', { name: 'Connect with Google', exact: true }).click();
-  await page.getByRole('button', { name: 'Authorize Synthetic account', exact: true }).click();
-  const edit = page.getByRole('dialog', { name: 'Edit email account', exact: true });
-  await edit.getByRole('button', { name: 'Cancel', exact: true }).click();
-  expect(await page.evaluate(() => typeof window.history.state?.acIndex)).toBe('number');
-  await page.getByRole('textbox', { name: 'Search credentials', exact: true }).fill(name);
-  const row = page.getByRole('row').filter({ hasText: name });
-  await row.getByRole('button', { name: 'Expand row', exact: true }).click();
-  const monitor = page.getByRole('region', { name: 'Email monitoring', exact: true });
-  await expect(monitor.getByText('Monitoring Off', { exact: true })).toBeVisible();
-  await expect(monitor.getByRole('button', { name: 'Save monitoring', exact: true })).toBeDisabled();
-  const toggle = monitor.getByRole('switch', { name: 'New inbox messages', exact: true });
-  await toggle.focus(); await page.keyboard.press('Space');
-  await monitor.getByRole('combobox', { name: 'Check every', exact: true }).click();
-  await page.getByRole('option', { name: '1 minute', exact: true }).click();
-  const refresh = page.waitForResponse(response => response.url().endsWith('/api/v2/admin/credentials') && response.request().method() === 'GET');
-  await page.getByRole('region', { name: `Details for ${name}`, exact: true }).getByRole('button', { name: 'Test access', exact: true }).click();
-  await refresh;
-  await expect(toggle).toBeChecked();
-  await expect(monitor.getByText('Unsaved monitoring changes', { exact: true })).toBeVisible();
-  await monitor.getByRole('button', { name: 'Save monitoring', exact: true }).click();
-  await expect(monitor.getByText('Monitoring settings saved.', { exact: true })).toBeVisible();
-  await expect(monitor.getByText('Monitoring On', { exact: true })).toBeVisible({ timeout: 25_000 });
-  await expect(monitor.getByText('No subscribed Automations', { exact: true })).toBeVisible();
-  await monitor.getByRole('button', { name: 'Check now', exact: true }).click();
-  await expect(monitor.getByText('Check queued. It may trigger subscribed Automations.', { exact: true })).toBeVisible();
-  await expect(monitor.getByRole('button', { name: 'Check now', exact: true })).toBeDisabled();
-  await expect(monitor.getByRole('button', { name: 'Check now', exact: true })).toBeEnabled({ timeout: 25_000 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await monitor.scrollIntoViewIfNeeded(); await page.screenshot({ path: `test-results/email-monitoring-${width}.png`, fullPage: true });
-  await toggle.click(); await monitor.getByRole('button', { name: 'Cancel changes', exact: true }).click(); await expect(toggle).toBeChecked();
-  await toggle.click(); await expect(toggle).not.toBeChecked(); await expect(monitor.getByRole('button', { name: 'Save monitoring', exact: true })).toBeEnabled(); await monitor.getByRole('button', { name: 'Save monitoring', exact: true }).click();
-  await expect(monitor.getByText('Monitoring Off', { exact: true })).toBeVisible();
-  const details = page.getByRole('region', { name: `Details for ${name}`, exact: true });
-  await details.getByRole('button', { name: 'Disconnect', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Disconnect this Google account for all agents?', exact: true }).getByRole('button', { name: 'Disconnect account', exact: true }).click();
-  await toggle.click(); await monitor.getByRole('button', { name: 'Save monitoring', exact: true }).click();
-  await expect(monitor.getByText('Monitoring paused', { exact: true }).first()).toBeVisible();
-  await expect(monitor.getByRole('button', { name: 'Check now', exact: true })).toBeDisabled();
-  await monitor.getByRole('link', { name: 'View Events catalog', exact: true }).click();
-  await expect(page.getByText('email.message.received', { exact: true }).first()).toBeVisible();
-  const headers = { 'X-AgentCore-Owner-Capability': (await page.evaluate(() => localStorage.getItem('agent-core.owner-capability')))! };
-  const accountsResponse = await page.request.get('/api/v2/admin/credentials', { headers });
-  expect(accountsResponse.ok()).toBe(true);
-  const account = (await accountsResponse.json()).items.find((item: { displayName: string }) => item.displayName === name);
-  const created = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 25 } });
-  expect(created.ok()).toBe(true); const instance = await created.json();
-  const binding = await page.request.post(`/api/v2/admin/agent-instances/${instance.instanceId}/credential-bindings`, { headers, data: { expectedInstanceRevision: instance.revision, credentialId: account.credentialId, reference: 'inbox' } });
-  expect(binding.ok()).toBe(true);
-  await page.goto(`/admin/instances/${instance.instanceId}/credentials`);
-  await expect(page.getByRole('heading', { name: 'Credential bindings', exact: true, level: 2 })).toBeVisible();
-  await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name: 'Expand row', exact: true }).click();
-  const bound = page.getByRole('region', { name: 'Email monitoring', exact: true });
-  await expect(bound.getByText(/Monitoring is account-wide/)).toBeVisible();
-  await expect(bound.getByRole('switch')).toHaveCount(0);
-  await expect(bound.getByRole('button', { name: 'Save monitoring', exact: true })).toHaveCount(0);
-  await expect(bound.getByRole('button', { name: 'Check now', exact: true })).toHaveCount(0);
-  await expect(page.getByText('Unsaved changes retained in this Instance', { exact: true })).toBeHidden();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  const setup = bound.getByRole('link', { name: 'Configure an Instance Automation', exact: true });
-  await expect(setup).toHaveAttribute('href', `/admin/instances/${instance.instanceId}/automations`);
-  await setup.click();
-  await expect(page.getByRole('heading', { name: 'Automations', exact: true, level: 2 })).toBeVisible();
-  await page.goto(`/admin/instances/${instance.instanceId}/credentials`);
-  await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name: 'Expand row', exact: true }).click();
-  await bound.getByRole('link', { name: 'Manage monitoring in Connections → Credentials', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Credentials', exact: true, level: 2 })).toBeVisible();
-  await page.getByRole('textbox', { name: 'Search credentials', exact: true }).fill(name);
-  await page.getByRole('row').filter({ hasText: name }).getByRole('button', { name: 'Expand row', exact: true }).click();
-  await expect(monitor.getByRole('switch', { name: 'New inbox messages', exact: true })).toBeVisible();
-});
+for (const width of [1440, 768, 390, 320])
+  test(`email monitoring saved settings and queued scan at ${width}px`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.goto('/admin/connections/credentials');
+    await page.waitForFunction(() =>
+      localStorage.getItem('agent-core.owner-capability'),
+    );
+    await expect(
+      page.getByRole('textbox', { name: 'Search credentials', exact: true }),
+    ).toBeVisible();
+    const name = `Monitor ${width} ${Date.now()} long account name for responsive details`;
+    const add = page.getByRole('button', {
+      name: 'Add credential',
+      exact: true,
+    });
+    await add.focus();
+    await page.keyboard.press('Enter');
+    const create = page.getByRole('dialog', {
+      name: 'Add credential',
+      exact: true,
+    });
+    await create.getByLabel('Credential purpose').click();
+    await page.getByText('Gmail account', { exact: true }).click();
+    await create.getByLabel('Display name', { exact: true }).fill(name);
+    await create
+      .getByRole('button', { name: 'Connect with Google', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Authorize Synthetic account', exact: true })
+      .click();
+    const edit = page.getByRole('dialog', {
+      name: 'Edit email account',
+      exact: true,
+    });
+    await edit.getByRole('button', { name: 'Cancel', exact: true }).click();
+    expect(
+      await page.evaluate(() => typeof window.history.state?.acIndex),
+    ).toBe('number');
+    await page
+      .getByRole('textbox', { name: 'Search credentials', exact: true })
+      .fill(name);
+    const row = page.getByRole('row').filter({ hasText: name });
+    await row.getByRole('button', { name: 'Expand row', exact: true }).click();
+    const monitor = page.getByRole('region', {
+      name: 'Email monitoring',
+      exact: true,
+    });
+    await expect(
+      monitor.getByText('Monitoring Off', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      monitor.getByRole('button', { name: 'Save monitoring', exact: true }),
+    ).toBeDisabled();
+    const toggle = monitor.getByRole('switch', {
+      name: 'New inbox messages',
+      exact: true,
+    });
+    await toggle.focus();
+    await page.keyboard.press('Space');
+    await monitor
+      .getByRole('combobox', { name: 'Check every', exact: true })
+      .click();
+    await page.getByRole('option', { name: '1 minute', exact: true }).click();
+    const refresh = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/v2/admin/credentials') &&
+        response.request().method() === 'GET',
+    );
+    await page
+      .getByRole('region', { name: `Details for ${name}`, exact: true })
+      .getByRole('button', { name: 'Test access', exact: true })
+      .click();
+    await refresh;
+    await expect(toggle).toBeChecked();
+    await expect(
+      monitor.getByText('Unsaved monitoring changes', { exact: true }),
+    ).toBeVisible();
+    await monitor
+      .getByRole('button', { name: 'Save monitoring', exact: true })
+      .click();
+    await expect(
+      monitor.getByText('Monitoring settings saved.', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      monitor.getByText('Monitoring On', { exact: true }),
+    ).toBeVisible({ timeout: 25_000 });
+    await expect(
+      monitor.getByText('No subscribed Automations', { exact: true }),
+    ).toBeVisible();
+    await monitor
+      .getByRole('button', { name: 'Check now', exact: true })
+      .click();
+    await expect(
+      monitor.getByText(
+        'Check queued. It may trigger subscribed Automations.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      monitor.getByRole('button', { name: 'Check now', exact: true }),
+    ).toBeDisabled();
+    await expect(
+      monitor.getByRole('button', { name: 'Check now', exact: true }),
+    ).toBeEnabled({ timeout: 25_000 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await monitor.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: `test-results/email-monitoring-${width}.png`,
+      fullPage: true,
+    });
+    await toggle.click();
+    await monitor
+      .getByRole('button', { name: 'Cancel changes', exact: true })
+      .click();
+    await expect(toggle).toBeChecked();
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    await expect(
+      monitor.getByRole('button', { name: 'Save monitoring', exact: true }),
+    ).toBeEnabled();
+    await monitor
+      .getByRole('button', { name: 'Save monitoring', exact: true })
+      .click();
+    await expect(
+      monitor.getByText('Monitoring Off', { exact: true }),
+    ).toBeVisible();
+    const details = page.getByRole('region', {
+      name: `Details for ${name}`,
+      exact: true,
+    });
+    await details
+      .getByRole('button', { name: 'Disconnect', exact: true })
+      .click();
+    await page
+      .getByRole('dialog', {
+        name: 'Disconnect this Google account for all agents?',
+        exact: true,
+      })
+      .getByRole('button', { name: 'Disconnect account', exact: true })
+      .click();
+    await toggle.click();
+    await monitor
+      .getByRole('button', { name: 'Save monitoring', exact: true })
+      .click();
+    await expect(
+      monitor.getByText('Monitoring paused', { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      monitor.getByRole('button', { name: 'Check now', exact: true }),
+    ).toBeDisabled();
+    await monitor
+      .getByRole('link', { name: 'View Events catalog', exact: true })
+      .click();
+    await expect(
+      page.getByText('email.message.received', { exact: true }).first(),
+    ).toBeVisible();
+    const headers = {
+      'X-AgentCore-Owner-Capability': (await page.evaluate(() =>
+        localStorage.getItem('agent-core.owner-capability'),
+      ))!,
+    };
+    const accountsResponse = await page.request.get(
+      '/api/v2/admin/credentials',
+      { headers },
+    );
+    expect(accountsResponse.ok()).toBe(true);
+    const account = (await accountsResponse.json()).items.find(
+      (item: { displayName: string }) => item.displayName === name,
+    );
+    const created = await page.request.post('/api/v2/admin/agent-instances', {
+      headers,
+      data: { definitionId: 'general-assistant', version: 25 },
+    });
+    expect(created.ok()).toBe(true);
+    const instance = await created.json();
+    const binding = await page.request.post(
+      `/api/v2/admin/agent-instances/${instance.instanceId}/credential-bindings`,
+      {
+        headers,
+        data: {
+          expectedInstanceRevision: instance.revision,
+          credentialId: account.credentialId,
+          reference: 'inbox',
+        },
+      },
+    );
+    expect(binding.ok()).toBe(true);
+    await page.goto(`/admin/instances/${instance.instanceId}/credentials`);
+    await expect(
+      page.getByRole('heading', {
+        name: 'Credential bindings',
+        exact: true,
+        level: 2,
+      }),
+    ).toBeVisible();
+    await page
+      .getByRole('row')
+      .filter({ hasText: name })
+      .getByRole('button', { name: 'Expand row', exact: true })
+      .click();
+    const bound = page.getByRole('region', {
+      name: 'Email monitoring',
+      exact: true,
+    });
+    await expect(bound.getByText(/Monitoring is account-wide/)).toBeVisible();
+    await expect(bound.getByRole('switch')).toHaveCount(0);
+    await expect(
+      bound.getByRole('button', { name: 'Save monitoring', exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      bound.getByRole('button', { name: 'Check now', exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText('Unsaved changes retained in this Instance', {
+        exact: true,
+      }),
+    ).toBeHidden();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    const setup = bound.getByRole('link', {
+      name: 'Configure an Instance Automation',
+      exact: true,
+    });
+    await expect(setup).toHaveAttribute(
+      'href',
+      `/admin/instances/${instance.instanceId}/automations`,
+    );
+    await setup.click();
+    await expect(
+      page.getByRole('heading', { name: 'Automations', exact: true, level: 2 }),
+    ).toBeVisible();
+    await page.goto(`/admin/instances/${instance.instanceId}/credentials`);
+    await page
+      .getByRole('row')
+      .filter({ hasText: name })
+      .getByRole('button', { name: 'Expand row', exact: true })
+      .click();
+    await bound
+      .getByRole('link', {
+        name: 'Manage monitoring in Connections → Credentials',
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByRole('heading', { name: 'Credentials', exact: true, level: 2 }),
+    ).toBeVisible();
+    await page
+      .getByRole('textbox', { name: 'Search credentials', exact: true })
+      .fill(name);
+    await page
+      .getByRole('row')
+      .filter({ hasText: name })
+      .getByRole('button', { name: 'Expand row', exact: true })
+      .click();
+    await expect(
+      monitor.getByRole('switch', { name: 'New inbox messages', exact: true }),
+    ).toBeVisible();
+  });

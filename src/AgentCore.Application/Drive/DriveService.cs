@@ -5,6 +5,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
 using AgentCore.Domain.Definitions;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Application.Drive;
 
@@ -17,8 +18,8 @@ public sealed class DriveIndeterminateException(Guid operationId, string fileId,
     : "The remote effect remains uncertain. Inspect the known file in Drive and confirm account access. A missing file alone does not make another write safe.")
 { public Guid OperationId { get; } = operationId; public string FileId { get; } = fileId; public string? CauseCode { get; } = causeCode; public bool ResumeAllowed { get; } = resumeAllowed; }
 
-public sealed class DriveService(ICredentialStore credentials, IAgentCredentialBindingStore bindings, IAgentInstanceStore instances,
-    IGoogleDriveProviderFactory providers, IDriveOperationStore operations, TimeProvider time)
+public sealed partial class DriveService(ICredentialStore credentials, IAgentCredentialBindingStore bindings, IAgentInstanceStore instances,
+    IGoogleDriveProviderFactory providers, IDriveOperationStore operations, TimeProvider time, ILogger<DriveService>? logger = null)
 {
     // Fixed stripes bound memory while serializing effect/inspection for this single host.
     private readonly SemaphoreSlim[] operationGates = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
@@ -74,6 +75,16 @@ public sealed class DriveService(ICredentialStore credentials, IAgentCredentialB
         var page = await access.Provider.ListAsync(folder, query, cursor, limit, ct); await RecheckAsync(access, false, ct); return page;
     }
     public async ValueTask<DriveFile> GetAsync(DriveAccess access, string id, CancellationToken ct) { var file = await access.Provider.GetAsync(Id(id), ct); await RecheckAsync(access, false, ct); return file; }
+    private async ValueTask<DriveFile> ReadForOperation(DriveAccess access, string id, DriveOperation op, string stage, CancellationToken ct)
+    {
+        try { return await GetAsync(access, id, ct); }
+        catch (Exception ex)
+        {
+            logger?.LogWarning("Drive operation read failed. OperationId {OperationId} Tool {Tool} Stage {Stage} Code {Code}",
+                op.OperationId, op.Tool, stage, (ex as AgentCoreException)?.Code ?? "drive_provider_unavailable");
+            throw;
+        }
+    }
     public async ValueTask<(DriveFile File, byte[] Bytes)> ReadAsync(DriveAccess access, string id, string? expectedVersion, CancellationToken ct)
     {
         var file = await GetAsync(access, id, ct); if (file.Folder || file.NativeDocument) throw Failure("drive_native_unsupported", "Preview/download supports binary files. Google-native export and folder download are deferred.");
@@ -97,7 +108,11 @@ public sealed class DriveService(ICredentialStore credentials, IAgentCredentialB
                 throw Failure("drive_source_revision_conflict", "Upload bytes do not match the immutable source snapshot.", 409);
             effect = effect with { SourceMd5 = Convert.ToHexStringLower(MD5.HashData(bytes.Span)), MimeType = effect.MimeType ?? "application/octet-stream" };
         }
-        Epoch(access, expectedEpoch); await RecheckAsync(access, true, ct); Name(effect.Name); Id(effect.Parent);
+        Epoch(access, expectedEpoch); await RecheckAsync(access, true, ct);
+        if (tool is "drive.trash" or "drive.move")
+        { if (effect.Name.Length is < 1 or > 255 || effect.Name.Any(char.IsControl)) throw Failure("drive_invalid", "Existing target name exceeds its metadata bound."); }
+        else Name(effect.Name);
+        Id(effect.Parent);
         if (bytes.Length > MaxTransferBytes || effect.MimeType?.StartsWith("application/vnd.google-apps.", StringComparison.Ordinal) == true && tool == "drive.upload") throw Failure("drive_invalid", "Use bounded binary files; Google-native conversion/overwrite is deferred.");
         var snapshot = JsonSerializer.Serialize(new { tool, fileId, effect }); var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(snapshot)));
         var known = await operations.GetAsync(access.InstanceId, operationId, ct);
@@ -122,10 +137,16 @@ public sealed class DriveService(ICredentialStore credentials, IAgentCredentialB
         }
         if (op.State is not ("Planned" or "Indeterminate" or "Dispatched")) throw Failure("drive_operation_pending", "The operation cannot be dispatched again. Inspect its receipt.", 409);
         if (op.AuthEpoch != expectedEpoch) throw Failure("drive_access_changed", "The planned operation belongs to an earlier authorization epoch. Reconnect/inspect before acting.", 409);
-        if (effect.Parent != "root") { var parent = await GetAsync(access, effect.Parent, ct); if (!parent.Folder || parent.Trashed) throw Failure("drive_invalid", "Destination must be an available app-authorized folder."); }
+        if ((tool is "drive.create_folder" or "drive.upload" or "drive.move") && effect.Parent != "root")
+        { var parent = await ReadForOperation(access, effect.Parent, op, "parent_metadata", ct); if (!parent.Folder || parent.Trashed) throw Failure("drive_invalid", "Destination must be an available app-authorized folder."); }
         if (fileId is not null)
         {
-            var observed = await GetAsync(access, fileId, ct); if (effect.ExpectedVersion is null || observed.Version != effect.ExpectedVersion) throw Failure("drive_remote_conflict", "Remote version changed. Inspect it before approval/dispatch.", 409);
+            var observed = await ReadForOperation(access, fileId, op, "target_metadata", ct);
+            if (effect.ExpectedVersion is null || observed.Version != effect.ExpectedVersion)
+            {
+                logger?.LogWarning("Drive operation preflight failed. OperationId {OperationId} Tool {Tool} Stage {Stage} Code {Code}", op.OperationId, tool, "preflight_version", "drive_remote_conflict");
+                throw Failure("drive_remote_conflict", "Remote version changed. Inspect it before approval/dispatch.", 409);
+            }
             if (tool == "drive.trash" && observed.Folder) throw Failure("drive_operation_unsupported", "Folder trash is deferred. Select one file.");
             if (tool == "drive.move" && (effect.SourceParent is null || !observed.Parents.Contains(effect.SourceParent))) throw Failure("drive_remote_conflict", "Source parent changed.", 409);
         }
@@ -133,6 +154,7 @@ public sealed class DriveService(ICredentialStore credentials, IAgentCredentialB
         if (op.State == "Planned") op = await operations.UpdateAsync(op with { State = "Dispatched", Revision = op.Revision + 1 }, op.Revision, ct);
         try
         {
+            logger?.LogDebug("Drive operation dispatch. OperationId {OperationId} Tool {Tool} Stage {Stage}", op.OperationId, tool, "dispatch");
             switch (tool)
             {
                 case "drive.create_folder": await access.Provider.CreateFolderAsync(op.FileId, effect.Name, effect.Parent, ct); break;
@@ -148,6 +170,7 @@ public sealed class DriveService(ICredentialStore credentials, IAgentCredentialB
         catch (DriveIndeterminateException) { throw; }
         catch (DriveEffectNotExecutedException ex) when (op.ProtectedUploadSession is null)
         {
+            logger?.LogWarning("Drive operation rejected. OperationId {OperationId} Tool {Tool} Stage {Stage} Code {Code}", op.OperationId, tool, "dispatch", ex.Code);
             var current = (await operations.GetAsync(access.InstanceId, op.OperationId, CancellationToken.None))!;
             var failed = await operations.UpdateAsync(current with { State = "Failed", Revision = current.Revision + 1,
                 ResultJson = JsonSerializer.Serialize(new DriveOperationFailure(ex.Code, ex.Message, "initial_request_not_executed")) }, current.Revision, CancellationToken.None);
@@ -155,6 +178,7 @@ public sealed class DriveService(ICredentialStore credentials, IAgentCredentialB
         }
         catch (Exception ex)
         {
+            logger?.LogWarning("Drive operation uncertain. OperationId {OperationId} Tool {Tool} Stage {Stage} Code {Code}", op.OperationId, tool, "dispatch", (ex as AgentCoreException)?.Code ?? "drive_provider_unavailable");
             var current = await operations.FindAsync(access.InstanceId, access.Credential.CredentialId, hash, CancellationToken.None) ?? op;
             if (current.State != "Indeterminate") await operations.UpdateAsync(current with { State = "Indeterminate", Revision = current.Revision + 1 }, current.Revision, CancellationToken.None);
             throw new DriveIndeterminateException(op.OperationId, op.FileId, (ex as AgentCoreException)?.Code, CanResume(access, current));
@@ -179,7 +203,7 @@ public sealed class DriveService(ICredentialStore credentials, IAgentCredentialB
     private async ValueTask<DriveReceipt> Reconcile(DriveAccess access, DriveOperation op, DriveEffect effect, ReadOnlyMemory<byte> bytes, CancellationToken ct)
     {
         DriveFile file;
-        try { file = await GetAsync(access, op.FileId, ct); }
+        try { file = await ReadForOperation(access, op.FileId, op, "reconciliation", ct); }
         catch (Exception) { if (op.State != "Indeterminate") await operations.UpdateAsync(op with { State = "Indeterminate", Revision = op.Revision + 1 }, op.Revision, CancellationToken.None); throw new DriveIndeterminateException(op.OperationId, op.FileId, resumeAllowed: CanResume(access, op)); }
         var matches = op.Tool switch
         {

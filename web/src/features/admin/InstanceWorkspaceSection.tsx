@@ -1,89 +1,315 @@
-import { SaveToDriveButton } from '../filePreview/SaveToDriveButton';
 import { DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
-import { AdminErrorNotice } from "./adminFailure";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, App, Button, Empty, Flex, Spin, Table, Tooltip, Typography, theme } from "antd";
-import { confirmAction } from "../../app/confirmAction";
-import { deleteAgentWorkspaceItem, downloadAgentWorkspaceItem, listAgentWorkspace,
-  type AgentWorkspaceItem, type AgentWorkspacePage } from "../../services/agentWorkspace";
-import { artifactKind, artifactSize } from "../../services/artifacts";
-import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
-import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
+import { AdminErrorNotice } from './adminFailure';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  App,
+  Button,
+  Empty,
+  Flex,
+  Spin,
+  Table,
+  Tooltip,
+  Typography,
+  theme,
+} from 'antd';
+import { confirmAction } from '../../app/confirmAction';
+import {
+  deleteAgentWorkspaceItem,
+  downloadAgentWorkspaceItem,
+  listAgentWorkspace,
+  type AgentWorkspaceItem,
+  type AgentWorkspacePage,
+} from '../../services/agentWorkspace';
+import { artifactKind, artifactSize } from '../../services/artifacts';
+import { describeAdminError, type AdminFailureNotice } from './adminErrors';
+import {
+  AdminCollectionToolbar,
+  useAdminCollectionSearch,
+} from './AdminCollectionToolbar';
 
-import { FilePreviewButton } from "../filePreview/FilePreview";
+import { FilePreviewButton } from '../filePreview/FilePreview';
 
-export function InstanceWorkspaceSection({ instanceId, archived }: { instanceId: string; archived: boolean }) {
-  const { token } = theme.useToken(); const { modal } = App.useApp();
+export function InstanceWorkspaceSection({
+  instanceId,
+  archived,
+}: {
+  instanceId: string;
+  archived: boolean;
+}) {
+  const { token } = theme.useToken();
+  const { modal } = App.useApp();
   const [page, setPage] = useState<AgentWorkspacePage | null>(null);
   const [error, setError] = useState<AdminFailureNotice | null>(null);
-  const [loading, setLoading] = useState(true); const [busy, setBusy] = useState<string | null>(null);
-  const identity = useRef(instanceId); identity.current = instanceId;
-  const order = useRef(0); const download = useRef<AbortController | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const identity = useRef(instanceId);
+  identity.current = instanceId;
+  const order = useRef(0);
+  const download = useRef<AbortController | null>(null);
   const { search, setSearch, pagination } = useAdminCollectionSearch();
-  const reload = useCallback(async (afterPath?: string) => {
-    const generation = ++order.current; setLoading(true); setError(null);
-    try {
-      const result = await listAgentWorkspace(instanceId, afterPath);
-      if (generation === order.current) setPage(previous => afterPath && previous ? { ...result, items: [...previous.items, ...result.items] } : result);
-    } catch (reason) {
-      if (generation === order.current) setError(describeAdminError(reason, "Unable to load workspace. Retry to reload the workspace."));
-    } finally { if (generation === order.current) setLoading(false); }
-  }, [instanceId]);
+  const reload = useCallback(
+    async (afterPath?: string) => {
+      const generation = ++order.current;
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await listAgentWorkspace(instanceId, afterPath);
+        if (generation === order.current)
+          setPage((previous) =>
+            afterPath && previous
+              ? { ...result, items: [...previous.items, ...result.items] }
+              : result,
+          );
+      } catch (reason) {
+        if (generation === order.current)
+          setError(
+            describeAdminError(
+              reason,
+              'Unable to load workspace. Retry to reload the workspace.',
+            ),
+          );
+      } finally {
+        if (generation === order.current) setLoading(false);
+      }
+    },
+    [instanceId],
+  );
   useEffect(() => {
-    setPage(null); setBusy(null); setSearch(""); void reload();
-    return () => { order.current++; download.current?.abort(); };
+    setPage(null);
+    setBusy(null);
+    setSearch('');
+    void reload();
+    return () => {
+      order.current++;
+      download.current?.abort();
+    };
   }, [reload, setSearch]);
 
   async function remove(item: AgentWorkspaceItem) {
     if (busy || archived) return;
-    const generation = ++order.current; setBusy(item.itemId); setError(null);
+    const generation = ++order.current;
+    setBusy(item.itemId);
+    setError(null);
     try {
       await deleteAgentWorkspaceItem(instanceId, item);
       if (generation === order.current) await reload();
     } catch (reason) {
-      if (generation === order.current) setError(describeAdminError(reason, "The item changed or could not be deleted. Reload before trying again."));
-    } finally { if (identity.current === instanceId) setBusy(null); }
+      if (generation === order.current)
+        setError(
+          describeAdminError(
+            reason,
+            'The item changed or could not be deleted. Reload before trying again.',
+          ),
+        );
+    } finally {
+      if (identity.current === instanceId) setBusy(null);
+    }
   }
   async function save(item: AgentWorkspaceItem) {
     if (busy) return;
-    const generation = order.current; const controller = new AbortController(); download.current = controller;
-    setBusy(item.itemId); setError(null);
-    try { await downloadAgentWorkspaceItem(instanceId, item, controller.signal); }
-    catch (reason) { if (!controller.signal.aborted && generation === order.current) setError(describeAdminError(reason, "Download failed. Try again.")); }
-    finally { if (generation === order.current) setBusy(null); }
+    const generation = order.current;
+    const controller = new AbortController();
+    download.current = controller;
+    setBusy(item.itemId);
+    setError(null);
+    try {
+      await downloadAgentWorkspaceItem(instanceId, item, controller.signal);
+    } catch (reason) {
+      if (!controller.signal.aborted && generation === order.current)
+        setError(describeAdminError(reason, 'Download failed. Try again.'));
+    } finally {
+      if (generation === order.current) setBusy(null);
+    }
   }
-  const items = page?.items.filter(i => `${i.logicalPath} ${i.contentType}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())) ?? [];
-  return <AgentConfigurationPanel title="Agent Workspace" label="Agent Workspace"
-    description="/home · Durable across sessions." bodyGap="section">
-      {archived ? <Alert type="info" showIcon title="Archived workspace is read-only" description="Files remain available to download." /> : null}
+  const items =
+    page?.items.filter((i) =>
+      `${i.logicalPath} ${i.contentType}`
+        .toLocaleLowerCase()
+        .includes(search.toLocaleLowerCase()),
+    ) ?? [];
+  return (
+    <AgentConfigurationPanel
+      title="Agent Workspace"
+      label="Agent Workspace"
+      description="/home · Durable across sessions."
+      bodyGap="section"
+    >
+      {archived ? (
+        <Alert
+          type="info"
+          showIcon
+          title="Archived workspace is read-only"
+          description="Files remain available to download."
+        />
+      ) : null}
       <Flex justify="space-between" align="center" wrap gap={token.paddingXS}>
-        <Typography.Text type="secondary">{page ? `${artifactSize(page.usedBytes)} of ${artifactSize(page.maxInstanceBytes)} · ${page.totalItems} ${page.totalItems === 1 ? "item" : "items"}` : ""}</Typography.Text>
-        <Button disabled={loading || !!busy} onClick={() => void reload()}>Reload workspace</Button>
+        <Typography.Text type="secondary">
+          {page
+            ? `${artifactSize(page.usedBytes)} of ${artifactSize(page.maxInstanceBytes)} · ${page.totalItems} ${page.totalItems === 1 ? 'item' : 'items'}`
+            : ''}
+        </Typography.Text>
+        <Button disabled={loading || !!busy} onClick={() => void reload()}>
+          Reload workspace
+        </Button>
       </Flex>
-      {error ? <Alert type="error" showIcon title={<AdminErrorNotice message={error.message} diagnosticId={error.diagnosticId} showDetailsLabel />} action={<Button onClick={() => void reload()}>Retry workspace</Button>} /> : null}
+      {error ? (
+        <Alert
+          type="error"
+          showIcon
+          title={
+            <AdminErrorNotice
+              message={error.message}
+              diagnosticId={error.diagnosticId}
+              showDetailsLabel
+            />
+          }
+          action={
+            <Button onClick={() => void reload()}>Retry workspace</Button>
+          }
+        />
+      ) : null}
       {loading && !page ? <Spin aria-label="Loading workspace" /> : null}
-      {page ? <>
-        <AdminCollectionToolbar value={search} onChange={setSearch} label="workspace items" />
-        <Table<AgentWorkspaceItem> className="admin-collection-table" size="small" rowKey="itemId" loading={loading} dataSource={items} pagination={pagination} scroll={{ x: 880 }}
-          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={search ? "No matching items" : "No workspace items yet"} /> }}
-          columns={[
-            { title: "Path", dataIndex: "logicalPath", ellipsis: true, width: 260, render: (value: string) => <span title={value}>{value}</span> },
-            { title: "Type", dataIndex: "contentType", width: 100, render: (value: string, item) => <span title={value}>{item.directory ? "Folder" : artifactKind(value)}</span> },
-            { title: "Size", dataIndex: "byteSize", align: "right", width: 90, render: artifactSize },
-            { title: "Updated", dataIndex: "updatedAt", width: 165, render: (value: string) => <time dateTime={value}>{new Date(value).toLocaleString()}</time> },
-            { title: "Source", dataIndex: "sourceSessionId", ellipsis: true, width: 140, render: (value: string | null) => value ? <span title={`Conversation ${value}`}>Conversation {value}</span> : "—" },
-            { title: "Actions", width: 208, render: (_, item) => <Flex className="admin-table-actions" gap={token.paddingXS}>
-              {!item.directory && <FilePreviewButton iconOnly file={{ kind: "home", instanceId, itemId: item.itemId, metadata: { displayName: item.logicalPath.split("/").pop()!, contentType: item.contentType, byteSize: item.byteSize, sha256: item.sha256Hex } }} />}
-              {!archived && !item.directory && <SaveToDriveButton iconOnly displayName={item.logicalPath} file={{ kind: 'home', instanceId, itemId: item.itemId, metadata: { displayName: item.logicalPath.split('/').pop()!, contentType: item.contentType, byteSize: item.byteSize, sha256: item.sha256Hex } }} />}
-              <Tooltip title="Download"><Button icon={<DownloadOutlined aria-hidden />} aria-label={`Download ${item.logicalPath}`} disabled={!!busy || item.directory} onClick={() => void save(item)} /></Tooltip>
-              <Tooltip title="Delete"><Button icon={<DeleteOutlined aria-hidden />} danger aria-label={`Delete ${item.logicalPath}`} disabled={archived || !!busy || loading} onClick={() => confirmAction(modal, {
-                title: item.directory ? "Delete empty folder?" : "Delete workspace file?", content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,
-                okText: item.directory ? "Delete folder" : "Delete file", danger: true, onOk: () => remove(item)
-              })} /></Tooltip>
-            </Flex> }
-          ]} />
-        {page.nextPath ? <Button disabled={loading || !!busy} onClick={() => void reload(page.nextPath!)}>Load more items</Button> : null}
-      </> : null}
-    </AgentConfigurationPanel>;
+      {page ? (
+        <>
+          <AdminCollectionToolbar
+            value={search}
+            onChange={setSearch}
+            label="workspace items"
+          />
+          <Table<AgentWorkspaceItem>
+            className="admin-collection-table"
+            size="small"
+            rowKey="itemId"
+            loading={loading}
+            dataSource={items}
+            pagination={pagination}
+            scroll={{ x: 880 }}
+            locale={{
+              emptyText: (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={
+                    search ? 'No matching items' : 'No workspace items yet'
+                  }
+                />
+              ),
+            }}
+            columns={[
+              {
+                title: 'Path',
+                dataIndex: 'logicalPath',
+                ellipsis: true,
+                width: 260,
+                render: (value: string) => <span title={value}>{value}</span>,
+              },
+              {
+                title: 'Type',
+                dataIndex: 'contentType',
+                width: 100,
+                render: (value: string, item) => (
+                  <span title={value}>
+                    {item.directory ? 'Folder' : artifactKind(value)}
+                  </span>
+                ),
+              },
+              {
+                title: 'Size',
+                dataIndex: 'byteSize',
+                align: 'right',
+                width: 90,
+                render: artifactSize,
+              },
+              {
+                title: 'Updated',
+                dataIndex: 'updatedAt',
+                width: 165,
+                render: (value: string) => (
+                  <time dateTime={value}>
+                    {new Date(value).toLocaleString()}
+                  </time>
+                ),
+              },
+              {
+                title: 'Source',
+                dataIndex: 'sourceSessionId',
+                ellipsis: true,
+                width: 140,
+                render: (value: string | null) =>
+                  value ? (
+                    <span title={`Conversation ${value}`}>
+                      Conversation {value}
+                    </span>
+                  ) : (
+                    '—'
+                  ),
+              },
+              {
+                title: 'Actions',
+                width: 208,
+                render: (_, item) => (
+                  <Flex className="admin-table-actions" gap={token.paddingXS}>
+                    {!item.directory && (
+                      <FilePreviewButton
+                        iconOnly
+                        file={{
+                          kind: 'home',
+                          instanceId,
+                          itemId: item.itemId,
+                          metadata: {
+                            displayName: item.logicalPath.split('/').pop()!,
+                            contentType: item.contentType,
+                            byteSize: item.byteSize,
+                            sha256: item.sha256Hex,
+                          },
+                        }}
+                      />
+                    )}
+                    <Tooltip title="Download">
+                      <Button
+                        icon={<DownloadOutlined aria-hidden />}
+                        aria-label={`Download ${item.logicalPath}`}
+                        disabled={!!busy || item.directory}
+                        onClick={() => void save(item)}
+                      />
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                      <Button
+                        icon={<DeleteOutlined aria-hidden />}
+                        danger
+                        aria-label={`Delete ${item.logicalPath}`}
+                        disabled={archived || !!busy || loading}
+                        onClick={() =>
+                          confirmAction(modal, {
+                            title: item.directory
+                              ? 'Delete empty folder?'
+                              : 'Delete workspace file?',
+                            content: `Delete ${item.logicalPath} from this agent's workspace. Existing conversation Artifacts are kept.`,
+                            okText: item.directory
+                              ? 'Delete folder'
+                              : 'Delete file',
+                            danger: true,
+                            onOk: () => remove(item),
+                          })
+                        }
+                      />
+                    </Tooltip>
+                  </Flex>
+                ),
+              },
+            ]}
+          />
+          {page.nextPath ? (
+            <Button
+              disabled={loading || !!busy}
+              onClick={() => void reload(page.nextPath!)}
+            >
+              Load more items
+            </Button>
+          ) : null}
+        </>
+      ) : null}
+    </AgentConfigurationPanel>
+  );
 }

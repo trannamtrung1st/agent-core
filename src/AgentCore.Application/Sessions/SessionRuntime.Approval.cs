@@ -194,7 +194,7 @@ public sealed partial class SessionRuntime
         await RequestAgentRunCommandAsync(cause, responseId, (run, now) =>
             new AgentRunCommand.BeginApproval(run.Revision, now, run.Claim!.Generation, approvalId,
                 call.Name, args.GetRawText(), actionHash,
-                JsonSerializer.Serialize(new { summary, details }), expiresAt), CancellationToken.None).ConfigureAwait(false);
+                JsonSerializer.Serialize(new { summary, details }, call.Name == "drive.trash_batch" ? new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping } : null), expiresAt), CancellationToken.None).ConfigureAwait(false);
         var waitStarted = Stopwatch.GetTimestamp();
         OperationalDiagnostics.RecordApproval("waiting", "waiting", null);
 

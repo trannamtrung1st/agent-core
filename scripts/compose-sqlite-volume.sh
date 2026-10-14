@@ -194,7 +194,7 @@ assert resource_bytes.decode("utf-8") in workspace_text, workspace_text
 
 # New-mode binary home writes and scratch retain their distinct lifetimes after recreation.
 status, v2_owner_body = request(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances", method="POST",
-    data=json.dumps({"definitionId": "general-assistant", "version": 21}).encode(), headers=owner_headers)
+    data=json.dumps({"definitionId": "general-assistant", "version": 28}).encode(), headers=owner_headers)
 v2_owner = json.loads(v2_owner_body)["instanceId"]
 skills_url = f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{v2_owner}/skills"
 _, skill_body = request(skills_url, headers=owner_headers)
@@ -321,13 +321,11 @@ _, current_owner = oauth_request(f"/api/v2/admin/instances/{v2_owner}/effective-
 _, drive_binding = oauth_request(f"/api/v2/admin/agent-instances/{v2_owner}/credential-bindings", "POST", {"credentialId":drive['credentialId'],"reference":"compose-drive","expectedInstanceRevision":current_owner['instanceRevision']}, owner_headers)
 _, home_page = oauth_request(f"/api/v2/agent-instances/{v2_owner}/workspace", headers=owner_headers)
 source = next(item for item in home_page['items'] if item['logicalPath'] == '/home/binary.dat')
-operation_id = str(uuid.uuid4())
-_, receipt = oauth_request(f"/api/v2/agent-instances/{v2_owner}/workspace/{source['itemId']}/drive-upload", "POST", {"accountRef":"compose-drive","authEpoch":connected_drive['driveAccount']['authEpoch'],"bindingId":drive_binding['bindingId'],"expectedSha256":source['sha256Hex'],"operationId":operation_id,"folderId":"root","name":"compose-binary.dat"}, owner_headers)
-assert receipt['status'] == 'Succeeded' and receipt['synthetic'] is True
-json.dump({"accountId":drive['credentialId'],"revision":connected_drive['revision'],"epoch":connected_drive['driveAccount']['authEpoch'],"instanceId":v2_owner,"operationId":operation_id,"file":receipt['file'],"bindingId":drive_binding['bindingId'],"sourceSha":source['sha256Hex']}, open('/tmp/agent-core-drive-survival.json','w'))
-print('Synthetic Drive separate grant, exact bytes and verified receipt created')
+json.dump({"accountId":drive['credentialId'],"revision":connected_drive['revision'],"epoch":connected_drive['driveAccount']['authEpoch'],"instanceId":v2_owner,"sessionId":v2_session,"bindingId":drive_binding['bindingId'],"sourceSha":source['sha256Hex']}, open('/tmp/agent-core-drive-survival.json','w'))
 
 PY
+
+node scripts/verify-compose-drive-transfer.mjs
 
 session_id="$(python3 -c 'import json; print(json.load(open("/tmp/agent-core-session.json"))["sessionId"])')"
 owner_token="$(cat /tmp/agent-core-owner-token.txt)"

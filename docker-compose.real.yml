@@ -16,6 +16,10 @@ services:
   agent-core:
     environment:
       AgentCore__Profile: Real
+      GoogleOAuth__ClientId: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GoogleOAuth__ClientSecret: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GoogleOAuth__PublicAppUrl: ${GOOGLE_OAUTH_PUBLIC_APP_URL:-}
+      # Legacy client inputs protect pre-migration refresh grants; remove after explicit reconnection.
       GoogleEmailOAuth__ClientId: ${GOOGLE_EMAIL_OAUTH_CLIENT_ID:-}
       GoogleEmailOAuth__ClientSecret: ${GOOGLE_EMAIL_OAUTH_CLIENT_SECRET:-}
       GoogleEmailOAuth__PublicAppUrl: ${GOOGLE_EMAIL_OAUTH_PUBLIC_APP_URL:-}

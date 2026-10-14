@@ -1,5 +1,11 @@
 # TODO
 
+The previously accepted OpenSandbox cutover is being integrated with newer main
+`a04e6a76`. General Assistant v29 preserves main's immutable v28 and combines
+its current Drive/Office authority with sandbox execution. Current combined
+verification is tracked in the [OpenSandbox ledger](docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
+prior acceptance below remains evidence for its original behavior SHA.
+
 Keep this file focused on open work and maintainer ideas. [README](README.md) summarizes the shipped product; the [Implementation Plan](docs/18-implementation-plan.md) owns milestone order and gates. Verification history, exact behavior commits and test results belong in [reports](docs/reports/).
 
 ## Current status
@@ -43,6 +49,7 @@ Other bounded successor verification limits remain in their linked reports under
 
 Always keep this section. These are personal product ideas to refine, not approved implementation scope.
 
+- [ ] Refactor legacy, compatibility, fallbacks, refactor env names, etc. [TBD]
 - [ ] **Environment instructions**: for all agents working in same context? [TBD]
 - [ ] **KOL, marketing strategy**: book KOL to use and review, post videos. Create posts across forums and pages [TBD]
 - [ ] **Commercial video:** follow a person collaborating with apparent co-workers throughout a workday. At the end, reveal that it was one person working with Agent Core.

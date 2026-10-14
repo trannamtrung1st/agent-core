@@ -22,6 +22,7 @@ public static class ToolCatalog
     public const string DriveRename = "drive.rename";
     public const string DriveMove = "drive.move";
     public const string DriveTrash = "drive.trash";
+    public const string DriveTrashBatch = "drive.trash_batch";
     public const string OfficeDocumentCreate = "office.document.create";
     public const string OfficeDocumentInspect = "office.document.inspect";
     public const string OfficeDocumentEdit = "office.document.edit";

@@ -1,5 +1,11 @@
 # Development Roadmap
 
+The previously accepted OpenSandbox cutover is being integrated with newer main
+`a04e6a76`. General Assistant v29 preserves main's immutable v28 and combines
+its current Drive/Office authority with sandbox execution. Current combined
+verification is tracked in the [OpenSandbox ledger](reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
+prior acceptance below remains evidence for its original behavior SHA.
+
 Build the canonical composed pipeline from deterministic conversation mechanics toward continuous full-duplex audio. Native realtime models are future-only and have no MVP milestone. [Implementation Plan](18-implementation-plan.md) is authoritative for each milestone's goal, scope, interfaces, tests, acceptance criteria and non-goals.
 
 P10's scoped OpenSandbox cutover is accepted for trusted single-user local Docker development/demo on behavior `4c8f2507`, with all eight exact-source hosted gates passed. The [verification ledger](reports/opensandbox-integration-verification.md) maps OSB-01–18 to actual SDK/Workbench/tool/UI, ownership, atomic files, deadline/recovery, browser/restart and Compose evidence. Own execd loopback and absent writable-layer quota remain disclosed local-demo limitations. P11 remains unopened; historical P10/P11 statements below retain their original slice boundaries.

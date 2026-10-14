@@ -1,4 +1,4 @@
-import { ownerFetch, type CursorPage } from "./api";
+import { ownerFetch, type CursorPage } from './api';
 
 // Immutable metadata only. Pending requests share the same bound as completed reads.
 const metadata = new Map<string, Promise<ArtifactMetadata>>();
@@ -16,19 +16,53 @@ function artifactPath(sessionId: string, artifactId: string): string {
   return `/api/v2/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`;
 }
 
-export async function listArtifactPage(sessionId: string, before?: string, agentRunId?: string): Promise<CursorPage<ArtifactMetadata>> {
-  const query = new URLSearchParams({ limit: "20", ...(before ? { before } : {}), ...(agentRunId ? { agentRunId } : {}) });
-  const response = await ownerFetch(`/api/v2/sessions/${encodeURIComponent(sessionId)}/artifacts/page?${query}`);
-  if (!response.ok) throw new Error("Files could not be loaded. Try again.");
-  const page = await response.json() as CursorPage<ArtifactMetadata>;
-  if (!Array.isArray(page.items) || page.items.length > 20 || typeof page.hasMore !== "boolean"
-    || page.items.some(file => file.sessionId !== sessionId || typeof file.artifactId !== "string" || typeof file.displayName !== "string"
-      || typeof file.contentType !== "string" || !Number.isSafeInteger(file.byteSize) || file.byteSize < 0)) throw new Error("Files could not be loaded. Try again.");
-  return { items: page.items.map(file => ({ artifactId: file.artifactId, sessionId: file.sessionId, displayName: file.displayName,
-    contentType: file.contentType, byteSize: file.byteSize })), nextCursor: page.nextCursor, hasMore: page.hasMore };
+export async function listArtifactPage(
+  sessionId: string,
+  before?: string,
+  agentRunId?: string,
+): Promise<CursorPage<ArtifactMetadata>> {
+  const query = new URLSearchParams({
+    limit: '20',
+    ...(before ? { before } : {}),
+    ...(agentRunId ? { agentRunId } : {}),
+  });
+  const response = await ownerFetch(
+    `/api/v2/sessions/${encodeURIComponent(sessionId)}/artifacts/page?${query}`,
+  );
+  if (!response.ok) throw new Error('Files could not be loaded. Try again.');
+  const page = (await response.json()) as CursorPage<ArtifactMetadata>;
+  if (
+    !Array.isArray(page.items) ||
+    page.items.length > 20 ||
+    typeof page.hasMore !== 'boolean' ||
+    page.items.some(
+      (file) =>
+        file.sessionId !== sessionId ||
+        typeof file.artifactId !== 'string' ||
+        typeof file.displayName !== 'string' ||
+        typeof file.contentType !== 'string' ||
+        !Number.isSafeInteger(file.byteSize) ||
+        file.byteSize < 0,
+    )
+  )
+    throw new Error('Files could not be loaded. Try again.');
+  return {
+    items: page.items.map((file) => ({
+      artifactId: file.artifactId,
+      sessionId: file.sessionId,
+      displayName: file.displayName,
+      contentType: file.contentType,
+      byteSize: file.byteSize,
+    })),
+    nextCursor: page.nextCursor,
+    hasMore: page.hasMore,
+  };
 }
 
-export function getArtifact(sessionId: string, artifactId: string): Promise<ArtifactMetadata> {
+export function getArtifact(
+  sessionId: string,
+  artifactId: string,
+): Promise<ArtifactMetadata> {
   const key = JSON.stringify([sessionId, artifactId]);
   const cached = metadata.get(key);
   if (cached) {
@@ -38,35 +72,53 @@ export function getArtifact(sessionId: string, artifactId: string): Promise<Arti
   }
   const request = (async () => {
     const response = await ownerFetch(artifactPath(sessionId, artifactId));
-    if (!response.ok) throw new Error("File unavailable.");
-    const body = await response.json() as ArtifactMetadata;
-    if (body.sessionId !== sessionId || body.artifactId !== artifactId
-      || typeof body.displayName !== "string" || !body.displayName.trim()
-      || typeof body.contentType !== "string"
-      || !Number.isSafeInteger(body.byteSize) || body.byteSize < 0) {
-      throw new Error("File unavailable.");
+    if (!response.ok) throw new Error('File unavailable.');
+    const body = (await response.json()) as ArtifactMetadata;
+    if (
+      body.sessionId !== sessionId ||
+      body.artifactId !== artifactId ||
+      typeof body.displayName !== 'string' ||
+      !body.displayName.trim() ||
+      typeof body.contentType !== 'string' ||
+      !Number.isSafeInteger(body.byteSize) ||
+      body.byteSize < 0
+    ) {
+      throw new Error('File unavailable.');
     }
     // Do not retain hashes, provenance or workspace paths from the HTTP DTO.
-    return { artifactId: body.artifactId, sessionId: body.sessionId,
-      displayName: body.displayName, contentType: body.contentType, byteSize: body.byteSize };
+    return {
+      artifactId: body.artifactId,
+      sessionId: body.sessionId,
+      displayName: body.displayName,
+      contentType: body.contentType,
+      byteSize: body.byteSize,
+    };
   })();
   metadata.set(key, request);
-  if (metadata.size > metadataLimit) metadata.delete(metadata.keys().next().value!);
+  if (metadata.size > metadataLimit)
+    metadata.delete(metadata.keys().next().value!);
   void request.catch(() => {
     if (metadata.get(key) === request) metadata.delete(key);
   });
   return request;
 }
 
-export async function downloadArtifact(sessionId: string, artifactId: string, signal?: AbortSignal): Promise<void> {
+export async function downloadArtifact(
+  sessionId: string,
+  artifactId: string,
+  signal?: AbortSignal,
+): Promise<void> {
   const file = await getArtifact(sessionId, artifactId);
   signal?.throwIfAborted();
-  const response = await ownerFetch(`${artifactPath(sessionId, artifactId)}/content`, { signal });
-  if (!response.ok) throw new Error("Download failed. Try again.");
+  const response = await ownerFetch(
+    `${artifactPath(sessionId, artifactId)}/content`,
+    { signal },
+  );
+  if (!response.ok) throw new Error('Download failed. Try again.');
   const blob = await response.blob();
   signal?.throwIfAborted();
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  const link = document.createElement('a');
   try {
     link.href = url;
     link.download = file.displayName;
@@ -81,10 +133,24 @@ export async function downloadArtifact(sessionId: string, artifactId: string, si
 }
 
 export function artifactKind(contentType: string): string {
-  const mime = contentType.split(";", 1)[0].trim().toLowerCase();
-  if (mime.startsWith("image/")) return "Image";
-  return ({ "application/pdf": "PDF", "text/markdown": "Markdown", "text/csv": "CSV",
-    "application/json": "JSON", "text/plain": "Text", "application/zip": "ZIP" } as Record<string, string>)[mime] ?? "File";
+  const mime = contentType.split(';', 1)[0].trim().toLowerCase();
+  if (mime.startsWith('image/')) return 'Image';
+  return (
+    (
+      {
+        'application/pdf': 'PDF',
+        'text/markdown': 'Markdown',
+        'text/csv': 'CSV',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+          'Word',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+          'Excel',
+        'application/json': 'JSON',
+        'text/plain': 'Text',
+        'application/zip': 'ZIP',
+      } as Record<string, string>
+    )[mime] ?? 'File'
+  );
 }
 
 export function artifactSize(bytes: number): string {

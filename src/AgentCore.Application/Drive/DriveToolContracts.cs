@@ -14,6 +14,11 @@ public static class DriveToolContracts
         if (name == "drive.get") { fields += ",\"fileId\":" + Id + ",\"operationId\":{\"type\":\"string\",\"format\":\"uuid\"}"; }
         if (name == "drive.create_folder") { fields += "," + Epoch + ",\"name\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":255},\"parentId\":" + Id; required = "\"name\",\"authEpoch\""; }
         if (name == "drive.upload") { fields += "," + Epoch + ",\"path\":{\"type\":\"string\",\"maxLength\":512},\"expectedSha256\":{\"type\":\"string\",\"pattern\":\"^[a-fA-F0-9]{64}$\"},\"name\":{\"type\":\"string\",\"maxLength\":255},\"folderId\":" + Id; required = "\"path\",\"expectedSha256\",\"authEpoch\""; }
+        if (name == "drive.trash_batch")
+        {
+            fields += "," + Epoch + ",\"files\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":20,\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"fileId\":" + Id + ",\"expectedVersion\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}},\"required\":[\"fileId\",\"expectedVersion\"]}}";
+            required = "\"accountRef\",\"authEpoch\",\"files\"";
+        }
         if (name is "drive.download" or "drive.rename" or "drive.move" or "drive.trash")
         {
             fields += ",\"fileId\":" + Id + ",\"expectedVersion\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64}"; required = "\"fileId\",\"expectedVersion\"";
@@ -32,10 +37,11 @@ public static class DriveToolContracts
             "drive.download" => "Download one app-authorized binary file at expectedVersion to a NEW local /home or /working path. Verifies size/checksum and live binding, then commits atomically. Never silently overwrites.",
             "drive.rename" => "Rename one inspected app-authorized file at expectedVersion/authEpoch with explicit task approval. Rechecks current metadata; remote version checking is best effort against independent clients.",
             "drive.move" => "Move one inspected file between app-authorized folders in the same account, with expectedVersion/authEpoch and explicit task approval. Source parent is checked; no Shared Drive transfer.",
-            _ => "Trash exactly one inspected binary file with expectedVersion/authEpoch and exact approval. No permanent deletion or recursive folder trash. Live binding/epoch and metadata are rechecked after approval."
+            "drive.trash_batch" => "Move 1–20 distinct, explicitly listed app-authorized Drive files to recoverable Trash with one exact approval. Supply ordered fileId/expectedVersion manifest, one accountRef and authEpoch. This is only the app-authorized subset, never all personal Drive files. Stops on any failure/uncertainty, reports per-item receipts/counts and leaves remaining items unattempted. No folders, recursive/permanent deletion or blind retry; reinspection and fresh exact approval are required for remaining work.",
+            _ => "Trash exactly one inspected app-authorized file with expectedVersion/authEpoch and exact approval. No permanent deletion or recursive folder trash. Live binding/epoch and metadata are rechecked after approval."
         };
         var schema = "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{" + fields + "},\"required\":[" + required + "]}";
-        return new(new ModelToolDefinition(name, description, schema), readOnly ? ToolEffect.ReadOnly : name == "drive.trash" ? ToolEffect.Destructive : name is "drive.rename" or "drive.move" ? ToolEffect.SensitiveWrite : ToolEffect.Write,
+        return new(new ModelToolDefinition(name, description, schema), readOnly ? ToolEffect.ReadOnly : name is "drive.trash" or "drive.trash_batch" ? ToolEffect.Destructive : name is "drive.rename" or "drive.move" ? ToolEffect.SensitiveWrite : ToolEffect.Write,
             Scope: ToolResourceScope.Session, ReplaySafety: readOnly ? ToolReplaySafety.ReplaySafe : ToolReplaySafety.NonReplayable);
     }
 }

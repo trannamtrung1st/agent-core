@@ -22,7 +22,6 @@ related_targets:
   - web/src/features/chat/DrawerListFooter.tsx
   - web/src/app/antdTheme.ts
   - web/src/features/filePreview/FilePreview.tsx
-  - web/src/features/filePreview/SaveToDriveButton.tsx
   - web/src/app.css
 ---
 
@@ -88,16 +87,13 @@ The [current review](../../docs/reports/frontend-design-system-review.md) inspec
 
 The [header review](../../docs/reports/chat-header-status-review.md) verifies stable action coordinates through generation and reconnect at 1440/1200/1199/768/767/390/320px, long identity/error containment, keyboard actions, reload, pending Voice and paused-session recovery. DESIGN.md and the schema-v2 header excerpt now match role/profile/status grouping, 8/12px row gaps, 1200px layout transition and 24px Speech locale Select. This is local Synthetic verification, not hosted or physical-device acceptance.
 
-## Shared preview and Drive — current source 0763058d (2026-10-14)
+## Drive credentials successor (2026-10-14)
 
-Existing Attachment/Artifact/Workspace/Resource actions reuse the [FilePreview Read surface](web-src-features-filepreview-filepreview-tsx.md). The source collection owns its compact wrapping action row; the preview owns metadata, renderer toolbars and a bounded locally scrolling canvas. Artifact cards retain a readable filename above full-width Preview, optional Save to Drive and Download/Retry actions. Familiar icon-only source actions use native tooltips.
+Artifact cards now use one centered horizontal row with file icon, shrinking filename/type/size and two tooltip-equipped Preview/Download icon actions. Actions never shrink, keep full accessible filenames and retain 40px mobile targets; metadata/download failures keep local Retry. Generic Artifact and Workspace rows have no provider-specific export affordance. Existing FilePreview owns the same source authentication, read-only renderer canvas and focus/cancellation.
 
-Credentials owns Drive connections and Instance binding details own the app-authorized browser. That browser shares the preview canvas, a flexible search/control row, local column scrolling and a mobile scroll hint. Save to Drive retains a compact account/name/folder form with a native footer outside its bounded scrolling body. Loading and Retry stay beside destination/folder reads; changing accounts clears prior folder choices/search. Verified success leaves Close, and uncertainty retains read-only Check operation, with Continue upload only for backend-confirmed saved-session authority. Proven non-execution offers Start new save explicitly; it releases the pinned form without uploading automatically. Synthetic identity/receipts are explicit. These remain Operate flows; their behavior is owned by docs/13 and docs/14.
+Credentials owns one Add credential purpose selector with reused Drive/Gmail/Custom/General fields and immutable-purpose specialist edits. Saved connection Tags remain separate from Active/Disabled status. Instance bindings own app-authorized Drive browsing; conversational tools own mutations. The shared ApprovalModal uses trusted file/name/version details, a full-width narrow-screen list, action-specific Trash/Rename/Move wording, recoverable-subset copy and the existing keyboard/Reject/footer behavior. Behavior remains owned by docs/13 and docs/14.
 
-The [current polish report](../../docs/reports/file-preview-drive-ui-polish-2026-10-14.md) supplies five-width and short-screen captures, keyboard/focus recovery, 1,004 unit passes and four browser journeys on 8e053018. The [successor ledger](../../docs/reports/office-file-preview-drive-verification-2026-10-13.md) owns the earlier exact-source hosted acceptance and manual/Real gaps. This documentation refresh introduces no runtime change or new acceptance.
-
-The [correctness review](../../docs/reports/file-preview-drive-review-2026-10-14.md) verifies clear-search restoration and one-upload/read-only receipt recovery on `0763058d`. Folder consumes the same form lock as the other fields during upload, pending recovery and verified completion. Action names stay stable through loading; earlier geometry captures remain valid.
-
+The [successor verification ledger](../../docs/reports/drive-credentials-ux-verification-2026-10-14.md) owns current local evidence and exact source identity. Earlier reports are historical; Real Trash requires an authorized disposable account scope and remains unverified.
 
 ## P10 local sandbox extension
 

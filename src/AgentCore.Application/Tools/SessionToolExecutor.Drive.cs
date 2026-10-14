@@ -15,15 +15,7 @@ public sealed partial class SessionToolExecutor
             return Error("forbidden", "Drive requires the current owned Session/Agent Instance.");
         try
         {
-            using var schema = JsonDocument.Parse(ToolRegistry.Get(call.Name).ModelDefinition.ParametersJson);
-            var allowed = schema.RootElement.GetProperty("properties").EnumerateObject().Select(property => property.Name).ToHashSet(StringComparer.Ordinal);
-            if (args.ValueKind != JsonValueKind.Object || args.EnumerateObject().Any(property => !allowed.Contains(property.Name)) || args.EnumerateObject().Select(property => property.Name).Distinct(StringComparer.Ordinal).Count() != args.EnumerateObject().Count()) return Error("invalid", "Drive arguments must match the closed tool schema.");
-            foreach (var property in args.EnumerateObject())
-            {
-                var propertySchema = schema.RootElement.GetProperty("properties").GetProperty(property.Name);
-                if (propertySchema.TryGetProperty("type", out var type) && (type.GetString() == "string" && property.Value.ValueKind != JsonValueKind.String
-                    || type.GetString() == "integer" && (property.Value.ValueKind != JsonValueKind.Number || !property.Value.TryGetInt64(out _)))) return Error("invalid", "Drive argument type does not match its schema.");
-            }
+            DriveMutationArguments.Validate(call.Name, args);
             string? Text(string key) => args.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
             string Required(string key) => Text(key) ?? throw AgentCoreErrors.Validation(key + " is required.");
             if (call.Name == "drive.accounts") return JsonSerializer.Serialize(new { accounts = await driveService.AccountsAsync(instanceId, admission.PinnedCredentialBindings, ct), limitedToAppAuthorizedFiles = true }, OfficeJson);
@@ -48,9 +40,15 @@ public sealed partial class SessionToolExecutor
                 return JsonSerializer.Serialize(new { path = AgentWorkspacePaths.Public(path), sha256 = Convert.ToHexStringLower(SHA256.HashData(content.Bytes)), byteSize = content.Bytes.Length, remoteFileId = content.File.Id }, OfficeJson);
             }
             if (!args.TryGetProperty("authEpoch", out var epoch) || !epoch.TryGetInt64(out var authEpoch) || authEpoch < 1) return Error("invalid", "authEpoch from drive.accounts is required for remote writes.");
-            if (call.Name is "drive.rename" or "drive.move" or "drive.trash")
+            if (DriveMutationArguments.RequiresApproval(call.Name))
                 if (grant is null || grant.ToolName != call.Name || grant.ActionHash != ToolActionHash.Compute(call.Name, args)) return Error("approval_required", "Exact current Drive action approval is required.");
             var operationBytes = SHA256.HashData(Encoding.UTF8.GetBytes((admission.AgentRunId ?? sessionId).ToString("D") + "|" + call.Id + "|" + call.Name)); var operationId = new Guid(operationBytes.AsSpan(0, 16));
+            if (call.Name == "drive.trash_batch")
+            {
+                var batchHash = SHA256.HashData(Encoding.UTF8.GetBytes(operationId.ToString("D") + "|" + ToolActionHash.Compute(call.Name, args)));
+                var result = await driveService.TrashBatchAsync(account, new Guid(batchHash.AsSpan(0, 16)), authEpoch, DriveMutationArguments.Manifest(args), ct);
+                return JsonSerializer.Serialize(new { untrusted = true, result }, OfficeJson);
+            }
             DriveEffect effect; string? fileId = null; byte[] bytes = [];
             if (call.Name == "drive.upload")
             {

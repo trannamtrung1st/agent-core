@@ -1,6 +1,37 @@
 # OpenSandbox integration verification
 
-## Accepted trusted-local cutover — 2026-10-14
+## Current main integration — 2026-10-14
+
+Main advanced during final-head validation to `a04e6a76` (Drive subset Trash,
+shared Google OAuth migration, credential-purpose creation and exact approval
+file presentation). This successor integration is being verified; the earlier
+all-green acceptance below remains evidence for its own source, not this merge.
+Conflicts retain main's Drive contracts and UI plus sandbox ownership/recovery.
+Main's immutable General Assistant v26/v27/v28 remain byte-identical; new **v29**
+bases their current Drive/Office behavior on main v28 and substitutes the five
+modern sandbox tools plus its approved profile policy. The real browser runner
+uses v29; the existing Drive Office journey also exercises v29 while other
+Drive/Trash journeys retain main v28 compatibility.
+
+Focused merged checks: 24 catalog/store/shared-client/cleanup tests and 31
+Drive/Trash/approval/recovery/Google-migration/sandbox API tests pass. The seven
+frontend fixtures initially passed 37 cases but exposed two AntD validation
+callbacks after credential-fixture teardown. The fixture now uses a stateful
+owner, awaits settled consent retry and real Cancel/destroy-on-hidden closure;
+its two focused cases pass with zero unhandled errors. A concurrent seven-file
+rerun hit its unchanged 30-second test timeout during heavy local SDK/browser
+work; serial recheck passes all **37 cases / seven files with zero unhandled errors**, without increasing that bound.
+
+All 12 isolated Synthetic Drive Office (v29), email account, monitoring and
+system credential browser cases pass. MCP separately opens the unified purpose
+selector, confirms changing purpose clears the transient name, then cancels
+and observes the closed modal and focus returned to Add credential; no console
+errors were reported. The native topology and all 31 SDK/store/Workspace cases
+pass; both merged UI restart phases also pass (29.9 seconds before / approximately
+1.4 minutes after actual Core/server recreation). Seventeen focused Application
+identity/dispatch/Drive-bound checks pass. Final exact-source hosted gates remain required. No user database reset or unrelated service cleanup is authorized.
+
+## Earlier accepted trusted-local cutover — 2026-10-14
 
 Branch `develop/branch-1`; main `a63194ba` was merged as `e9089734`, followed by `719ac6c5` as `928b8ccd` and `32f5f244` as `81a39b87`. Office/Drive/file-preview code and immutable General Assistant v26/v27 are preserved. New v28 combines their capabilities with modern sandbox tools. **Accepted behavior: `4c8f2507e04e7bd4e7a3ecf1af4d89a2d806f582`**, with all eight jobs in [workflow 38518370016](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016) passed. This closes Stages A–G and OSB-01–18 for the expressly revised trusted-local scope. Subsequent closure edits change documentation only. Earlier candidates and failures below remain historical evidence.
 
