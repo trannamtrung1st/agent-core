@@ -53,6 +53,39 @@ The correction passes all five isolated Synthetic email cases (1440/768/390/320p
 
 Latest main `32f5f244` only removes obsolete border/padding on focused Instance assignments. It merged without conflicts. All three isolated Synthetic Instance settings cases pass after that merge, exercising Save/Reset, conflict and failed-refresh recovery, resource ownership and responsive containment. Unrelated processes/data were untouched.
 
+The [8ddedb58 workflow](https://github.com/trannamtrung1st/agent-core/actions/runs/38515274908) passed both frontend shards, backend, acceptance browser, Compose and core browser shard 1 (including the corrected Gmail flow). Core shard 2 passed 112 cases and failed nested Event management: the subscription's pointer click occurred during Collapse layout motion and no Global Events drawer opened. That journey now explicitly verifies focus and uses real Enter actions to open nested management; the same draft/sample/subscription identity/save/reload assertions pass locally (one case, 26.8 seconds). No Automation product behavior or test timeout changed.
+
+That candidate's mandatory SDK job passed 30 cases and failed UTF-8/adversarial-tree teardown with a durable cleanup-pending receipt; browser phases were not run there. The receipt did not establish a confirmed removal and the upstream cause was not exposed. Cleanup now performs only bounded idempotent DELETE retries for the same durable provider identity, with five-second request limits and the unchanged 20-second total budget. 404 confirms absence; denied cleanup is not retried; exhausted cleanup remains pending for supervision. Commands are never replayed. Safe warning fields exclude upstream errors, bodies, routes, provider IDs and secrets. Six actual SDK/loopback Kestrel regressions pass for transient HTTP recovery, lost acknowledgement, forbidden cleanup, persistent failure and unresponsive bounded cleanup. The owner sandbox API/production-DI recheck passes (one case).
+
+After that correction, the complete local runner passes the topology proof, **31 real SDK/store/Workspace cases with zero skips**, and **both browser phases** (21.0 seconds before / approximately 1.3 minutes after). Actual Core/server recreation, exact Artifacts, live 31-second output, cancellation/reset, separate Background Session completion and owned cleanup remain asserted. The rebuilt Workbench and inventory are retained under the owned gitignored runner state. This local recheck does not replace the next exact-source hosted gate.
+
+## OSB-01–18 evidence map for the approved scope
+
+These rows map the executed local and mandatory Linux evidence above to the proposal. Combined exact-source CI closure remains separate from individual evidence rows.
+
+| Criterion | Executed evidence |
+| --- | --- |
+| OSB-01 — optional startup | Default Synthetic and Real API startup/auth/availability cases pass without OpenSandbox; unavailable execution fails closed with Admin status |
+| OSB-02 — pinned deployment | Owned native runner on macOS and Ubuntu uses exact authenticated server/execd/egress digests, verified non-root/resource restrictions and no Core/workload socket |
+| OSB-03 — actual coding | Python/Node versions, failing then corrected Python tests, Node test, separated exit-7 streams and bounded UTF-8 output pass through the real SDK |
+| OSB-04 — Session ownership | Same-generation file reuse, distinct Session files, durable ownership/operation uniqueness and owner-scoped background status/stop pass |
+| OSB-05 — revisions/init | Profile history/CAS and malformed-script validation pass; real initialization is generation-pinned, once-only on reconnect and deterministic after expiration |
+| OSB-06 — persistence | Exact canonical bytes survive adapter reopen, actual Core/server recreation and expiration/rehydration; `/home` remains independently tested |
+| OSB-07 — guarded import | Atomic stale-authority/tree/quota/conflict checks reject traversal, links, protected/case-colliding paths, FIFO/socket and untracked children without partial canonical writes |
+| OSB-08 — Office delivery | Real openpyxl/python-docx create and reread XLSX/DOCX; authenticated browser downloads retain exact hashes across restart |
+| OSB-09 — authority/disable | Definition/Instance constraints, unavailable capability filtering, profile disable and generation fences pass; disable reconciles owned environments |
+| OSB-10 — revised local isolation | Actual auth/resource/DNS/external-IP/metadata/private lifecycle/gateway/socket probes pass on both topologies. **Own execd loopback remains reachable**, expressly accepted for this trusted-local scope; no production isolation claim |
+| OSB-11 — command budget | Real one-second deadline quarantines without importing partial files; browser observes live partial output and successful 31-second completion under the separate sandbox allowance |
+| OSB-12 — recovery/no replay | Cancellation/manual deactivate, reset CAS, terminal receipt preservation, disabled-profile cleanup, actual restart and abandoned provisioning reconciliation pass; unknown output survives clipping and is not replayed |
+| OSB-13 — background | Real start/inspect/log/owned stop, untracked-child guards and teardown fences pass; independent existing Background Session completes coding/Office work with separate generation and init marker |
+| OSB-14 — Admin | Profile Save/Discard/Verify/navigation guard, owner HTTP revision CAS, Instance Save/Reset/conflict/refresh recovery and redacted projections pass |
+| OSB-15 — compatibility | Full local backend/frontend, eight ordinary Workspace/Artifact/Office/Drive/Instance browser cases and Compose pass; historical `sandbox.run` executes through the real SDK with its original result fields. v26/v27 remain byte-identical to main |
+| OSB-16 — browser UX | Real command stream, collapse/copy, cancellation/reset guidance, protected downloads, profile edits and keyboard Escape/focus pass at 1440/1024/768/390/320px with no application page errors |
+| OSB-17 — recreation | Runner actually restarts Core and server using retained isolated SQLite; same generation/init/artifact hashes and canonical recovery pass, then owned server/workloads/processes are cleaned up |
+| OSB-18 — build/docs | Pinned Workbench builds on arm64 and Ubuntu; installed SPDX/license/image evidence retained. Architecture, ports, protocol, persistence, operations and shared DESIGN/context are synchronized; no signed provenance or legal/vulnerability conclusion |
+
+The executable native cases live in [SDK/lifecycle acceptance](../../tests/AgentCore.Infrastructure.Tests/OpenSandboxIntegrationTests.cs), [store/migration parity](../../tests/AgentCore.Infrastructure.Tests/SandboxStoreTests.cs), [atomic Workspace checks](../../tests/AgentCore.Infrastructure.Tests/WorkspaceStructureTests.cs), [owner API](../../tests/AgentCore.Api.Tests/SandboxApiTests.cs) and [real browser/restart journey](../../web/opensandbox-e2e/workbench.spec.ts). [The runner](../../scripts/opensandbox-local.py) invokes these gates rather than replacing them with health checks or scripted result text.
+
 ## Historical Stage A evidence — 2026-10-13
 
 Date: 2026-10-13 (Asia/Ho_Chi_Minh). Branch: `develop/branch-1`.

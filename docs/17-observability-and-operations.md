@@ -582,8 +582,10 @@ This optional execution subsystem targets trusted single-user local development/
 
 ```sh
 python3 scripts/opensandbox-local.py up
-python3 scripts/opensandbox-local.py accept --ui --name agent-core-opensandbox-acceptance
+# Start native Core with the private overrides described below for manual use.
 python3 scripts/opensandbox-local.py down
+# Acceptance provisions and tears down its own server; run after manual teardown.
+python3 scripts/opensandbox-local.py accept --ui --name agent-core-opensandbox-acceptance
 ```
 
 Run `down` for the existing owned runner before starting acceptance with another name; do not run two servers together. `up` builds the pinned Workbench, pulls exact server/execd/egress digests, creates a random 0600 private env file under gitignored `local/opensandbox-runners/<name>/`, starts a labeled server on `127.0.0.1:18080`, and exports `image.json`, installed SPDX inventory and retained license notices. Core is native; the dedicated runner is the tested deployment path. The server alone mounts the host Docker socket plus its private config and state volume. Workloads have empty host-bind allowlists. Never publish the Docker API or copy the server key into Core source/browser/Chat.

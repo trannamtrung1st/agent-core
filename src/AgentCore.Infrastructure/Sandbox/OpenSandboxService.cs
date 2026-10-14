@@ -12,13 +12,15 @@ using OpenSandbox;
 using OpenSandbox.Config;
 using OpenSandbox.Core;
 using OpenSandbox.Models;
+using Microsoft.Extensions.Logging;
 using SdkSandbox = OpenSandbox.Sandbox;
 
 namespace AgentCore.Infrastructure.Sandbox;
 
 /// <summary>One SDK adapter; authoritative files and durable ownership remain in Core.</summary>
 public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISandboxStore store,
-    ISessionWorkspace workspace, IMemoryStore sessions, IAgentRunStore runs, TimeProvider time, IAgentInstanceStore? instances = null) : ISandboxService
+    ISessionWorkspace workspace, IMemoryStore sessions, IAgentRunStore runs, TimeProvider time, IAgentInstanceStore? instances = null,
+    ILogger<OpenSandboxService>? logger = null) : ISandboxService
 {
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gates = new();
     private SemaphoreSlim Gate(Guid id) => _gates.GetOrAdd(id, _ => new(1, 1));
@@ -237,9 +239,38 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     {
         if (lease.ProviderId is null) return false;
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct); budget.CancelAfter(TimeSpan.FromSeconds(20));
-        try { await using var manager = SandboxManager.Create(new SandboxManagerOptions { ConnectionConfig = Connection() }); await manager.KillSandboxAsync(lease.ProviderId, budget.Token); return true; }
-        catch (SandboxApiException e) when (e.StatusCode == 404) { return true; }
-        catch { return false; }
+        string failure = "transport"; int? status = null;
+        // DELETE is idempotent for this exact durable provider identity. A lost
+        // acknowledgement may already have removed it; 404 confirms cleanup.
+        // Shell dispatch remains non-replayable. Keep the existing total budget.
+        for (var attempt = 0; attempt < 3 && !budget.IsCancellationRequested; attempt++)
+        {
+            using var request = CancellationTokenSource.CreateLinkedTokenSource(budget.Token);
+            request.CancelAfter(TimeSpan.FromSeconds(5));
+            try
+            {
+                await using var manager = SandboxManager.Create(new SandboxManagerOptions { ConnectionConfig = Connection() });
+                await manager.KillSandboxAsync(lease.ProviderId, request.Token); return true;
+            }
+            catch (SandboxApiException e) when (e.StatusCode == 404) { return true; }
+            catch (SandboxApiException e)
+            {
+                failure = "http"; status = e.StatusCode;
+                if (e.StatusCode is not (408 or 429 or 500 or 502 or 503 or 504)) break;
+            }
+            catch (OperationCanceledException) { failure = "timeout"; status = null; if (budget.IsCancellationRequested) break; }
+            catch (HttpRequestException) { failure = "transport"; status = null; }
+            catch { failure = "transport"; status = null; break; }
+            if (attempt < 2)
+            {
+                try { await Task.Delay(TimeSpan.FromMilliseconds(250), budget.Token); }
+                catch (OperationCanceledException) { break; }
+            }
+        }
+        // Never log the SDK exception, body, route, provider ID or credentials.
+        logger?.LogWarning("Sandbox cleanup remains pending. SessionId={SessionId} Generation={Generation} Failure={Failure} StatusCode={StatusCode}",
+            lease.SessionId, lease.Generation, failure, status);
+        return false;
     }
     public async ValueTask<SandboxEnvironmentInfo?> InspectAsync(Guid trustedSessionId, CancellationToken ct = default)
     {

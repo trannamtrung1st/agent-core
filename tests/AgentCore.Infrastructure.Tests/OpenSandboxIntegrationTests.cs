@@ -10,6 +10,7 @@ using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Sandbox;
 using AgentCore.Infrastructure.Workspaces;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OpenSandbox;
 using OpenSandbox.Config;
 
@@ -244,6 +245,7 @@ public sealed class OpenSandboxIntegrationTests
         public FileSessionWorkspace Workspace { get; private set; } = null!; public ISandboxStore Store { get; private set; } = null!;
         private Factory _factory = null!; private SqliteMemoryStore _memory = null!; private SqliteAgentRunStore _runs = null!;
         private OpenSandboxOptions _options = null!; private SandboxProfile _profile = null!;
+        private readonly ILoggerFactory _logs = LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
         public static async Task<Fixture> Create(string? initializationScript = null)
         {
             var f = new Fixture(); Directory.CreateDirectory(f.Root);
@@ -267,7 +269,7 @@ public sealed class OpenSandboxIntegrationTests
         public void Reopen()
         {
             Store = new SqliteSandboxStore(_factory); Workspace = new(Path.Combine(Root,"workspaces"),Path.Combine(Root,"templates"),sessions:_memory);
-            Service = new(_options,Store,Workspace,_memory,_runs,TimeProvider.System);
+            Service = new(_options,Store,Workspace,_memory,_runs,TimeProvider.System,logger:_logs.CreateLogger<OpenSandboxService>());
         }
         public SandboxAccess Access(string? call = null) => new(Session.SessionId,Session.AgentInstanceId,Run.AgentRunId,Run.Claim!.Generation,call ?? Guid.NewGuid().ToString("N"),_profile,Definition);
         public async Task ReviseScript(string script) { var next = _profile with { Revision=_profile.Revision+1,InitializationScript=script }; await Store.SaveProfileAsync(next,_profile.Revision); _profile=next; }
@@ -285,7 +287,7 @@ public sealed class OpenSandboxIntegrationTests
         public ValueTask<SandboxCommandResult> Exec(string command) => Service.ExecuteAsync(Access(),new(command));
         public async Task<string> Read(string name) => Encoding.UTF8.GetString((await Workspace.ReadAsync(Session.SessionId,Definition,"/workspace/working/"+name)).Bytes);
         public async ValueTask DisposeAsync()
-        { try { await Service.StopSessionAsync(Session.SessionId); } finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(Root,true); } }
+        { try { await Service.StopSessionAsync(Session.SessionId); } finally { _logs.Dispose(); Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(Root,true); } }
     }
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext> { public AgentCoreDbContext CreateDbContext() => new(options); }
 }
