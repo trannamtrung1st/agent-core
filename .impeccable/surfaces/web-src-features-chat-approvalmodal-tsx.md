@@ -4,6 +4,7 @@ slug: "web-src-features-chat-approvalmodal-tsx"
 primary_target: "web/src/features/chat/ApprovalModal.tsx"
 related_targets:
   - web/src/app.css
+  - src/AgentCore.Application/Tools/SessionToolExecutor.DriveApproval.cs
   - web/src/features/admin/HarnessManagementSection.tsx
 ---
 
@@ -26,3 +27,7 @@ Apply to this Instance shows complete bounded before/source/after with Instance 
 ## Ordinary sensitive approval refinement (2026-10-12)
 
 Ordinary sensitive fields use small one-column Ant Design Descriptions with a shared 6rem secondary label column. Supplied empty values stay explicit as a muted dash; email addresses, subject and body retain complete escaped text and newlines. Preserve the existing 520px dialog, focusable review region, footer and exact decisions; semantic proposals retain their larger stacked layout. [Verification](../../docs/reports/sensitive-approval-polish-verification.md) records the actual Synthetic demo approval, rejection/refresh/keyboard regressions, long email presentation and 320px/short landscape checks. No Real email was sent.
+
+## Trusted Drive decisions (2026-10-14)
+
+Reuse the same 520px Modal and bounded focusable details region. Drive fields stack their labels vertically, giving every bounded filename the full available width at 320px. Trash/Rename/Move titles and confirmation verbs identify the exact operation; batch Trash shows every trusted name/ID/version, verified account, app-authorized subset count and restore explanation. Destructive confirmation uses native danger tokens. Reject, Escape, focus recovery and stale-identity scroll reset remain shared. Invalid target projections disable confirmation; server preparation and execution own exact authority, never the display labels. The [successor ledger](../../docs/reports/drive-credentials-ux-verification-2026-10-14.md) records actual Synthetic rejection/Enter and scope readback.

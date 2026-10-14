@@ -306,6 +306,9 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Restore JavaScript protocol fixture
+        run: npm ci --prefix tests/realtime-js
+
       - name: Owner-capability path and SQLite volume survival
         run: ./scripts/compose-sqlite-volume.sh
 

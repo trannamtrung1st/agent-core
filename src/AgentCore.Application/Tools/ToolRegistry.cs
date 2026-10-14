@@ -17,6 +17,7 @@ public static class ToolRegistry
             ["drive.rename"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.rename"),
             ["drive.move"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.move"),
             ["drive.trash"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.trash"),
+            ["drive.trash_batch"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.trash_batch"),
             [ToolCatalog.OfficeDocumentCreate] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeDocumentCreate),
             [ToolCatalog.OfficeDocumentInspect] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeDocumentInspect),
             [ToolCatalog.OfficeDocumentEdit] = AgentCore.Application.Office.OfficeToolContracts.Descriptor(ToolCatalog.OfficeDocumentEdit),

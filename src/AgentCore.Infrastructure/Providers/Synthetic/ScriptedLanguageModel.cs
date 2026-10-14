@@ -145,6 +145,16 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in structureEvents) yield return item;
             yield break;
         }
+        if (DriveTransferScript.Generate(request) is { } transferEvents)
+        {
+            foreach (var item in transferEvents) yield return item;
+            yield break;
+        }
+        if (DriveTrashScript.Generate(request) is { } trashEvents)
+        {
+            foreach (var item in trashEvents) yield return item;
+            yield break;
+        }
         if (OfficeScript.Generate(request) is { } officeEvents)
         {
             foreach (var item in officeEvents) yield return item;

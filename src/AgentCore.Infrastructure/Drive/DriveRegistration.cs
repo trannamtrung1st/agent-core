@@ -1,3 +1,4 @@
+using AgentCore.Infrastructure.Credentials;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Http;
 using Microsoft.Extensions.Configuration;
@@ -7,10 +8,21 @@ namespace AgentCore.Infrastructure.Drive;
 
 internal static class DriveRegistration
 {
+    private static GoogleDriveOptions DriveHostOptions(IConfiguration? configuration)
+    {
+        var options = configuration?.GetSection("GoogleDrive").Get<GoogleDriveOptions>() ?? new();
+        if (configuration?["AGENTCORE_DRIVE_ENABLED"] is { Length: > 0 } external)
+        {
+            if (!bool.TryParse(external, out var enabled)) throw new InvalidOperationException("AGENTCORE_DRIVE_ENABLED must be true or false.");
+            options.Enabled = enabled;
+        }
+        return options;
+    }
     internal static void AddDrive(IServiceCollection services, string profile)
     {
-        services.TryAddSingleton<GoogleDriveOptions>(sp => sp.GetService<IConfiguration>()?.GetSection("GoogleDrive").Get<GoogleDriveOptions>() ?? new());
-        services.TryAddSingleton<GoogleDriveOAuthOptions>(sp => sp.GetService<IConfiguration>()?.GetSection("GoogleDriveOAuth").Get<GoogleDriveOAuthOptions>() ?? new());
+        services.TryAddSingleton<GoogleDriveOptions>(sp => DriveHostOptions(sp.GetService<IConfiguration>()));
+        services.TryAddSingleton<GoogleOAuthConfiguration>(sp => new(sp.GetService<IConfiguration>() ?? new ConfigurationBuilder().Build(), sp.GetService<Microsoft.Extensions.Logging.ILogger<GoogleOAuthConfiguration>>()));
+        services.TryAddSingleton<GoogleDriveOAuthOptions>(sp => sp.GetRequiredService<GoogleOAuthConfiguration>().Drive);
         services.AddHttpClient(GoogleDriveOAuthService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20)).WithErrorDiagnostics().RemoveAllLoggers().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, MaxConnectionsPerServer = 4 });
         services.AddHttpClient(GoogleDriveProvider.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30)).WithErrorDiagnostics().RemoveAllLoggers().ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, MaxConnectionsPerServer = 4 });
         var synthetic = string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase);

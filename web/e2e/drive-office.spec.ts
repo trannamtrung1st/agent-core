@@ -11,14 +11,14 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   await page.goto('/');
   const owner = await selectInstanceIdentity(page, {
     id: 'general-assistant',
-    version: 27,
+    version: 28,
   });
   const name = `Office Drive ${owner.slice(-8)}`;
   await page.goto('/admin/connections/credentials');
   await page
-    .getByRole('button', { name: 'Add Google Drive Account', exact: true })
+    .getByRole('button', { name: 'Add credential', exact: true })
     .click();
-  const create = page.getByRole('dialog', { name: 'Add Google Drive Account' });
+  const create = page.getByRole('dialog', { name: 'Add credential' });
   await create.getByRole('textbox').fill(name);
   await create
     .getByRole('button', { name: 'Create account', exact: true })
@@ -64,118 +64,18 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     .locator('.ant-select-item-option')
     .filter({ hasText: owner.replace(/-/g, '').slice(-8) })
     .click();
-  await page.getByLabel('Message').fill('synthetic-office: q3-sales-drive');
+  await page
+    .getByLabel('Message')
+    .fill('synthetic-office: q3-sales-drive-trash-fixtures');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Preview q3-report.docx' }),
   ).toBeVisible({ timeout: 60000 });
   await expect(page.getByText(/Verified report ID:/)).toBeVisible();
   const session = page.url();
-  // A transient destination failure must be recoverable without closing the form.
-  await page.route(
-    '**/drive-accounts',
-    (route) =>
-      route.fulfill({
-        status: 503,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: 'unavailable' }),
-      }),
-    { times: 1 },
-  );
-  await page
-    .getByRole('button', { name: 'Save q3-report.docx to Drive' })
-    .click();
-  const save = page.getByRole('dialog', { name: 'Save as new file in Drive' });
-  await save
-    .getByRole('button', { name: 'Retry destinations', exact: true })
-    .click();
   await expect(
-    save.getByRole('combobox', { name: 'Drive account' }),
-  ).toBeEnabled();
-  await save.getByLabel('Drive file name').fill('review-copy.docx');
-  const failedIds: string[] = [];
-  const rejectedUpload = async (route: import('@playwright/test').Route) => {
-    failedIds.push(route.request().postDataJSON().operationId);
-    if (failedIds.length === 1)
-      await route.fulfill({
-        status: 409,
-        json: {
-          title: 'drive_operation_failed',
-          detail:
-            'The operation did not execute. Check destination permission.',
-        },
-      });
-    else await route.continue();
-  };
-  await page.route('**/drive-upload', rejectedUpload);
-  await save
-    .getByRole('button', { name: 'Save new file', exact: true })
-    .click();
-  await expect(
-    save.getByRole('button', { name: 'Start new save' }),
-  ).toBeVisible();
-  await expect(save.getByLabel('Drive file name')).toBeDisabled();
-  expect(failedIds).toHaveLength(1);
-  await save.getByRole('button', { name: 'Start new save' }).click();
-  await save
-    .getByRole('button', { name: 'Save new file', exact: true })
-    .click();
-  await expect(save).toContainText('Verified in Synthetic Drive');
-  expect(failedIds).toHaveLength(2);
-  expect(failedIds[0]).not.toBe(failedIds[1]);
-  await page.unroute('**/drive-upload', rejectedUpload);
-  await expect(
-    save.getByRole('combobox', { name: 'Drive folder' }),
-  ).toBeDisabled();
-  await save.getByRole('button', { name: 'Close', exact: true }).click();
-  // UI fault fixture; adapter tests independently verify Google's actual 308 protocol.
-  const continuedBodies: unknown[] = [];
-  const partialUpload = async (route: import('@playwright/test').Route) => {
-    const body = route.request().postDataJSON();
-    continuedBodies.push(body);
-    if (continuedBodies.length === 1)
-      await route.fulfill({
-        status: 409,
-        json: {
-          error: 'drive_effect_indeterminate',
-          operationId: body.operationId,
-          fileId: 'partial-fixture',
-          retryAllowed: false,
-          resumeAllowed: true,
-        },
-      });
-    else await route.continue();
-  };
-  await page.route('**/drive-upload', partialUpload);
-  await page.setViewportSize({ width: 390, height: 640 });
-  await page
-    .getByRole('button', { name: 'Save q3-report.docx to Drive', exact: true })
-    .click();
-  await save.getByLabel('Drive file name').fill('continued-copy.docx');
-  await save
-    .getByRole('button', { name: 'Save new file', exact: true })
-    .click();
-  const resume = save.getByRole('button', {
-    name: 'Continue upload',
-    exact: true,
-  });
-  await expect(resume).toBeVisible();
-  await expect(save.getByLabel('Drive file name')).toBeDisabled();
-  await expect(
-    save.getByRole('combobox', { name: 'Drive folder' }),
-  ).toBeDisabled();
-  await expect(
-    save.getByRole('button', { name: 'Save new file', exact: true }),
+    page.getByRole('button', { name: /Save .* to Drive/ }),
   ).toHaveCount(0);
-  await resume.focus();
-  await expect(resume).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(save).toContainText('Verified in Synthetic Drive');
-  expect(continuedBodies).toHaveLength(2);
-  expect(continuedBodies[0]).toEqual(continuedBodies[1]);
-  await save.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.unroute('**/drive-upload', partialUpload);
-  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(`/admin/instances/${owner}/credentials`);
   await page
     .getByRole('row')
@@ -195,12 +95,12 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   await search.fill('q3-sales');
   await search.press('Enter');
   await expect(files.getByText('q3-sales.xlsx', { exact: true })).toBeVisible();
-  await expect(
-    files.getByText('review-copy.docx', { exact: true }),
-  ).toHaveCount(0);
+  await expect(files.getByText('q3-report.docx', { exact: true })).toHaveCount(
+    0,
+  );
   await files.getByRole('button', { name: 'Clear Drive search' }).click();
   await expect(
-    files.getByText('review-copy.docx', { exact: true }),
+    files.getByText('q3-report.docx', { exact: true }),
   ).toBeVisible();
   await files.getByRole('button', { name: 'Preview q3-sales.xlsx' }).click();
   const workbook = page.getByRole('dialog', {
@@ -240,8 +140,8 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     files.getByRole('button', { name: 'Preview q3-sales.xlsx' }),
   ).toBeFocused();
   await page.setViewportSize({ width: 1440, height: 900 });
-  await files.getByRole('button', { name: 'Preview review-copy.docx' }).click();
-  const preview = page.getByRole('dialog', { name: 'review-copy.docx' });
+  await files.getByRole('button', { name: 'Preview q3-report.docx' }).click();
+  const preview = page.getByRole('dialog', { name: 'q3-report.docx' });
   await expect(
     page
       .frameLocator('iframe[title="Word document preview"]')
@@ -249,7 +149,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   ).toBeVisible();
   const downloadEvent = page.waitForEvent('download');
   await preview
-    .getByRole('button', { name: 'Download review-copy.docx' })
+    .getByRole('button', { name: 'Download q3-report.docx' })
     .click();
   const downloaded = await downloadEvent;
   expect((await readFile((await downloaded.path())!)).subarray(0, 4)).toEqual(
@@ -257,7 +157,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   );
   await page.keyboard.press('Escape');
   await expect(
-    files.getByRole('button', { name: 'Preview review-copy.docx' }),
+    files.getByRole('button', { name: 'Preview q3-report.docx' }),
   ).toBeFocused();
   await page.keyboard.press('Escape');
   const connection = page.getByRole('region', { name: `Details for ${name}` });
@@ -287,5 +187,79 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   await expect(
     page.getByRole('tab', { name: 'Assumptions', exact: true }),
   ).toBeVisible();
+  await page.keyboard.press('Escape');
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 800 });
+    await expect(
+      page.getByRole('button', { name: 'Preview q3-report.docx' }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    expect(
+      await page
+        .locator('.artifact-actions')
+        .first()
+        .getByRole('button')
+        .allTextContents(),
+    ).toEqual(['', '']);    if (width < 768) {
+      const action = await page.getByRole('button', { name: 'Download q3-report.docx' }).boundingBox();
+      expect(action!.height).toBeGreaterThanOrEqual(40); expect(action!.width).toBeGreaterThanOrEqual(40);
+    }
+
+  }
+  const token = await page.evaluate(() =>
+    localStorage.getItem('agent-core.owner-capability'),
+  );
+  const remaining = async () => {
+    const response = await page.request.get(
+      `/api/v2/agent-instances/${owner}/drive/accounts/drive-work/files?query=AgentCoreUat&limit=20`,
+      { headers: { 'X-AgentCore-Owner-Capability': token! } },
+    );
+    expect(response.ok()).toBe(true);
+    return (await response.json()).items;
+  };
+  expect(await remaining()).toHaveLength(8);
+  const requestBatch = async () => {
+    await page
+      .getByLabel('Message', { exact: true })
+      .fill('synthetic-drive-trash: batch');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const approval = page.getByRole('dialog', {
+      name: 'Move 7 listed Drive files to Trash?',
+    });
+    await expect(approval).toBeVisible({ timeout: 30000 });
+    await expect(approval).toContainText('7 listed app-authorized Drive files');
+    await expect(approval).toContainText(name);
+    await expect(approval).toContainText('Can be restored');
+    expect(await approval.locator('.chat-approval-list li').count()).toBe(7);
+    return approval;
+  };
+  const rejected = await requestBatch();
+  await page.keyboard.press('Escape');
+  await expect(rejected).toBeHidden();
+  await expect(
+    page.getByText('Drive fixture stopped after rejection or a tool failure.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  expect(await remaining()).toHaveLength(8);
+  const approved = await requestBatch();
+  await page.setViewportSize({ width: 320, height: 800 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await approved
+    .getByRole('button', { name: 'Move 7 files to Trash', exact: true })
+    .focus();
+  await page.keyboard.press('Enter');
+  await expect(approved).toBeHidden();
+  await expect(
+    page.getByText(
+      'Synthetic app-authorized batch: requested 7; trashed 7; failed 0; uncertain 0; not attempted 0.',
+      { exact: false },
+    ),
+  ).toBeVisible({ timeout: 30000 });
+  expect(await remaining()).toHaveLength(1);
   expect(errors).toEqual([]);
 });

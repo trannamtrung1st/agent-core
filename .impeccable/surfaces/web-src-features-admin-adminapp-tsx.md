@@ -34,6 +34,9 @@ related_targets:
   - web/src/features/admin/DefinitionSkillsSection.tsx
   - web/src/features/admin/InstanceWorkspaceSection.tsx
   - web/src/features/admin/CredentialsSection.tsx
+  - web/src/features/admin/AddCredentialDialog.tsx
+  - web/src/features/admin/CredentialFields.tsx
+  - web/src/features/admin/CredentialConnectionTag.tsx
   - web/src/features/admin/DriveFiles.tsx
   - web/src/features/admin/DriveConnectionPanel.tsx
   - web/src/features/admin/instanceMemoryAutomation.tsx
@@ -45,7 +48,6 @@ related_targets:
   - web/src/features/admin/useAdminDetailLayout.ts
   - web/src/app/confirmAction.ts
   - web/src/features/filePreview/FilePreview.tsx
-  - web/src/features/filePreview/SaveToDriveButton.tsx
   - web/src/app.css
 ---
 
@@ -124,12 +126,10 @@ Current source: `9a798360`. Matching [focused configuration verification and cap
 
 Focused configuration refinement: preserve Agent Core branding with a secondary Admin marker and desktop breadcrumb separator. Native outline icons accompany every canonical destination; remove the contextual Global integrations & platform shortcut. Separate unrelated settings into focused pages while preserving exact-owner candidates, field anchors, native links and draft guards. The sticky bordered actions frame is shared by Definition drafts and Instance configuration. Instance inherited settings accept edits immediately, retain sparse per-field source/reset semantics and reserved minimum label-row height. Common table operations use accessible icon buttons; longer choices belong to an icon-labeled More menu with keyboard focus restoration. At 320px only brand/icon-header spacing uses native paddingXXS (4px); all normal shell/control/panel roles remain 8/12/16px. `/docs/13` remains authoritative.
 
-## Shared preview and Drive — current source 0763058d (2026-10-14)
+## Drive credentials successor (2026-10-14)
 
-Existing Attachment/Artifact/Workspace/Resource actions reuse the [FilePreview Read surface](web-src-features-filepreview-filepreview-tsx.md). The source collection owns its compact wrapping action row; the preview owns metadata, renderer toolbars and a bounded locally scrolling canvas. Artifact cards retain a readable filename above full-width Preview, optional Save to Drive and Download/Retry actions. Familiar icon-only source actions use native tooltips.
+Artifact cards now use one centered horizontal row with file icon, shrinking filename/type/size and two tooltip-equipped Preview/Download icon actions. Actions never shrink, keep full accessible filenames and retain 40px mobile targets; metadata/download failures keep local Retry. Generic Artifact and Workspace rows have no provider-specific export affordance. Existing FilePreview owns the same source authentication, read-only renderer canvas and focus/cancellation.
 
-Credentials owns Drive connections and Instance binding details own the app-authorized browser. That browser shares the preview canvas, a flexible search/control row, local column scrolling and a mobile scroll hint. Save to Drive retains a compact account/name/folder form with a native footer outside its bounded scrolling body. Loading and Retry stay beside destination/folder reads; changing accounts clears prior folder choices/search. Verified success leaves Close, and uncertainty retains read-only Check operation, with Continue upload only for backend-confirmed saved-session authority. Proven non-execution offers Start new save explicitly; it releases the pinned form without uploading automatically. Synthetic identity/receipts are explicit. These remain Operate flows; their behavior is owned by docs/13 and docs/14.
+Credentials owns one Add credential purpose selector with reused Drive/Gmail/Custom/General fields and immutable-purpose specialist edits. Saved connection Tags remain separate from Active/Disabled status. Instance bindings own app-authorized Drive browsing; conversational tools own mutations. The shared ApprovalModal uses trusted file/name/version details, a full-width narrow-screen list, action-specific Trash/Rename/Move wording, recoverable-subset copy and the existing keyboard/Reject/footer behavior. Behavior remains owned by docs/13 and docs/14.
 
-The [current polish report](../../docs/reports/file-preview-drive-ui-polish-2026-10-14.md) supplies five-width and short-screen captures, keyboard/focus recovery, 1,004 unit passes and four browser journeys on 8e053018. The [successor ledger](../../docs/reports/office-file-preview-drive-verification-2026-10-13.md) owns the earlier exact-source hosted acceptance and manual/Real gaps. This documentation refresh introduces no runtime change or new acceptance.
-
-The [correctness review](../../docs/reports/file-preview-drive-review-2026-10-14.md) verifies clear-search restoration and one-upload/read-only receipt recovery on `0763058d`. Folder consumes the same form lock as the other fields during upload, pending recovery and verified completion. Action names stay stable through loading; earlier geometry captures remain valid.
+The [successor verification ledger](../../docs/reports/drive-credentials-ux-verification-2026-10-14.md) owns current local evidence and exact source identity. Earlier reports are historical; Real Trash requires an authorized disposable account scope and remains unverified.

@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Infrastructure.Tests;
 
-public sealed class GoogleEmailOAuthTests
+public sealed partial class GoogleEmailOAuthTests
 {
     [Fact]
     public async Task Callback_verifies_PKCE_nonce_identity_scopes_and_encrypts_offline_grant_then_rotates_without_revision()
@@ -30,7 +30,7 @@ public sealed class GoogleEmailOAuthTests
         var c = (await f.Store.GetAsync(account.CredentialId))!;
         Assert.Equal("verified@example.test", c.EmailAccount!.EmailAddress); Assert.Equal("verified-sub", c.EmailAccount.GoogleSubject);
         Assert.DoesNotContain("known-refresh", c.ProtectedPayload);
-        Assert.Equal("known-refresh", f.Protector.Unprotect(c.CredentialId, 1, c.ProtectedPayload));
+        Assert.Equal("known-refresh", GoogleOAuthRefreshGrant.Read(f.Protector.Unprotect(c.CredentialId, 1, c.ProtectedPayload)).Token);
         Assert.Contains("code_verifier=", f.Transport.ExchangeBody);
         var sentVerifier = QueryHelpers.ParseQuery("?" + f.Transport.ExchangeBody)["code_verifier"].ToString();
         Assert.Equal(query["code_challenge"].ToString(), GmailMime.EncodeBase64Url(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(sentVerifier)))); Assert.DoesNotContain("known-refresh", JsonSerializer.Serialize(await f.Credentials.GetAsync(c.CredentialId)));
@@ -38,7 +38,7 @@ public sealed class GoogleEmailOAuthTests
         Assert.All(tokens, t => Assert.Equal("known-access", t)); Assert.Equal(1, f.Transport.Refreshes);
         var rotated = (await f.Store.GetAsync(c.CredentialId))!;
         Assert.Equal(c.Revision, rotated.Revision); Assert.Equal(c.SecretRevision + 1, rotated.SecretRevision);
-        Assert.Equal("rotated-refresh", f.Protector.Unprotect(c.CredentialId, 1, rotated.ProtectedPayload));
+        Assert.Equal("rotated-refresh", GoogleOAuthRefreshGrant.Read(f.Protector.Unprotect(c.CredentialId, 1, rotated.ProtectedPayload)).Token);
         var reopened = f.NewService(); await reopened.AccessTokenAsync(c.CredentialId, c.Revision, default);
         Assert.Equal(2, f.Transport.Refreshes);
     }
@@ -234,14 +234,14 @@ public sealed class GoogleEmailOAuthTests
     {
         public readonly TaskCompletionSource RefreshStarted = new(TaskCreationOptions.RunContinuationsAsynchronously), ReleaseRefresh = new(TaskCreationOptions.RunContinuationsAsynchronously); public bool PauseRefresh;
         public HttpStatusCode? ProfileFailure;
-        public int Exchanges, Refreshes; public bool MissingRefresh, MissingScope, RevokeFails; public string? RefreshFailure; public string ExchangeBody = "";
+        public string LastRefreshBody = ""; public int Exchanges, Refreshes; public bool MissingRefresh, MissingScope, RevokeFails; public string? RefreshFailure; public string ExchangeBody = "";
         public HttpClient CreateClient(string name) => new(this, false);
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             if (request.RequestUri!.AbsolutePath == "/revoke") return new(RevokeFails ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK);
             if (request.RequestUri.AbsolutePath.EndsWith("/profile")) return ProfileFailure is { } failed ? Json(new { error = "safe-error" }, failed) : Json(new { emailAddress = "verified@example.test" });
             var body = await request.Content!.ReadAsStringAsync(ct);
-            if (body.Contains("grant_type=refresh_token")) { Interlocked.Increment(ref Refreshes); if (PauseRefresh) { RefreshStarted.TrySetResult(); await ReleaseRefresh.Task.WaitAsync(ct); } if (RefreshFailure is not null) return Json(new { error = RefreshFailure }, HttpStatusCode.BadRequest); }
+            if (body.Contains("grant_type=refresh_token")) { LastRefreshBody = body; Interlocked.Increment(ref Refreshes); if (PauseRefresh) { RefreshStarted.TrySetResult(); await ReleaseRefresh.Task.WaitAsync(ct); } if (RefreshFailure is not null) return Json(new { error = RefreshFailure }, HttpStatusCode.BadRequest); }
             else { Exchanges++; ExchangeBody = body; }
             return Json(new { access_token = "known-access", refresh_token = MissingRefresh ? null : body.Contains("grant_type=refresh_token") ? "rotated-refresh" : "known-refresh", id_token = "verified-id", expires_in = 3600,
                 scope = EmailAccountProfile.ReadScope + (MissingScope ? "" : " " + EmailAccountProfile.SendScope) });

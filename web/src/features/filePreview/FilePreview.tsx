@@ -92,7 +92,7 @@ function PreviewEntry({
   }, [disabled]);
   return (
     <>
-      <Tooltip title={iconOnly ? 'Preview' : undefined}>
+      <Tooltip title={iconOnly ? label : undefined}>
         <Button
           type="text"
           icon={<EyeOutlined aria-hidden />}

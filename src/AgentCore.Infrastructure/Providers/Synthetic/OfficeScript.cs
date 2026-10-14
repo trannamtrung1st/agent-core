@@ -12,7 +12,8 @@ internal static class OfficeScript
     {
         var last = request.Messages.ToList().FindLastIndex(message => message.Role == ModelRole.User);
         if (last < 0) return null;
-        var drive = request.Messages[last].Text.Trim() == "synthetic-office: q3-sales-drive";
+        var fixtures = request.Messages[last].Text.Trim() == "synthetic-office: q3-sales-drive-trash-fixtures";
+        var drive = fixtures || request.Messages[last].Text.Trim() == "synthetic-office: q3-sales-drive";
         if (!drive && request.Messages[last].Text.Trim() != Marker) return null;
         var results = request.Messages.Skip(last + 1).Where(message => message.Role == ModelRole.Tool).ToArray();
         if (results.Any(result => { using var json = JsonDocument.Parse(result.Text); return json.RootElement.TryGetProperty("error", out _); }))
@@ -46,6 +47,7 @@ internal static class OfficeScript
             if (results.Length == 8) return Call(request, "drive.accounts", new { });
             using var accounts = JsonDocument.Parse(results[8].Text); var ready = accounts.RootElement.GetProperty("accounts").EnumerateArray().Where(a => a.GetProperty("available").GetBoolean()).ToArray();
             if (ready.Length != 1) return Done("Choose exactly one connected bound Drive account for this deterministic fixture. Local Office files were created; no Drive success is claimed.");
+            if (fixtures && !ready[0].GetProperty("synthetic").GetBoolean()) return Done("Disposable Drive fixtures require a Synthetic account. Local Office files were created; no real Drive mutation was requested.");
             var account = ready[0].GetProperty("accountRef").GetString(); var epoch = ready[0].GetProperty("authEpoch").GetInt64();
             if (results.Length == 9) return Call(request, "drive.create_folder", new { accountRef = account, authEpoch = epoch, name = "Q3 Sales" });
             if (results.Length == 10) return Call(request, ToolCatalog.CapabilitiesLoad, new { query = "drive.upload", limit = 1 });
@@ -54,6 +56,12 @@ internal static class OfficeScript
             if (results.Length == 12) { using var source = JsonDocument.Parse(results[1].Text); return Call(request, "drive.upload", new { accountRef = account, authEpoch = epoch, path = "/home/q3-sales.xlsx", expectedSha256 = source.RootElement.GetProperty("sha256").GetString(), folderId }); }
             using var reportReceipt = JsonDocument.Parse(results[11].Text); using var workbookReceipt = JsonDocument.Parse(results[12].Text);
             if (reportReceipt.RootElement.GetProperty("receipt").GetProperty("status").GetString() != "Succeeded" || workbookReceipt.RootElement.GetProperty("receipt").GetProperty("status").GetString() != "Succeeded") return Done("Drive completion is uncertain; inspect the known operations. No delivery is claimed.");
+            if (fixtures && ready[0].GetProperty("synthetic").GetBoolean() && results.Length < 21)
+            {
+                using var source = JsonDocument.Parse(results[3].Text);
+                return Call(request, "drive.upload", new { accountRef = account, authEpoch = epoch, path = "/home/q3-report.docx", expectedSha256 = source.RootElement.GetProperty("sha256").GetString(), folderId,
+                    name = "AgentCoreUat-" + (results.Length - 13) + "-" + string.Concat(Enumerable.Repeat("長い四半期報告書", 20)) + ".docx" });
+            }
             return Done($"Synthetic Q3 Office files created, inspected and saved as new files in app-authorized Drive folder {folderId}. Verified report ID: {reportReceipt.RootElement.GetProperty("receipt").GetProperty("file").GetProperty("id").GetString()}; workbook ID: {workbookReceipt.RootElement.GetProperty("receipt").GetProperty("file").GetProperty("id").GetString()}. Formulas are stored; cached totals may be unavailable. [[artifact:{spreadsheetId.GetString()}]] [[artifact:{documentId.GetString()}]]");
         }
         return Done($"Synthetic Q3 workbook and report created and inspected. Formulas are stored; cached totals may be unavailable. [[artifact:{spreadsheetId.GetString()}]] [[artifact:{documentId.GetString()}]]");

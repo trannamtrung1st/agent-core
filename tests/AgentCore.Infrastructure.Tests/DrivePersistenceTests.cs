@@ -69,6 +69,65 @@ public sealed class DrivePersistenceTests
         }
         finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Seven_file_batch_reopens_sqlite_receipts_and_does_not_repeat_remote_patches(bool deadline)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "drive-batch-reopen-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var dbOptions = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/store.db").Options;
+            var factory = new Factory(dbOptions); await using (var db = factory.CreateDbContext()) await db.Database.MigrateAsync();
+            var ids = new SystemIdGenerator(TimeProvider.System); var owners = new SqliteAgentInstanceStore(factory, ids); var credentials = new SqliteCredentialStore(factory); var files = new SqliteDriveStore(factory);
+            var owner = new AgentInstance(Guid.NewGuid(), "general-assistant", 28, new("UAT", "Assistant", "Help", "Calm"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow); await owners.InsertAsync(owner);
+            var protector = new LocalCredentialProtector(root + "/keys"); var service = new CredentialService(credentials, credentials, protector, owners, ids, TimeProvider.System);
+            var account = await service.CreateGoogleDriveAccountAsync("Batch Drive"); await service.BindAsync(owner.InstanceId, account.CredentialId, "drive", 1);
+            var oauth = new GoogleDriveOAuthService(credentials, protector, new NoHttp(), new(), new(), TimeProvider.System, true); var start = await oauth.StartAsync(account.CredentialId, 1, owner.InstanceId, default);
+            var state = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(start.AuthorizationUrl[start.AuthorizationUrl.IndexOf('?')..])["state"].ToString(); await oauth.CompleteAsync(state, start.Correlation, owner.InstanceId, "consent", null, default);
+            var targets = new List<AgentCore.Application.Drive.DriveTrashTarget>();
+            for (var i = 0; i < 8; i++) { var file = new DriveFile("exact-file-" + i, "sample-" + i + ".txt", "text/plain", 2, "1", "49f68a5c8493ec2c0bf489821c21fc3b", ["unavailable-parent"], false); await files.SaveAsync(account.CredentialId, file, "hi"u8.ToArray(), null, default); if (i < 7) targets.Add(new(file.Id, file.Version)); }
+            var provider = new BatchCountingFactory(new GoogleDriveProviderFactory(new(), oauth, new NoHttp(), files, files, protector, ids, TimeProvider.System, true));
+            var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
+            var drive = new AgentCore.Application.Drive.DriveService(credentials, credentials, owners, provider, files, clock); var access = await drive.ResolveAsync(owner.InstanceId, "drive", null, true, default); var batch = Guid.NewGuid();
+            AgentCore.Application.Drive.DriveTrashBatchResult result;
+            if (deadline)
+            {
+                var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                provider.AfterTrash = async (_, ct) => { reached.TrySetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, ct); };
+                var pending = drive.TrashBatchAsync(access, batch, 1, targets, default).AsTask();
+                await reached.Task.WaitAsync(TimeSpan.FromSeconds(10)); clock.Advance(TimeSpan.FromSeconds(60));
+                result = await pending.WaitAsync(TimeSpan.FromSeconds(10)); Assert.Equal(1, result.UncertainCount); Assert.Equal(6, result.NotAttemptedCount); Assert.Equal(1, provider.Trashes);
+            }
+            else { result = await drive.TrashBatchAsync(access, batch, 1, targets, default); Assert.Equal(7, result.TrashedCount); Assert.Equal(7, provider.Trashes); }
+            SqliteConnection.ClearAllPools(); factory = new Factory(dbOptions); files = new(factory); credentials = new(factory); owners = new(factory, ids);
+            oauth = new(credentials, new LocalCredentialProtector(root + "/keys"), new NoHttp(), new(), new(), TimeProvider.System, true);
+            provider = new(new GoogleDriveProviderFactory(new(), oauth, new NoHttp(), files, files, protector, ids, TimeProvider.System, true));
+            drive = new(credentials, credentials, owners, provider, files, TimeProvider.System); access = await drive.ResolveAsync(owner.InstanceId, "drive", null, true, default);
+            var replay = await drive.TrashBatchAsync(access, batch, 1, targets, default); Assert.Equal(7, replay.TrashedCount); Assert.Equal(deadline ? 6 : 0, provider.Trashes);
+            if (!deadline) Assert.Equal(result.Items.Select(i => i.OperationId), replay.Items.Select(i => i.OperationId));
+            else Assert.Equal(result.Items[0].OperationId, replay.Items[0].OperationId); Assert.False((await files.GetAsync(account.CredentialId, "exact-file-7", default))!.Trashed);
+        }
+        finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+    }
+    private sealed class BatchCountingFactory(IGoogleDriveProviderFactory inner) : IGoogleDriveProviderFactory
+    {
+        public Func<string, CancellationToken, Task>? AfterTrash;
+        public int Trashes; public bool Enabled => inner.Enabled; public bool Configured => inner.Configured; public bool Synthetic => inner.Synthetic;
+        public IGoogleDriveProvider Create(Guid id, long revision) => new BatchCountingProvider(inner.Create(id, revision), this);
+    }
+    private sealed class BatchCountingProvider(IGoogleDriveProvider inner, BatchCountingFactory count) : IGoogleDriveProvider
+    {
+        public ValueTask<string> GenerateIdAsync(CancellationToken ct) => inner.GenerateIdAsync(ct);
+        public ValueTask<DriveFilePage> ListAsync(string? folder, string? query, string? cursor, int limit, CancellationToken ct) => inner.ListAsync(folder, query, cursor, limit, ct);
+        public ValueTask<DriveFile> GetAsync(string id, CancellationToken ct) => inner.GetAsync(id, ct);
+        public ValueTask CreateFolderAsync(string id, string name, string parent, CancellationToken ct) => inner.CreateFolderAsync(id, name, parent, ct);
+        public ValueTask UploadAsync(string id, string name, string parent, string mime, ReadOnlyMemory<byte> bytes, DriveOperation op, CancellationToken ct) => inner.UploadAsync(id, name, parent, mime, bytes, op, ct);
+        public ValueTask<byte[]> DownloadAsync(DriveFile file, CancellationToken ct) => inner.DownloadAsync(file, ct);
+        public ValueTask RenameAsync(string id, string name, CancellationToken ct) => inner.RenameAsync(id, name, ct);
+        public ValueTask MoveAsync(string id, string source, string destination, CancellationToken ct) => inner.MoveAsync(id, source, destination, ct);
+        public async ValueTask TrashAsync(string id, CancellationToken ct) { count.Trashes++; await inner.TrashAsync(id, ct); if (count.AfterTrash is not null) await count.AfterTrash(id, ct); }
+    }
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext> { public AgentCoreDbContext CreateDbContext() => new(options); }
     private sealed class NoHttp : IHttpClientFactory { public HttpClient CreateClient(string name) => throw new InvalidOperationException("Synthetic must not use HTTP"); }
 }

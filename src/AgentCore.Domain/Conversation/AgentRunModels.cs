@@ -20,7 +20,10 @@ public static class AgentRunLimits
     public const int MaxBackgroundObjectiveCharacters = 4000;
     public const int MaxCheckpointBytes = 262_144;
     public const int MaxPreviewCharacters = 12_000;
+    // A bounded 20-file Drive manifest includes every exact name, ID and version.
+    public const int MaxDriveBatchPreviewCharacters = 32_000;
     public const int MaxPreparedActionBytes = 8_192;
+    public const int MaxDriveBatchPreparedActionBytes = 16_384;
     public const int MaxToolNameCharacters = 128;
     public const int ActionHashCharacters = 64;
     public const int MaxKnownEffectCharacters = 500;
@@ -419,9 +422,9 @@ public sealed class AgentRunApproval
         ExecutionGeneration = executionGeneration;
         CheckpointRevision = checkpointRevision;
         ToolName = AgentRunText.RequireToolName(toolName);
-        PreparedActionJson = AgentRunText.RequireUtf8(preparedActionJson, AgentRunLimits.MaxPreparedActionBytes, "Prepared action");
+        PreparedActionJson = AgentRunText.RequireUtf8(preparedActionJson, ToolName == "drive.trash_batch" ? AgentRunLimits.MaxDriveBatchPreparedActionBytes : AgentRunLimits.MaxPreparedActionBytes, "Prepared action");
         ActionHash = AgentRunText.RequireActionHash(actionHash);
-        Preview = AgentRunText.RequireMultiline(preview, AgentRunLimits.MaxPreviewCharacters, "Approval preview");
+        Preview = AgentRunText.RequireMultiline(preview, ToolName == "drive.trash_batch" ? AgentRunLimits.MaxDriveBatchPreviewCharacters : AgentRunLimits.MaxPreviewCharacters, "Approval preview");
         ExpiresAtUtc = expiresAtUtc;
         Decision = decision;
         DecidedAtUtc = decidedAtUtc;

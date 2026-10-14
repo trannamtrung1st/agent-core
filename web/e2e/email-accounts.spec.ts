@@ -1,126 +1,287 @@
 import { expect, test } from '@playwright/test';
 import { selectInstanceIdentity } from './support/instance-identity';
 
-for (const width of [1440, 768, 390, 320]) test(`email account editor, tests and owner chooser at ${width}px`, async ({ page }) => {
-  test.setTimeout(120_000);
-  await page.setViewportSize({ width, height: 900 });
-  await page.goto('/admin/connections/credentials');
-  await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));
-  const name = `Email ${width} ${Date.now()}`;
-  const addTrigger = page.getByRole('button', { name: 'Add email account', exact: true });
-  await addTrigger.focus(); await page.keyboard.press('Enter');
-  await expect(page.getByRole('dialog', { name: 'Add email account', exact: true })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'Add email account', exact: true })).toBeHidden();
-  await expect(addTrigger).toBeFocused();
-  await addTrigger.click();
-  const create = page.getByRole('dialog', { name: 'Add email account', exact: true });
-  await create.getByLabel('Display name', { exact: true }).fill(name);
-  await expect(create.getByLabel('Sender email address', { exact: true })).toHaveCount(0);
-  await expect(create.getByLabel('App Password', { exact: true })).toHaveCount(0);
-  await expect(create.getByLabel('IMAP host', { exact: true })).toHaveCount(0);
-  await expect(create).toContainText('Synthetic — no Google connection');
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await create.getByRole('button', { name: 'Connect with Google', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Synthetic email authorization' })).toBeVisible();
-  await page.getByRole('button', { name: 'Authorize Synthetic account', exact: true }).click();
-  const connected = page.getByRole('dialog', { name: 'Edit email account' });
-  await expect(connected).toBeVisible(); await expect(connected).toContainText('Verified mailbox');
-  await expect(connected).toContainText('Synthetic — no Google connection');
-  await connected.getByRole('button', { name: 'Test access', exact: true }).click();
-  await expect(connected).toContainText('Last checked');
-  await connected.getByRole('button', { name: 'Disconnect', exact: true }).click();
-  const confirm = page.getByRole('dialog', { name: 'Disconnect this Google account for all agents?' });
-  await expect(confirm).toBeVisible(); await expect(confirm).toContainText('Bindings remain');
-  await confirm.getByRole('button', { name: 'Disconnect account', exact: true }).click();
-  await expect(confirm).toBeHidden(); await expect(connected).toContainText('Disconnected');
-  await connected.getByLabel('Display name', { exact: true }).fill(`${name} pending edits`);
-  await connected.getByRole('button', { name: 'Reconnect with Google', exact: true }).click();
-  await page.getByRole('button', { name: 'Authorize Synthetic account', exact: true }).click();
-  await expect(connected).toBeVisible();
-  await expect(connected.getByText('Unsaved account details restored', { exact: true })).toBeVisible();
-  await expect(connected.getByLabel('Display name', { exact: true })).toHaveValue(`${name} pending edits`);
-  await connected.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(connected).toBeHidden();
-  await page.getByRole('textbox', { name: 'Search credentials', exact: true }).fill(name);
-  const row = page.getByRole('row').filter({ hasText: name });
-  await expect(row).toContainText('Email account');
-  await row.getByRole('button', { name: 'Expand row', exact: true }).click();
-  const details = page.getByRole('region', { name: `Details for ${name}` });
-  await details.getByRole('button', { name: 'Test access', exact: true }).click();
-  await expect(details).toContainText('Synthetic — no Google connection');
-  await expect(row.getByRole('button', { name: 'Replace value', exact: true })).toHaveCount(0);
-  await row.getByRole('button', { name: 'Edit', exact: true }).click();
-  const edit = page.getByRole('dialog', { name: 'Edit email account' });
-  await expect(edit.getByLabel('App Password', { exact: true })).toHaveCount(0);
-  await edit.getByLabel('Display name', { exact: true }).fill(`${name} updated`);
-  await edit.getByRole('button', { name: 'Save email account', exact: true }).click();
-  await expect(edit).toBeHidden();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.goto('/');
-  await selectInstanceIdentity(page, { id: 'general-assistant', version: 25 });
-  await page.getByLabel('Message').fill('Please run the email account chooser.');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
-  const chooser = page.getByRole('dialog', { name: 'Choose an email account' });
-  await expect(chooser).toBeVisible({ timeout: 30_000 });
-  await expect(chooser.getByRole('button', { name: 'Allow account', exact: true })).toBeDisabled();
-  // Reconnect/reload must preserve the same durable pending request.
-  await page.reload();
-  await expect(chooser).toBeVisible({ timeout: 30_000 });
-  const option = chooser.getByRole('radio', { name: new RegExp(`${name} updated`) });
-  await option.focus(); await page.keyboard.press('Space'); await expect(option).toBeChecked();
-  await chooser.getByRole('textbox', { name: 'Account reference', exact: true }).fill(`mail-${width}`);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: `test-results/email-chooser-${width}.png` });
-  await chooser.getByRole('button', { name: 'Allow account', exact: true }).click();
-  await expect(chooser).toBeHidden();
-  await expect(page.getByText('Email inspected with the selected account.', { exact: true })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole('region', { name: 'Conversation', exact: true }).getByText('Please run the email account chooser.', { exact: true })).toHaveCount(1);
-  await page.getByLabel('Message').fill('Please run the email account chooser again.');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(chooser).toBeVisible({ timeout: 30_000 });
-  await chooser.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(chooser).toBeHidden();
-  const receipt = page.getByRole('alert').filter({ hasText: 'Account selection cancelled. Send a new user turn to retry.' });
-  await expect(receipt).toBeVisible(); await expect(receipt.locator('..')).toBeFocused();
-  expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight)).toBe(true);
-});
+for (const width of [1440, 768, 390, 320])
+  test(`email account editor, tests and owner chooser at ${width}px`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/admin/connections/credentials');
+    await page.waitForFunction(() =>
+      localStorage.getItem('agent-core.owner-capability'),
+    );
+    const name = `Email ${width} ${Date.now()}`;
+    const addTrigger = page.getByRole('button', {
+      name: 'Add credential',
+      exact: true,
+    });
+    await addTrigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(
+      page.getByRole('dialog', { name: 'Add credential', exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(
+      page.getByRole('dialog', { name: 'Add credential', exact: true }),
+    ).toBeHidden();
+    await expect(addTrigger).toBeFocused();
+    await addTrigger.click();
+    const create = page.getByRole('dialog', {
+      name: 'Add credential',
+      exact: true,
+    });
+    await create.getByLabel('Credential purpose').click();
+    await page.getByText('Gmail account', { exact: true }).click();
+    await create.getByLabel('Display name', { exact: true }).fill(name);
+    await expect(
+      create.getByLabel('Sender email address', { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      create.getByLabel('App Password', { exact: true }),
+    ).toHaveCount(0);
+    await expect(create.getByLabel('IMAP host', { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(create).toContainText('Synthetic — no Google connection');
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      )
+      .toBe(true);
+    await create
+      .getByRole('button', { name: 'Connect with Google', exact: true })
+      .click();
+    await expect(
+      page.getByRole('heading', { name: 'Synthetic email authorization' }),
+    ).toBeVisible();
+    await page
+      .getByRole('button', { name: 'Authorize Synthetic account', exact: true })
+      .click();
+    const connected = page.getByRole('dialog', { name: 'Edit email account' });
+    await expect(connected).toBeVisible();
+    await expect(connected).toContainText('Verified mailbox');
+    await expect(connected).toContainText('Synthetic — no Google connection');
+    await connected
+      .getByRole('button', { name: 'Test access', exact: true })
+      .click();
+    await expect(connected).toContainText('Last checked');
+    await connected
+      .getByRole('button', { name: 'Disconnect', exact: true })
+      .click();
+    const confirm = page.getByRole('dialog', {
+      name: 'Disconnect this Google account for all agents?',
+    });
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText('Bindings remain');
+    await confirm
+      .getByRole('button', { name: 'Disconnect account', exact: true })
+      .click();
+    await expect(confirm).toBeHidden();
+    await expect(connected).toContainText('Disconnected');
+    await connected
+      .getByLabel('Display name', { exact: true })
+      .fill(`${name} pending edits`);
+    await connected
+      .getByRole('button', { name: 'Reconnect with Google', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Authorize Synthetic account', exact: true })
+      .click();
+    await expect(connected).toBeVisible();
+    await expect(
+      connected.getByText('Unsaved account details restored', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      connected.getByLabel('Display name', { exact: true }),
+    ).toHaveValue(`${name} pending edits`);
+    await connected
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
+    await expect(connected).toBeHidden();
+    await page
+      .getByRole('textbox', { name: 'Search credentials', exact: true })
+      .fill(name);
+    const row = page.getByRole('row').filter({ hasText: name });
+    await expect(row).toContainText('Email account');
+    await row.getByRole('button', { name: 'Expand row', exact: true }).click();
+    const details = page.getByRole('region', { name: `Details for ${name}` });
+    await details
+      .getByRole('button', { name: 'Test access', exact: true })
+      .click();
+    await expect(details).toContainText('Synthetic — no Google connection');
+    await expect(
+      row.getByRole('button', { name: 'Replace value', exact: true }),
+    ).toHaveCount(0);
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
+    const edit = page.getByRole('dialog', { name: 'Edit email account' });
+    await expect(edit.getByLabel('App Password', { exact: true })).toHaveCount(
+      0,
+    );
+    await edit
+      .getByLabel('Display name', { exact: true })
+      .fill(`${name} updated`);
+    await edit
+      .getByRole('button', { name: 'Save email account', exact: true })
+      .click();
+    await expect(edit).toBeHidden();
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      )
+      .toBe(true);
+    await page.goto('/');
+    await selectInstanceIdentity(page, {
+      id: 'general-assistant',
+      version: 25,
+    });
+    await page
+      .getByLabel('Message')
+      .fill('Please run the email account chooser.');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const chooser = page.getByRole('dialog', {
+      name: 'Choose an email account',
+    });
+    await expect(chooser).toBeVisible({ timeout: 30_000 });
+    await expect(
+      chooser.getByRole('button', { name: 'Allow account', exact: true }),
+    ).toBeDisabled();
+    // Reconnect/reload must preserve the same durable pending request.
+    await page.reload();
+    await expect(chooser).toBeVisible({ timeout: 30_000 });
+    const option = chooser.getByRole('radio', {
+      name: new RegExp(`${name} updated`),
+    });
+    await option.focus();
+    await page.keyboard.press('Space');
+    await expect(option).toBeChecked();
+    await chooser
+      .getByRole('textbox', { name: 'Account reference', exact: true })
+      .fill(`mail-${width}`);
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      )
+      .toBe(true);
+    await page.screenshot({ path: `test-results/email-chooser-${width}.png` });
+    await chooser
+      .getByRole('button', { name: 'Allow account', exact: true })
+      .click();
+    await expect(chooser).toBeHidden();
+    await expect(
+      page.getByText('Email inspected with the selected account.', {
+        exact: true,
+      }),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page
+        .getByRole('region', { name: 'Conversation', exact: true })
+        .getByText('Please run the email account chooser.', { exact: true }),
+    ).toHaveCount(1);
+    await page
+      .getByLabel('Message')
+      .fill('Please run the email account chooser again.');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(chooser).toBeVisible({ timeout: 30_000 });
+    await chooser.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(chooser).toBeHidden();
+    const receipt = page.getByRole('alert').filter({
+      hasText: 'Account selection cancelled. Send a new user turn to retry.',
+    });
+    await expect(receipt).toBeVisible();
+    await expect(receipt.locator('..')).toBeFocused();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollHeight <= innerHeight,
+      ),
+    ).toBe(true);
+  });
 
-test('Custom account defaults survive provider mounting and saved endpoints reopen unchanged', async ({ page }) => {
+test('Custom account defaults survive provider mounting and saved endpoints reopen unchanged', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 320, height: 900 });
   await page.goto('/admin/connections/credentials');
-  await page.waitForFunction(() => localStorage.getItem('agent-core.owner-capability'));
+  await page.waitForFunction(() =>
+    localStorage.getItem('agent-core.owner-capability'),
+  );
   const name = `Custom defaults ${Date.now()}`;
-  await page.getByRole('button', { name: 'Add email account', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Add email account', exact: true });
-  await dialog.getByLabel('Provider', { exact: true }).click();
-  await page.getByText('Custom IMAP/SMTP · Advanced', { exact: true }).click();
-  await expect(dialog.getByLabel('IMAP port', { exact: true })).toHaveValue('993');
-  await expect(dialog.getByLabel('SMTP port', { exact: true })).toHaveValue('465');
-  await expect(dialog.getByText('Required implicit TLS', { exact: true })).toHaveCount(2);
+  await page
+    .getByRole('button', { name: 'Add credential', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Add credential',
+    exact: true,
+  });
+  await dialog.getByLabel('Credential purpose', { exact: true }).click();
+  await page.getByText('Custom email account', { exact: true }).click();
+  await expect(dialog.getByLabel('IMAP port', { exact: true })).toHaveValue(
+    '993',
+  );
+  await expect(dialog.getByLabel('SMTP port', { exact: true })).toHaveValue(
+    '465',
+  );
+  await expect(
+    dialog.getByText('Required implicit TLS', { exact: true }),
+  ).toHaveCount(2);
   await dialog.getByLabel('Display name', { exact: true }).fill(name);
-  await dialog.getByLabel('Sender email address', { exact: true }).fill('custom@example.test');
+  await dialog
+    .getByLabel('Sender email address', { exact: true })
+    .fill('custom@example.test');
   for (const protocol of ['IMAP', 'SMTP']) {
-    await dialog.getByLabel(`${protocol} username`, { exact: true }).fill('custom@example.test');
-    await dialog.getByLabel(`${protocol} host`, { exact: true }).fill(`${protocol.toLowerCase()}.gmail.com`);
+    await dialog
+      .getByLabel(`${protocol} username`, { exact: true })
+      .fill('custom@example.test');
+    await dialog
+      .getByLabel(`${protocol} host`, { exact: true })
+      .fill(`${protocol.toLowerCase()}.gmail.com`);
   }
   await dialog.getByLabel('SMTP port', { exact: true }).fill('587');
   await dialog.getByLabel('SMTP TLS', { exact: true }).click();
-  await page.locator('.ant-select-dropdown:visible').getByText('Required STARTTLS', { exact: true }).click();
-  await dialog.getByLabel('Password', { exact: true }).fill('disposable-synthetic-fixture');
-  await dialog.getByRole('button', { name: 'Save email account', exact: true }).click();
+  await page
+    .locator('.ant-select-dropdown:visible')
+    .getByText('Required STARTTLS', { exact: true })
+    .click();
+  await dialog
+    .getByLabel('Password', { exact: true })
+    .fill('disposable-synthetic-fixture');
+  await dialog
+    .getByRole('button', { name: 'Save credential', exact: true })
+    .click();
   await expect(dialog).toBeHidden();
-  await page.getByRole('textbox', { name: 'Search credentials', exact: true }).fill(name);
+  await page
+    .getByRole('textbox', { name: 'Search credentials', exact: true })
+    .fill(name);
   const row = page.getByRole('row').filter({ hasText: name });
   await row.getByRole('button', { name: 'Expand row', exact: true }).click();
-  const details = page.getByRole('region', { name: `Details for ${name}`, exact: true });
-  await details.getByRole('button', { name: 'Test incoming', exact: true }).click();
-  await expect(details.getByText('Synthetic — no server connection', { exact: true })).toBeVisible();
-  await expect(details.getByText('Monitoring Off', { exact: true })).toBeVisible();
+  const details = page.getByRole('region', {
+    name: `Details for ${name}`,
+    exact: true,
+  });
+  await details
+    .getByRole('button', { name: 'Test incoming', exact: true })
+    .click();
+  await expect(
+    details.getByText('Synthetic — no server connection', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    details.getByText('Monitoring Off', { exact: true }),
+  ).toBeVisible();
   await row.getByRole('button', { name: 'Edit', exact: true }).click();
-  const edit = page.getByRole('dialog', { name: 'Edit email account', exact: true });
-  await expect(edit.getByLabel('SMTP port', { exact: true })).toHaveValue('587');
-  await expect(edit.getByText('Required STARTTLS', { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const edit = page.getByRole('dialog', {
+    name: 'Edit email account',
+    exact: true,
+  });
+  await expect(edit.getByLabel('SMTP port', { exact: true })).toHaveValue(
+    '587',
+  );
+  await expect(
+    edit.getByText('Required STARTTLS', { exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   await edit.getByRole('button', { name: 'Cancel', exact: true }).click();
 });

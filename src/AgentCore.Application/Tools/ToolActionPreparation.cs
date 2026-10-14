@@ -34,6 +34,8 @@ public static class ToolActionPreparation
         Guid sessionId = default,
         ToolExecutionAdmission? admission = null)
     {
+        if (AgentCore.Application.Drive.DriveMutationArguments.RequiresApproval(call.Name))
+            return await tools.PrepareDriveApprovalAsync(call, args, sessionId, admission, cancellationToken);
         if (ConfigurationTools.IsTool(call.Name) || InstanceSkillTools.IsManagement(call.Name))
             return await tools.PrepareManagementApprovalAsync(call, args, admission, cancellationToken);
         if (call.Name is ToolCatalog.WorkspaceDelete or ToolCatalog.WorkspaceBatch)

@@ -615,12 +615,13 @@ body,
 }
 
 .artifact-card {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   width: min(100%, 32rem);
   box-sizing: border-box;
 }
 
-.artifact-actions { display: flex; flex-wrap: wrap; gap: var(--ac-space-compact); width: 100%; }
+.artifact-actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--ac-space-tight); }
 
 .artifact-card > .anticon,
 .artifact-card > .ant-btn {
@@ -2819,8 +2820,6 @@ body,
 .drive-file-search { flex: 1 1 240px; max-width: 400px; min-width: 0; }
 .drive-file-folder { max-width: 100%; height: auto; white-space: normal; justify-content: flex-start; }
 .drive-file-scroll-hint { display: none; }
-.drive-save-modal .ant-modal-body { max-height: calc(100dvh - 180px); overflow: auto; overscroll-behavior: contain; }
-.drive-save-modal .ant-form-item:last-child { margin-bottom: 0; }
 .file-preview-content { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .file-preview-code { margin: 0; padding: var(--ac-space-default); overflow: auto; background: var(--ac-color-container); tab-size: 4; }
 .file-preview-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -2832,16 +2831,16 @@ body,
 .file-preview-image img { display: block; height: auto; margin-inline: auto; }
 .file-preview-media { display: block; width: 100%; max-height: 100%; }
 @media (max-width: 767px) {
+  .artifact-actions .ant-btn { min-width: 40px; min-height: 40px; }
   .ant-modal.file-preview-modal { width: 100vw !important; max-width: 100vw; margin: 0; padding-bottom: 0; }
   .file-preview-modal .ant-modal-container { height: 100dvh; display: flex; flex-direction: column; border-radius: 0; padding: var(--ac-space-default); }
   .file-preview-modal .ant-modal-body { flex: 1; min-height: 0; }
   .file-preview-shell { height: 100%; }
   .file-preview-modal .ant-btn, .file-preview-modal .ant-input, .file-preview-modal .ant-input-affix-wrapper,
   .file-preview-modal .ant-checkbox-wrapper, .file-preview-modal .ant-tabs-tab,
-  .file-preview-modal .ant-segmented-item-label, .drive-save-modal .ant-btn,
-  .drive-save-modal .ant-input, .drive-save-modal .ant-select { min-height: 40px; }
+  .file-preview-modal .ant-segmented-item-label { min-height: 40px; }
   .file-preview-modal .ant-input-affix-wrapper .ant-input { min-height: 0; }
-  .file-preview-modal .ant-modal-close, .drive-save-modal .ant-modal-close { min-width: 40px; min-height: 40px; }
+  .file-preview-modal .ant-modal-close { min-width: 40px; min-height: 40px; }
   .file-preview-modal .ant-checkbox-wrapper { align-items: center; }
   .file-preview-range { flex: 1 1 140px; width: auto; }
   .file-preview-mime { flex-basis: 100%; }
