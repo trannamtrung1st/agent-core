@@ -14,6 +14,8 @@ The MVP and phases through P9.10 have closed/frozen evidence. Later bounded enha
 
 Email accounts, Gmail OAuth and monitoring have accepted non-live scopes. The contextual Admin/email integration also has exact-source hosted acceptance; see [integration verification](docs/reports/email-monitoring-main-integration-2026-10-13.md). Real mailbox acceptance remains separate.
 
+Office + Google Drive v1 implementation is closed after [current-head local qualification](docs/reports/office-drive-cross-feature-fixes-2026-10-14.md#qualification-closure) on `2766d08e`: the historical sparse assertion and post-Sandbox integration qualifications are resolved. Customer-file/live-account acceptance below remains separate; no further mandatory implementation fixes or hosted CI are required for this closure.
+
 P10's scoped OpenSandbox cutover is closed for trusted single-user local Docker
 development/demo on behavior `4c8f2507`, with all eight
 [exact-source hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016)
