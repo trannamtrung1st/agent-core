@@ -6,13 +6,16 @@ internal sealed record PublicWebOutboundRequest(
     string Method,
     Uri Uri,
     IReadOnlyList<HttpRequestHeader> Headers,
-    byte[] Body);
+    byte[] Body,
+    int MaxResponseBytes = PublicWebLimits.MaxBodyBytes);
 
 internal sealed record PublicWebTransportResponse(
     int StatusCode,
     Uri? RedirectLocation,
     string? ContentType,
-    byte[] Body);
+    byte[] Body,
+    string? ContentDisposition = null,
+    string? ContentEncoding = null);
 
 internal interface IPublicWebTransport
 {

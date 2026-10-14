@@ -25,6 +25,7 @@ public sealed class ToolConfigurationGate(
             _ when toolName.StartsWith("sandbox.", StringComparison.Ordinal) => sandbox?.IsAvailable == true,
             ToolCatalog.WebSearch => webSearch?.IsAvailable == true,
             ToolCatalog.WebFetch => publicWebFetcher is not null,
+            ToolCatalog.WebDownload => publicWebFetcher?.SupportsDownloads == true,
             ToolCatalog.EmailAccounts or ToolCatalog.EmailRequestAccount or ToolCatalog.EmailSearch or ToolCatalog.EmailRead or ToolCatalog.EmailCreateDraft
                 => emailFactory?.IsEnabled ?? emailProvider?.IsAvailable == true,
             ToolCatalog.EmailSend => emailFactory?.IsSendEnabled ?? emailProvider?.IsAvailable == true,

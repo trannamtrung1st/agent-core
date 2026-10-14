@@ -760,6 +760,23 @@ Drive receipts expose operationId/status/file/reconciled/synthetic/limitation on
 
 `drive.trash_batch` is a closed Destructive/NonReplayable session tool. Arguments are `{accountRef,authEpoch,files:[{fileId,expectedVersion}]}`: required alias, positive epoch, 1–20 distinct ordered IDs (1–160 safe characters), bounded versions (1–64 characters), no duplicate/unknown fields, maximum 16 KiB arguments. No query/wildcard/all/recursive/permanent variant exists. One exact approval binds the entire named ordered set. Output is `{untrusted:true,result:{requestedCount,trashedCount,failedCount,uncertainCount,notAttemptedCount,items,scope,policy}}`; scope is `app_authorized_files_only`. Items carry ID/name/version/status, receipt ID and normalized error when available. Failed/uncertain execution stops; successful earlier files remain recoverable in Trash. Approval details add a bounded JSON Files list to the existing string dictionary; no hub event or standalone approval contract is added.
 
+
+## Public file download tool contract
+
+`web.fetch` reads bounded public text; a binary response points to `web.download`. The new capability uses the existing agent tool loop and Workspace/Artifact HTTP surfaces; no download-manager endpoint or wire event is added.
+
+```json
+{"url":"https://example.com/forms/template.docx","path":"/home/forms/template.docx"}
+```
+
+Only `url`, `path` and `expectedSha256` are accepted. `url` is an absolute credential-free public HTTP(S) URL (maximum 4096 characters). Optional `path` is a concrete owned Workspace file path (schema maximum 1024 characters; existing logical-path limits also apply). Relative paths resolve from the trusted execution cwd. Omission derives a safe `/home/downloads/` filename. Optional `expectedSha256` is 64 hex digits and requires an explicit existing destination; omission never overwrites. Tool authorization is required independently of Workspace ownership.
+
+```json
+{"status":"completed","untrusted":true,"path":"/home/forms/template.docx","sourceUrl":"https://example.com/forms/template.docx","finalUrl":"https://example.com/forms/template.docx","contentType":"application/vnd.openxmlformats-officedocument.wordprocessingml.document","declaredContentType":"application/octet-stream","byteSize":12345,"sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","published":false,"formatValidation":"Basic signature checks only; inspect with the appropriate tool before claiming format validity or editing support."}
+```
+
+Transfer failures return `status=failed`, `error` and `message`, with no bytes; mismatches include actual declared content type. Workspace validation/conflict/quota failures use existing structured tool errors. Cancellation propagates through the existing Run contract. Public GET cannot reuse browser authentication, cookies, bearer credentials or CAPTCHA state. A saved file is not automatically an Artifact; inspect/edit and publish explicitly.
+
 ## Owner-scoped sandbox HTTP contract
 
 All routes below use existing owner-capability authorization and safe problem details. No public arbitrary-execution endpoint is added; command dispatch uses the authorized Session tool/Run path.

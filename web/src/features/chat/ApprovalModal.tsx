@@ -1,10 +1,26 @@
-import { Alert, Descriptions, Flex, Modal, Tag, Typography, theme } from 'antd';
+import {
+  Alert,
+  Descriptions,
+  Flex,
+  Grid,
+  Modal,
+  Table,
+  Tag,
+  Typography,
+  theme,
+} from 'antd';
 import type { PendingApproval } from '../../state/sessionStore';
 
 type ApprovalModalProps = {
   approval: PendingApproval | null;
   onApprove: () => void;
   onReject: () => void;
+};
+
+type DriveApprovalFile = {
+  fileId: string;
+  name: string;
+  expectedVersion: string;
 };
 
 // Match the server's display bounds without interpreting metadata as authority.
@@ -39,6 +55,7 @@ export function ApprovalModal({
   onReject,
 }: ApprovalModalProps) {
   const { token } = theme.useToken();
+  const screens = Grid.useBreakpoint();
   const open = approval != null;
   const filesystem = ['workspace.delete', 'workspace.batch'].includes(
     approval?.toolName ?? '',
@@ -60,11 +77,7 @@ export function ApprovalModal({
     'drive.rename',
     'drive.move',
   ].includes(approval?.toolName ?? '');
-  let driveFiles: Array<{
-    fileId: string;
-    name: string;
-    expectedVersion: string;
-  }> = [];
+  let driveFiles: DriveApprovalFile[] = [];
   if (drive && approval?.details.Files) {
     try {
       const value: unknown = JSON.parse(approval.details.Files);
@@ -129,7 +142,7 @@ export function ApprovalModal({
       open={open}
       className="chat-approval"
       centered
-      width={semantic ? 720 : 520}
+      width={semantic ? 720 : drive ? 640 : 520}
       title={
         drive
           ? driveTitle
@@ -218,7 +231,7 @@ export function ApprovalModal({
           {content.length > 0 ? (
             <div
               key={approval.approvalId}
-              className="chat-approval-details"
+              className={`chat-approval-details${drive ? ' chat-approval-drive-details' : ''}`}
               role="region"
               aria-label="Approval details"
               tabIndex={0}
@@ -241,30 +254,59 @@ export function ApprovalModal({
                     label: key,
                     children:
                       drive && key === 'Files' && driveFiles.length > 0 ? (
-                        <ul
-                          className="chat-approval-drive-files"
+                        <Table<DriveApprovalFile>
+                          className="admin-collection-table chat-approval-drive-files"
                           aria-label="Drive files in this request"
-                        >
-                          {driveFiles.map((file) => (
-                            <li
-                              key={file.fileId}
-                              className="chat-approval-drive-file"
-                            >
-                              <Typography.Text strong>
-                                {file.name}
-                              </Typography.Text>
-                              <Flex wrap gap={token.paddingXS} align="center">
-                                <Tag>Version {file.expectedVersion}</Tag>
+                          size="small"
+                          rowKey="fileId"
+                          tableLayout="fixed"
+                          pagination={false}
+                          dataSource={driveFiles}
+                          columns={[
+                            {
+                              title: 'Name',
+                              dataIndex: 'name',
+                              key: 'name',
+                              width: screens.md ? '44%' : undefined,
+                              render: (name: string, file) => (
+                                <Flex vertical gap={token.paddingXXS}>
+                                  <Typography.Text strong>
+                                    {name}
+                                  </Typography.Text>
+                                  {!screens.md && (
+                                    <Typography.Text
+                                      type="secondary"
+                                      className="chat-approval-drive-file-id"
+                                    >
+                                      ID: {file.fileId}
+                                    </Typography.Text>
+                                  )}
+                                </Flex>
+                              ),
+                            },
+                            {
+                              title: 'File ID',
+                              dataIndex: 'fileId',
+                              key: 'fileId',
+                              width: '40%',
+                              responsive: ['md'],
+                              render: (id: string) => (
                                 <Typography.Text
                                   type="secondary"
                                   className="chat-approval-drive-file-id"
                                 >
-                                  ID: {file.fileId}
+                                  {id}
                                 </Typography.Text>
-                              </Flex>
-                            </li>
-                          ))}
-                        </ul>
+                              ),
+                            },
+                            {
+                              title: 'Version',
+                              dataIndex: 'expectedVersion',
+                              key: 'expectedVersion',
+                              width: screens.md ? '16%' : 80,
+                            },
+                          ]}
+                        />
                       ) : value.length > 0 ? (
                         value
                       ) : (

@@ -1,8 +1,8 @@
 # TODO
 
 The previously accepted OpenSandbox cutover is being integrated with newer main
-`d2bada99`. General Assistant v29 preserves main's immutable v28 and combines
-its current Drive/Office authority with sandbox execution. Current combined
+`ed943429`. General Assistant v30 preserves main's immutable v29 and combines
+its current public-download/Drive/Office authority with sandbox execution. Current combined
 verification is tracked in the [OpenSandbox ledger](docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
 prior acceptance below remains evidence for its original behavior SHA.
 

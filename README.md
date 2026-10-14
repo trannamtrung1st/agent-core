@@ -1,8 +1,8 @@
 # Agent Core MVP
 
 The previously accepted OpenSandbox cutover is being integrated with newer main
-`d2bada99`. General Assistant v29 preserves main's immutable v28 and combines
-its current Drive/Office authority with sandbox execution. Current combined
+`ed943429`. General Assistant v30 preserves main's immutable v29 and combines
+its current public-download/Drive/Office authority with sandbox execution. Current combined
 verification is tracked in the [OpenSandbox ledger](docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
 prior acceptance below remains evidence for its original behavior SHA.
 
@@ -207,3 +207,6 @@ Admin and expressly enabled Chat management use the existing Instance owners. Id
 General Assistant v25 and Secretary v10 add account discovery and trusted owner selection. Connections → Credentials owns Gmail OAuth accounts with protected offline refresh and Custom IMAP/SMTP accounts with protected passwords. Bind through Instance Credentials or the trusted Chat chooser, then use authorized account-scoped search/read/Core draft/exact-approved send. Sending has a durable at-most-once fence and truthful uncertain outcomes. Real dispatch inherits the enabled SMTP default unless Email:SendEnabled is specified; explicit SendEnabled=false disables all sends, and Custom also requires SMTP enablement; bound account credentials and exact draft approval remain required. Synthetic remains offline with explicit account fixtures. See [setup/recovery](docs/17-observability-and-operations.md#email-account-setup-and-recovery) and [current OAuth verification and deferred live setup](docs/reports/gmail-oauth-verification-2026-10-12.md). Reply, labels, attachments and bulk sending are deferred.
 
 Gmail and Google Drive creation share **Integrations → Credentials → Add credential**, with purpose-specific Gmail, Google Drive, Custom email and General forms. Connection grants, tokens and Instance bindings stay independent. Shared backend-only Google OAuth client setup and staged legacy-grant migration are documented in [Operations](docs/17-observability-and-operations.md#gmail-google-oauth-operator-setup). General Assistant v28 explicitly opts into bounded exact-approved `drive.trash_batch`; historical versions stay unchanged. The [successor verification ledger](docs/reports/drive-credentials-ux-verification-2026-10-14.md) records local gates and deferred Real acceptance.
+
+
+Public file downloads use the exact-authorized `web.download` capability (General Assistant v29) to save public text or binary bytes directly into owned `/home` or `/working`. Original DOCX/XLSX templates can then be inspected, edited with existing formatting limitations and returned as Artifacts. Existing versions retain their grants; live official-site and desktop-client fidelity are separate from [local offline verification](docs/reports/public-binary-download-verification-2026-10-14.md).

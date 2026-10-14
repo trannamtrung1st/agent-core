@@ -1,3 +1,4 @@
+import { selectSpreadsheetCell } from './support/spreadsheet';
 import { test, expect } from '@playwright/test';
 import { selectInstanceIdentity } from './support/instance-identity';
 import { readFile } from 'node:fs/promises';
@@ -11,7 +12,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   await page.goto('/');
   const owner = await selectInstanceIdentity(page, {
     id: 'general-assistant',
-    version: 29,
+    version: 30,
   });
   const name = `Office Drive ${owner.slice(-8)}`;
   await page.goto('/admin/connections/credentials');
@@ -111,10 +112,8 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   await workbook
     .getByRole('button', { name: 'Load range', exact: true })
     .click();
-  await workbook
-    .getByRole('button', { name: 'B4 empty formula', exact: true })
-    .click();
-  await expect(workbook).toContainText('B4 · =SUM(B2:B3)');
+  await selectSpreadsheetCell(workbook, 'B4');
+  await expect(workbook).toContainText('=SUM(B2:B3)');
   const rangeReads: string[] = [];
   const trackRange = (request: import('@playwright/test').Request) => {
     if (request.url().includes('/office-preview'))
@@ -126,7 +125,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     await expect(
       workbook.getByRole('button', { name: 'A1 Region', exact: true }),
     ).toBeVisible();
-    await expect(workbook).toContainText('B4 · =SUM(B2:B3)');
+    await expect(workbook).toContainText('=SUM(B2:B3)');
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -239,21 +238,16 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     await expect(approval).toContainText('Can be restored');
     await expect(
       approval
-        .getByRole('list', { name: 'Drive files in this request' })
-        .getByRole('listitem'),
+        .getByRole('table', { name: 'Drive files in this request' })
+        .locator('tbody tr'),
     ).toHaveCount(7);
-    // Filename and metadata stay grouped; a flex-item line break previously
-    // inserted an empty line and two extra sibling gaps between them.
-    const metadataGap = await approval
-      .getByRole('listitem')
-      .first()
-      .evaluate(
-        (row) =>
-          row.lastElementChild!.getBoundingClientRect().top -
-          row.firstElementChild!.getBoundingClientRect().bottom,
-      );
-    expect(metadataGap).toBeGreaterThanOrEqual(0);
-    expect(metadataGap).toBeLessThanOrEqual(8);
+    const table = approval.getByRole('table', {
+      name: 'Drive files in this request',
+    });
+    for (const header of ['Name', 'File ID', 'Version'])
+      await expect(
+        table.getByRole('columnheader', { name: header, exact: true }),
+      ).toBeVisible();
     return approval;
   };
   const rejected = await requestBatch();
@@ -280,9 +274,15 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     .toBe(true);
   // Exercise the supported version display bound without changing the
   // approved request or remote metadata. Restore the rendered fixture first.
-  const versionTag = approved.getByRole('listitem').first().locator('.ant-tag');
-  const originalVersion = await versionTag.textContent();
-  await versionTag.evaluate((element) => {
+  const table = approved.getByRole('table', {
+    name: 'Drive files in this request',
+  });
+  await expect(
+    table.getByRole('columnheader', { name: 'File ID', exact: true }),
+  ).toHaveCount(0);
+  const versionCell = table.locator('tbody tr').first().getByRole('cell').last();
+  const originalVersion = await versionCell.textContent();
+  await versionCell.evaluate((element) => {
     element.textContent = `Version ${'9'.repeat(64)}`;
   });
   await expect
@@ -292,7 +292,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
         .evaluate((region) => region.scrollWidth <= region.clientWidth),
     )
     .toBe(true);
-  await versionTag.evaluate((element, text) => {
+  await versionCell.evaluate((element, text) => {
     element.textContent = text;
   }, originalVersion);
   await approved

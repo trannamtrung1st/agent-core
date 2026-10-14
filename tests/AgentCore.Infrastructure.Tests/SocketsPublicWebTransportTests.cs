@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.PublicWeb;
 
@@ -55,11 +56,16 @@ public sealed class SocketsPublicWebTransportTests
         var dns = new ScriptedDnsResolver(
             IPAddress.Parse("10.0.0.1"),
             IPAddress.Parse("93.184.216.34"));
-        var transport = new SocketsPublicWebTransport(dns);
-
-        await Assert.ThrowsAnyAsync<Exception>(() =>
+        var attempts = new List<IPAddress>();
+        var transport = new SocketsPublicWebTransport(dns, connect: (address, _, _) =>
+        {
+            attempts.Add(address);
+            throw new SocketException((int)SocketError.ConnectionRefused);
+        });
+        var failure = await Assert.ThrowsAsync<PublicWebFetchException>(() =>
             transport.GetAsync(new Uri("https://mixed.example/"), CancellationToken.None).AsTask());
-
+        Assert.Equal("transport_error", failure.Code);
+        Assert.Equal(IPAddress.Parse("93.184.216.34"), Assert.Single(attempts));
         Assert.Equal(1, dns.ResolveCount);
     }
 
@@ -69,14 +75,22 @@ public sealed class SocketsPublicWebTransportTests
         var dns = new AlternatingDnsResolver(
             disallowed: IPAddress.Parse("10.0.0.1"),
             allowed: IPAddress.Parse("93.184.216.34"));
-        var transport = new SocketsPublicWebTransport(dns);
+        var attempts = new List<IPAddress>();
+        var transport = new SocketsPublicWebTransport(dns, connect: (address, _, _) =>
+        {
+            attempts.Add(address);
+            throw new SocketException((int)SocketError.ConnectionRefused);
+        });
 
         var first = await Assert.ThrowsAsync<PublicWebFetchException>(() =>
             transport.GetAsync(new Uri("https://rebind.example/a"), CancellationToken.None).AsTask());
         Assert.Equal("forbidden_host", first.Code);
 
-        await Assert.ThrowsAnyAsync<Exception>(() =>
+        Assert.Empty(attempts);
+        var second = await Assert.ThrowsAsync<PublicWebFetchException>(() =>
             transport.GetAsync(new Uri("https://rebind.example/b"), CancellationToken.None).AsTask());
+        Assert.Equal("transport_error", second.Code);
+        Assert.Equal(IPAddress.Parse("93.184.216.34"), Assert.Single(attempts));
 
         Assert.Equal(2, dns.ResolveCount);
     }

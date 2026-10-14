@@ -671,6 +671,11 @@ Shared client migration does not migrate or merge consent. Legacy GoogleEmailOAu
 
 Drive batch receipts reuse IDriveOperationStore and the existing single-effect tables, with no batch engine/table. The durable approval preview bound stays 12,000 characters for existing tools and is explicitly 32,000 only for `drive.trash_batch`, enough for all 20 bounded names/IDs/versions, including quote/Unicode display data. JSON is inert in the UI; the Drive manifest codec avoids needless Unicode expansion. Prepared actions retain the existing 8 KiB bound for old tools and explicitly allow 16 KiB only for the closed Drive batch contract. Existing result bounds continue to apply.
 
+
+## Public file download configuration
+
+Infrastructure reads `PublicWeb:MaxDownloadBytes` (default 10485760, range 1–52428800) and `PublicWeb:DownloadTimeoutSeconds` (default 15, range 1–30) when constructing the singleton public fetcher. Invalid values fail configuration rather than silently disabling bounds. Environment equivalents are `PublicWeb__MaxDownloadBytes` and `PublicWeb__DownloadTimeoutSeconds`. Restart the host after changing these limits. Downloads use existing Workspace immutable blobs, metadata transactions, revisions/hash guards, scratch imports and quotas; no schema/migration or new persistence root is introduced. Run checkpoints retain only download metadata and existing effect receipts.
+
 ## OpenSandbox durable records and configuration
 
 Additive migration `20261014003355_OpenSandboxOwnership` creates `SandboxProfiles` (ID/revision history), `SandboxSessionLeases` (Session primary key, revision CAS, owner/expiry index) and `SandboxExecutions` (Core execution primary key and unique Session/Run/tool-call receipt). Existing Session, AgentRun, Workspace, Artifact and Drive data are preserved; no database reset is required. InMemory/SQLite stores share ownership, revision and uniqueness rules. Records contain normalized immutable configuration and reconciliation evidence, never SDK clients, CTS, streams, secrets or live process objects. Provider IDs stay server-side. Cleanup receipts remain available after Session deletion.

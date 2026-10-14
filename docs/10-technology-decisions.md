@@ -474,6 +474,11 @@ Exact new frontend production package inventory:
 | shiki | 4.5.0 | MIT |
 | xmlchars | 2.2.0 | MIT |
 
+
+## Public binary download limits
+
+The approved public-file enhancement reuses the public HTTP transport, owned Workspace commits and existing Artifact/Office capabilities. No additional HTTP client, storage engine or document conversion stack is introduced. Binary transfer buffering is bounded: default 10 MiB, configurable through `PublicWeb:MaxDownloadBytes` from 1 byte to the existing 50 MiB home-file ceiling; Workspace aggregate/scratch quotas still apply at commit. The default 15-second total download deadline is configurable from 1 to 30 seconds and remains subject to the admitted Run's per-tool/overall budgets. Text fetch/HTTP response limits remain 2 MiB and text projection remains 256 KiB characters. Neither declared MIME types nor a media allowlist restrict ordinary binary downloads; basic known-extension signature checks reject obvious mismatches, while Office inspection owns full supported-format validation.
+
 ## Trusted-local OpenSandbox decision
 
 The approved P10 execution backend is `Alibaba.OpenSandbox` exactly 1.1.1, paired with the 1.1.1 server/execd/egress digests in [images.json](../scripts/opensandbox-proof/images.json). The SDK stays in Infrastructure. No Docker CLI or daemon client remains in production Core. Deployment/acceptance scripts may operate only their disposable project resources. A single trusted server uses the existing local Docker daemon; no DinD, additional VM, Kubernetes or alternate runtime is introduced for this local-demo target.

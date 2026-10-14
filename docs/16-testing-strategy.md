@@ -642,6 +642,15 @@ DriveJourneyTests include parent-404 red/green Trash/rename, exact 1/7/20 manife
 
 Frontend unit/build and the Drive Office, system-credential, email-account and monitoring browser journeys cover one purpose selector, transient secret wipe, saved consent retry, specialized edits, independent status tags, compact icon file actions, exact subset approvals, Reject/Escape/Enter/focus, long Unicode names and 320/390/768/1024/1440 layouts. Playwright MCP additionally exercises the actual Synthetic approval path; provider fixtures remain offline. Source fixtures never authorize live Drive mutation. Record current gate outcomes and blockers in the [successor ledger](reports/drive-credentials-ux-verification-2026-10-14.md), independently of historical hosted results.
 
+
+## Public binary download acceptance
+
+Use controlled offline HTTP transport fixtures, real Office packages and owned Synthetic Session/Run storage; no external account/provider is needed. `PublicWebDownloadTests` covers exact binary transfer independent of MIME, a separate binary/text bound, filename* parsing, redirect limits and private targets, DNS/IP denial through the real socket transport, partial/error/encoded responses, transport errors, timeout/cancellation, declared/chunked size enforcement and stream disposal. Existing public-network tests retain per-connect filtering/rebinding checks.
+
+`PublicDownloadJourneyTests` exercises registered agent tool → original DOCX → Office inspection/targeted fill → Artifact publication → protected content/preview readback, asserting original bytes/hash before editing and unchanged styles/instructions afterward. Additional cases cover real XLSX, legacy DOC download with honest editing rejection, PDFs/images/archives/arbitrary bytes, missing/inaccurate MIME, sanitized header names, create conflicts and guarded replacement, invalid paths/foreign owners/old Definition denial, corrupt/HTML mismatches, cancellation after transfer, quotas, failed SQLite metadata commit cleanup and exact home readback after host restart. Scratch remains Session-isolated and home remains Instance-isolated.
+
+`PublicDownloadRuntimeTests` executes the actual Synthetic model/tool loop with owned Run checkpoints and final Artifact references, both normally and through a transient provider retry after the committed download. The restored checkpoint contains the download receipt and no pending download; dispatch occurs once. Full format/client fidelity and a real official-site discovery/authentication/download journey remain separate live acceptance, not inferred from offline fixtures. See [local verification](reports/public-binary-download-verification-2026-10-14.md).
+
 ## Real OpenSandbox acceptance
 
 Ordinary Synthetic/Real startup and default tests require no Docker or hosted credentials. Native `OpenSandboxIntegrationTests` require explicit `AGENTCORE_OPENSANDBOX_TESTS=1`; their default skips never establish sandbox acceptance. Every PR also runs the mandatory **Trusted local OpenSandbox acceptance** job using pinned images on a disposable Docker-enabled Ubuntu runner.

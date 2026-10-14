@@ -2,40 +2,33 @@
 
 ## Current main integration — 2026-10-14
 
-Main advanced during final-head validation to `a04e6a76`, then `d2bada99`
-(exact Drive approval targets and long-version wrapping), on top of Drive subset Trash,
-shared Google OAuth migration, credential-purpose creation and exact approval
-file presentation. This successor integration is being verified; the earlier
-all-green acceptance below remains evidence for its own source, not this merge.
-Conflicts retain main's Drive contracts and UI plus sandbox ownership/recovery.
-Main's immutable General Assistant v26/v27/v28 remain byte-identical; new **v29**
-bases their current Drive/Office behavior on main v28 and substitutes the five
-modern sandbox tools plus its approved profile policy. The real browser runner
-uses v29; the existing Drive Office journey also exercises v29 while other
-Drive/Trash journeys retain main v28 compatibility.
+The owner selected **main `ed943429c619d1e28f0878222328a8c6af4b43b9`** as the final
+synchronization snapshot. It adds public binary downloads and responsive exact
+Drive approval tables. Conflicts preserve those contracts/UI and sandbox
+ownership/recovery. Main's immutable General Assistant v26–v29 are byte-identical;
+new **v30** combines main v29's public-download/Drive/Office grants with the five
+modern sandbox tools and its approved profile policy. Both the real Workbench
+browser runner and the combined Drive Office journey use v30.
 
-Focused merged checks: 24 catalog/store/shared-client/cleanup tests and 31
-Drive/Trash/approval/recovery/Google-migration/sandbox API tests pass. The seven
-frontend fixtures initially passed 37 cases but exposed two AntD validation
-callbacks after credential-fixture teardown. The fixture now uses a stateful
-owner, awaits settled consent retry and real Cancel/destroy-on-hidden closure;
-its two focused cases pass with zero unhandled errors. A concurrent seven-file
-rerun hit its unchanged 30-second test timeout during heavy local SDK/browser
-work; serial recheck passes all **37 cases / seven files with zero unhandled errors**, without increasing that bound.
+Focused selected-snapshot checks pass: **43 Infrastructure**, **10 API**,
+**19 Application** and **29 frontend cases / three files**. They cover owned
+binary download/commit/retry, catalog and immutable versions, sandbox store,
+Drive exact approvals and sandbox inspection. The credential fixture's AntD
+field-validation callbacks could survive unmount; its stateful owner and real
+Cancel flow now also cancel fixture-owned timers at teardown. The focused rerun
+has zero unhandled errors. TypeScript/Vite builds pass. Real SDK/browser and
+exact-source hosted gates are still pending for this selected snapshot. No user
+database reset or unrelated service cleanup is authorized.
 
-All 12 isolated Synthetic Drive Office (v29), email account, monitoring and
-system credential browser cases pass. MCP separately opens the unified purpose
-selector, confirms changing purpose clears the transient name, then cancels
-and observes the closed modal and focus returned to Add credential; no console
-errors were reported. The native topology and all 31 SDK/store/Workspace cases
-pass; both merged UI restart phases also pass (29.9 seconds before / approximately
-1.4 minutes after actual Core/server recreation). Seventeen focused Application
-identity/dispatch/Drive-bound checks pass. The final main approval/credential/sandbox
-fixtures also pass **28 tests / three files**. TypeScript rejected two
-Testing Library-only `exact` options in the credential fixture; these were
-removed and the full TypeScript/Vite build passes. The final Drive Office/approval
-journey also passes (one case, 1.8 minutes), including exact targets and 64-character
-version wrapping with v29. Final exact-source hosted gates remain required. No user database reset or unrelated service cleanup is authorized.
+The preceding combined source **`b26291d249a19fb194bb825389419f396ba3ea08`**
+(main `d2bada99`, combined v29) passed all eight
+[hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38526559158).
+Backend: Domain 196, Infrastructure 1,380, Application 1,807, API 607 —
+**3,990 passes / 32 optional live skips**. Frontend: **1,027 passes / 128 files**,
+both builds passed. Mandatory native acceptance: **31 cases / zero skips**,
+both browser phases passed (28.8 seconds before / approximately 1.3 minutes after
+actual Core/server recreation). This remains evidence for that exact source,
+not a substitute for the selected-snapshot gates.
 
 ## Earlier accepted trusted-local cutover — 2026-10-14
 

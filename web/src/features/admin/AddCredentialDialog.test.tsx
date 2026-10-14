@@ -1,4 +1,6 @@
 import {
+  act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -7,7 +9,7 @@ import {
 } from '@testing-library/react';
 import { App, ConfigProvider } from 'antd';
 import { useState } from 'react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AddCredentialDialog } from './AddCredentialDialog';
 import * as api from '../../services/adminApi';
 import * as drive from '../../services/drive';
@@ -21,8 +23,17 @@ vi.mock('../../services/drive', () => ({
   createDriveAccount: vi.fn(),
   getDriveOptions: vi.fn(),
 }));
+const nativeSetTimeout = globalThis.setTimeout;
+const ownedTimers = new Set<ReturnType<typeof setTimeout>>();
 beforeEach(() => {
   vi.clearAllMocks();
+  // AntD's delayed field-error state can outlive an unmounted form. Keep real
+  // timing during assertions, and cancel only this fixture's timers at teardown.
+  vi.spyOn(globalThis, 'setTimeout').mockImplementation((...args) => {
+    const handle = Reflect.apply(nativeSetTimeout, globalThis, args) as ReturnType<typeof setTimeout>;
+    ownedTimers.add(handle);
+    return handle;
+  });
   vi.mocked(api.emailOAuthConfiguration).mockResolvedValue({
     configured: true,
     synthetic: true,
@@ -33,6 +44,13 @@ beforeEach(() => {
     synthetic: true,
     scope: 'drive.file',
   });
+});
+afterEach(async () => {
+  cleanup();
+  await act(async () => { await Promise.resolve(); });
+  for (const handle of ownedTimers) clearTimeout(handle);
+  ownedTimers.clear();
+  vi.restoreAllMocks();
 });
 function show() {
   function Owner() {

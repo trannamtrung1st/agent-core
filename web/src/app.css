@@ -2437,6 +2437,7 @@ body,
   outline: 2px solid var(--ac-color-primary);
   outline-offset: 2px;
 }
+.chat-approval-drive-details { max-height: 60vh; }
 .chat-approval-list {
   list-style: none;
   margin: 0;
@@ -2461,29 +2462,11 @@ body,
 .chat-approval-fields .ant-descriptions-item-content { min-width: 0; }
 .chat-approval-drive-fields .ant-descriptions-item-label { flex-basis: auto; }
 .chat-approval-drive-files {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   width: 100%;
   white-space: normal;
 }
-.chat-approval-drive-file {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ac-space-tight);
-  padding-block: var(--ac-space-default);
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.chat-approval-drive-file + .chat-approval-drive-file { border-block-start: 1px solid var(--ac-color-border); }
-.chat-approval-drive-file:first-child { padding-block-start: 0; }
-.chat-approval-drive-file:last-child { padding-block-end: 0; }
-.chat-approval-drive-file .ant-tag {
-  margin-inline-end: 0;
-  max-width: 100%;
-  white-space: normal;
-}
-.chat-approval-drive-file-id { min-width: 0; font-size: var(--ac-font-size-label); }
+.chat-approval-drive-files .ant-table-cell { vertical-align: top; }
+.chat-approval-drive-file-id { min-width: 0; font-size: var(--ac-font-size-label); word-break: break-all; }
 .chat-approval-change {
   padding: var(--ac-space-default);
   background: var(--ac-color-fill);

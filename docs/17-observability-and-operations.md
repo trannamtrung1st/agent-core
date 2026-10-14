@@ -582,6 +582,13 @@ Retain `GOOGLE_EMAIL_OAUTH_*` / `GOOGLE_DRIVE_OAUTH_*` (or their original .NET s
 
 For the Compose survival gate, install the existing JavaScript protocol fixture with `npm ci --prefix tests/realtime-js`; `scripts/verify-compose-drive-transfer.mjs` exercises admitted conversational upload before recreation instead of removed source-save endpoints. Use a disposable `COMPOSE_PROJECT_NAME` and unused `AGENTCORE_COMPOSE_PORT`. Real Trash UAT requires an explicitly authorized disposable account/file manifest; without that scope record blocked, never use existing user files.
 
+
+## Public file downloads
+
+Enable `web.download` through normal Definition publication and Instance adoption; General Assistant v29 includes it without rewriting older pins. A public download requires no search-provider key. Use `web.search` or a supplied public link to locate the original file, `web.download` to save it, Office/Workspace inspection and supported edits, then Artifact publication. Report precise HTTP/login/browser-state/CAPTCHA limitations and never ask for manual attachment merely because `web.fetch` only reads text.
+
+Download policy is bounded by [configuration](15-persistence-and-configuration.md#public-file-download-configuration) and existing Workspace quotas. Network failures use safe `web.download` diagnostic warnings and operation timing; raw downloaded bytes, URL queries and headers are excluded from logs. Do not retry an uncertain Workspace commit automatically: inspect destination metadata/content and retain the Run's effect fence. Downloads never execute content. Legacy `.doc` can be downloaded and returned, but Office editing supports `.docx`; complex unsupported structures and paragraph/run normalization retain existing warnings. No external CI wait is required for the authorized local delivery; [verification](reports/public-binary-download-verification-2026-10-14.md) separates local evidence from unrun live-web/desktop-client checks.
+
 ## Trusted local OpenSandbox
 
 This optional execution subsystem targets trusted single-user local development/demo. Ordinary Core startup remains Docker-free. Use Node 22, .NET 10, Python 3 and the existing local Docker daemon. One OpenSandbox server per daemon is required; the runner refuses another pinned server because upstream sidecar reconciliation is daemon-wide. It never starts DinD, changes daemon/security settings or removes unrelated containers/networks/images/volumes.
