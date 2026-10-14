@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   queueComposerFiles,
@@ -48,6 +48,31 @@ function emptyComposerProps() {
     onRetry: vi.fn()
   };
 }
+
+it("removes action tooltips during approval and restores them afterwards", async () => {
+  const props = { ...emptyComposerProps(), draft: "Hello", canSend: true };
+  vi.useFakeTimers();
+  let unmount = () => {};
+  try {
+    const view = render(<Composer {...props} />);
+    unmount = view.unmount;
+    fireEvent.mouseOver(screen.getByRole("button", { name: "Send" }));
+    await act(() => vi.runAllTimersAsync());
+    expect(screen.getByRole("tooltip")).toBeVisible();
+    view.rerender(<Composer {...props} canSend={false} canStop approvalPending />);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
+    view.rerender(<Composer {...props} canSend={false} canStop />);
+    fireEvent.mouseOver(screen.getByRole("button", { name: "Stop" }));
+    await act(() => vi.runAllTimersAsync());
+    expect(screen.getByRole("tooltip")).toBeVisible();
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Stop");
+  } finally {
+    unmount();
+    await act(() => vi.runOnlyPendingTimersAsync());
+    vi.useRealTimers();
+  }
+});
 
 function asFileList(files: File[]): FileList {
   return {

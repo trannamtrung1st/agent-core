@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-14T05:30:42.545412+00:00",
+  "generatedAt": "2026-10-14T09:31:41.176180Z",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -566,7 +566,7 @@
       },
       {
         "name": "Credential creation and Drive approval presentation",
-        "body": "One primary Add credential opens the existing bounded Admin Modal with a purpose Select and reused specialist fields. Purpose changes discard transient form/secret state; immutable-purpose edits open their specialist dialog directly. Saved Gmail/Drive connection Tags use the same semantic tokens/icons beside a separate Active/Disabled tag; Synthetic is explicit. Metadata keeps verified identity and provider/scope without duplicating Connected. The shared ApprovalModal uses action-specific Drive titles and destructive Trash CTAs, a 640px dialog and compact native Ant Design table for exact file/name/version targets. Reuse admin-collection-table cell wrapping, tabular numerals and native 8px padding with fixed layout. Name/File ID/Version columns appear on desktop; below 768px the exact 12px ID sits beneath the filename with a native 4px Flex gap, and Version remains separate. Metadata wraps completely without pagination, selection or ellipsis. Drive review content may use 60vh and shrinks inside the existing viewport-bounded container; other approvals retain 40vh. Titles reserve 32px for the native close control; footer, keyboard focus and Reject/Escape behavior remain. Product behavior is owned by docs/13-frontend-implementation-spec.md.",
+        "body": "One primary Add credential opens the existing bounded Admin Modal with a purpose Select and reused specialist fields. Purpose changes discard transient form/secret state; immutable-purpose edits open their specialist dialog directly. Saved Gmail/Drive connection Tags use the same semantic tokens/icons beside a separate Active/Disabled tag; Synthetic is explicit. Metadata keeps verified identity and provider/scope without duplicating Connected. The shared ApprovalModal uses action-specific Drive titles and destructive Trash CTAs, a 640px dialog and compact native Ant Design table for exact file/name/version targets. Reuse admin-collection-table cell wrapping, tabular numerals and native 8px padding with fixed layout. Name/File ID/Version columns appear on desktop; below 768px the exact 12px ID sits beneath the filename with a native 4px Flex gap, and Version remains separate. Metadata wraps completely without pagination, selection or ellipsis. Drive review content may use 60vh and shrinks inside the existing viewport-bounded container; other approvals retain 40vh. Titles reserve 32px for the native close control; footer, keyboard focus and Reject/Escape behavior remain. Product behavior is owned by docs/13-frontend-implementation-spec.md. Composer Send/Stop tooltips are unmounted while an approval is pending so a popup behind the modal cannot consume its first Escape; normal hover help resumes after the decision.",
         "section": "components"
       },
       "Sandbox uncertainty retains evidence, labels combined background output and fences stale stop/reset confirmations. Local-demo limitations remain visible; no debug control plane appears in Chat."

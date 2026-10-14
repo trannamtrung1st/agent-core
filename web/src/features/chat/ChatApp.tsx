@@ -502,6 +502,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
                       onPartsChange={setDraftParts}
                       canSend={canSend}
                       canStop={canStop}
+                      approvalPending={state.pendingApproval !== null}
                       sendLabel={sendLabel}
                       pendingSendQueue={state.pendingSendQueue}
                       ready={composerReady}

@@ -62,6 +62,24 @@ real full rerun passes **31 cases / zero skips** and both browser restart phases
 (20.6 seconds before / approximately 1.4 minutes after). The prior hosted failure
 remains recorded; the final corrected source still requires the PR's native gate.
 
+On `f9bf52bd`, **seven hosted gates pass**, including 4,023 backend passes/32
+opt-in skips, 1,028 frontend passes/128 files, both builds, Compose and native
+31 cases/zero skips plus both browser restart phases (32.8 seconds / approximately
+1.5 minutes). Core shard 2 passes; shard 1 has 114 passes/one Drive Escape failure
+in [workflow 38535978220](https://github.com/trannamtrung1st/agent-core/actions/runs/38535978220).
+The retained frame shows a Stop tooltip behind the approval: its portal registers
+after the modal and consumes the first Escape. The prior entrance wait alone
+could not fix that ownership bug. The shared composer now unmounts Send/Stop
+help while approval is pending, preserving the existing controls and resuming
+normal tooltips afterwards. The browser regression deliberately opens Send help
+before submitting both exact Drive requests, checks that action popups disappear,
+and verifies single-Escape rejection without mutation followed by exact approval.
+The complete strengthened v30 journey passes (**45.9 seconds**) at all existing
+viewport bounds; 45 composer/approval cases and TypeScript/Vite builds pass. The
+new tooltip regression advances only its logical timers inside act; existing
+Composer fixtures retain their React act warnings, with zero unhandled errors.
+The final corrected source requires all eight PR checks.
+
 The preceding combined source **`b26291d249a19fb194bb825389419f396ba3ea08`**
 (main `d2bada99`, combined v29) passed all eight
 [hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38526559158).

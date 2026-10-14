@@ -236,12 +236,16 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     await page
       .getByLabel('Message', { exact: true })
       .fill('synthetic-drive-trash: batch');
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const send = page.getByRole('button', { name: 'Send', exact: true });
+    await send.hover();
+    await expect(page.getByRole('tooltip').filter({ hasText: 'Send (Enter)' })).toBeVisible();
+    await send.click();
     const approval = page.getByRole('dialog', {
       name: 'Move 7 listed Drive files to Trash?',
     });
     await expect(approval).toBeVisible({ timeout: 30000 });
-    await expect(approval).not.toHaveClass(/ant-zoom-(?:appear|enter)-active/);
+    await expect(approval).not.toHaveClass(/ant-zoom-(?:appear|enter)(?:-|\b)/);
+    await expect(page.getByRole('tooltip').filter({ hasText: /^(?:Stop|Send \(Enter\))/ })).toHaveCount(0);
     await expect(approval).toContainText('7 listed app-authorized Drive files');
     await expect(approval).toContainText(name);
     await expect(approval).toContainText('Can be restored');
