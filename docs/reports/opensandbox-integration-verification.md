@@ -2,9 +2,10 @@
 
 ## Current main integration — 2026-10-14
 
-Main advanced during final-head validation to `a04e6a76` (Drive subset Trash,
+Main advanced during final-head validation to `a04e6a76`, then `d2bada99`
+(exact Drive approval targets and long-version wrapping), on top of Drive subset Trash,
 shared Google OAuth migration, credential-purpose creation and exact approval
-file presentation). This successor integration is being verified; the earlier
+file presentation. This successor integration is being verified; the earlier
 all-green acceptance below remains evidence for its own source, not this merge.
 Conflicts retain main's Drive contracts and UI plus sandbox ownership/recovery.
 Main's immutable General Assistant v26/v27/v28 remain byte-identical; new **v29**
@@ -29,7 +30,12 @@ and observes the closed modal and focus returned to Add credential; no console
 errors were reported. The native topology and all 31 SDK/store/Workspace cases
 pass; both merged UI restart phases also pass (29.9 seconds before / approximately
 1.4 minutes after actual Core/server recreation). Seventeen focused Application
-identity/dispatch/Drive-bound checks pass. Final exact-source hosted gates remain required. No user database reset or unrelated service cleanup is authorized.
+identity/dispatch/Drive-bound checks pass. The final main approval/credential/sandbox
+fixtures also pass **28 tests / three files**. TypeScript rejected two
+Testing Library-only `exact` options in the credential fixture; these were
+removed and the full TypeScript/Vite build passes. The final Drive Office/approval
+journey also passes (one case, 1.8 minutes), including exact targets and 64-character
+version wrapping with v29. Final exact-source hosted gates remain required. No user database reset or unrelated service cleanup is authorized.
 
 ## Earlier accepted trusted-local cutover — 2026-10-14
 

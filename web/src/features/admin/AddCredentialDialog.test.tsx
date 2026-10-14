@@ -114,7 +114,7 @@ it('switching purposes clears transient secrets and names and submits a typed Cu
   expect(d.getByLabelText('Display name', { exact: true })).toHaveValue(
     'Custom fixture',
   );
-  fireEvent.click(d.getByRole('button', { name: 'Cancel', exact: true }));
+  fireEvent.click(d.getByRole('button', { name: 'Cancel' }));
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add credential' })).not.toBeInTheDocument());
 });
 it('failed Gmail consent start reuses the saved account and locks purpose on retry', async () => {
@@ -142,6 +142,6 @@ it('failed Gmail consent start reuses the saved account and locks purpose on ret
   await waitFor(() => expect(api.startEmailOAuth).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(connect).toBeEnabled());
   expect(api.createEmailAccount).toHaveBeenCalledTimes(1);
-  fireEvent.click(d.getByRole('button', { name: 'Cancel', exact: true }));
+  fireEvent.click(d.getByRole('button', { name: 'Cancel' }));
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add credential' })).not.toBeInTheDocument());
 });

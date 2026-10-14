@@ -257,6 +257,12 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     return approval;
   };
   const rejected = await requestBatch();
+  // Visibility precedes the native dialog's focus transfer during its entrance.
+  await expect
+    .poll(() =>
+      rejected.evaluate((dialog) => dialog.contains(document.activeElement)),
+    )
+    .toBe(true);
   await page.keyboard.press('Escape');
   await expect(rejected).toBeHidden();
   await expect(
@@ -272,6 +278,23 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
       page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
     )
     .toBe(true);
+  // Exercise the supported version display bound without changing the
+  // approved request or remote metadata. Restore the rendered fixture first.
+  const versionTag = approved.getByRole('listitem').first().locator('.ant-tag');
+  const originalVersion = await versionTag.textContent();
+  await versionTag.evaluate((element) => {
+    element.textContent = `Version ${'9'.repeat(64)}`;
+  });
+  await expect
+    .poll(() =>
+      approved
+        .getByRole('region', { name: 'Approval details' })
+        .evaluate((region) => region.scrollWidth <= region.clientWidth),
+    )
+    .toBe(true);
+  await versionTag.evaluate((element, text) => {
+    element.textContent = text;
+  }, originalVersion);
   await approved
     .getByRole('button', { name: 'Move 7 files to Trash', exact: true })
     .focus();

@@ -252,3 +252,109 @@ it('keeps old incomplete Drive requests rejectable and requires fresh trusted ta
   fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' }));
   expect(reject).toHaveBeenCalledOnce();
 });
+
+const validDriveTarget = {
+  fileId: 'file-1',
+  name: 'sample.xlsx',
+  expectedVersion: '9',
+};
+
+it('preserves all twenty distinct targets at the supported metadata bounds', () => {
+  const targets = Array.from({ length: 20 }, (_, index) => ({
+    fileId: 'a'.repeat(158) + String(index).padStart(2, '0'),
+    name: '長'.repeat(250) + '.xlsx',
+    expectedVersion: '9'.repeat(64),
+  }));
+  render(
+    <ApprovalModal
+      approval={{
+        ...approval,
+        toolName: 'drive.trash_batch',
+        details: { Files: JSON.stringify(targets) },
+      }}
+      onApprove={vi.fn()}
+      onReject={vi.fn()}
+    />,
+  );
+  const list = screen.getByRole('list', {
+    name: 'Drive files in this request',
+  });
+  expect(within(list).getAllByRole('listitem')).toHaveLength(20);
+  for (const target of targets)
+    expect(within(list).getByText(`ID: ${target.fileId}`)).toBeInTheDocument();
+  expect(within(list).getAllByText(targets[0].name)).toHaveLength(20);
+  expect(
+    within(list).getAllByText(`Version ${targets[0].expectedVersion}`),
+  ).toHaveLength(20);
+  expect(
+    screen.getByRole('button', { name: 'Move 20 files to Trash' }),
+  ).toBeEnabled();
+});
+it.each([
+  ['empty ID', 'drive.trash', [{ ...validDriveTarget, fileId: '' }]],
+  ['invalid ID', 'drive.trash', [{ ...validDriveTarget, fileId: 'file/1' }]],
+  [
+    'empty version',
+    'drive.trash',
+    [{ ...validDriveTarget, expectedVersion: '' }],
+  ],
+  [
+    'control character in version',
+    'drive.trash',
+    [{ ...validDriveTarget, expectedVersion: '9\n' }],
+  ],
+  [
+    'control character in filename',
+    'drive.trash',
+    [{ ...validDriveTarget, name: 'sample\nx.xlsx' }],
+  ],
+  [
+    'duplicate targets',
+    'drive.trash_batch',
+    [validDriveTarget, validDriveTarget],
+  ],
+  [
+    'multiple single-Trash targets',
+    'drive.trash',
+    [validDriveTarget, { ...validDriveTarget, fileId: 'file-2' }],
+  ],
+  [
+    'multiple rename targets',
+    'drive.rename',
+    [validDriveTarget, { ...validDriveTarget, fileId: 'file-2' }],
+  ],
+  [
+    'multiple move targets',
+    'drive.move',
+    [validDriveTarget, { ...validDriveTarget, fileId: 'file-2' }],
+  ],
+] as const)(
+  'requires fresh details for %s and keeps rejection available',
+  (_case, toolName, targets) => {
+    const approve = vi.fn();
+    const reject = vi.fn();
+    render(
+      <ApprovalModal
+        approval={{
+          ...approval,
+          toolName,
+          details: { Files: JSON.stringify(targets) },
+        }}
+        onApprove={approve}
+        onReject={reject}
+      />,
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(
+      within(dialog).getByRole('button', {
+        name: /^(Move to Trash|Rename file|Move file)$/,
+      }),
+    ).toBeDisabled();
+    expect(
+      within(dialog).getByText('Request fresh file details'),
+    ).toBeInTheDocument();
+    expect(approve).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' }));
+    expect(reject).toHaveBeenCalledOnce();
+  },
+);
