@@ -50,30 +50,32 @@ export function SandboxProfilesSection() {
     {error && <Alert type="error" showIcon title={<AdminErrorNotice {...error} />} action={<Button onClick={() => void load()}>Retry</Button>} />}
     {loading && !platform ? <Spin aria-label="Loading sandboxes" /> : platform && <>
       <Flex align="center" wrap gap={token.paddingXS}><Tag color={platform.state === 'Ready' ? 'success' : 'default'}>{platform.state}</Tag><Typography.Text>{platform.message}</Typography.Text><Button type="text" loading={loading} onClick={() => void load()}>Refresh status</Button></Flex>
-      <Typography.Paragraph type="secondary">Profiles choose a prebuilt environment. Definition capabilities grant command access; a profile alone grants no tools. The same Session retains its environment until expiry or reset.</Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Profiles choose a prebuilt environment. Definition capabilities grant command access; a profile alone grants no tools. The same Session retains its environment until expiry or reset.</Typography.Paragraph>
       <Flex wrap gap={token.paddingXS} align="center">
         <Select aria-label="Sandbox profile" value={baseline?.revision ? baseline.id : undefined} disabled={dirty || busy} placeholder="Choose a profile" className="instance-settings-control"
           options={platform.profiles.map(p => ({ value: p.id, label: `${p.name} · revision ${p.revision}${p.enabled ? '' : ' · Disabled'}` }))} onChange={id => { const profile = platform.profiles.find(p => p.id === id); if (profile) accept(profile); }} />
         <Button disabled={dirty || busy} onClick={() => accept(blank())}>New profile</Button>
       </Flex>
       {!baseline && <Empty description="No sandbox profiles. Build the Workbench and configure its immutable image, or add an approved prebuilt image." />}
-      {baseline && <Form form={form} layout="vertical" className="admin-settings-form" disabled={busy} onFinish={() => void save()}>
+      {baseline && <Form form={form} layout="vertical" className="admin-config-form admin-settings-form" disabled={busy} onFinish={() => void save()}>
         <Form.Item name="id" label="Profile ID" rules={[{ required: true, pattern: /^[a-z][a-z0-9-]{0,63}$/, message: 'Use lowercase letters, digits and hyphens.' }]}><Input aria-label="Profile ID" disabled={busy || baseline.revision > 0} /></Form.Item>
         <Form.Item name="name" label="Name" rules={[{ required: true, max: 120 }]}><Input aria-label="Sandbox profile name" /></Form.Item>
         <Form.Item name="description" label="Description"><Input.TextArea aria-label="Sandbox profile description" maxLength={2000} autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
         <Form.Item name="imageReference" label="Immutable image" extra="Use an image pinned by sha256 from the host's approved registry. Local image IDs require explicit host configuration." rules={[{ required: true }]}><Input aria-label="Sandbox image reference" /></Form.Item>
         <Form.Item name="enabled" label="Available for commands" valuePropName="checked" extra="Disabling immediately fences commands and schedules cleanup of live generations. Ordinary edits apply to new generations."><Switch aria-label="Sandbox profile enabled" /></Form.Item>
-        <Flex wrap gap={token.paddingSM}>
+        <Flex className="admin-form-row" wrap gap={token.padding}>
           {([['cpu','CPU cores',0.25,2,0.25],['memoryMiB','Memory (MiB)',256,2048,256],['maxCommandSeconds','Maximum command (seconds)',1,180,1],['idleTtlSeconds','Idle expiry (seconds)',60,3600,60],['maxLifetimeSeconds','Maximum lifetime (seconds)',60,86400,60]] as const).map(([key,label,min,max,step]) =>
             <Form.Item key={key} name={key} label={label} style={{ flex: '1 1 12rem' }} rules={[{ required: true, type: 'number', min, max }]}><InputNumber aria-label={label} min={min} max={max} step={step} style={{ width: '100%' }} /></Form.Item>)}
         </Flex>
         <Form.Item name="initializationScript" label="Optional initialization script" extra="Runs once after readiness and scratch hydration, as the non-root workload user. Reconnect does not rerun it. Preinstall packages in the image; default commands have no external network."><Input.TextArea aria-label="Sandbox initialization script" maxLength={16384} autoSize={{ minRows: 4, maxRows: 14 }} /></Form.Item>
-        <Flex wrap gap={token.paddingXS}>
-          <Button type="primary" htmlType="submit" aria-label="Save profile" aria-busy={busy} loading={busy} disabled={!dirty}>Save profile</Button>
-          <Button disabled={!dirty || busy} onClick={() => accept(baseline)}>Discard edits</Button>
-          <Button aria-label="Verify image" aria-busy={busy} disabled={dirty || busy || !baseline.revision || platform.state !== 'Ready'} onClick={() => void verify()}>Verify image</Button>
+        <Flex vertical gap={token.padding}>
+          <Flex wrap gap={token.paddingXS}>
+            <Button type="primary" htmlType="submit" aria-label="Save profile" aria-busy={busy} loading={busy} disabled={!dirty}>Save profile</Button>
+            <Button disabled={!dirty || busy} onClick={() => accept(baseline)}>Discard edits</Button>
+            <Button aria-label="Verify image" aria-busy={busy} disabled={dirty || busy || !baseline.revision || platform.state !== 'Ready'} onClick={() => void verify()}>Verify image</Button>
+          </Flex>
+          {baseline.lastVerifiedAt && <Typography.Text type="secondary">{baseline.verificationReason} · {formatAdminTimestamp(baseline.lastVerifiedAt)}</Typography.Text>}
         </Flex>
-        {baseline.lastVerifiedAt && <Typography.Text type="secondary">{baseline.verificationReason} · {formatAdminTimestamp(baseline.lastVerifiedAt)}</Typography.Text>}
       </Form>}
       <Descriptions {...detail} bordered size="small" column={1}>
         <Descriptions.Item label="Network">Offline · deny-default egress</Descriptions.Item><Descriptions.Item label="Workload protections">Non-root · 64 PIDs · capabilities dropped · no Docker socket</Descriptions.Item>
