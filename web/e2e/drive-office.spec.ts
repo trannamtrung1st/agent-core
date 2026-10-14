@@ -1,4 +1,3 @@
-import { selectSpreadsheetCell } from './support/spreadsheet';
 import { test, expect } from '@playwright/test';
 import { selectInstanceIdentity } from './support/instance-identity';
 import { readFile } from 'node:fs/promises';
@@ -112,7 +111,9 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   await workbook
     .getByRole('button', { name: 'Load range', exact: true })
     .click();
-  await selectSpreadsheetCell(workbook, 'B4');
+  await workbook
+    .getByRole('button', { name: 'B4 empty formula', exact: true })
+    .click();
   await expect(workbook).toContainText('=SUM(B2:B3)');
   const rangeReads: string[] = [];
   const trackRange = (request: import('@playwright/test').Request) => {
@@ -126,11 +127,13 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
       workbook.getByRole('button', { name: 'A1 Region', exact: true }),
     ).toBeVisible();
     await expect(workbook).toContainText('=SUM(B2:B3)');
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      )
+      .toBe(true);
   }
   expect(rangeReads).toEqual([]);
   page.off('request', trackRange);
@@ -187,16 +190,21 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     page.getByRole('tab', { name: 'Assumptions', exact: true }),
   ).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(
+    page.getByRole('dialog', { name: 'q3-sales.xlsx', exact: true }),
+  ).not.toBeVisible();
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 800 });
     await expect(
       page.getByRole('button', { name: 'Preview q3-report.docx' }),
     ).toBeVisible();
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      )
+      .toBe(true);
     expect(
       await page
         .locator('.artifact-actions')
@@ -233,6 +241,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
       name: 'Move 7 listed Drive files to Trash?',
     });
     await expect(approval).toBeVisible({ timeout: 30000 });
+    await expect(approval).not.toHaveClass(/ant-zoom-(?:appear|enter)-active/);
     await expect(approval).toContainText('7 listed app-authorized Drive files');
     await expect(approval).toContainText(name);
     await expect(approval).toContainText('Can be restored');

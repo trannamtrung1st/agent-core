@@ -16,8 +16,34 @@ binary download/commit/retry, catalog and immutable versions, sandbox store,
 Drive exact approvals and sandbox inspection. The credential fixture's AntD
 field-validation callbacks could survive unmount; its stateful owner and real
 Cancel flow now also cancel fixture-owned timers at teardown. The focused rerun
-has zero unhandled errors. TypeScript/Vite builds pass. Real SDK/browser and
-exact-source hosted gates are still pending for this selected snapshot. No user
+has zero unhandled errors. TypeScript/Vite builds pass. Real SDK acceptance passes **31 cases / zero skips**. Both v30 browser phases
+pass (36.2 seconds before / approximately 1.5 minutes after actual Core/server
+recreation), including owned coding/Office artifacts, independent background
+work, output streaming, cancellation and reset/recovery. MCP separately opens
+Add credential, switches purpose, cancels and confirms closed dialog/focus
+returned to Add credential; zero console errors. The required exact-source hosted results for the corrected source are published
+in [PR #15 checks](https://github.com/trannamtrung1st/agent-core/pull/15/checks).
+
+The first selected-snapshot hosted candidate `6c03a1fc` in
+[workflow 38531482334](https://github.com/trannamtrung1st/agent-core/actions/runs/38531482334)
+failed: fresh NuGet advisories reject existing SignalR MessagePack 10.0.12 and
+transitive PKCS 10.0.0; core browser discovery also rejects main's import of an
+absent spreadsheet helper. SignalR protocol references and the Infrastructure
+PKCS override now use Microsoft's patched **10.0.13** versions, retaining
+warning-as-error/audit enforcement. See the
+[SignalR advisory](https://github.com/dotnet/aspnetcore/security/advisories/GHSA-86xp-94pg-8r6r)
+and [PKCS advisories](https://github.com/dotnet/runtime/security/advisories/GHSA-2fmv-rv2c-59x7).
+Fresh restore and the whole solution vulnerability audit pass; **53 API**
+(MessagePack wire/download/sandbox) and **17 email/MIME** cases pass. The Drive
+fixture uses its existing actual spreadsheet cell control. A local responsive
+check also measured the closing preview modal immediately after Escape; the
+trace shows resize only 11 ms later. A subsequent check pressed Escape while
+the approval entrance animation remained active. The fixture now awaits actual
+preview closure and settled approval entrance before layout/keyboard assertions,
+and polls the same no-overflow condition while React applies breakpoint changes.
+The complete v30 Drive/Office/browser journey passes (**38.1 seconds**), including
+exact seven-target Reject/Escape/approval and desktop/mobile version wrapping,
+with the existing assertions and timeout bounds. No user
 database reset or unrelated service cleanup is authorized.
 
 The preceding combined source **`b26291d249a19fb194bb825389419f396ba3ea08`**
