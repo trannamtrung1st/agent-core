@@ -2795,6 +2795,10 @@ body,
 .admin-instance-management [hidden] { display: none !important; }
 .admin-instance-focused { display: flex; flex-direction: column; }
 .admin-instance-focused .admin-instance-persona { max-inline-size: 52rem; }
+.admin-instance-focused .admin-instance-assignment {
+  padding: 0;
+  border: 0;
+}
 
 @media (max-width: 359px) {
   .admin-header .admin-header-inner { column-gap: var(--ac-space-tight) !important; }
