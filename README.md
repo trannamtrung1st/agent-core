@@ -20,6 +20,8 @@ trusted OpenSandbox server may mount the host Docker socket. See
 Earlier P10/P11 statements below describe their historical slice boundaries;
 this accepted P10 cutover supersedes the former unopened P10 status. P11 remains unopened.
 
+The [sparse XLSX reading enhancement](docs/reports/closedxml-sparse-reading-verification-2026-10-14.md) uses bounded ClosedXML content pages for attachment and Workspace reads, preserves original addresses and stateless continuation, and separates formatted-template scanning from populated-cell budgets. Explicit ranges, preview and edits retain their strict profile. Focused local tests and generated-fixture measurements verify this change; real-file verification remains owner-run and hosted CI was not requested.
+
 The [Office productivity stabilization](docs/reports/office-productivity-stabilization-2026-10-14.md) fixes empty spreadsheet inspections, passes a fresh audited dependency restore and focused local checks, and records a live public DOCX → edit → Artifact → exact-byte Google Drive upload/rename/Trash/recovery workflow. Dense CSV measurements and remaining runtime/device/Office fidelity boundaries are explicit; hosted CI was not run.
 
 The spreadsheet preview follow-up uses one read-only FortuneSheet canvas for XLSX and CSV/TSV Grid, with backend-owned host limits and bounded range navigation. [Local verification](docs/reports/fortune-sheet-preview-verification-2026-10-14.md) records runtime evidence, formatting limits and remaining gate gaps; the original Office/Drive acceptance below remains unchanged.

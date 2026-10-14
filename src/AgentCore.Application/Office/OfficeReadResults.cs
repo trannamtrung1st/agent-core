@@ -57,7 +57,7 @@ public static class OfficeReadResults
             }
             var page = new
             {
-                source.Sha256, source.Sheets, source.Sheet, source.SheetExtents,
+                mode = "range", source.Sha256, source.Sheets, source.Sheet, source.SheetExtents,
                 source.Range, usedRange, returnedRange,
                 truncated = count < source.Rows.Count || extent is { LastRow: > 0 } &&
                     (first is null || Row(first) > extent.FirstRow || Column(first) > extent.FirstColumn || Row(last!) < extent.LastRow || Column(last!) < extent.LastColumn),
@@ -67,6 +67,38 @@ public static class OfficeReadResults
             if (Encoding.UTF8.GetByteCount(json) <= budget) return json;
             // No cell or metadata strings are sliced; callers can request a narrower column range.
             if (count <= 1) return OutputLimit(budget, "Complete rows or metadata exceed the read budget. Request fewer columns or individual cells with a larger output budget.");
+            count = Math.Max(1, count / 2);
+        }
+    }
+
+    public static string SparseWorkbook(OfficeSparseWorkbookInspection source, int budget, Func<object, string>? envelope = null)
+    {
+        envelope ??= page => JsonSerializer.Serialize(page, Json);
+        var count = source.Cells.Count;
+        while (true)
+        {
+            var cells = source.Cells.Take(count).ToArray();
+            var sheetHasMore = count < source.Cells.Count || source.SheetHasMore;
+            var hasMore = sheetHasMore || source.SelectedSheet is null && source.SheetOrdinal < source.Sheets.Count;
+            var nextCursor = sheetHasMore && count > 0
+                ? OfficeSparseCursor.Encode(source.Sha256, source.SelectedSheet, source.SheetOrdinal, source.Sheet, cells[^1].Address)
+                : hasMore && !sheetHasMore
+                    ? OfficeSparseCursor.Encode(source.Sha256, source.SelectedSheet, source.SheetOrdinal + 1, source.Sheets[source.SheetOrdinal], null)
+                    : null;
+            var sheetCoverage = !sheetHasMore ? "complete" : "partial";
+            var coverage = !hasMore ? "complete" : "partial";
+            var page = new
+            {
+                mode = "sparse", source.Sha256, source.Sheets, source.Sheet, source.SheetOrdinal, source.SelectedSheet,
+                populatedCellsReturned = count, cells, sheetHasMore, hasMore, nextCursor,
+                coverage, sheetCoverage, coverageScope = source.SelectedSheet is null ? "workbook_traversal" : "selected_sheet_traversal",
+                pageCoverage = !sheetHasMore && source.StartedAtBeginning ? "complete_sheet" : "partial_sheet", traversalComplete = !hasMore, source.StartedAtBeginning,
+                sheetState = source.Cells.Count > 0 || !source.StartedAtBeginning ? "populated" : source.HasStoredCells || source.HasFormatting ? "formatting_only" : "empty",
+                source.HasStoredCells, source.HasFormatting, source.Warnings
+            };
+            var json = envelope(page);
+            if (Encoding.UTF8.GetByteCount(json) <= budget) return json;
+            if (count <= 1) return OutputLimit(budget, "A complete populated cell or worksheet metadata exceeds the read budget. No continuation was issued; retry with a larger output budget.");
             count = Math.Max(1, count / 2);
         }
     }

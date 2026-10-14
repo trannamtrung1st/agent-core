@@ -10,6 +10,57 @@ namespace AgentCore.Api.Tests;
 
 public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixture<AgentCoreApiFactory>
 {
+    [Fact]
+    public async Task Published_office_capability_reads_sparse_owned_workbook_and_rechecks_revision_on_continuation()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(factory.Services));
+        var created = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version = 26 });
+        created.EnsureSuccessStatusCode();
+        var instance = (await created.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!;
+        var response = await client.PostAsJsonAsync("/api/v2/sessions", new { agentInstanceId = instance.InstanceId, mode = "text" });
+        response.EnsureSuccessStatusCode();
+        using var session = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sessionId = session.RootElement.GetProperty("sessionId").GetGuid();
+        var definition = (await factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Definition;
+        var tools = factory.Services.GetRequiredService<SessionToolExecutor>();
+        async Task<JsonElement> Execute(string name, object args)
+        {
+            var result = await tools.ExecuteAsync(definition, sessionId, new ModelToolCall(Guid.NewGuid().ToString(), name, JsonSerializer.Serialize(args)), 4096,
+                admission: new(false, TriggerKind.UserTurn, AgentInstanceId: Guid.Parse(instance.InstanceId), OwnedSessionId: sessionId));
+            Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(result.Text), 1, 4096);
+            using var json = JsonDocument.Parse(result.Text); return json.RootElement.Clone();
+        }
+        var path = "/home/sparse-continuation.xlsx";
+        var file = await Execute(ToolCatalog.OfficeSpreadsheetCreate, new { path, sheets = new[] {
+            new { name = "First", rows = Enumerable.Range(1, 100).Select(i => new[] { new { type = "number", number = i } }).ToArray() },
+            new { name = "Second", rows = new[] { new[] { new { type = "number", number = 101 } } } } } });
+        Assert.False(file.TryGetProperty("error", out _), file.ToString());
+        var seen = new List<string>(); string? cursor = null; string? initialCursor = null;
+        for (var call = 0; call < 30; call++)
+        {
+            var result = await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path, cursor });
+            Assert.False(result.TryGetProperty("error", out _), result.ToString());
+            var page = result.GetProperty("inspection");
+            Assert.Equal("sparse", page.GetProperty("mode").GetString());
+            foreach (var cell in page.GetProperty("cells").EnumerateArray())
+                seen.Add(page.GetProperty("sheet").GetString() + "!" + cell.GetProperty("address").GetString());
+            cursor = page.GetProperty("nextCursor").GetString(); initialCursor ??= cursor;
+            if (cursor is null) { Assert.Equal("complete", page.GetProperty("coverage").GetString()); break; }
+        }
+        Assert.Null(cursor);
+        Assert.NotNull(initialCursor);
+        Assert.Equal(Enumerable.Range(1, 100).Select(i => "First!A" + i).Append("Second!A1"), seen);
+        Assert.Equal("invalid", (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path, cursor = initialCursor, range = "A1" })).GetProperty("error").GetString());
+        var changed = await Execute(ToolCatalog.OfficeSpreadsheetEdit, new { path, expectedSha256 = file.GetProperty("sha256").GetString(), operations = new[] {
+            new { operation = "set_cells", sheet = "First", range = "A1", cells = new[] { new[] { new { type = "number", number = 999 } } } } } });
+        Assert.False(changed.TryGetProperty("error", out _), changed.ToString());
+        Assert.Equal("office_revision_conflict", (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path, cursor = initialCursor })).GetProperty("error").GetString());
+        var recovered = (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path })).GetProperty("inspection");
+        Assert.Equal("999", recovered.GetProperty("cells")[0].GetProperty("value").GetString());
+        Assert.Equal(changed.GetProperty("sha256").GetString(), recovered.GetProperty("sha256").GetString());
+    }
+
     [Theory]
     [InlineData("Z1:Z10")]
     [InlineData("A20:B30")]

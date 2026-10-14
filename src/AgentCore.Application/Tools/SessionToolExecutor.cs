@@ -617,7 +617,7 @@ public sealed partial class SessionToolExecutor(
         var attachmentType = AttachmentMedia.NormalizeContentType(record.ContentType);
         if (attachmentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime && officeProcessor is not null)
             return TextResult(await ReadOfficeAttachmentAsync(sessionId, record, args, remainingOutputBytes, cancellationToken));
-        if (args.TryGetProperty("sheet", out _) || args.TryGetProperty("range", out _) || args.TryGetProperty("offset", out _) || args.TryGetProperty("limit", out _))
+        if (args.TryGetProperty("sheet", out _) || args.TryGetProperty("range", out _) || args.TryGetProperty("cursor", out _) || args.TryGetProperty("offset", out _) || args.TryGetProperty("limit", out _))
             return TextResult(Error(attachmentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime ? "unavailable" : "invalid",
                 attachmentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime
                     ? "Targeted Office reading is unavailable because the Office processor is not configured."

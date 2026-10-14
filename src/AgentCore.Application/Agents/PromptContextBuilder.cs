@@ -955,7 +955,7 @@ public sealed class PromptContextBuilder(
             if (item.Kind == AttachmentProcessKind.ExtractedText && item.ContentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime)
             {
                 header += attachmentsReadAvailable
-                    ? "\nOffice reading: Use attachments.read with this attachmentId and sheet/range (XLSX) or offset/limit (DOCX) to read more. For a full summary, continue through relevant sheets/pages without asking permission; targeted requests may use partial reads."
+                    ? "\nOffice reading: Use attachments.read with this attachmentId and cursor (XLSX sparse pages, keep sheet selection) or sheet/range (XLSX rectangular reads) or offset/limit (DOCX) to read more. For a full summary, continue through relevant sheets/pages without asking permission; targeted requests may use partial reads. Disclose partial coverage if execution budgets prevent completing the traversal."
                     : "\nOnly the supplied initial Office excerpt is available with the current model/tool permissions. Do not claim full-file coverage.";
             }
             if (item.Kind == AttachmentProcessKind.Image && item.StrippedImage is { Length: > 0 })
@@ -985,8 +985,17 @@ public sealed class PromptContextBuilder(
                 {
                     if (item.ContentType == OfficeLimits.SpreadsheetMime)
                     {
-                        var workbook = JsonSerializer.Deserialize<OfficeWorkbookInspection>(item.Text, OfficeReadResults.Json);
-                        if (workbook is not null && workbook.Rows is not null) extract = OfficeReadResults.Workbook(workbook, budget);
+                        using var page = JsonDocument.Parse(item.Text);
+                        if (page.RootElement.TryGetProperty("mode", out var mode) && mode.GetString() == "sparse")
+                        {
+                            var sparse = JsonSerializer.Deserialize<OfficeSparseWorkbookInspection>(item.Text, OfficeReadResults.Json);
+                            if (sparse is not null && sparse.Cells is not null) extract = OfficeReadResults.SparseWorkbook(sparse, budget);
+                        }
+                        else
+                        {
+                            var workbook = JsonSerializer.Deserialize<OfficeWorkbookInspection>(item.Text, OfficeReadResults.Json);
+                            if (workbook is not null && workbook.Rows is not null) extract = OfficeReadResults.Workbook(workbook, budget);
+                        }
                     }
                     else
                     {

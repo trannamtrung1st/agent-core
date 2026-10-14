@@ -10,6 +10,11 @@ public static class OfficeLimits
     public const int MaxRows = 200;
     public const int MaxColumns = 64;
     public const int MaxCells = 50000;
+    public const int MaxSparseScannedCells = 250000;
+    public const int MaxSparsePartBytes = 16 * 1024 * 1024;
+    public const int MaxSparsePartNodes = 1500000;
+    public const int MaxSparsePackageNodes = 3000000;
+    public const int MaxSparsePageCells = 500;
     public const int MaxDocumentParagraphs = 2000;
     public const int MaxDocumentCells = 10000;
     public const int MaxDocumentImages = 32;
@@ -31,6 +36,9 @@ public sealed record OfficeCellView(string Address, string Type, string Value, s
 public sealed record OfficeSheetExtent(string Name, int FirstRow, int FirstColumn, int LastRow, int LastColumn);
 public sealed record OfficeWorkbookInspection(string Sha256, IReadOnlyList<string> Sheets, string Sheet, string Range, IReadOnlyList<IReadOnlyList<OfficeCellView>> Rows, IReadOnlyList<string> Warnings, OfficeWorksheetView? Presentation = null,
     IReadOnlyList<OfficeSheetExtent>? SheetExtents = null);
+public sealed record OfficeSparseWorkbookInspection(string Sha256, IReadOnlyList<string> Sheets, string Sheet, int SheetOrdinal,
+    string? SelectedSheet, IReadOnlyList<OfficeCellView> Cells, bool SheetHasMore, bool HasStoredCells,
+    bool StartedAtBeginning, IReadOnlyList<string> Warnings, bool HasFormatting = false);
 public sealed record OfficeBorder(string Style, string? Color);
 public sealed record OfficeCellStyle(string FontFamily, double FontSize, bool Bold, bool Italic, string? FontColor, string? FillColor,
     string Horizontal, string Vertical, bool Wrap, OfficeBorder Top, OfficeBorder Right, OfficeBorder Bottom, OfficeBorder Left);
@@ -49,6 +57,7 @@ public interface IOfficeProcessor
     OfficeProcessedFile EditDocument(ReadOnlyMemory<byte> bytes, IReadOnlyList<OfficeDocumentEdit> operations, CancellationToken ct);
     OfficeProcessedFile CreateWorkbook(OfficeWorkbookSpec spec, CancellationToken ct);
     OfficeWorkbookInspection InspectWorkbook(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct);
+    OfficeSparseWorkbookInspection ReadWorkbookContent(ReadOnlyMemory<byte> bytes, string? sheet, string? cursor, CancellationToken ct);
     OfficeWorkbookInspection PreviewWorkbook(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct);
     OfficeProcessedFile EditWorkbook(ReadOnlyMemory<byte> bytes, IReadOnlyList<OfficeSpreadsheetEdit> operations, CancellationToken ct);
 }

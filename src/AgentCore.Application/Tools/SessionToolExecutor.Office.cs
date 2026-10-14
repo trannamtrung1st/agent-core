@@ -15,8 +15,8 @@ public sealed partial class SessionToolExecutor
     private sealed record DocumentCreate(string Path, string? Title, IReadOnlyList<OfficeSection>? Sections);
     private sealed record WorkbookCreate(string Path, IReadOnlyList<OfficeSheet>? Sheets);
     private sealed record DocumentInspect(string Path, int Offset = 0, int Limit = 20);
-    private sealed record WorkbookInspect(string Path, string? Sheet = null, string? Range = null);
-    private sealed record OfficeAttachmentRead(string AttachmentId, string? Sheet = null, string? Range = null, int Offset = 0, int Limit = 100);
+    private sealed record WorkbookInspect(string Path, string? Sheet = null, string? Range = null, string? Cursor = null);
+    private sealed record OfficeAttachmentRead(string AttachmentId, string? Sheet = null, string? Range = null, int Offset = 0, int Limit = 100, string? Cursor = null);
     private sealed record DocumentEdit(string Path, string ExpectedSha256, IReadOnlyList<OfficeDocumentEdit>? Operations);
     private sealed record WorkbookEdit(string Path, string ExpectedSha256, IReadOnlyList<OfficeSpreadsheetEdit>? Operations);
     private static T OfficeArgs<T>(JsonElement args) => args.Deserialize<T>(OfficeJson) ?? throw AgentCoreErrors.Validation("office_operation_unsupported: Arguments are required.");
@@ -57,6 +57,10 @@ public sealed partial class SessionToolExecutor
                     else
                     {
                         var input = OfficeArgs<WorkbookInspect>(args);
+                        if (input.Cursor is not null && input.Range is not null) return Error("invalid", "A sparse cursor cannot be combined with an explicit range.");
+                        if (input.Range is null)
+                            return OfficeReadResults.SparseWorkbook(officeProcessor.ReadWorkbookContent(source.Bytes, input.Sheet, input.Cursor, ct), Math.Min(outputBudget, 128 * 1024),
+                                page => JsonSerializer.Serialize(new { untrusted = true, path = AgentWorkspacePaths.Public(path), inspection = page }, OfficeJson));
                         return OfficeReadResults.Workbook(officeProcessor.InspectWorkbook(source.Bytes, input.Sheet, input.Range, ct), Math.Min(outputBudget, 128 * 1024),
                             page => JsonSerializer.Serialize(new { untrusted = true, path = AgentWorkspacePaths.Public(path), inspection = page }, OfficeJson));
                     }
@@ -91,9 +95,9 @@ public sealed partial class SessionToolExecutor
             var input = OfficeArgs<OfficeAttachmentRead>(args);
             var spreadsheet = AttachmentMedia.NormalizeContentType(record.ContentType) == OfficeLimits.SpreadsheetMime;
             if (spreadsheet && (args.TryGetProperty("offset", out _) || args.TryGetProperty("limit", out _)))
-                return Error("invalid", "Use sheet/range for XLSX; offset/limit apply to DOCX.");
-            if (!spreadsheet && (args.TryGetProperty("sheet", out _) || args.TryGetProperty("range", out _)))
-                return Error("invalid", "Use offset/limit for DOCX; sheet/range apply to XLSX.");
+                return Error("invalid", "Use sheet/range or cursor for XLSX; offset/limit apply to DOCX.");
+            if (!spreadsheet && (args.TryGetProperty("sheet", out _) || args.TryGetProperty("range", out _) || args.TryGetProperty("cursor", out _)))
+                return Error("invalid", "Use offset/limit for DOCX; sheet/range/cursor apply to XLSX.");
             if (record.ByteSize > OfficeLimits.MaxPackageBytes)
                 return Error("office_processing_limit", "The Office attachment exceeds the 10 MiB processing limit; this does not establish corruption.");
             await using var stream = await attachments!.OpenContentAsync(sessionId, record.AttachmentId, ct);
@@ -112,6 +116,8 @@ public sealed partial class SessionToolExecutor
             }, OfficeJson);
             if (spreadsheet)
             {
+                if (input.Cursor is not null && input.Range is not null) return Error("invalid", "A sparse cursor cannot be combined with an explicit range.");
+                if (input.Range is null) return OfficeReadResults.SparseWorkbook(officeProcessor!.ReadWorkbookContent(bytes.ToArray(), input.Sheet, input.Cursor, ct), budget, Envelope);
                 return OfficeReadResults.Workbook(officeProcessor!.InspectWorkbook(bytes.ToArray(), input.Sheet, input.Range, ct), budget, Envelope);
             }
             return OfficeReadResults.Document(officeProcessor!.InspectDocument(bytes.ToArray(), input.Offset, input.Limit, ct), input.Offset, budget, Envelope);

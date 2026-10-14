@@ -8,6 +8,24 @@ namespace AgentCore.Application.Tests;
 
 public sealed class ToolRegistryPolicyTests
 {
+    [Theory]
+    [InlineData(ToolCatalog.AttachmentsRead)]
+    [InlineData(ToolCatalog.OfficeSpreadsheetInspect)]
+    public void Spreadsheet_read_contracts_advertise_sparse_continuation_without_changing_authority(string name)
+    {
+        var descriptor = ToolRegistry.Get(name);
+        using var schema = System.Text.Json.JsonDocument.Parse(descriptor.ModelDefinition.ParametersJson);
+        var properties = schema.RootElement.GetProperty("properties");
+        Assert.Equal(2048, properties.GetProperty("cursor").GetProperty("maxLength").GetInt32());
+        Assert.True(properties.TryGetProperty("range", out _));
+        Assert.Contains("500", descriptor.ModelDefinition.Description);
+        Assert.Contains("nextCursor", descriptor.ModelDefinition.Description);
+        Assert.Equal(ToolEffect.ReadOnly, descriptor.Effect);
+        Assert.Equal(ToolReplaySafety.ReplaySafe, descriptor.ReplaySafety);
+        Assert.Equal(ToolResourceScope.Session, descriptor.Scope);
+        Assert.True(descriptor.DefinitionAuthorizable);
+    }
+
     [Fact]
     public void Registered_tools_expose_trusted_effect_metadata()
     {

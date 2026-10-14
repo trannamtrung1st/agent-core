@@ -132,9 +132,9 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
                 // Reuse the guarded OOXML reader; formulas, macros and external links are never executed.
                 object inspection = type == OfficeLimits.DocumentMime
                     ? office.InspectDocument(bytes, 0, 100, cancellationToken)
-                    : office.InspectWorkbook(bytes, null, "A1:J50", cancellationToken);
-                var text = inspection is OfficeWorkbookInspection workbook
-                    ? OfficeReadResults.Workbook(workbook, AttachmentLimits.MaxExtractionOutputBytes)
+                    : office.ReadWorkbookContent(bytes, null, null, cancellationToken);
+                var text = inspection is OfficeSparseWorkbookInspection workbook
+                    ? OfficeReadResults.SparseWorkbook(workbook, Math.Min(16 * 1024, AttachmentLimits.MaxExtractionOutputBytes))
                     : OfficeReadResults.Document((OfficeDocumentInspection)inspection, 0, AttachmentLimits.MaxExtractionOutputBytes);
                 return new AttachmentProcessResult(record.AttachmentId, AttachmentLimits.ProcessorVersion,
                     AttachmentProcessKind.ExtractedText, record.DisplayName, type, text,

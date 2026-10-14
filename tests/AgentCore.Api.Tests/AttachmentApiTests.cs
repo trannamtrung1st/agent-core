@@ -179,13 +179,14 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.True((await hub.InvokeAsync<CommandAck>("SendText", Text(view.SessionId, 1, await ready, "Summarize all sheets", Guid.NewGuid().ToString(), [attachment.AttachmentId]))).Accepted);
         var processed = Assert.Single(await _factory.Services.GetRequiredService<IAttachmentProcessor>().ProcessTurnAsync(sessionId, [Guid.Parse(attachment.AttachmentId)]));
         using var initial = JsonDocument.Parse(processed.Text);
-        Assert.Equal(3, initial.RootElement.GetProperty("sheetExtents").GetArrayLength());
-        Assert.True(initial.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.Equal("sparse", initial.RootElement.GetProperty("mode").GetString());
+        Assert.Equal(3, initial.RootElement.GetProperty("sheets").GetArrayLength());
+        Assert.True(initial.RootElement.GetProperty("hasMore").GetBoolean());
         var prompt = PromptContextBuilder.BuildCurrentUserMessage("Summarize all", [processed], true,
             new Dictionary<Guid, int> { [Guid.Parse(attachment.AttachmentId)] = 4096 });
         var excerpt = prompt.Text.Split("\"\"\"")[1].Trim();
         using var promptPage = JsonDocument.Parse(excerpt);
-        Assert.True(promptPage.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.True(promptPage.RootElement.GetProperty("hasMore").GetBoolean());
         Assert.Contains("without asking permission", prompt.Text);
 
         var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Definition;
@@ -211,17 +212,33 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Contains("Beyond column 64", column.ToString());
         var guest = (await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Guest list" })).GetProperty("inspection");
         Assert.Contains("Guest beyond first tab", guest.ToString());
-        Assert.False(guest.GetProperty("truncated").GetBoolean());
+        Assert.Equal("complete", guest.GetProperty("coverage").GetString());
+        Assert.False(guest.GetProperty("hasMore").GetBoolean());
         var empty = (await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Empty" })).GetProperty("inspection");
-        Assert.Empty(empty.GetProperty("rows").EnumerateArray());
-        Assert.False(empty.GetProperty("truncated").GetBoolean());
+        Assert.Empty(empty.GetProperty("cells").EnumerateArray());
+        Assert.Equal("empty", empty.GetProperty("sheetState").GetString());
+        Assert.False(empty.GetProperty("hasMore").GetBoolean());
         var invalid = await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Check list", range = "A1:A201" });
         Assert.Contains("office_operation_unsupported", invalid.ToString());
         var recovered = await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Check list", range = "A240" });
         Assert.Contains("Wedding item 240", recovered.ToString());
+        var sparseSeen = new List<string>(); string? cursor = null; string? firstCursor = null;
+        for (var call = 0; call < 40; call++)
+        {
+            var sparse = (await Read(sessionId, new { attachmentId = attachment.AttachmentId, cursor }, 4096)).GetProperty("inspection");
+            Assert.Equal("sparse", sparse.GetProperty("mode").GetString());
+            foreach (var cell in sparse.GetProperty("cells").EnumerateArray())
+                sparseSeen.Add(sparse.GetProperty("sheet").GetString() + "!" + cell.GetProperty("address").GetString());
+            cursor = sparse.GetProperty("nextCursor").GetString(); firstCursor ??= cursor;
+            if (cursor is null) { Assert.Equal("complete", sparse.GetProperty("coverage").GetString()); break; }
+        }
+        Assert.Null(cursor);
+        Assert.Equal(new[] { "Check list!A1", "Check list!BM1" }.Concat(Enumerable.Range(2, 239).Select(i => "Check list!A" + i)).Append("Guest list!A1"), sparseSeen);
+        Assert.Contains("invalid", (await Read(sessionId, new { attachmentId = attachment.AttachmentId, cursor = firstCursor, range = "A1" })).ToString());
         var other = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var foreign = (await other.Content.ReadFromJsonAsync<SessionViewResponse>())!;
         Assert.Contains("notFound", (await Read(Guid.Parse(foreign.SessionId), new { attachmentId = attachment.AttachmentId })).ToString());
+        Assert.Contains("notFound", (await Read(Guid.Parse(foreign.SessionId), new { attachmentId = attachment.AttachmentId, cursor = firstCursor })).ToString());
         Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{view.SessionId}/attachments/{attachment.AttachmentId}/content"));
     }
 
@@ -312,6 +329,7 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal(paragraphs, seen);
         Assert.Contains("invalid", (await Read(new { attachmentId = attachment.AttachmentId, sheet = "Sheet1" })).ToString());
         Assert.Contains("invalid", (await Read(new { attachmentId = attachment.AttachmentId, range = (string?)null })).ToString());
+        Assert.Contains("invalid", (await Read(new { attachmentId = attachment.AttachmentId, cursor = (string?)null })).ToString());
         Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{view.SessionId}/attachments/{attachment.AttachmentId}/content"));
     }
 
