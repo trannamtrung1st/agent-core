@@ -23,8 +23,13 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
                 throw AgentCoreErrors.Conflict("Credential revision is stale.");
             if ((c.Purpose == CredentialPurpose.EmailAccount) != (c.EmailAccount is not null) || c.Purpose == CredentialPurpose.EmailAccount && (c.Kind != (c.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2 ? CredentialKind.Token : CredentialKind.Password) || c.AllowedOrigins.Count != 0)) throw AgentCoreErrors.Validation("Invalid credential purpose/profile.");
             c.EmailAccount?.Validate();
+        if (!Enum.IsDefined(c.Purpose) || (c.Purpose == CredentialPurpose.GoogleDriveAccount) != (c.DriveAccount is not null)
+            || c.Purpose == CredentialPurpose.GoogleDriveAccount && (c.Kind != CredentialKind.Token || c.AllowedOrigins.Count != 0)) throw AgentCoreErrors.Validation("Invalid Drive credential purpose/profile.");
+        c.DriveAccount?.Validate();
             if (c.EmailAccount?.GoogleSubject is { } subject && _credentials.Values.Any(x => x.CredentialId != c.CredentialId && x.EmailAccount?.GoogleSubject == subject))
                 throw AgentCoreErrors.Conflict("email_identity_already_connected: This Google identity belongs to another account.");
+            if (c.DriveAccount?.GoogleSubject is { } driveSubject && _credentials.Values.Any(x => x.CredentialId != c.CredentialId && x.DriveAccount?.GoogleSubject == driveSubject))
+                throw AgentCoreErrors.Conflict("drive_identity_already_connected: This Google identity belongs to another Drive account.");
             _credentials[c.CredentialId] = c; return ValueTask.CompletedTask;
         }
     }
@@ -33,7 +38,7 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
             if (!_credentials.TryGetValue(id, out var c) || c.Revision != expectedRevision || c.SecretRevision != expectedSecretRevision
-                || c.Status != CredentialStatus.Active || c.EmailAccount is not { AuthMethod: EmailAuthMethod.GoogleOAuth2, ConnectionStatus: EmailConnectionStatus.Connected })
+                || c.Status != CredentialStatus.Active || (c.EmailAccount is not { AuthMethod: EmailAuthMethod.GoogleOAuth2, ConnectionStatus: EmailConnectionStatus.Connected } && c.DriveAccount is not { ConnectionStatus: DriveConnectionStatus.Connected }))
                 return ValueTask.FromResult(false);
             _credentials[id] = c with { ProtectedPayload = payload, SecretRevision = c.SecretRevision + 1 };
             return ValueTask.FromResult(true);

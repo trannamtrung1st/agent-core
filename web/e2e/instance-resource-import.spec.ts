@@ -100,8 +100,10 @@ test('inherited built-in knowledge can be inspected and disabled while Instance 
   await expect(inherited.getByText('knowledge/compliance-retention', { exact: true })).toBeVisible();
   await row.getByRole('button', { name: 'Inspect', exact: true }).click();
   const details = page.getByRole('dialog', { name: 'Resource details' });
-  await details.getByRole('button', { name: 'Preview content' }).click();
-  await expect(details).toContainText('Simulated order policy');
+  await details.getByRole('button', { name: /^Preview / }).click();
+  const preview = page.locator('.file-preview-modal');
+  await expect(preview).toContainText('Simulated order policy');
+  await preview.getByRole('button', { name: 'Close', exact: true }).click();
   await details.getByRole('button', { name: 'Close', exact: true }).click();
   await row.getByRole('switch').click();
   await page.getByRole('dialog', { name: 'Disable resource?' }).getByRole('button', { name: 'Disable resource', exact: true }).click();

@@ -18,7 +18,9 @@ requirement-triggered.
 
 - [ ] **OpenSandbox cutover:** pass the real Stage A compatibility/isolation gate before dependent implementation; then complete contracts/persistence, lifecycle, atomic Workspace bridge, non-replayable tools, Admin/Chat and all OSB-01–18 acceptance. The privileged disposable runner requires explicit approval; the unprivileged fallback reproduced loopback execd reachability. See [verification](docs/reports/opensandbox-integration-verification.md).
 
-- [ ] **Environment instructions**: for all agents working in same context? [TBD]
+
+- [ ] **Office/Drive manual and Real acceptance:** implementation and all seven automated Synthetic/Compose gates passed on `a451600a`. Dedicated real Google UAT, desktop Office-client fidelity and actual native browser 200% zoom remain unverified; see the [successor ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md).
+
 - [ ] **Original Background Work results:** reconcile the remaining exact-source hosted acceptance after follow-up fixture/native-browser corrections. Local checks and earlier green runs are recorded in the [verification ledger](docs/reports/background-original-result-verification.md); preserve the distinction between earlier acceptance and later edits.
 - [ ] **Core Events stabilization:** establish and record exact-source hosted acceptance for the stabilization and subsequent recovery/resource-hygiene follow-ups. Preserve the documented SDK fallback and execution-time timeout/cancellation coverage limits. See [verification](docs/reports/core-events-automation-presets-verification.md).
 - [ ] **Event recovery operations:** observe deployed exhaustion/backlog trends and set alert baselines using the [operator runbook](docs/17-observability-and-operations.md#observing-event-recovery-pressure). Synthetic load results do not establish production rates.
@@ -42,6 +44,8 @@ Other bounded successor verification limits remain in their linked reports under
 
 Always keep this section. These are personal product ideas to refine, not approved implementation scope.
 
+- [ ] **Environment instructions**: for all agents working in same context? [TBD]
+- [ ] **KOL, marketing strategy**: book KOL to use and review, post videos. Create posts across forums and pages [TBD]
 - [ ] **Commercial video:** follow a person collaborating with apparent co-workers throughout a workday. At the end, reveal that it was one person working with Agent Core.
 - [ ] **Admin assistant:** explore an agent that helps the owner operate and configure Agent Core through the existing authority and approval boundaries.
 - [ ] **File creation and processing:** expand practical workflows for PNG images and other file formats.

@@ -41,7 +41,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
     AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null)
+    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -452,6 +452,10 @@ public sealed partial class SessionToolExecutor(
                 args = AgentWorkspacePaths.Arguments(call.Name, args, sessionId, admission?.WorkspaceCwd ?? "/home");
                 ProtectCwd(call.Name, args, sessionId, admission?.WorkspaceCwd ?? "/home");
             }
+            if (call.Name.StartsWith("drive.", StringComparison.Ordinal))
+                return FitResult(remainingOutputBytes, await ExecuteDriveAsync(definition, sessionId, call, args, admission, approvalGrant, cancellationToken));
+            if (call.Name.StartsWith("office.", StringComparison.Ordinal))
+                return FitResult(remainingOutputBytes, await ExecuteOfficeAsync(call.Name, definition, sessionId, args, admission?.WorkspaceCwd ?? "/home", cancellationToken));
             var executed = call.Name switch
             {
                 ToolCatalog.AttachmentsRead => await ReadAttachmentAsync(sessionId, args, remainingOutputBytes, cancellationToken)

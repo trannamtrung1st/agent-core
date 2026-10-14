@@ -4,6 +4,7 @@ import { CopyOutlined } from "@ant-design/icons";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
+import { HighlightedCode } from "../filePreview/HighlightedCode";
 import { authorizedHref } from "./sanitizedMarkdown";
 
 export function MarkdownMessage({ source }: { source: string }) {
@@ -73,7 +74,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
       >
         {copied ? "Copied" : "Copy"}
       </Button>
-      <pre>{children}</pre>
+      <HighlightedCode source={text} language={codeLanguage(children)} />
     </div>
   );
 }
@@ -97,4 +98,12 @@ function codeText(node: ReactNode): string {
   }
 
   return "";
+}
+
+function codeLanguage(node: ReactNode): string {
+  if (node && typeof node === 'object' && 'props' in node) {
+    const name = (node as { props?: { className?: string } }).props?.className;
+    return name?.match(/language-([a-z0-9-]+)/i)?.[1] ?? 'text';
+  }
+  return 'text';
 }

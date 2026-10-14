@@ -84,7 +84,7 @@ export function canonicalAppUrl(path: string): string {
   const canonical = adminRoutePath(route);
   if (!canonical || canonical === url.pathname) return path;
   const safe = new URLSearchParams();
-  for (const key of ['session', 'run', 'automation', 'emailAccount', 'event', 'builtin', 'returnTo', 'q']) {
+  for (const key of ['session', 'run', 'automation', 'emailAccount', 'driveAccount', 'event', 'builtin', 'returnTo', 'q']) {
     const value = url.searchParams.get(key); if (value !== null) safe.set(key, value);
   }
   let hash = url.hash;

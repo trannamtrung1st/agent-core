@@ -1,16 +1,20 @@
-import { render, screen } from "@testing-library/react";
+import { Blob as NodeBlob } from "node:buffer";
+import { readFileSync } from "node:fs";
+import { downloadFile, readFile, resolveFile } from "../filePreview/fileSource";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchAttachmentBlob, pendingPreviewUrl } from "../../services/attachments";
+import { pendingPreviewUrl } from "../../services/attachments";
 import { HistoryAttachmentView, PendingAttachmentView } from "./AttachmentPreview";
 
 vi.mock("../../services/attachments", () => ({
-  fetchAttachmentBlob: vi.fn(),
   pendingPreviewUrl: vi.fn()
 }));
 
+vi.mock("../filePreview/fileSource", async original => ({...await original<typeof import("../filePreview/fileSource")>(),downloadFile:vi.fn(),readFile:vi.fn(),resolveFile:vi.fn()}));
+const png=readFileSync("e2e/fixtures/file-preview/image.png");
 describe("AttachmentPreview", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.clearAllMocks();vi.mocked(downloadFile).mockResolvedValue(undefined);
     vi.stubGlobal("URL", {
       createObjectURL: vi.fn(() => "blob:history"),
       revokeObjectURL: vi.fn()
@@ -18,20 +22,22 @@ describe("AttachmentPreview", () => {
   });
 
   it("renders a file chip with kind and a download label", async () => {
-    vi.mocked(fetchAttachmentBlob).mockResolvedValue(new Blob(["x"], { type: "application/pdf" }));
+
     render(
       <HistoryAttachmentView
         sessionId="s1"
         file={{ attachmentId: "a1", displayName: "architecture.pdf", contentType: "application/pdf" }}
       />
     );
-    const link = await screen.findByRole("link", { name: "Download architecture.pdf" });
-    expect(link).toHaveAttribute("download", "architecture.pdf");
+    const download = await screen.findByRole("button", { name: "Download architecture.pdf" });
+    expect(readFile).not.toHaveBeenCalled();fireEvent.click(download);
+    await waitFor(()=>expect(downloadFile).toHaveBeenCalledWith({kind:"attachment",sessionId:"s1",attachmentId:"a1"},expect.any(AbortSignal)));
     expect(screen.getByText("PDF")).toBeInTheDocument();
   });
 
   it("opens image attachments with meaningful alt text", async () => {
-    vi.mocked(fetchAttachmentBlob).mockResolvedValue(new Blob([new Uint8Array([1])], { type: "image/png" }));
+    vi.mocked(resolveFile).mockResolvedValue({displayName:"screenshot.png",contentType:"image/png",byteSize:png.length});
+    vi.mocked(readFile).mockResolvedValue(new NodeBlob([png],{type:"image/png"}) as unknown as Blob);
     render(
       <HistoryAttachmentView
         sessionId="s1"

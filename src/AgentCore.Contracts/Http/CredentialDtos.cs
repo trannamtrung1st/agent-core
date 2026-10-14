@@ -2,7 +2,7 @@ namespace AgentCore.Contracts.Http;
 
 public sealed record AdminCredentialResponse(Guid CredentialId, string DisplayName, string Kind, string Status,
     IReadOnlyDictionary<string,string> Metadata, IReadOnlyList<string> AllowedOrigins, long Revision,
-    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, int BindingCount, string Purpose = "General", EmailAccountProfileDto? EmailAccount = null);
+    DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, int BindingCount, string Purpose = "General", EmailAccountProfileDto? EmailAccount = null, DriveAccountProfileDto? DriveAccount = null);
 public sealed record AdminCredentialBindingResponse(Guid BindingId, Guid CredentialId, string Reference, long Revision, AdminCredentialResponse Credential);
 public sealed record AdminCreateCredentialRequest(string DisplayName, string Kind, IReadOnlyDictionary<string,string>? Metadata, IReadOnlyList<string>? AllowedOrigins, string ProtectedValue);
 public sealed record AdminUpdateCredentialRequest(long ExpectedRevision, string DisplayName, string Status, IReadOnlyDictionary<string,string>? Metadata, IReadOnlyList<string>? AllowedOrigins);
@@ -23,3 +23,5 @@ public sealed record AdminEmailOAuthRequest(long ExpectedRevision, bool Confirm 
 
 public sealed record AdminEmailMonitoringRequest(long ExpectedRevision, bool Enabled, int IntervalSeconds);
 public sealed record AdminEmailMonitoringCheckRequest(long ExpectedRevision);
+
+public sealed record DriveAccountProfileDto(string EmailAddress, string ConnectionStatus, long AuthEpoch, DateTimeOffset? ConnectedAtUtc, DateTimeOffset? ReconnectRequiredAtUtc, bool Synthetic);

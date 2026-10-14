@@ -621,3 +621,17 @@ The approved local proposal reorganizes existing Admin into one global/contextua
 The email branch integration merges main `d425b121` into `develop/branch-1`, preserves the original watcher implementation and adopts the contextual Admin shell for its existing Credentials surfaces. [Integration verification](reports/email-monitoring-main-integration-2026-10-13.md) records current-source checks separately from the earlier follow-up verification records.
 
 The merged non-live UI integration is verified on `70691cad`: all seven [exact-source Synthetic/Compose jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/38385688652) passed. The integration report preserves the resolved inspector, native-tab harness and Gmail stale-read failures, final local 972-test frontend result and deferred live/human checks. This completes the bounded main synchronization without changing historical freezes or opening P10/P11.
+
+
+## Office file preview and Drive successor
+
+Approved bounded successor, implemented from `d6472746` (proposal baseline `5b2d42d4` plus a TODO-only commit), with concurrent approval correction `3f46ce1e` preserved. All seven [exact-source automated Synthetic/Compose jobs](https://github.com/trannamtrung1st/agent-core/actions/runs/38474865644) passed on `a451600a3f73c0ebf14cea4f17067db2359c0acd`. Historical freezes remain intact; P10/P11 remain unopened.
+
+- Phase A: one protected preview composition across existing file sources; text/Shiki/Markdown, CSV Grid/Text, raster images and bounded Blob media. Acceptance includes exact source/download bytes, source ownership, malicious content fallback, cancellation, keyboard/focus and responsive browser journeys.
+- Phase B: semantic DOCX/XLSX generation/inspection/guarded edits and validated read-only preview. Acceptance includes real downloadable Office files, exact targeted edits, stale/ambiguous rejection, package limits/cancellation, home durability and no implicit grants.
+- Phase C: optional typed Google Drive Account, separate protected OAuth, explicit bindings, direct REST/Synthetic provider, bounded explicit import/export/management and durable remote claims/receipts. `drive.file` only; remote overwrite, Google-native editing, broad access and sync/watchers are excluded.
+- Phase D: integrated Office → preview → verified Drive receipts demo, bounded Impeccable polish/design sync, package licensing/security audit, canonical docs and exact-final-SHA backend/frontend/Playwright/Compose hosted gates. Optional Google Real evidence stays separate.
+
+Implementation and required automated gates are verified: 3,930 backend passes / 27 configured opt-in skips, 1,002 frontend passes, 244 browser passes and both Compose checks. The [verification ledger](reports/office-file-preview-drive-verification-2026-10-13.md) preserves resolved failures, design/licensing/runtime evidence and the remaining dedicated real Google, desktop Office-client fidelity and actual native browser zoom checks. Full manual/Real acceptance is not claimed.
+
+The bounded [Drive upload/recovery follow-up](reports/drive-upload-recovery-2026-10-14.md) distinguishes proven non-execution from uncertain effects and adds status-checked continuation of the same protected upload session. It preserves the existing successor owners and non-goals. Verification for this follow-up is local at the user's explicit request; the original exact-source hosted closure and remaining manual/Real checks are unchanged.

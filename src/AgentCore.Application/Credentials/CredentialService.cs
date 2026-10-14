@@ -10,7 +10,7 @@ namespace AgentCore.Application.Credentials;
 public sealed record CredentialView(Guid CredentialId, string DisplayName, string Kind, string Status,
     IReadOnlyDictionary<string, string> Metadata, IReadOnlyList<string> AllowedOrigins, long Revision,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, int BindingCount,
-    string Purpose = "General", EmailAccountProfile? EmailAccount = null);
+    string Purpose = "General", EmailAccountProfile? EmailAccount = null, DriveAccountProfile? DriveAccount = null);
 public sealed record CredentialBindingView(Guid BindingId, Guid CredentialId, string Reference, long Revision, CredentialView Credential);
 public sealed record BoundCredentialMetadata(string Reference, string DisplayName, string Kind, IReadOnlyDictionary<string, string> Metadata);
 
@@ -49,6 +49,13 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
         await store.SaveAsync(credential, 0, ct);
         return View(credential, 0);
     }
+    public async ValueTask<CredentialView> CreateGoogleDriveAccountAsync(string name, CancellationToken ct = default)
+    {
+        var displayName = Validate(() => CredentialRules.DisplayName(name)); var id = ids.NewId(); var now = time.GetUtcNow();
+        var credential = new Credential(id, displayName, CredentialKind.Token, CredentialStatus.Active, CredentialRules.Metadata(null), [], "", 1, 1, now, now,
+            Purpose: CredentialPurpose.GoogleDriveAccount, DriveAccount: new DriveAccountProfile());
+        await store.SaveAsync(credential, 0, ct); return View(credential, 0);
+    }
     public async ValueTask<CredentialView> UpdateEmailAccountAsync(Guid id, long revision, string name, string status,
         EmailAccountProfile profile, CancellationToken ct = default)
     {
@@ -65,16 +72,17 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
         IReadOnlyDictionary<string, string>? metadata, IReadOnlyList<string>? origins, CancellationToken ct = default)
     {
         var current = await RequireCredential(id, ct);
-        if (current.Purpose == CredentialPurpose.EmailAccount && origins?.Count > 0) throw AgentCoreErrors.Validation("Email Accounts cannot have Browser origins.");
+        if (current.Purpose != CredentialPurpose.General && origins?.Count > 0) throw AgentCoreErrors.Validation("Account credentials cannot have Browser origins.");
         var updated = Validate(() => current with { DisplayName = CredentialRules.DisplayName(name), Status = Parse<CredentialStatus>(status),
             Metadata = CredentialRules.Metadata(metadata), AllowedOrigins = CredentialRules.Origins(origins), Revision = revision + 1, UpdatedAtUtc = time.GetUtcNow() });
+        if (current.DriveAccount is { } drive && updated.Status != current.Status) updated = updated with { DriveAccount = drive with { AuthEpoch = drive.AuthEpoch + 1 } };
         await store.SaveAsync(updated, revision, ct, current.SecretRevision); return await GetAsync(id, ct);
     }
     public async ValueTask<CredentialView> ReplaceAsync(Guid id, long revision, string value, CancellationToken ct = default)
     {
         Validate(() => { CredentialRules.ProtectedValue(value); return true; });
         var current = await RequireCredential(id, ct);
-        if (current.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2) throw AgentCoreErrors.Validation("Use Connect with Google to replace authorization.");
+        if (current.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2 || current.Purpose == CredentialPurpose.GoogleDriveAccount) throw AgentCoreErrors.Validation("Use Connect with Google to replace authorization.");
         await store.SaveAsync(current with { ProtectedPayload = protector.Protect(id, current.ProtectionVersion, value),
             Revision = revision + 1, UpdatedAtUtc = time.GetUtcNow() }, revision, ct, current.SecretRevision);
         return await GetAsync(id, ct);
@@ -143,7 +151,7 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
     private async ValueTask<Credential> RequireCredential(Guid id, CancellationToken ct) =>
         await store.GetAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Credential was not found.");
     private static CredentialView View(Credential c, int count) => new(c.CredentialId, c.DisplayName, c.Kind.ToString(), c.Status.ToString(),
-        c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, count, c.Purpose.ToString(), c.EmailAccount);
+        c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, count, c.Purpose.ToString(), c.EmailAccount, c.DriveAccount);
     private static T Parse<T>(string value) where T : struct, Enum =>
         Enum.TryParse<T>(value, false, out var kind) && Enum.IsDefined(kind) && Enum.GetNames<T>().Contains(value)
             ? kind : throw new ArgumentException("Unknown credential kind or status.");

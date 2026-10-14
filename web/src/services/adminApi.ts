@@ -938,7 +938,7 @@ export async function resetAdminLearnedMemoryScope(
 export type SystemCredential = {
   credentialId: string; displayName: string; kind: string; status: string;
   metadata: Record<string, string>; allowedOrigins: string[]; revision: number;
-  createdAtUtc: string; updatedAtUtc: string; bindingCount: number; purpose?: "General" | "EmailAccount"; emailAccount?: EmailAccountProfile | null;
+  createdAtUtc: string; updatedAtUtc: string; bindingCount: number; purpose?: "General" | "EmailAccount" | "GoogleDriveAccount"; emailAccount?: EmailAccountProfile | null; driveAccount?: import("./drive").DriveProfile | null;
 };
 export type CredentialBinding = { bindingId: string; credentialId: string; reference: string; revision: number; credential: SystemCredential };
 export type CredentialInput = { displayName: string; kind: string; metadata: Record<string, string>; allowedOrigins: string[]; protectedValue: string };

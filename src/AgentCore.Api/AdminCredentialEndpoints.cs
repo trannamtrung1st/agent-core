@@ -88,6 +88,6 @@ internal static class AdminCredentialEndpoints
         value.GoogleSubject, value.GrantedScopes, value.ConnectionStatus.ToString(), value.AuthEpoch, value.ConnectedAtUtc, value.Synthetic);
     private static void Positive(long revision) { if (revision < 1) throw AgentCoreErrors.Validation("Expected revision must be positive."); }
     private static async Task<IResult> Run(Func<Task<IResult>> action) { try { return await action(); } catch (AgentCoreException ex) { return ProblemResults.From(ex); } }
-    private static AdminCredentialResponse Map(CredentialView c) => new(c.CredentialId, c.DisplayName, c.Kind, c.Status, c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, c.BindingCount, c.Purpose, c.EmailAccount is null ? null : Map(c.EmailAccount));
+    internal static AdminCredentialResponse Map(CredentialView c) => new(c.CredentialId, c.DisplayName, c.Kind, c.Status, c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, c.BindingCount, c.Purpose, c.EmailAccount is null ? null : Map(c.EmailAccount), c.DriveAccount is null ? null : new(c.DriveAccount.EmailAddress, c.DriveAccount.ConnectionStatus.ToString(), c.DriveAccount.AuthEpoch, c.DriveAccount.ConnectedAtUtc, c.DriveAccount.ReconnectRequiredAtUtc, c.DriveAccount.Synthetic));
     private static AdminCredentialBindingResponse Map(CredentialBindingView b) => new(b.BindingId, b.CredentialId, b.Reference, b.Revision, Map(b.Credential));
 }

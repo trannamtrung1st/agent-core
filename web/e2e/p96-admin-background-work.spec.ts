@@ -1,4 +1,6 @@
 import { navigateAdmin } from "./support/admin-navigation";
+import { waitForResponseSettled } from "./support/response-settled";
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { approvalFixture, backgroundFixture, mockBackgroundSessions } from './support/background-fixtures';
 import { expect, test } from "@playwright/test";
 
@@ -150,19 +152,26 @@ test("background work lists scheduled and order-placed sources", async ({ page }
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await page.getByRole("link", { name: "Start a new chat" }).click();
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.examiner);
   await page.getByLabel("Message").fill("hello");
   await page.getByRole("button", { name: "Send" }).click();
+  // The header appears before first-send attachment and editor draft updates settle.
+  // Finish that transition before testing keyboard focus on its actions.
+  await expect(page.locator(".chat-message-assistant")).toContainText("Hello from synthetic.");
+  await waitForResponseSettled(page);
   await expect(page.getByRole("button", { name: "Background work" })).toBeVisible({ timeout: 15_000 });
 
   await mockBackgroundSessions(page, [backgroundFixture(177, 'Scheduled review', { activationKind: 'ScheduledWork' }),
     backgroundFixture(178, 'Order-placed review', { activationKind: 'ApplicationEvent', status: 'needsApproval', outcome: null, approval: approvalFixture })]);
   const opener = page.getByRole("button", { name: "Background work" });
   await opener.focus();
+  await expect(opener).toBeFocused();
   await page.keyboard.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Background work" });
   await expect(drawer.getByRole("heading", { name: "Scheduled review", exact: true })).toBeVisible();
   await expect(drawer.getByRole("heading", { name: "Order-placed review", exact: true })).toBeVisible();
   await expect(drawer.getByText("Needs approval")).toBeVisible();
+  await expect(page.locator(".chat-message-user")).toHaveCount(1);
   await expect(drawer.getByText(/sourceEventId|orderReference/)).toHaveCount(0);
   await drawer.getByRole("button", { name: "Close", exact: true }).focus();
   await page.keyboard.press("Escape");

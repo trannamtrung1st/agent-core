@@ -19,7 +19,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
     InMemoryAdminEventStore events,
     InMemoryExperienceStore? experience = null,
     IAgentInstanceWorkspaceStore? workspace = null,
-    IAgentCredentialBindingStore? credentialBindings = null, IBrowser? browser = null, InMemoryCoreEventStore? coreEvents = null) : IAdminLifecycleDeletion
+    IAgentCredentialBindingStore? credentialBindings = null, IBrowser? browser = null, InMemoryCoreEventStore? coreEvents = null, IDriveOperationStore? driveOperations = null) : IAdminLifecycleDeletion
 {
     private IBrowserProfileReset BrowserProfiles() => browser as IBrowserProfileReset
         ?? throw new AgentCoreException("UnsupportedOperation", "The browser provider does not support owner profile reset.", 503);
@@ -37,6 +37,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
                 receipt.TargetId, receipt.Revision, receipt.ActorKind.ToString());
             if (await instances.FindAsync(command.InstanceId, cancellationToken) is not null)
                 throw AgentCoreErrors.Conflict("Deleted instance id is already in use.");
+            if (driveOperations is not null) await driveOperations.DeleteOwnerAsync(command.InstanceId, cancellationToken);
             if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
             if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
             if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
@@ -77,7 +78,8 @@ public sealed class InMemoryAdminLifecycleDeletion(
         experience?.Purge(command.InstanceId);
         triggers.PurgeDeletedAutomations(command.InstanceId);
         coreEvents?.Purge(command.InstanceId);
-        if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
+        if (driveOperations is not null) await driveOperations.DeleteOwnerAsync(command.InstanceId, cancellationToken);
+            if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
         if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(command.InstanceId, cancellationToken);
         if (workspace is not null) await workspace.DeleteInstanceAsync(command.InstanceId, cancellationToken);
     }
@@ -87,6 +89,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
         {
             if (await instances.FindAsync(owner, ct) is null)
             {
+                if (driveOperations is not null) await driveOperations.DeleteOwnerAsync(owner, ct);
                 if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(owner, ct);
                 if (browser is not null) await BrowserProfiles().ResetPersistentProfileAsync(owner, ct);
                 if (workspace is not null) await workspace.DeleteInstanceAsync(owner, ct);

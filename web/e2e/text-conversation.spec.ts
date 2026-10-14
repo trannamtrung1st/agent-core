@@ -132,7 +132,7 @@ test("progress is visible, replaced, cleared on final, reload, disconnect, and s
     .toBe(true);
   await expectSupportOrder91Response(page);
   await expect(page.locator(".agent-activity")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "notes.txt" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Download notes.txt" })).toBeVisible();
   await expectHistoryOmitsProgress(page);
 
   await page.evaluate(async () => {
@@ -384,7 +384,7 @@ test("synthetic text conversation, pending voice, and disconnect cleanup", async
   await expect(page.getByRole("button", { name: "Remove notes.txt" })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByRole("link", { name: "notes.txt" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Download notes.txt" })).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".chat-message-assistant")).toHaveCount(2);
   await expect(page.locator(".chat-message-assistant").last()).toContainText("Hello from synthetic.");
 
@@ -529,9 +529,9 @@ test("queued attachment stays with the queued item until dispatch", async ({ pag
   await expect(page.getByRole("button", { name: "Remove queued.txt" })).toBeVisible({ timeout: 15_000 });
   await page.locator('button.composer-send[aria-label="Queue"]').click();
   await expect(queuedMessages(page)).toContainText("queued.txt");
-  await expect(page.getByRole("link", { name: "queued.txt" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Download queued.txt" })).toHaveCount(0);
   await page.getByRole("button", { name: "Steer queued message 1" }).click();
-  await expect(page.getByRole("link", { name: "queued.txt" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Download queued.txt" })).toBeVisible({ timeout: 15_000 });
 });
 
 test("manual pause via deactivate shows Resume and keeps history", async ({ page }) => {

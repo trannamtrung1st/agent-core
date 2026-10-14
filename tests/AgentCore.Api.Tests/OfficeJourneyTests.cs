@@ -1,0 +1,84 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
+using AgentCore.Contracts.Http;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace AgentCore.Api.Tests;
+
+public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixture<AgentCoreApiFactory>
+{
+    [Fact]
+    public async Task Office_create_inspect_targeted_edit_and_stale_hash_preserve_owned_real_files()
+    {
+        var client = factory.CreateClient(); client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(factory.Services));
+        var created = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version = 26 }); created.EnsureSuccessStatusCode();
+        var instance = await created.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>();
+        var sessionResponse = await client.PostAsJsonAsync("/api/v2/sessions", new { agentInstanceId = instance!.InstanceId, mode = "text" }); sessionResponse.EnsureSuccessStatusCode();
+        using var sessionJson = JsonDocument.Parse(await sessionResponse.Content.ReadAsStringAsync()); var sessionId = sessionJson.RootElement.GetProperty("sessionId").GetGuid();
+        var definition = (await factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Definition;
+        var tools = factory.Services.GetRequiredService<SessionToolExecutor>();
+        async Task<JsonElement> Execute(string name, object args)
+        {
+            var result = await tools.ExecuteAsync(definition, sessionId, new ModelToolCall(Guid.NewGuid().ToString(), name, JsonSerializer.Serialize(args)), 256 * 1024,
+                admission: new(false, TriggerKind.UserTurn, AgentInstanceId: Guid.Parse(instance.InstanceId), OwnedSessionId: sessionId));
+            using var json = JsonDocument.Parse(result.Text); return json.RootElement.Clone();
+        }
+        var word = await Execute(ToolCatalog.OfficeDocumentCreate, new
+        {
+            path = "/home/report.docx",
+            title = "Q3 sales report",
+            sections = new[] {
+            new { heading = "Summary", paragraphs = new[] { "Revenue increased.", "Specific paragraph to edit." }, table = new[] {new[] {"Region","Revenue"},new[] {"North","1250"}}, pageBreakBefore = false },
+            new { heading = "Recommendations", paragraphs = new[] { "Review the North region." }, table = Array.Empty<string[]>(), pageBreakBefore = true } }
+        });
+        Assert.False(word.TryGetProperty("error", out _), word.ToString());
+        var inspection = (await Execute(ToolCatalog.OfficeDocumentInspect, new { path = "/home/report.docx" })).GetProperty("inspection");
+        var selector = inspection.GetProperty("elements").EnumerateArray().Single(e => e.GetProperty("text").GetString() == "Specific paragraph to edit.").GetProperty("selector").GetString();
+        var edited = await Execute(ToolCatalog.OfficeDocumentEdit, new { path = "/home/report.docx", expectedSha256 = word.GetProperty("sha256").GetString(), operations = new[] { new { operation = "replace_paragraph", selector, text = "Reviewed recommendation." } } });
+        Assert.False(edited.TryGetProperty("error", out _), edited.ToString()); Assert.NotEqual(word.GetProperty("sha256").GetString(), edited.GetProperty("sha256").GetString());
+        var stale = await Execute(ToolCatalog.OfficeDocumentEdit, new { path = "/home/report.docx", expectedSha256 = word.GetProperty("sha256").GetString(), operations = new[] { new { operation = "replace_paragraph", selector, text = "Must not commit." } } });
+        Assert.Contains("office_revision_conflict", stale.ToString());
+        var after = (await Execute(ToolCatalog.OfficeDocumentInspect, new { path = "/home/report.docx" })).GetProperty("inspection");
+        Assert.Contains("Reviewed recommendation.", after.ToString()); Assert.DoesNotContain("Must not commit.", after.ToString());
+        var excel = await Execute(ToolCatalog.OfficeSpreadsheetCreate, new
+        {
+            path = "/home/sales.xlsx",
+            sheets = new[] {
+            new {name = "Sales", rows = new object[][] { [new {type="text",text="Region"},new {type="text",text="Revenue"}], [new {type="text",text="North"},new {type="number",number=1250,format="currency"}], [new {type="date",text="2026-10-13",format="date"},new {type="blank",formula="SUM(B2:B2)",format="currency"}] }},
+            new {name = "Growth", rows = new object[][] { [new {type="number",number=0.125,format="percentage"},new {type="text",text="0001"}] }} }
+        });
+        Assert.False(excel.TryGetProperty("error", out _), excel.ToString());
+        var sheet = (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path = "/home/sales.xlsx", sheet = "Sales", range = "A1:B3" })).GetProperty("inspection");
+        Assert.Equal(2, sheet.GetProperty("sheets").GetArrayLength()); Assert.Contains("SUM(B2:B2)", sheet.ToString()); Assert.Contains("cached_value", sheet.ToString());
+        var changed = await Execute(ToolCatalog.OfficeSpreadsheetEdit, new { path = "/home/sales.xlsx", expectedSha256 = excel.GetProperty("sha256").GetString(), operations = new[] { new { operation = "set_cells", sheet = "Sales", range = "B2", cells = new[] { new[] { new { type = "number", number = 1700, format = "currency" } } } } } });
+        Assert.False(changed.TryGetProperty("error", out _), changed.ToString());
+        var value = (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path = "/home/sales.xlsx", sheet = "Sales", range = "B2" })).GetProperty("inspection").GetProperty("rows")[0][0].GetProperty("value").GetString();
+        Assert.Equal("$1,700.00", value);
+        var page = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{instance.InstanceId}/workspace"))!;
+        foreach (var item in page.Items.Where(item => !item.Directory))
+        {
+            var download = await client.GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/content"); download.EnsureSuccessStatusCode();
+            var bytes = await download.Content.ReadAsByteArrayAsync(); Assert.Equal(new byte[] { 80, 75, 3, 4 }, bytes[..4]);
+            Assert.Equal(item.Sha256Hex, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)));
+            var preview = await client.GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/office-preview"); preview.EnsureSuccessStatusCode(); Assert.True(preview.Headers.CacheControl!.NoStore);
+            var projected = await preview.Content.ReadFromJsonAsync<OfficePreviewResponse>(); Assert.Equal(item.Sha256Hex, projected!.Sha256);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/office-preview")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{Guid.NewGuid()}/workspace/{item.ItemId}/office-preview")).StatusCode);
+
+        }
+        var scratch = await Execute(ToolCatalog.OfficeSpreadsheetCreate, new { path = "/working/scratch.xlsx", sheets = new[] { new { name = "Scratch", rows = new object[][] { [new { type = "text", text = "exact scratch bytes" }] } } } });
+        Assert.False(scratch.TryGetProperty("error", out _), scratch.ToString());
+        var publication = await Execute(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/scratch.xlsx", displayName = "scratch.xlsx" }); Assert.Equal(OfficeLimits.SpreadsheetMime, publication.GetProperty("contentType").GetString());
+        var artifactId = publication.GetProperty("artifactId").GetString(); var projection = await client.GetFromJsonAsync<OfficePreviewResponse>($"/api/v2/sessions/{sessionId}/artifacts/{artifactId}/office-preview"); Assert.Equal("exact scratch bytes", projection!.Rows![0][0].Value);
+        var empty = await Execute(ToolCatalog.OfficeDocumentCreate, new { path = "/working/empty.docx", sections = new[] { new { heading = (string?)null, paragraphs = Array.Empty<string>() } } }); Assert.False(empty.TryGetProperty("error", out _), empty.ToString());
+        var emptyArtifact = await Execute(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/empty.docx", displayName = "empty.docx" }); var emptyPreview = await client.GetFromJsonAsync<OfficePreviewResponse>($"/api/v2/sessions/{sessionId}/artifacts/{emptyArtifact.GetProperty("artifactId").GetString()}/office-preview"); Assert.True(emptyPreview!.EmptyBody);
+        var next = await client.PostAsJsonAsync("/api/v2/sessions", new { agentInstanceId = instance.InstanceId, mode = "text" }); next.EnsureSuccessStatusCode();
+        using var freshJson = JsonDocument.Parse(await next.Content.ReadAsStringAsync()); var freshId = freshJson.RootElement.GetProperty("sessionId").GetGuid(); Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{freshId}/workspace/content?path=/working/scratch.xlsx")).StatusCode);
+        Assert.Equal(2, (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{instance.InstanceId}/workspace"))!.Items.Count(item => !item.Directory));
+        var oldDefinition = (await factory.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 25))!;
+        Assert.Equal(ToolPolicyDecision.Deny, tools.EvaluateExecutionPolicy(oldDefinition, ToolCatalog.OfficeDocumentCreate, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: Guid.Parse(instance.InstanceId), OwnedSessionId: sessionId)));
+    }
+}

@@ -82,6 +82,8 @@ export default defineConfig({
         Providers__Speech__Synthesis__Adapter: "Synthetic",
         // OAuth callbacks must return to this isolated host, including non-default test ports.
         GoogleEmailOAuth__PublicAppUrl: webUrl,
+        GoogleDrive__Enabled: "true",
+        GoogleDriveOAuth__PublicAppUrl: webUrl,
         AGENTCORE_LIVE_PROVIDER_TESTS: process.env.AGENTCORE_LIVE_PROVIDER_TESTS ?? "0",
         AGENTCORE_LIVE_OPENAI_STT: process.env.AGENTCORE_LIVE_OPENAI_STT ?? "0",
         AGENTCORE_LIVE_OPENAI_TTS: process.env.AGENTCORE_LIVE_OPENAI_TTS ?? "0",

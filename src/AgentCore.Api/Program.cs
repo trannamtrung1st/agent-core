@@ -141,6 +141,9 @@ WorkspaceEndpoints.Map(app);
 AgentWorkspaceEndpoints.Map(app);
 ComposerEndpoints.Map(app);
 ArtifactEndpoints.Map(app);
+OfficePreviewEndpoints.Map(app);
+GoogleDriveOAuthEndpoints.Map(app);
+DriveEndpoints.Map(app);
 
 // Read the loaded API assembly, never a mutable checkout or DLL on disk.
 var buildVersion = typeof(Program).Assembly

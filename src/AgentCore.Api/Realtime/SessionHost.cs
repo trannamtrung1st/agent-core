@@ -93,6 +93,9 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
     internal Task WaitUntilMailboxDrainedAsync(Guid sessionId, CancellationToken ct = default) =>
         _live.TryGetValue(sessionId, out var live) ? live.Runtime.WaitUntilMailboxDrainedAsync(ct) : Task.CompletedTask;
 
+    internal Task WaitUntilAcceptedConversationWorkSettledAsync(Guid sessionId, CancellationToken ct = default) =>
+        _live.TryGetValue(sessionId, out var live) ? live.Runtime.WaitUntilAcceptedConversationWorkSettledAsync(ct) : Task.CompletedTask;
+
     private static bool NeedsDurableConversationConvergence(
         SessionSnapshot current,
         SessionSnapshot durable)

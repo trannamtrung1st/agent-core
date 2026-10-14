@@ -10,20 +10,24 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> contexts) : ICredentialStore, IAgentCredentialBindingStore
 {
     public async ValueTask<IReadOnlyList<Credential>> ListAsync(CancellationToken ct = default)
-    { await using var db = await contexts.CreateDbContextAsync(ct); return (await db.Credentials.Include(c => c.EmailAccount).AsNoTracking().OrderBy(c => c.DisplayName).ToArrayAsync(ct)).Select(Map).ToArray(); }
+    { await using var db = await contexts.CreateDbContextAsync(ct); return (await db.Credentials.Include(c => c.EmailAccount).Include(c => c.DriveAccount).AsNoTracking().OrderBy(c => c.DisplayName).ToArrayAsync(ct)).Select(Map).ToArray(); }
     public async ValueTask<Credential?> GetAsync(Guid id, CancellationToken ct = default)
-    { await using var db = await contexts.CreateDbContextAsync(ct); var row = await db.Credentials.Include(c => c.EmailAccount).AsNoTracking().SingleOrDefaultAsync(c => c.CredentialId == id.ToString("D"), ct); return row is null ? null : Map(row); }
+    { await using var db = await contexts.CreateDbContextAsync(ct); var row = await db.Credentials.Include(c => c.EmailAccount).Include(c => c.DriveAccount).AsNoTracking().SingleOrDefaultAsync(c => c.CredentialId == id.ToString("D"), ct); return row is null ? null : Map(row); }
     public async ValueTask SaveAsync(Credential c, long expectedRevision, CancellationToken ct = default, long? expectedSecretRevision = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        var row = await db.Credentials.Include(c => c.EmailAccount).SingleOrDefaultAsync(x => x.CredentialId == c.CredentialId.ToString("D"), ct);
+        var row = await db.Credentials.Include(c => c.EmailAccount).Include(c => c.DriveAccount).SingleOrDefaultAsync(x => x.CredentialId == c.CredentialId.ToString("D"), ct);
         if (expectedSecretRevision is not null && row?.SecretRevision != expectedSecretRevision || (row?.Revision ?? 0) != expectedRevision || c.Revision != expectedRevision + 1 || row is not null && (row.Kind != c.Kind.ToString() || row.Purpose != c.Purpose.ToString())) throw AgentCoreErrors.Conflict("Credential revision is stale.");
         if ((c.Purpose == CredentialPurpose.EmailAccount) != (c.EmailAccount is not null) || c.Purpose == CredentialPurpose.EmailAccount && (c.Kind != (c.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2 ? CredentialKind.Token : CredentialKind.Password) || c.AllowedOrigins.Count != 0)) throw AgentCoreErrors.Validation("Invalid credential purpose/profile.");
         c.EmailAccount?.Validate();
+        if (!Enum.IsDefined(c.Purpose) || (c.Purpose == CredentialPurpose.GoogleDriveAccount) != (c.DriveAccount is not null)
+            || c.Purpose == CredentialPurpose.GoogleDriveAccount && (c.Kind != CredentialKind.Token || c.AllowedOrigins.Count != 0)) throw AgentCoreErrors.Validation("Invalid Drive credential purpose/profile.");
+        c.DriveAccount?.Validate();
         if (row is null) { row = new(); db.Credentials.Add(row); }
         row.CredentialId = c.CredentialId.ToString("D"); row.DisplayName = c.DisplayName; row.Kind = c.Kind.ToString(); row.Status = c.Status.ToString();
         row.Purpose = c.Purpose.ToString();
         if (c.EmailAccount is not null) row.EmailAccount = new() { CredentialId = row.CredentialId, ProfileJson = JsonSerializer.Serialize(c.EmailAccount), GoogleSubject = c.EmailAccount.GoogleSubject };
+        if (c.DriveAccount is not null) row.DriveAccount = new() { CredentialId = row.CredentialId, ProfileJson = JsonSerializer.Serialize(c.DriveAccount), GoogleSubject = c.DriveAccount.GoogleSubject };
         row.MetadataJson = JsonSerializer.Serialize(c.Metadata); row.AllowedOriginsJson = JsonSerializer.Serialize(c.AllowedOrigins);
         row.SecretRevision = c.SecretRevision; row.ProtectedPayload = c.ProtectedPayload; row.ProtectionVersion = c.ProtectionVersion; row.Revision = c.Revision;
         row.CreatedAtUtc = c.CreatedAtUtc.ToUnixTimeMilliseconds(); row.UpdatedAtUtc = c.UpdatedAtUtc.ToUnixTimeMilliseconds();
@@ -33,14 +37,14 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         return await db.Credentials.Where(c => c.CredentialId == id.ToString("D") && c.Revision == expectedRevision
-            && c.SecretRevision == expectedSecretRevision && c.Status == "Active" && c.ProtectedPayload != "" && c.Kind == "Token" && c.Purpose == "EmailAccount")
+            && c.SecretRevision == expectedSecretRevision && c.Status == "Active" && c.ProtectedPayload != "" && c.Kind == "Token" && (c.Purpose == "EmailAccount" || c.Purpose == "GoogleDriveAccount"))
             .ExecuteUpdateAsync(set => set.SetProperty(c => c.ProtectedPayload, payload).SetProperty(c => c.SecretRevision, expectedSecretRevision + 1), ct) == 1;
     }
     public async ValueTask DeleteAsync(Guid id, long expectedRevision, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var row = await db.Credentials.Include(c => c.EmailAccount).SingleOrDefaultAsync(x => x.CredentialId == id.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Credential was not found.");
+        var row = await db.Credentials.Include(c => c.EmailAccount).Include(c => c.DriveAccount).SingleOrDefaultAsync(x => x.CredentialId == id.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Credential was not found.");
         if (row.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Credential revision is stale.");
         var count = await db.AgentCredentialBindings.CountAsync(b => b.CredentialId == row.CredentialId, ct);
         if (count != 0) throw AgentCoreErrors.Conflict($"Unbind {count} agent bindings before deleting this credential.");
@@ -83,5 +87,5 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
     }
     private static async Task Save(AgentCoreDbContext db, CancellationToken ct)
     { try { await db.SaveChangesAsync(ct); } catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Credential or binding changed concurrently or is already bound."); } }
-    internal static Credential Map(CredentialRecord c) => new(Guid.Parse(c.CredentialId), c.DisplayName, Enum.Parse<CredentialKind>(c.Kind), Enum.Parse<CredentialStatus>(c.Status), CredentialRules.Metadata(JsonSerializer.Deserialize<Dictionary<string,string>>(c.MetadataJson)), CredentialRules.Origins(JsonSerializer.Deserialize<string[]>(c.AllowedOriginsJson)), c.ProtectedPayload, c.ProtectionVersion, c.Revision, DateTimeOffset.FromUnixTimeMilliseconds(c.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(c.UpdatedAtUtc), Enum.Parse<CredentialPurpose>(c.Purpose), c.EmailAccount is null ? null : JsonSerializer.Deserialize<EmailAccountProfile>(c.EmailAccount.ProfileJson), c.SecretRevision);
+    internal static Credential Map(CredentialRecord c) => new(Guid.Parse(c.CredentialId), c.DisplayName, Enum.Parse<CredentialKind>(c.Kind), Enum.Parse<CredentialStatus>(c.Status), CredentialRules.Metadata(JsonSerializer.Deserialize<Dictionary<string,string>>(c.MetadataJson)), CredentialRules.Origins(JsonSerializer.Deserialize<string[]>(c.AllowedOriginsJson)), c.ProtectedPayload, c.ProtectionVersion, c.Revision, DateTimeOffset.FromUnixTimeMilliseconds(c.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(c.UpdatedAtUtc), Enum.Parse<CredentialPurpose>(c.Purpose), c.EmailAccount is null ? null : JsonSerializer.Deserialize<EmailAccountProfile>(c.EmailAccount.ProfileJson), c.SecretRevision, c.DriveAccount is null ? null : JsonSerializer.Deserialize<DriveAccountProfile>(c.DriveAccount.ProfileJson));
 }

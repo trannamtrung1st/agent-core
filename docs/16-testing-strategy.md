@@ -74,6 +74,8 @@ Static inspection, compilation, a screenshot or `/health` alone is not functiona
 
 ## Synthetic fixtures
 
+Journeys that mix conversation and Automation occurrences use one managed SessionHost Runtime per Session. Submit chat through authenticated attach/send and the fixture's explicit detach/dispatcher lifecycle rather than constructing a second Runtime over its live durable state. Await accepted-work settlement before advancing logical time; mailbox drain alone does not prove asynchronous admission/response callbacks have settled. Historical JSON evidence assertions compare decoded content while retaining the current-task, unique-occurrence, owner-edit and disable outcomes. The internal SessionHost settlement observer adds no public test endpoint.
+
 | Implementation | Contract and behavior |
 | --- | --- |
 | ScriptedLanguageModel | ILanguageModel; exact text chunks, explicit release gates, controlled terminal failures, optional intentional late results after cancellation |
@@ -640,3 +642,12 @@ Run route/router and affected component suites, full frontend unit/build and app
 The email/main integration regression extends the four monitoring viewports with a connection-test refresh while dirty, canonical contextual Automations navigation and read-only Instance status linking to global monitoring controls. Global connection-test refresh preserves dirty monitoring choices. OAuth callback checks preserve the native-history index. Current integration evidence is separate from the earlier frozen email and Admin results in [the integration report](reports/email-monitoring-main-integration-2026-10-13.md).
 
 `GmailConnectionPanel.test.tsx` holds a retired StrictMode startup read through a successful check, changes accounts during a pending check, and closes the workspace before completion. Browser MCP supplements this with a held old connection projection and a real Synthetic access check. Native-link fixtures detect the actual new Chromium target created by a real middle/modifier gesture, attach to that same target and verify its rendered document directly when the Page channel is unreliable. They retain exact canonical URL/content, source draft and guarded history assertions, and retry only transient execution-context replacement.
+
+
+## Office file preview and Drive successor checks
+
+Common preview checks cover source ownership, chunked stream limits, MIME/signature mismatch, UTF BOM/invalid encoding, CSV quotes/multiline/leading zeros/empty columns, Grid/Text byte fidelity, sanitized Markdown, worker fallback, source switch cancellation, URL cleanup and modal focus. Browser scenarios exercise actual Upload → Preview → Grid/Text → Download, permission failure/Retry and responsive containment. Existing Artifact delivery and Resource edit/delete journeys remain regression gates.
+
+Office acceptance requires real OOXML roundtrip through tool dispatch, protected downloads, paragraph/table-cell/range edits, stale SHA and ambiguous-selector rejection, malicious packages, cancellation and durable home/fresh Session behavior. Drive requires key-free OAuth/provider/receipt recovery and owner/binding/revocation tests; opt-in Real Google UAT is reported separately. Final closure requires all applicable backend/frontend/Playwright/Compose gates on the final behavior SHA. The [verification ledger](reports/office-file-preview-drive-verification-2026-10-13.md) records actual execution, not inferred acceptance.
+
+Drive recovery regression coverage includes explicit pre-effect rejection/cancellation, unknown failure before creation, loss after creation, partial-chunk acceptance, lost final response, bounded no-progress/transport recovery, malformed offsets, expired-session fencing, adapter/service restart, SQLite/InMemory proof/terminal/CAS parity, concurrent same-effect requests and reconnect with changed authEpoch. GET inspection must send no content. Continuing an upload must retain exact source/operation/destination and derive its offset from server status; only proven non-execution permits an explicit fresh save. UI fault envelopes exercise both recovery actions and mobile keyboard access; these do not establish live Google acceptance.

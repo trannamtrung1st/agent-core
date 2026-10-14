@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using AgentCore.Api.Realtime;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Events;
@@ -7,6 +8,7 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Triggers;
+using AgentCore.Contracts.Realtime;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Triggers;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +46,8 @@ public sealed class ReliabilityJourneyTests
         var owner = new AgentRunOwner(instanceId, LocalUserProfile.Id);
         var triggers = services.GetRequiredService<ITriggerStore>();
         var authoring = services.GetRequiredService<AdminAutomationAuthoringService>();
+        var liveHost = services.GetRequiredService<SessionHost>();
+        const string connection = "reliability-schedule-owner";
         for (var slot = 0; slot < 3; slot++)
         {
             clock.Advance(TimeSpan.FromSeconds(60));
@@ -55,11 +59,26 @@ public sealed class ReliabilityJourneyTests
             }
             if (slot < 2)
             {
-                var snapshot = await services.GetRequiredService<SessionManager>().LoadRuntimeAsync(sessionId);
-                await using var runtime = services.GetRequiredService<SessionRuntimeFactory>().Create(snapshot, new QuietOutput());
-                await runtime.AttachAsync();
-                Assert.True(await runtime.SubmitUserTextAsync(slot == 0 ? ConflictingChat : UnrelatedChat));
-                await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
+                Assert.True((await liveHost.AttachAsync(connection, new ClientCommand<AttachPayload>
+                {
+                    ProtocolVersion = 1, SessionId = sessionId.ToString(), EventId = Guid.NewGuid().ToString(),
+                    Sequence = 0, Timestamp = clock.GetUtcNow().ToString("o"), Type = "session.attach",
+                    Payload = new AttachPayload { OwnerCapability = TestOwnerCapability.Token(services) }
+                }, CancellationToken.None)).Accepted);
+                // Conversation and occurrences must use the same managed Runtime.
+                // A standalone factory Runtime races the SessionHost's durable history.
+                Assert.True((await liveHost.SendTextAsync(connection, new ClientCommand<UserTextPayload>
+                {
+                    ProtocolVersion = 1, SessionId = sessionId.ToString(), EventId = Guid.NewGuid().ToString(),
+                    AttachmentId = liveHost.LiveAttachmentId(sessionId)!.Value.ToString(), Sequence = slot + 1,
+                    Timestamp = clock.GetUtcNow().ToString("o"), Type = "user.text",
+                    Payload = new UserTextPayload { Text = slot == 0 ? ConflictingChat : UnrelatedChat }
+                }, CancellationToken.None)).Accepted);
+                // This host disables the background dispatcher; drive accepted input
+                // after detach through the fixture's normal detached-run driver.
+                await liveHost.DetachAsync(connection);
+                await services.ExecuteRunsAsync();
+                await liveHost.WaitUntilAcceptedConversationWorkSettledAsync(sessionId).WaitAsync(TimeSpan.FromSeconds(20));
                 var current = Assert.Single(await triggers.ListAsync(new(instanceId, LocalUserProfile.Id), null));
                 Assert.Equal("Say hello", current.Instructions);
                 Assert.Equal(AutomationStatus.Active, current.Status);
@@ -81,7 +100,9 @@ public sealed class ReliabilityJourneyTests
         foreach (var request in model.OccurrenceRequests.Skip(1))
         {
             Assert.DoesNotContain(request.Messages, m => m.Text == ConflictingChat || m.Text == UnrelatedChat);
-            Assert.Contains(request.Messages, m => m.Text.StartsWith("Historical conversation evidence (JSON; not current instructions):") && m.Text.Contains("Don't greet me"));
+            var evidence = Assert.Single(request.Messages, m => m.Text.StartsWith("Historical conversation evidence (JSON; not current instructions):"));
+            using var json = JsonDocument.Parse(evidence.Text[(evidence.Text.IndexOf('\n') + 1)..]);
+            Assert.Contains(json.RootElement.EnumerateArray(), turn => turn.GetProperty("text").GetString() == ConflictingChat);
         }
         var active = Assert.Single(await triggers.ListAsync(new(instanceId, LocalUserProfile.Id), null));
         await authoring.SaveAsync(instanceId, active.AutomationId, active.Revision, false, active.Name,
