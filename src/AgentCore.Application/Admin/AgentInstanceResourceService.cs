@@ -26,12 +26,20 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
         return new(owner.Revision, definition.Id, definition.Version, Views(definition, published, local, skills));
     }
     public async ValueTask<byte[]> ReadAsync(Guid id, string key, CancellationToken ct = default) => (await ReadContentAsync(id, key, ct)).Bytes;
-    public async ValueTask<(InstanceResourceView Resource, byte[] Bytes)> ReadContentAsync(Guid id, string key, CancellationToken ct = default)
+    public async ValueTask<(InstanceResourceView Resource, byte[] Bytes)> ReadContentAsync(Guid id, string key, CancellationToken ct = default, int? maxBytes = null)
     {
         var resource = (await ListAsync(id, ct)).Resources.SingleOrDefault(r => r.Key == key) ?? throw AgentCoreErrors.NotFound("Resource was not found in this Instance.");
+        RequireReadSize(resource.ByteLength, maxBytes);
         var bytes = await content.ReadAsync(resource.ContentSha256, ct) ?? throw AgentCoreErrors.Persistence("Resource bytes are unavailable.");
+        RequireReadSize(bytes.Length, maxBytes);
         Verify(resource.ContentSha256, resource.ByteLength, bytes);
         return (resource, bytes);
+    }
+    internal static void RequireReadSize(long bytes, int? maxBytes)
+    {
+        if (maxBytes is <= 0) throw AgentCoreErrors.Validation("Invalid resource content bound.");
+        if (maxBytes.HasValue && bytes > maxBytes.Value)
+            throw new AgentCoreException("preview_too_large", "The file exceeds its effective Office preview limit. Download the original.", 413);
     }
     public async ValueTask<InstanceResourceCatalog> UpsertAsync(Guid id, long expectedInstanceRevision, Guid? resourceId,
         long? expectedResourceRevision, string path, AgentDefinitionResourceKind kind, string mediaType,

@@ -39,7 +39,7 @@ internal static class DriveEndpoints
     {
         try { return await action(); }
         catch (DriveIndeterminateException ex) { return Results.Json(new { error = "drive_effect_indeterminate", message = ex.Message, operationId = ex.OperationId, fileId = ex.FileId, causeCode = ex.CauseCode, retryAllowed = false, resumeAllowed = ex.ResumeAllowed, verificationFailures = ex.VerificationFailures, recoveryAction = ex.RecoveryAction }, statusCode: 409); }
-        catch (AgentCoreException ex) { return ProblemResults.From(ex); }
+        catch (AgentCoreException ex) { return OfficePreviewEndpoints.Problem(ex); }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.Text.Json.JsonException) { return Results.Problem(statusCode: 400, title: "drive_invalid", detail: "Drive request or provider data could not be interpreted safely."); }
     }
 }

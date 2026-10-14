@@ -102,7 +102,7 @@ public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixt
             foreach (var cell in page.GetProperty("cells").EnumerateArray())
                 seen.Add(page.GetProperty("sheet").GetString() + "!" + cell.GetProperty("address").GetString());
             cursor = page.GetProperty("nextCursor").GetString(); initialCursor ??= cursor;
-            if (cursor is null) { Assert.Equal("complete", page.GetProperty("coverage").GetString()); break; }
+            if (cursor is null) { Assert.Equal("partial", page.GetProperty("coverage").GetString()); Assert.True(page.GetProperty("traversalComplete").GetBoolean()); break; }
         }
         Assert.Null(cursor);
         Assert.NotNull(initialCursor);

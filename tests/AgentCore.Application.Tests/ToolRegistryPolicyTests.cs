@@ -20,6 +20,8 @@ public sealed class ToolRegistryPolicyTests
         Assert.True(properties.TryGetProperty("range", out _));
         Assert.Contains("500", descriptor.ModelDefinition.Description);
         Assert.Contains("nextCursor", descriptor.ModelDefinition.Description);
+        Assert.Contains("complete-workbook analysis", descriptor.ModelDefinition.Description);
+        Assert.Contains("combine", descriptor.ModelDefinition.Description, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(ToolEffect.ReadOnly, descriptor.Effect);
         Assert.Equal(ToolReplaySafety.ReplaySafe, descriptor.ReplaySafety);
         Assert.Equal(ToolResourceScope.Session, descriptor.Scope);

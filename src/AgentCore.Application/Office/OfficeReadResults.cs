@@ -85,14 +85,17 @@ public static class OfficeReadResults
                 : hasMore && !sheetHasMore
                     ? OfficeSparseCursor.Encode(source.Sha256, source.SelectedSheet, source.SheetOrdinal + 1, source.Sheets[source.SheetOrdinal], null)
                     : null;
-            var sheetCoverage = !sheetHasMore ? "complete" : "partial";
-            var coverage = !hasMore ? "complete" : "partial";
+            // Coverage describes only content in this response, never historical reads.
+            var completeSheetPage = !sheetHasMore && source.StartedAtBeginning;
+            var sheetCoverage = completeSheetPage ? "complete" : "partial";
+            var coverage = completeSheetPage && (source.SelectedSheet is not null || source.Sheets.Count == 1) ? "complete" : "partial";
             var page = new
             {
                 mode = "sparse", source.Sha256, source.Sheets, source.Sheet, source.SheetOrdinal, source.SelectedSheet,
                 populatedCellsReturned = count, cells, sheetHasMore, hasMore, nextCursor,
                 coverage, sheetCoverage, coverageScope = source.SelectedSheet is null ? "workbook_traversal" : "selected_sheet_traversal",
-                pageCoverage = !sheetHasMore && source.StartedAtBeginning ? "complete_sheet" : "partial_sheet", traversalComplete = !hasMore, source.StartedAtBeginning,
+                pageCoverage = completeSheetPage ? "complete_sheet" : "partial_sheet",
+                worksheetEndReached = !sheetHasMore, traversalComplete = !hasMore, analysisCoverage = "not_verified", source.StartedAtBeginning,
                 sheetState = source.Cells.Count > 0 || !source.StartedAtBeginning ? "populated" : source.HasStoredCells || source.HasFormatting ? "formatting_only" : "empty",
                 source.HasStoredCells, source.HasFormatting, source.Warnings
             };

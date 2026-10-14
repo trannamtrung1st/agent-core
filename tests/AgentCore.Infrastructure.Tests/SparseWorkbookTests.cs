@@ -17,6 +17,49 @@ public sealed class SparseWorkbookTests(ITestOutputHelper output)
 {
     private readonly OfficeProcessor processor = new();
 
+    [Theory]
+    [InlineData(3)]
+    [InlineData(50010)]
+    public void Typed_style_only_records_do_not_count_or_appear_as_empty_text(int records)
+    {
+        using var stream = new MemoryStream(); stream.Write(SparseWorkbookFixture.Create());
+        var rows = string.Concat(Enumerable.Range(2, records).Select(row => $"<row r=\"{row}\"><c r=\"A{row}\" s=\"1\" t=\"{(row % 3 == 0 ? "s" : row % 3 == 1 ? "str" : "inlineStr")}\" /></row>"));
+        SparseWorkbookFixture.Replace(stream, "xl/worksheets/sheet1.xml", $"<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>{rows}</sheetData></worksheet>");
+        var source = processor.ReadWorkbookContent(stream.ToArray(), "Content", null, default);
+        Assert.Empty(source.Cells);
+        Assert.True(source.HasFormatting);
+    }
+
+    [Fact]
+    public void Stored_text_representation_and_formula_distinguish_empty_values_from_type_only_records()
+    {
+        using var stream = new MemoryStream(); stream.Write(SparseWorkbookFixture.Create());
+        SparseWorkbookFixture.Replace(stream, "xl/worksheets/sheet1.xml", """
+            <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">
+            <c r="A1" t="s"><v /></c><c r="B1" t="inlineStr"><v /></c><c r="C1"><v /></c>
+            <c r="D1" t="str"><v /></c><c r="E1" t="inlineStr"><is><t /></is></c>
+            <c r="F1" t="s"><v>1</v></c><c r="G1"><f>1+1</f></c>
+            <c r="H1"><v>0</v></c><c r="I1" t="b"><v>0</v></c><c r="J1" t="e"><v>#N/A</v></c>
+            </row></sheetData></worksheet>
+            """);
+        var source = processor.ReadWorkbookContent(stream.ToArray(), "Content", null, default);
+        Assert.Equal(["D1", "E1", "F1", "G1", "H1", "I1", "J1"], source.Cells.Select(c => c.Address));
+        Assert.All(source.Cells.Take(3), c => Assert.Equal("", c.Value));
+        Assert.Equal("cached_value_unavailable", source.Cells[3].ValueStatus);
+    }
+
+    [Fact]
+    public void Final_continuation_page_does_not_claim_prior_page_coverage()
+    {
+        var bytes = SparseWorkbookFixture.Create(populatedCells: 1101);
+        var initial = processor.ReadWorkbookContent(bytes, "Content", null, default);
+        var cursor = OfficeSparseCursor.Encode(initial.Sha256, "Content", 1, "Content", "A1000");
+        using var final = JsonDocument.Parse(OfficeReadResults.SparseWorkbook(processor.ReadWorkbookContent(bytes, "Content", cursor, default), 128 * 1024));
+        Assert.Equal("partial", final.RootElement.GetProperty("coverage").GetString());
+        Assert.Equal("partial", final.RootElement.GetProperty("sheetCoverage").GetString());
+        Assert.True(final.RootElement.GetProperty("traversalComplete").GetBoolean());
+    }
+
     [Fact]
     public void Large_formatted_template_reads_content_with_original_coordinates_and_keeps_strict_operations_bounded()
     {
@@ -88,7 +131,8 @@ public sealed class SparseWorkbookTests(ITestOutputHelper output)
             Assert.Equal(cursor is not null, page.GetProperty("hasMore").GetBoolean());
             if (cursor is null)
             {
-                Assert.Equal("complete", page.GetProperty("coverage").GetString());
+                Assert.Equal("partial", page.GetProperty("coverage").GetString());
+                Assert.True(page.GetProperty("traversalComplete").GetBoolean());
                 break;
             }
         }

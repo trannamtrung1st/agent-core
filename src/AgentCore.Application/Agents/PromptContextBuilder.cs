@@ -955,7 +955,7 @@ public sealed class PromptContextBuilder(
             if (item.Kind == AttachmentProcessKind.ExtractedText && item.ContentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime)
             {
                 header += attachmentsReadAvailable
-                    ? "\nOffice reading: Use attachments.read with this attachmentId and cursor (XLSX sparse pages, keep sheet selection) or sheet/range (XLSX rectangular reads) or offset/limit (DOCX) to read more. For a full summary, continue through relevant sheets/pages without asking permission; targeted requests may use partial reads. Disclose partial coverage if execution budgets prevent completing the traversal."
+                    ? "\nOffice reading: Use attachments.read with this attachmentId and cursor (XLSX sparse pages, keep sheet selection) or sheet/range (XLSX rectangular reads) or offset/limit (DOCX) to read more. For a full summary, combine all required returned sheets/pages without asking permission; reaching the final cursor does not verify earlier pages or complete-workbook analysis. Targeted requests may use partial reads. Disclose partial coverage if execution budgets prevent completing the traversal."
                     : "\nOnly the supplied initial Office excerpt is available with the current model/tool permissions. Do not claim full-file coverage.";
             }
             if (item.Kind == AttachmentProcessKind.Image && item.StrippedImage is { Length: > 0 })

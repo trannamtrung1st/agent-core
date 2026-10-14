@@ -230,7 +230,7 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
             foreach (var cell in sparse.GetProperty("cells").EnumerateArray())
                 sparseSeen.Add(sparse.GetProperty("sheet").GetString() + "!" + cell.GetProperty("address").GetString());
             cursor = sparse.GetProperty("nextCursor").GetString(); firstCursor ??= cursor;
-            if (cursor is null) { Assert.Equal("complete", sparse.GetProperty("coverage").GetString()); break; }
+            if (cursor is null) { Assert.Equal("partial", sparse.GetProperty("coverage").GetString()); Assert.True(sparse.GetProperty("traversalComplete").GetBoolean()); break; }
         }
         Assert.Null(cursor);
         Assert.Equal(new[] { "Check list!A1", "Check list!BM1" }.Concat(Enumerable.Range(2, 239).Select(i => "Check list!A" + i)).Append("Guest list!A1"), sparseSeen);

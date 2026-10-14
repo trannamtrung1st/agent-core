@@ -10,7 +10,9 @@ import {
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FilePreviewButton } from './FilePreview';
-import { readFile, resolveFile } from './fileSource';
+import { readFile, resolveFile, PreviewError } from './fileSource';
+import { readOfficePreview } from './officeSource';
+vi.mock('./officeSource', () => ({ readOfficePreview: vi.fn() }));
 vi.mock('./fileSource', async (original) => ({
   ...(await original<typeof import('./fileSource')>()),
   readFile: vi.fn(),
@@ -27,6 +29,7 @@ const metadata = {
   byteSize: 15,
 };
 beforeEach(() => {
+  vi.mocked(readOfficePreview).mockReset();
   vi.mocked(loadPreviewOptions).mockReset().mockResolvedValue(testPolicy);
   vi.mocked(resolveFile).mockReset().mockResolvedValue(metadata);
   vi.mocked(readFile)
@@ -87,4 +90,15 @@ it('uses the effective limit before reading oversized content', async () => {
   await screen.findByText(/preview limit is 2 MiB/);
   expect(readFile).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'Download readme.txt' })).toBeEnabled();
+});
+
+it.each([['docx', false], ['xlsx', false], ['docx', true], ['xlsx', true]] as const)('Office %s preview failures keep original Download available (Drive: %s)', async (extension, drive) => {
+  vi.mocked(resolveFile).mockResolvedValue({ displayName: 'original.' + extension, contentType: 'application/vnd.openxmlformats-officedocument.' + (extension === 'docx' ? 'wordprocessingml.document' : 'spreadsheetml.sheet'), byteSize: 15 });
+  vi.mocked(readOfficePreview).mockRejectedValue(new PreviewError('office_feature_unsupported', 'This Office file contains a feature the preview does not support. The original file is still available to download.'));
+  const source = drive ? { kind: 'drive' as const, instanceId: 'i', accountRef: 'work', fileId: 'f', version: '2', authEpoch: 3, bindingId: 'b', synthetic: true, metadata: { displayName: 'original.' + extension, contentType: 'application/octet-stream', byteSize: 15 } } : file;
+  render(<FilePreviewButton file={source} />);
+  fireEvent.click(screen.getByRole('button', { name: drive ? 'Preview original.' + extension : 'Preview file' }));
+  await waitFor(() => expect(screen.getByText(/The original file is still available to download/)).toBeVisible());
+  expect(screen.getByRole('button', { name: 'Download original.' + extension })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
 });

@@ -34,21 +34,22 @@ internal static class OfficePreviewEndpoints
         {
             var metadata = (await files.InspectAsync(instanceId, itemId, cancellationToken: ct)).Item;
             policy.RequireOfficeSize(metadata.LogicalPath, metadata.ContentType, metadata.ByteSize);
-            var source = await files.ReadAsync(instanceId, itemId, cancellationToken: ct);
+            var source = await files.InspectAsync(instanceId, itemId, policy.OfficeLimit(metadata.LogicalPath, metadata.ContentType), ct);
+            policy.RequireOfficeSize(source.Item.LogicalPath, source.Item.ContentType, source.Item.ByteSize);
             return new Source(Path.GetFileName(source.Item.LogicalPath), source.Item.ContentType, source.Bytes);
         }, sheet, range, office, policy, ct));
         group.MapGet("/admin/agent-instances/{instanceId:guid}/resources/{key}/office-preview", (Guid instanceId, string key, string? sheet, string? range, AgentInstanceResourceService files, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct) => Respond(async () =>
         {
             var metadata = (await files.ListAsync(instanceId, ct)).Resources.SingleOrDefault(r => r.Key == key) ?? throw AgentCoreErrors.NotFound("File was not found.");
             policy.RequireOfficeSize(metadata.LogicalPath, metadata.MediaType, metadata.ByteLength);
-            var source = await files.ReadContentAsync(instanceId, key, ct);
+            var source = await files.ReadContentAsync(instanceId, key, ct, policy.OfficeLimit(metadata.LogicalPath, metadata.MediaType));
             return new Source(Path.GetFileName(source.Resource.LogicalPath), source.Resource.MediaType, source.Bytes);
         }, sheet, range, office, policy, ct));
         group.MapGet("/admin/definition-drafts/{draftId:guid}/resources/{resourceId:guid}/office-preview", (Guid draftId, Guid resourceId, string? sheet, string? range, AgentDefinitionResourceService files, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct) => Respond(async () =>
         {
             var item = (await files.ListDraftResourcesAsync(draftId, ct)).SingleOrDefault(item => item.ResourceId == resourceId) ?? throw AgentCoreErrors.NotFound("File was not found.");
             policy.RequireOfficeSize(item.LogicalPath, item.MediaType, item.ByteLength);
-            var bytes = await files.ReadDraftResourceContentAsync(draftId, resourceId, ct) ?? throw AgentCoreErrors.NotFound("File was not found.");
+            var bytes = await files.ReadDraftResourceContentAsync(draftId, resourceId, ct, policy.OfficeLimit(item.LogicalPath, item.MediaType)) ?? throw AgentCoreErrors.NotFound("File was not found.");
             return new Source(Path.GetFileName(item.LogicalPath), item.MediaType, bytes);
         }, sheet, range, office, policy, ct));
     }
@@ -65,14 +66,15 @@ internal static class OfficePreviewEndpoints
             var source = await read();
             return Project(source.Name, source.Mime, source.Bytes, sheet, range, office, policy, ct);
         }
-        catch (AgentCoreException ex)
-        {
-            return ex.Message.StartsWith("invalid_office_package:", StringComparison.Ordinal) || ex.Message.StartsWith("office_operation_unsupported:", StringComparison.Ordinal)
-                ? Results.Problem(statusCode: 400, title: ex.Message.Split(':')[0], detail: "The Office file or selected range is unsupported, unsafe or corrupt. Download the original or choose a smaller range.") : ProblemResults.From(ex);
-        }
+        catch (AgentCoreException ex) { return Problem(ex); }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException or System.Xml.XmlException)
         { return Results.Problem(statusCode: 400, title: "invalid_office_package", detail: "This Office package could not be interpreted safely. Download the original."); }
     }
+    internal static IResult Problem(AgentCoreException ex) =>
+        ex.Message.StartsWith("invalid_office_package:", StringComparison.Ordinal) || ex.Message.StartsWith("office_operation_unsupported:", StringComparison.Ordinal)
+            ? Results.Problem(statusCode: 400, title: ex.Message.Split(':')[0], detail: "This Office file or operation could not be interpreted safely. Download the original or choose a smaller range where applicable.")
+            : ProblemResults.From(ex);
+
     internal static IResult Project(string name, string mime, byte[] bytes, string? sheet, string? range, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct)
     {
         policy.RequireOfficeSize(name, mime, bytes.Length);

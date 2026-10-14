@@ -91,7 +91,7 @@ test('agent creates real Office files, previews sheets/formulas and isolated Wor
   await selectSpreadsheetCell(sheet, 'B2', '0001');
   await sheet.getByLabel('Worksheet range').fill('A1:B201');
   await sheet.getByRole('button', { name: 'Load range', exact: true }).click();
-  await expect(sheet).toContainText('exceeds the configured preview window');
+  await expect(sheet).toContainText('exceeds the preview structure limit');
   await sheet.getByLabel('Worksheet range').fill('A1:B2');
   await sheet.getByRole('button', { name: 'Load range', exact: true }).click();
   await selectSpreadsheetCell(sheet, 'B2', '0001');

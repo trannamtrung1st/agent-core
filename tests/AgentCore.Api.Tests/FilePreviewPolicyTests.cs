@@ -149,12 +149,14 @@ public sealed class FilePreviewPolicyTests
         Assert.Equal(bytes, await client.GetByteArrayAsync(path + "/content"));
     }
 
-    [Fact]
-    public async Task Instance_and_draft_resources_apply_preview_policy_while_downloads_keep_originals()
+    [Theory]
+    [InlineData(100)]
+    [InlineData(100000)]
+    public async Task Instance_and_draft_resources_apply_preview_policy_while_downloads_keep_originals(int maxBytes)
     {
         var processor = new AgentCore.Infrastructure.Office.OfficeProcessor();
         var bytes = processor.CreateWorkbook(new([new("Source", [[new("text", Text: "original")]])]), default).Bytes;
-        using var factory = new PolicyFactory(new Dictionary<string, string?> { ["FilePreview:Limits:XlsxBytes"] = "100" });
+        using var factory = new PolicyFactory(new Dictionary<string, string?> { ["FilePreview:Limits:XlsxBytes"] = maxBytes.ToString() });
         var client = factory.CreateClient(); client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(factory.Services));
         var created = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version = 26 }); created.EnsureSuccessStatusCode();
         var instance = (await created.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!;
@@ -164,7 +166,7 @@ public sealed class FilePreviewPolicyTests
             AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, OfficeLimits.SpreadsheetMime, bytes);
         var item = saved.Resources.Single(r => r.Origin == "Instance");
         var instancePath = $"/api/v2/admin/agent-instances/{instance.InstanceId}/resources/{Uri.EscapeDataString(item.Key)}";
-        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await client.GetAsync(instancePath + "/office-preview")).StatusCode);
+        Assert.Equal(bytes.Length > maxBytes ? HttpStatusCode.RequestEntityTooLarge : HttpStatusCode.OK, (await client.GetAsync(instancePath + "/office-preview")).StatusCode);
         Assert.Equal(bytes, await client.GetByteArrayAsync(instancePath + "/content"));
         Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync(instancePath + "/office-preview")).StatusCode);
 
@@ -177,7 +179,7 @@ public sealed class FilePreviewPolicyTests
         var bound = await client.PutAsJsonAsync($"/api/v2/admin/definition-drafts/{draft.DraftId}/resources", new AdminUpsertDefinitionDraftResourceRequest(draft.Revision, null, "reference/source.xlsx", "Reference", stored.MediaType, stored.ContentSha256, stored.ByteLength)); bound.EnsureSuccessStatusCode();
         var resource = (await bound.Content.ReadFromJsonAsync<AdminDefinitionDraftResourceResponse>())!;
         var draftPath = $"/api/v2/admin/definition-drafts/{draft.DraftId}/resources/{resource.ResourceId}";
-        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await client.GetAsync(draftPath + "/office-preview")).StatusCode);
+        Assert.Equal(bytes.Length > maxBytes ? HttpStatusCode.RequestEntityTooLarge : HttpStatusCode.OK, (await client.GetAsync(draftPath + "/office-preview")).StatusCode);
         Assert.Equal(bytes, await client.GetByteArrayAsync(draftPath + "/content"));
     }
 

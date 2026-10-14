@@ -52,7 +52,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
             if (admitted is not null && !admitted.Any(b => b.BindingId == binding.BindingId && b.Revision == binding.Revision && b.CredentialId == binding.CredentialId)) continue;
             var c = await credentials.GetAsync(binding.CredentialId, ct); if (c is not { Purpose: CredentialPurpose.GoogleDriveAccount, DriveAccount: not null }) continue;
             var status = owner.Lifecycle != AgentInstanceLifecycle.Active ? "Archived" : !providers.Enabled ? "HostDisabled" : !providers.Configured ? "NotConfigured" : c.Status == CredentialStatus.Disabled ? "Disabled" : c.DriveAccount.ConnectionStatus.ToString(); var available = owner.Lifecycle == AgentInstanceLifecycle.Active && providers.Enabled && providers.Configured && c.Status == CredentialStatus.Active && c.DriveAccount.IsUsable && c.DriveAccount.Synthetic == providers.Synthetic;
-            result.Add(new(binding.Reference, c.DisplayName, c.DriveAccount.EmailAddress, status, c.DriveAccount.AuthEpoch, available, available ? null : owner.Lifecycle != AgentInstanceLifecycle.Active ? "Unarchive this Instance before using its Drive bindings." : !providers.Enabled ? "Ask the operator to enable GoogleDrive:Enabled." : !providers.Configured ? "Ask the operator to configure GoogleDriveOAuth." : "Connect/enable this Google Drive Account in Admin → Credentials.", binding.BindingId, providers.Synthetic));
+            result.Add(new(binding.Reference, c.DisplayName, c.DriveAccount.EmailAddress, status, c.DriveAccount.AuthEpoch, available, available ? null : owner.Lifecycle != AgentInstanceLifecycle.Active ? "Unarchive this Instance before using its Drive bindings." : !providers.Enabled ? "Ask the operator to enable GoogleDrive:Enabled." : !providers.Configured ? "Ask the operator to configure GoogleOAuth." : "Connect/enable this Google Drive Account in Admin → Credentials.", binding.BindingId, providers.Synthetic));
             if (result.Count == 20) break;
         }
         return result;
@@ -60,7 +60,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
     public async ValueTask<DriveAccess> ResolveAsync(Guid instance, string? reference, IReadOnlyList<AgentCredentialBinding>? admitted, bool write, CancellationToken ct)
     {
         if (!providers.Enabled) throw Failure("drive_host_disabled", "Google Drive is disabled on this host. Ask the operator to enable GoogleDrive:Enabled.", 403);
-        if (!providers.Configured) throw Failure("drive_oauth_not_configured", "Ask the operator to configure GoogleDriveOAuth.", 403);
+        if (!providers.Configured) throw Failure("drive_oauth_not_configured", "Ask the operator to configure GoogleOAuth.", 403);
         await Instance(instance, true, ct); var accounts = await AccountsAsync(instance, admitted, ct);
         if (reference is null) { if (accounts.Count != 1) throw Failure("drive_not_connected", accounts.Count == 0 ? "Bind a connected Google Drive Account to this Instance in Admin → Credentials." : "Choose an accountRef from drive.accounts."); reference = accounts[0].AccountRef; }
         var alias = CredentialRules.Reference(reference); var binding = (await bindings.ListBindingsAsync(instance, ct)).SingleOrDefault(b => b.Reference == alias) ?? throw Failure("drive_not_connected", "This Drive alias is not bound to the current Instance.", 403);

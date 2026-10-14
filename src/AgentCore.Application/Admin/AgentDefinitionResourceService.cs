@@ -121,9 +121,21 @@ public sealed class AgentDefinitionResourceService(
     public async ValueTask<byte[]?> ReadDraftResourceContentAsync(
         Guid draftId,
         Guid resourceId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int? maxBytes = null)
     {
         await RequireDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
+        if (maxBytes.HasValue)
+        {
+            // Bind to one authorized metadata/hash snapshot. Managed content blobs
+            // are immutable; a later resource revision cannot replace these bytes.
+            var resource = (await resources.ListDraftResourcesAsync(draftId, cancellationToken)).SingleOrDefault(r => r.ResourceId == resourceId);
+            if (resource is null) return null;
+            AgentInstanceResourceService.RequireReadSize(resource.ByteLength, maxBytes);
+            var bytes = await content.ReadAsync(resource.ContentSha256, cancellationToken);
+            if (bytes is not null) AgentInstanceResourceService.RequireReadSize(bytes.Length, maxBytes);
+            return bytes;
+        }
         return await resources.ReadDraftResourceContentAsync(draftId, resourceId, cancellationToken)
             .ConfigureAwait(false);
     }

@@ -54,7 +54,7 @@ internal static class OfficePackageGuard
                 using var input = entry.Open();
                 using var reader = XmlReader.Create(input, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = partLimit });
                 var nodes = 0; var storedCells = 0; var cellDepth = -1; var formulaDepth = -1; System.Text.StringBuilder? formulaText = null; var valueDepth = -1; var cellContent = false; string? cellAddress = null;
-                var rowNumber = 0; var lastColumn = 0; var textCell = false; var hasFormula = false; var hasCache = false; var hasFormatting = false;
+                var rowNumber = 0; var lastColumn = 0; string? cellType = null; var textCell = false; var hasFormula = false; var hasCache = false; var hasFormatting = false;
                 var textAddresses = new List<string>(); var missingCaches = new HashSet<string>(StringComparer.Ordinal);
                 var standardRelationships = false;
                 void FinishCell()
@@ -118,8 +118,8 @@ internal static class OfficePackageGuard
                             cellAddress = reader.GetAttribute("r");
                             if (cellAddress is not null) lastColumn = AddressColumn(cellAddress);
                             else cellAddress = AgentCore.Application.Office.OfficeReadResults.Address(rowNumber, ++lastColumn);
-                            textCell = reader.GetAttribute("t") is "s" or "str" or "inlineStr";
-                            if (textCell) CountContent();
+                            cellType = reader.GetAttribute("t");
+                            textCell = cellType is "s" or "str" or "inlineStr";
                         }
                         if (worksheetPart && cellDepth >= 0 && reader.LocalName is "f" or "v" or "is")
                         {
@@ -128,7 +128,13 @@ internal static class OfficePackageGuard
                                 hasFormula = true;
                                 if (!reader.IsEmptyElement) { formulaDepth = reader.Depth; formulaText = new(); }
                             }
-                            if (reader.LocalName == "v") { hasCache = true; valueDepth = reader.IsEmptyElement ? -1 : reader.Depth; }
+                            if (reader.LocalName == "v")
+                            {
+                                hasCache = true; valueDepth = reader.IsEmptyElement ? -1 : reader.Depth;
+                                // An explicit string value can intentionally be empty. Shared strings
+                                // require an index; inline strings require an actual <is> representation.
+                                if (cellType == "str") CountContent();
+                            }
                             else CountContent();
                         }
                         // ClosedXML materializes array formula ranges, even when few <c> records exist.

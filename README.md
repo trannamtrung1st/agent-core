@@ -220,3 +220,5 @@ Gmail and Google Drive creation share **Integrations → Credentials → Add cre
 
 
 Public file downloads use the exact-authorized `web.download` capability (General Assistant v29) to save public text or binary bytes directly into owned `/home` or `/working`. Original DOCX/XLSX templates can then be inspected, edited with existing formatting limitations and returned as Artifacts. Existing versions retain their grants; live official-site and desktop-client fidelity are separate from [local offline verification](docs/reports/public-binary-download-verification-2026-10-14.md).
+
+The [final Office and Google Drive cross-feature fix pass](docs/reports/office-drive-cross-feature-fixes-2026-10-14.md) corrects sparse empty-cell detection, response coverage, preview recovery classifications and canonical OAuth guidance, with focused local and Synthetic browser evidence.
