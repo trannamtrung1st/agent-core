@@ -5,7 +5,8 @@ namespace AgentCore.Infrastructure.PublicWeb;
 
 internal static class PublicWebSocketsHttpFactory
 {
-    internal static SocketsHttpHandler CreateHandler(IPublicWebDnsResolver dns) =>
+    internal static SocketsHttpHandler CreateHandler(IPublicWebDnsResolver dns,
+        Func<IPAddress, int, CancellationToken, ValueTask<Stream>>? connect = null) =>
         new()
         {
             AllowAutoRedirect = false,
@@ -17,7 +18,7 @@ internal static class PublicWebSocketsHttpFactory
                 return await ConnectFirstPermittedAsync(
                         addresses,
                         context.DnsEndPoint.Port,
-                        ConnectSocketAsync,
+                        connect ?? ConnectSocketAsync,
                         token)
                     .ConfigureAwait(false);
             }

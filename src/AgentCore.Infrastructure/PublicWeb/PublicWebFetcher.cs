@@ -5,7 +5,8 @@ using AgentCore.Application.Ports;
 
 namespace AgentCore.Infrastructure.PublicWeb;
 
-internal sealed class PublicWebFetcher(IPublicWebTransport transport, ILogger<PublicWebFetcher>? logger = null, IDiagnosticIdSource? diagnosticIds = null) : IPublicWebFetcher
+internal sealed partial class PublicWebFetcher(IPublicWebTransport transport, ILogger<PublicWebFetcher>? logger = null, IDiagnosticIdSource? diagnosticIds = null,
+    int maxDownloadBytes = 10 * 1024 * 1024, int downloadTimeoutSeconds = 15) : IPublicWebFetcher
 {
     public async ValueTask<PublicWebFetchResult> FetchAsync(
         PublicWebFetchRequest request,
@@ -80,13 +81,13 @@ internal sealed class PublicWebFetcher(IPublicWebTransport transport, ILogger<Pu
         var mediaType = contentType?.Split(';', 2)[0].Trim().ToLowerInvariant() ?? "";
         if (!IsTextual(mediaType))
         {
-            return Error(finalUrl, "unsupported_media_type", "Only textual content types are supported.");
+            return Error(finalUrl, "unsupported_media_type", "Use web.download to save this public file into /home or /working, then inspect it with Workspace or Office tools. web.fetch reads text only.");
         }
 
         var decoded = PublicWebTextBodyDecoder.TryDecode(body, contentType);
         if (decoded is null)
         {
-            return Error(finalUrl, "invalid_text", "Response body could not be decoded with the declared charset.");
+            return Error(finalUrl, "invalid_text", "Response body could not be decoded with the declared charset. Use web.download to save the exact public file bytes into the Workspace.");
         }
 
         var text = mediaType.Contains("html", StringComparison.Ordinal)

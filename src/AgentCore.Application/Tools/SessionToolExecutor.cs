@@ -492,6 +492,8 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.WebFetch => FitResult(
                     remainingOutputBytes,
                     await FetchWebAsync(args, remainingOutputBytes, cancellationToken).ConfigureAwait(false)),
+                ToolCatalog.WebDownload => FitResult(remainingOutputBytes,
+                    await DownloadWebAsync(definition, sessionId, args, admission, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.HttpRequest => FitResult(
                     remainingOutputBytes,
                     await ExecuteHttpRequestAsync(args, approvalGrant, cancellationToken).ConfigureAwait(false)),

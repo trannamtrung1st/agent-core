@@ -5,6 +5,9 @@ namespace AgentCore.Infrastructure.PublicWeb;
 /// <summary>One credential-free deterministic public source for the Synthetic Chat learning journey.</summary>
 internal sealed class SyntheticHarnessWebFetcher(IPublicWebFetcher inner) : IPublicWebFetcher
 {
+    public bool SupportsDownloads => inner.SupportsDownloads;
+    public ValueTask<PublicWebDownloadResult> DownloadAsync(PublicWebDownloadRequest request, CancellationToken cancellationToken = default) =>
+        inner.DownloadAsync(request, cancellationToken);
     public ValueTask<PublicWebFetchResult> FetchAsync(PublicWebFetchRequest request, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

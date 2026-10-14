@@ -1,9 +1,11 @@
+using System.Net;
 using System.Net.Http.Headers;
 using AgentCore.Infrastructure.Http;
 
 namespace AgentCore.Infrastructure.PublicWeb;
 
-internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns, HttpErrorDiagnostics? diagnostics = null) : IPublicWebTransport
+internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns, HttpErrorDiagnostics? diagnostics = null,
+    Func<IPAddress, int, CancellationToken, ValueTask<Stream>>? connect = null) : IPublicWebTransport
 {
     public ValueTask<PublicWebTransportResponse> GetAsync(Uri uri, CancellationToken cancellationToken) =>
         SendAsync(
@@ -18,14 +20,14 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns, HttpE
         PublicWebOutboundRequest outbound,
         CancellationToken cancellationToken)
     {
-        using var handler = PublicWebSocketsHttpFactory.CreateHandler(dns);
+        using var handler = PublicWebSocketsHttpFactory.CreateHandler(dns, connect);
 
         try
         {
             using var client = new HttpMessageInvoker(handler, disposeHandler: true);
             using var request = CreateRequest(outbound);
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            var body = await ReadBoundedBodyAsync(response.Content, cancellationToken).ConfigureAwait(false);
+            var body = await ReadBoundedBodyAsync(response.Content, outbound.MaxResponseBytes, cancellationToken).ConfigureAwait(false);
             diagnostics?.Log((int)response.StatusCode, "public-web", body.AsMemory(0, Math.Min(body.Length, HttpErrorDiagnostics.MaxBodyBytes + 1)));
             Uri? redirect = null;
             if (response.Headers.Location is { } location)
@@ -37,7 +39,9 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns, HttpE
                 (int)response.StatusCode,
                 redirect,
                 response.Content.Headers.ContentType?.ToString(),
-                body);
+                body,
+                response.Content.Headers.ContentDisposition?.ToString(),
+                string.Join(",", response.Content.Headers.ContentEncoding));
         }
         catch (HttpRequestException ex)
         {
@@ -92,12 +96,16 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns, HttpE
         return request;
     }
 
-    private static async Task<byte[]> ReadBoundedBodyAsync(HttpContent? content, CancellationToken cancellationToken)
+    internal static async Task<byte[]> ReadBoundedBodyAsync(HttpContent? content, int maxBytes, CancellationToken cancellationToken)
     {
         if (content is null)
         {
             return [];
         }
+
+        if (maxBytes < 1 || maxBytes > 50 * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(maxBytes));
+        if (content.Headers.ContentLength > maxBytes)
+            throw new PublicWebFetchException("body_too_large", "Response body exceeded the permitted size.");
 
         await using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var buffer = new MemoryStream();
@@ -110,7 +118,7 @@ internal sealed class SocketsPublicWebTransport(IPublicWebDnsResolver dns, HttpE
                 break;
             }
 
-            if (buffer.Length + read > PublicWebLimits.MaxBodyBytes)
+            if (buffer.Length + read > maxBytes)
             {
                 throw new PublicWebFetchException("body_too_large", "Response body exceeded the permitted size.");
             }

@@ -43,6 +43,7 @@ public static class ToolCatalog
     public const string SandboxRun = "sandbox.run";
     public const string WebSearch = "web.search";
     public const string WebFetch = "web.fetch";
+    public const string WebDownload = "web.download";
     public const string HttpRequest = "http.request";
     public const string EmailAccounts = "email.accounts";
     public const string EmailRequestAccount = "email.request_account";

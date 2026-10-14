@@ -25,10 +25,21 @@ public sealed record PublicWebFetchResult(
 
 public interface IPublicWebFetcher
 {
+    bool SupportsDownloads => false;
+
+    ValueTask<PublicWebDownloadResult> DownloadAsync(
+        PublicWebDownloadRequest request, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(new PublicWebDownloadResult(request.Url.ToString(), null, null, [], "unavailable", "Public file downloads are not configured."));
+
     ValueTask<PublicWebFetchResult> FetchAsync(
         PublicWebFetchRequest request,
         CancellationToken cancellationToken = default);
 }
+
+// Normalized file bytes travel only to the owned Workspace, never to model tool output.
+public sealed record PublicWebDownloadRequest(Uri Url);
+public sealed record PublicWebDownloadResult(string FinalUrl, string? ContentType, string? SuggestedFileName,
+    byte[] Bytes, string? ErrorCode, string? ErrorMessage);
 
 public sealed record HttpRequestHeader(string Name, string Value);
 
