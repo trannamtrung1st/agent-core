@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { selectSpreadsheetCell } from './support/spreadsheet';
 import { selectInstanceIdentity } from './support/instance-identity';
 import { readFile } from 'node:fs/promises';
 test.use({ actionTimeout: 15000 });
@@ -111,9 +112,7 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   await workbook
     .getByRole('button', { name: 'Load range', exact: true })
     .click();
-  await workbook
-    .getByRole('button', { name: 'B4 empty formula', exact: true })
-    .click();
+  await selectSpreadsheetCell(workbook, 'B4');
   await expect(workbook).toContainText('=SUM(B2:B3)');
   const rangeReads: string[] = [];
   const trackRange = (request: import('@playwright/test').Request) => {
@@ -123,17 +122,11 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   page.on('request', trackRange);
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 700 });
-    await expect(
-      workbook.getByRole('button', { name: 'A1 Region', exact: true }),
-    ).toBeVisible();
+    await expect(workbook.getByRole('region', { name: 'Read-only spreadsheet', exact: true })).toBeVisible();
     await expect(workbook).toContainText('=SUM(B2:B3)');
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => document.documentElement.scrollWidth <= innerWidth,
-        ),
-      )
-      .toBe(true);
+    await expect.poll(() => page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    )).toBe(true);
   }
   expect(rangeReads).toEqual([]);
   page.off('request', trackRange);
@@ -190,21 +183,15 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     page.getByRole('tab', { name: 'Assumptions', exact: true }),
   ).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(
-    page.getByRole('dialog', { name: 'q3-sales.xlsx', exact: true }),
-  ).not.toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'q3-sales.xlsx', exact: true })).toHaveCount(0);
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 800 });
     await expect(
       page.getByRole('button', { name: 'Preview q3-report.docx' }),
     ).toBeVisible();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => document.documentElement.scrollWidth <= innerWidth,
-        ),
-      )
-      .toBe(true);
+    await expect.poll(() => page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    )).toBe(true);
     expect(
       await page
         .locator('.artifact-actions')
@@ -271,12 +258,13 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     )
     .toBe(true);
   await page.keyboard.press('Escape');
-  await expect(rejected).toBeHidden();
+  // The dialog retires after the asynchronous tool decision is confirmed.
   await expect(
     page.getByText('Drive fixture stopped after rejection or a tool failure.', {
       exact: false,
     }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 30000 });
+  await expect(rejected).toBeHidden();
   expect(await remaining()).toHaveLength(8);
   const approved = await requestBatch();
   await page.setViewportSize({ width: 320, height: 800 });
@@ -312,13 +300,13 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     .getByRole('button', { name: 'Move 7 files to Trash', exact: true })
     .focus();
   await page.keyboard.press('Enter');
-  await expect(approved).toBeHidden();
   await expect(
     page.getByText(
       'Synthetic app-authorized batch: requested 7; trashed 7; failed 0; uncertain 0; not attempted 0.',
       { exact: false },
     ),
   ).toBeVisible({ timeout: 30000 });
+  await expect(approved).toBeHidden();
   expect(await remaining()).toHaveLength(1);
   expect(errors).toEqual([]);
 });

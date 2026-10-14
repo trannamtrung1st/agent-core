@@ -32,7 +32,7 @@ Follow [Technology Decisions](docs/10-technology-decisions.md) and [Repository S
 - The microphone remains active while the agent speaks.
 - Synthetic mode requires no provider credentials.
 - No architecture change without updating authoritative docs.
-- Complete milestone tests before advancing.
+- Complete milestone tests before claiming milestone acceptance or advancing dependent milestones; ordinary requests do not start milestone acceptance.
 
 ## Do not introduce unless the specification is revised first
 
@@ -40,6 +40,8 @@ Microservices, MediatR forwarding, Kafka/Redis, generic repositories, a native r
 
 ## Completion
 
+Complete the requested scope with focused local verification appropriate to the change. CI is optional and runs only when the user explicitly requests it. Do not dispatch, rerun or wait for GitHub Actions, or run the full CI suite locally, by default. Requests to implement, fix, review, commit or push do not implicitly request CI. Broaden local checks only when affected behavior, failures or an explicitly requested milestone acceptance justify them.
+
 For frontend and backend implementation, fixes and behavior reviews, follow the [testing skill](.agents/skills/testing/SKILL.md#runtime-verification). Exercise the affected use case when runnable: frontend through Playwright MCP against the running Synthetic app, backend through a relevant integration test or local Synthetic host. Static code review, compilation, a page screenshot or a health response alone do not establish functional correctness. If execution is unavailable, attempt a practical fallback and report the exact blocker and unverified behavior. Plans and docs-only changes do not require running the application.
 
-Run applicable checks and report their results. Do not claim completion or milestone acceptance when required checks fail or were not run; identify the remaining gap.
+Run applicable focused checks and report their results and unverified behavior. Optional unrun CI does not block completion of the requested change. Do not claim milestone acceptance when its required checks fail or were not run; identify the remaining gap.

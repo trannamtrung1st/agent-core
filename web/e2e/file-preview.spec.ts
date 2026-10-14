@@ -1,3 +1,4 @@
+import { selectSpreadsheetCell } from './support/spreadsheet';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import {
@@ -49,20 +50,17 @@ test('protected attachment preview preserves CSV source, download, keyboard and 
   });
   await opener.click();
   const dialog = page.getByRole('dialog', { name: 'quoted.csv' });
-  await expect(dialog.getByText('001', { exact: true })).toBeVisible();
-  await expect(
-    dialog.getByText('a,b\r\n"quoted"', { exact: true }),
-  ).toBeVisible();
+  await selectSpreadsheetCell(dialog, 'A2', '001');
+  await selectSpreadsheetCell(dialog, 'B2', 'quoted');
   await dialog.getByText('Text', { exact: true }).click();
   await expect(dialog.locator('pre')).toContainText('001,"a,b');
   await dialog.getByText('Grid', { exact: true }).click();
-  await expect(dialog.getByText('001', { exact: true })).toBeVisible();
+  await selectSpreadsheetCell(dialog, 'A2', '001');
+  await selectSpreadsheetCell(dialog, 'B3', '=HYPERLINK("evil")');
   await dialog
     .getByRole('checkbox', { name: 'First row is headers' })
     .uncheck();
-  await expect(
-    dialog.getByRole('columnheader', { name: 'Column 1' }),
-  ).toBeVisible();
+  await selectSpreadsheetCell(dialog, 'A1', 'id');
   const pending = page.waitForEvent('download');
   await dialog.getByRole('button', { name: 'Download quoted.csv' }).click();
   const downloaded = await pending;
@@ -95,9 +93,7 @@ test('protected attachment preview preserves CSV source, download, keyboard and 
     .getByRole('dialog')
     .getByRole('button', { name: 'Retry', exact: true })
     .click();
-  await expect(
-    page.getByRole('dialog').getByText('001', { exact: true }),
-  ).toBeVisible();
+  await selectSpreadsheetCell(page.getByRole('dialog'), 'A2', '001');
   expect(errors).toEqual([]);
   expect(previewNavigations).toEqual([]);
   expect(requests.length).toBeGreaterThan(1);

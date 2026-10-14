@@ -72,19 +72,20 @@ public sealed partial class OfficeProcessor
             throw AgentCoreErrors.Validation("office_operation_unsupported: Range must fit Excel bounds and 200 rows by 64 columns.");
         return (row, column, rows, columns);
     }
-    private OfficeWorkbookInspection InspectWorkbookCore(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct)
+    private OfficeWorkbookInspection InspectWorkbookCore(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct, bool presentation = false)
     {
         OfficePackageGuard.Validate(bytes, "xl", ct);
         var bounds = Range(range);
         using var stream = new MemoryStream(bytes.ToArray(), false); using var workbook = new XLWorkbook(stream);
         if (workbook.Worksheets.Count > OfficeLimits.MaxSheets) throw AgentCoreErrors.Validation("office_operation_unsupported: Too many worksheets.");
         var selected = sheet is null ? workbook.Worksheets.First() : workbook.Worksheets.FirstOrDefault(s => s.Name == sheet) ?? throw AgentCoreErrors.Validation("office_operation_unsupported: Worksheet was not found.");
+        var previewState = presentation ? PreviewFrozenPane(bytes, selected.Name) : (Rows: 0, Columns: 0, Stale: false);
         var rows = new List<IReadOnlyList<OfficeCellView>>(); var totalChars = 0;
         var used = selected.RangeUsed(); var actualRows = used is null ? 0 : Math.Min(bounds.Rows, Math.Max(0, used.RangeAddress.LastAddress.RowNumber - bounds.Row + 1));
         var actualColumns = used is null ? 0 : Math.Min(bounds.Columns, Math.Max(0, used.RangeAddress.LastAddress.ColumnNumber - bounds.Column + 1));
         for (var r = 0; r < actualRows; r++)
         {
-            var cells = new List<OfficeCellView>();
+            var cells = new List<OfficeCellView>(); var rowChars = 0; var rowOmitted = false;
             for (var c = 0; c < actualColumns; c++)
             {
                 ct.ThrowIfCancellationRequested(); var cell = selected.Cell(bounds.Row + r, bounds.Column + c); var cached = cell.CachedValue;
@@ -92,16 +93,28 @@ public sealed partial class OfficeProcessor
                 // CachedValue avoids ClosedXML's lazy recalculation in Value/GetFormattedString.
                 object? value = cached.Type switch { XLDataType.Number => cached.GetNumber(), XLDataType.DateTime => cached.GetDateTime(), XLDataType.Boolean => cached.GetBoolean(), XLDataType.Text => cached.GetText(), _ => cached.ToString(CultureInfo.InvariantCulture) };
                 string display;
-                try { display = new NumberFormat(string.IsNullOrEmpty(format) ? "General" : format).Format(value, CultureInfo.InvariantCulture); }
+                try { display = new NumberFormat(string.IsNullOrEmpty(format) ? presentation ? PreviewNumberFormat(cell.Style.NumberFormat.NumberFormatId) : "General" : format).Format(value, CultureInfo.InvariantCulture); }
                 catch { display = Convert.ToString(value, CultureInfo.InvariantCulture) ?? ""; }
-                totalChars += display.Length + (formula?.Length ?? 0);
-                if (totalChars > 64000) throw AgentCoreErrors.Validation("office_operation_unsupported: The excerpt is too large. Request a smaller range.");
-                var state = formula is null ? "value" : cached.IsBlank ? "cached_value_unavailable" : cell.NeedsRecalculation ? "cached_value_stale" : "cached_value_available";
-                cells.Add(new(cell.Address.ToString()!, cached.Type.ToString(), display, formula, state, string.IsNullOrEmpty(format) ? cell.Style.NumberFormat.NumberFormatId.ToString(CultureInfo.InvariantCulture) : format));
+                rowChars += display.Length + (formula?.Length ?? 0);
+                if (totalChars + rowChars > 64000)
+                {
+                    if (presentation) throw new AgentCoreException("preview_structure_limit", "This range exceeds the immutable Office preview text budget. Select a smaller range or download the original.", 413);
+                    if (rows.Count == 0) throw AgentCoreErrors.Validation("office_operation_unsupported: A complete row exceeds the inspection text budget. Request fewer columns.");
+                    rowOmitted = true; break;
+                }
+                var state = formula is null ? "value" : cached.IsBlank ? "cached_value_unavailable" : (cell.NeedsRecalculation || previewState.Stale) ? "cached_value_stale" : "cached_value_available";
+                cells.Add(new(cell.Address.ToString()!, cached.Type.ToString(), display, formula, state, string.IsNullOrEmpty(format) ? cell.Style.NumberFormat.NumberFormatId.ToString(CultureInfo.InvariantCulture) : format, presentation ? PreviewStyle(cell.Style, workbook) : null));
             }
-            rows.Add(cells);
+            if (rowOmitted) break;
+            totalChars += rowChars; rows.Add(cells);
         }
-        return new(Hash(bytes), workbook.Worksheets.Select(s => s.Name).ToArray(), selected.Name, range ?? "A1:BL200", rows, WorkbookWarnings);
+        var extents = workbook.Worksheets.Select(s =>
+        {
+            var address = s.RangeUsed()?.RangeAddress;
+            return new OfficeSheetExtent(s.Name, address?.FirstAddress.RowNumber ?? 0, address?.FirstAddress.ColumnNumber ?? 0,
+                address?.LastAddress.RowNumber ?? 0, address?.LastAddress.ColumnNumber ?? 0);
+        }).ToArray();
+        return new(Hash(bytes), workbook.Worksheets.Select(s => s.Name).ToArray(), selected.Name, range ?? "A1:BL200", rows, WorkbookWarnings, presentation ? PreviewPresentation(selected, bounds, actualRows, actualColumns, used, (previewState.Rows, previewState.Columns)) : null, extents);
     }
     private OfficeProcessedFile EditWorkbookCore(ReadOnlyMemory<byte> bytes, IReadOnlyList<OfficeSpreadsheetEdit> operations, CancellationToken ct)
     {

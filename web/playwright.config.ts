@@ -145,6 +145,7 @@ export default defineConfig({
       env: {
         VITE_API_PROXY_TARGET: apiUrl,
         VITE_DEV_PORT: webPort,
+        VITE_CACHE_DIR: process.env.VITE_CACHE_DIR ?? path.join(playwrightData, `vite-${webPort}`),
       },
       url: webUrl,
       reuseExistingServer: !process.env.CI,
@@ -183,6 +184,7 @@ export default defineConfig({
             env: {
               VITE_API_PROXY_TARGET: browserSttApiUrl,
               VITE_DEV_PORT: browserSttWebPort,
+              VITE_CACHE_DIR: path.join(playwrightData, `vite-${browserSttWebPort}`),
             },
             url: browserSttWebUrl,
             reuseExistingServer: false,
@@ -219,6 +221,7 @@ export default defineConfig({
             env: {
               VITE_API_PROXY_TARGET: browserBrowserApiUrl,
               VITE_DEV_PORT: browserBrowserWebPort,
+              VITE_CACHE_DIR: path.join(playwrightData, `vite-${browserBrowserWebPort}`),
             },
             url: browserBrowserWebUrl,
             reuseExistingServer: false,

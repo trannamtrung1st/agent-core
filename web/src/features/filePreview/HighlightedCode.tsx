@@ -1,18 +1,23 @@
+import { loadPreviewOptions, type PreviewOptions } from './previewOptions';
 import { useEffect, useState } from 'react';
 import type { ThemedToken } from 'shiki/core';
 import { processPreview } from './previewWorker';
-import { previewLimits } from './previewPolicy';
+
 export function HighlightedCode({
+  policy,
   source,
   language = 'text',
   wrap = false,
   query = '',
 }: {
+  policy?: PreviewOptions;
   source: string;
   language?: string;
   wrap?: boolean;
   query?: string;
 }) {
+  const [effective, setEffective] = useState(policy);
+  useEffect(() => { if (policy) setEffective(policy); else void loadPreviewOptions().then(setEffective).catch(() => undefined); }, [policy]);
   const [result, setResult] = useState<{
     source: string;
     language: string;
@@ -21,14 +26,15 @@ export function HighlightedCode({
   useEffect(() => {
     const controller = new AbortController();
     if (
-      source.length <= previewLimits.highlightBytes &&
-      source.split('\n').length <= previewLimits.highlightLines
+      effective && new TextEncoder().encode(source).byteLength <= effective.text.highlightMaxBytes &&
+      source.split('\n').length <= effective.text.highlightMaxLines
     )
       void processPreview<ThemedToken[][]>(
         'code',
         source,
         language,
         controller.signal,
+        effective,
       )
         .then((tokens) => {
           if (!controller.signal.aborted)
@@ -36,7 +42,7 @@ export function HighlightedCode({
         })
         .catch(() => undefined);
     return () => controller.abort();
-  }, [source, language]);
+  }, [source, language, effective]);
   const tokens =
     result?.source === source && result.language === language
       ? result.tokens

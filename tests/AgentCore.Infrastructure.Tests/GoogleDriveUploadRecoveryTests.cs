@@ -8,6 +8,29 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed partial class GoogleDriveTests
 {
+    [Fact]
+    public async Task Upload_metadata_uses_media_type_without_transport_charset_parameters()
+    {
+        using var f = new Fixture(); var (provider, operation) = await UploadFixture(f);
+        var posts = 0; var puts = 0;
+        f.Transport.UploadHandler = async (request, ct) =>
+        {
+            if (request.Method == HttpMethod.Post)
+            {
+                posts++;
+                using var metadata = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+                Assert.Equal("text/plain", metadata.RootElement.GetProperty("mimeType").GetString());
+                return StartedUpload();
+            }
+            puts++; Assert.Equal("text/plain", request.Content!.Headers.ContentType!.MediaType);
+            Assert.Equal("utf-8", request.Content.Headers.ContentType.CharSet);
+            Assert.Equal("hello"u8.ToArray(), await request.Content.ReadAsByteArrayAsync(ct));
+            return Progress(5, 5);
+        };
+        await provider.UploadAsync("file-1", "report.txt", "root", "text/plain; charset=utf-8", "hello"u8.ToArray(), operation, default);
+        Assert.Equal(1, posts); Assert.Equal(1, puts);
+        Assert.Null((await f.Operations.GetAsync(f.Owner, operation.OperationId, default))!.ProtectedUploadSession);
+    }
     [Theory]
     [InlineData(0)]
     [InlineData(GoogleDriveProvider.UploadChunkBytes)]
@@ -73,7 +96,7 @@ public sealed partial class GoogleDriveTests
         Assert.Equal(1, starts); Assert.Equal(1, probes); Assert.Equal([0, 262144, 1310720], puts);
         Assert.Equal(bytes.Length, accepted);
         var stored = (await f.Operations.GetAsync(f.Owner, operation.OperationId, default))!;
-        Assert.DoesNotContain("opaque", stored.ProtectedUploadSession);
+        Assert.Null(stored.ProtectedUploadSession);
     }
 
     [Fact]

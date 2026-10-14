@@ -88,13 +88,17 @@ internal sealed partial class GoogleDriveProvider(Guid credential, long revision
     private static HttpContent Json(object value) => new StringContent(JsonSerializer.Serialize(value), Encoding.UTF8, "application/json");
     public async ValueTask CreateFolderAsync(string id, string name, string parent, CancellationToken ct)
     { using var response = await Send(() => new(HttpMethod.Post, Api + "files?fields=id") { Content = Json(new { id, name, mimeType = "application/vnd.google-apps.folder", parents = new[] { parent } }) }, false, ct, effectStart: true); }
-    public async ValueTask<byte[]> DownloadAsync(DriveFile file, CancellationToken ct)
+    public ValueTask<byte[]> DownloadAsync(DriveFile file, CancellationToken ct) => DownloadAsync(file, GoogleDriveOptions.MaxTransferBytes, ct);
+    public async ValueTask<byte[]> DownloadAsync(DriveFile file, int maxBytes, CancellationToken ct)
     {
+        if (maxBytes is <= 0 or > GoogleDriveOptions.MaxTransferBytes) throw new ArgumentOutOfRangeException(nameof(maxBytes));
+        var code = maxBytes < GoogleDriveOptions.MaxTransferBytes ? "preview_too_large" : "drive_transfer_too_large";
+        var message = maxBytes < GoogleDriveOptions.MaxTransferBytes ? "Drive file exceeds its effective preview limit. Download the original." : "Drive file exceeds 50 MiB.";
         if (file.NativeDocument || file.Folder) throw Failure("drive_native_unsupported", "Download supports binary files. Google-native export and folder download are deferred.", 400);
-        if (file.ByteSize > GoogleDriveOptions.MaxTransferBytes) throw Failure("drive_transfer_too_large", "Drive file exceeds 50 MiB.", 413);
+        if (file.ByteSize > maxBytes) throw Failure(code, message, 413);
         using var response = await Send(() => new(HttpMethod.Get, Api + "files/" + Enc(file.Id) + "?alt=media"), true, ct);
-        if (response.Content.Headers.ContentLength > GoogleDriveOptions.MaxTransferBytes) throw Failure("drive_transfer_too_large", "Drive file exceeds 50 MiB.", 413);
-        await using var input = await response.Content.ReadAsStreamAsync(ct); using var output = new MemoryStream(); var buffer = new byte[81920]; while (true) { var read = await input.ReadAsync(buffer, ct); if (read == 0) break; if (output.Length + read > GoogleDriveOptions.MaxTransferBytes) throw Failure("drive_transfer_too_large", "Drive file exceeds 50 MiB.", 413); output.Write(buffer, 0, read); }
+        if (response.Content.Headers.ContentLength > maxBytes) throw Failure(code, message, 413);
+        await using var input = await response.Content.ReadAsStreamAsync(ct); using var output = new MemoryStream(); var buffer = new byte[81920]; while (true) { var read = await input.ReadAsync(buffer, ct); if (read == 0) break; if (output.Length + read > maxBytes) throw Failure(code, message, 413); output.Write(buffer, 0, read); }
         return output.ToArray();
     }
     public async ValueTask RenameAsync(string id, string name, CancellationToken ct) { using var response = await Send(() => new(HttpMethod.Patch, Api + "files/" + Enc(id) + "?fields=id") { Content = Json(new { name }) }, false, ct, effectStart: true); }

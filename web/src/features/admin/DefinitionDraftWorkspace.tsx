@@ -1,5 +1,5 @@
 import { DeleteOutlined, InboxOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Flex, Input, Select, Spin, Switch, Table, Tag, Tooltip, Typography, Upload, theme } from "antd";
+import { Alert, App, Button, Empty, Flex, Input, Select, Spin, Table, Tag, Tooltip, Typography, Upload, theme } from "antd";
 import { useCallback, useEffect, useRef, useState, type Ref } from "react";
 import { followAppLink } from "../../app/appLink";
 import { adminDraftPath } from "../../app/appRoute";
@@ -640,25 +640,9 @@ export function DefinitionDraftWorkspace({
                       disabled={busy || candidateLocked}
                     />
                   </label>
-                  <Flex align="start" gap={12} className="admin-draft-switch-row">
-                    <Switch
-                      aria-label="Allow unread unsupported attachment types"
-                      checked={capabilities.allowUnreadUnsupportedAttachmentTypes}
-                      onChange={(checked) =>
-                        onCapabilitiesChange({
-                          ...capabilities,
-                          allowUnreadUnsupportedAttachmentTypes: checked
-                        })
-                      }
-                      disabled={busy || candidateLocked}
-                    />
-                    <div>
-                      <Typography.Text strong>Allow unsupported attachments</Typography.Text>
-                      <Typography.Paragraph type="secondary">
-                        Keep attachments the runtime cannot read instead of rejecting the turn.
-                      </Typography.Paragraph>
-                    </div>
-                  </Flex>
+                  <Typography.Paragraph type="secondary">
+                    All file types can be attached. Supported formats include bounded text, image, PDF, DOCX and XLSX readers; other files retain their original bytes for download and authorized workspace use.
+                  </Typography.Paragraph>
                 </section>
                 <section className="admin-draft-form-section" aria-label="Knowledge source references">
                   <Flex align="baseline" className="admin-draft-section-heading">

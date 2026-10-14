@@ -1,9 +1,10 @@
 # Development Roadmap
 
-The OpenSandbox cutover is synchronized with the owner-selected main snapshot
-`ed943429`. General Assistant v30 preserves main's immutable v29 and combines
-its current public-download/Drive/Office authority with sandbox execution. Combined
-verification and hosted gate status are tracked in the [OpenSandbox ledger](reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
+The OpenSandbox cutover is synchronized with main snapshot `d279abfe`.
+General Assistant v30 preserves main's immutable v29 and combines its current
+public-download/Drive/Office authority with sandbox execution. Main's Drive upload
+recovery, binary attachments and shared Office/file preview styling are retained.
+Focused local verification and historical hosted results are tracked in the [OpenSandbox ledger](reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
 prior acceptance below remains evidence for its original behavior SHA.
 
 Build the canonical composed pipeline from deterministic conversation mechanics toward continuous full-duplex audio. Native realtime models are future-only and have no MVP milestone. [Implementation Plan](18-implementation-plan.md) is authoritative for each milestone's goal, scope, interfaces, tests, acceptance criteria and non-goals.

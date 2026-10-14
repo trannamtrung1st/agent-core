@@ -454,7 +454,7 @@ public sealed partial class SessionToolExecutor(
             if (call.Name.StartsWith("drive.", StringComparison.Ordinal))
                 return FitResult(remainingOutputBytes, await ExecuteDriveAsync(definition, sessionId, call, args, admission, approvalGrant, cancellationToken));
             if (call.Name.StartsWith("office.", StringComparison.Ordinal))
-                return FitResult(remainingOutputBytes, await ExecuteOfficeAsync(call.Name, definition, sessionId, args, admission?.WorkspaceCwd ?? "/home", cancellationToken));
+                return FitResult(remainingOutputBytes, await ExecuteOfficeAsync(call.Name, definition, sessionId, args, admission?.WorkspaceCwd ?? "/home", remainingOutputBytes, cancellationToken));
             var executed = call.Name switch
             {
                 ToolCatalog.AttachmentsRead => await ReadAttachmentAsync(sessionId, args, remainingOutputBytes, cancellationToken)
@@ -597,14 +597,34 @@ public sealed partial class SessionToolExecutor(
             return TextResult(Error("notFound", "Attachment was not found."));
         }
 
+        if (!record.Readable)
+        {
+            return TextResult(JsonSerializer.Serialize(new
+            {
+                attachmentId = record.AttachmentId, displayName = record.DisplayName,
+                contentType = record.ContentType, byteSize = record.ByteSize, kind = "binary",
+                path = $"/attachments/{record.AttachmentId:D}",
+                note = "Original bytes are available for download or authorized workspace.copy. This format has no automatic content reader."
+            }));
+        }
+
         if (AttachmentMedia.IsImage(record.ContentType))
         {
             return await ReadHistoricalImageAsync(sessionId, record, remainingOutputBytes, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        if (string.Equals(AttachmentMedia.NormalizeContentType(record.ContentType), "application/pdf", StringComparison.OrdinalIgnoreCase))
+        var attachmentType = AttachmentMedia.NormalizeContentType(record.ContentType);
+        if (attachmentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime && officeProcessor is not null)
+            return TextResult(await ReadOfficeAttachmentAsync(sessionId, record, args, remainingOutputBytes, cancellationToken));
+        if (args.TryGetProperty("sheet", out _) || args.TryGetProperty("range", out _) || args.TryGetProperty("offset", out _) || args.TryGetProperty("limit", out _))
+            return TextResult(Error(attachmentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime ? "unavailable" : "invalid",
+                attachmentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime
+                    ? "Targeted Office reading is unavailable because the Office processor is not configured."
+                    : "Sheet/range and offset/limit are supported only for Office attachments."));
+        if (attachmentType is "application/pdf" or OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime)
         {
+            var kind = attachmentType == "application/pdf" ? "pdf" : "office";
             if (processor is null)
             {
                 return TextResult(JsonSerializer.Serialize(new
@@ -613,8 +633,8 @@ public sealed partial class SessionToolExecutor(
                     displayName = record.DisplayName,
                     contentType = record.ContentType,
                     byteSize = record.ByteSize,
-                    kind = "pdf",
-                    note = "PDF extraction is unavailable."
+                    kind,
+                    note = "Attachment extraction is unavailable."
                 }));
             }
 
@@ -629,8 +649,8 @@ public sealed partial class SessionToolExecutor(
                     displayName = record.DisplayName,
                     contentType = record.ContentType,
                     byteSize = record.ByteSize,
-                    kind = "pdf",
-                    note = "PDF content could not be extracted."
+                    kind,
+                    note = "Attachment content could not be extracted. Original bytes remain available."
                 }));
             }
 
@@ -642,7 +662,7 @@ public sealed partial class SessionToolExecutor(
                     attachmentId = record.AttachmentId,
                     displayName = record.DisplayName,
                     contentType = record.ContentType,
-                    kind = "pdf",
+                    kind,
                     provenance = extracted.Provenance,
                     truncated,
                     content
@@ -679,8 +699,22 @@ public sealed partial class SessionToolExecutor(
             buffer.Write(block, 0, read);
         }
 
-        var text = DecodeText(buffer.ToArray());
         var byteTruncated = buffer.Length < record.ByteSize;
+        string text;
+        try
+        {
+            var bytes = buffer.ToArray();
+            var decoder = StrictUtf8.GetDecoder();
+            var characters = new char[StrictUtf8.GetMaxCharCount(bytes.Length)];
+            var count = decoder.GetChars(bytes, 0, bytes.Length, characters, 0, flush: !byteTruncated);
+            text = new string(characters, 0, count);
+            if (text.Any(character => char.IsControl(character) && character is not ('\t' or '\n' or '\r' or '\f')))
+                return TextResult(Error("unsupported_reader", "This content is binary. Original bytes remain available for download or authorized workspace.copy."));
+        }
+        catch (DecoderFallbackException)
+        {
+            return TextResult(Error("unsupported_reader", "This content is not valid UTF-8. Original bytes remain available for download or authorized workspace.copy."));
+        }
         return TextResult(ToolJsonResults.FitJsonWithContentField(
             remainingOutputBytes,
             text,

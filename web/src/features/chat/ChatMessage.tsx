@@ -88,7 +88,7 @@ export function ChatMessage({
         ) : null}
       </Flex>
       {hasBody ? (
-        <div className={isUser ? "user-bubble" : "assistant-body"}>
+        <div className={isUser ? `user-bubble${hasFiles ? " user-bubble-with-files" : ""}` : "assistant-body"}>
           {isUser ? (
             <>
               {entry.text ? (

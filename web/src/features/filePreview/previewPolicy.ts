@@ -1,17 +1,5 @@
 import { PreviewError, type FileMetadata } from './fileSource';
-export const previewLimits = {
-  text: 2 * 1024 * 1024,
-  csv: 5 * 1024 * 1024,
-  image: 15 * 1024 * 1024,
-  media: 32 * 1024 * 1024,
-  textLines: 10000,
-  highlightBytes: 256 * 1024,
-  highlightLines: 3000,
-  rows: 50000,
-  columns: 256,
-  pageRows: 200,
-  imagePixels: 40_000_000,
-} as const;
+import { type PreviewOptions } from './previewOptions';
 export type PreviewFormat =
   | 'text'
   | 'markdown'
@@ -102,19 +90,14 @@ export function previewFormat(file: FileMetadata): PreviewFormat {
     return 'markdown';
   return textExtensions.has(ext) || noExtension ? 'text' : 'unsupported';
 }
-export function formatLimit(format: PreviewFormat): number {
-  if (format === 'docx' || format === 'xlsx') return 10 * 1024 * 1024;
-  return format === 'csv'
-    ? previewLimits.csv
-    : format === 'image'
-      ? previewLimits.image
-      : ['audio', 'video'].includes(format)
-        ? previewLimits.media
-        : previewLimits.text;
+export function formatLimit(format: PreviewFormat, policy: PreviewOptions): number {
+  const key = format === 'csv' ? 'delimitedBytes' : format === 'markdown' || format === 'unsupported' ? 'textBytes' : `${format}Bytes` as keyof PreviewOptions['limits'];
+  return Math.min(policy.limits.maxBytes, policy.limits[key]);
 }
 export async function decodeText(
   blob: Blob,
   format: PreviewFormat,
+  policy: PreviewOptions,
 ): Promise<string> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const encoding =
@@ -139,10 +122,10 @@ export async function decodeText(
       'preview_signature',
       'The content does not match a text file. Download the original.',
     );
-  if (format !== 'csv' && text.split('\n').length > previewLimits.textLines)
+  if (format !== 'csv' && text.split('\n').length > policy.text.maxLines)
     throw new PreviewError(
-      'preview_too_large',
-      'This file exceeds 10,000 preview lines. Download the original.',
+      'preview_structure_limit',
+      'This file exceeds the configured preview line limit. Download the original.',
     );
   return text;
 }
@@ -199,6 +182,7 @@ export async function validateSignature(
 export async function validateImageDimensions(
   blob: Blob,
   mime: string,
+  policy: PreviewOptions,
 ): Promise<void> {
   const bytes = new Uint8Array(await blob.slice(0, 256 * 1024).arrayBuffer());
   const view = new DataView(bytes.buffer);
@@ -273,12 +257,12 @@ export async function validateImageDimensions(
       'Safe image dimensions could not be read. Download the original.',
     );
   if (
-    width * height > previewLimits.imagePixels ||
-    width > 32768 ||
-    height > 32768
+    width * height > policy.image.maxPixels ||
+    width > policy.image.maxDimension ||
+    height > policy.image.maxDimension
   )
     throw new PreviewError(
-      'preview_too_large',
+      'preview_structure_limit',
       'This image exceeds the preview dimension limit. Download the original.',
     );
 }

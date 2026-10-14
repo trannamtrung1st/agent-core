@@ -66,7 +66,7 @@ public sealed partial class SessionToolExecutor
             }
             var receipt = await driveService.EffectAsync(account, operationId, call.Name, authEpoch, fileId, effect, bytes, ct); return JsonSerializer.Serialize(new { untrusted = true, receipt }, OfficeJson);
         }
-        catch (DriveIndeterminateException ex) { return JsonSerializer.Serialize(new { error = "drive_effect_indeterminate", message = ex.Message, operationId = ex.OperationId, fileId = ex.FileId, causeCode = ex.CauseCode, retryAllowed = false, resumeAllowed = ex.ResumeAllowed }, OfficeJson); }
+        catch (DriveIndeterminateException ex) { return JsonSerializer.Serialize(new { error = "drive_effect_indeterminate", message = ex.Message, operationId = ex.OperationId, fileId = ex.FileId, causeCode = ex.CauseCode, retryAllowed = false, resumeAllowed = ex.ResumeAllowed, verificationFailures = ex.VerificationFailures, recoveryAction = ex.RecoveryAction }, OfficeJson); }
         catch (OperationCanceledException) { throw; }
         catch (AgentCoreException ex) { return Error(ex.Code, ex.Message); }
         catch (Exception ex) when (ex is ArgumentException or JsonException or FormatException or InvalidOperationException) { return Error("drive_invalid", "Drive arguments/provider data could not be interpreted safely."); }

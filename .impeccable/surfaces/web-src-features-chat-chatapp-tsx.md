@@ -98,3 +98,7 @@ The [successor verification ledger](../../docs/reports/drive-credentials-ux-veri
 ## P10 local sandbox extension
 
 Platform profiles and the Session sandbox drawer preserve the incumbent Ant Design operate surface and shared Office/Drive file preview. Theme tokens own spacing; output uses Collapse/copyable text and existing confirmations. A bounded 1440/1024/768/390/320px runtime review found no horizontal overflow after transitions settled. Save/Discard/navigation protection, actual artifacts, cancellation/reset and Core restart were exercised. Canonical docs and the OpenSandbox verification ledger own scope/remaining acceptance; this is local evidence, not production hardening.
+
+## Composer attachment tiles and binary intake (2026-10-14)
+
+Pending uploads use a compact responsive icon/filename grid inside the incumbent composer with complete hover/keyboard filenames, icon-only Remove/Retry, upload progress and local errors. Its 30vh/12rem vertical cap keeps the editor available; the parent list and each tile own separate native 8px insets. No pending thumbnails are generated. All file types are stored inertly within existing quotas; bounded Office extraction supports DOCX/XLSX. Sent previews/downloads retain their source-owned behavior. `/docs` owns upload authority and processing limits.

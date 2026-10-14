@@ -142,7 +142,7 @@ export function ApprovalModal({
       open={open}
       className="chat-approval"
       centered
-      width={semantic ? 720 : drive ? 640 : 520}
+      width={semantic ? 720 : drive ? 880 : 520}
       title={
         drive
           ? driveTitle
@@ -267,7 +267,7 @@ export function ApprovalModal({
                               title: 'Name',
                               dataIndex: 'name',
                               key: 'name',
-                              width: screens.md ? '44%' : undefined,
+                              width: screens.md ? '36%' : undefined,
                               render: (name: string, file) => (
                                 <Flex vertical gap={token.paddingXXS}>
                                   <Typography.Text strong>
@@ -288,7 +288,7 @@ export function ApprovalModal({
                               title: 'File ID',
                               dataIndex: 'fileId',
                               key: 'fileId',
-                              width: '40%',
+                              width: '52%',
                               responsive: ['md'],
                               render: (id: string) => (
                                 <Typography.Text
@@ -303,7 +303,7 @@ export function ApprovalModal({
                               title: 'Version',
                               dataIndex: 'expectedVersion',
                               key: 'expectedVersion',
-                              width: screens.md ? '16%' : 80,
+                              width: screens.md ? '12%' : 80,
                             },
                           ]}
                         />

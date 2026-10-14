@@ -1,8 +1,10 @@
+import type { PreviewOptions } from './previewOptions';
 export function processPreview<T>(
   kind: 'csv' | 'code',
   source: string,
   language: string,
   signal: AbortSignal,
+  policy: PreviewOptions,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./preview.worker.ts', import.meta.url), {
@@ -24,7 +26,7 @@ export function processPreview<T>(
           'Preview processing timed out. Read Text or download the original.',
         ),
       );
-    }, 5000);
+    }, policy.workerTimeoutMs);
     worker.onmessage = (event) => {
       stop();
       event.data.error
@@ -44,6 +46,6 @@ export function processPreview<T>(
       abort();
       return;
     }
-    worker.postMessage({ kind, source, language });
+    worker.postMessage({ kind, source, language, policy });
   });
 }

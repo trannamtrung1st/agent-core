@@ -148,7 +148,7 @@ function DefinitionVersionDetails({ row, renderResources }: {
             {environment?.capabilityMode ? <Descriptions.Item label="Always projected">{environment.alwaysCapabilities?.join(", ") || "None"}</Descriptions.Item> : null}
             <Descriptions.Item label="Harness references">{environment?.harness.join(", ") || "None"}</Descriptions.Item>
             <Descriptions.Item label="Workspace template">{environment?.workspaceTemplateId || "None"}</Descriptions.Item>
-            <Descriptions.Item label="Attachment handling">{environment?.allowUnreadUnsupportedAttachmentTypes ? "Allow unread unsupported types" : "Reject unread unsupported types"}</Descriptions.Item>
+            <Descriptions.Item label="Attachment handling">All file types; unsupported formats stored without automatic extraction</Descriptions.Item>
             <Descriptions.Item label="Knowledge sources">{environment?.knowledgeSources.length ? environment.knowledgeSources.map(source =>
               <div key={source.identity}>{source.title} · {source.identity} · {source.citation} · {source.resourcePath || "Legacy knowledge fallback"}</div>
             ) : "None"}</Descriptions.Item>

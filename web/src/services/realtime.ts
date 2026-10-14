@@ -2886,6 +2886,7 @@ async function uploadQueued(sessionId: string, localId: string): Promise<void> {
       attachmentId: uploaded.attachmentId,
       displayName: uploaded.displayName,
       contentType: uploaded.contentType,
+      readable: uploaded.readable,
       error: null
     });
     await syncVoiceStage();

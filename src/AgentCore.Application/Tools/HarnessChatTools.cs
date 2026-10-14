@@ -45,7 +45,7 @@ public static class HarnessChatTools
         "knowledge.remove" => "id is the exact knowledge identity from harness.inspect.",
         "instructions.update" => "content replaces the complete operating instructions; preserve other intended instructions from harness.inspect.",
         "tool.select" => "id must be an eligible configured tool from harness.inspect; enabled adds or removes it. attachments.read uses harness.tool.configure instead.",
-        "tool.configure" => "Only id=attachments.read is supported; allowUnreadUnsupportedTypes sets its readability policy.",
+        "tool.configure" => "Only id=attachments.read is supported; allowUnreadUnsupportedTypes is retained for legacy configuration compatibility and does not restrict HTTP uploads.",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 

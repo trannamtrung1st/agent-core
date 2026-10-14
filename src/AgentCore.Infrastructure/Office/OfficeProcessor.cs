@@ -11,6 +11,7 @@ public sealed partial class OfficeProcessor
     public OfficeProcessedFile EditDocument(ReadOnlyMemory<byte> bytes, IReadOnlyList<OfficeDocumentEdit> operations, CancellationToken ct) => Process(token => EditDocumentCore(bytes, operations, token), ct);
     public OfficeProcessedFile CreateWorkbook(OfficeWorkbookSpec spec, CancellationToken ct) => Process(token => CreateWorkbookCore(spec, token), ct);
     public OfficeWorkbookInspection InspectWorkbook(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct) => Process(token => InspectWorkbookCore(bytes, sheet, range, token), ct);
+    public OfficeWorkbookInspection PreviewWorkbook(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct) => Process(token => InspectWorkbookCore(bytes, sheet, range, token, true), ct);
     public OfficeProcessedFile EditWorkbook(ReadOnlyMemory<byte> bytes, IReadOnlyList<OfficeSpreadsheetEdit> operations, CancellationToken ct) => Process(token => EditWorkbookCore(bytes, operations, token), ct);
     private static T Process<T>(Func<CancellationToken, T> operation, CancellationToken caller)
     {

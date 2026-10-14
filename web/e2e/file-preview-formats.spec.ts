@@ -1,3 +1,4 @@
+import { selectSpreadsheetCell } from './support/spreadsheet';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { selectInstanceIdentity } from './support/instance-identity';
@@ -31,6 +32,11 @@ test('owned home images, inert code/Markdown, native media and unsupported files
       'with-image.docx',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       await readFile(new URL('with-image.docx', fixture)),
+    ],
+    [
+      'presentation.xlsx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      await readFile(new URL('presentation.xlsx', fixture)),
     ],
     [
       'rows.tsv',
@@ -94,17 +100,25 @@ test('owned home images, inert code/Markdown, native media and unsupported files
     image.getByRole('region', { name: 'Image canvas. Scroll or drag to pan.' }),
   ).toBeVisible();
   await page.keyboard.press('Escape');
+  const styled = await open('presentation.xlsx');
+  await selectSpreadsheetCell(styled, 'B4', '$1,234.50');
+  await selectSpreadsheetCell(styled, 'D4', '2026');
+  await styled.getByLabel('Worksheet range').fill('C2:D5');
+  await styled.getByRole('button', { name: 'Load range', exact: true }).click();
+  await expect(styled).toContainText('merged range crosses');
+  await page.keyboard.press('Escape');
   const tsv = await open('rows.tsv');
-  await expect(tsv.getByText('0001', { exact: true })).toBeVisible();
-  await expect(tsv.getByText('a,b', { exact: true })).toBeVisible();
+  await selectSpreadsheetCell(tsv, 'A2', '0001');
+  await selectSpreadsheetCell(tsv, 'B2', 'a,b');
   await tsv.getByText('Text', { exact: true }).click();
   await expect(tsv.locator('pre')).toContainText('0001\ta,b');
   await tsv.getByText('Grid', { exact: true }).click();
-  await expect(tsv.getByText('0001', { exact: true })).toBeVisible();
+  await selectSpreadsheetCell(tsv, 'A2', '0001');
   await page.keyboard.press('Escape');
   const wide = await open('wide.csv');
-  await wide.getByText('row1-col128', { exact: true }).scrollIntoViewIfNeeded();
-  await expect(wide.getByText('row1-col128', { exact: true })).toBeVisible();
+  await wide.getByRole('button', { name: 'Next columns', exact: true }).click();
+  await wide.getByRole('button', { name: 'Next columns', exact: true }).click();
+  await selectSpreadsheetCell(wide, 'DY2', 'row1-col128');
   await page.setViewportSize({ width: 320, height: 900 });
   await expect
     .poll(() =>
@@ -190,4 +204,47 @@ test('owned home images, inert code/Markdown, native media and unsupported files
   ).toBeEnabled();
   expect(errors).toEqual([]);
   expect(previewNavigations).toEqual([]);
+});
+
+test('large CSV windows source rows and preserves exact Text copy and download', async ({ page }) => {
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  const owner = await selectInstanceIdentity(page, { id: 'general-assistant', version: 26 });
+  const token = await page.evaluate(() => localStorage.getItem('agent-core.owner-capability'));
+  const headers = { 'X-AgentCore-Owner-Capability': token! };
+  const session = await page.request.post('/api/v2/sessions', { headers, data: { agentInstanceId: owner, mode: 'text' } });
+  const id = (await session.json()).sessionId;
+  const long = 'Unicode Việt 🙂\n=WEBSERVICE("https://invalid.test/never") ' + 'x'.repeat(8000);
+  const source = '\uFEFFid,note\r\n' + Array.from({ length: 50010 }, (_, i) =>
+    `${String(i + 1).padStart(5, '0')},${i === 199 ? '"' + long.replaceAll('"', '""') + '"' : '+literal'}`,
+  ).join('\r\n');
+  const saved = await page.request.put(`/api/v2/sessions/${id}/workspace/content?path=%2Fhome%2Ftall.csv`, {
+    headers: { ...headers, 'Content-Type': 'text/csv' }, data: Buffer.from(source),
+  });
+  expect(saved.ok()).toBe(true);
+  await page.goto(`/admin/instances/${owner}/workspace`);
+  await page.getByRole('button', { name: 'Preview tall.csv', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'tall.csv', exact: true });
+  await selectSpreadsheetCell(dialog, 'A2', '00001');
+  await expect(dialog).toContainText('parsing limit reached');
+  await dialog.locator('.ant-pagination-next').click();
+  await selectSpreadsheetCell(dialog, 'A201', '00200');
+  await expect(dialog).toContainText('long values shortened');
+  await selectSpreadsheetCell(dialog, 'B201', 'Unicode Việt');
+  const policyResponse = await page.request.get('/api/v2/file-preview/options', { headers });
+  expect(policyResponse.ok()).toBe(true);
+  const policy = await policyResponse.json();
+  const details = await dialog.locator('.file-preview-cell-detail').textContent();
+  expect(details!.length).toBeLessThanOrEqual(policy.spreadsheet.maxCellCharacters + 64);
+  expect(details).toContain('…');
+  await dialog.getByText('Text', { exact: true }).click();
+  await expect(dialog).toContainText('configured text line limit');
+  await dialog.getByRole('button', { name: 'Copy', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source);
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Download tall.csv', exact: true }).click();
+  expect(await readFile((await (await download).path())!)).toEqual(Buffer.from(source));
+  expect(errors).toEqual([]);
 });

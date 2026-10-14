@@ -1,9 +1,16 @@
 # Implementation Plan
 
-The OpenSandbox cutover is synchronized with the owner-selected main snapshot
-`ed943429`. General Assistant v30 preserves main's immutable v29 and combines
-its current public-download/Drive/Office authority with sandbox execution. Combined
-verification and hosted gate status are tracked in the [OpenSandbox ledger](reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
+## Verification policy for current work
+
+Complete ordinary requests within their scope using focused local checks; they do not start milestone closure or require full backend/frontend/browser/Compose suites. Broaden local verification only for affected boundaries, failures or explicitly requested milestone acceptance. [Testing Strategy](16-testing-strategy.md#verification-scope-and-optional-ci) owns the current policy.
+
+CI is optional and runs only on explicit user request. This policy supersedes older mandatory hosted/exact-SHA CI language below for current work, including milestone acceptance unless the user explicitly requests CI as part of it. Preserve historical acceptance criteria, freeze SHAs and CI receipts as records of their original versions. Report local completion separately from milestone acceptance and never claim unrun checks passed.
+
+The OpenSandbox cutover is synchronized with main snapshot `d279abfe`.
+General Assistant v30 preserves main's immutable v29 and combines its current
+public-download/Drive/Office authority with sandbox execution. Main's Drive upload
+recovery, binary attachments and shared Office/file preview styling are retained.
+Focused local verification and historical hosted results are tracked in the [OpenSandbox ledger](reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
 prior acceptance below remains evidence for its original behavior SHA.
 
 ## P10 OpenSandbox cutover (authorized 2026-10-13)
@@ -658,3 +665,12 @@ The [Drive credentials/Trash UX successor](reports/drive-credentials-ux-verifica
 The 2026-10-14 owner-approved enhancement extends the implemented public-web, Agent Workspace and Office/Artifact substrate. Scope is exact public binary GET → owned create-only/hash-guarded file → supported Office inspection/edit → explicit Artifact return, using normal capability projection and durable Run fences. General Assistant v29 adds an explicit grant; existing published versions are immutable. This does not start P10/P11 or change prior milestone freezes.
 
 Local acceptance requires deterministic transfer/security/limits/cancellation fixtures, an actual owned model/tool-to-Office-to-Artifact Run, conflict/failed-write cleanup, cross-Session home/scratch isolation, SQLite restart/retry/checkpoint evidence, applicable backend regression suites and canonical documentation consistency. The user explicitly waived waiting for external CI and authorized commit/push to main. [The verification ledger](reports/public-binary-download-verification-2026-10-14.md) records actual local results and remaining live/manual boundaries; hosted acceptance is not inferred.
+
+## Unified FortuneSheet and backend preview policy follow-up
+
+The approved 2026-10-14 follow-up replaces XLSX and CSV/TSV Grid Tables with one read-only FortuneSheet canvas and moves operational preview limits to validated backend configuration. Existing Office/Drive successor prerequisites and historical acceptance stay intact; P10/P11 remain unopened. Acceptance requires actual inert/read-only renderer behavior, bounded navigable windows, common formatting, consistent policy/source handling, original download recovery, local backend/frontend/browser/package gates and bounded Impeccable/documentation/license synchronization. External CI waiting is waived by the user's instruction. [Verification and remaining limitations](reports/fortune-sheet-preview-verification-2026-10-14.md) own actual gate status; implementation alone is not milestone acceptance.
+
+The requested composer/binary-upload follow-up accepts all file formats as inert originals within existing attachment quotas and reuses guarded Office readers for bounded DOCX/XLSX context and rereads. Pending uploads use compact icon/filename tiles with responsive vertical containment and native recovery controls. [Local verification](reports/composer-attachments-binary-upload-2026-10-14.md) records actual upload/send/reload/retry journeys and focused checks; historical hosted freezes remain unchanged.
+
+
+The requested 2026-10-14 Office attachment reading correction builds on the implemented Office and composer successors: compact initial context remains, while authorized agents choose sheets/ranges or document pages directly through read-only `attachments.read`, with whole-row output fitting and explicit continuation. Full-file summaries can continue without a Workspace copy or user reauthorization. Unsupported features and safety limits remain separate from invalid-package errors. Local runtime/regression evidence is recorded in [Office attachment reading verification](reports/office-attachment-reading-verification-2026-10-14.md); this correction does not reopen historical milestones or claim their full acceptance.

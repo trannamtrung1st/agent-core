@@ -1,9 +1,10 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Office;
 using AgentCore.Application.Sessions;
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Tools;
@@ -14,11 +15,12 @@ public sealed partial class SessionToolExecutor
     private sealed record DocumentCreate(string Path, string? Title, IReadOnlyList<OfficeSection>? Sections);
     private sealed record WorkbookCreate(string Path, IReadOnlyList<OfficeSheet>? Sheets);
     private sealed record DocumentInspect(string Path, int Offset = 0, int Limit = 20);
-    private sealed record WorkbookInspect(string Path, string? Sheet = null, string? Range = "A1:J50");
+    private sealed record WorkbookInspect(string Path, string? Sheet = null, string? Range = null);
+    private sealed record OfficeAttachmentRead(string AttachmentId, string? Sheet = null, string? Range = null, int Offset = 0, int Limit = 100);
     private sealed record DocumentEdit(string Path, string ExpectedSha256, IReadOnlyList<OfficeDocumentEdit>? Operations);
     private sealed record WorkbookEdit(string Path, string ExpectedSha256, IReadOnlyList<OfficeSpreadsheetEdit>? Operations);
     private static T OfficeArgs<T>(JsonElement args) => args.Deserialize<T>(OfficeJson) ?? throw AgentCoreErrors.Validation("office_operation_unsupported: Arguments are required.");
-    private async Task<string> ExecuteOfficeAsync(string name, AgentDefinition definition, Guid sessionId, JsonElement args, string cwd, CancellationToken ct)
+    private async Task<string> ExecuteOfficeAsync(string name, AgentDefinition definition, Guid sessionId, JsonElement args, string cwd, int outputBudget, CancellationToken ct)
     {
         if (officeProcessor is null || agentWorkspace is null || workspace is null || !await AgentWorkspaceAvailableAsync(sessionId, ct))
             return Error("unavailable", "Office processing requires an owned Agent Instance workspace.");
@@ -43,14 +45,21 @@ public sealed partial class SessionToolExecutor
             {
                 await workspace.EnsureAsync(sessionId, definition, ct);
                 var source = await ReadExecutionWorkspaceAsync(sessionId, definition, path, ct);
-                if (source.Bytes.Length > OfficeLimits.MaxPackageBytes) return Error("invalid_office_package", "The Office file exceeds 10 MiB.");
+                if (source.Bytes.Length > OfficeLimits.MaxPackageBytes) return Error("office_processing_limit", "The Office file exceeds the 10 MiB processing limit; this does not establish corruption.");
                 if (action == "inspect")
                 {
-                    object inspection;
-                    if (document) { var input = OfficeArgs<DocumentInspect>(args); inspection = officeProcessor.InspectDocument(source.Bytes, input.Offset, input.Limit, ct); }
-                    else { var input = OfficeArgs<WorkbookInspect>(args); inspection = officeProcessor.InspectWorkbook(source.Bytes, input.Sheet, input.Range, ct); }
-                    var json = JsonSerializer.Serialize(new { untrusted = true, path = AgentWorkspacePaths.Public(path), inspection }, OfficeJson);
-                    return Encoding.UTF8.GetByteCount(json) <= 128 * 1024 ? json : Error("office_operation_unsupported", "The excerpt exceeds tool output limits. Request fewer sections or a smaller range.");
+                    if (document)
+                    {
+                        var input = OfficeArgs<DocumentInspect>(args);
+                        return OfficeReadResults.Document(officeProcessor.InspectDocument(source.Bytes, input.Offset, input.Limit, ct), input.Offset, Math.Min(outputBudget, 128 * 1024),
+                            page => JsonSerializer.Serialize(new { untrusted = true, path = AgentWorkspacePaths.Public(path), inspection = page }, OfficeJson));
+                    }
+                    else
+                    {
+                        var input = OfficeArgs<WorkbookInspect>(args);
+                        return OfficeReadResults.Workbook(officeProcessor.InspectWorkbook(source.Bytes, input.Sheet, input.Range, ct), Math.Min(outputBudget, 128 * 1024),
+                            page => JsonSerializer.Serialize(new { untrusted = true, path = AgentWorkspacePaths.Public(path), inspection = page }, OfficeJson));
+                    }
                 }
                 if (!TryString(args, "expectedSha256", out expectedHash) || expectedHash.Length != 64 || !expectedHash.All(Uri.IsHexDigit)) return Error("invalid", "expectedSha256 is required for edits.");
                 expectedHash = expectedHash.ToLowerInvariant();
@@ -73,5 +82,46 @@ public sealed partial class SessionToolExecutor
         catch (JsonException) { return Error("invalid", "Office arguments do not match the closed tool schema."); }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException or FormatException or System.Xml.XmlException or NullReferenceException)
         { return Error("invalid_office_package", "The file or operation is unsupported or corrupt; source bytes are unchanged."); }
+    }
+
+    private async Task<string> ReadOfficeAttachmentAsync(Guid sessionId, AttachmentRecord record, JsonElement args, int budget, CancellationToken ct)
+    {
+        try
+        {
+            var input = OfficeArgs<OfficeAttachmentRead>(args);
+            var spreadsheet = AttachmentMedia.NormalizeContentType(record.ContentType) == OfficeLimits.SpreadsheetMime;
+            if (spreadsheet && (args.TryGetProperty("offset", out _) || args.TryGetProperty("limit", out _)))
+                return Error("invalid", "Use sheet/range for XLSX; offset/limit apply to DOCX.");
+            if (!spreadsheet && (args.TryGetProperty("sheet", out _) || args.TryGetProperty("range", out _)))
+                return Error("invalid", "Use offset/limit for DOCX; sheet/range apply to XLSX.");
+            if (record.ByteSize > OfficeLimits.MaxPackageBytes)
+                return Error("office_processing_limit", "The Office attachment exceeds the 10 MiB processing limit; this does not establish corruption.");
+            await using var stream = await attachments!.OpenContentAsync(sessionId, record.AttachmentId, ct);
+            using var bytes = new MemoryStream();
+            var buffer = new byte[81920];
+            while (true)
+            {
+                var read = await stream.ReadAsync(buffer, ct);
+                if (read == 0) break;
+                if (bytes.Length + read > OfficeLimits.MaxPackageBytes) return Error("office_processing_limit", "The Office attachment exceeds the processing byte limit.");
+                bytes.Write(buffer, 0, read);
+            }
+            string Envelope(object inspection) => JsonSerializer.Serialize(new
+            {
+                untrusted = true, record.AttachmentId, record.DisplayName, record.ContentType, kind = "office", inspection
+            }, OfficeJson);
+            if (spreadsheet)
+            {
+                return OfficeReadResults.Workbook(officeProcessor!.InspectWorkbook(bytes.ToArray(), input.Sheet, input.Range, ct), budget, Envelope);
+            }
+            return OfficeReadResults.Document(officeProcessor!.InspectDocument(bytes.ToArray(), input.Offset, input.Limit, ct), input.Offset, budget, Envelope);
+        }
+        catch (JsonException) { return Error("invalid", "Office attachment arguments do not match the closed tool schema."); }
+        catch (AgentCoreException ex)
+        {
+            var code = ex.Message.StartsWith("invalid_office_package:", StringComparison.Ordinal) ? "invalid_office_package"
+                : ex.Message.StartsWith("office_operation_unsupported:", StringComparison.Ordinal) ? "office_operation_unsupported" : ex.Code;
+            return Error(code, ex.Message);
+        }
     }
 }

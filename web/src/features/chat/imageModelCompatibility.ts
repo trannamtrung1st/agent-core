@@ -16,7 +16,7 @@ export function isImageContentType(contentType: string): boolean {
 }
 
 export function pendingAttachmentsIncludeImage(pending: readonly PendingAttachment[]): boolean {
-  return pending.some((item) => isImageContentType(item.contentType));
+  return pending.some((item) => item.readable !== false && isImageContentType(item.contentType));
 }
 
 export function pendingSendQueueIncludesImage(queue: readonly PendingSendItem[]): boolean {

@@ -94,7 +94,7 @@ public sealed class AttachmentProcessorTests
         var legacy = AttachmentProcessor.CacheKey(id, "attachment-processors/1");
         var current = AttachmentProcessor.CacheKey(id, AttachmentLimits.ProcessorVersion);
         Assert.NotEqual(legacy, current);
-        Assert.Equal("attachment-processors/3", AttachmentLimits.ProcessorVersion);
+        Assert.Equal("attachment-processors/5", AttachmentLimits.ProcessorVersion);
     }
 
     [Fact]

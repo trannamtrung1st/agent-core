@@ -2,8 +2,60 @@
 
 ## Current main integration — 2026-10-14
 
-The owner selected **main `ed943429c619d1e28f0878222328a8c6af4b43b9`** as the final
-synchronization snapshot. It adds public binary downloads and responsive exact
+The renewed owner-authorized synchronization merges main
+**`d279abfe6c40d9835123396607f4f7f843a7f9bf`** into `develop/branch-1`.
+Main's Drive upload completion/terminal recovery, binary attachment intake,
+bounded paged Office attachment reading, backend preview policy, shared
+read-only FortuneSheet renderer and unified sent-file cards are retained.
+The wider 880px Drive approval styling coexists with the first-Escape tooltip
+fix, exact review authority and existing responsive sandbox drawer.
+General Assistant v26–v29 remain byte-identical to main; v30 retains both main's
+public download/Drive/Office grants and modern sandbox tools. No seed collision
+or additional published version is necessary.
+
+All merge conflicts are resolved by combining the independently owned
+contracts. The combined Drive fixture now selects cells through main's shared
+spreadsheet helper. The real Workbench browser regression additionally opens
+its generated Excel and Word Artifacts through main's current viewer before
+and after Core/server recreation, checking cell content, rendered Word content,
+Escape/focus recovery and unchanged protected download hashes.
+
+The uncommitted `progrwess` typo in AttachmentPreview's fixture was preserved
+as a local patch and path-specific stash before merge; the merged fixture uses
+the correct `progress` property. No user data or unrelated processes are reset.
+
+Current main makes hosted CI optional and manual. This synchronization follows
+focused local verification rather than dispatching or waiting for new hosted
+checks. All eight hosted jobs passed on preceding source `425ee624` in
+[workflow 38545247384](https://github.com/trannamtrung1st/agent-core/actions/runs/38545247384);
+that historical result does not establish CI acceptance for this merge.
+
+Focused verification of this merged candidate:
+
+| Check | Command / exercised workflow | Result |
+| --- | --- | --- |
+| API | `dotnet test tests/AgentCore.Api.Tests/AgentCore.Api.Tests.csproj --no-build --no-restore -m:1 --filter 'FullyQualifiedName~AttachmentApiTests\|FullyQualifiedName~FilePreviewPolicyTests\|FullyQualifiedName~DriveUploadCompletionTests\|FullyQualifiedName~DriveJourneyTests\|FullyQualifiedName~OfficeJourneyTests\|FullyQualifiedName~SandboxApiTests\|FullyQualifiedName~PublicDownloadApiTests'` | **64 passed**, including HTTP → hub Office attachment reads, protected original bytes, upload recovery and sandbox inspection |
+| Infrastructure | `dotnet test tests/AgentCore.Infrastructure.Tests/AgentCore.Infrastructure.Tests.csproj --no-restore -m:1 --filter 'FullyQualifiedName~OfficeProcessorTests\|FullyQualifiedName~OfficePreviewPresentationTests\|FullyQualifiedName~AttachmentProcessorTests\|FullyQualifiedName~DrivePersistenceTests\|FullyQualifiedName~GoogleDriveTests\|FullyQualifiedName~SandboxStoreTests\|FullyQualifiedName~StoreTests'` | **225 passed**, including paged Office reads, immutable catalog, SQLite recovery and Drive completion |
+| Application | `dotnet test tests/AgentCore.Application.Tests/AgentCore.Application.Tests.csproj --no-restore -m:1 --filter 'FullyQualifiedName~SessionToolExecutorTests\|FullyQualifiedName~AttachmentProcessingRuntimeTests\|FullyQualifiedName~SessionAttachmentRecallTests\|FullyQualifiedName~PublicDownloadRuntimeTests\|FullyQualifiedName~SecretaryIdentityTests\|FullyQualifiedName~SandboxToolTests'` | **43 passed**, including current-turn extraction, bounded tool output, ownership and preserved combined authority |
+| Frontend | Supported Node 22; `pnpm exec vitest run` selected Composer, ApprovalModal, AttachmentPreview, ArtifactView, filePreview, SessionSandboxDrawer, SandboxProfilesSection, InstanceSettingsSection and definitionCandidateEditor files | **110 unique cases passed** across 14 files after isolated retry. Initial Admin run: 26 passed / one 30-second timeout while concurrent suites ran. The unchanged three-case SandboxProfiles fixture passes with `--maxWorkers=1`; no assertions/bounds changed. Existing React act warnings and jsdom NaN-height warning remain; no unhandled errors. |
+| Build | `pnpm install --frozen-lockfile`, `pnpm run build` | Pinned main renderer installed; TypeScript/Vite pass. Existing large-renderer chunk warning remains. |
+| Synthetic browser | `pnpm exec playwright test --project=synthetic e2e/drive-office.spec.ts e2e/office-preview.spec.ts e2e/composer-attachments.spec.ts e2e/message-files.spec.ts e2e/approval-layout.spec.ts e2e/file-preview.spec.ts e2e/file-preview-formats.spec.ts` on isolated ports/SQLite | **11 passed / 1.8 minutes**: exact Drive Escape rejection/approval, wider review layouts, epoch recovery, read-only/copy/paste/formula-cache guards, smaller-range recovery, upload retry/removal, original downloads and shared file cards at desktop/mobile widths |
+| Real Docker | `python3 scripts/opensandbox-local.py accept --name agent-core-opensandbox-acceptance --ui` | Compatibility/resource/network probes pass; **31 cases / zero skips**. Both strengthened browser phases pass (**30.2 seconds before / approximately 1.6 minutes after** actual Core/server recreation), including generated XLSX/DOCX previews, exact downloads, output streaming, cancellation/reset and independent background ownership. |
+| Playwright MCP | Visible Admin creation of a General Assistant v30 Instance → Chat `synthetic-office: q3-sales` → shared XLSX viewer B4 → oversized A1:B201 rejection → A1:B2 recovery → 390px containment → Escape/focus restoration → shared Word preview | Pass: `SUM(B2:B3)` with truthful unavailable cached value; smaller window loads; Word heading rendered; file cards contained and both preview triggers regain focus. No application JavaScript errors. One expected HTTP 413 console entry records the deliberately rejected range. The first attempt used CLI-owned hosts which shut down after their passing suite; its connection refusal was resolved by restarting the same disposable data/ports as stable MCP hosts, then performing the complete flow. |
+| Consistency | All published main agent files compared byte-for-byte; v30 grant superset; 25-document local-path/conflict audit; JSON parse; `git diff --check` | Pass |
+
+Evidence remains under gitignored `local/opensandbox-demo/current-main-*.log`,
+the runner's retained project-owned image/SPDX/notices and disposable SQLite,
+and the Playwright output directories. All owned application/server processes
+were stopped; unrelated host resources were left running. No new hosted CI,
+paid provider, real Google account or physical-device acceptance was run.
+The coding/Office demo remains ready within the trusted-local scope described
+below; production hardening limitations are unchanged.
+
+## Earlier selected-main integration — 2026-10-14
+
+The owner selected **main `ed943429c619d1e28f0878222328a8c6af4b43b9`** as the synchronization
+snapshot for that review; the later synchronization above supersedes that selection. It adds public binary downloads and responsive exact
 Drive approval tables. Conflicts preserve those contracts/UI and sandbox
 ownership/recovery. Main's immutable General Assistant v26–v29 are byte-identical;
 new **v30** combines main v29's public-download/Drive/Office grants with the five
@@ -78,7 +130,7 @@ The complete strengthened v30 journey passes (**45.9 seconds**) at all existing
 viewport bounds; 45 composer/approval cases and TypeScript/Vite builds pass. The
 new tooltip regression advances only its logical timers inside act; existing
 Composer fixtures retain their React act warnings, with zero unhandled errors.
-The final corrected source requires all eight PR checks.
+The corrected source `425ee6242a21a907b0b39b0e17477a34d3d8979f` passed all eight hosted jobs in [workflow 38545247384](https://github.com/trannamtrung1st/agent-core/actions/runs/38545247384). Those receipts apply to that source, before the later main synchronization above.
 
 The preceding combined source **`b26291d249a19fb194bb825389419f396ba3ea08`**
 (main `d2bada99`, combined v29) passed all eight

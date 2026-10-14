@@ -2,10 +2,13 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Office;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using SkiaSharp;
 using System.Buffers.Binary;
+using System.Text.Json;
+using AgentCore.Application.Sessions;
 
 namespace AgentCore.Infrastructure.Attachments;
 
@@ -15,6 +18,7 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
     public static int CompletedRemoteFetches;
 
     private readonly IAttachmentStore _store;
+    private readonly IOfficeProcessor? _office;
     private readonly ConcurrentDictionary<string, AttachmentProcessResult> _cache = new(StringComparer.Ordinal);
 
     public AttachmentProcessor(IAttachmentStore store)
@@ -27,6 +31,9 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
         _store = store;
         Version = version;
     }
+
+    public AttachmentProcessor(IAttachmentStore store, IOfficeProcessor office)
+        : this(store, AttachmentLimits.ProcessorVersion) => _office = office;
 
     public string Version { get; }
 
@@ -83,7 +90,7 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
         }
     }
 
-    private static async Task<AttachmentProcessResult> ProcessOneAsync(
+    private async Task<AttachmentProcessResult> ProcessOneAsync(
         AttachmentRecord record,
         Stream content,
         CancellationToken cancellationToken)
@@ -100,7 +107,7 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
             await using var copy = new MemoryStream();
             await content.CopyToAsync(copy, timeout.Token).ConfigureAwait(false);
             var bytes = copy.ToArray();
-            return ProcessBytes(record, bytes);
+            return ProcessBytes(record, bytes, _office, timeout.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -108,7 +115,7 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
         }
     }
 
-    public static AttachmentProcessResult ProcessBytes(AttachmentRecord record, byte[] bytes)
+    public static AttachmentProcessResult ProcessBytes(AttachmentRecord record, byte[] bytes, IOfficeProcessor? office = null, CancellationToken cancellationToken = default)
     {
         if (!record.Readable)
         {
@@ -116,6 +123,31 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
         }
 
         var type = AttachmentMedia.NormalizeContentType(record.ContentType);
+        if (type is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime)
+        {
+            if (office is null) return Unsupported(record, "unsupported_reader");
+            if (bytes.Length > OfficeLimits.MaxPackageBytes) return Unsupported(record, "office_processing_limit");
+            try
+            {
+                // Reuse the guarded OOXML reader; formulas, macros and external links are never executed.
+                object inspection = type == OfficeLimits.DocumentMime
+                    ? office.InspectDocument(bytes, 0, 100, cancellationToken)
+                    : office.InspectWorkbook(bytes, null, "A1:J50", cancellationToken);
+                var text = inspection is OfficeWorkbookInspection workbook
+                    ? OfficeReadResults.Workbook(workbook, AttachmentLimits.MaxExtractionOutputBytes)
+                    : OfficeReadResults.Document((OfficeDocumentInspection)inspection, 0, AttachmentLimits.MaxExtractionOutputBytes);
+                return new AttachmentProcessResult(record.AttachmentId, AttachmentLimits.ProcessorVersion,
+                    AttachmentProcessKind.ExtractedText, record.DisplayName, type, text,
+                    Provenance: "Initial Office excerpt, not full-file coverage. Processing limits do not imply file corruption.",
+                    StrippedImage: null, FailureCode: null);
+            }
+            catch (AgentCoreException ex)
+            {
+                var code = ex.Message.StartsWith("invalid_office_package:", StringComparison.Ordinal) ? "invalid_office_package"
+                    : ex.Message.StartsWith("office_operation_unsupported:", StringComparison.Ordinal) ? "office_operation_unsupported" : ex.Code;
+                return Unsupported(record, code) with { Text = $"Attachment '{record.DisplayName}' could not be processed ({code}): {ex.Message}" };
+            }
+        }
         if (AttachmentMedia.IsImage(type))
         {
             return ProcessImage(record, bytes);
@@ -136,7 +168,11 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
 
     private static AttachmentProcessResult ProcessText(AttachmentRecord record, byte[] bytes)
     {
-        var text = Encoding.UTF8.GetString(bytes);
+        string text;
+        try { text = new UTF8Encoding(false, true).GetString(bytes); }
+        catch (DecoderFallbackException) { return Unsupported(record, "invalid_utf8"); }
+        if (text.Any(character => char.IsControl(character) && character is not ('\t' or '\n' or '\r' or '\f')))
+            return Unsupported(record, "binary_content");
         ObserveRemoteReferences(text);
         text = Truncate(text);
         return new AttachmentProcessResult(

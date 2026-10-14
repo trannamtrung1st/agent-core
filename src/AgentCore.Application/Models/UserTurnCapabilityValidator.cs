@@ -35,7 +35,7 @@ public sealed class UserTurnCapabilityValidator(IAttachmentStore attachments, IM
         foreach (var id in attachmentIds)
         {
             var record = await attachments.GetAsync(sessionId, id, cancellationToken).ConfigureAwait(false);
-            if (record is not null && AttachmentMedia.IsImage(record.ContentType))
+            if (record is { Readable: true } && AttachmentMedia.IsImage(record.ContentType))
             {
                 EnsureVisionSupported(selection);
                 return;

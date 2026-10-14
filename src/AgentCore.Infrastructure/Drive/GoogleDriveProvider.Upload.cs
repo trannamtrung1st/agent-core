@@ -38,6 +38,12 @@ internal sealed partial class GoogleDriveProvider
         if (current is { ProtectedUploadSession: not null, State: "Dispatched" or "Indeterminate" })
             await operations.UpdateAsync(current with { ProtectedUploadSession = null, Revision = current.Revision + 1 }, current.Revision, CancellationToken.None);
     }
+    private async Task ReleaseCompletedUploadSession(DriveOperation operation)
+    {
+        var current = await operations.GetAsync(operation.AgentInstanceId, operation.OperationId, CancellationToken.None);
+        if (current is { ProtectedUploadSession: not null, State: "Dispatched" or "Indeterminate" })
+            await operations.UpdateAsync(current with { ProtectedUploadSession = null, Revision = current.Revision + 1 }, current.Revision, CancellationToken.None);
+    }
     private static AgentCore.Application.Sessions.AgentCoreException ExpiredUploadFailure() => Failure(
         "drive_upload_session_expired", "The upload session expired. Inspect the known file and account access in Drive. Completion remains unknown; no replacement upload was started.", 409);
 
@@ -65,13 +71,15 @@ internal sealed partial class GoogleDriveProvider
     {
         if (bytes.Length > GoogleDriveOptions.MaxTransferBytes)
             throw Failure("drive_transfer_too_large", "Drive file exceeds 50 MiB.", 413);
+        if (!MediaTypeHeaderValue.TryParse(mime, out var uploadType) || uploadType.MediaType is null)
+            throw new DriveEffectNotExecutedException("drive_invalid", "Upload media type is invalid; no content request was sent.");
         Uri session;
         var offset = 0;
         if (operation.ProtectedUploadSession is { } protectedSession)
         {
             session = UploadSession(protector.Unprotect(credential, 1, protectedSession));
             var progress = await InspectUpload(session, bytes.Length, operation, ct);
-            if (progress.Complete) return;
+            if (progress.Complete) { await ReleaseCompletedUploadSession(operation); return; }
             offset = progress.Offset;
         }
         else
@@ -80,7 +88,7 @@ internal sealed partial class GoogleDriveProvider
             {
                 var request = new HttpRequestMessage(HttpMethod.Post,
                     "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id")
-                { Content = Json(new { id, name, mimeType = mime, parents = new[] { parent } }) };
+                { Content = Json(new { id, name, mimeType = uploadType.MediaType, parents = new[] { parent } }) };
                 request.Headers.TryAddWithoutValidation("X-Upload-Content-Type", mime);
                 request.Headers.TryAddWithoutValidation("X-Upload-Content-Length", bytes.Length.ToString(CultureInfo.InvariantCulture));
                 return request;
@@ -130,7 +138,7 @@ internal sealed partial class GoogleDriveProvider
                 // Observe accepted bytes before continuation, never replay a blind PUT.
                 progress = await InspectUpload(session, bytes.Length, operation, ct);
             }
-            if (progress.Complete) return;
+            if (progress.Complete) { await ReleaseCompletedUploadSession(operation); return; }
             if (progress.Offset < offset || progress.Offset == offset && ++stalled > MaxUploadRecoveryChecks)
                 throw Failure("drive_effect_indeterminate", "Drive upload made no verified progress. Check or continue this operation; do not create another file.", 409);
             if (progress.Offset > offset) stalled = 0;

@@ -100,6 +100,7 @@ public sealed partial class DriveJourneyTests
         public int Uploads; public string Mode = "after"; public TaskCompletionSource? Release; public IDriveOperationStore? Operations;
         public string? DeniedParent; public int ParentReads, Trashes, Renames;
         public string? FailTrashId; public string TrashFailure = "none"; public bool FailTrashRead;
+        public bool NormalizeUploadMime;
         public Func<string, CancellationToken, Task>? AfterTrash;
         public bool Enabled => inner.Enabled; public bool Configured => inner.Configured; public bool Synthetic => inner.Synthetic;
         public IGoogleDriveProvider Create(Guid id, long revision) => new LostProvider(inner.Create(id, revision), this);
@@ -108,11 +109,12 @@ public sealed partial class DriveJourneyTests
     {
         public ValueTask<string> GenerateIdAsync(CancellationToken ct) => inner.GenerateIdAsync(ct);
         public ValueTask<DriveFilePage> ListAsync(string? folder, string? query, string? cursor, int limit, CancellationToken ct) => inner.ListAsync(folder, query, cursor, limit, ct);
-        public ValueTask<DriveFile> GetAsync(string id, CancellationToken ct)
+        public async ValueTask<DriveFile> GetAsync(string id, CancellationToken ct)
         {
             if (id == owner.FailTrashId && owner.FailTrashRead && owner.Trashes > 0) throw new AgentCore.Application.Sessions.AgentCoreException("drive_not_found", "Target temporarily unavailable after PATCH.", 404);
             if (id == owner.DeniedParent) { owner.ParentReads++; throw new AgentCore.Application.Sessions.AgentCoreException("drive_not_found", "Parent unavailable under drive.file.", 404); }
-            return inner.GetAsync(id, ct);
+            var file = await inner.GetAsync(id, ct);
+            return owner.NormalizeUploadMime ? file with { MimeType = file.MimeType.Split(';')[0].Trim() } : file;
         }
         public ValueTask CreateFolderAsync(string id, string name, string parent, CancellationToken ct) => inner.CreateFolderAsync(id, name, parent, ct);
         public async ValueTask UploadAsync(string id, string name, string parent, string mime, ReadOnlyMemory<byte> bytes, DriveOperation op, CancellationToken ct)
@@ -130,6 +132,7 @@ public sealed partial class DriveJourneyTests
             if (owner.Mode == "after") throw new HttpRequestException("lost response");
         }
         public ValueTask<byte[]> DownloadAsync(DriveFile file, CancellationToken ct) => inner.DownloadAsync(file, ct);
+        public ValueTask<byte[]> DownloadAsync(DriveFile file, int maxBytes, CancellationToken ct) => inner.DownloadAsync(file, maxBytes, ct);
         public ValueTask RenameAsync(string id, string name, CancellationToken ct) { owner.Renames++; return inner.RenameAsync(id, name, ct); }
         public ValueTask MoveAsync(string id, string source, string destination, CancellationToken ct) => inner.MoveAsync(id, source, destination, ct);
         public async ValueTask TrashAsync(string id, CancellationToken ct)

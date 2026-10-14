@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { selectSpreadsheetCell } from '../e2e/support/spreadsheet';
 
 const stateFile = process.env.AGENTCORE_OSB_UI_STATE!;
 async function send(page: Page, scenario: string) {
@@ -22,6 +23,23 @@ async function environment(page: Page, id: string, headers: Record<string, strin
   expect(response.ok()).toBe(true); return await response.json();
 }
 
+async function previewOfficeArtifacts(page: Page) {
+  const workbookOpen = page.getByRole('button', { name: 'Preview report.xlsx', exact: true }).first();
+  await workbookOpen.click();
+  const workbook = page.getByRole('dialog', { name: 'report.xlsx', exact: true });
+  await selectSpreadsheetCell(workbook, 'B1', '5');
+  await page.keyboard.press('Escape');
+  await expect(workbook).toHaveCount(0);
+  await expect(workbookOpen).toBeFocused();
+  const documentOpen = page.getByRole('button', { name: 'Preview report.docx', exact: true }).first();
+  await documentOpen.click();
+  const document = page.getByRole('dialog', { name: 'report.docx', exact: true });
+  await expect(page.frameLocator('iframe[title="Word document preview"]').getByText('Total: 5', { exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(document).toHaveCount(0);
+  await expect(documentOpen).toBeFocused();
+}
+
 test('actual Workbench artifacts, stream, recovery and process recreation', async ({ page }, info) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   const headers = await setup(page);
@@ -41,6 +59,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
       const download = await request; const bytes = fs.readFileSync((await download.path())!);
       expect(crypto.createHash('sha256').update(bytes).digest('hex')).toBe(file.sha256);
     }
+    await previewOfficeArtifacts(page);
     // The observed partial output must arrive while the actual command runs.
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('synthetic-sandbox:long');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -107,6 +126,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
       const bytes = fs.readFileSync((await download.path())!); expect(bytes.subarray(0, 2).toString()).toBe('PK');
       artifacts.push({ name, sha256: crypto.createHash('sha256').update(bytes).digest('hex') });
     }
+    await previewOfficeArtifacts(page);
     await expect(await send(page, 'init')).toContainText('"stdout":"I"');
     const lease = await environment(page, sessionId, headers);
     fs.writeFileSync(stateFile, JSON.stringify({ sessionId, generation: lease.generation, artifacts }));

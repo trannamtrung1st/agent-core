@@ -171,6 +171,23 @@ public sealed class AttachmentProcessingRuntimeTests
     }
 
     [Fact]
+    public void Office_prompt_advertises_continuation_only_when_read_is_available()
+    {
+        var office = new AgentCore.Infrastructure.Office.OfficeProcessor();
+        var bytes = office.CreateWorkbook(new([new("Checklist", [[new("text", Text: "Wedding item")]])]), default).Bytes;
+        var now = DateTimeOffset.UtcNow;
+        var record = new AttachmentRecord(Guid.NewGuid(), Guid.NewGuid(), "blob", "checklist.xlsx", OfficeLimits.SpreadsheetMime,
+            bytes.Length, "hash", AttachmentState.Bound, true, Guid.NewGuid(), false, now, null, now);
+        var processed = AttachmentProcessor.ProcessBytes(record, bytes, office);
+        var unavailable = PromptContextBuilder.BuildCurrentUserMessage("Summarize", [processed], attachmentsReadAvailable: false);
+        Assert.DoesNotContain("attachments.read", unavailable.Text);
+        Assert.Contains("Do not claim full-file coverage", unavailable.Text);
+        var available = PromptContextBuilder.BuildCurrentUserMessage("Summarize", [processed], attachmentsReadAvailable: true);
+        Assert.Contains("attachments.read", available.Text);
+        Assert.Contains("without asking permission", available.Text);
+    }
+
+    [Fact]
     public async Task Stale_gated_attachment_completion_preserves_live_turn_processing()
     {
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Flex, Progress, Typography } from "antd";
+import { Button, Flex, Progress, Tooltip, Typography, theme } from "antd";
 import { artifactKind } from "../../services/artifacts";
-import { FileOutlined } from "@ant-design/icons";
-import { pendingPreviewUrl, type PendingAttachment } from "../../services/attachments";
+import { CloseOutlined, FileOutlined, ReloadOutlined } from "@ant-design/icons";
+import { type PendingAttachment } from "../../services/attachments";
 import type { HistoryAttachment } from "../../state/sessionStore";
 
 import { downloadFile, readFile, resolveFile, type FileRef } from "../filePreview/fileSource";
-import { previewFormat, previewLimits, validateImageDimensions, validateSignature } from "../filePreview/previewPolicy";
-import { FilePreviewButton } from "../filePreview/FilePreview";
+import { previewFormat, formatLimit, validateImageDimensions, validateSignature } from "../filePreview/previewPolicy";
+import { loadPreviewOptions } from "../filePreview/previewOptions";
+import { ChatFileCard } from "./ChatFileCard";
 
 export function HistoryAttachmentView({ sessionId, file }: { sessionId: string; file: HistoryAttachment }) {
   return <HistoryFile key={`${sessionId}:${file.attachmentId}`} sessionId={sessionId} file={file} />;
@@ -21,8 +22,9 @@ function HistoryFile({ sessionId, file }: { sessionId: string; file: HistoryAtta
     if (file.contentType.startsWith('image/')) void (async () => {
       const metadata = await resolveFile(ref, controller.signal);
       if (previewFormat(metadata) !== 'image') return;
-      const blob = await readFile(ref, metadata, previewLimits.image, controller.signal);
-      await validateSignature(blob, metadata.contentType); await validateImageDimensions(blob, metadata.contentType); controller.signal.throwIfAborted();
+      const policy = await loadPreviewOptions();
+      const blob = await readFile(ref, metadata, formatLimit('image', policy), controller.signal);
+      await validateSignature(blob, metadata.contentType); await validateImageDimensions(blob, metadata.contentType, policy); controller.signal.throwIfAborted();
       url = URL.createObjectURL(blob); setHref(url);
     })().catch(() => undefined);
     return () => { controller.abort(); downloads.current?.abort(); if (url) URL.revokeObjectURL(url); };
@@ -34,13 +36,11 @@ function HistoryFile({ sessionId, file }: { sessionId: string; file: HistoryAtta
     catch { if (!controller.signal.aborted) setFailed(true); }
     finally { if (!controller.signal.aborted) { setBusy(false); downloads.current = null; } }
   }
-  return <Flex className="history-file-actions" wrap align="center" gap="small">
-    {href ? <a className="entry-file" href={href} target="_blank" rel="noreferrer noopener" aria-label={`Open ${file.displayName}`}><img className="entry-preview" loading="lazy" decoding="async" src={href} alt={file.displayName} /></a>
-      : <a className="file-chip" href="#" download={file.displayName} aria-label={`Download ${file.displayName}`} aria-busy={busy} onClick={event=>{event.preventDefault();void save();}}><FileOutlined aria-hidden /><span><Typography.Text>{file.displayName}</Typography.Text><Typography.Text type="secondary">{artifactKind(file.contentType)}</Typography.Text></span></a>}
-    <FilePreviewButton file={ref} label={`Preview ${file.displayName}`} />
-    <Button type="text" loading={busy} aria-label={`Download ${file.displayName}`} onClick={() => void save()}>Download</Button>
-    {failed && <Typography.Text type="danger" role="status">Download failed. Try again.</Typography.Text>}
-  </Flex>;
+  return <div className="history-file-actions">
+    {href && <a className="entry-file" href={href} target="_blank" rel="noreferrer noopener" aria-label={`Open ${file.displayName}`}><img className="entry-preview" loading="lazy" decoding="async" src={href} alt={file.displayName} /></a>}
+    <ChatFileCard displayName={file.displayName} description={artifactKind(file.contentType)} fileRef={ref}
+      downloading={busy} downloadFailed={failed} onDownload={() => void save()} />
+  </div>;
 }
 
 export function PendingAttachmentView({
@@ -52,26 +52,26 @@ export function PendingAttachmentView({
   onRetry: () => void;
   onRemove: () => void;
 }) {
-  const preview = item.contentType.startsWith("image/") ? pendingPreviewUrl(item.localId) : null;
+  const { token } = theme.useToken();
 
   return (
-    <li className="attach-chip">
-      <Flex align="center" gap={8} wrap="wrap">
-        {preview ? <img className="attach-preview" src={preview} alt={item.displayName} /> : <FileOutlined aria-hidden />}
-        <Typography.Text strong>{item.displayName}</Typography.Text>
-        {item.status === "uploading" ? <Progress percent={item.progress} size="small" style={{ width: 120 }} /> : null}
-        {item.status === "error" && item.error ? (
-          <Typography.Text type="danger">{item.error}</Typography.Text>
-        ) : null}
-        {item.status === "error" ? (
-          <Button size="small" aria-label={`Retry ${item.displayName}`} onClick={onRetry}>
-            Retry
-          </Button>
-        ) : null}
-        <Button size="small" aria-label={`Remove ${item.displayName}`} onClick={onRemove}>
-          Remove
-        </Button>
+    <li className="attach-chip" aria-busy={item.status === "uploading"}>
+      <Flex align="center" gap={token.paddingXS} wrap={false}>
+        <FileOutlined aria-hidden style={{ fontSize: token.fontSizeLG }} />
+        <Tooltip title={item.displayName} trigger={["hover", "focus"]}>
+          <Typography.Text className="attach-filename single-line-ellipsis" tabIndex={0}>
+            {item.displayName}
+          </Typography.Text>
+        </Tooltip>
+        {item.status === "error" && <Tooltip title={`Retry ${item.displayName}`}>
+          <Button type="text" className="composer-icon" aria-label={`Retry ${item.displayName}`} icon={<ReloadOutlined />} onClick={onRetry} />
+        </Tooltip>}
+        <Tooltip title={`Remove ${item.displayName}`}>
+          <Button type="text" className="composer-icon" aria-label={`Remove ${item.displayName}`} icon={<CloseOutlined />} onClick={onRemove} />
+        </Tooltip>
       </Flex>
+      {item.status === "uploading" && <Progress aria-label={`Uploading ${item.displayName}`} percent={item.progress} size="small" />}
+      {item.status === "error" && <Typography.Text type="danger" role="status">{item.error || "Upload failed. Retry or remove this file."}</Typography.Text>}
     </li>
   );
 }
