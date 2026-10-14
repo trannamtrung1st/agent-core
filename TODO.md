@@ -37,6 +37,7 @@ Other bounded successor verification limits remain in their linked reports under
 
 Always keep this section. These are personal product ideas to refine, not approved implementation scope.
 
+- [ ] Refactor legacy, compatibility, fallbacks, refactor env names, etc. [TBD]
 - [ ] **Environment instructions**: for all agents working in same context? [TBD]
 - [ ] **KOL, marketing strategy**: book KOL to use and review, post videos. Create posts across forums and pages [TBD]
 - [ ] **Commercial video:** follow a person collaborating with apparent co-workers throughout a workday. At the end, reveal that it was one person working with Agent Core.
