@@ -8,7 +8,7 @@ import type { HistoryAttachment } from "../../state/sessionStore";
 import { downloadFile, readFile, resolveFile, type FileRef } from "../filePreview/fileSource";
 import { previewFormat, formatLimit, validateImageDimensions, validateSignature } from "../filePreview/previewPolicy";
 import { loadPreviewOptions } from "../filePreview/previewOptions";
-import { FilePreviewButton } from "../filePreview/FilePreview";
+import { ChatFileCard } from "./ChatFileCard";
 
 export function HistoryAttachmentView({ sessionId, file }: { sessionId: string; file: HistoryAttachment }) {
   return <HistoryFile key={`${sessionId}:${file.attachmentId}`} sessionId={sessionId} file={file} />;
@@ -36,13 +36,11 @@ function HistoryFile({ sessionId, file }: { sessionId: string; file: HistoryAtta
     catch { if (!controller.signal.aborted) setFailed(true); }
     finally { if (!controller.signal.aborted) { setBusy(false); downloads.current = null; } }
   }
-  return <Flex className="history-file-actions" wrap align="center" gap="small">
-    {href ? <a className="entry-file" href={href} target="_blank" rel="noreferrer noopener" aria-label={`Open ${file.displayName}`}><img className="entry-preview" loading="lazy" decoding="async" src={href} alt={file.displayName} /></a>
-      : <a className="file-chip" href="#" download={file.displayName} aria-label={`Download ${file.displayName}`} aria-busy={busy} onClick={event=>{event.preventDefault();void save();}}><FileOutlined aria-hidden /><span><Typography.Text>{file.displayName}</Typography.Text><Typography.Text type="secondary">{artifactKind(file.contentType)}</Typography.Text></span></a>}
-    <FilePreviewButton file={ref} label={`Preview ${file.displayName}`} />
-    <Button type="text" loading={busy} aria-label={`Download ${file.displayName}`} onClick={() => void save()}>Download</Button>
-    {failed && <Typography.Text type="danger" role="status">Download failed. Try again.</Typography.Text>}
-  </Flex>;
+  return <div className="history-file-actions">
+    {href && <a className="entry-file" href={href} target="_blank" rel="noreferrer noopener" aria-label={`Open ${file.displayName}`}><img className="entry-preview" loading="lazy" decoding="async" src={href} alt={file.displayName} /></a>}
+    <ChatFileCard displayName={file.displayName} description={artifactKind(file.contentType)} fileRef={ref}
+      downloading={busy} downloadFailed={failed} onDownload={() => void save()} />
+  </div>;
 }
 
 export function PendingAttachmentView({

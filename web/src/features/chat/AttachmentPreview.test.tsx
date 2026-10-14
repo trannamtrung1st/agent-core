@@ -3,7 +3,7 @@ import { testPolicy } from "../filePreview/previewTestPolicy";
 import { Blob as NodeBlob } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { downloadFile, readFile, resolveFile } from "../filePreview/fileSource";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryAttachmentView, PendingAttachmentView } from "./AttachmentPreview";
 
@@ -34,6 +34,39 @@ describe("AttachmentPreview", () => {
     expect(readFile).not.toHaveBeenCalled();fireEvent.click(download);
     await waitFor(()=>expect(downloadFile).toHaveBeenCalledWith({kind:"attachment",sessionId:"s1",attachmentId:"a1"},expect.any(AbortSignal)));
     expect(screen.getByText("PDF")).toBeInTheDocument();
+  });
+
+  it("groups long filenames with preview/download and retries a failed download without duplication", async () => {
+    const name = "Tổng hợp các đơn vị cung cấp dịch vụ cưới.xlsx";
+    let reject!: (error: Error) => void;
+    vi.mocked(downloadFile).mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    render(<HistoryAttachmentView sessionId="s1" file={{ attachmentId: "a1", displayName: name, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }} />);
+    const group = screen.getByRole("group", { name });
+    expect(screen.getByText(name)).toHaveAttribute("title", name);
+    expect(screen.getByRole("button", { name: `Preview ${name}` })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: `Download ${name}` })).not.toBeInTheDocument();
+    const button = screen.getByRole("button", { name: `Download ${name}` });
+    fireEvent.click(button); fireEvent.click(button);
+    expect(button).toBeDisabled();
+    expect(group).toHaveAttribute("aria-busy", "true");
+    expect(downloadFile).toHaveBeenCalledTimes(1);
+    await act(async () => reject(new Error("secret/internal/path")));
+    expect(screen.getByRole("status")).toHaveTextContent("Download failed. Try again.");
+    fireEvent.click(screen.getByRole("button", { name: `Retry download ${name}` }));
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(downloadFile).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("aborts an attachment download when the message is removed", async () => {
+    vi.mocked(downloadFile).mockImplementation(async (_, signal) => {
+      await new Promise<void>(resolve => signal!.addEventListener("abort", () => resolve()));
+    });
+    const { unmount } = render(<HistoryAttachmentView sessionId="s1" file={{ attachmentId: "a1", displayName: "notes.txt", contentType: "text/plain" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Download notes.txt" }));
+    const signal = vi.mocked(downloadFile).mock.calls[0][1]!;
+    unmount();
+    expect(signal.aborted).toBe(true);
   });
 
   it("opens image attachments with meaningful alt text", async () => {

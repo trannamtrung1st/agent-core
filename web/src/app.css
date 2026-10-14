@@ -474,6 +474,11 @@ body,
   border-radius: var(--ac-radius-bubble);
 }
 
+.user-bubble-with-files {
+  width: min(100%, 36rem);
+  box-sizing: border-box;
+}
+
 .user-bubble-text {
   margin-bottom: 0 !important;
   white-space: pre-wrap;
@@ -574,8 +579,10 @@ body,
   white-space: pre-wrap;
 }
 
-.chat-message-user .entry-files {
-  align-items: flex-end;
+.entry-files {
+  width: min(100%, 32rem);
+  min-width: 0;
+  align-items: stretch;
 }
 
 .entry-preview {
@@ -600,12 +607,6 @@ body,
   overflow-wrap: anywhere;
   white-space: normal;
   height: auto;
-}
-
-.file-chip span {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
 }
 
 .entry-block[data-kind="artifact"] {
@@ -2868,8 +2869,7 @@ body,
   .drive-file-scroll-hint { display: block; margin-bottom: var(--ac-space-compact); font-size: var(--ac-font-size-label); }
 }
 .file-preview-code mark { background: var(--ac-color-primary-bg); color: var(--ac-color-text); }
-.history-file-actions { min-width: 0; }
-.history-file-actions .file-chip { max-width: 100%; overflow-wrap: anywhere; }
+.history-file-actions { display: flex; flex-direction: column; align-items: flex-start; gap: var(--ac-space-compact); min-width: 0; }
 .file-preview-word { height: 100%; min-height: 0; }
 .file-preview-word-frame { flex: 1; width: 100%; min-height: 300px; border: 0; }
 

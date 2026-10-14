@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Tooltip, Typography } from 'antd';
-import { DownloadOutlined, FileOutlined } from '@ant-design/icons';
 import {
   artifactKind,
   artifactSize,
@@ -9,7 +7,7 @@ import {
   type ArtifactMetadata,
 } from '../../services/artifacts';
 
-import { FilePreviewButton } from '../filePreview/FilePreview';
+import { ChatFileCard } from './ChatFileCard';
 
 export function ArtifactView({
   sessionId,
@@ -65,74 +63,25 @@ export function ArtifactView({
   }
 
   return (
-    <div
-      className="file-chip artifact-card"
-      role="group"
-      aria-label={file?.displayName ?? 'File'}
-      aria-busy={downloading || (!file && !metadataFailed)}
-    >
-      <FileOutlined aria-hidden />
-      <div className="artifact-details">
-        {file ? (
-          <>
-            <Typography.Text
-              className="artifact-filename"
-              title={file.displayName}
-            >
-              {file.displayName}
-            </Typography.Text>
-            <Typography.Text type="secondary" className="artifact-description">
-              {artifactKind(file.contentType)} · {artifactSize(file.byteSize)}
-            </Typography.Text>
-            {downloadFailed ? (
-              <Typography.Text type="danger" role="status">
-                Download failed. Try again.
-              </Typography.Text>
-            ) : null}
-          </>
-        ) : (
-          <Typography.Text type="secondary" role="status">
-            {metadataFailed ? 'File unavailable' : 'Preparing file…'}
-          </Typography.Text>
-        )}
-      </div>
-      <div className="artifact-actions">
-        {file && sessionId ? (
-          <FilePreviewButton
-            file={{ kind: 'artifact', sessionId, artifactId }}
-            iconOnly
-            label={`Preview ${file.displayName}`}
-          />
-        ) : null}
-        {file ? (
-          <Tooltip
-            title={
-              downloading
-                ? 'Downloading…'
-                : downloadFailed
-                  ? 'Retry download'
-                  : 'Download'
-            }
-          >
-            <Button
-              type="text"
-              icon={<DownloadOutlined />}
-              loading={downloading}
-              disabled={downloading}
-              aria-label={`${downloadFailed ? 'Retry download' : 'Download'} ${file.displayName}`}
-              onClick={() => void startDownload()}
-            />
-          </Tooltip>
-        ) : metadataFailed && sessionId ? (
-          <Button
-            type="text"
-            aria-label="Retry file"
-            onClick={() => setAttempt((value) => value + 1)}
-          >
-            Retry
-          </Button>
-        ) : null}
-      </div>
-    </div>
+    <ChatFileCard
+      displayName={file?.displayName}
+      description={
+        file
+          ? `${artifactKind(file.contentType)} · ${artifactSize(file.byteSize)}`
+          : undefined
+      }
+      fileRef={
+        file && sessionId
+          ? { kind: 'artifact', sessionId, artifactId }
+          : undefined
+      }
+      downloading={downloading}
+      downloadFailed={downloadFailed}
+      metadataFailed={metadataFailed}
+      onDownload={() => void startDownload()}
+      onRetryMetadata={
+        sessionId ? () => setAttempt((value) => value + 1) : undefined
+      }
+    />
   );
 }
