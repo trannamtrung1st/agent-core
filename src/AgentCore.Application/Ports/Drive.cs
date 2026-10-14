@@ -8,6 +8,13 @@ public sealed record DriveFile(string Id, string Name, string MimeType, long Byt
 public sealed record DriveFilePage(IReadOnlyList<DriveFile> Items, string? NextCursor, bool LimitedToAppAuthorizedFiles = true);
 public sealed record DriveOperation(Guid OperationId, Guid AgentInstanceId, Guid CredentialId, string EffectHash, long AuthEpoch, string Tool,
     string FileId, string SnapshotJson, string State, long Revision, DateTimeOffset CreatedAtUtc, string? ResultJson = null, string? ProtectedUploadSession = null);
+// An adapter may report this only when no effect request was sent or its initial
+// request was explicitly rejected. Absence/timeouts are never this evidence.
+public sealed class DriveEffectNotExecutedException(string code, string message) : Exception(message)
+{
+    public string Code { get; } = code;
+}
+public sealed record DriveOperationFailure(string Code, string Message, string Proof);
 public interface IDriveOperationStore
 {
     ValueTask<DriveOperation?> GetAsync(Guid owner, Guid operationId, CancellationToken ct);

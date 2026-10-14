@@ -63,40 +63,76 @@ export class DrivePendingError extends Error {
   constructor(
     public operationId: string,
     public fileId: string,
+    public resumeAllowed = false,
   ) {
     super(
-      'Upload completion is uncertain. Check the known operation before creating another file.',
+      resumeAllowed
+        ? 'Upload completion is uncertain. Check the operation or continue this upload. The same file and destination are kept.'
+        : 'Upload completion is uncertain. Check the operation and confirm account access in Drive. Do not create another file while this outcome is unknown.',
     );
   }
 }
+export class DriveOperationFailedError extends Error {}
 async function request<T>(
   path: string,
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await ownerFetch(path, {
-    signal,
-    ...(body === undefined
-      ? {}
-      : {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }),
-  });
+  const operationId =
+    path.endsWith('/drive-upload') &&
+    body &&
+    typeof body === 'object' &&
+    'operationId' in body &&
+    typeof body.operationId === 'string'
+      ? body.operationId
+      : null;
+  let response: Response;
+  try {
+    response = await ownerFetch(path, {
+      signal,
+      ...(body === undefined
+        ? {}
+        : {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }),
+    });
+  } catch (reason) {
+    if (operationId && !signal?.aborted)
+      throw new DrivePendingError(operationId, '');
+    throw reason;
+  }
   if (!response.ok) {
     const raw = await response
       .clone()
       .json()
       .catch(() => null);
     if (raw?.error === 'drive_effect_indeterminate')
-      throw new DrivePendingError(raw.operationId, raw.fileId);
+      throw new DrivePendingError(
+        raw.operationId,
+        raw.fileId,
+        raw.resumeAllowed === true,
+      );
+    if (raw?.title === 'drive_operation_failed')
+      throw new DriveOperationFailedError(
+        raw.detail ??
+          'This operation did not execute. Resolve the cause, then start a new save.',
+      );
+    if (operationId && response.status >= 500)
+      throw new DrivePendingError(operationId, '');
     throw await adminProblemMessage(
       response,
       'Drive operation failed. Check the account and retry reading its state.',
     );
   }
-  return (await response.json()) as T;
+  try {
+    return (await response.json()) as T;
+  } catch (reason) {
+    if (operationId && !signal?.aborted)
+      throw new DrivePendingError(operationId, '');
+    throw reason;
+  }
 }
 let options: Promise<DriveOptions> | null = null;
 export function getDriveOptions() {

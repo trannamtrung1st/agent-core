@@ -38,10 +38,12 @@ The prior full frontend run remains **1,004 passes on `8e053018`**; it is not re
 - Final managed-owner Automation case: **1 passed in 6s**.
 - Unchanged prompt-context boundaries: **21 passed**.
 - Complete reliability/SessionHost race filter: **43 passed in 1m 15s**.
-- The first authorized push reached `7106e330`; its hosted workflow is superseded by the subsequent fixture correction push. Hosted acceptance is not claimed while the final run is pending.
+- The first authorized push reached `7106e330`; its hosted workflow was superseded by the subsequent fixture correction pushes. The review follow-up closed on `d5e7eb86a5b649d7579d31c0649c3bc01cd4350d`, with all seven [exact-source jobs passing](https://github.com/trannamtrung1st/agent-core/actions/runs/38490545235).
 
 ## CI closure follow-up
 
 Hosted run [38485295233](https://github.com/trannamtrung1st/agent-core/actions/runs/38485295233) on `7e5051ff` passed backend, both frontend shards, Playwright core 1, acceptance and Compose. Core 2 passed 112 scenarios and failed the Background work keyboard fixture. Its trace shows Enter submitted a second `hello` instead of opening the drawer while first-send attachment/editor updates were still settling. The test now selects its own Agent Instance, waits for the Synthetic response to settle, verifies button focus before Enter, and requires exactly one user message. All existing drawer content, approval, Escape/focus restoration and narrow-width assertions remain; no timeout or retry setting changed.
 
-The settling correction and related Background work journeys passed **5 scenarios in 28.6s**. The final isolated fixture, including explicit identity and the single-message assertion, passed **3 repetitions in 21.9s** against a fresh disposable Synthetic database. A fresh hosted run is required to close the remaining CI gap.
+The settling correction and related Background work journeys passed **5 scenarios in 28.6s**. The final isolated fixture, including explicit identity and the single-message assertion, passed **3 repetitions in 21.9s** against a fresh disposable Synthetic database. Hosted run [38490545235](https://github.com/trannamtrung1st/agent-core/actions/runs/38490545235) completed successfully on exact SHA `d5e7eb86a5b649d7579d31c0649c3bc01cd4350d`: backend, both frontend shards, both Playwright core shards, Playwright acceptance and Compose. Frontend logs record 1,006 passes across 126 files; backend logs record 3,930 .NET passes plus three event-storage checks. Real Google, installed Office-client fidelity and native zoom remain separate from this automated closure.
+
+The later [Drive recovery follow-up](drive-upload-recovery-2026-10-14.md) is locally verified under the user's explicit instruction to use local tests without waiting for external CI. Its behavior is not attributed to this historical green run.

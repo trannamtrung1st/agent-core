@@ -93,14 +93,89 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     save.getByRole('combobox', { name: 'Drive account' }),
   ).toBeEnabled();
   await save.getByLabel('Drive file name').fill('review-copy.docx');
+  const failedIds: string[] = [];
+  const rejectedUpload = async (route: import('@playwright/test').Route) => {
+    failedIds.push(route.request().postDataJSON().operationId);
+    if (failedIds.length === 1)
+      await route.fulfill({
+        status: 409,
+        json: {
+          title: 'drive_operation_failed',
+          detail:
+            'The operation did not execute. Check destination permission.',
+        },
+      });
+    else await route.continue();
+  };
+  await page.route('**/drive-upload', rejectedUpload);
+  await save
+    .getByRole('button', { name: 'Save new file', exact: true })
+    .click();
+  await expect(
+    save.getByRole('button', { name: 'Start new save' }),
+  ).toBeVisible();
+  await expect(save.getByLabel('Drive file name')).toBeDisabled();
+  expect(failedIds).toHaveLength(1);
+  await save.getByRole('button', { name: 'Start new save' }).click();
   await save
     .getByRole('button', { name: 'Save new file', exact: true })
     .click();
   await expect(save).toContainText('Verified in Synthetic Drive');
+  expect(failedIds).toHaveLength(2);
+  expect(failedIds[0]).not.toBe(failedIds[1]);
+  await page.unroute('**/drive-upload', rejectedUpload);
   await expect(
     save.getByRole('combobox', { name: 'Drive folder' }),
   ).toBeDisabled();
   await save.getByRole('button', { name: 'Close', exact: true }).click();
+  // UI fault fixture; adapter tests independently verify Google's actual 308 protocol.
+  const continuedBodies: unknown[] = [];
+  const partialUpload = async (route: import('@playwright/test').Route) => {
+    const body = route.request().postDataJSON();
+    continuedBodies.push(body);
+    if (continuedBodies.length === 1)
+      await route.fulfill({
+        status: 409,
+        json: {
+          error: 'drive_effect_indeterminate',
+          operationId: body.operationId,
+          fileId: 'partial-fixture',
+          retryAllowed: false,
+          resumeAllowed: true,
+        },
+      });
+    else await route.continue();
+  };
+  await page.route('**/drive-upload', partialUpload);
+  await page.setViewportSize({ width: 390, height: 640 });
+  await page
+    .getByRole('button', { name: 'Save q3-report.docx to Drive', exact: true })
+    .click();
+  await save.getByLabel('Drive file name').fill('continued-copy.docx');
+  await save
+    .getByRole('button', { name: 'Save new file', exact: true })
+    .click();
+  const resume = save.getByRole('button', {
+    name: 'Continue upload',
+    exact: true,
+  });
+  await expect(resume).toBeVisible();
+  await expect(save.getByLabel('Drive file name')).toBeDisabled();
+  await expect(
+    save.getByRole('combobox', { name: 'Drive folder' }),
+  ).toBeDisabled();
+  await expect(
+    save.getByRole('button', { name: 'Save new file', exact: true }),
+  ).toHaveCount(0);
+  await resume.focus();
+  await expect(resume).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(save).toContainText('Verified in Synthetic Drive');
+  expect(continuedBodies).toHaveLength(2);
+  expect(continuedBodies[0]).toEqual(continuedBodies[1]);
+  await save.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.unroute('**/drive-upload', partialUpload);
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(`/admin/instances/${owner}/credentials`);
   await page
     .getByRole('row')

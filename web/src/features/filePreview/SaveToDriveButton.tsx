@@ -15,6 +15,7 @@ import {
 import { CloudUploadOutlined } from '@ant-design/icons';
 import {
   DrivePendingError,
+  DriveOperationFailedError,
   getDriveOptions,
   getSaveAccounts,
   inspectDriveOperation,
@@ -112,6 +113,7 @@ function SaveDialog({
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<DriveReceipt | null>(null);
   const [pending, setPending] = useState<DrivePendingError | null>(null);
+  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const work = useRef<AbortController | null>(null);
@@ -124,6 +126,7 @@ function SaveDialog({
     setError(null);
     setReceipt(null);
     setPending(null);
+    setFailed(false);
     setFolder('root');
     setBusy(false);
     if (!open) return () => controller.abort();
@@ -157,7 +160,7 @@ function SaveDialog({
     };
   }, [open, identity, attempt]);
   const account = accounts?.find((a) => a.accountRef === alias);
-  const formLocked = busy || !!pending || !!receipt;
+  const formLocked = busy || !!pending || !!receipt || failed;
   const [folders, setFolders] = useState<DriveFile[]>([]);
   const [folderQuery, setFolderQuery] = useState('');
   const [folderCursor, setFolderCursor] = useState<string | null>(null);
@@ -259,7 +262,7 @@ function SaveDialog({
     }
   }
   async function save() {
-    if (!metadata?.sha256 || !account || busy) return;
+    if (!metadata?.sha256 || !account || busy || failed) return;
     const controller = new AbortController();
     work.current = controller;
     setBusy(true);
@@ -268,11 +271,11 @@ function SaveDialog({
     // Persist only opaque operation identity to recover a lost HTTP response across reload.
     const key = `agent-core.drive-upload:${sourcePath(file)}:${account.bindingId}:${folder}:${name}:${metadata.sha256}`;
     operationKey.current = key;
-    let id = sessionStorage.getItem(key);
+    let id = pending?.operationId ?? sessionStorage.getItem(key);
     if (!id) {
       id = crypto.randomUUID();
-      sessionStorage.setItem(key, id);
     }
+    sessionStorage.setItem(key, id);
     try {
       const result = await saveToDrive(
         file,
@@ -298,6 +301,10 @@ function SaveDialog({
     } catch (reason) {
       if (!controller.signal.aborted) {
         if (reason instanceof DrivePendingError) setPending(reason);
+        if (reason instanceof DriveOperationFailedError) {
+          setPending(null);
+          setFailed(true);
+        }
         setError(
           reason instanceof Error
             ? reason.message
@@ -329,12 +336,18 @@ function SaveDialog({
       setPending(null);
       if (operationKey.current) sessionStorage.removeItem(operationKey.current);
     } catch (reason) {
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
+        if (reason instanceof DrivePendingError) setPending(reason);
+        if (reason instanceof DriveOperationFailedError) {
+          setPending(null);
+          setFailed(true);
+        }
         setError(
           reason instanceof Error
             ? reason.message
             : 'The operation remains uncertain. Do not repeat the upload.',
         );
+      }
     } finally {
       if (!controller.signal.aborted) {
         setBusy(false);
@@ -353,12 +366,38 @@ function SaveDialog({
       footer={
         <Flex wrap gap={token.paddingXS} justify="end">
           {pending ? (
+            <>
+              {pending.resumeAllowed && (
+                <Button
+                  type="primary"
+                  aria-label="Continue upload"
+                  loading={busy}
+                  disabled={!account?.available || !metadata}
+                  onClick={() => void save()}
+                >
+                  Continue upload
+                </Button>
+              )}
+              <Button
+                aria-label="Check operation"
+                loading={busy}
+                onClick={() => void inspect()}
+              >
+                Check operation
+              </Button>
+            </>
+          ) : failed ? (
             <Button
-              aria-label="Check operation"
-              loading={busy}
-              onClick={() => void inspect()}
+              aria-label="Start new save"
+              onClick={() => {
+                if (operationKey.current)
+                  sessionStorage.removeItem(operationKey.current);
+                operationKey.current = null;
+                setFailed(false);
+                setError(null);
+              }}
             >
-              Check operation
+              Start new save
             </Button>
           ) : (
             !receipt && (

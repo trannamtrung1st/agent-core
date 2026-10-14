@@ -79,6 +79,107 @@ async function open() {
   );
 }
 describe('Drive save destination recovery', () => {
+  it('shows terminal recovery when a read-only operation check proves non-execution', async () => {
+    vi.mocked(drive.getSaveAccounts).mockResolvedValue({
+      instanceId: 'i',
+      accounts: [accounts[0]],
+    });
+    vi.mocked(drive.saveToDrive).mockRejectedValueOnce(
+      new drive.DrivePendingError('op', 'remote'),
+    );
+    vi.mocked(drive.inspectDriveOperation).mockRejectedValueOnce(
+      new drive.DriveOperationFailedError('No effect. Check permission.'),
+    );
+    await open();
+    const save = await screen.findByRole('button', { name: 'Save new file' });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Check operation' }),
+    );
+    await screen.findByRole('button', { name: 'Start new save' });
+    expect(
+      screen.getByRole('textbox', { name: 'Drive file name' }),
+    ).toBeDisabled();
+    expect(drive.saveToDrive).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole('button', { name: 'Check operation' }),
+    ).toBeNull();
+  });
+  it('continues only the same pending operation and keeps the immutable destination locked', async () => {
+    vi.mocked(drive.getSaveAccounts).mockResolvedValue({
+      instanceId: 'i',
+      accounts: [accounts[0]],
+    });
+    vi.mocked(drive.saveToDrive).mockRejectedValueOnce(
+      new drive.DrivePendingError('saved-op', 'remote', true),
+    );
+    vi.mocked(drive.saveToDrive).mockResolvedValueOnce({
+      operationId: 'saved-op',
+      status: 'Succeeded',
+      reconciled: true,
+      synthetic: true,
+      limitation: null,
+      file: { ...folder, name: 'report.docx', folder: false },
+    });
+    await open();
+    const save = await screen.findByRole('button', { name: 'Save new file' });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+    const resume = await screen.findByRole('button', {
+      name: 'Continue upload',
+    });
+    expect(
+      screen.getByRole('combobox', { name: 'Drive folder' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('textbox', { name: 'Drive file name' }),
+    ).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Save new file' })).toBeNull();
+    fireEvent.click(resume);
+    await screen.findByText('Verified in Synthetic Drive');
+    const [first, second] = vi.mocked(drive.saveToDrive).mock.calls;
+    expect(second[1]).toEqual({ ...first[1], operationId: 'saved-op' });
+    expect(drive.saveToDrive).toHaveBeenCalledTimes(2);
+  });
+  it('requires an explicit new-save action after proven non-execution and generates a fresh ID', async () => {
+    vi.mocked(drive.getSaveAccounts).mockResolvedValue({
+      instanceId: 'i',
+      accounts: [accounts[0]],
+    });
+    vi.mocked(drive.saveToDrive).mockRejectedValueOnce(
+      new drive.DriveOperationFailedError(
+        'The operation did not execute. Check permission.',
+      ),
+    );
+    vi.mocked(drive.saveToDrive).mockRejectedValueOnce(
+      new drive.DrivePendingError('unknown-op', 'remote'),
+    );
+    await open();
+    const save = await screen.findByRole('button', { name: 'Save new file' });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+    const fresh = await screen.findByRole('button', { name: 'Start new save' });
+    expect(
+      screen.getByRole('textbox', { name: 'Drive file name' }),
+    ).toBeDisabled();
+    expect(drive.saveToDrive).toHaveBeenCalledTimes(1);
+    fireEvent.click(fresh);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Save new file' }),
+    );
+    await screen.findByRole('button', { name: 'Check operation' });
+    expect(vi.mocked(drive.saveToDrive).mock.calls[0][1].operationId).not.toBe(
+      vi.mocked(drive.saveToDrive).mock.calls[1][1].operationId,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Continue upload' }),
+    ).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Start new save' })).toBeNull();
+    expect(
+      screen.getByRole('textbox', { name: 'Drive file name' }),
+    ).toBeDisabled();
+  });
   it('locks destination controls during upload, uncertain recovery and verified completion', async () => {
     vi.mocked(drive.getSaveAccounts).mockResolvedValue({
       instanceId: 'i',

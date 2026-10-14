@@ -8,6 +8,7 @@ related_targets:
   - web/src/features/filePreview/WordPreview.tsx
   - web/src/features/filePreview/SpreadsheetPreview.tsx
   - web/src/features/filePreview/HighlightedCode.tsx
+  - web/src/features/filePreview/SaveToDriveButton.tsx
 ---
 
 # Shared file preview
@@ -29,3 +30,5 @@ STATES: Keep filename/actions outside the bounded canvas. Loading, empty, unsupp
 Current source is `0763058d` (2026-10-14); presentation geometry is captured against `8e053018`. The [polish report and confirmation captures](../../docs/reports/file-preview-drive-ui-polish-2026-10-14.md) record 1440/1024/768/390/320 widths, short-screen save, retry/receipt and keyboard flows, 1,004 unit passes and four Synthetic browser journeys. The [successor ledger](../../docs/reports/office-file-preview-drive-verification-2026-10-13.md) preserves earlier hosted acceptance and the separate real Google, native browser zoom, physical input/screen-reader and installed Office-client gaps. This brief adds no new execution or acceptance claim.
 
 [Frontend behavior](../../docs/13-frontend-implementation-spec.md#shared-source-owned-file-preview) is authoritative. [DESIGN.md](../../.agents/context/DESIGN.md) owns shared presentation policy; `.impeccable/design.json` contains static excerpts, not operational controls or a replacement UI library.
+
+The bounded Drive recovery follow-up retains the same footer, token gaps and mobile targets. It distinguishes observational Check operation, exact-session Continue upload and explicit Start new save after proven non-execution. Local runtime evidence and remaining verification limits are in the [recovery report](../../docs/reports/drive-upload-recovery-2026-10-14.md).

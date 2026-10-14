@@ -11,7 +11,7 @@ public sealed class SqliteDriveStore(IDbContextFactory<AgentCoreDbContext> conte
     public async ValueTask<DriveOperation?> FindAsync(Guid owner, Guid credential, string hash, CancellationToken ct)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        var row = await db.Set<DriveOperationRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.AgentInstanceId == owner.ToString("D") && r.CredentialId == credential.ToString("D") && r.EffectHash == hash && r.State != "Succeeded" && r.State != "Rejected", ct);
+        var row = await db.Set<DriveOperationRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.AgentInstanceId == owner.ToString("D") && r.CredentialId == credential.ToString("D") && r.EffectHash == hash && r.State != "Succeeded" && r.State != "Rejected" && r.State != "Failed", ct);
         return row is null ? null : Map(row);
     }
     public async ValueTask<DriveOperation> ClaimAsync(DriveOperation operation, CancellationToken ct)

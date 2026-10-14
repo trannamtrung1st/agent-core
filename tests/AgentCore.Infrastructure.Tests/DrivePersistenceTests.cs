@@ -36,7 +36,24 @@ public sealed class DrivePersistenceTests
             if (sqlite) { SqliteConnection.ClearAllPools(); credentials = new SqliteCredentialStore(factory); operations = new SqliteDriveStore(factory); files = new SqliteDriveStore(factory); }
             var reopened = (await credentials.GetAsync(account.CredentialId))!; Assert.Equal(DriveConnectionStatus.Connected, reopened.DriveAccount!.ConnectionStatus); Assert.Equal("synthetic-drive-refresh", new LocalCredentialProtector(root + "/keys").Unprotect(account.CredentialId, 1, reopened.ProtectedPayload)); Assert.Null(await operations.GetAsync(Guid.NewGuid(), op.OperationId, default));
             var receipt = (await operations.GetAsync(owner.InstanceId, op.OperationId, default))!; Assert.Equal("Dispatched", receipt.State); Assert.Equal("hi"u8.ToArray(), await files.ReadAsync(account.CredentialId, file.Id, default)); Assert.Null(await files.GetAsync(Guid.NewGuid(), file.Id, default));
+            Assert.Equal("opaque-session", new LocalCredentialProtector(root + "/keys").Unprotect(account.CredentialId, 1, receipt.ProtectedUploadSession!));
             await operations.UpdateAsync(receipt with { State = "Succeeded", ResultJson = System.Text.Json.JsonSerializer.Serialize(file), Revision = 3 }, 2, default); Assert.Null(await operations.FindAsync(owner.InstanceId, account.CredentialId, op.EffectHash, default));
+            var failed = op with { OperationId = Guid.NewGuid(), EffectHash = "failed-effect", State = "Planned", Revision = 1, ProtectedUploadSession = null };
+            await operations.ClaimAsync(failed, default);
+            failed = await operations.UpdateAsync(failed with { State = "Dispatched", Revision = 2 }, 1, default);
+            failed = await operations.UpdateAsync(failed with { State = "Indeterminate", Revision = 3 }, 2, default);
+            await Assert.ThrowsAsync<AgentCoreException>(() => operations.UpdateAsync(failed with { State = "Failed", Revision = 4 }, 3, default).AsTask());
+            await Assert.ThrowsAsync<AgentCoreException>(() => operations.UpdateAsync(failed with { State = "Failed", Revision = 4, ResultJson = "{}" }, 3, default).AsTask());
+            failed = await operations.UpdateAsync(failed with { State = "Failed", Revision = 4,
+                ResultJson = System.Text.Json.JsonSerializer.Serialize(new DriveOperationFailure("drive_scope_limited", "Check permission.", "initial_request_not_executed")) }, 3, default);
+            if (sqlite) { SqliteConnection.ClearAllPools(); operations = new SqliteDriveStore(factory); }
+            var failedReopened = (await operations.GetAsync(owner.InstanceId, failed.OperationId, default))!;
+            Assert.Equal("Failed", failedReopened.State); Assert.Equal(failed.ResultJson, failedReopened.ResultJson);
+            Assert.Equal(failed.CreatedAtUtc.ToUnixTimeMilliseconds(), failedReopened.CreatedAtUtc.ToUnixTimeMilliseconds());
+            Assert.Null(await operations.FindAsync(owner.InstanceId, account.CredentialId, failed.EffectHash, default));
+            await Assert.ThrowsAsync<AgentCoreException>(() => operations.UpdateAsync(failed with { State = "Dispatched", Revision = 5 }, 4, default).AsTask());
+            Assert.Equal("Failed", (await operations.ClaimAsync(failed, default)).State);
+            await operations.ClaimAsync(failed with { OperationId = Guid.NewGuid(), State = "Planned", Revision = 1, ResultJson = null }, default);
             await operations.DeleteOwnerAsync(owner.InstanceId, default); Assert.Null(await operations.GetAsync(owner.InstanceId, op.OperationId, default)); Assert.NotNull(await files.GetAsync(account.CredentialId, file.Id, default));
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }

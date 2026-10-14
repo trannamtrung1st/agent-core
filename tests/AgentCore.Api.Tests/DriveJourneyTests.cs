@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 namespace AgentCore.Api.Tests;
 
-public sealed class DriveJourneyTests
+public sealed partial class DriveJourneyTests
 {
     private sealed class Factory : AgentCoreApiFactory
     { protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => new Dictionary<string, string?> { ["GoogleDrive:Enabled"] = "true", ["GoogleDriveOAuth:PublicAppUrl"] = "http://localhost" }; }
@@ -77,7 +77,8 @@ public sealed class DriveJourneyTests
     }
     private sealed class LostFactory(IGoogleDriveProviderFactory inner) : IGoogleDriveProviderFactory
     {
-        public int Uploads; public bool Enabled => inner.Enabled; public bool Configured => inner.Configured; public bool Synthetic => inner.Synthetic;
+        public int Uploads; public string Mode = "after"; public TaskCompletionSource? Release; public IDriveOperationStore? Operations;
+        public bool Enabled => inner.Enabled; public bool Configured => inner.Configured; public bool Synthetic => inner.Synthetic;
         public IGoogleDriveProvider Create(Guid id, long revision) => new LostProvider(inner.Create(id, revision), this);
     }
     private sealed class LostProvider(IGoogleDriveProvider inner, LostFactory owner) : IGoogleDriveProvider
@@ -86,7 +87,20 @@ public sealed class DriveJourneyTests
         public ValueTask<DriveFilePage> ListAsync(string? folder, string? query, string? cursor, int limit, CancellationToken ct) => inner.ListAsync(folder, query, cursor, limit, ct);
         public ValueTask<DriveFile> GetAsync(string id, CancellationToken ct) => inner.GetAsync(id, ct);
         public ValueTask CreateFolderAsync(string id, string name, string parent, CancellationToken ct) => inner.CreateFolderAsync(id, name, parent, ct);
-        public async ValueTask UploadAsync(string id, string name, string parent, string mime, ReadOnlyMemory<byte> bytes, DriveOperation op, CancellationToken ct) { owner.Uploads++; await inner.UploadAsync(id, name, parent, mime, bytes, op, ct); throw new HttpRequestException("lost response"); }
+        public async ValueTask UploadAsync(string id, string name, string parent, string mime, ReadOnlyMemory<byte> bytes, DriveOperation op, CancellationToken ct)
+        {
+            owner.Uploads++;
+            if (owner.Mode == "rejected") throw new DriveEffectNotExecutedException("drive_scope_limited", "Check the destination permission.");
+            if (owner.Mode == "before") throw new HttpRequestException("unknown before creation");
+            if (owner.Mode == "partial")
+            {
+                await owner.Operations!.UpdateAsync(op with { ProtectedUploadSession = "protected-test-session", Revision = op.Revision + 1 }, op.Revision, ct);
+                throw new HttpRequestException("lost partial upload");
+            }
+            await inner.UploadAsync(id, name, parent, mime, bytes, op, ct);
+            if (owner.Release is not null) await owner.Release.Task.WaitAsync(ct);
+            if (owner.Mode == "after") throw new HttpRequestException("lost response");
+        }
         public ValueTask<byte[]> DownloadAsync(DriveFile file, CancellationToken ct) => inner.DownloadAsync(file, ct);
         public ValueTask RenameAsync(string id, string name, CancellationToken ct) => inner.RenameAsync(id, name, ct);
         public ValueTask MoveAsync(string id, string source, string destination, CancellationToken ct) => inner.MoveAsync(id, source, destination, ct);

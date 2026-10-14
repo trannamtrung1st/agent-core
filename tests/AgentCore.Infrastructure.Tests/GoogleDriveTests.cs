@@ -11,7 +11,7 @@ using AgentCore.Infrastructure.Persistence;
 using Microsoft.AspNetCore.WebUtilities;
 namespace AgentCore.Infrastructure.Tests;
 
-public sealed class GoogleDriveTests
+public sealed partial class GoogleDriveTests
 {
     [Fact]
     public async Task Pkce_identity_scope_rotation_restart_disconnect_and_reconnect_are_separate_from_Email()
@@ -78,6 +78,7 @@ public sealed class GoogleDriveTests
     private sealed class Transport : HttpMessageHandler, IHttpClientFactory
     {
         public string Scope = DriveAccountProfile.Scope, IdentityEmail = "work@example.test", ExchangeBody = "", UploadLocation = "https://www.googleapis.com/upload/drive/v3/files?upload_id=opaque"; public bool MissingRefresh; public int Refreshes, FileRequests, UploadPuts; public HttpStatusCode FileStatus = HttpStatusCode.OK;
+        public Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>>? UploadHandler;
         public HttpClient CreateClient(string name) => new(this, false);
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
@@ -85,7 +86,7 @@ public sealed class GoogleDriveTests
             if (path == "/token") { var body = await request.Content!.ReadAsStringAsync(ct); if (body.Contains("grant_type=refresh_token")) Refreshes++; else ExchangeBody = body; return Json(new { access_token = "access", refresh_token = MissingRefresh ? null : "secret-refresh", id_token = "id", expires_in = 3600, scope = Scope }); }
             if (path == "/revoke") return Json(new { });
             if (path.EndsWith("/about")) return Json(new { user = new { emailAddress = IdentityEmail } });
-            if (path.StartsWith("/upload/")) { if (request.Method == HttpMethod.Put) { UploadPuts++; return Json(new { id = "file-1" }); } var r = Json(new { }); r.Headers.Location = new Uri(UploadLocation); return r; }
+            if (path.StartsWith("/upload/")) { if (UploadHandler is not null) return await UploadHandler(request, ct); if (request.Method == HttpMethod.Put) { UploadPuts++; return Json(new { id = "file-1" }); } var r = Json(new { }); r.Headers.Location = new Uri(UploadLocation); return r; }
             FileRequests++; if (FileStatus != HttpStatusCode.OK) return Json(new { error = "provider-secret" }, FileStatus);
             return Json(new { id = "file-1", name = "report.txt", mimeType = "text/plain", size = "2", version = "1", md5Checksum = "49f68a5c8493ec2c0bf489821c21fc3b", parents = new[] { "root" }, trashed = false });
         }
