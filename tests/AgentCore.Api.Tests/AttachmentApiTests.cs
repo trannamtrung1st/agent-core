@@ -2,16 +2,16 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Agents;
+using AgentCore.Application.Tools;
+using AgentCore.Domain.Conversation;
 using AgentCore.Contracts.Http;
 using AgentCore.Contracts.Realtime;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
-
-using System.Text.Json;
-using AgentCore.Application.Ports;
-using AgentCore.Application.Tools;
-using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Api.Tests;
 
@@ -151,6 +151,127 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
             if (name == "late-binary.txt") Assert.Contains("unsupported_reader", reread.Text);
             else if (name != "corrupt.docx") Assert.Contains("Original bytes are available", reread.Text);
         }
+    }
+
+    [Fact]
+    public async Task Spreadsheet_attachment_reads_all_rows_tabs_and_off_window_columns_with_bounded_continuation()
+    {
+        var client = Owner();
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
+        var view = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+        var sessionId = Guid.Parse(view.SessionId);
+        var office = _factory.Services.GetRequiredService<IOfficeProcessor>();
+        IReadOnlyList<IReadOnlyList<OfficeCell>> Items(int start, int count) => Enumerable.Range(start, count)
+            .Select(i => (IReadOnlyList<OfficeCell>)new[] { new OfficeCell("text", Text: $"Wedding item {i}") }).ToArray();
+        var original = office.CreateWorkbook(new([
+            new("Check list", Items(1, 200)), new("Guest list", [[new("text", Text: "Guest beyond first tab")]]), new("Empty", [])]), default).Bytes;
+        var bytes = office.EditWorkbook(original, [
+            new("set_cells", "Check list", "A201:A240", Items(201, 40)),
+            new("set_cells", "Check list", "BM1", [[new("text", Text: "Beyond column 64")]])], default).Bytes;
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(bytes), "file", "wedding.xlsx");
+        var uploaded = await client.PostAsync($"/api/v2/sessions/{view.SessionId}/attachments", form);
+        uploaded.EnsureSuccessStatusCode();
+        var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
+        await using var hub = await ConnectAsync();
+        var ready = ReadyWaiter(hub);
+        Assert.True((await hub.InvokeAsync<CommandAck>("Attach", Attach(view.SessionId))).Accepted);
+        Assert.True((await hub.InvokeAsync<CommandAck>("SendText", Text(view.SessionId, 1, await ready, "Summarize all sheets", Guid.NewGuid().ToString(), [attachment.AttachmentId]))).Accepted);
+        var processed = Assert.Single(await _factory.Services.GetRequiredService<IAttachmentProcessor>().ProcessTurnAsync(sessionId, [Guid.Parse(attachment.AttachmentId)]));
+        using var initial = JsonDocument.Parse(processed.Text);
+        Assert.Equal(3, initial.RootElement.GetProperty("sheetExtents").GetArrayLength());
+        Assert.True(initial.RootElement.GetProperty("truncated").GetBoolean());
+        var prompt = PromptContextBuilder.BuildCurrentUserMessage("Summarize all", [processed], true,
+            new Dictionary<Guid, int> { [Guid.Parse(attachment.AttachmentId)] = 4096 });
+        var excerpt = prompt.Text.Split("\"\"\"")[1].Trim();
+        using var promptPage = JsonDocument.Parse(excerpt);
+        Assert.True(promptPage.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.Contains("without asking permission", prompt.Text);
+
+        var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Definition;
+        var tools = _factory.Services.GetRequiredService<SessionToolExecutor>();
+        async Task<JsonElement> Read(Guid target, object args, int budget = 8192)
+        {
+            var result = await tools.ExecuteAsync(definition, target, new ModelToolCall(Guid.NewGuid().ToString(), ToolCatalog.AttachmentsRead, JsonSerializer.Serialize(args)), budget);
+            Assert.True(Encoding.UTF8.GetByteCount(result.Text) <= budget);
+            using var json = JsonDocument.Parse(result.Text);
+            return json.RootElement.Clone();
+        }
+        var seen = new List<string>();
+        string? range = "A1:A200";
+        for (var page = 0; page < 20 && range is not null; page++)
+        {
+            var result = (await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Check list", range })).GetProperty("inspection");
+            seen.AddRange(result.GetProperty("rows").EnumerateArray().Select(r => r[0].GetProperty("value").GetString()!).Where(v => v.StartsWith("Wedding item")));
+            var next = result.GetProperty("nextRange").GetString();
+            range = next?.StartsWith('A') == true ? next : null;
+        }
+        Assert.Equal(Enumerable.Range(1, 240).Select(i => $"Wedding item {i}"), seen);
+        var column = await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Check list", range = "BM1" });
+        Assert.Contains("Beyond column 64", column.ToString());
+        var guest = (await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Guest list" })).GetProperty("inspection");
+        Assert.Contains("Guest beyond first tab", guest.ToString());
+        Assert.False(guest.GetProperty("truncated").GetBoolean());
+        var empty = (await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Empty" })).GetProperty("inspection");
+        Assert.Empty(empty.GetProperty("rows").EnumerateArray());
+        Assert.False(empty.GetProperty("truncated").GetBoolean());
+        var invalid = await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Check list", range = "A1:A201" });
+        Assert.Contains("office_operation_unsupported", invalid.ToString());
+        var recovered = await Read(sessionId, new { attachmentId = attachment.AttachmentId, sheet = "Check list", range = "A240" });
+        Assert.Contains("Wedding item 240", recovered.ToString());
+        var other = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
+        var foreign = (await other.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+        Assert.Contains("notFound", (await Read(Guid.Parse(foreign.SessionId), new { attachmentId = attachment.AttachmentId })).ToString());
+        Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{view.SessionId}/attachments/{attachment.AttachmentId}/content"));
+    }
+
+    [Fact]
+    public async Task Document_attachment_read_continues_with_complete_elements_and_rejects_spreadsheet_arguments()
+    {
+        var client = Owner();
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
+        var view = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+        var sessionId = Guid.Parse(view.SessionId);
+        var paragraphs = Enumerable.Range(1, 120).Select(i => $"Wedding detail {i}").ToArray();
+        var bytes = _factory.Services.GetRequiredService<IOfficeProcessor>().CreateDocument(new(null,
+            [new(null, paragraphs.Take(100).ToArray(), null), new(null, paragraphs.Skip(100).ToArray(), null)]), default).Bytes;
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(bytes), "file", "wedding.docx");
+        var uploaded = await client.PostAsync($"/api/v2/sessions/{view.SessionId}/attachments", form);
+        uploaded.EnsureSuccessStatusCode();
+        var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
+        await using var hub = await ConnectAsync();
+        var ready = ReadyWaiter(hub);
+        Assert.True((await hub.InvokeAsync<CommandAck>("Attach", Attach(view.SessionId))).Accepted);
+        Assert.True((await hub.InvokeAsync<CommandAck>("SendText", Text(view.SessionId, 1, await ready, "Summarize", Guid.NewGuid().ToString(), [attachment.AttachmentId]))).Accepted);
+        var processed = Assert.Single(await _factory.Services.GetRequiredService<IAttachmentProcessor>().ProcessTurnAsync(sessionId, [Guid.Parse(attachment.AttachmentId)]));
+        using var initial = JsonDocument.Parse(processed.Text);
+        Assert.Equal(100, initial.RootElement.GetProperty("nextOffset").GetInt32());
+        var prompt = PromptContextBuilder.BuildCurrentUserMessage("Summarize", [processed], true,
+            new Dictionary<Guid, int> { [Guid.Parse(attachment.AttachmentId)] = 4096 });
+        using var excerpt = JsonDocument.Parse(prompt.Text.Split("\"\"\"")[1].Trim());
+        Assert.True(excerpt.RootElement.GetProperty("nextOffset").GetInt32() > 0);
+        Assert.True(excerpt.RootElement.GetProperty("nextOffset").GetInt32() < 100);
+        var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Definition;
+        async Task<JsonElement> Read(object args)
+        {
+            var result = await _factory.Services.GetRequiredService<SessionToolExecutor>().ExecuteAsync(definition, sessionId,
+                new ModelToolCall(Guid.NewGuid().ToString(), ToolCatalog.AttachmentsRead, JsonSerializer.Serialize(args)), 4096);
+            Assert.True(Encoding.UTF8.GetByteCount(result.Text) <= 4096);
+            using var json = JsonDocument.Parse(result.Text); return json.RootElement.Clone();
+        }
+        var seen = new List<string>();
+        int? offset = 0;
+        for (var page = 0; page < 20 && offset is not null; page++)
+        {
+            var inspection = (await Read(new { attachmentId = attachment.AttachmentId, offset, limit = 100 })).GetProperty("inspection");
+            seen.AddRange(inspection.GetProperty("elements").EnumerateArray().Select(e => e.GetProperty("text").GetString()!));
+            offset = inspection.GetProperty("nextOffset").ValueKind == JsonValueKind.Null ? null : inspection.GetProperty("nextOffset").GetInt32();
+        }
+        Assert.Equal(paragraphs, seen);
+        Assert.Contains("invalid", (await Read(new { attachmentId = attachment.AttachmentId, sheet = "Sheet1" })).ToString());
+        Assert.Contains("invalid", (await Read(new { attachmentId = attachment.AttachmentId, range = (string?)null })).ToString());
+        Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{view.SessionId}/attachments/{attachment.AttachmentId}/content"));
     }
 
     [Fact]

@@ -455,7 +455,7 @@ public sealed partial class SessionToolExecutor(
             if (call.Name.StartsWith("drive.", StringComparison.Ordinal))
                 return FitResult(remainingOutputBytes, await ExecuteDriveAsync(definition, sessionId, call, args, admission, approvalGrant, cancellationToken));
             if (call.Name.StartsWith("office.", StringComparison.Ordinal))
-                return FitResult(remainingOutputBytes, await ExecuteOfficeAsync(call.Name, definition, sessionId, args, admission?.WorkspaceCwd ?? "/home", cancellationToken));
+                return FitResult(remainingOutputBytes, await ExecuteOfficeAsync(call.Name, definition, sessionId, args, admission?.WorkspaceCwd ?? "/home", remainingOutputBytes, cancellationToken));
             var executed = call.Name switch
             {
                 ToolCatalog.AttachmentsRead => await ReadAttachmentAsync(sessionId, args, remainingOutputBytes, cancellationToken)
@@ -616,6 +616,13 @@ public sealed partial class SessionToolExecutor(
         }
 
         var attachmentType = AttachmentMedia.NormalizeContentType(record.ContentType);
+        if (attachmentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime && officeProcessor is not null)
+            return TextResult(await ReadOfficeAttachmentAsync(sessionId, record, args, remainingOutputBytes, cancellationToken));
+        if (args.TryGetProperty("sheet", out _) || args.TryGetProperty("range", out _) || args.TryGetProperty("offset", out _) || args.TryGetProperty("limit", out _))
+            return TextResult(Error(attachmentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime ? "unavailable" : "invalid",
+                attachmentType is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime
+                    ? "Targeted Office reading is unavailable because the Office processor is not configured."
+                    : "Sheet/range and offset/limit are supported only for Office attachments."));
         if (attachmentType is "application/pdf" or OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime)
         {
             var kind = attachmentType == "application/pdf" ? "pdf" : "office";

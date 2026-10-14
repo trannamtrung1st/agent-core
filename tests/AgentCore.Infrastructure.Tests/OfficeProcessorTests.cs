@@ -66,6 +66,43 @@ public sealed class OfficeProcessorTests
         Assert.Equal("$125.00", _processor.InspectWorkbook(file.Bytes, "Sheet", "B1", default).Rows[0][0].Value);
     }
     [Fact]
+    public void Valid_unsupported_and_processing_limit_packages_are_not_reported_as_corrupt()
+    {
+        var original = _processor.CreateWorkbook(new([new("Links", [[new("text", Text: "Vendor URL")]])]), default).Bytes;
+        using var bytes = new MemoryStream();
+        bytes.Write(original);
+        using (var archive = new ZipArchive(bytes, ZipArchiveMode.Update, true))
+        {
+            using var writer = new StreamWriter(archive.CreateEntry("xl/_rels/unsupported.xml.rels").Open());
+            writer.Write("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"link\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" TargetMode=\"External\" Target=\"https://invalid.test/vendor\" /></Relationships>");
+        }
+        var unsupported = Assert.Throws<AgentCoreException>(() => _processor.InspectWorkbook(bytes.ToArray(), null, "A1", default));
+        Assert.Equal("office_feature_unsupported", unsupported.Code);
+        Assert.Contains("does not establish corruption", unsupported.Message);
+        var record = new AttachmentRecord(Guid.NewGuid(), Guid.NewGuid(), "blob", "links.xlsx", OfficeLimits.SpreadsheetMime,
+            bytes.Length, "hash", AgentCore.Domain.Conversation.AttachmentState.Bound, true, Guid.NewGuid(), false, DateTimeOffset.UtcNow, null, DateTimeOffset.UtcNow);
+        var processed = AgentCore.Infrastructure.Attachments.AttachmentProcessor.ProcessBytes(record, bytes.ToArray(), _processor);
+        Assert.Equal("office_feature_unsupported", processed.FailureCode);
+        Assert.Contains("External relationships", processed.Text);
+        var limit = Assert.Throws<AgentCoreException>(() => OfficePackageGuard.Validate(new byte[OfficeLimits.MaxPackageBytes + 1], "xl", default));
+        Assert.Equal("office_processing_limit", limit.Code);
+        Assert.Contains("invalid_office_package", Assert.Throws<AgentCoreException>(() => _processor.InspectWorkbook("PKbad"u8.ToArray(), null, "A1", default)).Message);
+    }
+
+    [Fact]
+    public void Inspection_text_budget_ends_on_a_complete_row_and_continues_to_the_last_row()
+    {
+        var rows = Enumerable.Range(1, 17).Select(i => (IReadOnlyList<OfficeCell>)new[] { new OfficeCell("text", Text: i.ToString() + new string('x', 3998)) }).ToArray();
+        var bytes = _processor.CreateWorkbook(new([new("Long", rows)]), default).Bytes;
+        var first = _processor.InspectWorkbook(bytes, "Long", "A1:A17", default);
+        Assert.Equal(16, first.Rows.Count);
+        using var json = System.Text.Json.JsonDocument.Parse(AgentCore.Application.Office.OfficeReadResults.Workbook(first, 256 * 1024));
+        Assert.Equal("A17:A17", json.RootElement.GetProperty("nextRange").GetString());
+        Assert.True(json.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.Equal(rows[16][0].Text, Assert.Single(Assert.Single(_processor.InspectWorkbook(bytes, "Long", "A17", default).Rows)).Value);
+    }
+
+    [Fact]
     public void Cancellation_does_not_process_or_commit_any_bytes()
     {
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();

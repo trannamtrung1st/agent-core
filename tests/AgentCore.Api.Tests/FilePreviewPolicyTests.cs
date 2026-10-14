@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using AgentCore.Api;
 using AgentCore.Application.Ports;
 using AgentCore.Contracts.Http;
@@ -125,9 +126,16 @@ public sealed class FilePreviewPolicyTests
         var processor = factory.Services.GetRequiredService<IOfficeProcessor>();
         var rows = Enumerable.Range(0, 17).Select(_ => (IReadOnlyList<OfficeCell>)[new("text", Text: new string('x', 4000))]).ToArray();
         var bytes = processor.CreateWorkbook(new([new("Long", rows)]), default).Bytes;
-        // Tool inspection retains its existing independent validation semantics.
-        var toolError = Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() => processor.InspectWorkbook(bytes, "Long", "A1:A17", default));
-        Assert.Equal(400, toolError.StatusCode);
+        // Agent inspection returns complete rows that fit; UI preview keeps its independent rejection policy.
+        var toolPage = processor.InspectWorkbook(bytes, "Long", "A1:A17", default);
+        Assert.Equal(16, toolPage.Rows.Count);
+        var projection = JsonDocument.Parse(AgentCore.Application.Office.OfficeReadResults.Workbook(toolPage, 256 * 1024));
+        using (projection)
+        {
+            Assert.True(projection.RootElement.GetProperty("truncated").GetBoolean());
+            Assert.Equal("A17:A17", projection.RootElement.GetProperty("nextRange").GetString());
+        }
+        Assert.Single(processor.InspectWorkbook(bytes, "Long", "A17", default).Rows);
         using var content = new ByteArrayContent(bytes);
         content.Headers.ContentType = new(OfficeLimits.SpreadsheetMime);
         (await client.PutAsync($"/api/v2/sessions/{id}/workspace/content?path=%2Fhome%2Flong.xlsx", content)).EnsureSuccessStatusCode();

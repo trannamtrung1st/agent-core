@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Office;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Conversation;
 using SkiaSharp;
@@ -125,20 +126,27 @@ public sealed class AttachmentProcessor : IAttachmentProcessor
         if (type is OfficeLimits.DocumentMime or OfficeLimits.SpreadsheetMime)
         {
             if (office is null) return Unsupported(record, "unsupported_reader");
-            if (bytes.Length > OfficeLimits.MaxPackageBytes) return Unsupported(record, "office_package_limit");
+            if (bytes.Length > OfficeLimits.MaxPackageBytes) return Unsupported(record, "office_processing_limit");
             try
             {
                 // Reuse the guarded OOXML reader; formulas, macros and external links are never executed.
                 object inspection = type == OfficeLimits.DocumentMime
                     ? office.InspectDocument(bytes, 0, 100, cancellationToken)
                     : office.InspectWorkbook(bytes, null, "A1:J50", cancellationToken);
-                var text = Truncate(JsonSerializer.Serialize(inspection, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+                var text = inspection is OfficeWorkbookInspection workbook
+                    ? OfficeReadResults.Workbook(workbook, AttachmentLimits.MaxExtractionOutputBytes)
+                    : OfficeReadResults.Document((OfficeDocumentInspection)inspection, 0, AttachmentLimits.MaxExtractionOutputBytes);
                 return new AttachmentProcessResult(record.AttachmentId, AttachmentLimits.ProcessorVersion,
                     AttachmentProcessKind.ExtractedText, record.DisplayName, type, text,
-                    Provenance: "Bounded Office excerpt; use workspace.copy from /attachments/<attachmentId> to /working/<filename> and authorized office.* inspection for other sections or sheets.",
+                    Provenance: "Initial Office excerpt, not full-file coverage. Processing limits do not imply file corruption.",
                     StrippedImage: null, FailureCode: null);
             }
-            catch (AgentCoreException) { return Unsupported(record, "invalid_office_package"); }
+            catch (AgentCoreException ex)
+            {
+                var code = ex.Message.StartsWith("invalid_office_package:", StringComparison.Ordinal) ? "invalid_office_package"
+                    : ex.Message.StartsWith("office_operation_unsupported:", StringComparison.Ordinal) ? "office_operation_unsupported" : ex.Code;
+                return Unsupported(record, code) with { Text = $"Attachment '{record.DisplayName}' could not be processed ({code}): {ex.Message}" };
+            }
         }
         if (AttachmentMedia.IsImage(type))
         {

@@ -28,7 +28,9 @@ public sealed record OfficeDocumentInspection(string Sha256, IReadOnlyList<Offic
 public sealed record OfficeDocumentEdit(string Operation, string Selector, string? Text = null, string? Style = null);
 public sealed record OfficeSpreadsheetEdit(string Operation, string Sheet, string? Range = null, IReadOnlyList<IReadOnlyList<OfficeCell>>? Cells = null, string? Name = null, string? Formula = null, string? Format = null);
 public sealed record OfficeCellView(string Address, string Type, string Value, string? Formula, string ValueStatus, string NumberFormat, OfficeCellStyle? Style = null);
-public sealed record OfficeWorkbookInspection(string Sha256, IReadOnlyList<string> Sheets, string Sheet, string Range, IReadOnlyList<IReadOnlyList<OfficeCellView>> Rows, IReadOnlyList<string> Warnings, OfficeWorksheetView? Presentation = null);
+public sealed record OfficeSheetExtent(string Name, int FirstRow, int FirstColumn, int LastRow, int LastColumn);
+public sealed record OfficeWorkbookInspection(string Sha256, IReadOnlyList<string> Sheets, string Sheet, string Range, IReadOnlyList<IReadOnlyList<OfficeCellView>> Rows, IReadOnlyList<string> Warnings, OfficeWorksheetView? Presentation = null,
+    IReadOnlyList<OfficeSheetExtent>? SheetExtents = null);
 public sealed record OfficeBorder(string Style, string? Color);
 public sealed record OfficeCellStyle(string FontFamily, double FontSize, bool Bold, bool Italic, string? FontColor, string? FillColor,
     string Horizontal, string Vertical, bool Wrap, OfficeBorder Top, OfficeBorder Right, OfficeBorder Bottom, OfficeBorder Left);

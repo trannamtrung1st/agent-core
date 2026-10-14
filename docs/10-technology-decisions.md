@@ -384,7 +384,7 @@ Definition versions own reusable immutable procedures; Agent Instances own stabl
 
 ## Attachment image decoder
 
-Image sanitization uses MIT-licensed SkiaSharp 4.153.1 in Infrastructure, with matching `SkiaSharp.NativeAssets.Linux.NoDependencies` for the minimal Linux container. The former ImageSharp dependency is removed; NuGet vulnerability auditing remains enabled. Inspect dimensions before allocating decoded pixels, enforce the existing pixel limit, decode the first frame, and encode fresh PNG/JPEG bytes without source metadata. GIF/WebP normalize to PNG. Processor cache identity is `attachment-processors/4` (bounded DOCX/XLSX extraction); historical `/2` evidence remains historical. Vision admission, MIME truthfulness and provider ports are unchanged. The user approved replacing ImageSharp when the patched version required a Release-build license.
+Image sanitization uses MIT-licensed SkiaSharp 4.153.1 in Infrastructure, with matching `SkiaSharp.NativeAssets.Linux.NoDependencies` for the minimal Linux container. The former ImageSharp dependency is removed; NuGet vulnerability auditing remains enabled. Inspect dimensions before allocating decoded pixels, enforce the existing pixel limit, decode the first frame, and encode fresh PNG/JPEG bytes without source metadata. GIF/WebP normalize to PNG. Processor cache identity is `attachment-processors/5` (Office coverage/continuation and distinct feature/limit failures); historical `/2` and `/4` evidence remains historical. Vision admission, MIME truthfulness and provider ports are unchanged. The user approved replacing ImageSharp when the patched version required a Release-build license.
 
 ## Decision: explicit Automation destinations and report-back
 

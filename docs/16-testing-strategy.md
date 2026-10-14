@@ -664,3 +664,6 @@ Synthetic Playwright exercises actual FortuneSheet initialization and copies ren
 ### Composer attachment and binary-upload successor
 
 Focused Synthetic checks cover compact filename tiles without pending thumbnails, multi-file DOCX/XLSX/binary intake, generic MIME extension resolution, protected byte-for-byte retrieval after binding, first-turn Office extraction, corrupt-package unsupported results, keyboard removal, upload failure/retry, reload, and local containment at 1440/768/767/390/320px. Existing ownership, lifecycle, quota, TTL and image-signature checks remain mandatory. Unknown binaries are stored inertly and never represented as extracted text.
+
+
+The Office attachment read follow-up exercises HTTP upload → hub bind → initial prompt → registered `attachments.read` dispatch on a 240-row, three-sheet workbook, with 8 KiB result pages, a column beyond the first 64, an empty tab, complete original-byte readback, oversized-range rejection/recovery and foreign-Session denial. Package fixtures distinguish corrupt ZIP from unsupported external relationships and processing-limit failures. Prompt regression requires valid whole-row JSON within its assigned context slice. These local checks do not establish hosted-provider summary quality.
