@@ -23,36 +23,20 @@ export type PendingAttachment = {
   progress: number;
   attachmentId: string | null;
   error: string | null;
+  readable?: boolean;
 };
 
 const files = new Map<string, File>();
 const uploads = new Map<string, XMLHttpRequest>();
-const previews = new Map<string, string>();
-
-export function pendingPreviewUrl(localId: string): string | null {
-  return previews.get(localId) ?? null;
-}
 
 export function retainPendingFile(localId: string, file: File): void {
   files.set(localId, file);
-  if (file.type.startsWith("image/")) {
-    const existing = previews.get(localId);
-    if (existing) {
-      URL.revokeObjectURL(existing);
-    }
-    previews.set(localId, URL.createObjectURL(file));
-  }
 }
 
 export function releasePendingFile(localId: string): void {
   files.delete(localId);
   uploads.get(localId)?.abort();
   uploads.delete(localId);
-  const preview = previews.get(localId);
-  if (preview) {
-    URL.revokeObjectURL(preview);
-    previews.delete(localId);
-  }
 }
 
 export function releaseAllPendingFiles(): void {

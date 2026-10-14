@@ -46,8 +46,6 @@ public static class AttachmentEndpoints
             try
             {
                 await sessions.EnsureAttachmentsAllowedAsync(sessionId, cancellationToken).ConfigureAwait(false);
-                var snapshot = await sessions.GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
-                var allowUnread = RoleEnvironments.Of(snapshot.Definition).AttachmentPolicy.AllowUnreadUnsupportedTypes;
                 if (!http.Request.HasFormContentType)
                 {
                     throw AgentCoreErrors.Validation("Multipart form upload is required.");
@@ -66,7 +64,7 @@ public static class AttachmentEndpoints
                         file.FileName,
                         file.ContentType ?? "application/octet-stream",
                         stream,
-                        allowUnread,
+                        allowStoreUnread: true,
                         cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Json(HttpMapping.ToAttachment(record), statusCode: StatusCodes.Status201Created);

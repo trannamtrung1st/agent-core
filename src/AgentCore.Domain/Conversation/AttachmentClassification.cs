@@ -39,7 +39,13 @@ public static class AttachmentClassification
 
         if (IsExecutableOrArchive(prefix, length))
         {
-            return Reject("Executable and archive types are not accepted.");
+            if (!allowStoreUnread) return Reject("File type is outside the supported processing set.");
+            // Containers are stored inertly. Only the bounded Office reader opens OOXML.
+            var zip = prefix.StartsWith("PK"u8);
+            var inferred = InferContentTypeFromExtension(displayName);
+            var office = zip && inferred is "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            return new AttachmentInspectResult(true, office ? inferred! : zip ? "application/zip" : "application/octet-stream", office, null);
         }
 
         var resolved = ResolveContentType(prefix, suffix, length, declaredType, displayName);
@@ -100,6 +106,8 @@ public static class AttachmentClassification
             "txt" => "text/plain",
             "json" => "application/json",
             "csv" => "text/csv",
+            "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             _ => null
         };
     }
@@ -326,16 +334,17 @@ public static class AttachmentClassification
             return false;
         }
 
-        var nuls = 0;
         for (var i = 0; i < prefix.Length; i++)
         {
-            if (prefix[i] == 0)
-            {
-                nuls++;
-            }
+            if (prefix[i] < 0x20 && prefix[i] is not (0x09 or 0x0A or 0x0C or 0x0D)) return false;
         }
-
-        return nuls == 0;
+        try
+        {
+            // Intake inspects a prefix; a final partial UTF-8 character may continue in the file.
+            _ = new UTF8Encoding(false, true).GetDecoder().GetCharCount(prefix, flush: false);
+            return true;
+        }
+        catch (DecoderFallbackException) { return false; }
     }
 
     private static bool LooksLikeJson(ReadOnlySpan<byte> prefix)

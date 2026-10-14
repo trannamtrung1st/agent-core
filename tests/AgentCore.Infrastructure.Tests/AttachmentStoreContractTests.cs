@@ -89,10 +89,12 @@ public sealed class AttachmentStoreContractTests
             new MemoryStream(opaque),
             allowStoreUnread: true);
         Assert.False(unread.Readable);
-        var zip = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            store.UploadPendingAsync(session, "x.zip", "application/zip", new MemoryStream("PK\u0003\u0004abcd"u8.ToArray()), true)
-                .AsTask());
-        Assert.Equal("ValidationError", zip.Code);
+        var zip = await store.UploadPendingAsync(session, "x.zip", "application/zip", new MemoryStream("PK\u0003\u0004abcd"u8.ToArray()), true);
+        Assert.False(zip.Readable);
+        await using var original = await store.OpenContentAsync(session, zip.AttachmentId);
+        using var copy = new MemoryStream();
+        await original.CopyToAsync(copy);
+        Assert.Equal("PK\u0003\u0004abcd"u8.ToArray(), copy.ToArray());
     }
 
     [Fact]

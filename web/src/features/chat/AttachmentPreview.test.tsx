@@ -3,12 +3,8 @@ import { readFileSync } from "node:fs";
 import { downloadFile, readFile, resolveFile } from "../filePreview/fileSource";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { pendingPreviewUrl } from "../../services/attachments";
 import { HistoryAttachmentView, PendingAttachmentView } from "./AttachmentPreview";
 
-vi.mock("../../services/attachments", () => ({
-  pendingPreviewUrl: vi.fn()
-}));
 
 vi.mock("../filePreview/fileSource", async original => ({...await original<typeof import("../filePreview/fileSource")>(),downloadFile:vi.fn(),readFile:vi.fn(),resolveFile:vi.fn()}));
 const png=readFileSync("e2e/fixtures/file-preview/image.png");
@@ -50,8 +46,7 @@ describe("AttachmentPreview", () => {
     expect(image.closest("a")).not.toHaveAttribute("download");
   });
 
-  it("labels pending image previews and keeps retry on failed uploads", () => {
-    vi.mocked(pendingPreviewUrl).mockReturnValue("blob:preview");
+  it("renders compact filenames without previews and keeps retry/removal on failed uploads", () => {
     const onRetry = vi.fn();
     const onRemove = vi.fn();
     render(
@@ -70,8 +65,14 @@ describe("AttachmentPreview", () => {
         onRemove={onRemove}
       />
     );
-    expect(screen.getByRole("img", { name: "clip.png" })).toHaveAttribute("src", "blob:preview");
+    expect(screen.queryByRole("img", { name: "clip.png" })).not.toBeInTheDocument();
+    expect(screen.getByText("clip.png")).toHaveClass("single-line-ellipsis");
     expect(screen.getByText("Upload failed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry clip.png" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry clip.png" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove clip.png" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(onRemove).toHaveBeenCalledOnce();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 });

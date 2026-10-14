@@ -27,6 +27,11 @@ function readyImage(): PendingAttachment {
 }
 
 describe("imageModelCompatibility", () => {
+  it("allows unsupported images stored without extraction on text-only models", () => {
+    const attachment = { ...readyImage(), contentType: "image/bmp", readable: false };
+    expect(pendingAttachmentsIncludeImage([attachment])).toBe(false);
+    expect(imageModelCompatibility({ models, modelValue: "scripted-alpha", defaultKey: "scripted-alpha", pendingAttachments: [attachment], pendingSendQueue: [] }).incompatible).toBe(false);
+  });
   it("detects image content types with parameters", () => {
     expect(isImageContentType("image/png; charset=binary")).toBe(true);
     expect(isImageContentType("text/plain")).toBe(false);

@@ -8,6 +8,11 @@ using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 
+using System.Text.Json;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Tools;
+using AgentCore.Domain.Conversation;
+
 namespace AgentCore.Api.Tests;
 
 public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
@@ -89,16 +94,63 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
     }
 
-    [Fact]
-    public async Task Zip_is_rejected_even_with_unread_policy()
+    [Theory]
+    [InlineData("report.docx")]
+    [InlineData("sales.xlsx")]
+    [InlineData("archive.zip")]
+    [InlineData("blob.bin")]
+    [InlineData("program.exe")]
+    [InlineData("corrupt.docx")]
+    [InlineData("late-binary.txt")]
+    [InlineData("unread-image.bmp")]
+    public async Task All_file_types_upload_bind_and_preserve_original_bytes_without_a_role_opt_in(string name)
     {
         var client = Owner();
         var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
         var view = await created.Content.ReadFromJsonAsync<SessionViewResponse>();
-        using var zip = FileContent("x.zip", "PK\u0003\u0004abcd", "application/zip");
-        zip.Headers.TryAddWithoutValidation("X-AgentCore-Allow-Store-Unread", "true");
-        var rejected = await client.PostAsync($"/api/v2/sessions/{view!.SessionId}/attachments", zip);
-        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        var office = _factory.Services.GetRequiredService<IOfficeProcessor>();
+        var bytes = name switch
+        {
+            "report.docx" => office.CreateDocument(new("Quarterly report", [new(null, ["Uploaded document evidence."], null) ]), default).Bytes,
+            "sales.xlsx" => office.CreateWorkbook(new([new("Sales", [[new("text", Text: "Uploaded workbook evidence.")]])]), default).Bytes,
+            "archive.zip" or "corrupt.docx" => "PK\u0003\u0004abcd"u8.ToArray(),
+            "program.exe" => "MZabc"u8.ToArray(),
+            "late-binary.txt" => Enumerable.Repeat((byte)'a', 8192).Append((byte)255).ToArray(),
+            _ => new byte[] { 0, 1, 2, 255 }
+        };
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(bytes);
+        file.Headers.ContentType = new MediaTypeHeaderValue(name == "unread-image.bmp" ? "image/bmp" : "application/octet-stream");
+        form.Add(file, "file", name);
+        var uploaded = await client.PostAsync($"/api/v2/sessions/{view!.SessionId}/attachments", form);
+        Assert.Equal(HttpStatusCode.Created, uploaded.StatusCode);
+        var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
+        await using var hub = await ConnectAsync();
+        var ready = ReadyWaiter(hub);
+        Assert.True((await hub.InvokeAsync<CommandAck>("Attach", Attach(view.SessionId))).Accepted);
+        var ack = await hub.InvokeAsync<CommandAck>("SendText", Text(view.SessionId, 1, await ready, "", Guid.NewGuid().ToString(), [attachment.AttachmentId]));
+        Assert.True(ack.Accepted, ack.Error?.Message);
+        var bound = (await client.GetFromJsonAsync<AttachmentResponse>($"/api/v2/sessions/{view.SessionId}/attachments/{attachment.AttachmentId}"))!;
+        Assert.Equal("bound", bound.State);
+        Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{view.SessionId}/attachments/{attachment.AttachmentId}/content"));
+        var processor = _factory.Services.GetRequiredService<IAttachmentProcessor>();
+        var result = Assert.Single(await processor.ProcessTurnAsync(Guid.Parse(view.SessionId), [Guid.Parse(attachment.AttachmentId)]));
+        var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(Guid.Parse(view.SessionId)))!.Definition;
+        var reread = await _factory.Services.GetRequiredService<SessionToolExecutor>().ExecuteAsync(definition, Guid.Parse(view.SessionId),
+            new ModelToolCall(Guid.NewGuid().ToString(), ToolCatalog.AttachmentsRead, JsonSerializer.Serialize(new { attachmentId = attachment.AttachmentId })), 256 * 1024);
+        if (name is "report.docx" or "sales.xlsx")
+        {
+            Assert.True(attachment.Readable);
+            Assert.Equal(AttachmentProcessKind.ExtractedText, result.Kind);
+            Assert.Contains(name == "report.docx" ? "Uploaded document evidence." : "Uploaded workbook evidence.", result.Text);
+            Assert.Contains(name == "report.docx" ? "Uploaded document evidence." : "Uploaded workbook evidence.", reread.Text);
+        }
+        else
+        {
+            Assert.Equal(AttachmentProcessKind.Unsupported, result.Kind);
+            if (name == "late-binary.txt") Assert.Contains("unsupported_reader", reread.Text);
+            else if (name != "corrupt.docx") Assert.Contains("Original bytes are available", reread.Text);
+        }
     }
 
     [Fact]

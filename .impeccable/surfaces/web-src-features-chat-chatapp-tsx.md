@@ -94,3 +94,7 @@ Artifact cards now use one centered horizontal row with file icon, shrinking fil
 Credentials owns one Add credential purpose selector with reused Drive/Gmail/Custom/General fields and immutable-purpose specialist edits. Saved connection Tags remain separate from Active/Disabled status. Instance bindings own app-authorized Drive browsing; conversational tools own mutations. The shared ApprovalModal uses trusted file/name/version details, a full-width narrow-screen list, action-specific Trash/Rename/Move wording, recoverable-subset copy and the existing keyboard/Reject/footer behavior. Behavior remains owned by docs/13 and docs/14.
 
 The [successor verification ledger](../../docs/reports/drive-credentials-ux-verification-2026-10-14.md) owns current local evidence and exact source identity. Earlier reports are historical; Real Trash requires an authorized disposable account scope and remains unverified.
+
+## Composer attachment tiles and binary intake (2026-10-14)
+
+Pending uploads use a compact responsive icon/filename grid inside the incumbent composer with complete hover/keyboard filenames, icon-only Remove/Retry, upload progress and local errors. Its 30vh/12rem vertical cap keeps the editor available; the parent list and each tile own separate native 8px insets. No pending thumbnails are generated. All file types are stored inertly within existing quotas; bounded Office extraction supports DOCX/XLSX. Sent previews/downloads retain their source-owned behavior. `/docs` owns upload authority and processing limits.

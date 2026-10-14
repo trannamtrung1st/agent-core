@@ -4,6 +4,16 @@ namespace AgentCore.Domain.Tests;
 
 public sealed class AttachmentClassificationTests
 {
+    [Theory]
+    [InlineData(new byte[] { 255, 254, 253 })]
+    [InlineData(new byte[] { 1, 2, 3 })]
+    public void Opaque_binary_without_null_bytes_is_not_misrepresented_as_text(byte[] bytes)
+    {
+        var result = AttachmentClassification.Inspect(bytes, bytes, bytes.Length, "application/octet-stream", "data.bin", true);
+        Assert.True(result.Accepted);
+        Assert.False(result.Readable);
+    }
+
     [Fact]
     public void Titles_follow_one_file_many_files_and_image_conversation_rules()
     {
@@ -21,12 +31,18 @@ public sealed class AttachmentClassificationTests
         Assert.Equal("file", AttachmentClassification.SanitizeDisplayName("/abs/path/"));
     }
 
-    [Fact]
-    public void Executables_and_archives_are_rejected()
+    [Theory]
+    [InlineData("archive.zip", "application/zip", "PK\u0003\u0004", "application/zip", false)]
+    [InlineData("report.docx", "application/octet-stream", "PK\u0003\u0004", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", true)]
+    [InlineData("sheet.xlsx", "application/octet-stream", "PK\u0003\u0004", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", true)]
+    [InlineData("program.exe", "text/plain", "MZabc", "application/octet-stream", false)]
+    public void Binary_uploads_are_stored_inertly_and_office_containers_use_their_reader(string name, string declared, string body, string type, bool readable)
     {
-        var zip = "PK\u0003\u0004"u8.ToArray();
-        var result = AttachmentClassification.Inspect(zip, zip, zip.Length, "application/zip", "archive.zip", allowStoreUnread: true);
-        Assert.False(result.Accepted);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(body);
+        var result = AttachmentClassification.Inspect(bytes, bytes, bytes.Length, declared, name, allowStoreUnread: true);
+        Assert.True(result.Accepted);
+        Assert.Equal(type, result.ContentType);
+        Assert.Equal(readable, result.Readable);
     }
 
     [Theory]

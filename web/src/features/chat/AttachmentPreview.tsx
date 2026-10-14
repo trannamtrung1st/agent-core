@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Flex, Progress, Typography } from "antd";
+import { Button, Flex, Progress, Tooltip, Typography, theme } from "antd";
 import { artifactKind } from "../../services/artifacts";
-import { FileOutlined } from "@ant-design/icons";
-import { pendingPreviewUrl, type PendingAttachment } from "../../services/attachments";
+import { CloseOutlined, FileOutlined, ReloadOutlined } from "@ant-design/icons";
+import { type PendingAttachment } from "../../services/attachments";
 import type { HistoryAttachment } from "../../state/sessionStore";
 
 import { downloadFile, readFile, resolveFile, type FileRef } from "../filePreview/fileSource";
@@ -52,26 +52,26 @@ export function PendingAttachmentView({
   onRetry: () => void;
   onRemove: () => void;
 }) {
-  const preview = item.contentType.startsWith("image/") ? pendingPreviewUrl(item.localId) : null;
+  const { token } = theme.useToken();
 
   return (
-    <li className="attach-chip">
-      <Flex align="center" gap={8} wrap="wrap">
-        {preview ? <img className="attach-preview" src={preview} alt={item.displayName} /> : <FileOutlined aria-hidden />}
-        <Typography.Text strong>{item.displayName}</Typography.Text>
-        {item.status === "uploading" ? <Progress percent={item.progress} size="small" style={{ width: 120 }} /> : null}
-        {item.status === "error" && item.error ? (
-          <Typography.Text type="danger">{item.error}</Typography.Text>
-        ) : null}
-        {item.status === "error" ? (
-          <Button size="small" aria-label={`Retry ${item.displayName}`} onClick={onRetry}>
-            Retry
-          </Button>
-        ) : null}
-        <Button size="small" aria-label={`Remove ${item.displayName}`} onClick={onRemove}>
-          Remove
-        </Button>
+    <li className="attach-chip" aria-busy={item.status === "uploading"}>
+      <Flex align="center" gap={token.paddingXS} wrap={false}>
+        <FileOutlined aria-hidden style={{ fontSize: token.fontSizeLG }} />
+        <Tooltip title={item.displayName} trigger={["hover", "focus"]}>
+          <Typography.Text className="attach-filename single-line-ellipsis" tabIndex={0}>
+            {item.displayName}
+          </Typography.Text>
+        </Tooltip>
+        {item.status === "error" && <Tooltip title={`Retry ${item.displayName}`}>
+          <Button type="text" className="composer-icon" aria-label={`Retry ${item.displayName}`} icon={<ReloadOutlined />} onClick={onRetry} />
+        </Tooltip>}
+        <Tooltip title={`Remove ${item.displayName}`}>
+          <Button type="text" className="composer-icon" aria-label={`Remove ${item.displayName}`} icon={<CloseOutlined />} onClick={onRemove} />
+        </Tooltip>
       </Flex>
+      {item.status === "uploading" && <Progress aria-label={`Uploading ${item.displayName}`} percent={item.progress} size="small" />}
+      {item.status === "error" && <Typography.Text type="danger" role="status">{item.error || "Upload failed. Retry or remove this file."}</Typography.Text>}
     </li>
   );
 }

@@ -507,7 +507,7 @@ describe("definition candidate editor", () => {
     setText("Knowledge title 1", "Refund Policy");
     setText("Knowledge citation 1", "refund-policy@v3");
     setText("Workspace template id", "examiner-default");
-    fireEvent.click(screen.getByLabelText("Allow unread unsupported attachment types"));
+    expect(screen.queryByLabelText("Allow unread unsupported attachment types")).not.toBeInTheDocument();
 
 
     await navigateDraft('Advanced JSON');
@@ -625,7 +625,7 @@ describe("definition candidate editor", () => {
       { identity: "refund-policy", title: "Refund Policy", citation: "refund-policy@v3" }
     ]);
     expect(parsed.environment.workspace.templateId).toBe("examiner-default");
-    expect(parsed.environment.attachments.allowUnreadUnsupportedTypes).toBe(true);
+    expect(parsed.environment.attachments.allowUnreadUnsupportedTypes).toBe(false);
     expect(parsed.untouchedMarker).toEqual({ nested: "preserve-me" });
 
     await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
