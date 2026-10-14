@@ -13,6 +13,71 @@ namespace AgentCore.Api.Tests;
 
 public sealed class SandboxApiTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Registry_requests_without_a_profile_are_validation_errors_and_preserve_credentials(bool explicitNull)
+    {
+        await using var factory = new SandboxFactory(); using var owner = TestOwnerCapability.CreateOwnerClient(factory);
+        var body = new Dictionary<string, object?> { ["displayName"] = "Invalid registry", ["kind"] = "Password", ["protectedValue"] = "invalid-registry-sentinel" };
+        if (explicitNull) body["profile"] = null;
+        var rejected = await owner.PostAsJsonAsync("/api/v2/admin/container-registry-credentials", body);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.DoesNotContain("invalid-registry-sentinel", await rejected.Content.ReadAsStringAsync());
+        var created = await owner.PostAsJsonAsync("/api/v2/admin/container-registry-credentials",
+            new AdminCreateContainerRegistryRequest("Valid registry", "Password", new("docker.io", "owner", []), "fixture-value"));
+        created.EnsureSuccessStatusCode();
+        var credential = (await created.Content.ReadFromJsonAsync<AdminCredentialResponse>())!;
+        body.Remove("kind"); body.Remove("protectedValue"); body["expectedRevision"] = credential.Revision; body["status"] = "Active";
+        rejected = await owner.PatchAsJsonAsync($"/api/v2/admin/container-registry-credentials/{credential.CredentialId}", body);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        var unchanged = (await owner.GetFromJsonAsync<AdminCredentialResponse>($"/api/v2/admin/credentials/{credential.CredentialId}"))!;
+        Assert.Equal(credential.Revision, unchanged.Revision);
+        Assert.Equal(credential.DisplayName, unchanged.DisplayName);
+        Assert.Equal(credential.ContainerRegistry!.Registry, unchanged.ContainerRegistry!.Registry);
+    }
+
+    [Fact]
+    public async Task Verified_configuration_remains_inspectable_but_disabled_server_blocks_selection_and_run_pins()
+    {
+        await using var factory=new SandboxFactory();using var owner=TestOwnerCapability.CreateOwnerClient(factory);
+        var store=factory.Services.GetRequiredService<ISandboxStore>();
+        var profile=new SandboxProfile("general-workbench",1,"Verified fixture","",true,"sha256:"+new string('a',64));
+        await store.SaveProfileAsync(profile,0);
+        await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Policy fixture observation",ContractVersion:1));
+        var created=await owner.PostAsJsonAsync("/api/v2/admin/agent-instances",new{definitionId="general-assistant",version=30});created.EnsureSuccessStatusCode();
+        var instance=(await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>());var id=instance.GetProperty("instanceId").GetGuid();
+        var saved=(await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/general-workbench"))!;
+        Assert.Equal("ServerUnavailable",saved.Availability);Assert.True(saved.Verification!.Passed);
+        var resolved=await factory.Services.GetRequiredService<AgentCore.Application.Execution.AgentRunConfigurationResolver>().ResolveAsync(id);
+        Assert.Null(resolved.Configuration.Definition.ExecutionSandboxProfile);
+        var patch=await owner.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{id}/settings/sandboxPolicy",new{expectedInstanceRevision=instance.GetProperty("revision").GetInt64(),set=new{profileId=profile.Id},clear=Array.Empty<string>()});
+        Assert.Equal(HttpStatusCode.BadRequest,patch.StatusCode);
+    }
+    [Fact]
+    public async Task Registry_credentials_are_safe_host_authority_and_source_epoch_changes_invalidate_profiles()
+    {
+        await using var factory = new SandboxFactory(); using var owner=TestOwnerCapability.CreateOwnerClient(factory);
+        var created = await owner.PostAsJsonAsync("/api/v2/admin/container-registry-credentials",new AdminCreateContainerRegistryRequest("OCI fixture","Token",new("docker.io","owner",["docker.io/agent-core"]),"oci-secret-sentinel"));
+        created.EnsureSuccessStatusCode();
+        var credential=(await created.Content.ReadFromJsonAsync<AdminCredentialResponse>())!;
+        Assert.Equal("ContainerRegistry",credential.Purpose);Assert.DoesNotContain("oci-secret-sentinel",await owner.GetStringAsync("/api/v2/admin/credentials"));
+        var image="docker.io/agent-core/tool@sha256:"+new string('a',64);
+        var request=new SaveSandboxProfileRequest(0,"Private OCI","",true,image,RegistryCredentialId:credential.CredentialId);
+        var response=await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/private",request);response.EnsureSuccessStatusCode();
+        Assert.Equal("NeedsVerification",(await response.Content.ReadFromJsonAsync<SandboxProfileResponse>())!.Availability);
+        Assert.Equal(HttpStatusCode.BadRequest,(await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/wrong-host",request with {ImageReference="ghcr.io/trannamtrung1st/tool@sha256:"+new string('a',64)})).StatusCode);
+        var instanceResponse=await owner.PostAsJsonAsync("/api/v2/admin/agent-instances",new{definitionId="general-assistant",version=30});instanceResponse.EnsureSuccessStatusCode();
+        var instance=(await instanceResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>());
+        var binding=await owner.PostAsJsonAsync($"/api/v2/admin/agent-instances/{instance.GetProperty("instanceId").GetGuid()}/credential-bindings",new AdminBindCredentialRequest(credential.CredentialId,"oci",instance.GetProperty("revision").GetInt64()));
+        Assert.Equal(HttpStatusCode.Forbidden,binding.StatusCode);
+        (await owner.PatchAsJsonAsync($"/api/v2/admin/credentials/{credential.CredentialId}",new AdminUpdateCredentialRequest(credential.Revision,credential.DisplayName,"Disabled",credential.Metadata,[]))).EnsureSuccessStatusCode();
+        var unavailable=(await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/private"))!;
+        Assert.Equal("SourceUnavailable",unavailable.Availability);
+        // Revoked source can still be explicitly disabled; the owner cannot be trapped by its credential.
+        (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/private",request with {ExpectedRevision=1,Enabled=false})).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.BadRequest,(await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/sensitive",new{expectedRevision=0,name="Unsafe",description="",enabled=true,imageReference=image,password="oci-secret-sentinel"})).StatusCode);
+    }
     [Fact]
     public async Task Instance_sandbox_sparse_settings_preserve_authorization_CAS_and_effective_inspection()
     {
@@ -96,8 +161,7 @@ public sealed class SandboxApiTests
         protected override IReadOnlyDictionary<string, string?> ExtraConfiguration =>
             new Dictionary<string, string?>
             {
-                ["OpenSandbox:ApiKey"] = "",
-                ["OpenSandbox:WorkbenchImage"] = ""
+                ["OpenSandbox:ApiKey"] = ""
             };
     }
 }

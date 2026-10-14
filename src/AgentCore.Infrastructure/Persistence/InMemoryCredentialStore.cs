@@ -26,6 +26,10 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
         if (!Enum.IsDefined(c.Purpose) || (c.Purpose == CredentialPurpose.GoogleDriveAccount) != (c.DriveAccount is not null)
             || c.Purpose == CredentialPurpose.GoogleDriveAccount && (c.Kind != CredentialKind.Token || c.AllowedOrigins.Count != 0)) throw AgentCoreErrors.Validation("Invalid Drive credential purpose/profile.");
         c.DriveAccount?.Validate();
+        if ((c.Purpose == CredentialPurpose.ContainerRegistry) != (c.ContainerRegistry is not null)
+            || c.Purpose == CredentialPurpose.ContainerRegistry && (c.Kind is not (CredentialKind.Password or CredentialKind.Token) || c.AllowedOrigins.Count != 0))
+            throw AgentCoreErrors.Validation("Invalid Container Registry purpose/profile.");
+        if (c.ContainerRegistry is not null) c = c with { ContainerRegistry=c.ContainerRegistry.Validate() };
             if (c.EmailAccount?.GoogleSubject is { } subject && _credentials.Values.Any(x => x.CredentialId != c.CredentialId && x.EmailAccount?.GoogleSubject == subject))
                 throw AgentCoreErrors.Conflict("email_identity_already_connected: This Google identity belongs to another account.");
             if (c.DriveAccount?.GoogleSubject is { } driveSubject && _credentials.Values.Any(x => x.CredentialId != c.CredentialId && x.DriveAccount?.GoogleSubject == driveSubject))
@@ -62,7 +66,8 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
             RequireActive(b.AgentInstanceId, expectedInstanceRevision);
-            if (!_credentials.ContainsKey(b.CredentialId)) throw AgentCoreErrors.NotFound("Credential was not found.");
+            if (!_credentials.TryGetValue(b.CredentialId,out var credential)) throw AgentCoreErrors.NotFound("Credential was not found.");
+            if (credential.Purpose == CredentialPurpose.ContainerRegistry) throw AgentCoreErrors.Forbidden("Registry credentials cannot be bound to agents.");
             if (_bindings.ContainsKey(b.BindingId) || _bindings.Values.Any(x => x.AgentInstanceId == b.AgentInstanceId && (x.Reference == b.Reference || x.CredentialId == b.CredentialId)))
                 throw AgentCoreErrors.Conflict("Credential or reference is already bound to this agent.");
             instances.UpdateWithExpectedRevisionAsync(new(b.AgentInstanceId, expectedInstanceRevision, History: instances.EventStore is null ? null : history), b.UpdatedAtUtc, ct).GetAwaiter().GetResult();

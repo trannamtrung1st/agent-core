@@ -11,7 +11,7 @@ public sealed class AgentDefinitionDraftValidationService(
     AgentDefinitionResourceService resources,
     ProviderAliasSet aliases,
     IModelCatalog catalog,
-    IToolConfigurationGate configurationGate)
+    IToolConfigurationGate configurationGate, ISandboxStore? sandboxes = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null)
 {
     public async ValueTask<DefinitionValidationResult> ValidateDraftAsync(
         Guid draftId,
@@ -28,6 +28,13 @@ public sealed class AgentDefinitionDraftValidationService(
                 catalog,
                 configurationGate,
                 source is null ? [] : RoleEnvironments.Of(source).ToolList));
+        if (draft.Candidate.SandboxPolicy is { } policy)
+            foreach (var id in policy.AllowedProfileIds)
+            {
+                var profile = sandboxes is null ? null : await sandboxes.GetProfileAsync(id, ct:cancellationToken);
+                if (sandboxReadiness?.State != "Ready" || profile is null || sandboxAuthority is null || !(await sandboxAuthority.InspectAsync(profile, cancellationToken)).Eligible)
+                    findings.Add(new("sandboxPolicy", "sandbox_profile_unavailable", $"Profile '{id}' must be authorized and verified. Repair the selection in Sandboxes before publishing.", DefinitionValidationSeverity.Blocking));
+            }
         var draftResources = await resources.ListDraftResourcesAsync(draftId, cancellationToken).ConfigureAwait(false);
         draft = await lifecycle.GetDraftAsync(draftId, cancellationToken).ConfigureAwait(false);
         if (draft.Revision != revisionSnapshot)

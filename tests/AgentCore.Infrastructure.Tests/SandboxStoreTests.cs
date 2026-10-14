@@ -12,6 +12,42 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class SandboxStoreTests
 {
     [Fact]
+    public async Task Oci_upgrade_preserves_populated_profiles_policy_instance_pins_observations_and_live_receipts()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"oci-upgrade-"+Guid.NewGuid().ToString("N")+".db");
+        var factory=new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source="+path).Options);
+        var profile=new SandboxProfile("existing",3,"Existing","",true,"docker.io/agent-core/tool@sha256:"+new string('a',64),InstanceRevision:9);
+        var now=DateTimeOffset.UtcNow;var lease=new SandboxLease(Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),7,profile,SandboxLeaseState.Ready,"private-provider",now,now.AddMinutes(30));
+        var receipt=new SandboxExecution(Guid.NewGuid(),lease.SessionId,lease.AgentInstanceId,lease.Generation,Guid.NewGuid(),Guid.NewGuid(),"uncertain","hash",SandboxExecutionState.Indeterminate,now,WorkspaceSyncStatus:"unknown");
+        var observation=new SandboxProfileVerification(profile.Id,profile.Revision,now,true,"Historical verification");
+        var json=new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        try
+        {
+            await using(var old=factory.CreateDbContext())
+            {
+                var previous=old.Database.GetMigrations().Last(m=>string.CompareOrdinal(m,"20261014163203_OciSandboxRegistryAuthority")<0);
+                await old.GetService<IMigrator>().MigrateAsync(previous);
+                old.Add(new SandboxProfileRow {Id=profile.Id,Revision=3,Json=System.Text.Json.JsonSerializer.Serialize(profile,json)});
+                old.Add(new SandboxVerificationRow {ProfileId=profile.Id,ProfileRevision=3,Json=System.Text.Json.JsonSerializer.Serialize(observation,json)});
+                old.Add(new SandboxLeaseRow {SessionId=lease.SessionId.ToString("D"),AgentInstanceId=lease.AgentInstanceId.ToString("D"),Revision=7,State=(int)lease.State,ExpiresAt=lease.ExpiresAt.ToUnixTimeMilliseconds(),Json=System.Text.Json.JsonSerializer.Serialize(lease,json)});
+                old.Add(new SandboxExecutionRow {Id=receipt.Id.ToString("D"),SessionId=lease.SessionId.ToString("D"),AgentRunId=receipt.AgentRunId.ToString("D"),ToolCallId=receipt.ToolCallId,Json=System.Text.Json.JsonSerializer.Serialize(receipt,json)});
+                old.Sessions.Add(new SessionRecord {SessionId=lease.SessionId.ToString("D"),AgentInstanceId=lease.AgentInstanceId.ToString("D"),AgentId="historical",AgentVersion=4,DefinitionJson="{\"sandboxPolicy\":{\"defaultProfileId\":\"existing\",\"allowedProfileIds\":[\"existing\"]}}",Status="Paused",Mode="Text",Revision=11});
+                await old.SaveChangesAsync();
+            }
+            var owners=new SqliteAgentInstanceStore(factory,new AgentCore.Infrastructure.Identity.SystemIdGenerator(TimeProvider.System));
+            await owners.InsertAsync(new(lease.AgentInstanceId,"historical",4,new("Owner","Test","","neutral"),AgentInstanceLifecycle.Active,now,now,SettingsOverrides:new() {SandboxProfileId=new("existing")}));
+            await using(var upgraded=factory.CreateDbContext()) await upgraded.Database.MigrateAsync();
+            var store=new SqliteSandboxStore(factory);
+            Assert.Equal(profile,await store.GetProfileAsync(profile.Id,3));Assert.Equal(lease,await store.GetLeaseAsync(lease.SessionId));
+            Assert.Equal(receipt,await store.GetExecutionAsync(lease.SessionId,receipt.Id));Assert.Equal(observation,await store.GetVerificationAsync(profile.Id,3));
+            Assert.Equal("existing",(await owners.FindAsync(lease.AgentInstanceId))!.SettingsOverrides!.SandboxProfileId!.Value);
+            var authority=new AgentCore.Infrastructure.Sandbox.SandboxImageAuthority(new(),store,TimeProvider.System);
+            Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
+            await using var check=factory.CreateDbContext();Assert.Equal(11,(await check.Sessions.SingleAsync()).Revision);
+        }
+        finally { SqliteClear();if(File.Exists(path))File.Delete(path); }
+    }
+    [Fact]
     public async Task Additive_migration_preserves_existing_session_bytes_and_drive_schema_without_reset()
     {
         var path = Path.Combine(Path.GetTempPath(), "agent-core-sandbox-upgrade-"+Guid.NewGuid().ToString("N")+".db");

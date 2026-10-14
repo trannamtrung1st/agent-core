@@ -8,7 +8,8 @@ public sealed class ApplicationMessageToolPolicyTests
     [InlineData(ToolCatalog.WorkspaceList, true)]
     [InlineData(ToolCatalog.WebSearch, true)]
     [InlineData("browser.navigate", true)]
-    [InlineData(ToolCatalog.SandboxRun, true)]
+    [InlineData("sandbox.run", false)]
+    [InlineData(ToolCatalog.SandboxExec, true)]
     [InlineData(ToolCatalog.SkillsLoad, false)]
     [InlineData(ToolCatalog.AppMessageSend, false)]
     public void Substantive_work_tools_unlock_intermediate_messaging(string toolName, bool unlocks) =>

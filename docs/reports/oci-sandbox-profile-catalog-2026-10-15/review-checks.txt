@@ -1,0 +1,14 @@
+Final review on develop/branch-1 (15 October 2026, local):
+API SandboxApiTests|CredentialApiTests: 9 passed, 0 skipped
+Infrastructure OciSandboxAuthorityTests|RegistryAuthorizationProbeTests|SandboxStoreTests|OpenSandboxCleanupTests|OpenSandboxOptionsTests|SystemCredentialTests: 56 passed, 0 skipped
+Frontend SandboxProfilesSection: 8 passed; DefinitionSandboxPolicy: 5 passed; InstanceSandboxSummary: 3 passed
+Frontend CredentialsSection: 10 passed; AddCredentialDialog: 2 passed
+Launcher/config unittest: 28 passed
+Frontend build: passed; existing dependency annotation/large chunk warnings
+Actual private registry acceptance, fresh review prefix: passed
+Playwright CLI oci-catalog.spec.ts: 1 passed, two private images and code/Office/Artifact/reset workflow
+Playwright MCP: credential disable/restore refresh + dirty draft; expired credential safe-field edit: passed
+Markdown relative links: 793 checked in 20 changed Markdown files; 0 errors
+Design sidecar source hashes: match final inspected owners; active production legacy contract scan: 0 occurrences
+Hosted CI: not requested, not run
+See report for original tests and remaining Linux/customer-registry/device boundaries.

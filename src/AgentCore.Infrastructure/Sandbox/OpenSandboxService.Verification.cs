@@ -1,4 +1,5 @@
 using System.Globalization;
+using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using OpenSandbox;
@@ -11,11 +12,12 @@ public sealed partial class OpenSandboxService
 {
     public async ValueTask<SandboxProfileVerification> VerifyProfileAsync(SandboxProfile profile, CancellationToken ct, bool imageOnly = false)
     {
-        options.ValidateProfile(profile);
         var started = time.GetUtcNow(); var stdout = new BoundedText(32768); var stderr = new BoundedText(32768);
+        var authority = await Images.InspectAsync(profile, ct, requireVerification: false);
         SandboxProfileVerification Observation(bool passed, string message, string? code = null, int? exit = null) =>
             new(profile.Id, profile.Revision, time.GetUtcNow(), passed, message, code, exit, stdout.Text, stderr.Text, stdout.Truncated || stderr.Truncated,
-                Math.Max(0,(long)(time.GetUtcNow()-started).TotalMilliseconds), passed ? null : Guid.CreateVersion7().ToString("D"));
+                Math.Max(0,(long)(time.GetUtcNow()-started).TotalMilliseconds), passed ? null : Guid.CreateVersion7().ToString("D"), 1, profile.RegistryCredentialId, authority.CredentialRevision, authority.SecretRevision);
+        if (authority.Status != "SourceAuthorized") return Observation(false, authority.Message, "sourceAuthority");
         if (!options.Enabled) return Observation(false, "OpenSandbox is disabled in host configuration.", "disabled");
         var budget = 45 + profile.MaxCommandSeconds + CommitGraceSeconds;
         if (!imageOnly && budget > profile.MaxLifetimeSeconds && (!string.IsNullOrWhiteSpace(profile.InitializationScript) || !string.IsNullOrWhiteSpace(profile.InstanceInitializationScript)))
@@ -26,13 +28,19 @@ public sealed partial class OpenSandboxService
         var phase = "provisioning";
         try
         {
-            sdk = await SdkSandbox.CreateAsync(new SandboxCreateOptions { ConnectionConfig = Connection(), Image = profile.ImageReference,
+            var auth = await Images.ResolveAuthAsync(profile, deadline.Token, requireVerification: false);
+            if (!OciImageReference.Parse(profile.ImageReference).IsLocal) await RegistryAuthorizationProbe.CheckAsync(options, OciImageReference.Parse(profile.ImageReference), auth, deadline.Token);
+            var currentAuthority = await Images.InspectAsync(profile,deadline.Token,requireVerification:false);
+            if (currentAuthority.Status != "SourceAuthorized" || currentAuthority.CredentialRevision != authority.CredentialRevision || currentAuthority.SecretRevision != authority.SecretRevision)
+                throw AgentCoreErrors.Forbidden("Source authorization changed before provisioning. Read the current credential/profile state and verify again.");
+            sdk = await SdkSandbox.CreateAsync(new SandboxCreateOptions { ConnectionConfig = Connection(), Image = profile.ImageReference, ImageAuth = auth,
                 TimeoutSeconds = Math.Min(profile.MaxLifetimeSeconds, budget), ReadyTimeoutSeconds = 45,
                 Resource = new Dictionary<string,string> { ["cpu"] = profile.Cpu.ToString(CultureInfo.InvariantCulture), ["memory"] = profile.MemoryMiB + "Mi" },
                 Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = Guid.CreateVersion7().ToString("N") },
                 NetworkPolicy = new NetworkPolicy { DefaultAction = NetworkRuleAction.Deny, Egress = [] } }, deadline.Token);
+            auth = null;
             phase = "readiness";
-            var output = await InternalCommandAsync(sdk, ["python","-I","-c","import os; assert os.getuid()>0; assert not os.path.exists('/var/run/docker.sock'); print('verified')"], deadline.Token);
+            var output = await InternalCommandAsync(sdk, ["python","-I","-c","import os; assert os.getuid()>0; assert not os.path.exists('/var/run/docker.sock'); assert os.access('/working',os.W_OK); print('verified')"], deadline.Token);
             if (output.Trim() != "verified") throw new InvalidOperationException();
             var lease = new SandboxLease(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, profile, SandboxLeaseState.Ready, sdk.Id,
                 time.GetUtcNow(), time.GetUtcNow().AddSeconds(budget), BaselineProcesses: await ProcessIdentitiesAsync(sdk, deadline.Token));
@@ -72,6 +80,8 @@ public sealed partial class OpenSandboxService
         }
         catch (OperationCanceledException)
         { result = Observation(false, ct.IsCancellationRequested ? "Verification was canceled; success was not confirmed." : $"Verification timed out during {phase}. Check the profile limits and script.", "canceledOrTimeout"); }
+        catch (AgentCoreException error) when (phase == "provisioning")
+        { result = Observation(false, error.Message, "sourceAuthorization"); }
         catch
         { result = Observation(false, $"Verification failed during {phase}. Check private server readiness, the pinned image and initialization script. Provider exception details are withheld; bounded script output is available separately.", phase); }
         finally

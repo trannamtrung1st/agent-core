@@ -11,9 +11,9 @@ public sealed record ResolvedAgentRunConfiguration(AgentRunConfiguration Configu
     IReadOnlyList<EffectiveSkill> Skills, ExecutionBudgetPolicy? InstanceBudgets);
 
 public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
-    IAgentDefinitionResourceAdminStore resources, InheritedDefinitionResourceCatalog? inheritedResources = null, IAgentCredentialBindingStore? credentialBindings = null, ISandboxStore? sandboxes = null)
+    IAgentDefinitionResourceAdminStore resources, InheritedDefinitionResourceCatalog? inheritedResources = null, IAgentCredentialBindingStore? credentialBindings = null, ISandboxStore? sandboxes = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null)
 {
-    public async ValueTask<ResolvedAgentRunConfiguration> ResolveAsync(Guid id, CancellationToken ct = default, bool allowArchived = false)
+    public async ValueTask<ResolvedAgentRunConfiguration> ResolveAsync(Guid id, CancellationToken ct = default, bool allowArchived = false, bool inspectSandbox = false)
     {
         for (var attempt = 0; attempt < 4; attempt++)
         {
@@ -29,7 +29,12 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
             var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
             if (sandboxes is not null)
                 {
-                var profile = await sandboxes.GetProfileAsync(effective.SandboxPolicy?.DefaultProfileId ?? "general-workbench", ct: ct);
+                var profile = effective.SandboxPolicy is { } policy ? await sandboxes.GetProfileAsync(policy.DefaultProfileId, ct: ct) : null;
+                if (profile is not null && !inspectSandbox)
+                {
+                    var availability = sandboxAuthority is null ? null : await sandboxAuthority.InspectAsync(profile, ct);
+                    profile = availability?.Eligible == true && sandboxReadiness?.State == "Ready" ? profile with { RegistryCredentialRevision = availability.CredentialRevision, RegistrySecretRevision = availability.SecretRevision } : null;
+                }
                 effective = effective with { ExecutionSandboxProfile = profile is null ? null : SandboxSetupResolver.Resolve(profile, owner.SettingsOverrides, owner.Revision) };
             }
             var manifest = AgentInstanceResourceService.Resolve(effective, published, resourceState, skillState);

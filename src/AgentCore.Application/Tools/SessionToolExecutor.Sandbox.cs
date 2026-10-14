@@ -44,33 +44,8 @@ public sealed partial class SessionToolExecutor
             if (call.Name == ToolCatalog.SandboxExec && definition.SandboxPolicy is null)
                 return SandboxError("unavailable", "Configure the Definition's exact allowed sandbox profiles before using sandbox.exec.");
             var profile = definition.ExecutionSandboxProfile;
-            if (profile is null) return SandboxError("unavailable", "This Run has no pinned sandbox profile. Configure the Workbench, then start a new Run.");
+            if (profile is null) return SandboxError("unavailable", "This Run has no pinned sandbox profile. Register and verify an authorized prebuilt image, then start a new Run.");
             var access = new SandboxAccess(sessionId, session.AgentInstanceId, run.AgentRunId, run.Claim.Generation, call.Id, profile, definition);
-            if (call.Name == ToolCatalog.SandboxRun)
-            {
-                if (!TryString(args, "verb", out var verb)) return SandboxError("invalid", "Legacy verb is required.");
-                if (args.TryGetProperty("arguments", out var supplied) && (supplied.ValueKind != JsonValueKind.Array || supplied.EnumerateArray().Any(e => e.ValueKind != JsonValueKind.String)))
-                    return SandboxError("invalid", "Legacy arguments must contain strings.");
-                var arguments = args.TryGetProperty("arguments", out var legacy) && legacy.ValueKind == JsonValueKind.Array
-                    && legacy.EnumerateArray().All(e => e.ValueKind == JsonValueKind.String) ? legacy.EnumerateArray().Select(e => e.GetString()!).ToArray() : [];
-                if (verb.Trim().Equals("cat",StringComparison.OrdinalIgnoreCase) && arguments.Length == 1) arguments[0] = AgentWorkspacePaths.Resolve(arguments[0],sessionId,"/working");
-                if (!LegacySandboxCommands.TryTranslate(verb, arguments, out var oldArgv)) return SandboxError("forbidden", "Historical sandbox.run permits only its original bounded verbs.");
-                result = await sandboxService.ExecuteAsync(access, new(null, oldArgv, TimeoutSeconds: 8), ct);
-                Guid? artifactId = null;
-                if (TryString(args, "exportPath", out var export) && !string.IsNullOrWhiteSpace(export) && result.Status == "Completed")
-                {
-                    var canonical = AgentWorkspacePaths.Resolve(export, sessionId, "/working");
-                    using var exportArgs = JsonDocument.Parse(JsonSerializer.Serialize(new { path = canonical, displayName = Path.GetFileName(canonical) }));
-                    var exported = await CreateArtifactFromWorkspaceAsync(definition, sessionId, exportArgs.RootElement, admission.AgentRunId, ct);
-                    using var artifact = JsonDocument.Parse(exported);
-                    if (!artifact.RootElement.TryGetProperty("artifactId",out var id) || !Guid.TryParse(id.GetString(),out var parsedId)) return TextResult(exported);
-                    artifactId = parsedId;
-                }
-                return FitResult(remainingBytes, JsonSerializer.Serialize(new { ok = result.Status == "Completed" && result.ExitCode == 0 && result.WorkspaceSyncStatus == "committed", result.ExitCode,
-                    output = ToolJsonResults.ClipUtf8Prefix(result.Stdout + result.Stderr, Math.Max(0, remainingBytes - 500)), result.Truncated,
-                    artifactId, message = result.Status == "Indeterminate" ? "Outcome unknown; inspect before retrying." : "Observed through the owned Workbench.",
-                    executionId = result.ExecutionId, result.Status, result.WorkspaceSyncStatus, result.DiagnosticId }, SandboxJson)) with { OutcomeUnknown = result.Status == "Indeterminate" };
-            }
             if (args.TryGetProperty("command", out var commandValue) && commandValue.ValueKind != JsonValueKind.String
                 || args.TryGetProperty("cwd", out var cwdValue) && cwdValue.ValueKind != JsonValueKind.String
                 || args.TryGetProperty("timeoutSeconds", out var timeoutValue) && (timeoutValue.ValueKind != JsonValueKind.Number || !timeoutValue.TryGetInt32(out _))

@@ -1,3 +1,4 @@
+import { getSandboxPlatform, sandboxEligible, sandboxStatusLabel, type SandboxProfile } from '../../services/sandboxes';
 import { InstanceSandboxSummary } from "./InstanceSandboxSummary";
 import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { emptyDraft, useInstanceSettingsController } from './useInstanceSettingsController';
@@ -25,6 +26,10 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
   const formId = useId();
   const { sections, drafts, setDrafts, loading, busy, error, models, defaultModelKey, reload, change, inherit, save, saveAll } = useInstanceSettingsController(instanceId, archived, active, onUpdated);
   useEffect(() => { setExpanded([]); }, [instanceId]);
+  const [sandboxProfiles,setSandboxProfiles]=useState<SandboxProfile[]|null>(null);const [sandboxInventoryError,setSandboxInventoryError]=useState(false);const [catalogAttempt,setCatalogAttempt]=useState(0);
+  useEffect(()=>{if(page!=='sandbox')return;const controller=new AbortController();setSandboxProfiles(null);setSandboxInventoryError(false);
+    getSandboxPlatform(controller.signal).then(p=>{if(!controller.signal.aborted)setSandboxProfiles(p.profiles);}).catch(()=>{if(!controller.signal.aborted)setSandboxInventoryError(true);});return()=>controller.abort();
+  },[page,instanceId,catalogAttempt]);
   const requested = page ? instanceSettingGroups[page] ?? [] : undefined;
   const dirtySections = Object.entries(drafts).filter(([, draft]) => Object.keys(draft.set).length + draft.clear.length > 0).map(([key]) => key);
   useAdminDraftStatus(Object.entries(instanceSettingGroups).filter(([, sections]) => sections?.some(section => dirtySections.includes(section))).map(([key]) => key));
@@ -35,6 +40,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
     <Typography.Paragraph type="secondary" className="admin-settings-intro" style={{ margin: 0 }}>{page==='sandbox'?'Unchanged values inherit the authorized Profile. Only fields you change become Instance overrides. Existing environments retain their pinned setup until expiry or reset.':'Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.'}</Typography.Paragraph>
     <Button style={{ alignSelf: "flex-start" }} disabled={busy || loading} onClick={() => void reload()}>Reload settings</Button>
     {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => void reload()}>Retry settings</Button>} />}
+    {sandboxInventoryError && <Alert type="warning" showIcon title="Sandbox catalog unavailable" description="Saved choices are preserved. Retry before selecting another image." action={<Button onClick={()=>setCatalogAttempt(v=>v+1)}>Retry profiles</Button>} />}
     {loading && <Spin aria-label="Loading Instance settings" />}
     {sections && <Collapse styles={{ header: { alignItems: 'center' } }} activeKey={expanded} onChange={keys => setExpanded(Array.isArray(keys) ? keys : [keys])} items={sections.filter(section => !requested || requested.includes(section.section)).map(section => {
       const draft = drafts[section.section] ?? emptyDraft();
@@ -71,7 +77,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
             let control;
             if (boolean) control = <Switch id={id} aria-label={label} checked={value === true} disabled={disabled} onChange={v => change(section, field, v)} />;
             else if (numerics.has(field)) control = <InputNumber id={id} aria-label={label} value={typeof value === 'number' ? value : null} min={constraint?.minimum ?? undefined} max={constraint?.maximum ?? undefined} disabled={disabled} className="instance-settings-control" onChange={v => { if (v !== null || nullable.has(field)) change(section, field, v); }} />;
-            else if (field === 'profileId') control = <Select id={id} className="instance-settings-control" aria-label="Sandbox profile" value={value as string | null} disabled={disabled || !constraint?.choices?.length} options={(constraint?.choices ?? []).map(p => ({ label: p, value: p }))} onChange={v => change(section, field, v)} />;
+            else if (field === 'profileId') control = <Select id={id} className="instance-settings-control" aria-label="Sandbox profile" value={value as string | null} disabled={disabled || !constraint?.choices?.length || page==='sandbox'&&!sandboxProfiles} options={(constraint?.choices ?? []).map(p => {const profile=sandboxProfiles?.find(v=>v.id===p);return {label:profile?`${profile.name} · ${sandboxStatusLabel(profile)}`:`${p} · Unavailable`,value:p,disabled:!profile||!sandboxEligible(profile)};})} onChange={v => change(section, field, v)} />;
             else if (field === 'catalogKey') control = <Select id={id} className="instance-settings-control" aria-label={label} value={value as string | null} disabled={disabled || !models.length} allowClear options={models.map(m => ({ label: m.displayName, value: m.key }))} onChange={v => change(section, field, v ?? null)} />;
             else if (field === 'reasoningEffort') {
               const selected = (draft.clear.includes('catalogKey') ? section.definitionDefaults.catalogKey

@@ -40,7 +40,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
     AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null)
+    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -90,7 +90,7 @@ public sealed partial class SessionToolExecutor(
     public async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct)
     {
         if (_agentInstances is not null && _agentDefinitions is not null && definitionResources is not null)
-            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources, credentialBindings, sandboxStore).ResolveAsync(session.AgentInstanceId, ct);
+            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources, credentialBindings, sandboxStore, sandboxAuthority, sandboxReadiness).ResolveAsync(session.AgentInstanceId, ct);
         // Isolated fixtures can supply their immutable Definition directly. Production wires all stores.
         var owner = _agentInstances is null ? null : await _agentInstances.FindAsync(session.AgentInstanceId, ct);
         var bindings = credentialBindings is null ? [] : await credentialBindings.ListBindingsAsync(session.AgentInstanceId, ct);
@@ -482,7 +482,6 @@ public sealed partial class SessionToolExecutor(
                     await CreateArtifactFromWorkspaceAsync(definition, sessionId, args, admission?.AgentRunId, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsVerify => TextResult(
                     await VerifyArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.SandboxRun => await ExecuteSandboxToolAsync(definition, sessionId, call, args, admission, remainingOutputBytes, cancellationToken),
                 ToolCatalog.SandboxExec or ToolCatalog.SandboxStatus or ToolCatalog.SandboxProcessStatus or ToolCatalog.SandboxProcessStop or ToolCatalog.SandboxReset
                     => await ExecuteSandboxToolAsync(definition, sessionId, call, args, admission, remainingOutputBytes, cancellationToken),
                 ToolCatalog.WebSearch => FitResult(
@@ -526,7 +525,7 @@ public sealed partial class SessionToolExecutor(
                         _profiles, automationAuthoring).ConfigureAwait(false),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
-            return (call.Name.StartsWith("workspace.", StringComparison.Ordinal) || call.Name is ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.SandboxRun)
+            return (call.Name.StartsWith("workspace.", StringComparison.Ordinal) || call.Name is ToolCatalog.ArtifactsCreateFromWorkspace)
                 ? executed with { Text = AgentWorkspacePaths.Project(executed.Text) } : executed;
         }
         catch (OperationCanceledException)

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, App, Button, Descriptions, Flex, Spin, Tag, Typography, theme } from 'antd';
-import { getInstanceSandbox, verifyInstanceSandbox, type SandboxVerification } from '../../services/sandboxes';
+import { getInstanceSandbox, verifyInstanceSandbox, sandboxStatusLabel, sandboxEligible, type SandboxVerification } from '../../services/sandboxes';
 import { SandboxProfileDetails } from './SandboxProfileDetails';
 import { SandboxEvidence } from '../sandbox/SandboxEvidence';
 import { useAdminDetailLayout } from './useAdminDetailLayout';
@@ -26,11 +26,11 @@ export function InstanceSandboxSummary({ instanceId, revision, verifySetup, arch
     <Typography.Title level={5}>Effective Sandbox environment</Typography.Title>
     {error && <Alert showIcon type="warning" title={error} action={<Button disabled={busy} onClick={()=>setRefresh(v=>v+1)}>Retry</Button>} />}
     {!error && !value ? <Spin aria-label="Loading effective sandbox" /> : value && <>
-      <Flex wrap gap={token.paddingXS} align="center"><Tag color={value.state==='Ready'&&profile?.enabled?'success':'default'}>{profile?.enabled?value.state:'Unavailable'}</Tag><Typography.Text>{value.message}</Typography.Text></Flex>
+      <Flex wrap gap={token.paddingXS} align="center"><Tag color={profile&&sandboxEligible(profile)?'success':'default'}>{profile?sandboxStatusLabel(profile):'Unavailable'}</Tag><Typography.Text>{profile?.availabilityMessage??value.message}</Typography.Text></Flex>
       <a href="/admin/platform/sandboxes">Manage Global Sandbox Profiles</a>
       <Descriptions {...layout} bordered size="small" column={1}>
         <Descriptions.Item label="Selected profile">{profile?`${profile.name} · revision ${profile.revision}`:'No authorized configured profile'}</Descriptions.Item>
-        <Descriptions.Item label="Allowed profiles">{value.policy?.allowedProfileIds.join(', ')||'Historical bounded sandbox.run compatibility only'}</Descriptions.Item>
+        <Descriptions.Item label="Allowed profiles">{value.policy?.allowedProfileIds.join(', ')||'No explicit policy · sandbox execution unavailable'}</Descriptions.Item>
         <Descriptions.Item label="Configuration">Saved Instance revision {value.instanceRevision}. Existing generations retain their pinned setup until expiry or explicit reset in the Session Sandbox drawer.</Descriptions.Item>
       </Descriptions>
       {profile && <SandboxProfileDetails profile={profile} instanceInitializationScript={value.instanceInitializationScript} />}

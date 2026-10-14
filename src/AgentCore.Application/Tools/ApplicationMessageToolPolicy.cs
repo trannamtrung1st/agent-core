@@ -7,7 +7,7 @@ internal static class ApplicationMessageToolPolicy
         {
             ToolCatalog.SkillsLoad or ToolCatalog.AppMessageSend => false,
             ToolCatalog.KnowledgeRetrieve or ToolCatalog.AttachmentsRead => true,
-            ToolCatalog.DemoSensitiveAction or ToolCatalog.SandboxRun or ToolCatalog.HttpRequest => true,
+            ToolCatalog.DemoSensitiveAction or ToolCatalog.SandboxExec or ToolCatalog.HttpRequest => true,
             ToolCatalog.ArtifactsCreate or ToolCatalog.ArtifactsCreateFromWorkspace or ToolCatalog.ArtifactsVerify => true,
             _ when toolName.StartsWith("workspace.", StringComparison.Ordinal) => true,
             _ when toolName.StartsWith("web.", StringComparison.Ordinal) => true,

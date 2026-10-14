@@ -10,7 +10,7 @@ namespace AgentCore.Application.Credentials;
 public sealed record CredentialView(Guid CredentialId, string DisplayName, string Kind, string Status,
     IReadOnlyDictionary<string, string> Metadata, IReadOnlyList<string> AllowedOrigins, long Revision,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, int BindingCount,
-    string Purpose = "General", EmailAccountProfile? EmailAccount = null, DriveAccountProfile? DriveAccount = null);
+    string Purpose = "General", EmailAccountProfile? EmailAccount = null, DriveAccountProfile? DriveAccount = null, ContainerRegistryProfile? ContainerRegistry = null);
 public sealed record CredentialBindingView(Guid BindingId, Guid CredentialId, string Reference, long Revision, CredentialView Credential);
 public sealed record BoundCredentialMetadata(string Reference, string DisplayName, string Kind, IReadOnlyDictionary<string, string> Metadata);
 
@@ -34,6 +34,25 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
             normalized.Item4, protector.Protect(id, 1, value), 1, 1, now, now);
         await store.SaveAsync(credential, 0, ct);
         return View(credential, 0);
+    }
+    public async ValueTask<CredentialView> CreateContainerRegistryAsync(string name, string kind, ContainerRegistryProfile profile, string value, CancellationToken ct = default)
+    {
+        profile = Validate(profile.Validate);
+        var displayName = Validate(() => CredentialRules.DisplayName(name));
+        var parsedKind = Validate(() => Parse<CredentialKind>(kind));
+        if (parsedKind is not (CredentialKind.Password or CredentialKind.Token)) throw AgentCoreErrors.Validation("Registry credentials use Password or Token.");
+        Validate(() => { CredentialRules.ProtectedValue(value); return true; });
+        var id = ids.NewId(); var now = time.GetUtcNow();
+        var credential = new Credential(id, displayName, parsedKind, CredentialStatus.Active, CredentialRules.Metadata(null), [],
+            protector.Protect(id, 1, value), 1, 1, now, now, Purpose: CredentialPurpose.ContainerRegistry, ContainerRegistry: profile);
+        await store.SaveAsync(credential, 0, ct); return View(credential, 0);
+    }
+    public async ValueTask<CredentialView> UpdateContainerRegistryAsync(Guid id, long revision, string name, string status, ContainerRegistryProfile profile, CancellationToken ct = default)
+    {
+        var current = await RequireCredential(id,ct);
+        if (current.Purpose != CredentialPurpose.ContainerRegistry) throw AgentCoreErrors.Validation("Credential is not a Container Registry.");
+        var updated = Validate(() => current with {DisplayName=CredentialRules.DisplayName(name),Status=Parse<CredentialStatus>(status),ContainerRegistry=profile.Validate(),Revision=revision+1,UpdatedAtUtc=time.GetUtcNow()});
+        await store.SaveAsync(updated,revision,ct,current.SecretRevision);return await GetAsync(id,ct);
     }
     public async ValueTask<CredentialView> CreateEmailAccountAsync(string name, EmailAccountProfile profile, string value, CancellationToken ct = default)
     {
@@ -84,7 +103,7 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
         var current = await RequireCredential(id, ct);
         if (current.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2 || current.Purpose == CredentialPurpose.GoogleDriveAccount) throw AgentCoreErrors.Validation("Use Connect with Google to replace authorization.");
         await store.SaveAsync(current with { ProtectedPayload = protector.Protect(id, current.ProtectionVersion, value),
-            Revision = revision + 1, UpdatedAtUtc = time.GetUtcNow() }, revision, ct, current.SecretRevision);
+            Revision = revision + 1, SecretRevision = current.SecretRevision + 1, UpdatedAtUtc = time.GetUtcNow() }, revision, ct, current.SecretRevision);
         return await GetAsync(id, ct);
     }
     public ValueTask DeleteAsync(Guid id, long revision, CancellationToken ct = default) => store.DeleteAsync(id, revision, ct);
@@ -98,7 +117,8 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
     }
     public async ValueTask<CredentialBindingView> BindAsync(Guid instanceId, Guid credentialId, string reference, long expectedInstanceRevision, CancellationToken ct = default, AdminEventActorKind actor = AdminEventActorKind.LocalOwner)
     {
-        await RequireInstance(instanceId, true, ct); await RequireCredential(credentialId, ct);
+        await RequireInstance(instanceId, true, ct);
+        if ((await RequireCredential(credentialId, ct)).Purpose == CredentialPurpose.ContainerRegistry) throw AgentCoreErrors.Forbidden("Registry credentials are host-side pull authority and cannot be bound to an agent.");
         var alias = Validate(() => CredentialRules.Reference(reference)); var now = time.GetUtcNow();
         var binding = new AgentCredentialBinding(ids.NewId(), instanceId, credentialId, alias, 1, now, now);
         await bindings.BindAsync(binding, expectedInstanceRevision, ct, new(ids.NewId(), now, actor, AdminEventOperationKind.CredentialBindingChanged, "agent.instance", instanceId.ToString("D"), expectedInstanceRevision + 1, null, JsonSerializer.Serialize(new { operation = "bind", bindingId = binding.BindingId, credentialId })));
@@ -120,7 +140,7 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
             .Where(b => cursor is null || string.CompareOrdinal(b.Reference, cursor) > 0)
             .OrderBy(b => b.Reference, StringComparer.Ordinal))
         {
-            if (await store.GetAsync(binding.CredentialId, ct) is not { Status: CredentialStatus.Active } c) continue;
+            if (await store.GetAsync(binding.CredentialId, ct) is not { Status: CredentialStatus.Active } c || c.Purpose == CredentialPurpose.ContainerRegistry) continue;
             result.Add(new(binding.Reference, c.DisplayName, c.Kind.ToString(), c.Metadata));
             if (result.Count >= limit) break;
         }
@@ -151,7 +171,7 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
     private async ValueTask<Credential> RequireCredential(Guid id, CancellationToken ct) =>
         await store.GetAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Credential was not found.");
     private static CredentialView View(Credential c, int count) => new(c.CredentialId, c.DisplayName, c.Kind.ToString(), c.Status.ToString(),
-        c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, count, c.Purpose.ToString(), c.EmailAccount, c.DriveAccount);
+        c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, count, c.Purpose.ToString(), c.EmailAccount, c.DriveAccount, c.ContainerRegistry);
     private static T Parse<T>(string value) where T : struct, Enum =>
         Enum.TryParse<T>(value, false, out var kind) && Enum.IsDefined(kind) && Enum.GetNames<T>().Contains(value)
             ? kind : throw new ArgumentException("Unknown credential kind or status.");

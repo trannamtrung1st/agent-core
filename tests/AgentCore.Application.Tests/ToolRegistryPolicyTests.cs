@@ -36,7 +36,8 @@ public sealed class ToolRegistryPolicyTests
         Assert.Equal(ToolEffect.Write, ToolCatalog.EffectOf(ToolCatalog.WorkspaceWrite));
         Assert.Equal(ToolReplaySafety.NonReplayable, ToolCatalog.ReplaySafetyOf(ToolCatalog.EmailCreateDraft));
         Assert.Equal(ToolReplaySafety.ReplaySafe, ToolCatalog.ReplaySafetyOf(ToolCatalog.KnowledgeRetrieve));
-        Assert.Equal(ToolEffect.Write, ToolCatalog.EffectOf(ToolCatalog.SandboxRun));
+        Assert.Throws<KeyNotFoundException>(() => ToolCatalog.EffectOf("sandbox.run"));
+        Assert.DoesNotContain("sandbox.run",ToolCatalog.AllKnownNames());
         Assert.Equal(ToolEffect.SensitiveWrite, ToolCatalog.EffectOf(ToolCatalog.DemoSensitiveAction));
     }
 
@@ -95,7 +96,7 @@ public sealed class ToolRegistryPolicyTests
             [
                 ToolCatalog.KnowledgeRetrieve,
                 ToolCatalog.WorkspaceRead,
-                ToolCatalog.SandboxRun,
+                "sandbox.run",
                 ToolCatalog.AutomationCreate,
                 ToolCatalog.WebFetch
             ]);
@@ -114,7 +115,7 @@ public sealed class ToolRegistryPolicyTests
         var offered = ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll).Select(tool => tool.Name).ToArray();
         Assert.Equal([ToolCatalog.KnowledgeRetrieve, ToolCatalog.WebFetch, ToolCatalog.WorkComplete], offered);
         Assert.DoesNotContain(ToolCatalog.WorkspaceRead, offered);
-        Assert.DoesNotContain(ToolCatalog.SandboxRun, offered);
+        Assert.DoesNotContain("sandbox.run", offered);
         Assert.DoesNotContain(ToolCatalog.AutomationCreate, offered);
 
         var admission = new ToolExecutionAdmission(Detached: true, TriggerKind.ApplicationEvent);

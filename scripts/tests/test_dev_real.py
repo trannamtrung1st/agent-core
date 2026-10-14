@@ -149,11 +149,11 @@ root=pathlib.Path(__file__).resolve().parents[1]
 with (root/'trace').open('a') as output: output.write('sandbox:'+sys.argv[1]+'\\n')
 if sys.argv[1]=='up':
  p=root/'local/opensandbox-compose/agent-core-sandbox/native.env';p.parent.mkdir(parents=True,exist_ok=True)
- p.write_text('OpenSandbox__Enabled=true\\nOpenSandbox__Endpoint=http://127.0.0.1:18080\\nOpenSandbox__ApiKey=fixture-private-key\\nOpenSandbox__WorkbenchImage=sha256:fixture\\n');p.chmod(0o600)
+ p.write_text('OpenSandbox__Enabled=true\\nOpenSandbox__Endpoint=http://127.0.0.1:18080\\nOpenSandbox__ApiKey=fixture-private-key\\n');p.chmod(0o600)
 if sys.argv[1]=='stop' and os.getenv('FIXTURE_CLEANUP_PENDING')=='1': raise SystemExit(1)
 print('OpenSandbox: authenticated fixture readiness')
 """)
-        self.command('dotnet','case "$*" in *--AgentCore:Profile=Real*) ;; *) exit 40;; esac\ntest "$OpenSandbox__Enabled" = true || exit 41\necho "$OpenSandbox__Endpoint $OpenSandbox__WorkbenchImage" >> "'+str(self.root/'handoff')+'"\nexec sleep 300')
+        self.command('dotnet','case "$*" in *--AgentCore:Profile=Real*) ;; *) exit 40;; esac\ntest "$OpenSandbox__Enabled" = true || exit 41\necho "$OpenSandbox__Endpoint" >> "'+str(self.root/'handoff')+'"\nexec sleep 300')
 
     def test_full_start_restart_status_stop_selects_all_components_and_hands_off_private_settings(self):
         self.sandbox_stubs()
@@ -162,7 +162,7 @@ print('OpenSandbox: authenticated fixture readiness')
         for _ in range(100):
             if (self.root/'handoff').exists(): break
             time.sleep(.01)
-        self.assertIn('http://127.0.0.1:18080 sha256:fixture',(self.root/'handoff').read_text())
+        self.assertIn('http://127.0.0.1:18080',(self.root/'handoff').read_text())
         self.assertNotIn('fixture-private-key',started.stdout)
         self.assertEqual(self.run_script('status').returncode,0)
         restarted=self.run_script('restart','--full');self.assertEqual(restarted.returncode,0,restarted.stderr)

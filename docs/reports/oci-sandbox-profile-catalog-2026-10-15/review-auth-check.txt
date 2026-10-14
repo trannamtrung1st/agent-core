@@ -1,0 +1,6 @@
+review-workbench: actual disposable verification passed
+review-alternate: actual disposable verification passed
+Cached private image without a credential rejected
+review-workbench: cached-image wrong authorization rejected
+review-alternate: cached-image wrong authorization rejected
+Restored protected authorization and safe readback passed. Disposable evidence retained.

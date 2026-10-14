@@ -2,7 +2,7 @@
 
 This opt-in console program uses exact `Alibaba.OpenSandbox` 1.1.1. It is outside the application solution and complements the real Core integration/browser gates. The supported target is the owner-approved **trusted single-user local demo** using one authenticated OpenSandbox server on the existing Docker daemon. Only that server may mount the daemon socket. No DinD or extra VM is required or started.
 
-[Operations](../../docs/17-observability-and-operations.md#trusted-local-opensandbox) owns setup. `python3 scripts/opensandbox-local.py accept --ui` supplies private configuration, builds the Workbench, runs this proof plus integrated tests, recreates Core/server, and cleans its owned resources. Do not start two servers on one daemon: upstream sidecar cleanup can interfere across them. Never use arbitrary live/operator resources as probe targets.
+[Operations](../../docs/17-observability-and-operations.md#trusted-local-opensandbox) owns setup. `python3 scripts/opensandbox-local.py accept --ui --build-workbench` supplies private configuration, builds the Workbench, runs this proof plus integrated tests, recreates Core/server, and cleans its owned resources. Do not start two servers on one daemon: upstream sidecar cleanup can interfere across them. Never use arbitrary live/operator resources as probe targets.
 
 Offline checks:
 

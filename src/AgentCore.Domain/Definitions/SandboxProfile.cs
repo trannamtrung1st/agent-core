@@ -8,13 +8,15 @@ public sealed record SandboxProfile(string Id, long Revision, string Name, strin
     string ImageReference, string? InitializationScript = null, double Cpu = 1, int MemoryMiB = 1024,
     int Pids = 64, int MaxCommandSeconds = 120, int IdleTtlSeconds = 1800,
     int MaxLifetimeSeconds = 7200, long StorageBytes = 250L * 1024 * 1024,
-    DateTimeOffset? LastVerifiedAt = null, string? VerificationReason = null, string? InstanceInitializationScript = null, long? InstanceRevision = null)
+    DateTimeOffset? LastVerifiedAt = null, string? VerificationReason = null, string? InstanceInitializationScript = null, long? InstanceRevision = null, Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null)
 {
     public void Validate()
     {
+        var source = OciImageReference.Parse(ImageReference);
+        if (source.Repository == "" || source.Value != ImageReference || source.IsLocal && RegistryCredentialId is not null)
+            throw new ArgumentException("Use a canonical immutable image; local image IDs cannot use registry credentials.");
         if (!Regex.IsMatch(Id ?? "", "^[a-z][a-z0-9-]{0,63}$") || Revision < 1
             || string.IsNullOrWhiteSpace(Name) || Name.Length > 120 || Description is null || Description.Length > 2000
-            || !Regex.IsMatch(ImageReference ?? "", @"^(?:[a-zA-Z0-9./:_-]+@)?sha256:[a-f0-9]{64}$")
             || !ValidText(InstanceInitializationScript ?? "") || Encoding.UTF8.GetByteCount(InstanceInitializationScript ?? "") > 16384
             || !ValidText(Name) || !ValidText(Description) || !ValidText(InitializationScript ?? "")
             || Encoding.UTF8.GetByteCount(InitializationScript ?? "") > 16384 || InitializationScript?.Contains('\0') == true

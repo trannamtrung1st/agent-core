@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, App, Flex, Form, Modal, Select, theme } from 'antd';
+import { Alert, App, Flex, Form, Input, Modal, Select, theme } from 'antd';
 import {
   createCredential,
+  createContainerRegistry,
   createEmailAccount,
   emailOAuthConfiguration,
   startEmailOAuth,
@@ -12,6 +13,7 @@ import {
   CredentialFields,
   safeFields,
   type CredentialFieldsValue,
+  ProtectedValueField,
 } from './CredentialFields';
 import { DriveAccountFields } from './DriveAccountDialog';
 import {
@@ -23,12 +25,14 @@ import {
 import { describeAdminError, type AdminFailureNotice } from './adminErrors';
 import { AdminErrorNotice } from './adminFailure';
 
-type Purpose = 'Drive' | 'Gmail' | 'Custom' | 'General';
-type Fields = CredentialFieldsValue & EmailAccountFieldsValue;
+type Purpose = 'Drive' | 'Gmail' | 'Custom' | 'General' | 'Registry';
+export type RegistryCredentialFieldsValue = {registry:string;username:string;repositories:string};
+type Fields = CredentialFieldsValue & EmailAccountFieldsValue & {registry:string; username:string; repositories:string};
 const choices = [
   { value: 'Drive', label: 'Google Drive account' },
   { value: 'Gmail', label: 'Gmail account' },
   { value: 'Custom', label: 'Custom email account' },
+  { value: 'Registry', label: 'Container registry' },
   { value: 'General', label: 'General credential' },
 ];
 export function AddCredentialDialog({
@@ -36,11 +40,13 @@ export function AddCredentialDialog({
   onClose,
   onSaved,
   onClosed,
+  initialPurpose = 'Drive',
 }: {
   open: boolean;
   onClose: () => void;
   onSaved: () => Promise<void>;
   onClosed: () => void;
+  initialPurpose?:Purpose;
 }) {
   const { token } = theme.useToken();
   const { message } = App.useApp();
@@ -76,7 +82,7 @@ export function AddCredentialDialog({
   }, [purpose, open, form]);
   useEffect(() => {
     if (!open) return;
-    select('Drive');
+    select(initialPurpose);
     setConfiguration(undefined);
     setDriveEnabled(undefined);
     let cancelled = false;
@@ -100,7 +106,7 @@ export function AddCredentialDialog({
       cancelled = true;
       form.resetFields();
     };
-  }, [open, form]);
+  }, [open, form, initialPurpose]);
   function close() {
     if (inFlight.current) return;
     form.resetFields();
@@ -117,6 +123,7 @@ export function AddCredentialDialog({
     setError(undefined);
     try {
       if (purpose === 'Drive') await createDriveAccount(values.displayName);
+      else if (purpose === 'Registry') await createContainerRegistry({displayName:values.displayName, kind:values.kind, protectedValue:values.protectedValue!, profile:{registry:values.registry, username:values.username, repositoryPrefixes:(values.repositories??'').split(/\r?\n/).map(v=>v.trim()).filter(Boolean)}});
       else if (purpose === 'General')
         await createCredential({
           ...safeFields(values),
@@ -253,7 +260,7 @@ export function AddCredentialDialog({
         >
           {purpose === 'Drive' ? (
             <DriveAccountFields />
-          ) : purpose === 'General' ? (
+          ) : purpose === 'Registry' ? <ContainerRegistryFields /> : purpose === 'General' ? (
             <CredentialFields create />
           ) : (
             <EmailAccountFields
@@ -268,4 +275,19 @@ export function AddCredentialDialog({
       </Flex>
     </Modal>
   );
+}
+
+export function ContainerRegistryFields({edit=false}:{edit?:boolean}) {
+  return <>
+    <Form.Item name="displayName" label="Display name" rules={[{required:true,max:120}]}><Input autoComplete="off" /></Form.Item>
+    {edit ? <Form.Item name="status" label="Status"><Select options={['Active','Disabled'].map(value=>({value,label:value}))} /></Form.Item> : null}
+    <>
+      <Form.Item name="registry" label="Registry host" extra="Exact lowercase host and optional port, such as ghcr.io. No URL, path or wildcard." rules={[{required:true}]}><Input autoComplete="off" /></Form.Item>
+      <Form.Item name="username" label="Registry username" rules={[{required:true,max:256}]}><Input autoComplete="off" /></Form.Item>
+      <Form.Item name="repositories" label="Repository scopes" extra="Optional narrower scopes, one registry/repository prefix per line. Empty permits repositories on this exact host, within the host image policy."><Input.TextArea autoSize={{minRows:2,maxRows:5}} /></Form.Item>
+      {!edit && <Form.Item name="kind" label="Authentication kind"><Select options={['Password','Token'].map(value=>({value,label:value}))} /></Form.Item>}
+      {!edit && <ProtectedValueField />}
+    </>
+    <Alert type="info" showIcon title="Host-side image pulls only" description="Agents cannot bind or read this credential. Rotation or disabling requires profile reverification before another generation." />
+  </>;
 }

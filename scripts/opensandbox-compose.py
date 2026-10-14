@@ -58,48 +58,49 @@ def prepare(args):
         "Config"
     ][0]["Gateway"]
     private_write(state / "server.toml", server_config(desktop, gateway, compose=True))
-    inputs = [
-        "scripts/opensandbox-proof/images.json",
-        "deploy/sandbox/Dockerfile.workbench",
-        "deploy/sandbox/requirements.txt",
-        "deploy/sandbox/inventory.py",
-    ]
-    fingerprint = hashlib.sha256(
-        b"\0".join((ROOT / name).read_bytes() for name in inputs)
-    ).hexdigest()
-    # Retain every input-addressed manifest: containerd may discard an old
-    # multi-platform image ID when its only mutable tag is overwritten.
-    tag = "agent-core-workbench:inputs-" + fingerprint[:24]
-    previous = read_json(state / "image.json")
-    if (
-        previous
-        and previous.get("inputsSha256") == fingerprint
-        and inspect(previous["imageId"])
-    ):
-        image = previous["imageId"]
-        run("docker", "tag", image, tag)
-        print("Workbench: reused the immutable image for unchanged pinned inputs.")
-    else:
-        run(
-            "docker",
-            "build",
-            "--provenance=false",
-            "--label",
-            "agent-core.workbench.inputs=" + fingerprint,
-            "-t",
-            tag,
-            "-f",
+    image = None
+    if args.build_workbench:
+        inputs = [
+            "scripts/opensandbox-proof/images.json",
             "deploy/sandbox/Dockerfile.workbench",
-            "deploy/sandbox",
-            capture=False,
-        )
-        image = run("docker", "image", "inspect", tag, "--format", "{{.Id}}").strip()
+            "deploy/sandbox/requirements.txt",
+            "deploy/sandbox/inventory.py",
+        ]
+        fingerprint = hashlib.sha256(
+            b"\0".join((ROOT / name).read_bytes() for name in inputs)
+        ).hexdigest()
+        # Retain every input-addressed manifest: containerd may discard an old
+        # multi-platform image ID when its only mutable tag is overwritten.
+        tag = "agent-core-workbench:inputs-" + fingerprint[:24]
+        previous = read_json(state / "image.json")
+        if (
+            previous
+            and previous.get("inputsSha256") == fingerprint
+            and inspect(previous["imageId"])
+        ):
+            image = previous["imageId"]
+            run("docker", "tag", image, tag)
+            print("Workbench: reused the immutable image for unchanged pinned inputs.")
+        else:
+            run(
+                "docker",
+                "build",
+                "--provenance=false",
+                "--label",
+                "agent-core.workbench.inputs=" + fingerprint,
+                "-t",
+                tag,
+                "-f",
+                "deploy/sandbox/Dockerfile.workbench",
+                "deploy/sandbox",
+                capture=False,
+            )
+            image = run("docker", "image", "inspect", tag, "--format", "{{.Id}}").strip()
     for name in ["server", "execd", "egress"]:
         if not inspect(PINS[name]):
             run("docker", "pull", PINS[name], capture=False)
     values = {
         "AGENTCORE_SANDBOX_SERVER_IMAGE": PINS["server"],
-        "AGENTCORE_SANDBOX_WORKBENCH_IMAGE": image,
         "AGENTCORE_SANDBOX_KEY_FILE": str(key_path),
         "AGENTCORE_SANDBOX_CONFIG_FILE": str(state / "server.toml"),
         "AGENTCORE_SANDBOX_PORT": str(args.port),
@@ -107,11 +108,12 @@ def prepare(args):
     private_write(
         state / "compose.env", "".join(k + "=" + v + "\n" for k, v in values.items())
     )
-    (state / "image.json").write_text(
-        json.dumps(
-            {"imageId": image, "pins": PINS, "inputsSha256": fingerprint}, indent=2
+    if image:
+        (state / "image.json").write_text(
+            json.dumps(
+                {"imageId": image, "pins": PINS, "inputsSha256": fingerprint}, indent=2
+            )
         )
-    )
     return state, image
 
 
@@ -143,10 +145,10 @@ def readiness(endpoint, key):
     return result
 
 
-def native_handoff(state, endpoint, key, image):
+def native_handoff(state, endpoint, key, image=None):
     private_write(
         state / "native.env",
-        f"OpenSandbox__Enabled=true\nOpenSandbox__Endpoint={endpoint}\nOpenSandbox__ApiKey={key}\nOpenSandbox__WorkbenchImage={image}\nOpenSandbox__AllowLocalImageIds=true\n",
+        f"OpenSandbox__Enabled=true\nOpenSandbox__Endpoint={endpoint}\nOpenSandbox__ApiKey={key}\n",
     )
 
 
@@ -237,7 +239,7 @@ def up(args):
     print(
         "OpenSandbox: authenticated Compose server ready at "
         + endpoint
-        + ". Persistent metadata and Workbench image retained."
+        + ". Persistent metadata retained; register and verify a prebuilt image in Admin."
     )
 
 
@@ -356,6 +358,7 @@ def main():
     parser.add_argument("command", choices=["prepare", "up", "status", "stop"])
     parser.add_argument("--project", default="agent-core-sandbox")
     parser.add_argument("--port", type=int, default=18080)
+    parser.add_argument("--build-workbench", action="store_true", help="Optional maintainer fixture; normal startup never builds workload images.")
     parser.add_argument("--migrate-local", action="store_true")
     parser.add_argument("--api-url")
     args = parser.parse_args()

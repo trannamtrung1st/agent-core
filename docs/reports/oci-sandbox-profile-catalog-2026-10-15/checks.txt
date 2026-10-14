@@ -1,0 +1,57 @@
+Focused local evidence. Hosted CI/full unrelated suites not run.
+
+/tmp/oci-api-tests.log
+  AgentCore.Api.Tests -> /Users/trungtran/MyPlace/Personal/Projects/agent-core-1/tests/AgentCore.Api.Tests/bin/Debug/net10.0/AgentCore.Api.Tests.dll
+Passed!  - Failed:     0, Passed:     7, Skipped:     0, Total:     7, Duration: 5 s - AgentCore.Api.Tests.dll (net10.0)
+
+/tmp/oci-app-tests.log
+  AgentCore.Application.Tests -> /Users/trungtran/MyPlace/Personal/Projects/agent-core-1/tests/AgentCore.Application.Tests/bin/Debug/net10.0/AgentCore.Application.Tests.dll
+Passed!  - Failed:     0, Passed:    31, Skipped:     0, Total:    31, Duration: 424 ms - AgentCore.Application.Tests.dll (net10.0)
+
+/tmp/oci-infra-tests.log
+  AgentCore.Infrastructure.Tests -> /Users/trungtran/MyPlace/Personal/Projects/agent-core-1/tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/AgentCore.Infrastructure.Tests.dll
+Passed!  - Failed:     0, Passed:    56, Skipped:     0, Total:    56, Duration: 22 s - AgentCore.Infrastructure.Tests.dll (net10.0)
+
+/tmp/oci-real-lifecycle-tests.log
+  AgentCore.Infrastructure.Tests -> /Users/trungtran/MyPlace/Personal/Projects/agent-core-1/tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/AgentCore.Infrastructure.Tests.dll
+Passed!  - Failed:     0, Passed:    18, Skipped:     0, Total:    18, Duration: 4 m 13 s - AgentCore.Infrastructure.Tests.dll (net10.0)
+
+/tmp/oci-web-tests.log
+ Test Files  7 passed (7)
+      Tests  43 passed (43)
+
+/tmp/oci-final-ui-owner-tests.log
+ Test Files  2 passed (2)
+      Tests  15 passed (15)
+
+/tmp/oci-final-policy-ui-tests.log
+ Test Files  3 passed (3)
+      Tests  14 passed (14)
+
+/tmp/oci-instance-summary-tests.log
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+/tmp/oci-scripts-tests.log
+Ran 28 tests in 18.579s
+OK
+
+/tmp/oci-e2e-before.log
+  1 passed (43.8s)
+
+/tmp/oci-e2e-after.log
+  1 passed (1.2m)
+
+/tmp/oci-private-sessions-final.log
+  1 passed (27.7s)
+
+/tmp/oci-final-auth-tests.log
+  AgentCore.Infrastructure.Tests -> /Users/trungtran/MyPlace/Personal/Projects/agent-core-1/tests/AgentCore.Infrastructure.Tests/bin/Debug/net10.0/AgentCore.Infrastructure.Tests.dll
+Passed!  - Failed:     0, Passed:    13, Skipped:     0, Total:    13, Duration: 22 s - AgentCore.Infrastructure.Tests.dll (net10.0)
+
+/tmp/oci-web-build.log
+✓ built in 6.49s
+
+Consistency: 20 Markdown files, 791 relative links/anchors checked; no link/fence errors.
+Impeccable sidecar JSON/source fingerprints valid.
+Production src/web source has zero active sandbox.run, LegacySandboxCommands, WorkbenchImage or implicit default occurrences.

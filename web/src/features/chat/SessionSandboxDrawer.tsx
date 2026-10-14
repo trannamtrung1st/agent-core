@@ -79,12 +79,14 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
     }}>
       {error && <Alert type="error" showIcon title={error} action={<Button loading={reading} onClick={() => void refresh.current()}>Retry</Button>} />}
-      {loading ? <Spin aria-label="Loading Session sandbox" /> : !environment ? !error && <Empty description="No sandbox environment yet. An authorized command provisions the selected Workbench for this Session." /> : <>
+      {loading ? <Spin aria-label="Loading Session sandbox" /> : !environment ? !error && <Empty description="No sandbox environment yet. An authorized command provisions the selected verified profile for this Session." /> : <>
         <Flex align="center" wrap gap={token.paddingXS}><Tag color={uncertain ? 'warning' : environment.state === 'Ready' && !ended ? 'success' : 'default'}>{ended && environment.state === 'Ready' ? 'Expired' : environment.state}</Tag><Typography.Text>{environment.profileId} · revision {environment.profileRevision}</Typography.Text></Flex>
         {uncertain && <Alert type="warning" showIcon title="Inspect before retrying" description={recoveryDescription} />}
         {environment.message && !ended && <Alert type="error" showIcon title="Environment setup failed" description={environment.message} />}
         {ended && <Alert type="info" showIcon title="Environment ended" description={initializationBlocked?"Initialization failed or was not confirmed. Inspect the retained output and canonical files, then explicitly reset before retrying. Scripts are never repeated automatically.":"The next authorized command creates a fresh environment from canonical /working. Saved Workspace files and Artifacts are retained."} />}
         <Descriptions bordered size="small" column={1}>
+          {environment.profileName && <Descriptions.Item label="Pinned profile">{environment.profileName} · revision {environment.profileRevision}</Descriptions.Item>}
+          {environment.imageReference && <Descriptions.Item label="Pinned image"><Typography.Text code style={{overflowWrap:'anywhere'}}>{environment.imageReference}</Typography.Text></Descriptions.Item>}
           {environment.createdAt && <Descriptions.Item label="Created">{new Date(environment.createdAt).toLocaleString()}</Descriptions.Item>}
           {environment.lastActivityAt && <Descriptions.Item label="Last activity">{new Date(environment.lastActivityAt).toLocaleString()}</Descriptions.Item>}
           {environment.maximumLifetimeAt && <Descriptions.Item label="Maximum lifetime">{new Date(environment.maximumLifetimeAt).toLocaleString()}</Descriptions.Item>}

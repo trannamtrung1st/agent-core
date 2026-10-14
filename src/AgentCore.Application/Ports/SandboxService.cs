@@ -14,7 +14,7 @@ public sealed record SandboxEnvironmentInfo(Guid SessionId, Guid Generation, str
     long ProfileRevision, DateTimeOffset ExpiresAt, Guid? ActiveExecutionId, string? DiagnosticId, Guid? LastExecutionId = null, string? Message = null,
     DateTimeOffset? CreatedAt = null, DateTimeOffset? LastActivityAt = null, DateTimeOffset? MaximumLifetimeAt = null,
     string? CleanupReason = null, bool CleanupPending = false, int CleanupPasses = 0, DateTimeOffset? LastCleanupAttemptAt = null,
-    SandboxInitializationEvidence? Initialization = null);
+    SandboxInitializationEvidence? Initialization = null, string? ProfileName = null, string? ImageReference = null);
 public sealed record ScratchSnapshot(WorkspaceTransfer Transfer, string Fingerprint);
 
 public interface ISandboxService

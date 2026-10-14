@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Descriptions, Flex, Select, Spin, Tag, Typography, theme } from 'antd';
-import { getSandboxPlatform, type SandboxPlatform } from '../../services/sandboxes';
+import { getSandboxPlatform, sandboxEligible, sandboxStatusLabel, type SandboxPlatform } from '../../services/sandboxes';
 import { followAppLink } from '../../app/appLink';
 import type { DefinitionCandidate } from './definitionCandidate';
 import { SandboxProfileDetails } from './SandboxProfileDetails';
@@ -26,9 +26,9 @@ export function DefinitionSandboxPolicy({ candidate, disabled, readOnly, onChang
   }, [attempt]);
   const profiles = platform?.profiles;
   const options = [...new Map([
-    ...(profiles ?? []).map(profile => [profile.id, { value: profile.id, label: `${profile.name}${profile.enabled ? '' : ' · Disabled'}` }] as const),
+    ...(profiles ?? []).map(profile => [profile.id, { value: profile.id, label: `${profile.name} · ${sandboxStatusLabel(profile)}`, disabled: !sandboxEligible(profile) }] as const),
     ...(policy?.allowedProfileIds ?? []).filter(id => !profiles?.some(profile => profile.id === id))
-      .map(id => [id, { value: id, label: `${id} · Unavailable` }] as const)
+      .map(id => [id, { value: id, label: `${id} · Unavailable`, disabled: true }] as const)
   ]).values()];
   const profile = profiles?.find(value => value.id === policy?.defaultProfileId);
   const label = (id: string) => options.find(option => option.value === id)?.label ?? id;
@@ -55,7 +55,8 @@ export function DefinitionSandboxPolicy({ candidate, disabled, readOnly, onChang
             onChange={defaultProfileId => onChange?.({ ...candidate, sandboxPolicy: { ...policy, defaultProfileId } })} />
         </label>
       </>}
-      {!policy && <Typography.Text type="secondary">No explicit profile policy. Historical bounded sandbox.run compatibility may still apply where that capability is granted.</Typography.Text>}
+      {!readOnly && profiles && policy?.allowedProfileIds.some(id=>!profiles.some(p=>p.id===id&&sandboxEligible(p))) && <Alert showIcon type="warning" title="Stored policy contains unavailable profiles" description="Verify or repair them in Sandboxes, or explicitly remove them from this draft before publishing." action={<Button disabled={disabled} onClick={()=>{const allowedProfileIds=policy.allowedProfileIds.filter(id=>profiles.some(p=>p.id===id&&sandboxEligible(p)));onChange?.({...candidate,sandboxPolicy:allowedProfileIds.length?{allowedProfileIds,defaultProfileId:allowedProfileIds.includes(policy.defaultProfileId)?policy.defaultProfileId:allowedProfileIds[0]}:null});}}>Remove unavailable profiles</Button>} />}
+      {!policy && <Typography.Text type="secondary">No explicit profile policy. Sandbox execution is unavailable. Publish modern sandbox capabilities and an explicit profile policy, then adopt that version on the Instance.</Typography.Text>}
       <a href="/admin/platform/sandboxes" onClick={followAppLink}>Manage Global Sandbox Profiles</a>
     </section>
     {platform && policy && <section className="admin-draft-form-section" aria-label="Default Global sandbox profile">
@@ -63,8 +64,8 @@ export function DefinitionSandboxPolicy({ candidate, disabled, readOnly, onChang
       {profile && <Typography.Text strong>{profile.name} · revision {profile.revision}</Typography.Text>}
       <Typography.Text type="secondary">Current Global configuration for reference. This Definition stores profile IDs; Runs resolve and pin a profile revision when admitted.</Typography.Text>
       <Flex wrap gap={token.paddingXS} align="center">
-        <Tag color={platform.state === 'Ready' && profile?.enabled ? 'success' : 'default'}>{profile ? profile.enabled ? platform.state : 'Disabled' : 'Unavailable'}</Tag>
-        <Typography.Text>{profile ? platform.message : 'The default profile is unavailable. Choose an available profile before publishing.'}</Typography.Text>
+        <Tag color={profile && sandboxEligible(profile) ? 'success' : 'default'}>{profile ? sandboxStatusLabel(profile) : 'Unavailable'}</Tag>
+        <Typography.Text>{profile ? profile.availabilityMessage??platform.message : 'The default profile is unavailable. Choose an available profile before publishing.'}</Typography.Text>
       </Flex>
       {profile && <SandboxProfileDetails profile={profile} />}
     </section>}

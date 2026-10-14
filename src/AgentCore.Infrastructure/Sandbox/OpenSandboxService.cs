@@ -20,8 +20,9 @@ namespace AgentCore.Infrastructure.Sandbox;
 /// <summary>One SDK adapter; authoritative files and durable ownership remain in Core.</summary>
 public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISandboxStore store,
     ISessionWorkspace workspace, IMemoryStore sessions, IAgentRunStore runs, TimeProvider time, IAgentInstanceStore? instances = null,
-    ILogger<OpenSandboxService>? logger = null) : ISandboxService
+    ILogger<OpenSandboxService>? logger = null, SandboxImageAuthority? imageAuthority = null) : ISandboxService
 {
+    private SandboxImageAuthority Images => imageAuthority ?? new(options, store, time);
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gates = new();
     private SemaphoreSlim Gate(Guid id) => _gates.GetOrAdd(id, _ => new(1, 1));
     internal Action<SandboxExecution>? ExecutionReceiptFault { get; set; }
@@ -51,8 +52,10 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         if (!options.Enabled || (await store.GetProfileAsync(access.Profile.Id, ct: ct))?.Enabled != true)
             throw AgentCoreErrors.Forbidden("Sandbox profile is disabled or unavailable.");
         options.ValidateProfile(access.Profile);
+        var source = await Images.InspectAsync(access.Profile, ct, requireVerification: false);
+        if (source.Status != "SourceAuthorized") throw AgentCoreErrors.Forbidden(source.Message);
         var allowed = access.Definition.SandboxPolicy?.AllowedProfileIds;
-        if (allowed is not null && !allowed.Contains(access.Profile.Id, StringComparer.Ordinal))
+        if (allowed is null || !allowed.Contains(access.Profile.Id, StringComparer.Ordinal))
             throw AgentCoreErrors.Forbidden("Definition does not allow this sandbox profile.");
     }
 
@@ -166,6 +169,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         if (lease is not null && lease.AgentInstanceId != access.AgentInstanceId) throw AgentCoreErrors.NotFound("Sandbox was not found.");
         if (lease is not null && lease.State != SandboxLeaseState.Terminated)
         {
+            if ((await Images.InspectAsync(lease.Profile, ct, requireVerification:false)).Status != "SourceAuthorized") throw AgentCoreErrors.Forbidden("Pinned generation source authority was revoked. Inspect and reset the Session sandbox.");
             if (lease.Profile.Id != access.Profile.Id) throw AgentCoreErrors.Conflict("Current sandbox uses another profile. Reset to use the newly selected profile.");
             if (lease.ExpiresAt <= time.GetUtcNow() && lease.ActiveExecutionId is null)
             {
@@ -183,6 +187,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 else return lease;
             }
         }
+        var imageAuth = await Images.ResolveAuthAsync(access.Profile, ct, requireVerification: true);
         var now = time.GetUtcNow();
         var initialTtl = Math.Min(access.Profile.MaxLifetimeSeconds,
             Math.Max(access.Profile.IdleTtlSeconds, 45 + access.Profile.MaxCommandSeconds + CommitGraceSeconds));
@@ -196,12 +201,16 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         var phase = "provisioning";
         try
         {
+            if (!OciImageReference.Parse(lease.Profile.ImageReference).IsLocal) await RegistryAuthorizationProbe.CheckAsync(options, OciImageReference.Parse(lease.Profile.ImageReference), imageAuth, ct);
+            await ValidateAccessAsync(access, ct);
+            imageAuth = await Images.ResolveAuthAsync(access.Profile,ct,requireVerification:true);
             sdk = await SdkSandbox.CreateAsync(new SandboxCreateOptions {
-                ConnectionConfig = Connection(), Image = lease.Profile.ImageReference, TimeoutSeconds = initialTtl, ReadyTimeoutSeconds = 45,
+                ConnectionConfig = Connection(), Image = lease.Profile.ImageReference, ImageAuth = imageAuth, TimeoutSeconds = initialTtl, ReadyTimeoutSeconds = 45,
                 Resource = new Dictionary<string,string> { ["cpu"] = lease.Profile.Cpu.ToString(CultureInfo.InvariantCulture), ["memory"] = lease.Profile.MemoryMiB + "Mi" },
                 Metadata = new Dictionary<string,string> { ["agent-core-generation"] = lease.Generation.ToString("N") },
                 NetworkPolicy = new NetworkPolicy { DefaultAction = NetworkRuleAction.Deny, Egress = [] }
             }, ct);
+            imageAuth = null;
             lease = await SaveAsync(lease with { ProviderId = sdk.Id }, ct);
             var identity = await InternalCommandAsync(sdk, ["id", "-u"], ct);
             if (!int.TryParse(identity.Trim(), out var uid) || uid <= 0) throw new InvalidOperationException("Non-root execution is required.");
@@ -232,7 +241,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             var terminated = lease.ProviderId is not null && await TryTerminateAsync(lease, cleanup.Token);
             await SaveAsync(lease with { State = terminated ? SandboxLeaseState.Failed : SandboxLeaseState.NeedsReconciliation, DiagnosticId = Guid.CreateVersion7().ToString("D"),
                 CleanupReason = phase == "initialization" ? "initializationFailed" : "setupFailed",
-                SafeMessage = phase == "initialization" ? "Environment initialization failed. Correct and verify the profile script, then reset before retrying." : "Environment setup failed. Check private server readiness and the pinned image, then reset before retrying." }, CancellationToken.None);
+                SafeMessage = phase == "initialization" ? "Environment initialization failed. Correct and verify the profile script, then reset before retrying." : error is AgentCoreException sourceError ? sourceError.Message + " Inspect the saved source, then reset before retrying." : "Environment setup failed. Check private server readiness and the pinned image, then reset before retrying." }, CancellationToken.None);
             throw AgentCoreErrors.Persistence("Sandbox provisioning failed. Inspect readiness and reset before retrying.");
         }
         finally { if (sdk is not null) await sdk.DisposeAsync(); }
@@ -338,7 +347,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         return lease is null ? null : new(lease.SessionId, lease.Generation, lease.State.ToString(), lease.Profile.Id, lease.Profile.Revision, lease.ExpiresAt, lease.ActiveExecutionId, lease.DiagnosticId, lease.LastExecutionId, lease.SafeMessage,
             lease.CreatedAt, lease.LastActivityAt ?? lease.InitializedAt ?? lease.CreatedAt, lease.CreatedAt.AddSeconds(lease.Profile.MaxLifetimeSeconds),
             lease.CleanupReason, lease.State is SandboxLeaseState.Terminating or SandboxLeaseState.NeedsReconciliation, lease.CleanupPasses,
-            lease.LastCleanupAttemptAt, lease.Initialization);
+            lease.LastCleanupAttemptAt, lease.Initialization, lease.Profile.Name, lease.Profile.ImageReference);
     }
     public async ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct = default, Guid? expectedGeneration = null)
     {
@@ -375,7 +384,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             {
                 var lease = await store.GetLeaseAsync(item.SessionId, ct); if (lease is null || lease.State == SandboxLeaseState.Terminated) continue;
                 var session = await sessions.LoadMetadataAsync(lease.SessionId, ct);
-                var revoked = !options.Enabled || (await store.GetProfileAsync(lease.Profile.Id, ct: ct))?.Enabled != true
+                var revoked = (await Images.InspectAsync(lease.Profile, ct, requireVerification:false)).Status != "SourceAuthorized" || !options.Enabled || (await store.GetProfileAsync(lease.Profile.Id, ct: ct))?.Enabled != true
                     || instances is not null && (await instances.FindAsync(lease.AgentInstanceId,ct))?.Lifecycle != AgentInstanceLifecycle.Active;
                 // Transport loss and application shutdown pause the conversation, but
                 // retain an idle environment until TTL. Explicit deactivation cleans it.

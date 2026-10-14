@@ -15,7 +15,7 @@ public sealed record InstanceSettingsSection(string Section, long InstanceRevisi
 
 public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
     IIdGenerator ids, TimeProvider time, IModelCatalog? models = null, ProviderAliasSet? aliases = null,
-    Triggers.InstanceAutomationPolicy? automationPolicy = null, ISandboxStore? sandboxes = null)
+    Triggers.InstanceAutomationPolicy? automationPolicy = null, ISandboxStore? sandboxes = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public async ValueTask<IReadOnlyList<InstanceSettingsSection>> ReadAllAsync(Guid id, CancellationToken ct = default)
@@ -37,6 +37,7 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         RequireWritableRevision(owner, expectedRevision);
         var definition = await DefinitionAsync(owner, ct);
         var candidate = InstanceSettingsResolver.Patch(owner.SettingsOverrides ?? new(), section, set, clear);
+        await ValidateSandboxChoiceAsync(section, set, ct);
         definition = await BindSandboxAsync(definition, candidate, ct);
         if (section == "sandboxPolicy" && definition.ExecutionSandboxProfile is { } profile) _ = SandboxSetupResolver.Resolve(profile, candidate, owner.Revision, rejectExpansion:true);
         _ = ResolvePatch(definition, owner.SettingsOverrides ?? new(), section, set, clear);
@@ -51,6 +52,7 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         var definition = await DefinitionAsync(owner, ct);
         var current = owner.SettingsOverrides ?? new();
         var candidate = InstanceSettingsResolver.Patch(current, section, set, clear);
+        await ValidateSandboxChoiceAsync(section, set, ct);
         var bound = await BindSandboxAsync(definition, candidate, ct);
         if (section == "sandboxPolicy" && bound.ExecutionSandboxProfile is { } profile) _ = SandboxSetupResolver.Resolve(profile, candidate, owner.Revision, rejectExpansion:true);
         var (next, effective) = ResolvePatch(bound, current, section, set, clear);
@@ -65,6 +67,14 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         return await ViewAsync(updated, definition, section, ct);
     }
 
+    private async ValueTask ValidateSandboxChoiceAsync(string section, IReadOnlyDictionary<string, JsonElement> set, CancellationToken ct)
+    {
+        if (section != "sandboxPolicy" || !set.TryGetValue("profileId", out var choice)) return;
+        var id = choice.ValueKind == JsonValueKind.String ? choice.GetString() : null;
+        var profile = id is null || sandboxes is null ? null : await sandboxes.GetProfileAsync(id, ct:ct);
+        if (sandboxReadiness?.State != "Ready" || profile is null || sandboxAuthority is null || !(await sandboxAuthority.InspectAsync(profile, ct)).Eligible)
+            throw AgentCoreErrors.Validation("Choose a currently verified authorized profile; repair and verify it in Sandboxes first.");
+    }
     private static void RequireWritableRevision(AgentInstance owner, long expectedRevision)
     {
         if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived instances are read-only.");
@@ -88,8 +98,8 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
     private async Task<AgentDefinition> BindSandboxAsync(AgentDefinition definition, InstanceSettingsOverrides settings, CancellationToken ct)
     {
         if (sandboxes is null) return definition;
-        var selected = InstanceSettingsResolver.Resolve(definition, settings).SandboxPolicy?.DefaultProfileId ?? "general-workbench";
-        return definition with { ExecutionSandboxProfile = await sandboxes.GetProfileAsync(selected, ct:ct) };
+        var selected = InstanceSettingsResolver.Resolve(definition, settings).SandboxPolicy?.DefaultProfileId;
+        return definition with { ExecutionSandboxProfile = selected is null ? null : await sandboxes.GetProfileAsync(selected, ct:ct) };
     }
 
     private async Task<InstanceSettingsSection> ViewAsync(AgentInstance owner, AgentDefinition definition, string section, CancellationToken ct)

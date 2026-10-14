@@ -125,30 +125,30 @@ public sealed class SessionToolExecutorTests
     }
 
     [Fact]
-    public async Task Sandbox_run_requires_allowlist_and_the_owned_OpenSandbox_service()
+    public async Task Retired_sandbox_run_never_regains_execution_even_when_historically_allowlisted()
     {
         var executor = new SessionToolExecutor();
         var forbidden = await ExecuteTextAsync(
             executor,
             Support(),
             Guid.NewGuid(),
-            new ModelToolCall("c1", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""));
+            new ModelToolCall("c1", "sandbox.run", """{"verb":"echo","arguments":["hi"]}"""));
         Assert.Contains("forbidden", forbidden, StringComparison.OrdinalIgnoreCase);
 
         var allowed = await ExecuteTextAsync(
             executor,
             Sandboxed(),
             Guid.NewGuid(),
-            new ModelToolCall("c2", ToolCatalog.SandboxRun, """{"verb":"echo","arguments":["hi"]}"""));
-        Assert.Contains("unavailable", allowed, StringComparison.OrdinalIgnoreCase);
+            new ModelToolCall("c2", "sandbox.run", """{"verb":"echo","arguments":["hi"]}"""));
+        Assert.Contains("forbidden", allowed, StringComparison.OrdinalIgnoreCase);
 
         var missing = new SessionToolExecutor();
         var unavailable = await ExecuteTextAsync(
             missing,
             Sandboxed(),
             Guid.NewGuid(),
-            new ModelToolCall("c3", ToolCatalog.SandboxRun, """{"verb":"echo"}"""));
-        Assert.Contains("unavailable", unavailable, StringComparison.OrdinalIgnoreCase);
+            new ModelToolCall("c3", "sandbox.run", """{"verb":"echo"}"""));
+        Assert.Contains("forbidden", unavailable, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -376,7 +376,7 @@ trailer<< /Root 1 0 R >>
 
     private static AgentDefinition Sandboxed() => Support() with
     {
-        Environment = new RoleEnvironment(ToolAllowlist: [ToolCatalog.SandboxRun])
+        Environment = new RoleEnvironment(ToolAllowlist: ["sandbox.run"])
     };
 
     private static AgentDefinition Artifacts() => Support() with

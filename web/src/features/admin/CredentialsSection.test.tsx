@@ -6,7 +6,7 @@ import { CredentialsSection, InstanceCredentialsSection } from "./CredentialsSec
 import * as api from "../../services/adminApi";
 
 vi.mock("../../services/adminApi", () => ({ listCredentials: vi.fn(), createCredential: vi.fn(),
-  updateCredential: vi.fn(), replaceCredentialValue: vi.fn(), deleteCredential: vi.fn(),
+  updateCredential: vi.fn(), updateContainerRegistry: vi.fn(), replaceCredentialValue: vi.fn(), deleteCredential: vi.fn(),
   listCredentialBindings: vi.fn(), bindCredential: vi.fn(), unbindCredential: vi.fn(), resetBrowserProfile: vi.fn() }));
 const credential: api.SystemCredential = { credentialId: "credential", displayName: "Shared store", kind: "Password", status: "Active",
   metadata: { username: "operator@example.test", application: "store" }, allowedOrigins: ["https://store.example.test"],
@@ -16,6 +16,19 @@ beforeEach(() => { vi.clearAllMocks(); vi.mocked(api.listCredentialBindings).moc
 afterEach(cleanup);
 
 describe("System credentials", () => {
+  it("preserves registry expiry while editing safe scope and name fields", async () => {
+    const registry: api.SystemCredential = {...credential,purpose:"ContainerRegistry",metadata:{},allowedOrigins:[],bindingCount:0,
+      containerRegistry:{registry:"ghcr.io",username:"owner",repositoryPrefixes:["ghcr.io/acme"],expiresAtUtc:"2026-10-14T00:00:00Z"}};
+    vi.mocked(api.listCredentials).mockResolvedValue([registry]);
+    vi.mocked(api.updateContainerRegistry).mockResolvedValue(registry);
+    view(); fireEvent.click(await screen.findByRole("button",{name:"Edit"}));
+    const dialog=within(await screen.findByRole("dialog",{name:"Edit credential"}));
+    await waitFor(()=>expect(dialog.getByLabelText("Registry host")).toHaveValue("ghcr.io"));
+    fireEvent.change(dialog.getByLabelText("Display name"),{target:{value:"Renamed registry"}});
+    fireEvent.click(dialog.getByRole("button",{name:"Save credential"}));
+    await waitFor(()=>expect(api.updateContainerRegistry).toHaveBeenCalledWith(registry,{displayName:"Renamed registry",status:"Active",profile:registry.containerRegistry}));
+    expect(api.updateCredential).not.toHaveBeenCalled();
+  });
   it("retains existing dynamic metadata when editing safe fields", async () => {
     vi.mocked(api.updateCredential).mockResolvedValue(credential);
     view(); fireEvent.click(await screen.findByRole("button", { name: "Edit" }));

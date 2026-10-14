@@ -1,0 +1,26 @@
+{
+  "preFixCachedPrivatePassed": true,
+  "postFixCachedPrivatePassed": false,
+  "finalRemoteResults": {
+    "anonymous-private-cache": {
+      "passed": false,
+      "availability": "VerificationFailed",
+      "message": "Verification failed during provisioning. Check private server readiness, the pinned image and initialization script. Provider exception details are withheld; bounded script output is available separately."
+    },
+    "public-oci": {
+      "passed": true,
+      "availability": "Eligible",
+      "message": "Non-root Python readiness, initialization and scratch validation passed in a disposable sandbox."
+    },
+    "private-workbench": {
+      "passed": true,
+      "availability": "Eligible",
+      "message": "Non-root Python readiness, initialization and scratch validation passed in a disposable sandbox."
+    },
+    "private-alternate": {
+      "passed": true,
+      "availability": "Eligible",
+      "message": "Non-root Python readiness, initialization and scratch validation passed in a disposable sandbox."
+    }
+  }
+}

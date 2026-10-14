@@ -938,7 +938,7 @@ export async function resetAdminLearnedMemoryScope(
 export type SystemCredential = {
   credentialId: string; displayName: string; kind: string; status: string;
   metadata: Record<string, string>; allowedOrigins: string[]; revision: number;
-  createdAtUtc: string; updatedAtUtc: string; bindingCount: number; purpose?: "General" | "EmailAccount" | "GoogleDriveAccount"; emailAccount?: EmailAccountProfile | null; driveAccount?: import("./drive").DriveProfile | null;
+  createdAtUtc: string; updatedAtUtc: string; bindingCount: number; purpose?: "General" | "EmailAccount" | "GoogleDriveAccount" | "ContainerRegistry"; emailAccount?: EmailAccountProfile | null; driveAccount?: import("./drive").DriveProfile | null; containerRegistry?:ContainerRegistryProfile|null;
 };
 export type CredentialBinding = { bindingId: string; credentialId: string; reference: string; revision: number; credential: SystemCredential };
 export type CredentialInput = { displayName: string; kind: string; metadata: Record<string, string>; allowedOrigins: string[]; protectedValue: string };
@@ -1177,3 +1177,8 @@ export type EmailMonitoring = {
 export const getEmailMonitoring = (id: string) => credentialRequest<EmailMonitoring>(`email-accounts/${id}/monitoring`, 'GET');
 export const saveEmailMonitoring = (id: string, body: { expectedRevision: number; enabled: boolean; intervalSeconds: number }) => credentialRequest<EmailMonitoring>(`email-accounts/${id}/monitoring`, 'PUT', body);
 export const checkEmailMonitoring = (id: string, expectedRevision: number) => credentialRequest<EmailMonitoring>(`email-accounts/${id}/monitoring/check`, 'POST', { expectedRevision });
+
+export type ContainerRegistryProfile = {registry:string; username:string; repositoryPrefixes:string[]; expiresAtUtc?:string|null};
+export const createContainerRegistry = (input:{displayName:string; kind:string; profile:ContainerRegistryProfile; protectedValue:string}) => credentialRequest<SystemCredential>('container-registry-credentials','POST',input);
+
+export const updateContainerRegistry = (credential:SystemCredential,input:{displayName:string;status:string;profile:ContainerRegistryProfile}) => credentialRequest<SystemCredential>(`container-registry-credentials/${credential.credentialId}`,'PATCH',{...input,expectedRevision:credential.revision});
