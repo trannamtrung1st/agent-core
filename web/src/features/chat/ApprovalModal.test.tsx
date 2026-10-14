@@ -209,16 +209,19 @@ it.each(['drive.trash', 'drive.trash_batch', 'drive.rename', 'drive.move'])(
       />,
     );
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getAllByRole('listitem')).toHaveLength(
-      targets.length,
-    );
+    const table = within(dialog).getByRole('table', {
+      name: 'Drive files in this request',
+    });
+    expect(within(table).getAllByRole('row')).toHaveLength(targets.length + 1);
+    for (const header of ['Name', 'File ID', 'Version'])
+      expect(
+        within(table).getByRole('columnheader', { name: header }),
+      ).toBeInTheDocument();
     expect(dialog.querySelector('script')).toBeNull();
     for (const target of targets) {
-      const row = within(dialog).getByText(target.name).closest('li')!;
-      expect(within(row).getByText(`ID: ${target.fileId}`)).toBeInTheDocument();
-      expect(
-        within(row).getByText(`Version ${target.expectedVersion}`),
-      ).toBeInTheDocument();
+      const row = within(dialog).getByText(target.name).closest('tr')!;
+      expect(within(row).getByText(target.fileId)).toBeInTheDocument();
+      expect(within(row).getByText(target.expectedVersion)).toBeInTheDocument();
     }
     const verb =
       toolName === 'drive.trash_batch'
@@ -259,6 +262,44 @@ const validDriveTarget = {
   expectedVersion: '9',
 };
 
+it('keeps exact IDs with filenames in the narrow two-column table', () => {
+  const original = window.matchMedia;
+  const media = vi
+    .spyOn(window, 'matchMedia')
+    .mockImplementation((query) => ({
+      ...original(query),
+      matches: query.includes('max-width'),
+    }));
+  try {
+    render(
+      <ApprovalModal
+        approval={{
+          ...approval,
+          toolName: 'drive.trash',
+          details: { Files: JSON.stringify([validDriveTarget]) },
+        }}
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+      />,
+    );
+    const table = screen.getByRole('table', {
+      name: 'Drive files in this request',
+    });
+    expect(
+      within(table).queryByRole('columnheader', { name: 'File ID' }),
+    ).toBeNull();
+    const row = within(table).getByText(validDriveTarget.name).closest('tr')!;
+    expect(
+      within(row).getByText(`ID: ${validDriveTarget.fileId}`),
+    ).toBeInTheDocument();
+    expect(
+      within(row).getByText(validDriveTarget.expectedVersion),
+    ).toBeInTheDocument();
+  } finally {
+    media.mockRestore();
+  }
+});
+
 it('preserves all twenty distinct targets at the supported metadata bounds', () => {
   const targets = Array.from({ length: 20 }, (_, index) => ({
     fileId: 'a'.repeat(158) + String(index).padStart(2, '0'),
@@ -276,16 +317,16 @@ it('preserves all twenty distinct targets at the supported metadata bounds', () 
       onReject={vi.fn()}
     />,
   );
-  const list = screen.getByRole('list', {
+  const list = screen.getByRole('table', {
     name: 'Drive files in this request',
   });
-  expect(within(list).getAllByRole('listitem')).toHaveLength(20);
+  expect(within(list).getAllByRole('row')).toHaveLength(21);
   for (const target of targets)
-    expect(within(list).getByText(`ID: ${target.fileId}`)).toBeInTheDocument();
+    expect(within(list).getByText(target.fileId)).toBeInTheDocument();
   expect(within(list).getAllByText(targets[0].name)).toHaveLength(20);
-  expect(
-    within(list).getAllByText(`Version ${targets[0].expectedVersion}`),
-  ).toHaveLength(20);
+  expect(within(list).getAllByText(targets[0].expectedVersion)).toHaveLength(
+    20,
+  );
   expect(
     screen.getByRole('button', { name: 'Move 20 files to Trash' }),
   ).toBeEnabled();
