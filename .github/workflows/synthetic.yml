@@ -44,7 +44,7 @@ jobs:
           sudo python3 ../scripts/prepare-ci-apt.py
           pnpm exec playwright install --with-deps chromium
       - name: Real Docker SDK, Workspace, browser and restart acceptance
-        run: python3 scripts/opensandbox-local.py accept --ui --name agent-core-opensandbox-ci
+        run: python3 scripts/opensandbox-local.py accept --ui --build-workbench --name agent-core-opensandbox-ci
       - name: Preserve bounded evidence without private configuration
         if: always()
         uses: actions/upload-artifact@v4

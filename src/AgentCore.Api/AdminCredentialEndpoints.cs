@@ -54,6 +54,12 @@ internal static class AdminCredentialEndpoints
         }));
         group.MapGet("/credentials", ([FromServices] CredentialService service, CancellationToken ct) => Run(async () => Results.Json(new { items = (await service.ListAsync(ct)).Select(Map) })));
         group.MapGet("/credentials/{credentialId:guid}", (Guid credentialId, [FromServices] CredentialService service, CancellationToken ct) => Run(async () => Results.Json(Map(await service.GetAsync(credentialId, ct)))));
+        group.MapPatch("/container-registry-credentials/{credentialId:guid}", (Guid credentialId, AdminUpdateContainerRegistryRequest request, [FromServices] CredentialService service, CancellationToken ct) => Run(async () => {
+            Positive(request.ExpectedRevision); return Results.Json(Map(await service.UpdateContainerRegistryAsync(credentialId,request.ExpectedRevision,request.DisplayName,request.Status,
+                RegistryProfile(request.Profile),ct))); }));
+        group.MapPost("/container-registry-credentials", (AdminCreateContainerRegistryRequest request, [FromServices] CredentialService service, CancellationToken ct) => Run(async () =>
+            Results.Json(Map(await service.CreateContainerRegistryAsync(request.DisplayName, request.Kind,
+                RegistryProfile(request.Profile), request.ProtectedValue, ct)), statusCode: 201)));
         group.MapPost("/credentials", (AdminCreateCredentialRequest request, [FromServices] CredentialService service, CancellationToken ct) => Run(async () => Results.Json(Map(await service.CreateAsync(request.DisplayName, request.Kind, request.Metadata, request.AllowedOrigins, request.ProtectedValue, ct)), statusCode: 201)));
         group.MapPatch("/credentials/{credentialId:guid}", (Guid credentialId, AdminUpdateCredentialRequest request, [FromServices] CredentialService service, CancellationToken ct) => Run(async () => {
             Positive(request.ExpectedRevision); return Results.Json(Map(await service.UpdateAsync(credentialId, request.ExpectedRevision, request.DisplayName, request.Status, request.Metadata, request.AllowedOrigins, ct))); }));
@@ -87,7 +93,10 @@ internal static class AdminCredentialEndpoints
         value.SmtpEndpoint is { } smtp ? new(smtp.Host, smtp.Port, smtp.TlsMode.ToString()) : null, value.AuthMethod.ToString(),
         value.GoogleSubject, value.GrantedScopes, value.ConnectionStatus.ToString(), value.AuthEpoch, value.ConnectedAtUtc, value.Synthetic);
     private static void Positive(long revision) { if (revision < 1) throw AgentCoreErrors.Validation("Expected revision must be positive."); }
+    private static ContainerRegistryProfile RegistryProfile(ContainerRegistryProfileDto? profile) => profile is null
+        ? throw AgentCoreErrors.Validation("A Container Registry profile is required.")
+        : new(profile.Registry, profile.Username, profile.RepositoryPrefixes, profile.ExpiresAtUtc);
     private static async Task<IResult> Run(Func<Task<IResult>> action) { try { return await action(); } catch (AgentCoreException ex) { return ProblemResults.From(ex); } }
-    internal static AdminCredentialResponse Map(CredentialView c) => new(c.CredentialId, c.DisplayName, c.Kind, c.Status, c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, c.BindingCount, c.Purpose, c.EmailAccount is null ? null : Map(c.EmailAccount), c.DriveAccount is null ? null : new(c.DriveAccount.EmailAddress, c.DriveAccount.ConnectionStatus.ToString(), c.DriveAccount.AuthEpoch, c.DriveAccount.ConnectedAtUtc, c.DriveAccount.ReconnectRequiredAtUtc, c.DriveAccount.Synthetic));
+    internal static AdminCredentialResponse Map(CredentialView c) => new(c.CredentialId, c.DisplayName, c.Kind, c.Status, c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, c.BindingCount, c.Purpose, c.EmailAccount is null ? null : Map(c.EmailAccount), c.DriveAccount is null ? null : new(c.DriveAccount.EmailAddress, c.DriveAccount.ConnectionStatus.ToString(), c.DriveAccount.AuthEpoch, c.DriveAccount.ConnectedAtUtc, c.DriveAccount.ReconnectRequiredAtUtc, c.DriveAccount.Synthetic), c.ContainerRegistry is { } registry ? new(registry.Registry, registry.Username, registry.RepositoryPrefixes, registry.ExpiresAtUtc) : null);
     private static AdminCredentialBindingResponse Map(CredentialBindingView b) => new(b.BindingId, b.CredentialId, b.Reference, b.Revision, Map(b.Credential));
 }

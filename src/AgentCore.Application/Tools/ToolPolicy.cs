@@ -159,7 +159,7 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
-        if (descriptor.Name == ToolCatalog.SandboxExec && definition.SandboxPolicy is null) return false;
+        if (descriptor.Name == ToolCatalog.SandboxExec && (definition.SandboxPolicy is null || definition.ExecutionSandboxProfile is null)) return false;
         if (context?.ConfigurationContinuationTarget is { } continuationTarget && (ManagementTools.IsManagement(descriptor.Name) || descriptor.Effect != ToolEffect.ReadOnly && descriptor.Name != continuationTarget)) return false;
         if (descriptor.Name == ToolCatalog.BackgroundAcknowledge && context?.HasBackgroundClaim != true) return false;
         if (ToolCatalog.IsCompletionTool(descriptor.Name) && context?.OwnedSessionId is null) return false;

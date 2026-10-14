@@ -1239,6 +1239,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ContainerRegistryJson")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 

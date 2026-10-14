@@ -61,7 +61,7 @@ internal static class OpenSandboxScript
         if (args is null && name is not null) return [new ModelTextDelta("Unknown Synthetic sandbox scenario."),new ModelCompleted(ModelStopReason.Completed)];
         if (name is not null && request.Tools?.Any(t => t.Name == name) == true)
             return [new ModelToolCallEvent(new("sandbox-proof-"+results.Length,name,JsonSerializer.Serialize(args))),new ModelCompleted(ModelStopReason.ToolCalls)];
-        if (name is not null) return [new ModelTextDelta("Sandbox capability unavailable. Configure the Workbench and start a new Run."),new ModelCompleted(ModelStopReason.Completed)];
+        if (name is not null) return [new ModelTextDelta("Sandbox capability unavailable. Register and verify an authorized prebuilt image and start a new Run."),new ModelCompleted(ModelStopReason.Completed)];
         if (scenario == "demo" && results.Length == 7)
         {
             var blocks = new List<ModelResponseBlock>();

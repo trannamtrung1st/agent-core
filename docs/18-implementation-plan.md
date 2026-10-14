@@ -14,6 +14,10 @@ recovery, binary attachments and shared Office/file preview styling are retained
 Focused local verification and historical hosted results are tracked in the [OpenSandbox ledger](reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
 prior acceptance below remains evidence for its original behavior SHA.
 
+## OCI-only sandbox profile catalog (authorized 2026-10-14)
+
+The owner requested the complete OCI catalog proposal on `develop/branch-1`: strict immutable registry sources, protected host-side registry credentials and epochs, exact verification/eligibility, modern-only execution, no startup Workbench build/seed/default, searchable owner catalog and synchronized Definition/Instance/Chat presentation. This scoped cutover preserves data and historical publications and does not reopen P11 or production isolation. Required focused parser/credential/migration/runtime/browser/private-pull/Impeccable evidence is tracked in the [OCI ledger](reports/oci-sandbox-profile-catalog-verification-2026-10-15.md). Implemented local behavior and actual checks must remain distinct from optional hosted CI and separate Linux/customer-registry/device acceptance.
+
 ## OpenSandbox configuration and deployment enhancement (authorized 2026-10-14)
 
 The owner authorized enhancing the completed integration with a dedicated sparse Instance Sandbox destination, Profile-then-Instance initialization and bounded durable owner evidence, disposable setup verification, lifecycle visibility and optional Compose-managed server. `dev-real.sh start` now selects only the pinned OpenSandbox infrastructure plus native Real API/Vite; `--with-store`/`--full` explicitly adds the existing store demo. Native-only `--api-only` explicitly disables OpenSandbox unless `--with-sandbox` is selected. Ordinary restart, including `--full`, reuses infrastructure; generation-fenced cleanup/recreation requires `restart --recreate-sandbox`. Packaged app deployment remains separate. This scope does not open P11 or introduce production isolation. Focused local backend/frontend/browser/real Docker/deployment verification is required; hosted CI was explicitly not requested. The [enhancement ledger](reports/opensandbox-configuration-deployment-verification-2026-10-14.md) owns current evidence and hardware limitations; older accepted behavior retains its historical evidence below.
@@ -37,7 +41,7 @@ contracts/policy/persistence → C Workbench/lifecycle → D atomic Workspace
 bridge → E tools/non-replayable Run safety → F Admin/Chat/canonical docs → G
 full OSB-01–18 acceptance and legacy retirement. Each stage must pass before
 dependent work. All-scope delivery includes owned bounded background
-processes, historical Definition compatibility, data-preserving migrations,
+processes, historical Definition preservation (legacy execution now retired), data-preserving migrations,
 Office Artifact delivery, responsive runtime UX, Compose/runner restart and
 real network isolation evidence. Mocked SDK tests cannot accept Stage A.
 

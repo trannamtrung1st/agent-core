@@ -15,6 +15,25 @@ spec.loader.exec_module(helper)
 
 
 class SandboxComposeTests(unittest.TestCase):
+    def test_normal_prepare_never_builds_or_seeds_workload_and_handoff_has_no_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            calls = []
+            def fake_run(*args, **kwargs):
+                calls.append(args)
+                if args[:2] == ('docker', 'info'): return 'Docker Desktop'
+                if args[:3] == ('docker', 'network', 'inspect'): return '[{"IPAM":{"Config":[{"Gateway":"172.17.0.1"}]}}]'
+                raise AssertionError('Unexpected Docker operation')
+            args = argparse.Namespace(project='agent-core-fixture',port=18080,build_workbench=False)
+            with patch.object(helper,'state_path',return_value=state),patch.object(helper,'run',side_effect=fake_run),patch.object(helper,'inspect',return_value={'owned':True}):
+                _, image = helper.prepare(args)
+                self.assertIsNone(image)
+                self.assertFalse(any('build' in call for call in calls))
+                self.assertNotIn('WORKBENCH',(state/'compose.env').read_text())
+                helper.native_handoff(state,'http://127.0.0.1:18080','private-fixture')
+                self.assertNotIn('WorkbenchImage',(state/'native.env').read_text())
+                self.assertNotIn('AllowLocalImageIds',(state/'native.env').read_text())
+
     def test_desktop_and_linux_share_pins_but_use_inspected_reachable_private_proxy_routes(
         self,
     ):

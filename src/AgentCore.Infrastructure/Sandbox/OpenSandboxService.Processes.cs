@@ -94,7 +94,7 @@ public sealed partial class OpenSandboxService
             throw AgentCoreErrors.Conflict("Process Run was canceled or revoked; scratch cannot be committed.");
         if (instances is not null && (await instances.FindAsync(lease.AgentInstanceId,ct))?.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active)
             throw AgentCoreErrors.Conflict("Process Instance is no longer active; scratch cannot be committed.");
-        if (!options.Enabled || owner?.AgentInstanceId != lease.AgentInstanceId || owner.DurablyDeletedAt is not null || owner.ArchivedAt is not null
+        if ((await Images.InspectAsync(lease.Profile, ct, requireVerification:false)).Status != "SourceAuthorized" || !options.Enabled || owner?.AgentInstanceId != lease.AgentInstanceId || owner.DurablyDeletedAt is not null || owner.ArchivedAt is not null
             || owner.LifecycleStatus != SessionLifecycleStatus.Active || owner.Status is SessionStatus.Ended or SessionStatus.Ending
             || (await store.GetProfileAsync(lease.Profile.Id, ct: ct))?.Enabled != true)
             throw AgentCoreErrors.Conflict("Process authority was revoked; scratch cannot be committed.");

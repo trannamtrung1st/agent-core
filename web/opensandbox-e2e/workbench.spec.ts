@@ -45,6 +45,13 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
   const headers = await setup(page);
   await expect.poll(async () => (await (await page.request.get('/api/v2/admin/sandboxes', { headers })).json()).state,
     { timeout: 30000 }).toBe('Ready');
+  const platform = await (await page.request.get('/api/v2/admin/sandboxes',{headers})).json();
+  if (!platform.profiles.length) {
+    const saved = await page.request.put('/api/v2/admin/sandbox-profiles/general-workbench',{headers,data:{expectedRevision:0,name:'Explicit OCI Workbench',description:'Disposable browser fixture',enabled:true,imageReference:process.env.AGENTCORE_OSB_PROOF_IMAGE}});
+    expect(saved.ok()).toBe(true);
+    await page.reload();
+  }
+  await page.getByRole('button',{name:'Advanced settings · limits and initialization',exact:true}).click();
   let sessionId: string;
   if (process.env.AGENTCORE_OSB_UI_PHASE === 'after') {
     const saved = JSON.parse(fs.readFileSync(stateFile, 'utf8')); sessionId = saved.sessionId;

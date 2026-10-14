@@ -23,6 +23,7 @@ public sealed class HarnessKnowledgeConcurrencyTests
         instance = await service.ConfigureAsync(instance.InstanceId, instance.Revision,
             new(HarnessManagementMode.Managed, [HarnessManagementScope.KnowledgeResources], ["knowledge:support-order-policy"], []));
         instance = await service.StartAsync(instance.InstanceId, instance.Revision, "Prepare knowledge.");
+        await HarnessLegacyFixture.RepairDraftAsync(factory.Services, instance.InstanceId);
         var prepId = instance.HarnessManagement!.Preparation!.PreparationId;
         var review = await service.ReviewAsync(instance.InstanceId);
         await service.RequestOperationAsync(instance.InstanceId, prepId,

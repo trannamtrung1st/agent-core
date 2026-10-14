@@ -18,7 +18,8 @@ import type { AdminDefinitionPublicationResource, AdminEffectiveConfiguration } 
 import { DefinitionDetail } from "./DefinitionDetail";
 import { getInstanceSandbox } from "../../services/sandboxes";
 
-vi.mock("../../services/sandboxes", () => ({
+vi.mock("../../services/sandboxes", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../services/sandboxes")>(),
   getInstanceSandbox: vi.fn().mockResolvedValue({
     policy: null, profile: null, state: "Disabled", message: "Sandbox is disabled in this fixture.",
     instanceRevision: 1, instanceInitializationScript: null, verification: null

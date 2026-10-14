@@ -1,4 +1,4 @@
-import { AddCredentialDialog } from './AddCredentialDialog';
+import { ContainerRegistryFields, AddCredentialDialog, type RegistryCredentialFieldsValue } from './AddCredentialDialog';
 import { CredentialConnectionTag } from './CredentialConnectionTag';
 import {
   CredentialFields,
@@ -58,6 +58,7 @@ import {
   resetBrowserProfile,
   unbindCredential,
   updateCredential,
+  updateContainerRegistry,
   type CredentialBinding,
   type SystemCredential,
 } from '../../services/adminApi';
@@ -76,6 +77,8 @@ function matchesCredential(credential: SystemCredential, search: string) {
     credential.emailAccount?.emailAddress ?? '',
     credential.emailAccount?.preset ?? '',
     credential.emailAccount?.connectionStatus ?? '',
+    credential.containerRegistry?.registry ?? '',
+    ...(credential.containerRegistry?.repositoryPrefixes ?? []),
     ...Object.entries(credential.metadata).flat(),
     ...credential.allowedOrigins,
   ]
@@ -89,6 +92,7 @@ function CredentialPolicySummary({
 }: {
   credential: SystemCredential;
 }) {
+  if (credential.containerRegistry) return <Flex vertical><Typography.Text style={{overflowWrap:'anywhere'}}>{credential.containerRegistry.registry}</Typography.Text><Typography.Text type="secondary">Container registry · host-side image pull</Typography.Text></Flex>;
   if (credential.driveAccount)
     return (
       <Flex vertical style={{ minWidth: 0 }}>
@@ -219,8 +223,9 @@ function CredentialDetails({
           {
             key: 'kind',
             label: 'Kind / purpose',
-            children: `${credential.kind} · ${credential.purpose === 'GoogleDriveAccount' ? 'Google Drive Account' : credential.purpose === 'EmailAccount' ? 'Email account' : 'General'}`,
+            children: `${credential.kind} · ${credential.purpose === 'GoogleDriveAccount' ? 'Google Drive Account' : credential.purpose === 'EmailAccount' ? 'Email account' : credential.containerRegistry ? 'Container registry' : 'General'}`,
           },
+          ...(credential.containerRegistry ? [{key:'registry',label:'Registry scope',children:credential.containerRegistry.repositoryPrefixes.join(', ')||credential.containerRegistry.registry},{key:'registry-user',label:'Registry username',children:credential.containerRegistry.username}] : []),
           ...(credential.emailAccount?.preset === 'Custom'
             ? [
                 {
@@ -389,7 +394,7 @@ export function CredentialsSection() {
     item?: SystemCredential;
   }>();
   const [dialogError, setDialogError] = useState<AdminFailureNotice>();
-  const [form] = Form.useForm<CredentialFieldsValue>();
+  const [form] = Form.useForm<CredentialFieldsValue & RegistryCredentialFieldsValue>();
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const [expanded, setExpanded] = useState<React.Key[]>([]);
   const load = useCallback(async () => {
@@ -430,6 +435,7 @@ export function CredentialsSection() {
               key,
               value,
             })),
+            registry:item.containerRegistry?.registry, username:item.containerRegistry?.username, repositories:item.containerRegistry?.repositoryPrefixes.join('\n'),
             origins: item.allowedOrigins.join('\n'),
           }
         : { kind: 'Password', status: 'Active', metadata: [], origins: '' },
@@ -461,6 +467,7 @@ export function CredentialsSection() {
     try {
       if (dialog.kind === 'replace')
         await replaceCredentialValue(dialog.item!, values.protectedValue!);
+      else if (dialog.item?.containerRegistry) await updateContainerRegistry(dialog.item,{displayName:values.displayName,status:values.status,profile:{registry:values.registry,username:values.username,repositoryPrefixes:(values.repositories??'').split(/\r?\n/).map(v=>v.trim()).filter(Boolean),expiresAtUtc:dialog.item.containerRegistry.expiresAtUtc}});
       else await updateCredential(dialog.item!, safeFields(values));
       close();
       await load();
@@ -636,7 +643,7 @@ export function CredentialsSection() {
                           ? 'Google Drive Account'
                           : c.purpose === 'EmailAccount'
                             ? 'Email account'
-                            : 'General'}
+                            : c.purpose === 'ContainerRegistry' ? 'Container registry' : 'General'}
                       </Typography.Text>
                     </Flex>
                   ),
@@ -857,7 +864,7 @@ export function CredentialsSection() {
                 email={dialog.item?.purpose === 'EmailAccount'}
               />
             ) : (
-              <CredentialFields create={false} />
+              dialog?.item?.containerRegistry ? <ContainerRegistryFields edit /> : <CredentialFields create={false} />
             )}
           </Form>
         </Flex>
@@ -908,7 +915,7 @@ export function InstanceCredentialsSection({
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const [expanded, setExpanded] = useState<React.Key[]>([]);
   const available = choices.filter(
-    (c) => !bindings.some((b) => b.credentialId === c.credentialId),
+    (c) => c.purpose !== 'ContainerRegistry' && !bindings.some((b) => b.credentialId === c.credentialId),
   );
   const load = useCallback(async () => {
     setLoading(true);

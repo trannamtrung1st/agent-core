@@ -23,9 +23,14 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
         if (!Enum.IsDefined(c.Purpose) || (c.Purpose == CredentialPurpose.GoogleDriveAccount) != (c.DriveAccount is not null)
             || c.Purpose == CredentialPurpose.GoogleDriveAccount && (c.Kind != CredentialKind.Token || c.AllowedOrigins.Count != 0)) throw AgentCoreErrors.Validation("Invalid Drive credential purpose/profile.");
         c.DriveAccount?.Validate();
+        if ((c.Purpose == CredentialPurpose.ContainerRegistry) != (c.ContainerRegistry is not null)
+            || c.Purpose == CredentialPurpose.ContainerRegistry && (c.Kind is not (CredentialKind.Password or CredentialKind.Token) || c.AllowedOrigins.Count != 0))
+            throw AgentCoreErrors.Validation("Invalid Container Registry purpose/profile.");
+        if (c.ContainerRegistry is not null) c = c with { ContainerRegistry=c.ContainerRegistry.Validate() };
         if (row is null) { row = new(); db.Credentials.Add(row); }
         row.CredentialId = c.CredentialId.ToString("D"); row.DisplayName = c.DisplayName; row.Kind = c.Kind.ToString(); row.Status = c.Status.ToString();
         row.Purpose = c.Purpose.ToString();
+        row.ContainerRegistryJson = c.ContainerRegistry is null ? null : JsonSerializer.Serialize(c.ContainerRegistry);
         if (c.EmailAccount is not null) row.EmailAccount = new() { CredentialId = row.CredentialId, ProfileJson = JsonSerializer.Serialize(c.EmailAccount), GoogleSubject = c.EmailAccount.GoogleSubject };
         if (c.DriveAccount is not null) row.DriveAccount = new() { CredentialId = row.CredentialId, ProfileJson = JsonSerializer.Serialize(c.DriveAccount), GoogleSubject = c.DriveAccount.GoogleSubject };
         row.MetadataJson = JsonSerializer.Serialize(c.Metadata); row.AllowedOriginsJson = JsonSerializer.Serialize(c.AllowedOrigins);
@@ -60,7 +65,8 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
     {
         await using var db = await contexts.CreateDbContextAsync(ct); await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await RequireActive(db, b.AgentInstanceId, expectedInstanceRevision, ct);
-        if (!await db.Credentials.AnyAsync(c => c.CredentialId == b.CredentialId.ToString("D"), ct)) throw AgentCoreErrors.NotFound("Credential was not found.");
+        var credential = await db.Credentials.AsNoTracking().SingleOrDefaultAsync(c => c.CredentialId == b.CredentialId.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Credential was not found.");
+        if (credential.Purpose == "ContainerRegistry") throw AgentCoreErrors.Forbidden("Registry credentials cannot be bound to agents.");
         db.AgentCredentialBindings.Add(new() { BindingId = b.BindingId.ToString("D"), AgentInstanceId = b.AgentInstanceId.ToString("D"), CredentialId = b.CredentialId.ToString("D"), Reference = b.Reference, Revision = b.Revision, CreatedAtUtc = b.CreatedAtUtc.ToUnixTimeMilliseconds(), UpdatedAtUtc = b.UpdatedAtUtc.ToUnixTimeMilliseconds() });
         if (history is not null) AdminEventPersistence.StageAppend(db, history, Guid.NewGuid());
         await Save(db, ct); await transaction.CommitAsync(ct);
@@ -87,5 +93,5 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
     }
     private static async Task Save(AgentCoreDbContext db, CancellationToken ct)
     { try { await db.SaveChangesAsync(ct); } catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Credential or binding changed concurrently or is already bound."); } }
-    internal static Credential Map(CredentialRecord c) => new(Guid.Parse(c.CredentialId), c.DisplayName, Enum.Parse<CredentialKind>(c.Kind), Enum.Parse<CredentialStatus>(c.Status), CredentialRules.Metadata(JsonSerializer.Deserialize<Dictionary<string,string>>(c.MetadataJson)), CredentialRules.Origins(JsonSerializer.Deserialize<string[]>(c.AllowedOriginsJson)), c.ProtectedPayload, c.ProtectionVersion, c.Revision, DateTimeOffset.FromUnixTimeMilliseconds(c.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(c.UpdatedAtUtc), Enum.Parse<CredentialPurpose>(c.Purpose), c.EmailAccount is null ? null : JsonSerializer.Deserialize<EmailAccountProfile>(c.EmailAccount.ProfileJson), c.SecretRevision, c.DriveAccount is null ? null : JsonSerializer.Deserialize<DriveAccountProfile>(c.DriveAccount.ProfileJson));
+    internal static Credential Map(CredentialRecord c) => new(Guid.Parse(c.CredentialId), c.DisplayName, Enum.Parse<CredentialKind>(c.Kind), Enum.Parse<CredentialStatus>(c.Status), CredentialRules.Metadata(JsonSerializer.Deserialize<Dictionary<string,string>>(c.MetadataJson)), CredentialRules.Origins(JsonSerializer.Deserialize<string[]>(c.AllowedOriginsJson)), c.ProtectedPayload, c.ProtectionVersion, c.Revision, DateTimeOffset.FromUnixTimeMilliseconds(c.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(c.UpdatedAtUtc), Enum.Parse<CredentialPurpose>(c.Purpose), c.EmailAccount is null ? null : JsonSerializer.Deserialize<EmailAccountProfile>(c.EmailAccount.ProfileJson), c.SecretRevision, c.DriveAccount is null ? null : JsonSerializer.Deserialize<DriveAccountProfile>(c.DriveAccount.ProfileJson), c.ContainerRegistryJson is null ? null : JsonSerializer.Deserialize<ContainerRegistryProfile>(c.ContainerRegistryJson));
 }

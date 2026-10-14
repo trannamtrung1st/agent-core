@@ -7,8 +7,31 @@ namespace AgentCore.Api.Tests;
 // Historical candidate recovery is tested through Authoring owners; no second model runtime.
 internal static class HarnessLegacyFixture
 {
+    // Explicit owner repair of a disposable draft; immutable built-ins keep their historical authority.
+    internal static AgentDefinitionCandidate WithoutRetiredSandboxTool(AgentDefinitionCandidate candidate)
+    {
+        var environment = candidate.Environment!;
+        return candidate with { Environment = environment with {
+            ToolAllowlist = environment.ToolAllowlist?.Where(name => name != "sandbox.run").ToArray(),
+            Capabilities = environment.Capabilities is { } authority ? authority with {
+                ResolvedCapabilities = authority.ResolvedCapabilities.Where(name => name != "sandbox.run").ToArray(),
+                AuthorizationFingerprint = null } : null,
+            Projection = environment.Projection is { } projection ? projection with {
+                AlwaysCapabilities = projection.AlwaysCapabilities.Where(name => name != "sandbox.run").ToArray() } : null
+        } };
+    }
+
+    internal static async ValueTask RepairDraftAsync(IServiceProvider services, Guid instanceId)
+    {
+        var draft = (await services.GetRequiredService<HarnessManagementService>().ReviewAsync(instanceId)).Draft!;
+        if (!draft.Candidate.Environment!.ToolList.Contains("sandbox.run")) return;
+        await services.GetRequiredService<AgentDefinitionLifecycleService>().UpdateDraftAsync(
+            draft.DraftId, draft.Revision, WithoutRetiredSandboxTool(draft.Candidate));
+    }
+
     public static async ValueTask<HarnessReview> RunAsync(IServiceProvider services, Guid id, Guid prepId)
     {
+        await RepairDraftAsync(services, id);
         var service = services.GetRequiredService<HarnessManagementService>();
         var review = await service.ReviewAsync(id);
         var draft = review.Draft!;

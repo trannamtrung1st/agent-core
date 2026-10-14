@@ -1,0 +1,51 @@
+{
+  "catalog": [
+    {
+      "viewport": 1440,
+      "pageScrollWidth": 1440,
+      "height": 900
+    },
+    {
+      "viewport": 1024,
+      "pageScrollWidth": 1024,
+      "height": 900
+    },
+    {
+      "viewport": 768,
+      "pageScrollWidth": 768,
+      "height": 900
+    },
+    {
+      "viewport": 390,
+      "pageScrollWidth": 390,
+      "height": 900
+    },
+    {
+      "viewport": 320,
+      "pageScrollWidth": 320,
+      "height": 900
+    }
+  ],
+  "longReference": {
+    "viewport": 320,
+    "height": 600,
+    "fieldWidth": 262,
+    "pageScrollWidth": 320
+  },
+  "cssZoom": {
+    "viewport": 1024,
+    "height": 600,
+    "zoom": 2,
+    "pageScrollWidth": 1024
+  },
+  "registryModal": {
+    "viewport": 320,
+    "height": 600,
+    "maskedType": "password",
+    "cancelClearsSecret": true,
+    "tabFocusTrapped": true,
+    "escapeAndSaveRestoreOpener": true
+  },
+  "nativeBrowserZoom": "not run",
+  "manualScreenReader": "not run"
+}

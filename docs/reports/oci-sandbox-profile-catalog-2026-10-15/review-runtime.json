@@ -1,0 +1,24 @@
+{
+  "tool": "Playwright MCP",
+  "profile": "Synthetic",
+  "apiUrl": "http://127.0.0.1:6284",
+  "uiUrl": "http://127.0.0.1:6274",
+  "catalogRefresh": {
+    "profileId": "auth-final-workbench",
+    "profileRevision": 1,
+    "disabledStatus": "Source unavailable",
+    "restoredStatus": "Needs verification",
+    "dirtyDraftRetained": true,
+    "reverifiedStatus": "Eligible"
+  },
+  "credentialEdit": {
+    "fixture": "OCI review expiry fixture",
+    "renamed": true,
+    "expiryPreserved": true,
+    "expiresAtUtc": "2026-10-14T00:00:00Z",
+    "revisionAdvanced": true,
+    "noProtectedValueFields": true
+  },
+  "relatedFailedApiRequests": 0,
+  "browserConsoleErrors": 0
+}

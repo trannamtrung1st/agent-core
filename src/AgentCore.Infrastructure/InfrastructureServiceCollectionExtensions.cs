@@ -54,7 +54,12 @@ public static class InfrastructureServiceCollectionExtensions
         persistence ??= new PersistenceOptions();
         browser ??= new BrowserOptions();
         services.TryAddSingleton(browser);
-        services.TryAddSingleton(provider => provider.GetService<IConfiguration>()?.GetSection("OpenSandbox").Get<OpenSandboxOptions>() ?? new OpenSandboxOptions());
+        services.TryAddSingleton(provider => {
+            var options = provider.GetService<IConfiguration>()?.GetSection("OpenSandbox").Get<OpenSandboxOptions>() ?? new OpenSandboxOptions();
+            options.ValidatePolicy(); return options;
+        });
+        services.TryAddSingleton<SandboxImageAuthority>();
+        services.TryAddSingleton<ISandboxImageAuthority>(provider => provider.GetRequiredService<SandboxImageAuthority>());
         services.TryAddSingleton<ISandboxStore>(provider => string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase)
             ? new SqliteSandboxStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()) : new InMemorySandboxStore(provider.GetRequiredService<InMemoryAdminEventStore>()));
         services.TryAddSingleton<OpenSandboxService>();
@@ -441,7 +446,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AgentInstanceSkillService>(),
             provider.GetRequiredService<ICoreEventStore>(),
             provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),
-            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>(), provider.GetService<ILogger<SessionToolExecutor>>(), provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<IOfficeProcessor>(), provider.GetRequiredService<AgentCore.Application.Drive.DriveService>(), provider.GetRequiredService<ISandboxService>(), provider.GetRequiredService<ISandboxStore>()));
+            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>(), provider.GetService<ILogger<SessionToolExecutor>>(), provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<IOfficeProcessor>(), provider.GetRequiredService<AgentCore.Application.Drive.DriveService>(), provider.GetRequiredService<ISandboxService>(), provider.GetRequiredService<ISandboxStore>(), provider.GetRequiredService<ISandboxImageAuthority>(), provider.GetRequiredService<ISandboxReadiness>()));
         services.TryAddSingleton(provider =>
         {
             var speech = provider.GetRequiredService<SpeechResolution>();

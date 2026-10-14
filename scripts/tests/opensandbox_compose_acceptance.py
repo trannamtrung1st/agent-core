@@ -6,6 +6,7 @@ import argparse, json, urllib.error, urllib.parse, urllib.request
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--api-url", required=True)
 parser.add_argument("--expect-profile", choices=["Synthetic", "Real"], required=True)
+parser.add_argument("--image", help="Explicit approved immutable image; the application never seeds a fixture.")
 parser.add_argument("--without-sandbox", action="store_true")
 args = parser.parse_args()
 uri = urllib.parse.urlparse(args.api_url)
@@ -57,14 +58,9 @@ if args.without_sandbox:
     )
     raise SystemExit(0)
 check(platform["state"] == "Ready", "authenticated internal control-plane readiness")
-profile = next(p for p in platform["profiles"] if p["id"] == "general-workbench")
-# A dedicated profile in disposable Core storage never changes user configuration.
-profile = {
-    k: v
-    for k, v in profile.items()
-    if k
-    not in ("id", "revision", "lastVerifiedAt", "verificationReason", "verification")
-}
+if not args.image:
+    parser.error("Enabled acceptance requires --image with an explicitly approved immutable source.")
+profile = {"imageReference":args.image,"enabled":True,"cpu":1,"memoryMiB":1024,"pids":64,"maxCommandSeconds":120,"idleTtlSeconds":1800,"maxLifetimeSeconds":7200,"storageBytes":262144000}
 profile["name"] = "Disposable Compose acceptance"
 profile["description"] = "Private local verification fixture"
 script = """python -I -c 'import os; from docx import Document; from openpyxl import Workbook,load_workbook; assert os.getuid()>0; assert not os.path.exists("/var/run/docker.sock"); w=Workbook(); w.active["A1"]=5; w.save("compose.xlsx"); assert load_workbook("compose.xlsx").active["A1"].value==5; d=Document(); d.add_paragraph("Total: 5"); d.save("compose.docx"); assert Document("compose.docx").paragraphs[0].text=="Total: 5"' && node -e 'if(2+3!==5)process.exit(1);console.log("Node passed")' && echo Python-Word-Excel-passed"""

@@ -5,6 +5,7 @@ public sealed class CredentialRecord
     public string CredentialId { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public string Kind { get; set; } = "";
+    public string? ContainerRegistryJson { get; set; }
     public string Purpose { get; set; } = "General";
     public EmailAccountProfileRecord? EmailAccount { get; set; }
     public DriveAccountProfileRecord? DriveAccount { get; set; }

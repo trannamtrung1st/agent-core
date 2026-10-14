@@ -177,7 +177,7 @@ An Agent Instance shows one application connection on Admin. Admin names nopComm
 
 ## Post-MVP planned until verified
 
-Observed later demos: durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen (`SupportComplianceWorkflowTests`). Docker `sandbox.run` is a runtime capability, not a separate UI demo. Examiner MVP conversational demos above remain.
+Observed later demos: durable multi-chat Support and Compliance flows with attachments, bounded work, artifacts, rich presentation, deactivation, and reopen (`SupportComplianceWorkflowTests`). Modern `sandbox.exec` is an explicitly authorized runtime capability, not a separate UI demo; historical Docker `sandbox.run` is retired. Examiner MVP conversational demos above remain.
 
 ## P9.7 — Teach an operations assistant in Chat
 

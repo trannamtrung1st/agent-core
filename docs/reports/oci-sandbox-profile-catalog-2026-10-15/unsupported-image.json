@@ -1,0 +1,6 @@
+{
+  "passed": false,
+  "availability": "VerificationFailed",
+  "message": "Verification failed during readiness. Check private server readiness, the pinned image and initialization script. Provider exception details are withheld; bounded script output is available separately.",
+  "diagnosticId": "01a13b75-4ec4-7d1a-8696-2811f8b90916"
+}

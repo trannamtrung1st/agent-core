@@ -201,21 +201,15 @@ public sealed class OpenSandboxIntegrationTests
         Assert.Equal("retained",await f.Read("orphan.txt"));
     }
     [OpenSandboxFact]
-    public async Task Legacy_tool_uses_the_owned_sdk_and_rejects_mutated_grammar_and_malformed_modern_arguments()
+    public async Task Retired_tool_never_dispatches_and_modern_arguments_remain_strict()
     {
         await using var f = await Fixture.Create();
         var executor = f.Executor();
-        var definition = f.Definition with { Environment = new(ToolAllowlist:[ToolCatalog.SandboxRun,ToolCatalog.SandboxExec]), ExecutionSandboxProfile=f.Profile };
+        var definition = f.Definition with { Environment = new(ToolAllowlist:["sandbox.run",ToolCatalog.SandboxExec]), ExecutionSandboxProfile=f.Profile };
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:f.Session.AgentInstanceId, AgentRunId:f.Run.AgentRunId, OwnedSessionId:f.Session.SessionId);
-        var legacy = await executor.ExecuteAsync(definition,f.Session.SessionId,new("legacy-once",ToolCatalog.SandboxRun,"""{"verb":"echo","arguments":["legacy-real"]}"""),8192,admission:admission);
-        Assert.Contains("\"ok\":true",legacy.Text); Assert.Contains("legacy-real",legacy.Text);
-        Assert.Equal(0,(await f.Exec("printf canonical > legacy.txt")).ExitCode);
-        var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var exported = await f.Executor(artifacts).ExecuteAsync(definition,f.Session.SessionId,new("legacy-export",ToolCatalog.SandboxRun,"""{"verb":"cat","arguments":["legacy.txt"],"exportPath":"legacy.txt"}"""),8192,admission:admission);
-        Assert.Contains("\"ok\":true",exported.Text); Assert.Contains("\"artifactId\":",exported.Text); Assert.Contains("canonical",exported.Text);
-        Assert.Single(await artifacts.ListAsync(f.Session.SessionId));
-        foreach (var arguments in new[] { """{"verb":"sh","arguments":["-c","true"]}""", """{"verb":"echo","arguments":["$(true)"]}""" })
-            Assert.Contains("forbidden",(await executor.ExecuteAsync(definition,f.Session.SessionId,new(Guid.NewGuid().ToString(),ToolCatalog.SandboxRun,arguments),8192,admission:admission)).Text);
+        var legacy = await executor.ExecuteAsync(definition,f.Session.SessionId,new("legacy-once","sandbox.run","""{"verb":"echo","arguments":["legacy-real"]}"""),8192,admission:admission);
+        Assert.DoesNotContain("legacy-real",legacy.Text); Assert.DoesNotContain("\"ok\":true",legacy.Text);
+        Assert.Null(await f.Store.GetLeaseAsync(f.Session.SessionId));
         foreach (var arguments in new[] { """{"command":"true","timeoutSeconds":"120"}""", """{"command":"true","background":"false"}""", """{"command":123}""" })
             Assert.Contains("invalid",(await executor.ExecuteAsync(definition,f.Session.SessionId,new(Guid.NewGuid().ToString(),ToolCatalog.SandboxExec,arguments),8192,admission:admission)).Text);
         var unknown = await executor.ExecuteAsync(definition,f.Session.SessionId,new("unknown-clipped",ToolCatalog.SandboxExec,"""{"command":"ln -s /etc/passwd link"}"""),64,admission:admission);
@@ -388,8 +382,8 @@ public sealed class OpenSandboxIntegrationTests
                 .AddInterceptors(new SqlitePragmaInterceptor(5000)).Options);
             f._memory = new(f._factory, TimeProvider.System); await f._memory.EnsureCreatedAsync();
             f._options = new() { Enabled = true, AllowLocalImageIds = true, Endpoint = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_URL") ?? "http://127.0.0.1:18080",
-                ApiKey = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_KEY"), WorkbenchImage = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_IMAGE") };
-            f._profile = new("general-workbench",1,"Workbench","Test",true,f._options.WorkbenchImage!,InitializationScript:initializationScript,IdleTtlSeconds:idleTtl,MaxCommandSeconds:maxCommand,MaxLifetimeSeconds:maxLifetime);
+                ApiKey = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_KEY") };
+            f._profile = new("general-workbench",1,"Workbench","Test",true,Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_IMAGE")!,InitializationScript:initializationScript,IdleTtlSeconds:idleTtl,MaxCommandSeconds:maxCommand,MaxLifetimeSeconds:maxLifetime);
             f.Definition = new(1,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("general-workbench",["general-workbench"]));
             var now = DateTimeOffset.UtcNow; var owner = new AgentRunOwner(Guid.NewGuid(),Guid.NewGuid());
             f.Session = new(1,Guid.NewGuid(),1,f.Definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId,PinnedPersona:f.Definition.Identity);
@@ -399,7 +393,8 @@ public sealed class OpenSandboxIntegrationTests
             var run = AgentRun.Create(Guid.NewGuid(),owner,new(activation,f.Definition.Id,1,f.Definition.Identity,Guid.NewGuid(),AgentRunOutputContract.ConversationResponse),new("synthetic","synthetic","synthetic",null),3,now);
             await f._runs.AdmitAsync(f.Session with {Revision=2},1,run);
             f.Run = await f._runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));
-            f.Reopen(); await f.Store.SaveProfileAsync(f._profile,0); return f;
+            f.Reopen(); await f.Store.SaveProfileAsync(f._profile,0);
+            await f.Store.SaveVerificationAsync(new(f._profile.Id,f._profile.Revision,DateTimeOffset.UtcNow,true,"Lifecycle fixture admission",ContractVersion:1)); return f;
         }
         public void Reopen()
         {
@@ -408,8 +403,8 @@ public sealed class OpenSandboxIntegrationTests
         }
         public SandboxAccess Access(string? call = null) => new(Session.SessionId,Session.AgentInstanceId,Run.AgentRunId,Run.Claim!.Generation,call ?? Guid.NewGuid().ToString("N"),_profile,Definition);
         public void SetInstanceSetup(string script,long revision) => _profile = _profile with {InstanceInitializationScript=script,InstanceRevision=revision};
-        public async Task ReviseScript(string script) { var next = _profile with { Revision=_profile.Revision+1,InitializationScript=script }; await Store.SaveProfileAsync(next,_profile.Revision); _profile=next; }
-        public async Task LimitStorage(long bytes) { var next=_profile with { Revision=_profile.Revision+1,StorageBytes=bytes };await Store.SaveProfileAsync(next,_profile.Revision);_profile=next; }
+        public async Task ReviseScript(string script) { var next = _profile with { Revision=_profile.Revision+1,InitializationScript=script }; await Store.SaveProfileAsync(next,_profile.Revision); _profile=next; await Store.SaveVerificationAsync(new(next.Id,next.Revision,DateTimeOffset.UtcNow,true,"Lifecycle fixture admission",ContractVersion:1)); }
+        public async Task LimitStorage(long bytes) { var next=_profile with { Revision=_profile.Revision+1,StorageBytes=bytes };await Store.SaveProfileAsync(next,_profile.Revision);_profile=next;await Store.SaveVerificationAsync(new(next.Id,next.Revision,DateTimeOffset.UtcNow,true,"Lifecycle fixture admission",ContractVersion:1)); }
         public async ValueTask CancelRun()
         {
             var owner = new AgentRunOwner(Session.AgentInstanceId, Session.ProfileId!.Value);

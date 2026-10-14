@@ -5,8 +5,8 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { DefinitionSandboxPolicy } from './DefinitionSandboxPolicy';
 import { getSandboxPlatform, type SandboxPlatform } from '../../services/sandboxes';
 import type { DefinitionCandidate } from './definitionCandidate';
-vi.mock('../../services/sandboxes', () => ({ getSandboxPlatform: vi.fn() }));
-const profile = { id: 'fixture', revision: 2, name: 'Fixture', description: '', enabled: true, imageReference: 'sha256:' + 'a'.repeat(64), initializationScript: 'echo Profile', cpu: 1, memoryMiB: 1024, pids: 64, maxCommandSeconds: 120, idleTtlSeconds: 1800, maxLifetimeSeconds: 7200, storageBytes: 262144000, lastVerifiedAt: null, verificationReason: null };
+vi.mock('../../services/sandboxes', async (importOriginal) => ({...await importOriginal<typeof import('../../services/sandboxes')>(), getSandboxPlatform: vi.fn() }));
+const profile = { id: 'fixture', revision: 2, name: 'Fixture', description: '', enabled: true, availability:'Eligible', imageReference: 'sha256:' + 'a'.repeat(64), initializationScript: 'echo Profile', cpu: 1, memoryMiB: 1024, pids: 64, maxCommandSeconds: 120, idleTtlSeconds: 1800, maxLifetimeSeconds: 7200, storageBytes: 262144000, lastVerifiedAt: null, verificationReason: null };
 const platform: SandboxPlatform = { state: 'Ready', message: 'Authenticated.', profiles: [profile, { ...profile, id: 'other', name: 'Other' }], allowedImagePrefixes: [], localImageIdsAllowed: true, securityScope: '', storageScope: '' };
 const candidate: DefinitionCandidate = { sandboxPolicy: { defaultProfileId: 'fixture', allowedProfileIds: ['fixture', 'other'] } };
 const tree = (readOnly = false, onChange = vi.fn()) => <ConfigProvider theme={{ token: { motion: false } }}><DefinitionSandboxPolicy candidate={candidate} readOnly={readOnly} onChange={onChange} /></ConfigProvider>;
@@ -30,7 +30,7 @@ it('keeps the default within remaining allowed grants and clears policy when the
   }
   render(<Editor />); await screen.findByText('Fixture · revision 2');
   const remove = (name: string) => {
-    const item = Array.from(document.querySelectorAll('.ant-select-selection-item')).find(element => element.getAttribute('title') === name)!;
+    const item = Array.from(document.querySelectorAll('.ant-select-selection-item')).find(element => element.getAttribute('title') === name+' · Verified · eligible')!;
     fireEvent.mouseDown(item.querySelector('.ant-select-selection-item-remove')!);
     fireEvent.click(item.querySelector('.ant-select-selection-item-remove')!);
   };
@@ -41,7 +41,7 @@ it('inspects immutable published policy without edit or verification controls', 
   render(tree(true)); await screen.findByText('Fixture · revision 2');
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Verify/ })).not.toBeInTheDocument();
-  expect(screen.getByText('Fixture, Other')).toBeInTheDocument();
+  expect(screen.getByText('Fixture · Verified · eligible, Other · Verified · eligible')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Manage Global Sandbox Profiles' })).toHaveAttribute('href', '/admin/platform/sandboxes');
 });
 it('ignores a late failed inventory response after a different owner is mounted', async () => {
@@ -51,4 +51,11 @@ it('ignores a late failed inventory response after a different owner is mounted'
   view.unmount(); render(tree(true)); await screen.findByText('Fixture · revision 2');
   await act(async () => reject(new Error('late')));
   expect(screen.queryByText('Profile inventory unavailable')).not.toBeInTheDocument();
+});
+
+it('requires explicit repair of an unavailable stored policy without silently substituting an image',async()=>{
+ const onChange=vi.fn();render(<ConfigProvider><DefinitionSandboxPolicy candidate={{sandboxPolicy:{defaultProfileId:'missing',allowedProfileIds:['missing','fixture']}}} onChange={onChange} /></ConfigProvider>);
+ await screen.findByText('Stored policy contains unavailable profiles');expect(onChange).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Remove unavailable profiles'}));
+ expect(onChange).toHaveBeenCalledWith({sandboxPolicy:{defaultProfileId:'fixture',allowedProfileIds:['fixture']}});
 });

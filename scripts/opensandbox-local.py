@@ -68,10 +68,12 @@ def up(args):
         raise RuntimeError("Existing sandbox workloads must be reconciled by their owning server before starting a new runner; unrelated resources are left unchanged.")
     state = prepare(args)
     tag = args.name + "-workbench:local"
-    run("docker", "build", "--label", LABEL + "=" + args.name, "-t", tag,
-        "-f", "deploy/sandbox/Dockerfile.workbench", "deploy/sandbox")
+    if args.build_workbench:
+        run("docker", "build", "--label", LABEL + "=" + args.name, "-t", tag,
+            "-f", "deploy/sandbox/Dockerfile.workbench", "deploy/sandbox")
     for component in ("server", "execd", "egress"):
-        run("docker", "pull", PINS[component])
+        if subprocess.run(["docker", "image", "inspect", PINS[component]],capture_output=True).returncode:
+            run("docker", "pull", PINS[component])
     current = owned(args.name)
     if current is None:
         run("docker", "run", "-d", "--name", args.name, "--label", LABEL + "=" + args.name,
@@ -95,8 +97,10 @@ def up(args):
             if attempt == 89:
                 raise RuntimeError("Private authenticated OpenSandbox readiness failed; inspect owned server logs locally.")
             time.sleep(1)
-    (state / "image.json").write_text(json.dumps({"imageId": env["AGENTCORE_OSB_PROOF_IMAGE"], "pins": PINS}, indent=2))
-    export_inventory(args, state, env["AGENTCORE_OSB_PROOF_IMAGE"])
+    if env.get("AGENTCORE_OSB_PROOF_IMAGE"):
+        (state / "image.json").write_text(json.dumps({"imageId": env["AGENTCORE_OSB_PROOF_IMAGE"], "pins": PINS}, indent=2))
+    if args.build_workbench:
+        export_inventory(args, state, env["AGENTCORE_OSB_PROOF_IMAGE"])
     print(f"Trusted local server ready on 127.0.0.1:{args.port}; private configuration in {state}.")
     return state, env
 
@@ -118,7 +122,7 @@ def environment(args, state, tag):
     env = os.environ.copy()
     env.update(AGENTCORE_OPENSANDBOX_TESTS="1", AGENTCORE_OSB_PROOF_DISPOSABLE="1", AGENTCORE_OSB_PROOF_KEY=key,
         AGENTCORE_OSB_PROOF_URL=f"http://127.0.0.1:{args.port}",
-        AGENTCORE_OSB_PROOF_IMAGE=run("docker", "image", "inspect", tag, "--format", "{{.Id}}", capture=True).strip(),
+        AGENTCORE_OSB_PROOF_IMAGE=args.image or (run("docker", "image", "inspect", tag, "--format", "{{.Id}}", capture=True).strip() if args.build_workbench else ""),
         AGENTCORE_OSB_PROOF_PRIVATE_TARGET=owned(args.name)["NetworkSettings"]["Networks"]["bridge"]["IPAddress"],
         AGENTCORE_OSB_PROOF_GATEWAY=owned(args.name)["NetworkSettings"]["Networks"]["bridge"]["Gateway"],
         DOTNET_CLI_USE_MSBUILD_SERVER="0", MSBUILDDISABLENODEREUSE="1")
@@ -204,7 +208,7 @@ def ui_acceptance(args, state, env):
         Persistence__WorkspaceRoot=str(data / "workspaces"), Persistence__ArtifactRoot=str(data / "artifacts"),
         Persistence__AttachmentRoot=str(data / "attachments"), Persistence__CredentialProtectionKeyRoot=str(data / "keys"),
         OpenSandbox__Enabled="true", OpenSandbox__Endpoint=env["AGENTCORE_OSB_PROOF_URL"],
-        OpenSandbox__ApiKey=env["AGENTCORE_OSB_PROOF_KEY"], OpenSandbox__WorkbenchImage=env["AGENTCORE_OSB_PROOF_IMAGE"],
+        OpenSandbox__ApiKey=env["AGENTCORE_OSB_PROOF_KEY"],
         OpenSandbox__AllowLocalImageIds="true", Browser__Enabled="false",
         VITE_DEV_PORT=str(args.web_port), VITE_API_PROXY_TARGET=api_url,
         AGENTCORE_OSB_UI_URL=web_url, AGENTCORE_OSB_UI_STATE=str(data / "browser-state.json"))
@@ -253,12 +257,16 @@ def main():
     parser.add_argument("command", choices=["up", "down", "accept", "ui"])
     parser.add_argument("--name", default="agent-core-opensandbox-local")
     parser.add_argument("--port", type=int, default=18080)
+    parser.add_argument("--image", help="Exact installed local sha256 ID for opt-in tests, never a runtime default.")
+    parser.add_argument("--build-workbench", action="store_true", help="Explicit optional maintainer fixture build.")
     parser.add_argument("--ui", action="store_true", help="Include browser journeys and actual Core/server restart.")
     parser.add_argument("--api-port", type=int, default=6280)
     parser.add_argument("--web-port", type=int, default=6273)
     args = parser.parse_args()
     if not re.fullmatch(r"agent-core-opensandbox-[a-z0-9-]{1,64}", args.name) or not 1024 <= args.port <= 65535:
         parser.error("Use a project-owned name and an unprivileged local port.")
+    if args.command in ("accept","ui") and not (args.build_workbench or args.image):
+        parser.error("Acceptance requires --image <exact immutable ID> or explicit --build-workbench fixture preparation.")
     {"up": up, "down": down, "accept": accept, "ui":ui}[args.command](args)
 
 

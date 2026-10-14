@@ -8,6 +8,8 @@ recovery, binary attachments and shared Office/file preview styling are retained
 Focused local verification and historical hosted results are tracked in the [OpenSandbox ledger](docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14);
 prior acceptance below remains evidence for its original behavior SHA.
 
+The owner-authorized OCI sandbox catalog cutover replaces implicit Workbench bootstrap with explicit prebuilt-image registration. Start the private server, then use Admin → Platform → Sandboxes to register a digest, optionally select a protected Container registry Credential, verify it, authorize it on a Definition and select it on an Instance. Normal startup builds no workload. Historical observations require fresh verification and retired `sandbox.run` requires modern republishing/adoption. [OCI verification](docs/reports/oci-sandbox-profile-catalog-verification-2026-10-15.md) records focused observed evidence and remaining boundaries; historical acceptance below remains unchanged.
+
 The owner-authorized P10 OpenSandbox cutover is implemented and accepted for a
 **trusted, single-user local demo** on behavior `4c8f2507`. All eight
 [hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016)

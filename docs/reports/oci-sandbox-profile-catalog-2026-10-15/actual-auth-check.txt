@@ -1,0 +1,6 @@
+auth-final-workbench: actual disposable verification passed
+auth-final-alternate: actual disposable verification passed
+Cached private image without a credential rejected
+auth-final-workbench: cached-image wrong authorization rejected
+auth-final-alternate: cached-image wrong authorization rejected
+Restored protected authorization and safe readback passed. Disposable evidence retained.

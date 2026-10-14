@@ -50,7 +50,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.Contains("http.request", environment.ToolList);
         Assert.Contains(ToolCatalog.SandboxExec, environment.ToolList);
         Assert.Contains(ToolCatalog.SandboxReset, environment.ToolList);
-        Assert.DoesNotContain(ToolCatalog.SandboxRun, environment.ToolList);
+        Assert.DoesNotContain("sandbox.run", environment.ToolList);
         Assert.Contains("email.send", environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserNavigate, environment.ToolList);
         Assert.Contains(ToolCatalog.BrowserSnapshot, environment.ToolList);

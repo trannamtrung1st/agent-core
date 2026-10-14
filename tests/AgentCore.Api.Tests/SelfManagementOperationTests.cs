@@ -5,22 +5,49 @@ using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Domain.Definitions;
+using AgentCore.Application.Sessions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.Api.Tests;
 
 public sealed class SelfManagementOperationTests
 {
+    private sealed class SelectionReadySandboxFactory : AgentCoreApiFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureTestServices(services => {
+                services.RemoveAll<ISandboxReadiness>();
+                services.AddSingleton<ISandboxReadiness>(new SelectionReady());
+            });
+        }
+    }
+    private sealed class SelectionReady : ISandboxReadiness
+    {
+        public bool IsAvailable => true;
+        public string State => "Ready";
+        public string SafeMessage => "Isolated settings-selection fixture.";
+    }
+
     [Fact]
     public async Task Existing_sandbox_profile_management_remains_available_without_disclosing_or_approving_setup_scripts()
     {
-        await using var factory=new AgentCoreApiFactory();var services=factory.Services;
+        await using var factory=new SelectionReadySandboxFactory();var services=factory.Services;
         var store=services.GetRequiredService<ISandboxStore>();
         var oldProfileRevision=(await store.GetProfileAsync("general-workbench"))?.Revision ?? 0;
         await store.SaveProfileAsync(new("general-workbench",oldProfileRevision+1,"Workbench","",true,"docker.io/agent-core/workbench@sha256:"+new string('a',64),"profile-private-sentinel"),oldProfileRevision);
         var owner=await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant",30);
         var policy=await services.GetRequiredService<SelfManagementService>().UpdateAsync(owner.InstanceId,owner.Revision,new(new(HarnessManagementMode.Managed),new([HarnessManagementScope.Settings]),new([])));
         var settings=services.GetRequiredService<AgentInstanceSettingsService>();
+        // Server readiness alone cannot grant selection. This test supplies explicit compatibility evidence.
+        var profile=(await store.GetProfileAsync("general-workbench"))!;
+        await Assert.ThrowsAsync<AgentCoreException>(()=>settings.ValidatePatchAsync(owner.InstanceId,"sandboxPolicy",policy.InstanceRevision,
+            new Dictionary<string,JsonElement>{["profileId"]=JsonSerializer.SerializeToElement(profile.Id)},[]).AsTask());
+        await store.SaveVerificationAsync(new(profile.Id,profile.Revision,DateTimeOffset.UtcNow,true,"Selection fixture; no provisioning is exercised here.",ContractVersion:1));
         var saved=await settings.PatchAsync(owner.InstanceId,"sandboxPolicy",policy.InstanceRevision,new Dictionary<string,JsonElement>{["initializationScript"]=JsonSerializer.SerializeToElement("instance-private-sentinel")},[]);
         var definition=(await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
         var executor=services.GetRequiredService<SessionToolExecutor>();var admission=new ToolExecutionAdmission(false,TriggerKind.UserTurn,AgentInstanceId:owner.InstanceId);

@@ -101,10 +101,11 @@ public sealed class OpenSandboxCleanupTests
         var run = AgentRun.Create(Guid.NewGuid(),owner,new(activation,definition.Id,1,definition.Identity,Guid.NewGuid(),AgentRunOutputContract.ConversationResponse),new("synthetic","synthetic","synthetic",null),3,now);
         await runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
         run = await runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));
-        var store = new InMemorySandboxStore(); var image = "docker.io/agent-core/workbench@sha256:" + new string('a', 64);
+        var store = new InMemorySandboxStore(); var image = new Uri(host.Endpoint).Authority + "/fixture/workbench@sha256:" + new string('a', 64);
         var profile = new SandboxProfile("fixture",1,"Fixture","",true,image); await store.SaveProfileAsync(profile, 0);
+        await store.SaveVerificationAsync(new(profile.Id,profile.Revision,now,true,"Fixture admission",ContractVersion:1));
         var logs = new Logs();
-        var service = new OpenSandboxService(new() { Enabled = true, Endpoint = host.Endpoint, ApiKey = "private-fixture-key", WorkbenchImage = image },store,null!,memory,runs,TimeProvider.System,logger:logs);
+        var service = new OpenSandboxService(new() { Enabled = true, Endpoint = host.Endpoint, ApiKey = "private-fixture-key", AllowedImagePrefixes=[new Uri(host.Endpoint).Authority+"/fixture"], InsecureRegistryHosts=[new Uri(host.Endpoint).Authority] },store,null!,memory,runs,TimeProvider.System,logger:logs);
         await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(new(snapshot.SessionId,owner.AgentInstanceId,run.AgentRunId,run.Claim!.Generation,"create-once",profile,definition),new("true")).AsTask());
         var lease = (await store.GetLeaseAsync(snapshot.SessionId))!;
         Assert.Null(lease.ProviderId); Assert.Equal(SandboxLeaseState.NeedsReconciliation, lease.State);
@@ -143,6 +144,7 @@ public sealed class OpenSandboxCleanupTests
             var app = builder.Build(); app.MapDelete("/v1/sandboxes/{id}", delete);
             if (create is not null) app.MapPost("/v1/sandboxes", create);
             if (list is not null) app.MapGet("/v1/sandboxes", list);
+            app.MapMethods("/v2/{**path}",["HEAD"],() => Results.Ok());
             await app.StartAsync();
             return new(app, app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single());
         }
