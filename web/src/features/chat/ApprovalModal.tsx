@@ -1,4 +1,4 @@
-import { Alert, Descriptions, Modal, Tag, Typography, theme } from 'antd';
+import { Alert, Descriptions, Flex, Modal, Tag, Typography, theme } from 'antd';
 import type { PendingApproval } from '../../state/sessionStore';
 
 type ApprovalModalProps = {
@@ -149,7 +149,10 @@ export function ApprovalModal({
       okButtonProps={{
         danger: trash,
         type: trash ? 'default' : undefined,
-        style: trash && driveFiles.length > 0 ? { color: token.colorErrorTextHover } : undefined,
+        style:
+          trash && driveFiles.length > 0
+            ? { color: token.colorErrorTextHover }
+            : undefined,
         disabled: drive && driveFiles.length === 0,
       }}
       cancelText="Reject"
@@ -169,7 +172,14 @@ export function ApprovalModal({
               description={`${approval.decisionError} Retry a decision, or reconnect to recover its saved state.`}
             />
           ) : null}
-          {drive && driveFiles.length === 0 ? <Alert type="warning" showIcon title="Request fresh file details" description="This saved request has no complete target details. Reject it, inspect the files and request a fresh exact approval." /> : null}
+          {drive && driveFiles.length === 0 ? (
+            <Alert
+              type="warning"
+              showIcon
+              title="Request fresh file details"
+              description="This saved request has no complete target details. Reject it, inspect the files and request a fresh exact approval."
+            />
+          ) : null}
           <Typography.Paragraph className="chat-approval-summary">
             {approval.summary}
           </Typography.Paragraph>
@@ -205,7 +215,7 @@ export function ApprovalModal({
             >
               {!semantic ? (
                 <Descriptions
-                  className="chat-approval-fields"
+                  className={`chat-approval-fields${drive ? ' chat-approval-drive-fields' : ''}`}
                   size="small"
                   column={1}
                   layout={drive ? 'vertical' : 'horizontal'}
@@ -221,19 +231,27 @@ export function ApprovalModal({
                     label: key,
                     children:
                       drive && key === 'Files' && driveFiles.length > 0 ? (
-                        <ul className="chat-approval-list">
+                        <ul
+                          className="chat-approval-drive-files"
+                          aria-label="Drive files in this request"
+                        >
                           {driveFiles.map((file) => (
                             <li
                               key={file.fileId}
-                              className="chat-approval-detail"
+                              className="chat-approval-drive-file"
                             >
                               <Typography.Text strong>
                                 {file.name}
                               </Typography.Text>
-                              <br />
-                              <Typography.Text type="secondary">
-                                {file.fileId} · Version {file.expectedVersion}
-                              </Typography.Text>
+                              <Flex wrap gap={token.paddingXS} align="center">
+                                <Tag>Version {file.expectedVersion}</Tag>
+                                <Typography.Text
+                                  type="secondary"
+                                  className="chat-approval-drive-file-id"
+                                >
+                                  ID: {file.fileId}
+                                </Typography.Text>
+                              </Flex>
                             </li>
                           ))}
                         </ul>

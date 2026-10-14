@@ -209,12 +209,17 @@ it.each(['drive.trash', 'drive.trash_batch', 'drive.rename', 'drive.move'])(
       />,
     );
     const dialog = screen.getByRole('dialog');
-    expect(dialog.querySelectorAll('.chat-approval-list li')).toHaveLength(
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(
       targets.length,
     );
     expect(dialog.querySelector('script')).toBeNull();
-    for (const target of targets)
-      expect(within(dialog).getByText(target.name)).toBeInTheDocument();
+    for (const target of targets) {
+      const row = within(dialog).getByText(target.name).closest('li')!;
+      expect(within(row).getByText(`ID: ${target.fileId}`)).toBeInTheDocument();
+      expect(
+        within(row).getByText(`Version ${target.expectedVersion}`),
+      ).toBeInTheDocument();
+    }
     const verb =
       toolName === 'drive.trash_batch'
         ? 'Move 7 files to Trash'
@@ -230,9 +235,20 @@ it.each(['drive.trash', 'drive.trash_batch', 'drive.rename', 'drive.move'])(
 
 it('keeps old incomplete Drive requests rejectable and requires fresh trusted targets', () => {
   const reject = vi.fn();
-  render(<ApprovalModal approval={{ ...approval, toolName: 'drive.trash', details: {} }} onApprove={vi.fn()} onReject={reject} />);
+  render(
+    <ApprovalModal
+      approval={{ ...approval, toolName: 'drive.trash', details: {} }}
+      onApprove={vi.fn()}
+      onReject={reject}
+    />,
+  );
   const dialog = screen.getByRole('dialog');
-  expect(within(dialog).getByRole('button', { name: 'Move to Trash' })).toBeDisabled();
-  expect(within(dialog).getByText('Request fresh file details')).toBeInTheDocument();
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' })); expect(reject).toHaveBeenCalledOnce();
+  expect(
+    within(dialog).getByRole('button', { name: 'Move to Trash' }),
+  ).toBeDisabled();
+  expect(
+    within(dialog).getByText('Request fresh file details'),
+  ).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Reject' }));
+  expect(reject).toHaveBeenCalledOnce();
 });

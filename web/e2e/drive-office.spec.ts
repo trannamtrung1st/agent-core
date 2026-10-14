@@ -204,11 +204,14 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
         .first()
         .getByRole('button')
         .allTextContents(),
-    ).toEqual(['', '']);    if (width < 768) {
-      const action = await page.getByRole('button', { name: 'Download q3-report.docx' }).boundingBox();
-      expect(action!.height).toBeGreaterThanOrEqual(40); expect(action!.width).toBeGreaterThanOrEqual(40);
+    ).toEqual(['', '']);
+    if (width < 768) {
+      const action = await page
+        .getByRole('button', { name: 'Download q3-report.docx' })
+        .boundingBox();
+      expect(action!.height).toBeGreaterThanOrEqual(40);
+      expect(action!.width).toBeGreaterThanOrEqual(40);
     }
-
   }
   const token = await page.evaluate(() =>
     localStorage.getItem('agent-core.owner-capability'),
@@ -234,7 +237,23 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
     await expect(approval).toContainText('7 listed app-authorized Drive files');
     await expect(approval).toContainText(name);
     await expect(approval).toContainText('Can be restored');
-    expect(await approval.locator('.chat-approval-list li').count()).toBe(7);
+    await expect(
+      approval
+        .getByRole('list', { name: 'Drive files in this request' })
+        .getByRole('listitem'),
+    ).toHaveCount(7);
+    // Filename and metadata stay grouped; a flex-item line break previously
+    // inserted an empty line and two extra sibling gaps between them.
+    const metadataGap = await approval
+      .getByRole('listitem')
+      .first()
+      .evaluate(
+        (row) =>
+          row.lastElementChild!.getBoundingClientRect().top -
+          row.firstElementChild!.getBoundingClientRect().bottom,
+      );
+    expect(metadataGap).toBeGreaterThanOrEqual(0);
+    expect(metadataGap).toBeLessThanOrEqual(8);
     return approval;
   };
   const rejected = await requestBatch();
@@ -248,7 +267,11 @@ test('connect explicit Drive binding, generate Office deliverables, verify remot
   expect(await remaining()).toHaveLength(8);
   const approved = await requestBatch();
   await page.setViewportSize({ width: 320, height: 800 });
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    )
+    .toBe(true);
   await approved
     .getByRole('button', { name: 'Move 7 files to Trash', exact: true })
     .focus();
