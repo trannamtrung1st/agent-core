@@ -45,11 +45,11 @@ public static class OfficeReadResults
                 ? $"{Address(extent.FirstRow, extent.FirstColumn)}:{Address(extent.LastRow, extent.LastColumn)}" : null;
             var returnedRange = first is null ? null : $"{first}:{last}";
             string? nextRange = null;
-            if (extent is not null && rows.Length > 0)
+            if (extent is not null && first is not null && last is not null)
             {
-                var lastRow = Row(last!);
-                var firstColumn = Column(first!);
-                var lastColumn = Column(last!);
+                var lastRow = Row(last);
+                var firstColumn = Column(first);
+                var lastColumn = Column(last);
                 if (lastRow < extent.LastRow)
                     nextRange = $"{Address(lastRow + 1, firstColumn)}:{Address(Math.Min(extent.LastRow, lastRow + OfficeLimits.MaxRows), lastColumn)}";
                 else if (lastColumn < extent.LastColumn)

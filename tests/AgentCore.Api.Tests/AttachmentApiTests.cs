@@ -225,6 +225,47 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
         Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{view.SessionId}/attachments/{attachment.AttachmentId}/content"));
     }
 
+    [Theory]
+    [InlineData("Z1:Z10")]
+    [InlineData("A20:B30")]
+    [InlineData("Z20:Z30")]
+    public async Task Spreadsheet_attachment_outside_used_range_returns_empty_bounded_inspection_and_remains_readable(string range)
+    {
+        var client = Owner();
+        var created = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
+        var view = (await created.Content.ReadFromJsonAsync<SessionViewResponse>())!;
+        var sessionId = Guid.Parse(view.SessionId);
+        var office = _factory.Services.GetRequiredService<IOfficeProcessor>();
+        var rows = Enumerable.Range(1, 10).Select(i => (IReadOnlyList<OfficeCell>)new[]
+            { new OfficeCell("text", Text: $"Item {i}"), new OfficeCell("number", Number: i) }).ToArray();
+        var bytes = office.CreateWorkbook(new([new("Items", rows)]), default).Bytes;
+        using var form = new MultipartFormDataContent();
+        form.Add(new ByteArrayContent(bytes), "file", "items.xlsx");
+        var uploaded = await client.PostAsync($"/api/v2/sessions/{view.SessionId}/attachments", form);
+        uploaded.EnsureSuccessStatusCode();
+        var attachment = (await uploaded.Content.ReadFromJsonAsync<AttachmentResponse>())!;
+        var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Definition;
+        var tools = _factory.Services.GetRequiredService<SessionToolExecutor>();
+        async Task<JsonElement> Read(string selectedRange)
+        {
+            var result = await tools.ExecuteAsync(definition, sessionId, new ModelToolCall(Guid.NewGuid().ToString(), ToolCatalog.AttachmentsRead,
+                JsonSerializer.Serialize(new { attachmentId = attachment.AttachmentId, sheet = "Items", range = selectedRange })), 4096);
+            Assert.InRange(Encoding.UTF8.GetByteCount(result.Text), 1, 4096);
+            using var json = JsonDocument.Parse(result.Text);
+            Assert.False(json.RootElement.TryGetProperty("error", out _), result.Text);
+            return json.RootElement.GetProperty("inspection").Clone();
+        }
+        var empty = await Read(range);
+        Assert.Equal(range, empty.GetProperty("range").GetString());
+        Assert.Equal("A1:B10", empty.GetProperty("usedRange").GetString());
+        Assert.Empty(empty.GetProperty("rows").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, empty.GetProperty("returnedRange").ValueKind);
+        Assert.Equal(JsonValueKind.Null, empty.GetProperty("nextRange").ValueKind);
+        Assert.True(empty.GetProperty("truncated").GetBoolean());
+        Assert.Contains("Item 1", (await Read("A1:B1")).ToString());
+        Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{view.SessionId}/attachments/{attachment.AttachmentId}/content"));
+    }
+
     [Fact]
     public async Task Document_attachment_read_continues_with_complete_elements_and_rejects_spreadsheet_arguments()
     {

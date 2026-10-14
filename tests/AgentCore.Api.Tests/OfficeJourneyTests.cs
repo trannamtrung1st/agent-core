@@ -10,6 +10,47 @@ namespace AgentCore.Api.Tests;
 
 public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixture<AgentCoreApiFactory>
 {
+    [Theory]
+    [InlineData("Z1:Z10")]
+    [InlineData("A20:B30")]
+    [InlineData("Z20:Z30")]
+    public async Task Workspace_spreadsheet_inspection_outside_used_range_returns_metadata_without_continuation(string range)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(factory.Services));
+        var created = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version = 26 });
+        created.EnsureSuccessStatusCode();
+        var instance = (await created.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!;
+        var response = await client.PostAsJsonAsync("/api/v2/sessions", new { agentInstanceId = instance.InstanceId, mode = "text" });
+        response.EnsureSuccessStatusCode();
+        using var session = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sessionId = session.RootElement.GetProperty("sessionId").GetGuid();
+        var definition = (await factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Definition;
+        var tools = factory.Services.GetRequiredService<SessionToolExecutor>();
+        async Task<JsonElement> Execute(string tool, object args)
+        {
+            var result = await tools.ExecuteAsync(definition, sessionId, new ModelToolCall(Guid.NewGuid().ToString(), tool, JsonSerializer.Serialize(args)), 4096,
+                admission: new(false, TriggerKind.UserTurn, AgentInstanceId: Guid.Parse(instance.InstanceId), OwnedSessionId: sessionId));
+            Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(result.Text), 1, 4096);
+            using var json = JsonDocument.Parse(result.Text);
+            Assert.False(json.RootElement.TryGetProperty("error", out _), result.Text);
+            return json.RootElement.Clone();
+        }
+        var createdFile = await Execute(ToolCatalog.OfficeSpreadsheetCreate, new { path = "/home/empty-range.xlsx", sheets = new[]
+            { new { name = "Items", rows = Enumerable.Range(1, 10).Select(i => new object[] { new { type = "text", text = $"Item {i}" }, new { type = "number", number = i } }).ToArray() } } });
+        var inspection = (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path = "/home/empty-range.xlsx", sheet = "Items", range })).GetProperty("inspection");
+        Assert.Equal(range, inspection.GetProperty("range").GetString());
+        Assert.Equal("A1:B10", inspection.GetProperty("usedRange").GetString());
+        Assert.Equal(createdFile.GetProperty("sha256").GetString(), inspection.GetProperty("sha256").GetString());
+        Assert.Empty(inspection.GetProperty("rows").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, inspection.GetProperty("returnedRange").ValueKind);
+        Assert.Equal(JsonValueKind.Null, inspection.GetProperty("nextRange").ValueKind);
+        Assert.True(inspection.GetProperty("truncated").GetBoolean());
+        var recovered = (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path = "/home/empty-range.xlsx", sheet = "Items", range = "A1:B1" })).GetProperty("inspection");
+        Assert.Contains("Item 1", recovered.ToString());
+        Assert.Equal(createdFile.GetProperty("sha256").GetString(), recovered.GetProperty("sha256").GetString());
+    }
+
     [Fact]
     public async Task Office_create_inspect_targeted_edit_and_stale_hash_preserve_owned_real_files()
     {

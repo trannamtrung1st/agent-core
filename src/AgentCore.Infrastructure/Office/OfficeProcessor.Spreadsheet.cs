@@ -83,6 +83,8 @@ public sealed partial class OfficeProcessor
         var rows = new List<IReadOnlyList<OfficeCellView>>(); var totalChars = 0;
         var used = selected.RangeUsed(); var actualRows = used is null ? 0 : Math.Min(bounds.Rows, Math.Max(0, used.RangeAddress.LastAddress.RowNumber - bounds.Row + 1));
         var actualColumns = used is null ? 0 : Math.Min(bounds.Columns, Math.Max(0, used.RangeAddress.LastAddress.ColumnNumber - bounds.Column + 1));
+        // A range beyond the used columns has no cells, even when its rows overlap.
+        if (actualColumns == 0) actualRows = 0;
         for (var r = 0; r < actualRows; r++)
         {
             var cells = new List<OfficeCellView>(); var rowChars = 0; var rowOmitted = false;

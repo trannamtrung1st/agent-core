@@ -20,6 +20,8 @@ trusted OpenSandbox server may mount the host Docker socket. See
 Earlier P10/P11 statements below describe their historical slice boundaries;
 this accepted P10 cutover supersedes the former unopened P10 status. P11 remains unopened.
 
+The [Office productivity stabilization](docs/reports/office-productivity-stabilization-2026-10-14.md) fixes empty spreadsheet inspections, passes a fresh audited dependency restore and focused local checks, and records a live public DOCX → edit → Artifact → exact-byte Google Drive upload/rename/Trash/recovery workflow. Dense CSV measurements and remaining runtime/device/Office fidelity boundaries are explicit; hosted CI was not run.
+
 The spreadsheet preview follow-up uses one read-only FortuneSheet canvas for XLSX and CSV/TSV Grid, with backend-owned host limits and bounded range navigation. [Local verification](docs/reports/fortune-sheet-preview-verification-2026-10-14.md) records runtime evidence, formatting limits and remaining gate gaps; the original Office/Drive acceptance below remains unchanged.
 
 The Office/file-preview/Drive successor is implemented: one protected Chat/Admin preview, guarded DOCX/XLSX authoring and optional bound Google Drive integration. All seven [exact-source Synthetic/Compose gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38474865644) passed on `a451600a`. See the [implementation gates](docs/18-implementation-plan.md#office-file-preview-and-drive-successor) and [verification ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md) for evidence and manual/Real verification gaps.
