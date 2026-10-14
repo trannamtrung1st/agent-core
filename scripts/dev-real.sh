@@ -4,10 +4,11 @@
 #
 # Usage:
 #   scripts/dev-real.sh start                # OpenSandbox + native Real API + web (default)
-#   scripts/dev-real.sh start --api-only     # native API + web only, no managed Docker
+#   scripts/dev-real.sh start --api-only     # native API + web only, OpenSandbox disabled
 #   scripts/dev-real.sh start --full         # store + Compose OpenSandbox + API + web
 #   scripts/dev-real.sh start --with-store   # optional nopCommerce demo as well
-#   scripts/dev-real.sh restart --full       # generation-fenced cleanup and restart
+#   scripts/dev-real.sh restart --full       # restart native app, reuse infrastructure
+#   scripts/dev-real.sh restart --recreate-sandbox # explicit generation-fenced cleanup
 #   scripts/dev-real.sh stop                 # API + web only
 #   scripts/dev-real.sh stop --with-store    # also scripts/nopcommerce-demo.sh stop
 #   scripts/dev-real.sh status               # health + nopCommerce plugin check
@@ -38,8 +39,10 @@ store_origin="http://127.0.0.1:5088"
 
 usage() {
   echo "usage: scripts/dev-real.sh start|restart [--api-only] [--with-sandbox] [--with-store] | start|restart --full"
+  echo "       scripts/dev-real.sh restart [--full | --with-store | --api-only --with-sandbox] --recreate-sandbox"
   echo "       scripts/dev-real.sh stop [--with-store] [--with-sandbox] | stop --full | status"
-  echo "Default start/restart: OpenSandbox infrastructure + native Real API + Vite. --with-store or --full adds the optional nopCommerce demo; --api-only starts API/Vite only. No app container is started."
+  echo "Default start/restart: OpenSandbox infrastructure + native Real API + Vite. --with-store or --full adds the optional nopCommerce demo; --api-only disables OpenSandbox unless --with-sandbox is also selected. No app container is started."
+  echo "Restart reuses infrastructure, including --full and --with-sandbox. --recreate-sandbox and stop --with-sandbox/--full request Session sandbox cleanup: container-local packages, processes and unsynchronized files may be lost. Canonical files are preserved."
 }
 
 mkdir -p "$state_dir"
@@ -243,6 +246,9 @@ start_api() {
     set -a
     source "$root/local/opensandbox-compose/$sandbox_project/native.env"
     set +a
+  else
+    # Apply after .env so API-only cannot attach to a previously configured server.
+    export OpenSandbox__Enabled=false
   fi
   export Hosting__AllowedOrigins__0="http://localhost:$web_port" Hosting__AllowedOrigins__1="http://127.0.0.1:$web_port"
   local data_args=()
@@ -436,14 +442,20 @@ main() {
   case "$cmd" in
     start) cmd_start "$@" ;;
     restart)
-      local full=0 sandbox=0 api_only=0 with_store=0 option
+      local full=0 sandbox=0 api_only=0 with_store=0 recreate=0 option
+      local start_args=()
       for option in "$@"; do
-        case "$option" in --full) full=1;; --with-sandbox) sandbox=1;; --with-store) with_store=1;; --api-only) api_only=1;; -h|--help) usage;return 0;; *) echo "unknown option: $option" >&2;return 2;; esac
+        case "$option" in --full) full=1;; --with-sandbox) sandbox=1;; --with-store) with_store=1;; --api-only) api_only=1;; --recreate-sandbox) recreate=1;continue;; -h|--help) usage;return 0;; *) echo "unknown option: $option" >&2;return 2;; esac
+        start_args+=("$option")
       done
       [[ "$full" != 1 || "$api_only" != 1 ]] || { echo "Choose --full or --api-only, not both." >&2; return 2; }
       [[ "$with_store" != 1 || "$api_only" != 1 ]] || { echo "Choose --with-store or --api-only, not both." >&2; return 2; }
-      if [[ "$full" == 1 ]]; then cmd_stop --full; elif [[ "$sandbox" == 1 ]]; then cmd_stop --with-sandbox; fi
-      cmd_start "$@" ;;
+      [[ "$recreate" != 1 || "$api_only" != 1 || "$sandbox" == 1 ]] || { echo "--recreate-sandbox requires OpenSandbox; add --with-sandbox or omit --api-only." >&2; return 2; }
+      if [[ "$recreate" == 1 ]]; then
+        echo "Recreating Session sandboxes: container-local packages, processes and unsynchronized files may be lost. Canonical files are preserved." >&2
+        cmd_stop --with-sandbox
+      fi
+      cmd_start ${start_args[@]+"${start_args[@]}"} ;;
     stop) cmd_stop "$@" ;;
     status) cmd_status ;;
     -h | --help | "") usage; exit 0 ;;

@@ -25,14 +25,18 @@ The owner-authorized [Sandbox configuration/deployment enhancement](docs/reports
 ```bash
 scripts/dev-real.sh start                         # OpenSandbox + native Real API + Vite
 scripts/dev-real.sh restart                       # reuse infrastructure; restart native app
+scripts/dev-real.sh restart --full                # reuse Sandbox/store; restart native app
+scripts/dev-real.sh restart --recreate-sandbox     # cleanup; container-local state may be lost
 scripts/dev-real.sh status
 scripts/dev-real.sh stop                          # native app only; Docker data/services retained
 scripts/dev-real.sh start --with-store            # optional nopCommerce demo as well
 scripts/dev-real.sh start --full                  # equivalent complete store demo
 scripts/dev-real.sh stop --full                   # owned infrastructure too; data retained
-scripts/dev-real.sh start --api-only              # native API/Vite without managed Docker
+scripts/dev-real.sh start --api-only              # native API/Vite, OpenSandbox disabled
 scripts/dev-real.sh start --api-only --with-sandbox # explicit Sandbox, no store
 ```
+
+The [launcher polish verification](docs/reports/opensandbox-launcher-polish-verification-2026-10-14.md) records explicit API-only disabling, restart preservation and warned sandbox recreation with focused local evidence.
 
 The [sparse XLSX reading enhancement](docs/reports/closedxml-sparse-reading-verification-2026-10-14.md) uses bounded ClosedXML content pages for attachment and Workspace reads, preserves original addresses and stateless continuation, and separates formatted-template scanning from populated-cell budgets. Explicit ranges, preview and edits retain their strict profile. Focused local tests and generated-fixture measurements verify this change; real-file verification remains owner-run and hosted CI was not requested.
 

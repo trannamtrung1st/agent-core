@@ -167,11 +167,15 @@ print('OpenSandbox: authenticated fixture readiness')
         self.assertEqual(self.run_script('status').returncode,0)
         restarted=self.run_script('restart','--full');self.assertEqual(restarted.returncode,0,restarted.stderr)
         self.assertTrue(all(not self.alive(pid) for pid in old))
+        trace=(self.root/'trace').read_text()
+        self.assertNotIn('sandbox:stop',trace)
+        self.assertNotIn('store:stop',trace)
         stopped=self.run_script('stop','--full');self.assertEqual(stopped.returncode,0,stopped.stderr)
         trace=(self.root/'trace').read_text();self.assertIn('store:start',trace);self.assertIn('store:stop',trace);self.assertIn('sandbox:stop',trace)
 
     def test_api_only_with_sandbox_does_not_start_or_stop_store(self):
         self.sandbox_stubs()
+        (self.root/'.env').write_text('OpenSandbox__Enabled=false\n')
         result=self.run_script('start','--api-only','--with-sandbox');self.assertEqual(result.returncode,0,result.stderr)
         self.assertNotIn('store:',(self.root/'trace').read_text())
         self.assertEqual(self.run_script('stop','--with-sandbox').returncode,0)
@@ -209,6 +213,62 @@ print('OpenSandbox: authenticated fixture readiness')
         self.assertEqual(self.run_script('status').returncode,0)
         self.assertFalse((self.root/'trace').exists())
         self.assertIn('not selected',self.run_script('status').stdout)
+
+    def test_api_only_disables_sandbox_despite_inherited_and_env_file_settings(self):
+        self.sandbox_stubs()
+        self.env['OpenSandbox__Enabled']='true'
+        (self.root/'.env').write_text('OpenSandbox__Enabled=true\nOpenSandbox__ApiKey=fixture-private-key\n')
+        self.command('dotnet','echo "$OpenSandbox__Enabled" >> "'+str(self.root/'enabled')+'"\nexec sleep 300')
+        for count,action in enumerate(['start','restart'],start=1):
+            result=self.run_script(action,'--api-only')
+            self.assertEqual(result.returncode,0,result.stderr)
+            for _ in range(100):
+                if (self.root/'enabled').exists() and len((self.root/'enabled').read_text().splitlines())==count: break
+                time.sleep(.01)
+            self.assertEqual((self.root/'enabled').read_text().splitlines(),['false']*count)
+        self.assertEqual((self.root/'enabled').read_text().splitlines(),['false','false'])
+        self.assertFalse((self.root/'trace').exists())
+
+    def test_explicit_sandbox_restart_reuses_server(self):
+        self.sandbox_stubs()
+        self.assertEqual(self.run_script('start','--api-only','--with-sandbox').returncode,0)
+        result=self.run_script('restart','--api-only','--with-sandbox')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertNotIn('sandbox:stop',(self.root/'trace').read_text())
+
+    def test_explicit_recreation_warns_before_cleanup_and_restarts_native_processes(self):
+        self.sandbox_stubs()
+        self.assertEqual(self.run_script('start').returncode,0)
+        old=self.pids()
+        result=self.run_script('restart','--recreate-sandbox')
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('container-local packages, processes and unsynchronized files',result.stderr)
+        self.assertIn('Canonical files are preserved',result.stderr)
+        self.assertTrue(all(not self.alive(pid) for pid in old))
+        self.assertTrue(all(self.alive(pid) for pid in self.pids()))
+        self.assertEqual((self.root/'trace').read_text().splitlines(),
+            ['sandbox:up','sandbox:status','sandbox:stop','sandbox:up','sandbox:status'])
+
+    def test_recreation_pending_cleanup_does_not_start_replacement_stack(self):
+        self.sandbox_stubs()
+        self.assertEqual(self.run_script('start','--full').returncode,0)
+        old=self.pids();self.env['FIXTURE_CLEANUP_PENDING']='1'
+        result=self.run_script('restart','--full','--recreate-sandbox')
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('cleanup remains pending',result.stderr)
+        self.assertTrue(all(not self.alive(pid) for pid in old))
+        trace=(self.root/'trace').read_text().splitlines()
+        self.assertEqual(trace.count('sandbox:up'),1)
+        self.assertNotIn('store:stop',trace)
+
+    def test_recreation_requires_restart_and_selected_sandbox_before_mutation(self):
+        self.sandbox_stubs()
+        for action,flags in [('start',('--recreate-sandbox',)),
+            ('restart',('--api-only','--recreate-sandbox')),
+            ('restart',('--recreate-sandbox','--api-only'))]:
+            result=self.run_script(action,*flags)
+            self.assertEqual(result.returncode,2,result.stderr)
+            self.assertFalse((self.root/'trace').exists())
 
     def test_selected_store_down_fails_status_without_stopping_services(self):
         self.sandbox_stubs()
