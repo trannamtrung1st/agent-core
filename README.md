@@ -1,15 +1,16 @@
 # Agent Core MVP
 
-The owner-authorized P10 OpenSandbox cutover is in progress for a **trusted,
-single-user local demo**. The real authenticated Docker-bridge SDK proof and
-durable ownership/atomic scratch gates pass. The SDK backend, Workbench, lifecycle/command recovery, tools and Admin/Chat
-cutover are implemented. Real SDK/migration/Workspace checks and all 1,021 merged
-frontend tests pass; final browser/restart/Compose and exact-source hosted gates
-are in progress, so full milestone acceptance is not yet claimed. Own-container execd loopback is
-an explicit local-demo limitation. Only the trusted OpenSandbox server may
-mount the host Docker socket. See [verification](docs/reports/opensandbox-integration-verification.md).
-Earlier P10/P11 statements below describe the boundaries of their historical
-slices; this approved Stage A work supersedes the former unopened P10 status.
+The owner-authorized P10 OpenSandbox cutover is implemented and accepted for a
+**trusted, single-user local demo** on behavior `4c8f2507`. All eight
+[hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016)
+pass, including real Linux SDK/Workbench, atomic scratch, coding/Office,
+command recovery and Core/server recreation through the browser. Main's
+Office/Drive behavior is preserved. Own-container execd loopback remains an
+explicit local-demo limitation; production hardening is separate. Only the
+trusted OpenSandbox server may mount the host Docker socket. See
+[verification](docs/reports/opensandbox-integration-verification.md).
+Earlier P10/P11 statements below describe their historical slice boundaries;
+this accepted P10 cutover supersedes the former unopened P10 status. P11 remains unopened.
 
 The Office/file-preview/Drive successor is implemented: one protected Chat/Admin preview, guarded DOCX/XLSX authoring and optional bound Google Drive integration. All seven [exact-source Synthetic/Compose gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38474865644) passed on `a451600a`. See the [implementation gates](docs/18-implementation-plan.md#office-file-preview-and-drive-successor) and [verification ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md) for evidence and manual/Real verification gaps.
 

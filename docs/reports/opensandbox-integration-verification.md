@@ -1,8 +1,8 @@
 # OpenSandbox integration verification
 
-## Current local-demo continuation — 2026-10-14
+## Accepted trusted-local cutover — 2026-10-14
 
-Branch `develop/branch-1`; main `a63194ba` was merged as `e9089734`, followed by `719ac6c5` as `928b8ccd` and `32f5f244` as `81a39b87`. Office/Drive/file-preview code and immutable General Assistant v26/v27 are preserved. New v28 combines their capabilities with modern sandbox tools. Behavior `51fb6fd95ed55fa58e9d1b87770fc3d67f903503` passed the mandatory Linux OpenSandbox job in [workflow 38512857065](https://github.com/trannamtrung1st/agent-core/actions/runs/38512857065). Its combined browser regression found the modal motion race described below; **full milestone acceptance is not yet claimed**.
+Branch `develop/branch-1`; main `a63194ba` was merged as `e9089734`, followed by `719ac6c5` as `928b8ccd` and `32f5f244` as `81a39b87`. Office/Drive/file-preview code and immutable General Assistant v26/v27 are preserved. New v28 combines their capabilities with modern sandbox tools. **Accepted behavior: `4c8f2507e04e7bd4e7a3ecf1af4d89a2d806f582`**, with all eight jobs in [workflow 38518370016](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016) passed. This closes Stages A–G and OSB-01–18 for the expressly revised trusted-local scope. Subsequent closure edits change documentation only. Earlier candidates and failures below remain historical evidence.
 
 The owner explicitly approved trusted single-user local development/demo on the existing Docker daemon. Only the trusted OpenSandbox server may mount its socket; neither Core nor workloads do. DinD, an extra VM and other execution platforms are excluded. Own execd loopback is an acknowledged local-demo exception; public/multi-tenant isolation, writable-layer disk quota and signed supply-chain attestation remain deferred. Earlier stronger failed/rejected evidence below remains historical.
 
@@ -41,13 +41,35 @@ The migration is additive and preserves a populated pre-cutover Session record a
 
 Eight ordinary Synthetic browser cases passed on isolated 6480/6473 ports and disposable roots: guarded scratch/home filesystem, exact Artifact download/reload/error recovery, shared Office/Drive OAuth/binding/preview/epoch behavior, and Instance settings Save/Reset/CAS/recovery. No sandbox service was required for these existing journeys. The isolated Compose project on port 6580 passed SQLite volume recreation, exact home/scratch isolation, Workspace source deletion, Admin/resources, protected credential/binding, Synthetic OAuth and Drive remote bytes/same operation identity. Its container/network were removed and unrelated services preserved. The historical sandbox.run real-SDK export recheck passed, preserving ok/exit/output/truncation/artifact/message fields and refusing to present indeterminate execution as success. Six offline probe receipt/guard tests passed. Markdown file-target audit found zero missing targets across 22 canonical/overview/deployment documents.
 
-## Remaining closure gates
+## Exact-source acceptance closure
 
-Finish documentation evidence closure and all exact-SHA hosted jobs after the combined browser correction. The mandatory Linux job has passed with 31 executed/31 passed/zero skips and both browser phases (31.1 seconds before / approximately 1.4 minutes after). Its retained [acceptance artifact](https://github.com/trannamtrung1st/agent-core/actions/runs/38512857065/artifacts/11870803440) contains the TRX, browser report, image identity, installed SPDX inventory (498 packages) and license bundle; no private key or database is uploaded. Optional native SDK skips do not substitute for that execution. Commit/push and update the attached PR after a reviewable candidate is verified. Do not merge without explicit merge instruction.
+All eight jobs pass on the accepted behavior SHA: backend, frontend shards 1/2,
+core browser shards 1/2, acceptance browser, Synthetic Compose and mandatory
+Trusted local OpenSandbox acceptance. Hosted backend results are Domain **195**,
+Infrastructure **1,368**, Application **1,807** and API **586** passed:
+**3,956 passes / 32 explicit optional live skips / zero failures**. The six
+SDK/loopback cleanup regressions execute within Infrastructure; the separate
+mandatory Docker job executes **31 cases / zero skips** and both browser phases
+(27.6 seconds before / approximately 1.3 minutes after actual Core/server recreation).
+Both frontend shards/builds pass; local full Vitest records **1,021 tests / 129 files**.
+
+The retained [final native acceptance artifact](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016/artifacts/11872863337)
+contains the TRX, browser report, image identity, installed SPDX inventory
+(498 packages) and license bundle. The downloaded TRX independently confirms
+31 executed/31 passed/zero failed, skipped, aborted or timed out. Private keys
+and databases are excluded. Owned runtime processes/server/workloads are stopped;
+images/state and local/hosted receipts remain for inspection. No user database
+reset or unrelated resource removal was performed.
+
+The changed Markdown audit passes: 24 documents, zero missing file targets or
+unbalanced fences, and all 253 local fragment links resolve. PR
+[#15](https://github.com/trannamtrung1st/agent-core/pull/15) delivers the cutover
+with current main through `32f5f244` integrated. Production isolation, writable-layer
+quota, signed attestation and other explicitly deferred targets are not accepted.
 
 ### Combined hosted correction and latest-main review
 
-The same workflow passed backend (Domain 195, Infrastructure 1,362, Application 1,807, API 586; 32 explicit optional live skips), frontend (589 + 432 tests / 129 files, both builds), acceptance browser and Compose. Core browser shard 1 passed 114 cases and failed the 390px Gmail access-check assertion. The trace contains no POST to `/connection/check`: the click occurred during the reopened centered modal's zoom animation, with a scaled 21.5px button. The test now waits for the existing settled AntD motion boundary and asserts the actual successful access-check response before the unchanged visible receipt assertion. No email product behavior, authorization or timeout is altered.
+The earlier [51fb6fd9 workflow](https://github.com/trannamtrung1st/agent-core/actions/runs/38512857065) passed backend (Domain 195, Infrastructure 1,362, Application 1,807, API 586; 32 explicit optional live skips), frontend (589 + 432 tests / 129 files, both builds), acceptance browser and Compose. Core browser shard 1 passed 114 cases and failed the 390px Gmail access-check assertion. The trace contains no POST to `/connection/check`: the click occurred during the reopened centered modal's zoom animation, with a scaled 21.5px button. The test now waits for the existing settled AntD motion boundary and asserts the actual successful access-check response before the unchanged visible receipt assertion. No email product behavior, authorization or timeout is altered.
 
 The correction passes all five isolated Synthetic email cases (1440/768/390/320px plus Custom endpoint defaults), including authorization/check/disconnect/reconnect, draft restoration, durable chooser reload and cancel. Existing pointer, keyboard, responsive and exact-owner assertions remain. A Vite proxy EPIPE during server teardown did not fail these journeys.
 
@@ -57,11 +79,11 @@ The [8ddedb58 workflow](https://github.com/trannamtrung1st/agent-core/actions/ru
 
 That candidate's mandatory SDK job passed 30 cases and failed UTF-8/adversarial-tree teardown with a durable cleanup-pending receipt; browser phases were not run there. The receipt did not establish a confirmed removal and the upstream cause was not exposed. Cleanup now performs only bounded idempotent DELETE retries for the same durable provider identity, with five-second request limits and the unchanged 20-second total budget. 404 confirms absence; denied cleanup is not retried; exhausted cleanup remains pending for supervision. Commands are never replayed. Safe warning fields exclude upstream errors, bodies, routes, provider IDs and secrets. Six actual SDK/loopback Kestrel regressions pass for transient HTTP recovery, lost acknowledgement, forbidden cleanup, persistent failure and unresponsive bounded cleanup. The owner sandbox API/production-DI recheck passes (one case).
 
-After that correction, the complete local runner passes the topology proof, **31 real SDK/store/Workspace cases with zero skips**, and **both browser phases** (21.0 seconds before / approximately 1.3 minutes after). Actual Core/server recreation, exact Artifacts, live 31-second output, cancellation/reset, separate Background Session completion and owned cleanup remain asserted. The rebuilt Workbench and inventory are retained under the owned gitignored runner state. This local recheck does not replace the next exact-source hosted gate.
+After that correction, the complete local runner passes the topology proof, **31 real SDK/store/Workspace cases with zero skips**, and **both browser phases** (21.0 seconds before / approximately 1.3 minutes after). Actual Core/server recreation, exact Artifacts, live 31-second output, cancellation/reset, separate Background Session completion and owned cleanup remain asserted. The rebuilt Workbench and inventory are retained under the owned gitignored runner state. The accepted exact-source hosted run above subsequently repeats and passes this gate.
 
 ## OSB-01–18 evidence map for the approved scope
 
-These rows map the executed local and mandatory Linux evidence above to the proposal. Combined exact-source CI closure remains separate from individual evidence rows.
+These rows map the executed local and mandatory Linux evidence above to the proposal. All combined exact-source CI jobs have passed as recorded above; the rows identify the exercised behavior rather than inferring it from CI status alone.
 
 | Criterion | Executed evidence |
 | --- | --- |

@@ -8,18 +8,15 @@ The MVP and phases through P9.10 have closed/frozen evidence. Later bounded enha
 
 Email accounts, Gmail OAuth and monitoring have accepted non-live scopes. The contextual Admin/email integration also has exact-source hosted acceptance; see [integration verification](docs/reports/email-monitoring-main-integration-2026-10-13.md). Real mailbox acceptance remains separate.
 
-P10's scoped OpenSandbox cutover is owner-authorized for trusted single-user
-local Docker development/demo. The real SDK bridge proof passes; durable
-ownership, lifecycle, coding/Office, deadline/recovery and atomic scratch checks
-pass. Full merged frontend tests pass; final runtime/hosted closure is in progress.
-[Verification](docs/reports/opensandbox-integration-verification.md) records the
-actual fallback failure and remaining gates. P11 remains unopened and
-requirement-triggered.
+P10's scoped OpenSandbox cutover is closed for trusted single-user local Docker
+development/demo on behavior `4c8f2507`, with all eight
+[exact-source hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016)
+passed. [Verification](docs/reports/opensandbox-integration-verification.md)
+records OSB-01–18, actual runtime evidence and historical failures. Own execd
+loopback and absent writable-layer quota remain disclosed local-demo limits;
+production hardening is deferred. P11 remains unopened and requirement-triggered.
 
 ## Open work and acceptance gaps
-
-- [ ] **OpenSandbox cutover:** close remaining combined browser/restart/Compose and exact-source hosted acceptance for the implemented SDK/Workbench/tool/UI cutover. Own execd loopback is a disclosed limitation; public/multi-tenant production hardening is deferred. DinD and extra execution platforms are excluded. See [verification](docs/reports/opensandbox-integration-verification.md).
-
 
 - [ ] **Office/Drive manual and Real acceptance:** implementation and all seven automated Synthetic/Compose gates passed on `a451600a`. Dedicated real Google UAT, desktop Office-client fidelity and actual native browser 200% zoom remain unverified; see the [successor ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md).
 
@@ -34,7 +31,7 @@ Other bounded successor verification limits remain in their linked reports under
 
 ## Future work — start only for a concrete requirement
 
-- **Sandbox beyond approved P10:** pools, Kubernetes, multi-host scheduling and a second execution engine remain deferred. The approved OpenSandbox cutover is tracked above.
+- **Sandbox beyond approved P10:** pools, Kubernetes, multi-host scheduling and a second execution engine remain deferred. The trusted-local OpenSandbox cutover is accepted above; public/multi-tenant isolation, writable-layer quota and signed attestation remain deferred.
 - **P11 — Production:** introduce authentication and tenant ownership for an external pilot; adopt PostgreSQL, object storage or external secret protection when hosting requires them. Add TLS, operational monitoring, backup/restore and rollback evidence for that deployment. Distributed workers, coordination services and orchestration require a measured need.
 - **Application participation:** define Application Bindings when a real client application embeds or invokes an identity. Website automation already uses explicit Credential grants and instance-owned Browser state. Broader messaging, shared application/task workspaces and portable worker packages need separate requirements.
 - **Extensions and packaging:** add provider seams and reusable evaluations when another concrete implementation needs them. Marketplaces, universal plugins, package import/export, Git/folder sync and remote file browsing remain deferred.

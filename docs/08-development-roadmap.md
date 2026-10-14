@@ -2,7 +2,7 @@
 
 Build the canonical composed pipeline from deterministic conversation mechanics toward continuous full-duplex audio. Native realtime models are future-only and have no MVP milestone. [Implementation Plan](18-implementation-plan.md) is authoritative for each milestone's goal, scope, interfaces, tests, acceptance criteria and non-goals.
 
-P10's scoped OpenSandbox cutover is authorized for trusted single-user local Docker development/demo. The SDK/Workbench/tool/UI implementation and real resource, ownership, atomic file and deadline/recovery checks are in place; full combined and exact-source hosted acceptance is tracked in the [verification ledger](reports/opensandbox-integration-verification.md). Own execd loopback and absent writable-layer quota are disclosed local-demo limitations. P11 remains unopened; historical P10/P11 statements below retain their original slice boundaries.
+P10's scoped OpenSandbox cutover is accepted for trusted single-user local Docker development/demo on behavior `4c8f2507`, with all eight exact-source hosted gates passed. The [verification ledger](reports/opensandbox-integration-verification.md) maps OSB-01–18 to actual SDK/Workbench/tool/UI, ownership, atomic files, deadline/recovery, browser/restart and Compose evidence. Own execd loopback and absent writable-layer quota remain disclosed local-demo limitations. P11 remains unopened; historical P10/P11 statements below retain their original slice boundaries.
 
 ## Follow-on observed slices
 

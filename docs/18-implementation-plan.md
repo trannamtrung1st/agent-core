@@ -9,7 +9,8 @@ official C# SDK, one per-Session execution replica, Core-owned authoritative
 Workspace/Artifacts, exact Definition authority and pinned Run/generation
 policy. The direct Docker/BusyBox backend is retired in the current implementation.
 One SDK backend owns execution; no parallel executor or automatic host fallback
-is authorized. Final milestone acceptance requires the remaining integrated gates.
+is authorized. The approved trusted-local scope is accepted on behavior `4c8f2507`;
+all eight exact-source hosted gates passed.
 
 Required order: A real upstream compatibility and isolation proof → B typed
 contracts/policy/persistence → C Workbench/lifecycle → D atomic Workspace
@@ -28,11 +29,13 @@ production control-plane isolation remains deferred. The real 1.1.1 SDK proof
 passes on the authenticated bridge deployment. The local SDK, durable ownership, atomic scratch, coding/Office, command
 interruption/recovery and responsive Admin/Chat flows have executed successfully.
 All 1,021 merged frontend tests pass. The reproducible runner exports installed
-SPDX/license evidence. Final combined backend/browser/restart/Compose and exact-SHA
-hosted acceptance are still in progress; no complete milestone acceptance is claimed. Exact evidence is recorded in the
+SPDX/license evidence. Final combined backend/browser/restart/Compose and mandatory
+Linux OpenSandbox acceptance passed on `4c8f2507` in
+[workflow 38518370016](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016),
+closing Stages A–G and OSB-01–18 for the revised local-demo scope. Exact evidence is recorded in the
 [verification ledger](reports/opensandbox-integration-verification.md).
 Earlier P10/P11 status statements below record their historical slice
-boundaries and do not override this newly authorized P10 gate.
+boundaries and do not override this accepted scoped P10 cutover.
 
 ## Browser semantic-action redesign
 
