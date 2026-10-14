@@ -7,6 +7,9 @@ type ApprovalModalProps = {
   onReject: () => void;
 };
 
+// Match the server's display bounds without interpreting metadata as authority.
+const controlCharacters = /[\u0000-\u001f\u007f-\u009f]/;
+
 // Style supplied paragraph headings and list lines without interpreting HTML or rewriting the proposal.
 function ProposalText({ value }: { value: string }) {
   return (
@@ -69,16 +72,23 @@ export function ApprovalModal({
         Array.isArray(value) &&
         value.length >= 1 &&
         value.length <= 20 &&
+        (approval.toolName === 'drive.trash_batch' || value.length === 1) &&
         value.every(
           (f) =>
             f &&
             typeof f.fileId === 'string' &&
+            f.fileId.length > 0 &&
             f.fileId.length <= 160 &&
+            !/[^A-Za-z0-9_-]/.test(f.fileId) &&
             typeof f.name === 'string' &&
             f.name.length <= 255 &&
+            !controlCharacters.test(f.name) &&
             typeof f.expectedVersion === 'string' &&
-            f.expectedVersion.length <= 64,
-        )
+            f.expectedVersion.length > 0 &&
+            f.expectedVersion.length <= 64 &&
+            !controlCharacters.test(f.expectedVersion),
+        ) &&
+        new Set(value.map((file) => file.fileId)).size === value.length
       )
         driveFiles = value;
     } catch {

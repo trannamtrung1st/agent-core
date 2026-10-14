@@ -2478,7 +2478,11 @@ body,
 .chat-approval-drive-file + .chat-approval-drive-file { border-block-start: 1px solid var(--ac-color-border); }
 .chat-approval-drive-file:first-child { padding-block-start: 0; }
 .chat-approval-drive-file:last-child { padding-block-end: 0; }
-.chat-approval-drive-file .ant-tag { margin-inline-end: 0; }
+.chat-approval-drive-file .ant-tag {
+  margin-inline-end: 0;
+  max-width: 100%;
+  white-space: normal;
+}
 .chat-approval-drive-file-id { min-width: 0; font-size: var(--ac-font-size-label); }
 .chat-approval-change {
   padding: var(--ac-space-default);
