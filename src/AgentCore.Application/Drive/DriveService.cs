@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Ports;
@@ -13,10 +14,16 @@ public sealed record DriveAccountView(string AccountRef, string DisplayName, str
 public sealed record DriveAccess(Guid InstanceId, AgentCredentialBinding Binding, Credential Credential, IGoogleDriveProvider Provider);
 public sealed record DriveEffect(string Name, string Parent, string? SourceSha256 = null, long SourceBytes = 0, string? MimeType = null, string? ExpectedVersion = null, string? SourceParent = null, string? SourceMd5 = null);
 public sealed record DriveReceipt(Guid OperationId, string Status, DriveFile File, bool Reconciled, bool Synthetic, string? Limitation = null);
-public sealed class DriveIndeterminateException(Guid operationId, string fileId, string? causeCode = null, bool resumeAllowed = false) : Exception(resumeAllowed
+public sealed class DriveIndeterminateException(Guid operationId, string fileId, string? causeCode = null, bool resumeAllowed = false,
+    IReadOnlyList<string>? verificationFailures = null) : Exception(verificationFailures is { Count: > 0 } && !resumeAllowed
+    ? "The known file does not match the upload receipt. Inspect the reported verification fields and request exact cleanup approval if needed. No replacement upload or automatic deletion was started."
+    : resumeAllowed
     ? "Upload completion is uncertain. Check the operation or continue the same upload; do not create another file."
     : "The remote effect remains uncertain. Inspect the known file in Drive and confirm account access. A missing file alone does not make another write safe.")
-{ public Guid OperationId { get; } = operationId; public string FileId { get; } = fileId; public string? CauseCode { get; } = causeCode; public bool ResumeAllowed { get; } = resumeAllowed; }
+{ public Guid OperationId { get; } = operationId; public string FileId { get; } = fileId; public string? CauseCode { get; } = causeCode; public bool ResumeAllowed { get; } = resumeAllowed;
+  public IReadOnlyList<string> VerificationFailures { get; } = verificationFailures ?? [];
+  public string RecoveryAction => ResumeAllowed ? "continue_same_upload" : VerificationFailures.Count > 0 ? "inspect_target_and_request_cleanup_approval" : "inspect_operation";
+}
 
 public sealed partial class DriveService(ICredentialStore credentials, IAgentCredentialBindingStore bindings, IAgentInstanceStore instances,
     IGoogleDriveProviderFactory providers, IDriveOperationStore operations, TimeProvider time, ILogger<DriveService>? logger = null)
@@ -27,7 +34,8 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
     private static AgentCoreException FailedOperation(DriveOperation op)
     {
         var failure = JsonSerializer.Deserialize<DriveOperationFailure>(op.ResultJson!);
-        return Failure("drive_operation_failed", "This operation did not execute. " + failure?.Message + " Resolve the cause, then explicitly start a new save; this operation cannot run again.", 409);
+        return Failure("drive_operation_failed", failure?.Proof == "verified_target_trashed" ? failure.Message
+            : "This operation did not execute. " + failure?.Message + " Resolve the cause, then explicitly start a new save; this operation cannot run again.", 409);
     }
     private static bool CanResume(DriveAccess access, DriveOperation op) => op.Tool == "drive.upload"
         && op.ProtectedUploadSession is not null && op.AuthEpoch == access.Credential.DriveAccount!.AuthEpoch;
@@ -107,6 +115,9 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
             if (effect.SourceBytes != bytes.Length || effect.SourceSha256 != Convert.ToHexStringLower(SHA256.HashData(bytes.Span)))
                 throw Failure("drive_source_revision_conflict", "Upload bytes do not match the immutable source snapshot.", 409);
             effect = effect with { SourceMd5 = Convert.ToHexStringLower(MD5.HashData(bytes.Span)), MimeType = effect.MimeType ?? "application/octet-stream" };
+            if (!MediaTypeHeaderValue.TryParse(effect.MimeType, out var uploadType) || uploadType.MediaType is null
+                || uploadType.MediaType.StartsWith("application/vnd.google-apps.", StringComparison.OrdinalIgnoreCase))
+                throw Failure("drive_invalid", "Use a valid binary media type; Google-native conversion is excluded.");
         }
         Epoch(access, expectedEpoch); await RecheckAsync(access, true, ct);
         if (tool is "drive.trash" or "drive.move")
@@ -129,7 +140,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
         if (op.State is "Dispatched" or "Indeterminate")
         {
             try { return await Reconcile(access, op, effect, bytes, ct); }
-            catch (DriveIndeterminateException) when (CanResume(access, op))
+            catch (DriveIndeterminateException ex) when (ex.ResumeAllowed)
             {
                 // Only the same pinned bytes/session may continue. GET inspection never sends content.
                 op = (await operations.GetAsync(access.InstanceId, op.OperationId, ct))!;
@@ -168,6 +179,7 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
             return await Reconcile(access, op, effect, bytes, ct);
         }
         catch (DriveIndeterminateException) { throw; }
+        catch (AgentCoreException ex) when (ex.Code == "drive_operation_failed") { throw; }
         catch (DriveEffectNotExecutedException ex) when (op.ProtectedUploadSession is null)
         {
             logger?.LogWarning("Drive operation rejected. OperationId {OperationId} Tool {Tool} Stage {Stage} Code {Code}", op.OperationId, tool, "dispatch", ex.Code);
@@ -204,18 +216,45 @@ public sealed partial class DriveService(ICredentialStore credentials, IAgentCre
     {
         DriveFile file;
         try { file = await ReadForOperation(access, op.FileId, op, "reconciliation", ct); }
-        catch (Exception) { if (op.State != "Indeterminate") await operations.UpdateAsync(op with { State = "Indeterminate", Revision = op.Revision + 1 }, op.Revision, CancellationToken.None); throw new DriveIndeterminateException(op.OperationId, op.FileId, resumeAllowed: CanResume(access, op)); }
+        catch (Exception ex) { if (op.State != "Indeterminate") await operations.UpdateAsync(op with { State = "Indeterminate", Revision = op.Revision + 1 }, op.Revision, CancellationToken.None); throw new DriveIndeterminateException(op.OperationId, op.FileId, (ex as AgentCoreException)?.Code, CanResume(access, op)); }
+        if (op.Tool == "drive.upload" && file.Id == op.FileId && file.Trashed)
+        {
+            await RecheckAsync(access, false, ct);
+            var failure = new DriveOperationFailure("drive_upload_target_trashed",
+                $"The known upload target ({op.FileId}) is in Google Drive Trash. This operation will not resume and no active upload success is claimed. Restore that file in Drive, or explicitly start a new upload with a new operation ID.",
+                "verified_target_trashed", file);
+            var failed = await operations.UpdateAsync(op with { State = "Failed", ResultJson = JsonSerializer.Serialize(failure),
+                ProtectedUploadSession = null, Revision = op.Revision + 1 }, op.Revision, ct);
+            throw FailedOperation(failed);
+        }
+        var verificationFailures = op.Tool == "drive.upload" ? UploadVerificationFailures(file, effect) : [];
+        if (op.Tool == "drive.upload" && file.Id != op.FileId) verificationFailures.Add("fileId");
         var matches = op.Tool switch
         {
             "drive.create_folder" => file.Folder && file.Name == effect.Name && (effect.Parent == "root" || file.Parents.Contains(effect.Parent)),
-            "drive.upload" => !file.Folder && file.Name == effect.Name && file.MimeType == effect.MimeType && file.ByteSize == effect.SourceBytes && string.Equals(file.Md5Checksum, effect.SourceMd5, StringComparison.OrdinalIgnoreCase) && (effect.Parent == "root" || file.Parents.Contains(effect.Parent)),
+            "drive.upload" => verificationFailures.Count == 0,
             "drive.rename" => file.Name == effect.Name,
             "drive.move" => file.Parents.Contains(effect.Parent) && !file.Parents.Contains(effect.SourceParent!),
             "drive.trash" => file.Trashed,
             _ => false
         };
-        if (!matches) { if (op.State != "Indeterminate") await operations.UpdateAsync(op with { State = "Indeterminate", Revision = op.Revision + 1 }, op.Revision, CancellationToken.None); throw new DriveIndeterminateException(op.OperationId, op.FileId, resumeAllowed: CanResume(access, op)); }
-        await RecheckAsync(access, false, ct); await operations.UpdateAsync(op with { State = "Succeeded", ResultJson = JsonSerializer.Serialize(file), Revision = op.Revision + 1 }, op.Revision, ct);
+        if (!matches) { if (op.State != "Indeterminate") await operations.UpdateAsync(op with { State = "Indeterminate", Revision = op.Revision + 1 }, op.Revision, CancellationToken.None);
+            var resume = CanResume(access, op) && (op.Tool != "drive.upload" || string.IsNullOrEmpty(file.Md5Checksum));
+            throw new DriveIndeterminateException(op.OperationId, op.FileId, op.Tool == "drive.upload" ? "drive_upload_verification_failed" : null, resume, verificationFailures); }
+        await RecheckAsync(access, false, ct); await operations.UpdateAsync(op with { State = "Succeeded", ResultJson = JsonSerializer.Serialize(file), ProtectedUploadSession = null, Revision = op.Revision + 1 }, op.Revision, ct);
         return new(op.OperationId, "Succeeded", file, true, providers.Synthetic, op.Tool is "drive.rename" or "drive.move" or "drive.trash" ? "Remote preconditions are best effort against independent Google clients; no atomic conditional-write guarantee is claimed." : null);
+    }
+
+    private static List<string> UploadVerificationFailures(DriveFile file, DriveEffect effect)
+    {
+        var failures = new List<string>();
+        if (file.Folder || file.NativeDocument) failures.Add("binaryType");
+        if (file.Name != effect.Name) failures.Add("name");
+        if (!MediaTypeHeaderValue.TryParse(file.MimeType, out var observed) || !MediaTypeHeaderValue.TryParse(effect.MimeType, out var requested)
+            || !string.Equals(observed.MediaType, requested.MediaType, StringComparison.OrdinalIgnoreCase)) failures.Add("mimeType");
+        if (file.ByteSize != effect.SourceBytes) failures.Add("byteSize");
+        if (string.IsNullOrEmpty(effect.SourceMd5) || !string.Equals(file.Md5Checksum, effect.SourceMd5, StringComparison.OrdinalIgnoreCase)) failures.Add("checksum");
+        if (effect.Parent != "root" && !file.Parents.Contains(effect.Parent)) failures.Add("parent");
+        return failures;
     }
 }

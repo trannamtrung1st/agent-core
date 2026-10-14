@@ -14,7 +14,7 @@ public sealed class DriveEffectNotExecutedException(string code, string message)
 {
     public string Code { get; } = code;
 }
-public sealed record DriveOperationFailure(string Code, string Message, string Proof);
+public sealed record DriveOperationFailure(string Code, string Message, string Proof, DriveFile? VerifiedFile = null);
 public interface IDriveOperationStore
 {
     ValueTask<DriveOperation?> GetAsync(Guid owner, Guid operationId, CancellationToken ct);

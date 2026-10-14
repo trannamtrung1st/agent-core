@@ -54,6 +54,19 @@ public sealed class DrivePersistenceTests
             await Assert.ThrowsAsync<AgentCoreException>(() => operations.UpdateAsync(failed with { State = "Dispatched", Revision = 5 }, 4, default).AsTask());
             Assert.Equal("Failed", (await operations.ClaimAsync(failed, default)).State);
             await operations.ClaimAsync(failed with { OperationId = Guid.NewGuid(), State = "Planned", Revision = 1, ResultJson = null }, default);
+            var trashed = op with { OperationId = Guid.NewGuid(), EffectHash = "trashed-upload", State = "Planned", Revision = 1, ResultJson = null, ProtectedUploadSession = null };
+            await operations.ClaimAsync(trashed, default);
+            trashed = await operations.UpdateAsync(trashed with { State = "Dispatched", Revision = 2, ProtectedUploadSession = "protected-session" }, 1, default);
+            var evidence = file with { Id = trashed.FileId, Trashed = true };
+            string Proof(DriveFile observed) => System.Text.Json.JsonSerializer.Serialize(new DriveOperationFailure("drive_upload_target_trashed", "Known target is in Trash.", "verified_target_trashed", observed));
+            await Assert.ThrowsAsync<AgentCoreException>(() => operations.UpdateAsync(trashed with { State = "Failed", Revision = 3, ResultJson = Proof(evidence) }, 2, default).AsTask());
+            await Assert.ThrowsAsync<AgentCoreException>(() => operations.UpdateAsync(trashed with { State = "Failed", Revision = 3, ProtectedUploadSession = null, ResultJson = Proof(evidence with { Id = "other-file" }) }, 2, default).AsTask());
+            await Assert.ThrowsAsync<AgentCoreException>(() => operations.UpdateAsync(trashed with { State = "Failed", Revision = 3, ProtectedUploadSession = null, ResultJson = Proof(evidence with { Trashed = false }) }, 2, default).AsTask());
+            trashed = await operations.UpdateAsync(trashed with { State = "Failed", Revision = 3, ProtectedUploadSession = null, ResultJson = Proof(evidence) }, 2, default);
+            if (sqlite) { SqliteConnection.ClearAllPools(); operations = new SqliteDriveStore(factory); }
+            Assert.Equal(trashed.ResultJson, (await operations.GetAsync(owner.InstanceId, trashed.OperationId, default))!.ResultJson);
+            Assert.Null(await operations.FindAsync(owner.InstanceId, account.CredentialId, trashed.EffectHash, default));
+            await Assert.ThrowsAsync<AgentCoreException>(() => operations.UpdateAsync(trashed with { State = "Dispatched", Revision = 4 }, 3, default).AsTask());
             await operations.DeleteOwnerAsync(owner.InstanceId, default); Assert.Null(await operations.GetAsync(owner.InstanceId, op.OperationId, default)); Assert.NotNull(await files.GetAsync(account.CredentialId, file.Id, default));
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }

@@ -13,11 +13,17 @@ internal static class DriveOperationTransitions
     internal static bool SameIntent(DriveOperation before, DriveOperation after) => before.Tool == after.Tool
         && before.CreatedAtUtc.ToUnixTimeMilliseconds() == after.CreatedAtUtc.ToUnixTimeMilliseconds()
         && Allowed(before.State, after.State) && (after.State is not ("Succeeded" or "Failed") || after.ResultJson is not null)
-        && (after.State != "Failed" || HasNonExecutionProof(after));
-    private static bool HasNonExecutionProof(DriveOperation operation)
+        && (after.State != "Failed" || HasTerminalFailureProof(after));
+    private static bool HasTerminalFailureProof(DriveOperation operation)
     {
-        try { return System.Text.Json.JsonSerializer.Deserialize<DriveOperationFailure>(operation.ResultJson!)
-            is { Proof: "initial_request_not_executed", Code.Length: > 0, Message.Length: > 0 }; }
+        try
+        {
+            var failure = System.Text.Json.JsonSerializer.Deserialize<DriveOperationFailure>(operation.ResultJson!);
+            return failure is { Proof: "initial_request_not_executed", Code.Length: > 0, Message.Length: > 0 }
+                || operation.Tool == "drive.upload" && operation.ProtectedUploadSession is null
+                && failure is { Proof: "verified_target_trashed", Code: "drive_upload_target_trashed", Message.Length: > 0, VerifiedFile.Trashed: true }
+                && failure.VerifiedFile.Id == operation.FileId;
+        }
         catch (System.Text.Json.JsonException) { return false; }
     }
 }
