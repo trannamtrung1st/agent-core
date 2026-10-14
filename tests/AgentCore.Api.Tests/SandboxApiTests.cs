@@ -12,6 +12,17 @@ namespace AgentCore.Api.Tests;
 public sealed class SandboxApiTests
 {
     [Fact]
+    public async Task Shipped_host_enables_sandbox_but_missing_private_configuration_remains_unavailable()
+    {
+        await using var factory = new UnconfiguredSandboxFactory();
+        using var owner = TestOwnerCapability.CreateOwnerClient(factory);
+        Assert.True(factory.Services.GetRequiredService<OpenSandboxOptions>().Enabled);
+        var platform = (await owner.GetFromJsonAsync<SandboxPlatformResponse>("/api/v2/admin/sandboxes"))!;
+        Assert.Equal("Unavailable", platform.State);
+        Assert.Empty(platform.Profiles);
+    }
+
+    [Fact]
     public async Task Owner_profile_revisions_limits_and_safe_audit_work_without_a_running_backend()
     {
         await using var factory = new SandboxFactory(); using var anonymous = factory.CreateClient();
@@ -42,5 +53,15 @@ public sealed class SandboxApiTests
             base.ConfigureWebHost(builder);
             builder.ConfigureTestServices(s => { s.RemoveAll<OpenSandboxOptions>(); s.AddSingleton(new OpenSandboxOptions { AllowLocalImageIds=true }); });
         }
+    }
+
+    private sealed class UnconfiguredSandboxFactory : AgentCoreApiFactory
+    {
+        protected override IReadOnlyDictionary<string, string?> ExtraConfiguration =>
+            new Dictionary<string, string?>
+            {
+                ["OpenSandbox:ApiKey"] = "",
+                ["OpenSandbox:WorkbenchImage"] = ""
+            };
     }
 }
