@@ -40,6 +40,8 @@ scripts/dev-real.sh start --api-only --with-sandbox # explicit Sandbox, no store
 
 The [launcher polish verification](docs/reports/opensandbox-launcher-polish-verification-2026-10-14.md) records explicit API-only disabling, restart preservation and warned sandbox recreation with focused local evidence.
 
+The remaining [nopCommerce restart polish](docs/reports/nopcommerce-restart-polish-verification-2026-10-15.md) makes full native restart reuse a healthy initialized store without reseeding or rebuilding its plugin. `scripts/nopcommerce-demo.sh start --refresh` explicitly repeats initialization when desired.
+
 The [sparse XLSX reading enhancement](docs/reports/closedxml-sparse-reading-verification-2026-10-14.md) uses bounded ClosedXML content pages for attachment and Workspace reads, preserves original addresses and stateless continuation, and separates formatted-template scanning from populated-cell budgets. Explicit ranges, preview and edits retain their strict profile. Focused local tests and generated-fixture measurements verify this change; real-file verification remains owner-run and hosted CI was not requested.
 
 The [Office productivity stabilization](docs/reports/office-productivity-stabilization-2026-10-14.md) fixes empty spreadsheet inspections, passes a fresh audited dependency restore and focused local checks, and records a live public DOCX → edit → Artifact → exact-byte Google Drive upload/rename/Trash/recovery workflow. Dense CSV measurements and remaining runtime/device/Office fidelity boundaries are explicit; hosted CI was not run.

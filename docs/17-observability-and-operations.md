@@ -224,11 +224,14 @@ The nopCommerce demo is a second Compose project, not an overlay on `docker-comp
 
 ```text
 scripts/nopcommerce-demo.sh start
+scripts/nopcommerce-demo.sh start --refresh
 scripts/nopcommerce-demo.sh stop
 scripts/nopcommerce-demo.sh reset
 ```
 
-On start, Compose waits for SQL health, then restarts the web container before its first HTTP readiness check. This recovers a previously running nopCommerce process that cached a SQL/DNS failure during a database restart, without resetting installed configuration or database volumes.
+`start` first checks the owned running containers, SQL health, installed-site redirect, deployed OrderEvents plugin/catalog and storefront/admin origin responses. A healthy initialized demo is reused without Compose startup, container restarts, seed writes, plugin rebuilding or `.env` changes. This also applies when `dev-real.sh restart --full` or `restart --with-store` calls it. Current low-stock/order demo conditions are deliberately not readiness checks: completing a demo should not trigger reseeding on the next native restart.
+
+When initialization is required, Compose waits for SQL health, then restarts the web container before its first HTTP readiness check. This recovers a previously running nopCommerce process that cached a SQL/DNS failure during a database restart, without resetting installed configuration or database volumes. Use `start --refresh` to deliberately repeat initialization, reapply demo seed data, rebuild/reinstall the plugin or apply changed webhook environment settings to an already healthy demo. `reset` still explicitly removes only this project's volumes and initializes again.
 
 `start` and `stop` use project name `nopcommerce-demo` only. `reset` runs `docker compose -p nopcommerce-demo -f docker-compose.nopcommerce.yml down -v`, starts again, installs sample data, and applies `deploy/nopcommerce/seed/demo-conditions.sql` (one low-stock product and one pending order). It must not delete Agent Core volumes. Pinned images, with RepoDigests recorded after pull on 2026-10-02, are `nopcommerceteam/nopcommerce:4.90.8` (`sha256:a4043d78041cdf4aa7c2a68dea613212ba5841cf3a05b23ac0240ae258906a79`) and `mcr.microsoft.com/mssql/server:2022-CU22-ubuntu-22.04` (`sha256:db9a8fe3098b7e8bbde41106bdc7caee942e97124e5fdb71b872ca208de3092d`). The SQL Server image is linux/amd64. The store is published only on `http://127.0.0.1:5088`. After start and after reset, the storefront and `/admin` responses, including every redirect, stay on that origin. `localhost`, another host, `https`, or another port fails the script. Admin sign-in uses `NOPCOMMERCE_ADMIN_EMAIL` (default `demo-owner@example.com`). `start` installs `deploy/nopcommerce/plugin/AgentCore.OrderEvents`. Set `AGENTCORE_WEBHOOK_URL` and `AGENTCORE_WEBHOOK_TOKEN` before `start` when the plugin should emit `order.placed`. An agent that investigates the store needs `http://127.0.0.1:5088` in `Browser:NavigationOrigins` and `Browser:InteractionOrigins`. The product image for a later publish journey is `deploy/nopcommerce/assets/ac-keyboard.png`.
 
