@@ -20,7 +20,8 @@ export function WordPreview({
     setFailed(false);
     void (async () => {
       const { renderAsync } = await import('docx-preview');
-      // The backend has rejected external relations, macros and alternate HTML chunks.
+      // The backend rejects active external relations, macros and alternate HTML chunks.
+      // Safe Word hyperlinks remain inert: sanitization below removes navigation attributes.
       // Render detached, use inline local raster data, then sanitize into a scriptless frame.
       const body = document.createElement('div');
       const styles = document.createElement('div');

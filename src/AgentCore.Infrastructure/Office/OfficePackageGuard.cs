@@ -25,6 +25,7 @@ internal static class OfficePackageGuard
             var sheetIds = new Dictionary<string, string>();
             var relationships = new Dictionary<string, string>();
             var scans = new Dictionary<string, SparseSheetScan>();
+            var wordHyperlinkParts = new HashSet<string>(StringComparer.Ordinal);
             var populated = 0; long formulaCells = 0; var packageNodes = 0; var sharedStrings = 0;
             foreach (var entry in zip.Entries)
             {
@@ -55,6 +56,7 @@ internal static class OfficePackageGuard
                 var nodes = 0; var storedCells = 0; var cellDepth = -1; var formulaDepth = -1; System.Text.StringBuilder? formulaText = null; var valueDepth = -1; var cellContent = false; string? cellAddress = null;
                 var rowNumber = 0; var lastColumn = 0; var textCell = false; var hasFormula = false; var hasCache = false; var hasFormatting = false;
                 var textAddresses = new List<string>(); var missingCaches = new HashSet<string>(StringComparer.Ordinal);
+                var standardRelationships = false;
                 void FinishCell()
                 {
                     if (hasFormula && !hasCache && cellAddress is not null) missingCaches.Add(cellAddress);
@@ -70,6 +72,8 @@ internal static class OfficePackageGuard
                 while (reader.Read())
                 {
                     ct.ThrowIfCancellationRequested();
+                    if (reader.NodeType == XmlNodeType.Element && reader.Depth == 0)
+                        standardRelationships = reader.LocalName == "Relationships" && reader.NamespaceURI == "http://schemas.openxmlformats.org/package/2006/relationships";
                     if (sparseXml && reader.NodeType == XmlNodeType.Element && reader.Depth == 0)
                     {
                         worksheetPart = reader.LocalName == "worksheet" && reader.NamespaceURI == "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -139,7 +143,18 @@ internal static class OfficePackageGuard
                         var target = reader.GetAttribute("Target") ?? "";
                         if (reader.GetAttribute("TargetMode") == "External" || (!target.StartsWith('/') && Uri.TryCreate(target, UriKind.Absolute, out _))
                             || target.StartsWith("//", StringComparison.Ordinal))
-                            throw new AgentCoreException("office_feature_unsupported", "External relationships are unsupported. This does not establish corruption.", 400);
+                        {
+                            var inertWordHyperlink = family == "word" && standardRelationships && reader.Depth == 1
+                                && reader.NamespaceURI == "http://schemas.openxmlformats.org/package/2006/relationships"
+                                && reader.GetAttribute("TargetMode") == "External"
+                                && (reader.GetAttribute("Type") is "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+                                    or "http://purl.oclc.org/ooxml/officeDocument/relationships/hyperlink")
+                                && !string.IsNullOrWhiteSpace(reader.GetAttribute("Id")) && SafeWordHyperlinkTarget(target)
+                                && (wordHyperlinkParts.Contains(entry.FullName) || IsWordContentRelationshipPart(zip, entry.FullName, ct));
+                            if (!inertWordHyperlink)
+                                throw new AgentCoreException("office_feature_unsupported", "External relationships other than safe inert Word hyperlinks are unsupported. This does not establish corruption.", 400);
+                            wordHyperlinkParts.Add(entry.FullName);
+                        }
                     }
                     if (reader.LocalName == "Override" && (reader.GetAttribute("ContentType") ?? "").Contains("macro", StringComparison.OrdinalIgnoreCase))
                         throw new AgentCoreException("office_feature_unsupported", "Macro-enabled documents are unsupported. This does not establish corruption.", 400);
@@ -172,6 +187,41 @@ internal static class OfficePackageGuard
         catch (Exception ex) when (ex is InvalidDataException or XmlException or IOException or OverflowException or ArgumentException or FormatException)
         { throw AgentCoreErrors.Validation("invalid_office_package: The package is corrupt or unsafe."); }
     }
+    private static bool SafeWordHyperlinkTarget(string target)
+    {
+        if (target.Length is < 1 or > 2048 || target.Any(char.IsWhiteSpace) || target.Any(char.IsControl) || target.Contains('\\')
+            || !Uri.TryCreate(target, UriKind.Absolute, out var uri) || !uri.IsWellFormedOriginalString()
+            || Uri.UnescapeDataString(target).Any(char.IsControl)) return false;
+        if (uri.Scheme is "http" or "https") return !string.IsNullOrEmpty(uri.Host) && string.IsNullOrEmpty(uri.UserInfo);
+        if (uri.Scheme != "mailto") return false;
+        var recipients = Uri.UnescapeDataString(target[(target.IndexOf(':') + 1)..].Split('?')[0]);
+        return System.Net.Mail.MailAddress.TryCreate(recipients, out var parsed)
+            && parsed.Address == recipients && recipients.Contains('@');
+    }
+
+    private static bool IsWordContentRelationshipPart(ZipArchive zip, string relationshipPart, CancellationToken ct)
+    {
+        var marker = relationshipPart.LastIndexOf("/_rels/", StringComparison.Ordinal);
+        if (!relationshipPart.StartsWith("word/", StringComparison.Ordinal) || marker < 4 || !relationshipPart.EndsWith(".xml.rels", StringComparison.Ordinal)) return false;
+        var name = relationshipPart[(marker + 7)..^5];
+        if (name.Contains('/')) return false;
+        var owner = zip.GetEntry(relationshipPart[..(marker + 1)] + name);
+        if (owner is null) return false;
+        if (owner.Length > 4 * 1024 * 1024) throw new AgentCoreException("office_processing_limit", "Word relationship owner exceeds part limits.", 400);
+        using var input = owner.Open();
+        using var reader = XmlReader.Create(input, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 4 * 1024 * 1024 });
+        var nodes = 0;
+        while (reader.Read())
+        {
+            ct.ThrowIfCancellationRequested();
+            if (++nodes > 250000) throw new AgentCoreException("office_processing_limit", "Word relationship owner exceeds structural limits.", 400);
+            if (reader.NodeType == XmlNodeType.Element)
+                return reader.Depth == 0 && (reader.NamespaceURI is "http://schemas.openxmlformats.org/wordprocessingml/2006/main" or "http://purl.oclc.org/ooxml/wordprocessingml/main")
+                    && (reader.LocalName is "document" or "hdr" or "ftr" or "footnotes" or "endnotes" or "comments");
+        }
+        return false;
+    }
+
     internal static void RequireLocalFormula(string formula)
     {
         if (System.Text.RegularExpressions.Regex.IsMatch(formula, @"\[[^\]]+\][^!(),+\-*/<>=]*!", System.Text.RegularExpressions.RegexOptions.CultureInvariant))

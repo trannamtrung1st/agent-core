@@ -5,11 +5,67 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 using AgentCore.Contracts.Http;
 using Microsoft.Extensions.DependencyInjection;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace AgentCore.Api.Tests;
 
 public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixture<AgentCoreApiFactory>
 {
+    [Fact]
+    public async Task Owned_DOCX_with_inert_hyperlink_can_be_inspected_previewed_and_safely_edited()
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(factory.Services));
+        var created = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version = 26 });
+        created.EnsureSuccessStatusCode();
+        var instance = (await created.Content.ReadFromJsonAsync<AdminAgentInstanceResponse>())!;
+        var response = await client.PostAsJsonAsync("/api/v2/sessions", new { agentInstanceId = instance.InstanceId, mode = "text" });
+        response.EnsureSuccessStatusCode();
+        using var session = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var sessionId = session.RootElement.GetProperty("sessionId").GetGuid();
+        var definition = (await factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Definition;
+        var office = factory.Services.GetRequiredService<IOfficeProcessor>();
+        using var source = new MemoryStream();
+        source.Write(office.CreateDocument(new(null, [new(null, ["Editable business text."], null)]), default).Bytes);
+        source.Position = 0;
+        using (var document = WordprocessingDocument.Open(source, true))
+        {
+            var main = document.MainDocumentPart!;
+            main.AddHyperlinkRelationship(new Uri("https://example.test/business-report"), true, "business-link");
+            main.Document!.Body!.InsertBefore(new Paragraph(new Hyperlink(new Run(new Text("Read the report"))) { Id = "business-link" }), main.Document!.Body.GetFirstChild<SectionProperties>());
+            main.Document!.Save();
+        }
+        var path = "/home/business-links.docx";
+        (await client.PutAsync($"/api/v2/sessions/{sessionId}/workspace/content?path={path}", new ByteArrayContent(source.ToArray()))).EnsureSuccessStatusCode();
+        var tools = factory.Services.GetRequiredService<SessionToolExecutor>();
+        async Task<JsonElement> Execute(string name, object args)
+        {
+            var result = await tools.ExecuteAsync(definition, sessionId, new ModelToolCall(Guid.NewGuid().ToString(), name, JsonSerializer.Serialize(args)), 8192,
+                admission: new(false, TriggerKind.UserTurn, AgentInstanceId: Guid.Parse(instance.InstanceId), OwnedSessionId: sessionId));
+            using var json = JsonDocument.Parse(result.Text); return json.RootElement.Clone();
+        }
+        var inspection = (await Execute(ToolCatalog.OfficeDocumentInspect, new { path })).GetProperty("inspection");
+        Assert.Contains("Read the report", inspection.ToString());
+        var elements = inspection.GetProperty("elements").EnumerateArray().ToArray();
+        var hash = inspection.GetProperty("sha256").GetString();
+        var linked = elements.Single(e => e.GetProperty("text").GetString() == "Read the report").GetProperty("selector").GetString();
+        var unsafeEdit = await Execute(ToolCatalog.OfficeDocumentEdit, new { path, expectedSha256 = hash, operations = new[] { new { operation = "replace_paragraph", selector = linked, text = "Must not replace hyperlink" } } });
+        Assert.Equal("office_operation_unsupported", unsafeEdit.GetProperty("error").GetString());
+        var selector = elements.Single(e => e.GetProperty("text").GetString() == "Editable business text.").GetProperty("selector").GetString();
+        var edited = await Execute(ToolCatalog.OfficeDocumentEdit, new { path, expectedSha256 = hash, operations = new[] { new { operation = "replace_paragraph", selector, text = "Updated business text." } } });
+        Assert.False(edited.TryGetProperty("error", out _), edited.ToString());
+        var page = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{instance.InstanceId}/workspace"))!;
+        var item = page.Items.Single(i => !i.Directory && i.LogicalPath.EndsWith("business-links.docx", StringComparison.Ordinal));
+        var preview = await client.GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/office-preview");
+        preview.EnsureSuccessStatusCode(); Assert.True(preview.Headers.CacheControl!.NoStore);
+        var bytes = await client.GetByteArrayAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/content");
+        using var reopened = WordprocessingDocument.Open(new MemoryStream(bytes), false);
+        Assert.Equal("https://example.test/business-report", reopened.MainDocumentPart!.HyperlinkRelationships.Single().Uri.ToString());
+        Assert.Contains("Updated business text.", reopened.MainDocumentPart.Document!.InnerText);
+        Assert.Equal("Read the report", reopened.MainDocumentPart.Document!.Descendants<Hyperlink>().Single().InnerText);
+    }
+
     [Fact]
     public async Task Published_office_capability_reads_sparse_owned_workbook_and_rechecks_revision_on_continuation()
     {

@@ -14,7 +14,8 @@ RUN pnpm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY Directory.Build.props ./
+# Follow the shared SDK policy; rebuild with --pull to pick up serviced 10.0 images.
+COPY global.json Directory.Build.props ./
 COPY src/ ./src/
 RUN dotnet publish src/AgentCore.Api/AgentCore.Api.csproj -c Release -o /app/publish --no-self-contained
 

@@ -158,6 +158,29 @@ Bind loopback for local demos. For shared demo hosting use HTTPS with WebSocket 
 
 Back up SQLite using `SqliteMemoryStore.BackupToAsync` (SQLite backup API) or a copy taken while the process is stopped. Copying only the main file while WAL/`-wal`/`-shm` companions are active is not a reliable backup. Apply schema at startup (`EnsureCreated` for this MVP initial schema; treat it as the first migration) before serving traffic; fail startup on schema error. Test a restore before a demo that needs durable history. Native development can keep `Persistence__Provider=InMemory` or set `Persistence__Provider=Sqlite` with `Persistence__ConnectionString=Data Source=data/agent-core.db`.
 
+## Serviced .NET runtime and safe redeployment
+
+Deploy Agent Core with both **Microsoft.NETCore.App and Microsoft.AspNetCore.App 10.0.13 or a later serviced 10.0 patch**. Package auditing is independent: the patched NuGet graph does not update a running shared runtime. Microsoft's [ASP.NET advisory](https://github.com/dotnet/aspnetcore/security/advisories/GHSA-86xp-94pg-8r6r) and [.NET advisory](https://github.com/dotnet/runtime/security/advisories/GHSA-2fmv-rv2c-59x7) require installing the update and restarting applications. This floor is the operational owner; use the latest supported compatible servicing release instead of repeating exact runtime pins across project files. `global.json` selects the shared SDK feature-band floor with `latestFeature` roll-forward, not the deployed ASP.NET runtime. Docker copies it into the publish stage and keeps maintained `sdk:10.0` / `aspnet:10.0` tags; `--pull` is required to refresh cached base images.
+
+For a native deployment, schedule an owner-controlled restart after finishing or cancelling active work. Install the current .NET 10 SDK (which includes ASP.NET Core) or both required runtimes for the host OS/architecture from the [official .NET 10 downloads](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Verify the same `dotnet` executable/environment used by the service:
+
+```sh
+dotnet --version
+dotnet --list-runtimes
+```
+
+Both 10.0 runtime entries must meet the floor above. Preserve the existing launch profile, provider configuration, secrets, database and binary-store paths. Take a SQLite backup using the existing backup API or a controlled stopped-host copy as described above; retain attachment/Artifact/workspace and credential-protection data. For the managed native Real stack, the operator can then run `./scripts/dev-real.sh restart --api-only` (leaves nopCommerce running) and `./scripts/dev-real.sh status`. For an independently managed process/service, restart only its known owner instead; the script does not discover untracked hosts. Verify readiness and an ordinary owned Office read after the restart. Self-contained publishes must be rebuilt/redeployed with the patched SDK, not just restarted.
+
+For an existing Real Compose deployment, use its same overlay and environment on every command. These are **operator instructions**, not an automatic restart performed by the stabilization task:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.real.yml build --pull agent-core
+docker compose -f docker-compose.yml -f docker-compose.real.yml run --rm --no-deps --entrypoint dotnet agent-core --list-runtimes
+docker compose -f docker-compose.yml -f docker-compose.real.yml up -d --no-deps --force-recreate agent-core
+```
+
+Check both runtime versions before replacing the application container. Synthetic uses the same commands without the Real overlay. Preserve the existing named volumes and backup; do not remove volumes as part of this update. A fresh image/runtime check does not replace application readiness checks or real-file fidelity verification. [The local ledger](reports/office-small-stabilization-verification-2026-10-14.md) records the images actually inspected and the native-runtime gap left for the owner.
+
 ## Docker Compose integration and demo
 
 Docker Compose is the supported reproducible local integration/demo environment, while Docker remains optional for ordinary development. Native `dotnet run` + Vite remains the fast loop. `docker compose up --build` starts one Synthetic application container (built SPA, SQLite and definition resource blobs on volume `agent-core-data` via `Persistence__DefinitionResourceRoot=/data/definition-resources`, no provider keys) on http://127.0.0.1:5080. The image runs as the Microsoft runtime `app` user (`USER $APP_UID`); `/data` and `/app/data` are owned by that user. A volume created by an older root image needs ownership `1654:1654` (or a one-time `docker compose down -v`) before SQLite can open. Building/pulling container dependencies may require network even though synthetic runtime behavior does not. `docker compose down` keeps the volume; `docker compose down -v` destroys it. Volume survival plus the frontend owner-capability path (`POST /api/v1/local/owner-capability` → `X-AgentCore-Owner-Capability` → `POST /api/v2/sessions` → catalog GET) is `scripts/compose-sqlite-volume.sh`. Keep host publish on `127.0.0.1`; Compose sets `Hosting__TrustPublishedPortGateway=true` so Docker published-port NAT (the container default gateway) is trusted without opening private IP ranges.
