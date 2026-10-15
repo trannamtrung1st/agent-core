@@ -16,6 +16,7 @@ colors:
   container: "#141414"
   elevated: "#1f1f1f"
   border: "#303030"
+  borderStrong: "#424242"
   fill: "rgba(255, 255, 255, 0.08)"
   bubble: "rgba(255, 255, 255, 0.12)"
 typography:
@@ -176,7 +177,7 @@ components:
 
 This file records the current Ant Design v6 presentation system. Screens, copy and behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md); `/docs` wins on conflicts. Resolved values come from `antdTheme`, `AppShell`, `app.css` and the product components, rather than an independent runtime token system.
 
-Synchronized on 2026-10-15 against the commit candidate based on `aba8cd94`, including the compact bottom-message refinement. The companion [preview metadata](../../.impeccable/design.json) records candidate source hashes. [Compact feedback verification](../../docs/reports/compact-feedback-verification-2026-10-15.md) records the new local runtime checks; earlier reports retain their original scope. This is not milestone or hosted acceptance.
+Synchronized on 2026-10-15 against the commit candidate based on `de0f7875`, including compact contextual message spacing and a stronger outline. The companion [preview metadata](../../.impeccable/design.json) records candidate source hashes. [Feedback visibility verification](../../docs/reports/feedback-visibility-verification-2026-10-15.md) records current local runtime checks; earlier reports retain their original scope. This is not milestone or hosted acceptance.
 
 The [recent Git and UI review](../../docs/reports/recent-git-ui-design-review-2026-10-14.md) records the earlier attachment/artifact cards, compact pending uploads, FortuneSheet previews, Drive approvals and credential creation review on `d279abfe`. The [integrated verification](../../docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14) records the XLSX clipping-notice and Drive keyboard-rejection corrections. Historical reports retain their original source, hosted acceptance and manual verification gaps.
 
@@ -221,11 +222,12 @@ Dark operate neutrals with one primary accent and one success accent for live mi
 - **Container** (`{colors.container}`): conversation pane and header.
 - **Elevated** (`{colors.elevated}`): composer shell, code, chips-on-dark.
 - **Border** (`{colors.border}`): 1px hairlines (rail edge, header, composer, Spoken separator).
+- **Strong border** (`{colors.borderStrong}`): native Ant Design `colorBorder`; the 1px feedback outline separates transient messages from dark content without a second shadow.
 - **Fill** (`{colors.fill}`): session-row hover across the whole row including overflow.
 - **Bubble** (`{colors.bubble}`): user message fill. Structured chips and active picker choices consume the same Ant Design `colorFillSecondary` role directly.
 - **Text / secondary / tertiary** (`{colors.text}`, `{colors.textSecondary}`, `{colors.textTertiary}`): body, meta/timestamps/Spoken body, Spoken caption and icons.
 
-**The Role Surfaces Rule.** `AppShell` owns the CSS bridge: primary → `colorPrimary`, success → `colorSuccess`, listening hover → `colorSuccessTextHover`, layout/container/elevated → `colorBgLayout`/`colorBgContainer`/`colorBgElevated`, border → `colorBorderSecondary`, fill → `colorFillTertiary`, bubble → `colorFillSecondary`. Error color uses `colorError`; selection uses `colorPrimaryBg`, and live microphone fill uses `colorSuccessBg`. The values above record the resolved dark theme, not a parallel palette. Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.
+**The Role Surfaces Rule.** `AppShell` owns the CSS bridge: primary → `colorPrimary`, success → `colorSuccess`, listening hover → `colorSuccessTextHover`, layout/container/elevated → `colorBgLayout`/`colorBgContainer`/`colorBgElevated`, border → `colorBorderSecondary`, strong border → `colorBorder`, fill → `colorFillTertiary`, bubble → `colorFillSecondary`. Error color uses `colorError`; selection uses `colorPrimaryBg`, and live microphone fill uses `colorSuccessBg`. The values above record the resolved dark theme, not a parallel palette. Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.
 
 ## Typography
 
@@ -392,7 +394,7 @@ Add prebuilt image opens a centered 800px maximum Ant Design Modal, using the sa
 
 **The Submission Feedback Rule.** A failed submission must be immediately visible and lead to a correction. Client validation shows a deduplicated Ant Design warning with the first field error, keeps inline field errors, reveals any collapsed containing section, then scrolls to and focuses that field. Server failures show an action-specific error toast and preserve local details, safe diagnostics and editable drafts. A toast supplements persistent guidance; its disappearance must not erase the recovery path.
 
-**The Bounded Feedback Rule.** Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack near the bottom, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. Leave 96px (six section units) plus the device safe area below the stack for form/composer actions. The stack uses normal flow, grows upward, and scrolls locally beyond half the dynamic viewport so resized messages do not retain stale measured heights. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains available after the toast closes.
+**The Bounded Feedback Rule.** Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack 16px above the bottom safe area, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Use an opaque `{colors.elevated}` surface and one 1px `{colors.borderStrong}` outline, without an additional shadow. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. [AppShell's shared placement hook](../../web/src/app/appFeedbackPlacement.ts) raises the stack only when its default position would overlap a visible footer, composer or sticky configuration action frame, keeping an 8px gap above that surface. The frontmost dialog owns clearance; covered page controls do not reserve space. Closing, scrolling, resizing and growing inputs recalculate placement. The stack uses normal flow and scrolls locally within half the dynamic viewport or the smaller available space above actions. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains after dismissal. Do not restore a fixed 96px gap across every page.
 
 Reuse [adminFormFeedback.ts](../../web/src/features/admin/adminFormFeedback.ts): `validateAdminForm` for explicit modal validation and `showAdminFormValidation` for native `onFinishFailed`. The containing feature opens collapsed sections before deferred scroll/focus. Validation warnings and Sandbox verification errors last 6 seconds; [showAdminFailure](../../web/src/features/admin/adminFailure.tsx) displays errors for 6 seconds, or 8 with diagnostic details. Keep diagnostic Copy available through the existing details popover. Neither helper introduces a custom control or notification system.
 

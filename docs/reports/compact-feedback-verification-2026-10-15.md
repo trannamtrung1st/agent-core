@@ -1,5 +1,7 @@
 # Compact message feedback — 2026-10-15
 
+Presentation successor: [feedback visibility verification](feedback-visibility-verification-2026-10-15.md) replaces the fixed 96px gap below with a 16px default, contextual action clearance and a stronger border. The measurements here retain the original implementation's evidence.
+
 The screenshot showed a long verification error spanning the header. Chat and Admin now share native Ant Design message configuration through `web/src/app/appFeedback.ts`: 40rem maximum width, full wrapping, 16px inline clearance, 8px stack gaps and bottom placement above a 96px action clearance plus the device safe area. The native surface, severity icons, hover pause and diagnostic controls remain. Normal-flow notices avoid stale measured-height offsets when existing messages wrap after resizing. This is a focused UI refinement; [Frontend Implementation](../13-frontend-implementation-spec.md) owns behavior and [DESIGN.md](../../.agents/context/DESIGN.md#admin-forms-creation-dialogs-and-validation) owns presentation guidance.
 
 ## Runtime evidence

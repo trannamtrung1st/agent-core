@@ -1,5 +1,6 @@
 import { useLayoutEffect, type CSSProperties, type ReactNode } from "react";
 import { theme } from "antd";
+import { useAppFeedbackPlacement } from "./appFeedbackPlacement";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { token } = theme.useToken();
@@ -19,6 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     "--ac-color-container": token.colorBgContainer,
     "--ac-color-elevated": token.colorBgElevated,
     "--ac-color-border": token.colorBorderSecondary,
+    "--ac-color-border-strong": token.colorBorder,
     "--ac-color-fill": token.colorFillTertiary,
     "--ac-color-bubble": token.colorFillSecondary,
     "--ac-space-tight": `${token.paddingXXS}px`,
@@ -51,5 +53,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [token]);
 
+  useAppFeedbackPlacement();
   return <div className="app-shell" style={style}>{children}</div>;
 }

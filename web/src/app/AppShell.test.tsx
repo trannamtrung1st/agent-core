@@ -16,6 +16,8 @@ describe("AppShell theme", () => {
     expect(screen.getByTestId("portal").parentElement).toBe(document.body);
     const initial = document.documentElement.style.getPropertyValue("--ac-color-primary");
     expect(initial).toBe(theme.getDesignToken(antdTheme).colorPrimary);
+    expect(document.documentElement.style.getPropertyValue("--ac-color-border-strong"))
+      .toBe(theme.getDesignToken(antdTheme).colorBorder);
     view.rerender(<Surface primary="#722ed1" />);
     expect(document.documentElement.style.getPropertyValue("--ac-color-primary"))
       .toBe(theme.getDesignToken({ ...antdTheme, token: { colorPrimary: "#722ed1" } }).colorPrimary);
@@ -31,6 +33,7 @@ describe("AppShell theme", () => {
     view.unmount();
     expect(root.getPropertyValue("--ac-color-primary")).toBe("previous-theme");
     expect(root.getPropertyValue("--ac-space-section")).toBe("");
+    expect(root.getPropertyValue("--ac-color-border-strong")).toBe("");
     root.removeProperty("--ac-color-primary");
   });
 });

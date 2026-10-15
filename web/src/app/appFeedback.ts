@@ -9,9 +9,9 @@ export const appMessageConfig: ConfigOptions = {
   classNames: { list: "app-feedback-list" },
   styles: {
     list: {
-      bottom: "calc(6 * var(--ac-space-section, 16px) + env(safe-area-inset-bottom, 0px))",
+      bottom: "calc(var(--ac-feedback-clearance, var(--ac-space-section, 16px)) + env(safe-area-inset-bottom, 0px))",
       height: "auto",
-      maxHeight: "50dvh",
+      maxHeight: "min(50dvh, calc(100dvh - var(--ac-feedback-clearance, var(--ac-space-section, 16px)) - env(safe-area-inset-bottom, 0px) - var(--ac-space-section, 16px)))",
       gap: "var(--ac-space-compact, 8px)",
       padding: "0 var(--ac-space-section, 16px)"
     },
@@ -24,6 +24,9 @@ export const appMessageConfig: ConfigOptions = {
       transform: "none",
       marginInline: "auto",
       flexShrink: 0,
+      background: "var(--ac-color-elevated, #1f1f1f)",
+      border: "1px solid var(--ac-color-border-strong, #424242)",
+      boxShadow: "none",
       maxWidth: "min(40rem, calc(100vw - 2 * var(--ac-space-section, 16px)))"
     },
     wrapper: { alignItems: "flex-start" },

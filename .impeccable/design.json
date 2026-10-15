@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T02:49:09.081876+00:00",
+  "generatedAt": "2026-10-15T03:03:04.253412+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -243,6 +243,11 @@
           "#8dc5f8",
           "#b7dcfa"
         ]
+      },
+      "borderStrong": {
+        "role": "neutral",
+        "displayName": "Strong border",
+        "purpose": "Ant Design colorBorder; one-pixel feedback outline on the elevated surface."
       }
     },
     "typographyMeta": {
@@ -310,9 +315,9 @@
     ],
     "inspection": {
       "branch": "main",
-      "baseCommit": "aba8cd9448ebd8cdfb48f912a679dcc61487a2e3",
+      "baseCommit": "de0f78751d46084871227fbc5650bbbd438a530f",
       "sourceSha256": {
-        "web/src/app/AppShell.tsx": "7117c0cb06b9f29bcb5158e5dab2c742e69a88d8e25df3a16a6cfb80b77ed83a",
+        "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
         "web/src/app.css": "f7a3a9fc5e3b810fc39c5019fb85dfd830445ceb89d1518d7c38b89cb6812d01",
         "web/src/features/admin/SandboxProfilesSection.tsx": "32d236b2e1c1382fb7b0003c511cb2b3963558182cde336eeaabb1c712001b18",
         "web/src/features/admin/SandboxProfileDetails.tsx": "8c6ca0a5851648c0c700b36e1f226616a9f9b24150a4147ae88674cc2bed6d86",
@@ -335,21 +340,23 @@
         "web/src/features/admin/InstanceSkillsSection.tsx": "874bd6ecdaf4fadc261bc9e61954a0184b24cb590cb665fafe69f889da952868",
         "web/src/features/admin/InstanceAutomationsSection.tsx": "fe80f38993e493dc9e5c021ea068d9ba90e108a058dcabf62be06f885aa7a421",
         "web/src/services/sandboxes.ts": "aea331050554a77af5c4aa94a70a663c546ea64c8c78f0afb69cca1289ef1a28",
-        "web/src/app/appFeedback.ts": "f6c4d75c561c730657e7aa063b1ee4e2a67caf42e97cb2ff6181172ffbb3ac2f",
+        "web/src/app/appFeedback.ts": "9fb2b3caaffb16f19a2320e0f3c241905c80420f0c417f259cd50eaf1b41bbb2",
         "web/src/features/admin/AdminApp.tsx": "59d46f1a41c694953ceb2c8386ab1ec50bee97ff7c07aee035bd464b9cd84587",
-        "web/src/features/chat/ChatApp.tsx": "fc593d3a21d8b7b4810753940ade2d9867fa66f35d07e16b7fa7ba0fff0b350d"
+        "web/src/features/chat/ChatApp.tsx": "fc593d3a21d8b7b4810753940ade2d9867fa66f35d07e16b7fa7ba0fff0b350d",
+        "web/src/app/appFeedbackPlacement.ts": "4232563daa5a53ce141c2585035b5aa65bd5ea443590c32167c52354c8c1c6e5"
       },
-      "evidence": "docs/reports/compact-feedback-verification-2026-10-15.md",
-      "scope": "Shared native Ant Design messages in Chat/Admin: 40rem maximum, full wrapping, bottom placement with 96px action/safe-area clearance, flow layout on resize and bounded local overflow. Existing Sandbox creation, sparse Instance settings and submission-recovery patterns retained. Source hashes identify staged candidate files, excluding concurrent uncommitted work.",
+      "evidence": "docs/reports/feedback-visibility-verification-2026-10-15.md",
+      "scope": "Shared native Ant Design feedback: 16px default bottom safe-area gap, 40rem maximum, opaque elevated fill and 1px colorBorder outline without a second shadow. AppShell measures overlapping visible actions and leaves 8px above them; frontmost dialogs exclude covered page controls. Flow layout and local overflow are retained. Hashes identify staged candidate source, excluding concurrent edits.",
       "snapshotKind": "commit-candidate",
-      "inspectedAt": "2026-10-15T02:49:09.081876+00:00",
+      "inspectedAt": "2026-10-15T03:03:04.253412+00:00",
       "evidenceRecords": [
+        "docs/reports/feedback-visibility-verification-2026-10-15.md",
         "docs/reports/compact-feedback-verification-2026-10-15.md",
         "docs/reports/admin-form-feedback-verification-2026-10-15.md",
         "docs/reports/oci-sandbox-final-hardening-2026-10-15.md",
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
-      "verification": "Playwright MCP against isolated Synthetic API 5088/Vite 5188: actual Sandbox save rejection/correction and failed verification; five-width resize checks; mobile nested validation; controlled long diagnostic and overflow fixtures; non-destructive Chat rename fixture. 22 focused tests, build and detector passed. No CI or milestone acceptance."
+      "verification": "Playwright MCP: actual profile creation and failed verification at five viewports, mobile nested validation and focus recovery, non-destructive Chat rename fixture with Drawer close and growing composer. 12 focused tests and frontend build passed; final browser console had no errors. No CI or milestone acceptance."
     }
   },
   "components": [
@@ -565,9 +572,9 @@
       "name": "Message feedback",
       "kind": "custom",
       "refersTo": "feedback-toast",
-      "description": "Static message excerpt with illustrative recovery text. Chat and Admin use the same native AntD message configuration: maximum 40rem, 16px inline clearance, full wrapping and a top-aligned icon. Runtime messages sit above a 96px bottom action clearance plus the device safe area, with 8px stack gaps, at most three messages, local overflow beyond half the dynamic viewport and native hover pause. Normal-flow notices preserve position on resize. Persistent field/local details remain after dismissal; this static example has no timer, notification behavior or diagnostic controls.",
+      "description": "Static message excerpt with illustrative text. Native Chat/Admin feedback uses opaque elevated fill and one 1px AntD colorBorder outline, no extra shadow, a 40rem maximum and complete wrapping. Default spacing is 16px from viewport edges plus the bottom safe area. AppShell raises the stack only when visible actions would overlap it, leaving 8px above the frontmost dialog footer, composer or sticky configuration frame. Covered page controls add no gap. Normal flow and local overflow handle resize and input growth. Runtime timing, diagnostics and persistent field guidance stay in the application.",
       "html": "<div class=\"ds-feedback\" aria-label=\"Message feedback preview\"><svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"8\" r=\"8\" fill=\"currentColor\"/><path d=\"m5.5 5.5 5 5m0-5-5 5\" stroke=\"var(--ac-color-elevated,#1f1f1f)\" stroke-width=\"1.5\"/></svg><span>Verification failed. Check server readiness, the saved image and initialization output. Your profile remains available for correction.</span></div>",
-      "css": ".ds-feedback{display:flex;align-items:flex-start;gap:var(--ac-space-compact,8px);width:max-content;max-width:min(40rem,calc(100vw - 32px));margin-inline:auto;padding:9px var(--ac-space-default,12px);border-radius:var(--ac-radius-surface,8px);background:var(--ac-color-elevated,#1f1f1f);color:var(--ac-color-text,rgba(255,255,255,.85));font:400 14px/1.5714285714 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;box-shadow:0 6px 16px 0 rgba(255,255,255,.016),0 3px 6px -4px rgba(255,255,255,.024),0 9px 28px 8px rgba(255,255,255,.01)}.ds-feedback svg{flex-shrink:0;margin-block-start:.2em;color:var(--ac-color-error,#dc4446)}.ds-feedback span{min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:start}"
+      "css": ".ds-feedback{display:flex;align-items:flex-start;gap:var(--ac-space-compact,8px);width:max-content;max-width:min(40rem,calc(100vw - 32px));margin-inline:auto;padding:9px var(--ac-space-default,12px);border-radius:var(--ac-radius-surface,8px);background:var(--ac-color-elevated,#1f1f1f);color:var(--ac-color-text,rgba(255,255,255,.85));font:400 14px/1.5714285714 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;border:1px solid var(--ac-color-border-strong,#424242);box-shadow:none}.ds-feedback svg{flex-shrink:0;margin-block-start:.2em;color:var(--ac-color-error,#dc4446)}.ds-feedback span{min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:start}"
     }
   ],
   "narrative": {
@@ -589,7 +596,7 @@
     "rules": [
       {
         "name": "The Role Surfaces Rule",
-        "body": "`AppShell` owns the CSS bridge: primary \u2192 `colorPrimary`, success \u2192 `colorSuccess`, listening hover \u2192 `colorSuccessTextHover`, layout/container/elevated \u2192 `colorBgLayout`/`colorBgContainer`/`colorBgElevated`, border \u2192 `colorBorderSecondary`, fill \u2192 `colorFillTertiary`, bubble \u2192 `colorFillSecondary`. Error color uses `colorError`; selection uses `colorPrimaryBg`, and live microphone fill uses `colorSuccessBg`. The values above record the resolved dark theme, not a parallel palette. Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.",
+        "body": "`AppShell` owns the CSS bridge: primary \u2192 `colorPrimary`, success \u2192 `colorSuccess`, listening hover \u2192 `colorSuccessTextHover`, layout/container/elevated \u2192 `colorBgLayout`/`colorBgContainer`/`colorBgElevated`, border \u2192 `colorBorderSecondary`, strong border \u2192 `colorBorder`, fill \u2192 `colorFillTertiary`, bubble \u2192 `colorFillSecondary`. Error color uses `colorError`; selection uses `colorPrimaryBg`, and live microphone fill uses `colorSuccessBg`. The values above record the resolved dark theme, not a parallel palette. Map these dark roles in product CSS. Do not invert a light palette or add extra brand hues.",
         "section": "colors"
       },
       {
@@ -629,7 +636,7 @@
       },
       {
         "name": "The Bounded Feedback Rule",
-        "body": "Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack near the bottom, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. Leave 96px (six section units) plus the device safe area below the stack for form/composer actions. The stack uses normal flow, grows upward, and scrolls locally beyond half the dynamic viewport so resized messages do not retain stale measured heights. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains available after the toast closes.",
+        "body": "Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack 16px above the bottom safe area, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Use an opaque `{colors.elevated}` surface and one 1px `{colors.borderStrong}` outline, without an additional shadow. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. [AppShell's shared placement hook](../../web/src/app/appFeedbackPlacement.ts) raises the stack only when its default position would overlap a visible footer, composer or sticky configuration action frame, keeping an 8px gap above that surface. The frontmost dialog owns clearance; covered page controls do not reserve space. Closing, scrolling, resizing and growing inputs recalculate placement. The stack uses normal flow and scrolls locally within half the dynamic viewport or the smaller available space above actions. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains after dismissal. Do not restore a fixed 96px gap across every page.",
         "section": "components"
       }
     ],
