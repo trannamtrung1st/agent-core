@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T03:03:04.253412+00:00",
+  "generatedAt": "2026-10-15T03:07:40.741636+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -315,11 +315,11 @@
     ],
     "inspection": {
       "branch": "main",
-      "baseCommit": "de0f78751d46084871227fbc5650bbbd438a530f",
+      "baseCommit": "0c2c0f273005743fb43b526b3ccd4e02e9cfbbf1",
       "sourceSha256": {
         "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
         "web/src/app.css": "f7a3a9fc5e3b810fc39c5019fb85dfd830445ceb89d1518d7c38b89cb6812d01",
-        "web/src/features/admin/SandboxProfilesSection.tsx": "32d236b2e1c1382fb7b0003c511cb2b3963558182cde336eeaabb1c712001b18",
+        "web/src/features/admin/SandboxProfilesSection.tsx": "f042b7e78217ac5f0feaf0ff6c59f78c4caf44e74bdd6fb7792e1256a3998dea",
         "web/src/features/admin/SandboxProfileDetails.tsx": "8c6ca0a5851648c0c700b36e1f226616a9f9b24150a4147ae88674cc2bed6d86",
         "web/src/features/admin/CredentialsSection.tsx": "17406d7a757110be6d783a5f98abb8c94d1495e438cf982826de7dda8bc8dba6",
         "web/src/features/admin/AddCredentialDialog.tsx": "e9e217a5e84579e386bfb8610e104e48e2955c426db4b192cc714459036b0127",
@@ -345,18 +345,21 @@
         "web/src/features/chat/ChatApp.tsx": "fc593d3a21d8b7b4810753940ade2d9867fa66f35d07e16b7fa7ba0fff0b350d",
         "web/src/app/appFeedbackPlacement.ts": "4232563daa5a53ce141c2585035b5aa65bd5ea443590c32167c52354c8c1c6e5"
       },
-      "evidence": "docs/reports/feedback-visibility-verification-2026-10-15.md",
-      "scope": "Shared native Ant Design feedback: 16px default bottom safe-area gap, 40rem maximum, opaque elevated fill and 1px colorBorder outline without a second shadow. AppShell measures overlapping visible actions and leaves 8px above them; frontmost dialogs exclude covered page controls. Flow layout and local overflow are retained. Hashes identify staged candidate source, excluding concurrent edits.",
-      "snapshotKind": "commit-candidate",
-      "inspectedAt": "2026-10-15T03:03:04.253412+00:00",
+      "evidence": "docs/reports/design-system-sync-2026-10-15.md",
+      "scope": "Documentation sync of current working-tree presentation: native Ant Design v6, shared form/modal/grid layouts, contextual 16px message edges and stronger outline. Uncommitted ordinary-image helper and image-default-user protection copy are reflected separately from the committed feedback presentation. Source hashes identify this inspection, not a release.",
+      "snapshotKind": "working-tree",
+      "inspectedAt": "2026-10-15T03:07:40.741636+00:00",
       "evidenceRecords": [
+        "docs/reports/design-system-sync-2026-10-15.md",
+        "docs/reports/ordinary-sandbox-images-verification-2026-10-15.md",
         "docs/reports/feedback-visibility-verification-2026-10-15.md",
         "docs/reports/compact-feedback-verification-2026-10-15.md",
         "docs/reports/admin-form-feedback-verification-2026-10-15.md",
         "docs/reports/oci-sandbox-final-hardening-2026-10-15.md",
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
-      "verification": "Playwright MCP: actual profile creation and failed verification at five viewports, mobile nested validation and focus recovery, non-destructive Chat rename fixture with Drawer close and growing composer. 12 focused tests and frontend build passed; final browser console had no errors. No CI or milestone acceptance."
+      "verification": "Documentation consistency only in this sync. Reuses prior feedback visibility and separate ordinary-image verification records; no new application run, CI or acceptance. Current initialization-script helper still says non-root despite image-default-user guidance; the sync record identifies this open source-copy mismatch.",
+      "presentationCommit": "0c2c0f273005743fb43b526b3ccd4e02e9cfbbf1"
     }
   },
   "components": [
@@ -564,7 +567,7 @@
       "name": "OCI profile catalog",
       "kind": "custom",
       "refersTo": "sandbox-profile-catalog",
-      "description": "Static excerpt of the shared six-column Admin collection, with a table-local 1080px minimum and full-value titles/copy in the application. Add prebuilt image opens the guarded 800px Ant Design Modal; saved-profile editing remains inline. The shared Global/Instance grid owns 16px gaps, full-column controls and MiB/exact-byte presentation. Tags and Docker Hub names resolve to a fixed digest on Save. Failed submissions retain drafts, announce errors and focus client-invalid fields, including collapsed Advanced controls. Credentials owns optional UTC expiry. Real registry values, modal interactions and notifications are omitted from this static catalog excerpt.",
+      "description": "Static excerpt of the shared six-column Admin collection, with table-local 1080px scrolling and full-value titles/copy in the application. Add prebuilt image opens the guarded 800px Modal; saved-profile editing stays inline. Global/Instance forms share 16px grids and MiB/exact-byte presentation. Tags resolve to saved digests. Current working-tree Image help describes shell and /proc, platform-mounted /working and optional Python; Workload protections names the image default user. The sync record tracks the remaining initialization-helper copy mismatch. Readiness and exact-revision Verify stay distinct from Save. Runtime dialogs, notifications and private values are omitted from this static excerpt.",
       "html": "<section class=\"ds-oci\"><header><input aria-label=\"Search sandbox profiles\" placeholder=\"Search sandbox profiles\"><button type=\"button\">Add prebuilt image</button></header><div class=\"ds-oci-scroll\"><table><thead><tr><th>Profile</th><th>Profile ID</th><th>Revision</th><th>Source</th><th>Image</th><th>Availability</th></tr></thead><tbody><tr><td><a href=\"#profile\">Example OCI</a></td><td>example</td><td>3</td><td>Remote OCI</td><td><code title=\"Illustrative image identity\">sha256:illustrative\u2026</code></td><td><span>Verified \u00b7 eligible</span></td></tr></tbody></table></div></section>",
       "css": ".ds-oci{background:var(--ac-color-container,#141414);color:var(--ac-color-text,rgba(255,255,255,.85));font:14px/1.57 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;padding:16px}.ds-oci header{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}.ds-oci input,.ds-oci button{min-height:32px;border:1px solid var(--ac-color-border,#303030);border-radius:6px;padding:4px 12px;font:inherit}.ds-oci input{min-width:0;flex:1;background:transparent;color:inherit}.ds-oci button{background:var(--ac-color-primary,#1668dc);color:white}.ds-oci-scroll{overflow:auto}.ds-oci table{min-width:1080px;width:100%;border-collapse:collapse}.ds-oci th,.ds-oci td{text-align:start;white-space:nowrap;padding:8px;border-bottom:1px solid var(--ac-color-border,#303030)}.ds-oci code{white-space:nowrap}.ds-oci small{color:var(--ac-color-text-secondary,rgba(255,255,255,.65))}.ds-oci a{color:var(--ac-color-primary,#1668dc)}.ds-oci span{color:var(--ac-color-success,#49aa19)}.ds-oci button{cursor:pointer}.ds-oci button:hover{filter:brightness(1.1)}.ds-oci button:active{filter:brightness(.9)}.ds-oci :is(button,input,a):focus-visible{outline:2px solid var(--ac-color-focus,#3c89e8);outline-offset:2px}@media(max-width:767px){.ds-oci input,.ds-oci button{min-height:40px}}"
     },
