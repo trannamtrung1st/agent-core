@@ -21,7 +21,7 @@ internal static class AgentWorkspaceScript
             if (!request.Tools!.Any(t => t.Name == name)) return [new ModelTextDelta("Workspace capability unavailable."), new ModelCompleted(ModelStopReason.Completed)];
             var args = command == "publish" ? JsonSerializer.Serialize(new { path, displayName = "store-review.md" })
                 : command == "search" ? JsonSerializer.Serialize(new { path = "/home", query = "store-review" }) : JsonSerializer.Serialize(new { path });
-            return [new ModelToolCallEvent(new("agent-home-proof", name, args)), new ModelCompleted(ModelStopReason.ToolCalls)];
+            return [new ModelToolCallEvent(new("agent-home-proof-" + tools.Length, name, args)), new ModelCompleted(ModelStopReason.ToolCalls)];
         }
         if (command == "publish")
         {

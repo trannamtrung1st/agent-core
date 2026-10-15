@@ -277,7 +277,7 @@ public sealed class AutomationDestinationJourneyTests
             configure: services => {
                 services.RemoveAll<IModelCatalog>();
                 services.AddSingleton<IModelCatalog>(new ConfigurationModelCatalog("text-only", [
-                    new("text-only", "Text only", "primary-llm", "scripted-alpha", false, false, true, false, [], null)]));
+                    new("text-only", "Text only", "primary-llm", "scripted-alpha", false, false, true, false, [], null, DeveloperRoleSupport: true)]));
             });
         var s = host.Services;
         var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21);
@@ -312,8 +312,8 @@ public sealed class AutomationDestinationJourneyTests
     }
     private sealed class ReportModelCatalog : IModelCatalog
     {
-        private static readonly ModelDescriptor Execution = new("scripted-alpha", "Execution", "primary-llm", "scripted-alpha", true, true, true, false, [], null);
-        private static readonly ModelDescriptor Report = new("report-model", "Report", "primary-llm", "scripted-beta", true, true, true, false, [], null);
+        private static readonly ModelDescriptor Execution = new("scripted-alpha", "Execution", "primary-llm", "scripted-alpha", true, true, true, false, [], null, DeveloperRoleSupport: true);
+        private static readonly ModelDescriptor Report = new("report-model", "Report", "primary-llm", "scripted-beta", true, true, true, false, [], null, DeveloperRoleSupport: true);
         public bool IncludeReportModel { get; set; } = true;
         public string DefaultKey => Execution.Key;
         public ModelDescriptor Default => Execution;

@@ -37,6 +37,6 @@ internal static class WorkspaceStructureScript
     }
     private static readonly JsonSerializerOptions Options=new(JsonSerializerDefaults.Web) {DefaultIgnoreCondition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault};
     private static IReadOnlyList<ModelGenerationEvent> Call(ModelRequest request,string name,string args) => request.Tools?.Any(t=>t.Name==name)==true
-        ? [new ModelToolCallEvent(new("filesystem-proof",name,args)),new ModelCompleted(ModelStopReason.ToolCalls)]
+        ? [new ModelToolCallEvent(new("filesystem-proof-" + request.Messages.Count(m => m.Role == ModelRole.Tool),name,args)),new ModelCompleted(ModelStopReason.ToolCalls)]
         : [new ModelTextDelta("Filesystem capability unavailable."),new ModelCompleted(ModelStopReason.Completed)];
 }

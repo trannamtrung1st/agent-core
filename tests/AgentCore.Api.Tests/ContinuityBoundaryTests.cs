@@ -387,7 +387,7 @@ public sealed class ContinuityBoundaryTests
             var json = mode == "malformed" ? "{}" : mode == "secret" ? JsonSerializer.Serialize(content with { Goal = "api_key=sk-123456789012345678901234567890" }, new JsonSerializerOptions(JsonSerializerDefaults.Web))
                 : mode == "extra" ? JsonSerializer.Serialize(content, new JsonSerializerOptions(JsonSerializerDefaults.Web))[..^1] + ",\"authority\":\"administrator\"}" : JsonSerializer.Serialize(content, new JsonSerializerOptions(JsonSerializerDefaults.Web));
             yield return new ModelReasoningDelta("PRIVATE_HIDDEN_REASONING");
-            yield return new ModelToolCallEvent(new("record", ExperienceService.RecordTool, json));
+            yield return new ModelToolCallEvent(new("record-" + ++calls, ExperienceService.RecordTool, json));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
         }
     }

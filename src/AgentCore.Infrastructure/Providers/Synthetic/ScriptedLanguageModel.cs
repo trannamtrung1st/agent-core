@@ -108,6 +108,13 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
             yield break;
         }
+        if (request.Context?.Sections.Any(section => section.Id == ContextSectionId.CoreAutomation) == true)
+        {
+            var greeting = request.Context.Text(ContextSectionId.RunTask) == "Say welcome" ? "Welcome!" : "Hello!";
+            yield return new ModelTextDelta(RequestsNativeJson(request) ? ToNativeJson("Say hello", [greeting], []) : greeting);
+            yield return new ModelCompleted(ModelStopReason.Completed);
+            yield break;
+        }
         if (BackgroundSessionScript.Generate(request) is { } backgroundEvents)
         {
             foreach (var item in backgroundEvents) yield return item;

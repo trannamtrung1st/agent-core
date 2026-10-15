@@ -187,7 +187,7 @@ public sealed class AttachmentApiTests : IClassFixture<AgentCoreApiFactory>
         var excerpt = prompt.Text.Split("\"\"\"")[1].Trim();
         using var promptPage = JsonDocument.Parse(excerpt);
         Assert.True(promptPage.RootElement.GetProperty("hasMore").GetBoolean());
-        Assert.Contains("without asking permission", prompt.Text);
+        Assert.Equal("partial", promptPage.RootElement.GetProperty("coverage").GetString());
 
         var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Definition;
         var tools = _factory.Services.GetRequiredService<SessionToolExecutor>();

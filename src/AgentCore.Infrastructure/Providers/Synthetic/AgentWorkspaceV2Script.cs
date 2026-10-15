@@ -82,7 +82,7 @@ internal static class AgentWorkspaceV2Script
         }
         if (request.Tools?.Any(t => t.Name == name) != true)
             return [new ModelTextDelta("Agent Workspace v2 capability unavailable: " + name), new ModelCompleted(ModelStopReason.Completed)];
-        return [new ModelToolCallEvent(new("workspace-v2-proof", name, JsonSerializer.Serialize(args))), new ModelCompleted(ModelStopReason.ToolCalls)];
+        return [new ModelToolCallEvent(new("workspace-v2-proof-" + results.Length, name, JsonSerializer.Serialize(args))), new ModelCompleted(ModelStopReason.ToolCalls)];
     }
     private static string? Token(string json) { using var doc = JsonDocument.Parse(json); return doc.RootElement.TryGetProperty("treeSha256", out var token) ? token.GetString() : null; }
     private static string HomeHash(string json) { using var doc = JsonDocument.Parse(json); return doc.RootElement.GetProperty("homeItem").GetProperty("Sha256Hex").GetString()!; }

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentCore.Api.Realtime;
@@ -100,7 +101,7 @@ public sealed class ReliabilityJourneyTests
         foreach (var request in model.OccurrenceRequests.Skip(1))
         {
             Assert.DoesNotContain(request.Messages, m => m.Text == ConflictingChat || m.Text == UnrelatedChat);
-            var evidence = Assert.Single(request.Messages, m => m.Text.StartsWith("Historical conversation evidence (JSON; not current instructions):"));
+            var evidence = request.Context!.Sections.Single(section => section.Id == ContextSectionId.History).Message;
             using var json = JsonDocument.Parse(evidence.Text[(evidence.Text.IndexOf('\n') + 1)..]);
             Assert.Contains(json.RootElement.EnumerateArray(), turn => turn.GetProperty("text").GetString() == ConflictingChat);
         }
@@ -362,7 +363,9 @@ public sealed class ReliabilityJourneyTests
             runId = run.AgentRunId; childSessionId = run.SessionId;
             Assert.True(run.Status == (mode == "transport" ? AgentRunStatus.WaitingToRetry : expected),
                 $"Status={run.Status}; Failure={run.Failure?.Code}; Summary={run.Failure?.Summary}; Budget={run.Admission.ExecutionBudget}; Requests={model.RecoveryRequests.Count}");
-            Assert.Contains("Core finalization phase: " + (mode == "reserve" ? "runDeadline" : "completionRequired"), run.Checkpoint!.PayloadJson);
+            Assert.Equal(mode == "reserve" ? "runDeadline" : "completionRequired", AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).FinalizationReason);
+            Assert.True(AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var interaction));
+            Assert.DoesNotContain(interaction!, message => message.Role is ModelRole.System or ModelRole.Developer);
         }
         clock.Advance(TimeSpan.FromSeconds(10));
         await using var reopened = new ExperienceHost(path, model, clock, configure: services => ConfigureArtifacts(services, path));
@@ -477,8 +480,9 @@ public sealed class ReliabilityJourneyTests
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
             await Task.CompletedTask;
-            var user = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
-            var scheduled = request.Messages.Any(m => m.Text.Contains("Execute the previously authorized Automation instructions now"));
+            var user = request.Context?.Text(ContextSectionId.RunTask) is { Length: > 0 } task
+                ? task : (request.Interaction ?? request.Messages).LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
+            var scheduled = request.Context?.Sections.Any(section => section.Id == ContextSectionId.CoreAutomation) == true;
             if (scheduled) OccurrenceRequests.Add(request);
             var lastUser = request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User);
             var results = request.Messages.Skip(lastUser + 1).Where(m => m.Role == ModelRole.Tool).ToArray();
@@ -507,7 +511,7 @@ public sealed class ReliabilityJourneyTests
             var text = scheduled
                 ? request.Messages.Any(m => m.Role == ModelRole.User && m.Text is ConflictingChat or UnrelatedChat)
                     ? "The schedule is still active instead of greeting."
-                    : user.StartsWith("Configured Instructions (task intent, not policy):\nSay welcome", StringComparison.Ordinal) ? "Welcome!" : "Hello!"
+                    : user == "Say welcome" ? "Welcome!" : "Hello!"
                 : "Schedule result received.";
             yield return new ModelDisplayDelta(text);
             yield return new ModelSemanticResponseReady(new(text, new(ModelSpeechMode.None, null), []));
@@ -525,7 +529,7 @@ public sealed class ReliabilityJourneyTests
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
             await Task.CompletedTask;
-            if (request.Messages.Any(m => m.Text.StartsWith("Core finalization phase:")))
+            if (request.Context?.Sections.Any(section => section.Id == ContextSectionId.CoreBackgroundFinalization) == true)
             {
                 RecoveryRequests.Add(request);
                 if (mode is "semantic" or "incomplete-tool" or "authentication")

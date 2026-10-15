@@ -154,10 +154,8 @@ public sealed class RealComposeHostTests(RealComposeHostFixture fixture)
         var free = await client.PostAsJsonAsync(
             "/api/v2/sessions",
             new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text", Model: new SessionModelChoiceRequest("openrouter-free")));
-        Assert.Equal(HttpStatusCode.Created, free.StatusCode);
-        var freeView = await free.Content.ReadFromJsonAsync<SessionViewResponse>();
-        Assert.Equal("openrouter-free", freeView!.Model!.CatalogKey);
-        Assert.Equal("openrouter/free", freeView.Model.ModelId);
+        Assert.Equal(HttpStatusCode.BadRequest, free.StatusCode);
+        Assert.Contains("does not support the required separate Core/system and Runtime/developer roles", await free.Content.ReadAsStringAsync());
 
         var lunaSession = await client.PostAsJsonAsync(
             "/api/v2/sessions",
