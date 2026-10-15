@@ -12,6 +12,8 @@ The owner-authorized OCI sandbox catalog cutover replaces implicit Workbench boo
 
 The [Sandbox selection and recovery successor](docs/reports/sandbox-selection-recovery-verification-2026-10-15.md) adds `sandbox.profiles`, optional `sandbox.exec.profileId`, sparse Instance allowed subsets and one safely switched generation per Session. General Assistant v31 adds discovery and recovery guidance while v30 remains immutable. Runs pin all effective authorized profile revisions and source epochs; Sessions retain their own choice across Runs/reconnects/restarts and idle expiry. Explicit reset returns to the effective default. Descriptor-relative staging traversal rejects links/replacement races, and known clean cancellation releases the environment while retaining the original receipt. Read-only inspection remains available during execution outages. Deployment still requires an intentional restart of the known host; verification never restarts the user's application.
 
+The [ordinary .NET build and timeout follow-up](docs/reports/sandbox-dotnet-quiescence-timeout-verification-2026-10-15.md) verifies unmodified build/run commands, bounded managed SDK-server shutdown with full quiescence before file import, and timeout defaults from the actual Session-selected profile. Existing user Sessions and deployment are preserved.
+
 The owner-authorized P10 OpenSandbox cutover is implemented and accepted for a
 **trusted, single-user local demo** on behavior `4c8f2507`. All eight
 [hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016)

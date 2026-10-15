@@ -94,7 +94,7 @@ public sealed partial class SessionToolExecutor
             }
             var allowed = new[] { "command", "argv", "cwd", "timeoutSeconds", "background", "profileId" };
             if (args.EnumerateObject().Any(p => !allowed.Contains(p.Name, StringComparer.Ordinal))) return SandboxError("invalid", "Unknown sandbox argument; infrastructure and ownership settings are not tool arguments.");
-            var timeout = args.TryGetProperty("timeoutSeconds", out var seconds) && seconds.TryGetInt32(out var parsed) ? parsed : profile.MaxCommandSeconds;
+            int? timeout = args.TryGetProperty("timeoutSeconds", out var seconds) && seconds.TryGetInt32(out var parsed) ? parsed : null;
             var background = args.TryGetProperty("background", out var bg) && bg.ValueKind == JsonValueKind.True;
             result = await sandboxService.ExecuteAsync(access, new(args.TryGetProperty("command",out _) ? command : null, argv,
                 args.TryGetProperty("cwd",out _) ? cwd : "/working", timeout, background, args.TryGetProperty("profileId", out _) ? selectedId : null), ct);

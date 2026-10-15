@@ -127,7 +127,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             if (lease.State != SandboxLeaseState.Ready || lease.ActiveExecutionId is not null)
                 throw AgentCoreErrors.Conflict("Sandbox requires process inspection, stop or reset before another command.");
             await using var sdk = await ConnectAsync(lease, ct);
-            var timeout = Math.Min(command.TimeoutSeconds, lease.Profile.MaxCommandSeconds);
+            var timeout = Math.Min(command.TimeoutSeconds ?? lease.Profile.MaxCommandSeconds, lease.Profile.MaxCommandSeconds);
             var scratch = await workspace.CaptureScratchAsync(access.SessionId, access.Definition, ct);
             if (scratch.Fingerprint != lease.ScratchFingerprint) await HydrateAsync(lease, scratch.Transfer, ct);
             lease = await ReserveExecutionLifetimeAsync(sdk, lease, timeout, ct);

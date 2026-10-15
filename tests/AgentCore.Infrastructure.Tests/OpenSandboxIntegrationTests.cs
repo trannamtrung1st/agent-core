@@ -29,6 +29,52 @@ public sealed class OpenSandboxFactAttribute : FactAttribute
 public sealed class OpenSandboxIntegrationTests
 {
     [OpenSandboxFact]
+    public async Task Tool_timeout_defaults_to_the_explicit_or_retained_profile_and_explicit_limits_still_clamp()
+    {
+        await using var f = await Fixture.Create(maxCommand: 1);
+        var alternate = await f.AddProfile("longer", f.Profile.ImageReference, maxCommandSeconds: 4);
+        var definition = f.Definition with { Environment = new(ToolAllowlist: [ToolCatalog.SandboxExec]) };
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:f.Session.AgentInstanceId, AgentRunId:f.Run.AgentRunId, OwnedSessionId:f.Session.SessionId);
+        foreach (var (arguments, seconds) in new[] {
+            ("{\"command\":\"printf default\"}", 1),
+            ("{\"command\":\"sleep 2; printf alternate\",\"profileId\":\"longer\"}", 4),
+            ("{\"command\":\"sleep 2; printf retained\"}", 4),
+            ("{\"command\":\"printf clamped\",\"timeoutSeconds\":180}", 4),
+            ("{\"command\":\"printf explicit\",\"timeoutSeconds\":1}", 1) })
+        {
+            var call = Guid.NewGuid().ToString("N");
+            var result = await f.Executor().ExecuteAsync(definition, f.Session.SessionId, new(call, ToolCatalog.SandboxExec, arguments), 8192, admission:admission);
+            using var parsed = System.Text.Json.JsonDocument.Parse(result.Text);
+            Assert.True(parsed.RootElement.TryGetProperty("exitCode", out var exit) && exit.GetInt32() == 0, result.Text);
+            var receipt = (await f.Store.GetOperationAsync(f.Session.SessionId, f.Run.AgentRunId, call))!;
+            Assert.InRange((receipt.DeadlineAt!.Value - receipt.StartedAt).TotalSeconds, seconds, seconds + .1);
+            if (seconds == 4) Assert.Equal(alternate.Id, receipt.ProfileId);
+            f.Reopen();
+        }
+    }
+
+    [OpenSandboxFact(requiresOrdinaryImage: true)]
+    public async Task Ordinary_dotnet_build_and_run_without_server_flags_commit_each_command()
+    {
+        await using var f = await Fixture.Create();
+        await f.UseImage(Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")!);
+        var setup = await f.Exec("printf '<configuration><packageSources><clear /></packageSources></configuration>' > NuGet.Config; dotnet new console -o app --no-restore");
+        Assert.True(setup.Status == "Completed", setup.Status + ": " + setup.Stderr);
+        var build = await f.Exec("dotnet build app");
+        Assert.True(build.Status == "Completed", build.Status + ": " + build.Stderr + "\n" + build.Stdout);
+        Assert.Equal(0, build.ExitCode); Assert.Equal("committed", build.WorkspaceSyncStatus);
+        var run = await f.Exec("dotnet run --project app");
+        Assert.True(run.Status == "Completed", run.Status + ": " + run.Stderr);
+        Assert.Equal(0, run.ExitCode); Assert.Contains("Hello, World!", run.Stdout);
+        Assert.Contains("Console.WriteLine", await f.Read("app/Program.cs"));
+        var canonical = (await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Fingerprint;
+        var blocked = await f.Exec("dotnet build app -t:Rebuild; for file in /proc/[0-9]*/comm; do IFS= read -r name < \"$file\" 2>/dev/null || continue; if [ \"$name\" = VBCSCompiler ]; then pid=${file#/proc/}; pid=${pid%/comm}; kill -STOP \"$pid\"; fi; done");
+        Assert.Equal("Indeterminate", blocked.Status); Assert.Equal("backgroundProcessesActive", blocked.FailureCategory);
+        Assert.Equal("notCommitted", blocked.WorkspaceSyncStatus); Assert.True(blocked.TerminationConfirmed);
+        Assert.Equal(canonical, (await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Fingerprint);
+    }
+
+    [OpenSandboxFact]
     public async Task Background_cancellation_at_commit_does_not_replace_the_settled_receipt_with_dispatch_evidence()
     {
         foreach (var point in new[] { "beforeSwap", "afterSwap" })
@@ -618,9 +664,9 @@ public sealed class OpenSandboxIntegrationTests
             Service = new(_options,Store,Workspace,_memory,_runs,TimeProvider.System,logger:_logs.CreateLogger<OpenSandboxService>());
         }
         public SandboxAccess Access(string? call = null) => new(Session.SessionId,Session.AgentInstanceId,Run.AgentRunId,Run.Claim!.Generation,call ?? Guid.NewGuid().ToString("N"),_profile,Definition);
-        public async Task<SandboxProfile> AddProfile(string id, string image)
+        public async Task<SandboxProfile> AddProfile(string id, string image, int? maxCommandSeconds = null)
         {
-            var profile = _profile with { Id=id, Name=id, ImageReference=image, InitializationScript=null };
+            var profile = _profile with { Id=id, Name=id, ImageReference=image, InitializationScript=null, MaxCommandSeconds=maxCommandSeconds??_profile.MaxCommandSeconds };
             await Store.SaveProfileAsync(profile, 0);
             var verification = await Service.VerifyProfileAsync(profile, default);
             Assert.True(verification.Passed, verification.Message); await Store.SaveVerificationAsync(verification);

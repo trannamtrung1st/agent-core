@@ -7,7 +7,7 @@ namespace AgentCore.Application.Ports;
 public sealed record SandboxAccess(Guid SessionId, Guid AgentInstanceId, Guid AgentRunId, Guid ClaimGeneration,
     string ToolCallId, SandboxProfile Profile, AgentDefinition Definition);
 public sealed record SandboxCommandRequest(string? Command, IReadOnlyList<string>? Argv = null,
-    string Cwd = "/working", int TimeoutSeconds = 120, bool Background = false, string? ProfileId = null);
+    string Cwd = "/working", int? TimeoutSeconds = null, bool Background = false, string? ProfileId = null);
 public sealed record SandboxCommandResult(Guid ExecutionId, string Status, int? ExitCode, string Stdout,
     string Stderr, bool Truncated, long DurationMs, string WorkspaceSyncStatus, string? DiagnosticId = null, bool Background = false, string CommandText = "", string? ProfileId = null, long? ProfileRevision = null, Guid? Generation = null,
     string? Phase = null, string? FailureCategory = null, string? CancellationReason = null, bool TerminationConfirmed = false, string? Error = null, string? Recovery = null, string? EnvironmentState = null, Guid? EnvironmentGeneration = null);

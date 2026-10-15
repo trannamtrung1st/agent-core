@@ -8,6 +8,15 @@ namespace AgentCore.Application.Tests;
 
 public sealed class ToolRegistryPolicyTests
 {
+    [Fact]
+    public void Sandbox_timeout_omission_uses_selection_rather_than_a_fixed_schema_default()
+    {
+        using var schema = System.Text.Json.JsonDocument.Parse(ToolRegistry.Get(ToolCatalog.SandboxExec).ModelDefinition.ParametersJson);
+        Assert.False(schema.RootElement.GetProperty("properties").GetProperty("timeoutSeconds").TryGetProperty("default", out _));
+        SandboxCommands.Validate(new("true"));
+        Assert.Throws<AgentCore.Application.Sessions.AgentCoreException>(() => SandboxCommands.Validate(new("true", TimeoutSeconds:0)));
+    }
+
     [Theory]
     [InlineData(ToolCatalog.AttachmentsRead)]
     [InlineData(ToolCatalog.OfficeSpreadsheetInspect)]
