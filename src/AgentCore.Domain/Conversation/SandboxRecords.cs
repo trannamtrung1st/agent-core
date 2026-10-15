@@ -17,7 +17,8 @@ public sealed record SandboxExecution(Guid Id, Guid SessionId, Guid AgentInstanc
     DateTimeOffset StartedAt, string? ProviderCommandId = null, DateTimeOffset? FinishedAt = null,
     int? ExitCode = null, string Stdout = "", string Stderr = "", bool Truncated = false,
     string WorkspaceSyncStatus = "pending", string? DiagnosticId = null, bool Background = false, string CommandText = "", long? DurationMs = null, DateTimeOffset? DeadlineAt = null, string? ProfileId = null, long? ProfileRevision = null,
-    string? Phase = null, string? FailureCategory = null, string? CancellationReason = null, bool TerminationConfirmed = false);
+    string? Phase = null, string? FailureCategory = null, string? CancellationReason = null, bool TerminationConfirmed = false,
+    bool GenerationRecycled = false, bool RemoteTerminationConfirmed = false);
 
 // Verification is an observation of one exact immutable configuration revision.
 public sealed record SandboxProfileVerification(string ProfileId, long ProfileRevision,

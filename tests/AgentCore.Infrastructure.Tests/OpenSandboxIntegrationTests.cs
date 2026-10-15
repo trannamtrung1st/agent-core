@@ -29,6 +29,79 @@ public sealed class OpenSandboxFactAttribute : FactAttribute
 public sealed class OpenSandboxIntegrationTests
 {
     [OpenSandboxFact]
+    public async Task Opaque_python_and_node_children_retire_generically_without_affecting_a_sibling_session()
+    {
+        await using var f = await Fixture.Create();
+        var sibling = await f.SiblingAccess();
+        try
+        {
+            var foreign = await f.Service.ExecuteAsync(sibling, new("printf foreign > sibling.txt"));
+            foreach (var (command, file, expected) in new[] {
+                ("python -c \"import subprocess,pathlib; pathlib.Path('python.txt').write_text('python-exact'); subprocess.Popen(['sleep','120'],start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\"", "python.txt", "python-exact"),
+                ("node -e \"require('fs').writeFileSync('node.txt','node-exact');require('child_process').spawn('sleep',['120'],{detached:true,stdio:'ignore'}).unref()\"", "node.txt", "node-exact") })
+            {
+                var result = await f.Exec(command);
+                Assert.Equal("Completed",result.Status);Assert.Equal(0,result.ExitCode);Assert.True(result.GenerationRecycled);Assert.Equal(expected,await f.Read(file));
+                Assert.Equal(foreign.Generation,(await f.Service.InspectAsync(sibling.SessionId))!.Generation);
+                Assert.Equal("Ready",(await f.Service.InspectAsync(sibling.SessionId))!.State);
+            }
+            var stillOwned = await f.Service.ExecuteAsync(sibling with { ToolCallId="after-other-retirements" },new("cat sibling.txt"));
+            Assert.Equal("foreign",stillOwned.Stdout); Assert.Equal(foreign.Generation,stillOwned.Generation);
+        }
+        finally { await f.Service.StopSessionAsync(sibling.SessionId); }
+    }
+
+    [OpenSandboxFact]
+    public async Task Generic_retirement_crash_boundaries_reconcile_files_once_without_shell_replay()
+    {
+        foreach (var point in new[] { "commandCompleted", "retirementRequested", "remoteTerminated", "retired", "collected", "canonicalCommitted", "stagingCleanup", "stagingDeleted" })
+        {
+            await using var f = await Fixture.Create();
+            var access = f.Access("crash-" + point);
+            var command = new SandboxCommandRequest("printf x >> once.txt; sleep 120 >/dev/null 2>&1 &");
+            f.Service.FinalizationCheckpoint = stage => { if (stage == point) throw new OpenSandboxService.FinalizationCrash(); };
+            await Assert.ThrowsAsync<OpenSandboxService.FinalizationCrash>(() => f.Service.ExecuteAsync(access, command).AsTask());
+            var pending = (await f.Store.GetOperationAsync(f.Session.SessionId, f.Run.AgentRunId, access.ToolCallId))!;
+            Assert.Equal("Completed", pending.State.ToString()); Assert.Equal(0, pending.ExitCode);
+            if (point is "canonicalCommitted" or "stagingCleanup" or "stagingDeleted")
+                await f.Workspace.WriteAsync(f.Session.SessionId, "/workspace/working/newer.txt", "newer"u8.ToArray());
+            f.Reopen(); await f.Service.ReconcileAsync();
+            var receipt = await f.Service.InspectProcessAsync(f.Session.SessionId, pending.Id);
+            Assert.Equal("committed", receipt.WorkspaceSyncStatus); Assert.True(receipt.GenerationRecycled); Assert.True(receipt.TerminationConfirmed);
+            Assert.Equal("x", await f.Read("once.txt"));
+            if (point is "canonicalCommitted" or "stagingCleanup" or "stagingDeleted") Assert.Equal("newer", await f.Read("newer.txt"));
+            Assert.Equal(receipt.ExecutionId, (await f.Service.ExecuteAsync(access, command)).ExecutionId);
+            Assert.Equal("x", await f.Read("once.txt"));
+        }
+    }
+
+    [OpenSandboxFact]
+    public async Task Generic_residual_processes_recycle_only_the_owned_generation_and_preserve_completed_files()
+    {
+        await using var f = await Fixture.Create();
+        var normal = await f.Exec("printf initial > ordinary.txt");
+        Assert.Equal("Completed", normal.Status); Assert.False(normal.GenerationRecycled);
+        var reused = await f.Exec("cat ordinary.txt"); Assert.Equal(normal.Generation, reused.Generation);
+        var selected = await f.AddProfile("selected-opaque", f.Profile.ImageReference);
+        foreach (var child in new[] { "sleep 120 >/dev/null 2>&1 &", "setsid /bin/sh -c 'trap \"\" TERM; while :; do sleep 120; done' </dev/null >/dev/null 2>&1 &" })
+        {
+            var access = f.Access();
+            var command = new SandboxCommandRequest("printf retained > recycled.txt; " + child + " exit 7", ProfileId:selected.Id);
+            var completed = await f.Service.ExecuteAsync(access, command);
+            Assert.Equal("Completed", completed.Status); Assert.Equal(7, completed.ExitCode);
+            Assert.Equal("committed", completed.WorkspaceSyncStatus); Assert.True(completed.GenerationRecycled); Assert.True(completed.RemoteTerminationConfirmed);
+            Assert.True(completed.TerminationConfirmed); Assert.Equal("Terminated", (await f.Service.InspectAsync(f.Session.SessionId))!.State);
+            Assert.Equal("retained", await f.Read("recycled.txt"));
+            Assert.Equal(completed.ExecutionId, (await f.Service.ExecuteAsync(access, command)).ExecutionId);
+            var fresh = await f.Exec("cat recycled.txt");
+            Assert.Equal("retained", fresh.Stdout); Assert.NotEqual(completed.Generation, fresh.Generation);
+            Assert.Equal(selected.Id, fresh.ProfileId);
+        }
+        var switched = await f.Service.ExecuteAsync(f.Access(),new("cat recycled.txt",ProfileId:f.Profile.Id));
+        Assert.Equal(f.Profile.Id,switched.ProfileId);Assert.Equal("retained",switched.Stdout);
+    }
+
+    [OpenSandboxFact]
     public async Task Tool_timeout_defaults_to_the_explicit_or_retained_profile_and_explicit_limits_still_clamp()
     {
         await using var f = await Fixture.Create(maxCommand: 1);
@@ -44,6 +117,7 @@ public sealed class OpenSandboxIntegrationTests
         {
             var call = Guid.NewGuid().ToString("N");
             var result = await f.Executor().ExecuteAsync(definition, f.Session.SessionId, new(call, ToolCatalog.SandboxExec, arguments), 8192, admission:admission);
+            Assert.True(result.EffectObserved, result.Text);
             using var parsed = System.Text.Json.JsonDocument.Parse(result.Text);
             Assert.True(parsed.RootElement.TryGetProperty("exitCode", out var exit) && exit.GetInt32() == 0, result.Text);
             var receipt = (await f.Store.GetOperationAsync(f.Session.SessionId, f.Run.AgentRunId, call))!;
@@ -51,6 +125,21 @@ public sealed class OpenSandboxIntegrationTests
             if (seconds == 4) Assert.Equal(alternate.Id, receipt.ProfileId);
             f.Reopen();
         }
+    }
+
+    [OpenSandboxFact]
+    public async Task A_new_blocked_tool_call_reports_prior_evidence_without_claiming_an_effect()
+    {
+        await using var f = await Fixture.Create();
+        var definition = f.Definition with { Environment = new(ToolAllowlist: [ToolCatalog.SandboxExec]), ExecutionSandboxProfile=f.Profile, ExecutionSandboxProfiles=[f.Profile] };
+        var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:f.Session.AgentInstanceId, AgentRunId:f.Run.AgentRunId, OwnedSessionId:f.Session.SessionId);
+        var access = f.Access("background-once");
+        var command = new SandboxCommandRequest("sleep 120",Background:true);
+        var active = await f.Service.ExecuteAsync(access,command);
+        Assert.Equal("Running",active.Status);
+        Assert.Equal(active,await f.Service.ExecuteAsync(access,command));
+        var blocked=await f.Executor().ExecuteAsync(definition,f.Session.SessionId,new("blocked-effect",ToolCatalog.SandboxExec,"{\"command\":\"printf never\"}"),8192,admission:admission);
+        Assert.True(blocked.RecoveryRequired,blocked.Text);Assert.False(blocked.EffectObserved,blocked.Text);
     }
 
     [OpenSandboxFact(requiresOrdinaryImage: true)]
@@ -67,11 +156,7 @@ public sealed class OpenSandboxIntegrationTests
         Assert.True(run.Status == "Completed", run.Status + ": " + run.Stderr);
         Assert.Equal(0, run.ExitCode); Assert.Contains("Hello, World!", run.Stdout);
         Assert.Contains("Console.WriteLine", await f.Read("app/Program.cs"));
-        var canonical = (await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Fingerprint;
-        var blocked = await f.Exec("dotnet build app -t:Rebuild; for file in /proc/[0-9]*/comm; do IFS= read -r name < \"$file\" 2>/dev/null || continue; if [ \"$name\" = VBCSCompiler ]; then pid=${file#/proc/}; pid=${pid%/comm}; kill -STOP \"$pid\"; fi; done");
-        Assert.Equal("Indeterminate", blocked.Status); Assert.Equal("backgroundProcessesActive", blocked.FailureCategory);
-        Assert.Equal("notCommitted", blocked.WorkspaceSyncStatus); Assert.True(blocked.TerminationConfirmed);
-        Assert.Equal(canonical, (await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Fingerprint);
+
     }
 
     [OpenSandboxFact]
@@ -101,7 +186,7 @@ public sealed class OpenSandboxIntegrationTests
     {
         foreach (var (command, phase, category) in new[] {
             ("ln -s /etc/passwd unsafe", "fileCollection", "unsafeFiles"),
-            ("sleep 120 >/dev/null 2>&1 & printf child-started", "processInspection", "backgroundProcessesActive") })
+            ("sleep 120 >/dev/null 2>&1 & printf child-started", "completed", (string?)null) })
         {
             await using var f = await Fixture.Create();
             var background = await f.Service.ExecuteAsync(f.Access(), new(command, Background: true));
@@ -112,8 +197,8 @@ public sealed class OpenSandboxIntegrationTests
                 await f.Service.ReconcileAsync();
                 receipt = await f.Service.InspectProcessAsync(f.Session.SessionId, background.ExecutionId);
             }
-            Assert.Equal("Indeterminate", receipt.Status); Assert.Equal(phase, receipt.Phase); Assert.Equal(category, receipt.FailureCategory);
-            Assert.Equal("notCommitted", receipt.WorkspaceSyncStatus); Assert.True(receipt.TerminationConfirmed);
+            Assert.Equal("Completed", receipt.Status); Assert.Equal(phase, receipt.Phase); Assert.Equal(category, receipt.FailureCategory);
+            Assert.Equal(category is null?"committed":"notCommitted", receipt.WorkspaceSyncStatus); Assert.True(receipt.TerminationConfirmed);
             Assert.Single((await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Transfer.Entries);
         }
     }
@@ -313,7 +398,7 @@ public sealed class OpenSandboxIntegrationTests
         await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:first.Generation);
         f.SetInstanceSetup("printf broken > partial.txt; echo failed >&2; exit 7",9);
         var before=(await f.Workspace.CaptureScratchAsync(f.Session.SessionId,f.Definition)).Fingerprint;
-        await Assert.ThrowsAsync<AgentCoreException>(async()=>await f.Exec("true"));
+        Assert.Equal("recovery_required",(await f.Exec("true")).Error);
         Assert.Equal(before,(await f.Workspace.CaptureScratchAsync(f.Session.SessionId,f.Definition)).Fingerprint);
         var failed=(await f.Service.InspectAsync(f.Session.SessionId))!;Assert.Equal("Failed",failed.Initialization!.State);Assert.Equal(7,failed.Initialization.ExitCode);Assert.Contains("failed",failed.Initialization.Stderr);
         Assert.Equal("recovery_required",(await f.Exec("true")).Error);
@@ -486,10 +571,14 @@ public sealed class OpenSandboxIntegrationTests
         Assert.InRange(Encoding.UTF8.GetByteCount(output.Stdout),1,32768); Assert.InRange(Encoding.UTF8.GetByteCount(output.Stderr),1,32768);
         Assert.DoesNotContain('\uFFFD',output.Stdout); Assert.DoesNotContain('\uFFFD',output.Stderr);
         Assert.Equal(0,(await f.Exec("printf safe > retained.txt")).ExitCode);
-        foreach (var command in new[] { "ln -s /etc/passwd link", "mkfifo pipe", "printf secret > .env", "printf a > file; printf b > FILE", "python -I -c \"import socket; socket.socket(socket.AF_UNIX).bind('socket')\"" })
+        // Docker Desktop bind mounts may be case insensitive. Probe representability
+        // rather than claiming two distinct names were collected when they alias.
+        var collision = "printf a > file; if test -e FILE; then printf blocked > .env.fixture; else printf b > FILE; fi";
+        foreach (var command in new[] { "ln -s /etc/passwd link", "mkfifo pipe", "printf secret > .env", collision, "python -I -c \"import socket; socket.socket(socket.AF_UNIX).bind('socket')\"" })
         {
             var before = (await f.Workspace.CaptureScratchAsync(f.Session.SessionId,f.Definition)).Fingerprint;
-            Assert.Equal("notCommitted",(await f.Exec(command)).WorkspaceSyncStatus);
+            var rejected = await f.Exec(command);
+            Assert.True(rejected.WorkspaceSyncStatus == "notCommitted", command + ": " + rejected.WorkspaceSyncStatus + "/" + rejected.Phase + "/" + rejected.FailureCategory + ": " + rejected.Stderr);
             Assert.Equal(before,(await f.Workspace.CaptureScratchAsync(f.Session.SessionId,f.Definition)).Fingerprint);
             await f.Service.StopSessionAsync(f.Session.SessionId);
         }
@@ -592,17 +681,17 @@ public sealed class OpenSandboxIntegrationTests
     }
 
     [OpenSandboxFact]
-    public async Task Real_sdk_rejects_links_and_untracked_children_without_corrupting_canonical_scratch()
+    public async Task Real_sdk_rejects_links_and_recycles_untracked_children_without_corrupting_canonical_scratch()
     {
         await using var f = await Fixture.Create();
         Assert.Equal(0, (await f.Exec("printf safe > source.txt")).ExitCode);
         var before = (await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Fingerprint;
         var linked = await f.Exec("ln source.txt hardlink.txt");
-        Assert.Equal("Indeterminate",linked.Status); Assert.Equal("notCommitted",linked.WorkspaceSyncStatus);
+        Assert.Equal("Completed",linked.Status); Assert.Equal("unsafeFiles",linked.FailureCategory); Assert.Equal("notCommitted",linked.WorkspaceSyncStatus);
         Assert.Equal(before, (await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Fingerprint);
         await f.Service.StopSessionAsync(f.Session.SessionId);
         var detached = await f.Exec("sleep 120 >/tmp/detached.log 2>&1 &");
-        Assert.Equal("Indeterminate", detached.Status); Assert.Equal("notCommitted", detached.WorkspaceSyncStatus);
+        Assert.Equal("Completed", detached.Status); Assert.True(detached.GenerationRecycled); Assert.Equal("committed", detached.WorkspaceSyncStatus);
         Assert.Equal(before, (await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Fingerprint);
     }
 

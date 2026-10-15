@@ -1,5 +1,6 @@
 # Sandbox selection, mounted-file safety and recovery — 2026-10-15
 
+> Historical evidence: the [generic Linux runtime successor](generic-linux-sandbox-runtime-verification-2026-10-15.md) replaces language-specific shutdown/remaining-child rejection with owned-generation retirement. Results below remain tied to their original source.
 This owner-requested successor implements both supplied feedback documents on the current main checkout. GitHub main was verified read-only at `0f994232`; the existing diagnostics edits were independently committed as `16a2d6d6` during the task and preserved. No hosted CI was dispatched or awaited, no full CI suite was run, and no historical milestone/freeze is renewed.
 
 ## Observed user issue and deployment evidence

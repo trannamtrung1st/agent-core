@@ -10,7 +10,8 @@ public sealed record SandboxCommandRequest(string? Command, IReadOnlyList<string
     string Cwd = "/working", int? TimeoutSeconds = null, bool Background = false, string? ProfileId = null);
 public sealed record SandboxCommandResult(Guid ExecutionId, string Status, int? ExitCode, string Stdout,
     string Stderr, bool Truncated, long DurationMs, string WorkspaceSyncStatus, string? DiagnosticId = null, bool Background = false, string CommandText = "", string? ProfileId = null, long? ProfileRevision = null, Guid? Generation = null,
-    string? Phase = null, string? FailureCategory = null, string? CancellationReason = null, bool TerminationConfirmed = false, string? Error = null, string? Recovery = null, string? EnvironmentState = null, Guid? EnvironmentGeneration = null);
+    string? Phase = null, string? FailureCategory = null, string? CancellationReason = null, bool TerminationConfirmed = false, string? Error = null, string? Recovery = null, string? EnvironmentState = null, Guid? EnvironmentGeneration = null,
+    bool GenerationRecycled = false, bool RemoteTerminationConfirmed = false);
 public sealed record SandboxEnvironmentInfo(Guid SessionId, Guid Generation, string State, string ProfileId,
     long ProfileRevision, DateTimeOffset ExpiresAt, Guid? ActiveExecutionId, string? DiagnosticId, Guid? LastExecutionId = null, string? Message = null,
     DateTimeOffset? CreatedAt = null, DateTimeOffset? LastActivityAt = null, DateTimeOffset? MaximumLifetimeAt = null,

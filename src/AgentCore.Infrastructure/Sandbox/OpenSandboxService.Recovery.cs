@@ -52,11 +52,12 @@ public sealed partial class OpenSandboxService
     private async ValueTask SettleTerminatedExecutionAsync(SandboxLease lease, SandboxExecution execution, CancellationToken ct)
     {
         var status = await CommitStatusAsync(execution, ct);
-        var settled = execution with { WorkspaceSyncStatus = status, TerminationConfirmed = true,
+        var deleted = status is "committed" or "notCommitted" && TryDeleteStaging(lease);
+        var settled = execution with { WorkspaceSyncStatus = status, TerminationConfirmed = deleted, RemoteTerminationConfirmed = true,
             State = execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running ? SandboxExecutionState.Indeterminate : execution.State,
             FinishedAt = execution.FinishedAt ?? time.GetUtcNow() };
         await SaveReceiptAsync(settled, false, ct);
-        await SaveAsync(lease with { State = status is "committed" or "notCommitted" ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsResync,
-            ActiveExecutionId = null }, ct);
+        await SaveAsync(lease with { State = status is "committed" or "notCommitted" ? deleted ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsReconciliation : SandboxLeaseState.NeedsResync,
+            ActiveExecutionId = deleted ? null : execution.Id }, ct);
     }
 }

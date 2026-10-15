@@ -19,6 +19,33 @@ it('shows failed command evidence with separate collapsed stderr and truthful tr
   expect(screen.getByText('Output was truncated at the bounded log limit.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Standard error'})); await screen.findByText('failure details');
 });
+it('keeps completed recycled commands concise and reveals lifecycle evidence on demand',async()=>{
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'Terminated',cleanupReason:'executionRecycle',selectedProfileId:'workbench'});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,exitCode:7,generationRecycled:true,remoteTerminationConfirmed:true,terminationConfirmed:true,phase:'completed'});
+  render(tree());await screen.findByText('Environment recycled');
+  expect(screen.getByText('Container recycled')).toBeInTheDocument();
+  expect(screen.queryByText('Previous execution needs review')).not.toBeInTheDocument();
+  expect(screen.queryByText('Termination and staging cleanup confirmed')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Lifecycle evidence'}));
+  await screen.findByText('Termination and staging cleanup confirmed');
+  expect(screen.getByText(/Exit 7/)).toBeInTheDocument();
+});
+it('distinguishes completed files from pending staging cleanup',async()=>{
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'NeedsReconciliation',cleanupPending:true});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,exitCode:0,generationRecycled:true,remoteTerminationConfirmed:true,phase:'stagingCleanup'});
+  render(tree());await screen.findByText(/Command completion and canonical file commit are confirmed/);
+  expect(screen.queryByText(/command completion was not confirmed/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'Lifecycle evidence'})).not.toBeInTheDocument();
+  expect(screen.getByText('Container termination confirmed; staging retained')).toBeInTheDocument();
+});
+it('does not promise retained selection after an explicit reset of a recycled generation',async()=>{
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'Terminated',cleanupReason:'reset',selectedProfileId:null});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,generationRecycled:true,remoteTerminationConfirmed:true,terminationConfirmed:true,phase:'completed'});
+  render(tree());await screen.findByText('Environment ended');
+  expect(screen.queryByText('Environment recycled')).not.toBeInTheDocument();
+  expect(screen.queryByText(/keeps this Session’s selected profile/)).not.toBeInTheDocument();
+  expect(screen.queryByText('Previous execution needs review')).not.toBeInTheDocument();
+});
 it('groups labeled command diagnostics with metadata and copies the owned context', async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', {configurable:true,value:{writeText}});

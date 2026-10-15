@@ -1,5 +1,6 @@
 # Ordinary .NET quiescence and selected-profile timeout — 2026-10-15
 
+> Historical evidence: the [generic Linux runtime successor](generic-linux-sandbox-runtime-verification-2026-10-15.md) replaces language-specific shutdown/remaining-child rejection with owned-generation retirement. Results below remain tied to their original source.
 This narrow owner-requested follow-up starts from main `839fa556`. It addresses the two remaining review items without changing execution ownership, image authority, canonical Workspace CAS or the single-generation Session lifecycle. No hosted CI, deployment restart, user Session reset or historical command replay was performed.
 
 ## Reproduction and correction
@@ -15,7 +16,7 @@ The first disposable stock .NET SDK test used ordinary `dotnet build app` with n
 - [Ordinary SDK regression](../../tests/AgentCore.Infrastructure.Tests/OpenSandboxIntegrationTests.cs): stock SDK verification, `dotnet new console -o app --no-restore`, ordinary `dotnet build app` and `dotnet run --project app`, successful Hello World output and exact canonical source retention. No build-server suppression flags/environment variables are passed into the workload. A deliberately stopped compiler server exercises unconfirmed shutdown and proves no new canonical import occurs.
 - The same real fixture exercises the actual Session tool executor with a 1-second default profile and a 4-second alternate. The explicit alternate and a later omitted-profile command each sleep two seconds and complete. Durable deadlines confirm the selected 4-second default; explicit 180 seconds clamps to 4, explicit 1 remains 1, and initial omitted selection uses the 1-second default. Reopening the service between commands retains selection. Deadline assertions allow the timestamp-call precision difference rather than requiring identical clock reads.
 - Existing real unknown-child/link, background collection and confirmed cancellation regressions verify that managed cleanup does not weaken rejection, import fences or non-replayable recovery.
-- [Recognition tests](../../tests/AgentCore.Infrastructure.Tests/SandboxBuildServerTests.cs) accept exact native/managed compiler servers and MSBuild server nodes; normal builds, mismatched SDK roots, `/working` lookalikes and arbitrary sleep processes are rejected.
+- [Recognition tests](https://github.com/trannamtrung1st/agent-core/blob/82d136682ee0cb8d2767022997bfa41ad7476719/tests/AgentCore.Infrastructure.Tests/SandboxBuildServerTests.cs) accept exact native/managed compiler servers and MSBuild server nodes; normal builds, mismatched SDK roots, `/working` lookalikes and arbitrary sleep processes are rejected.
 - [Schema/policy checks](../../tests/AgentCore.Application.Tests/ToolRegistryPolicyTests.cs) retain optional timeout omission and reject explicit out-of-range input.
 
 Focused verification completed:

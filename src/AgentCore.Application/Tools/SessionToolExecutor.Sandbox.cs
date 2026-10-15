@@ -9,6 +9,9 @@ public sealed partial class SessionToolExecutor
 {
     private static ToolExecutionResult SandboxError(string code, string message) => TextResult(Error(code,message));
     private static readonly JsonSerializerOptions SandboxJson = new(JsonSerializerDefaults.Web);
+    internal static bool SandboxEffectUnknown(SandboxCommandResult result, bool currentCall)
+        => result.Error is null && result.Status == "Indeterminate"
+            || currentCall && (result.Status == "Indeterminate" || result.WorkspaceSyncStatus is "unknown" or "committing");
     private async Task<ToolExecutionResult> ExecuteSandboxToolAsync(AgentDefinition definition, Guid sessionId, ModelToolCall call,
         JsonElement args, ToolExecutionAdmission? admission, int remainingBytes, CancellationToken ct)
     {
@@ -99,13 +102,16 @@ public sealed partial class SessionToolExecutor
             result = await sandboxService.ExecuteAsync(access, new(args.TryGetProperty("command",out _) ? command : null, argv,
                 args.TryGetProperty("cwd",out _) ? cwd : "/working", timeout, background, args.TryGetProperty("profileId", out _) ? selectedId : null), ct);
         }
+        var effectObserved = call.Name == ToolCatalog.SandboxExec && result.ExecutionId != Guid.Empty
+            && (await sandboxStore.GetOperationAsync(sessionId, run.AgentRunId, call.Id, ct))?.Id == result.ExecutionId;
         var stderr = ToolJsonResults.ClipUtf8Prefix(result.Stderr, Math.Max(0, (remainingBytes - 700) / 4));
         return TextResult(ToolJsonResults.FitJsonWithContentField(remainingBytes, result.Stdout,
             (stdout, truncated) => JsonSerializer.Serialize(new { result.ExecutionId, result.Status, result.ExitCode, stdout, stderr,
                 combinedLogs = result.Background,
                 truncated = truncated || result.Truncated, result.DurationMs, result.WorkspaceSyncStatus, result.DiagnosticId,
                 result.ProfileId, result.ProfileRevision, result.Generation, result.EnvironmentState, result.EnvironmentGeneration, result.Phase, result.FailureCategory, result.CancellationReason, result.TerminationConfirmed,
+                result.GenerationRecycled, result.RemoteTerminationConfirmed,
                 error = result.Error ?? (result.Status == "Indeterminate" ? "outcome_unknown" : null),
-                recovery = result.Recovery ?? (result.Status == "Indeterminate" ? "Outcome unknown. Do not repeat automatically; inspect and explicitly reset." : null) }, SandboxJson))) with { OutcomeUnknown = result.Error is null && result.Status == "Indeterminate", RecoveryRequired = result.Error == "recovery_required", SafeFailureSummary = result.FailureCategory is null ? null : SandboxFailureSummary.Describe(result.FailureCategory, result.Phase, result.WorkspaceSyncStatus, result.TerminationConfirmed) };
+                recovery = result.Recovery ?? (result.Status == "Indeterminate" ? "Outcome unknown. Do not repeat automatically; inspect and explicitly reset." : null) }, SandboxJson))) with { OutcomeUnknown = SandboxEffectUnknown(result, effectObserved), RecoveryRequired = result.Error == "recovery_required", EffectObserved = effectObserved, SafeFailureSummary = result.FailureCategory is null ? null : SandboxFailureSummary.Describe(result.FailureCategory, result.Phase, result.WorkspaceSyncStatus, result.TerminationConfirmed) };
     }
 }

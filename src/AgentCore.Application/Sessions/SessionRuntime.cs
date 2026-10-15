@@ -3731,7 +3731,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     // Safety evidence survives clipping/aggregate output exhaustion.
                     var sandboxUnknown = executionResult.OutcomeUnknown || (!executionResult.RecoveryRequired && SandboxOutcomeUnknown(call.Name, executionResult.Text));
                     if (effectFenced)
-                        await MarkRunEffectAsync(cause, request.ResponseId, call, effectHash!, sandboxUnknown ? AgentRunSideEffectDisposition.Indeterminate : RejectedEffect(executionResult.Text)
+                        await MarkRunEffectAsync(cause, request.ResponseId, call, effectHash!, sandboxUnknown ? AgentRunSideEffectDisposition.Indeterminate : !executionResult.EffectObserved && RejectedEffect(executionResult.Text)
                             ? AgentRunSideEffectDisposition.DefinitelyFailed : AgentRunSideEffectDisposition.Succeeded, generateToken).ConfigureAwait(false);
                     if (_boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.Indeterminate or AgentRunSideEffectDisposition.InFlight
                         && call.Name is ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserNavigate && !RejectedEffect(executionResult.Text))

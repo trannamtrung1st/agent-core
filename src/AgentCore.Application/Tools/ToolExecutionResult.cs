@@ -13,7 +13,7 @@ public sealed record ToolExecutionResult(
     bool ReplaceTriggerProposal = false,
     PendingTriggerProposal? TriggerProposal = null,
     string? WorkspaceCwd = null,
-    bool OutcomeUnknown = false, bool RecoveryRequired = false, string? SafeFailureSummary = null)
+    bool OutcomeUnknown = false, bool RecoveryRequired = false, string? SafeFailureSummary = null, bool EffectObserved = false)
 {
     public static ToolExecutionResult FromText(string text) => new(text);
 }

@@ -27,6 +27,8 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gates = new();
     private SemaphoreSlim Gate(Guid id) => _gates.GetOrAdd(id, _ => new(1, 1));
     internal Action<SandboxExecution>? ExecutionReceiptFault { get; set; }
+    internal Action<string>? FinalizationCheckpoint { get; set; }
+    internal sealed class FinalizationCrash : Exception { }
     private ValueTask SaveReceiptAsync(SandboxExecution execution, bool create, CancellationToken ct)
     {
         ExecutionReceiptFault?.Invoke(execution);
@@ -99,7 +101,8 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             if (previous is not null)
             {
                 if (previous.ActionHash != hash) throw AgentCoreErrors.Conflict("Tool operation already names another command.");
-                return Result(previous); // A receipt is observation, never permission to repeat.
+                var environment = await store.GetLeaseAsync(access.SessionId, ct);
+                return environment is null ? Result(previous) : FinalizedResult(environment, previous); // Observation, never permission to repeat.
             }
             var observed = await store.GetLeaseAsync(access.SessionId, ct);
             if (observed is not null && (observed.State is SandboxLeaseState.NeedsResync or SandboxLeaseState.NeedsReconciliation or SandboxLeaseState.Terminating or SandboxLeaseState.Failed or SandboxLeaseState.Provisioning
@@ -146,7 +149,6 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 receipt = receipt with { Stdout = stdout.Text, Stderr = stderr.Text, Truncated = stdout.Truncated || stderr.Truncated };
                 await SaveReceiptAsync(receipt, false, ct);
             }
-            var scratchCommitted = false;
             try
             {
                 var handlers = new ExecutionHandlers {
@@ -173,48 +175,30 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 if (!command.Background) receipt = receipt with { DurationMs = Math.Max(0, execution.Complete?.ExecutionTimeMs ?? (long)(time.GetUtcNow() - receipt.StartedAt).TotalMilliseconds) };
                 if (!command.Background)
                 {
-                    await ValidateAccessAsync(access, ct);
                     receipt = receipt with { Phase = "processInspection" };
-                    await ConfirmQuiescentAsync(sdk, lease, ct);
-                    receipt = receipt with { Phase = "fileCollection" };
-                    var transfer = await CollectAsync(lease, ct);
-                    await ValidateAccessAsync(access, ct);
-                    receipt = receipt with { WorkspaceSyncStatus = "committing", Phase = "workspaceCommit" };
-                    await SaveReceiptAsync(receipt, false, ct);
-                    await workspace.CommitScratchAsync(access.SessionId, transfer, scratch.Fingerprint, ct, token => ValidateAccessAsync(access, token), receipt.Id);
-                    scratchCommitted = true;
-                    receipt = receipt with { WorkspaceSyncStatus = "committed", Phase = "completed" };
-                    await SaveReceiptAsync(receipt, false, CancellationToken.None);
-                    lease = await SaveAsync(lease with { State = SandboxLeaseState.Ready, ActiveExecutionId = null, LastActivityAt = time.GetUtcNow(), ExpiresAt = await RenewIdleAsync(sdk, lease, ct),
-                        ScratchFingerprint = (await workspace.CaptureScratchAsync(access.SessionId, access.Definition, ct)).Fingerprint }, ct);
+                    await SaveReceiptAsync(receipt, false, ct); // Completion survives a crash before retirement/import.
+                    FinalizationCheckpoint?.Invoke("commandCompleted");
+                    (lease, receipt) = await FinalizeCompletedExecutionAsync(sdk, lease, receipt, access.Definition, token => ValidateAccessAsync(access, token), ct);
+                    return FinalizedResult(lease, receipt);
                 }
                 await SaveReceiptAsync(receipt, false, ct);
                 return Result(receipt);
             }
-            catch (Exception error)
+            catch (Exception error) when (error is not FinalizationCrash)
             {
                 if (error is AgentCoreException core) stderr.Append("\n" + core.Message);
-                else stderr.Append("\nSandbox execution outcome could not be confirmed. Inspect the diagnostic and reset before retrying.");
-                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-                var terminated = await TryTerminateAsync(lease, cleanup.Token);
-                var runCancelled = await RunCancellationRequestedAsync(access.SessionId, access.AgentInstanceId, access.AgentRunId, CancellationToken.None);
-                var cancellation = error is OperationCanceledException || runCancelled;
-                receipt = receipt with { State = cancellation && terminated ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate,
-                    Stdout = stdout.Text, Stderr = stderr.Text, Truncated = stdout.Truncated || stderr.Truncated,
-                    FinishedAt = time.GetUtcNow(), WorkspaceSyncStatus = scratchCommitted ? "committed" : await CommitStatusAsync(receipt, CancellationToken.None), DiagnosticId = Guid.CreateVersion7().ToString("D"),
-                    FailureCategory = cancellation ? "cancellation" : ClassifyFailure(error, receipt.Phase), CancellationReason = cancellation ? runCancelled ? "runCancellation" : "requestCancellation" : null,
-                    TerminationConfirmed = terminated };
-                // Even successful termination cannot imply uncertain effects were replay-safe.
+                else stderr.Append("\nSandbox finalization could not be confirmed. Inspect the retained command, file and cleanup evidence; do not replay automatically.");
                 try
                 {
+                    (lease, receipt) = await AbortExecutionFinalizationAsync(lease, receipt, error);
+                    receipt = receipt with { Stdout = stdout.Text, Stderr = stderr.Text, Truncated = stdout.Truncated || stderr.Truncated };
                     await SaveReceiptAsync(receipt, false, CancellationToken.None);
-                    lease = await SaveAsync(lease with { State = terminated ? receipt.WorkspaceSyncStatus is "committed" or "notCommitted" ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsResync : SandboxLeaseState.NeedsReconciliation,
-                        ActiveExecutionId = terminated ? null : receipt.Id, CleanupReason = cancellation ? "cancelled" : "executionFailed",
-                        DiagnosticId = receipt.DiagnosticId, SafeMessage = terminated && receipt.WorkspaceSyncStatus is "committed" or "notCommitted"
-                            ? "Termination and staging cleanup confirmed. The original execution receipt is retained; commands are never replayed. A new authorized command may create an environment."
-                            : "Execution or file synchronization remains unresolved. Inspect durable evidence and explicitly reset before further commands." }, CancellationToken.None);
                 }
-                catch { /* Never mask an uncertain dispatched effect with a generic persistence error. The dispatch receipt remains for recovery. */ }
+                catch
+                {
+                    if (error is OperationCanceledException) throw;
+                    return await UnsettledFailureResultAsync(lease, receipt);
+                }
                 if (error is OperationCanceledException) throw;
                 return Result(receipt);
             }
@@ -404,6 +388,20 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     { var next = lease with { Revision = lease.Revision + 1 }; await store.SaveLeaseAsync(next, lease.Revision, ct); return next; }
     private async Task<bool> TryTerminateAsync(SandboxLease lease, CancellationToken ct)
     {
+        if (!await TryTerminateRemoteAsync(lease, ct)) return false;
+        return TryDeleteStaging(lease);
+    }
+    private bool TryDeleteStaging(SandboxLease lease)
+    {
+        try { if (lease.MountContractVersion == 1) Mounts.Delete(lease.Generation); return true; }
+        catch
+        {
+            logger?.LogWarning("Sandbox staging cleanup remains pending. SessionId={SessionId} Generation={Generation} Failure=localStaging", lease.SessionId, lease.Generation);
+            return false;
+        }
+    }
+    private async Task<bool> TryTerminateRemoteAsync(SandboxLease lease, CancellationToken ct)
+    {
         if (lease.ProviderId is null) return false;
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct); budget.CancelAfter(TimeSpan.FromSeconds(20));
         string failure = "transport"; int? status = null;
@@ -419,7 +417,6 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 await using var manager = SandboxManager.Create(new SandboxManagerOptions { ConnectionConfig = Connection() });
                 try { await manager.KillSandboxAsync(lease.ProviderId, request.Token); }
                 catch (SandboxApiException e) when (e.StatusCode == 404) { /* Confirmed absent; local cleanup is still required. */ }
-                if (lease.MountContractVersion == 1) Mounts.Delete(lease.Generation);
                 return true;
             }
             catch (SandboxApiException e)
@@ -473,11 +470,33 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 : metadata.LifecycleStatus != SessionLifecycleStatus.Active ? "sessionDeactivated" : "sessionLifecycle";
             lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminating, CleanupReason = reason, SelectedProfileId = reason == "reset" ? null : lease.SelectedProfileId,
                 TransitionProfileId = reason == "reset" ? null : lease.TransitionProfileId, TransitionProfileRevision = reason == "reset" ? null : lease.TransitionProfileRevision, TransitionPhase = reason == "reset" ? null : lease.TransitionPhase, CleanupPasses = lease.CleanupPasses + 1, LastCleanupAttemptAt = time.GetUtcNow() }, ct);
-            if (!await TryTerminateAsync(lease, ct)) throw AgentCoreErrors.Persistence("Sandbox cleanup is pending; its durable receipt will be reconciled.");
-            if (lease.ActiveExecutionId is { } id && await store.GetExecutionAsync(trustedSessionId, id, ct) is { State: SandboxExecutionState.Dispatching or SandboxExecutionState.Running } execution)
-                await SaveReceiptAsync(execution with { State = SandboxExecutionState.Canceled, FinishedAt = time.GetUtcNow(), WorkspaceSyncStatus = await CommitStatusAsync(execution, ct),
-                    FailureCategory = "cancellation", CancellationReason = reason == "reset" ? "ownerReset" : "sessionLifecycle", TerminationConfirmed = true }, false, ct);
-            await SaveAsync(lease with { State = SandboxLeaseState.Terminated, ActiveExecutionId = null }, ct);
+            var pending = lease.ActiveExecutionId is { } id ? await store.GetExecutionAsync(trustedSessionId, id, ct) : null;
+            if (pending is null && lease.LastExecutionId is { } lastId
+                && await store.GetExecutionAsync(trustedSessionId, lastId, ct) is { } last
+                && (HasPendingFinalization(last) || last.WorkspaceSyncStatus is "pending" or "committing" or "unknown"))
+                pending = last; // An interrupted lease update may have cleared the active pointer.
+            if (pending is not null)
+            {
+                // Persist the discard intent before termination. Recovery must not import
+                // a completed-but-unpublished command after owner reset or Session end.
+                pending = pending with { FailureCategory = pending.FailureCategory ?? "cancellation",
+                    CancellationReason = reason == "reset" ? "ownerReset" : "sessionLifecycle" };
+                await SaveReceiptAsync(pending, false, ct);
+            }
+            if (!await TryTerminateRemoteAsync(lease, ct)) throw AgentCoreErrors.Persistence("Sandbox cleanup is pending; its durable receipt will be reconciled.");
+            if (pending is not null)
+            {
+                if (pending.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running)
+                    pending = pending with { State = SandboxExecutionState.Canceled, FinishedAt = time.GetUtcNow() };
+                await SettleTerminatedExecutionAsync(lease, pending, ct);
+                if ((await store.GetLeaseAsync(trustedSessionId, ct))?.State != SandboxLeaseState.Terminated)
+                    throw AgentCoreErrors.Persistence("Sandbox file outcome or staging cleanup remains unresolved; retained evidence must be reconciled.");
+            }
+            else
+            {
+                if (!TryDeleteStaging(lease)) throw AgentCoreErrors.Persistence("Sandbox staging cleanup is pending.");
+                await SaveAsync(lease with { State = SandboxLeaseState.Terminated, ActiveExecutionId = null }, ct);
+            }
         }
         finally { gate.Release(); }
     }
@@ -489,10 +508,17 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             try
             {
                 var lease = await store.GetLeaseAsync(item.SessionId, ct); if (lease is null || lease.State == SandboxLeaseState.Terminated) continue;
+                var finalizingId = lease.ActiveExecutionId ?? lease.LastExecutionId;
+                var finalizing = finalizingId is { } fid ? await store.GetExecutionAsync(lease.SessionId, fid, ct) : null;
+                if (finalizing is not null && HasPendingFinalization(finalizing))
+                {
+                    await ReconcileFinalizationAsync(lease, finalizing, ct);
+                    continue;
+                }
                 if (lease.State == SandboxLeaseState.NeedsResync && lease.LastExecutionId is { } lastId
                     && await store.GetExecutionAsync(lease.SessionId, lastId, ct) is { } last)
                 {
-                    if (await TryTerminateAsync(lease, ct)) await SettleTerminatedExecutionAsync(lease, last, ct);
+                    if (await TryTerminateRemoteAsync(lease, ct)) await SettleTerminatedExecutionAsync(lease, last, ct);
                     continue;
                 }
                 var session = await sessions.LoadMetadataAsync(lease.SessionId, ct);
@@ -518,14 +544,14 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                         foreach (var remote in page.Items) await manager.KillSandboxAsync(remote.Id, ct);
                         await FinalizeCleanupAsync(lease, ct);
                     }
-                    else if (await TryTerminateAsync(lease, ct)) await FinalizeCleanupAsync(lease, ct);
+                    else if (await TryTerminateRemoteAsync(lease, ct)) await FinalizeCleanupAsync(lease, ct);
                 }
                 else if (lease.ActiveExecutionId is { } executionId)
                 {
                     var execution = await store.GetExecutionAsync(lease.SessionId, executionId, ct);
                     if (execution is { WorkspaceSyncStatus: "committing" })
                     {
-                        var killed = await TryTerminateAsync(lease, ct);
+                        var killed = await TryTerminateRemoteAsync(lease, ct);
                         if (killed) await SettleTerminatedExecutionAsync(lease, execution, ct);
                         else await SaveAsync(lease with { State = SandboxLeaseState.NeedsReconciliation }, ct);
                         continue;
@@ -535,7 +561,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                         var run = await runs.GetAsync(new(lease.AgentInstanceId,ownerProfile),execution.AgentRunId,ct);
                         if (run?.Claim?.Generation != execution.ClaimGeneration || run.Claim.LeaseExpiresAtUtc <= time.GetUtcNow() || run.CancellationRequested || (execution.DeadlineAt ?? execution.StartedAt.AddSeconds(lease.Profile.MaxCommandSeconds)) <= time.GetUtcNow())
                         {
-                            var killed = await TryTerminateAsync(lease,ct);
+                            var killed = await TryTerminateRemoteAsync(lease,ct);
                             var retained = execution with { State = run?.CancellationRequested == true ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate,
                                 FailureCategory = run?.CancellationRequested == true ? "cancellation" : "ownerLost", CancellationReason = run?.CancellationRequested == true ? "runCancellation" : null };
                             if (killed) await SettleTerminatedExecutionAsync(lease, retained, ct);
@@ -558,7 +584,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                         if (ownerRun is null || ownerRun.CancellationRequested || ownerRun.Status is AgentRunStatus.Cancelled or AgentRunStatus.Failed
                             || (execution.DeadlineAt ?? execution.StartedAt.AddSeconds(lease.Profile.MaxCommandSeconds)) <= time.GetUtcNow())
                         {
-                            if (await TryTerminateAsync(lease, ct)) await FinalizeCleanupAsync(lease, ct);
+                            if (await TryTerminateRemoteAsync(lease, ct)) await FinalizeCleanupAsync(lease, ct);
                         }
                         else await RefreshProcessLockedAsync(lease, execution, false, ct);
                     }
@@ -570,7 +596,6 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     }
     private async ValueTask FinalizeCleanupAsync(SandboxLease lease, CancellationToken ct)
     {
-        if (lease.MountContractVersion == 1) Mounts.Delete(lease.Generation);
         var id = lease.ActiveExecutionId ?? lease.LastExecutionId;
         if (id is { } executionId && await store.GetExecutionAsync(lease.SessionId, executionId, ct) is { } execution)
         {
@@ -579,10 +604,11 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             await SettleTerminatedExecutionAsync(lease, execution, ct);
             return;
         }
+        if (!TryDeleteStaging(lease)) { await SaveAsync(lease with { State = SandboxLeaseState.NeedsReconciliation }, ct); return; }
         await SaveAsync(lease with { State = SandboxLeaseState.Terminated, ActiveExecutionId = null }, ct);
     }
     private static SandboxCommandResult Result(SandboxExecution e) => new(e.Id, e.State.ToString(), e.ExitCode, e.Stdout, e.Stderr, e.Truncated,
-        e.DurationMs ?? (e.FinishedAt is { } end ? Math.Max(0, (long)(end - e.StartedAt).TotalMilliseconds) : 0), e.WorkspaceSyncStatus, e.DiagnosticId, e.Background, e.CommandText, e.ProfileId, e.ProfileRevision, e.Generation, e.Phase, e.FailureCategory, e.CancellationReason, e.TerminationConfirmed);
+        e.DurationMs ?? (e.FinishedAt is { } end ? Math.Max(0, (long)(end - e.StartedAt).TotalMilliseconds) : 0), e.WorkspaceSyncStatus, e.DiagnosticId, e.Background, e.CommandText, e.ProfileId, e.ProfileRevision, e.Generation, e.Phase, e.FailureCategory, e.CancellationReason, e.TerminationConfirmed, GenerationRecycled: e.GenerationRecycled, RemoteTerminationConfirmed: e.RemoteTerminationConfirmed);
     private sealed class BoundedText(int maxBytes)
     {
         private readonly StringBuilder _text = new(); private int _bytes;

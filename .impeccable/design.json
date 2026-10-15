@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T04:41:45.691212+00:00",
+  "generatedAt": "2026-10-15T07:16:14.412187+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -315,7 +315,7 @@
     ],
     "inspection": {
       "branch": "main",
-      "baseCommit": "16a2d6d6",
+      "baseCommit": "82d136682ee0cb8d2767022997bfa41ad7476719",
       "sourceSha256": {
         "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
         "web/src/app.css": "f8f9e11ec625dbac34d631efb0e4f8eeb7f596d79816043ed80863c97660b95a",
@@ -326,7 +326,7 @@
         "web/src/features/admin/DefinitionSandboxPolicy.tsx": "f5346ee577bb3167c6369aee392d1fc68770b187fa6321b2ccd6c225f59d05fe",
         "web/src/features/admin/InstanceSettingsSection.tsx": "5271b1a2d4f6d34aef2f64f26c32c06775f03d0b19d99751255161485f361c64",
         "web/src/features/admin/InstanceSandboxSummary.tsx": "61c664c0d8ae6fa268451a86fdf1880e7da9cc8c731e003205336a6351321d30",
-        "web/src/features/chat/SessionSandboxDrawer.tsx": "5f8e4a0eef7748e148dc9f7e531fddf5132e74d015f021b15526f5541ea5a176",
+        "web/src/features/chat/SessionSandboxDrawer.tsx": "c36913615212a634dd61515c0287af2b9518ec7b7d8ca936053b6d659c60b4c3",
         "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66",
         "web/src/features/admin/AgentConfigurationLayout.tsx": "b36bde3bb2f8a11cc14abb20f29df25656b9ee2ee5490b1663d724513589e73b",
         "web/src/features/admin/adminFormFeedback.ts": "0d14ed96ba94bad96af6da12af25e1075ecce880cf8056700c49e93e17546bd5",
@@ -339,7 +339,7 @@
         "web/src/features/admin/SkillDrawer.tsx": "48c5aab113b87567037d4a275c220f9d436f0751299117e2de3e5dfdf1705ce2",
         "web/src/features/admin/InstanceSkillsSection.tsx": "874bd6ecdaf4fadc261bc9e61954a0184b24cb590cb665fafe69f889da952868",
         "web/src/features/admin/InstanceAutomationsSection.tsx": "fe80f38993e493dc9e5c021ea068d9ba90e108a058dcabf62be06f885aa7a421",
-        "web/src/services/sandboxes.ts": "56d2afeee18e2c4044495c67f7d17df81e2c4fe97b1425b6d203a90c5f0390c0",
+        "web/src/services/sandboxes.ts": "08abb08f1b9f3bc76f127ff3ded240a4f596e680387f75e28b353e76e65b7674",
         "web/src/app/appFeedback.ts": "9fb2b3caaffb16f19a2320e0f3c241905c80420f0c417f259cd50eaf1b41bbb2",
         "web/src/features/admin/AdminApp.tsx": "59d46f1a41c694953ceb2c8386ab1ec50bee97ff7c07aee035bd464b9cd84587",
         "web/src/features/chat/ChatApp.tsx": "fc593d3a21d8b7b4810753940ade2d9867fa66f35d07e16b7fa7ba0fff0b350d",
@@ -348,11 +348,12 @@
         "web/src/features/chat/detailPopover.tsx": "81e986114b6813c91d5ed8b31f8367cd9e71ae99e6e7487bed66da800e64db5b",
         "web/src/features/chat/diagnosticCopy.ts": "810d4b8f13bbba9306a3c2a023827d4ff030f8c16921d84216077b0a5ad3c330"
       },
-      "evidence": "docs/reports/sandbox-selection-recovery-verification-2026-10-15.md",
-      "scope": "Sandbox allowed-subset/default provenance, exact-profile setup verification and Session-scoped selection/recovery in existing Ant Design v6 owners. Five responsive widths, keyboard focus and polling-safe semantic reset; ledger owns actual runtime evidence and hardware limits.",
+      "evidence": "docs/reports/generic-linux-sandbox-runtime-verification-2026-10-15.md",
+      "scope": "Generic opaque Linux execution finalization in the existing Session drawer; independent exit/file/recycle/cleanup evidence and progressive lifecycle detail. Admin policy/setup remains in its incumbent owner.",
       "snapshotKind": "commit-candidate",
-      "inspectedAt": "2026-10-15T04:41:45.691212+00:00",
+      "inspectedAt": "2026-10-15T07:16:14.412187+00:00",
       "evidenceRecords": [
+        "docs/reports/generic-linux-sandbox-runtime-verification-2026-10-15.md",
         "docs/reports/sandbox-selection-recovery-verification-2026-10-15.md",
         "docs/reports/sandbox-diagnostics-polish-verification-2026-10-15.md",
         "docs/reports/design-system-sync-2026-10-15.md",
@@ -363,7 +364,7 @@
         "docs/reports/oci-sandbox-final-hardening-2026-10-15.md",
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
-      "verification": "Playwright MCP exercised saved two-profile Definition/Instance policy, inherited subset reset and dirty drafts, real Docker profile selection across turns, retained canonical bytes, polling-safe reset, quiescence failure, inspection outage/Retry and Escape focus. At 1440/1024/768/390/320px, Instance and Session drawer had no horizontal overflow. All 50 focused frontend tests, TypeScript and production build passed. The primary ledger records exact runtime evidence, controlled fault injection and hardware limits. No CI or renewed milestone acceptance. Follow-up review: 24 drawer/summary tests and both builds pass; real owner Reset clears a retained selection after termination, inspection outage/Retry preserves evidence, and a controlled missing-default fixture submits the explicit alternate verification target. See the follow-up ledger section."
+      "verification": "Real isolated Synthetic + pinned OpenSandbox: persistent child completed/committed/recycled, then dotnet selection, retained selection and exact selected.txt through a switch back to General. Chat and Instance Sandbox at 1440/1024/768/390/320px fit the viewport after transitions. Copy, two-level Escape/focus and 503/Retry retained evidence passed. Controlled pending-retirement/unknown-commit projections preserved known exit and remote-only termination truth. Final review keeps pending lifecycle evidence expanded and reset selection truthful. 37 focused frontend tests and production build passed. No CI or renewed milestone acceptance; ledger owns hardware/runtime limits."
     }
   },
   "components": [

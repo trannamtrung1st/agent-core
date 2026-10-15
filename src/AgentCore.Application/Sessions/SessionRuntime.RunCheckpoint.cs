@@ -88,13 +88,13 @@ public sealed partial class SessionRuntime
         catch (JsonException) { return false; }
     }
 
-    private static bool RejectedEffect(string text)
+    internal static bool RejectedEffect(string text)
     {
         try
         {
             using var json = JsonDocument.Parse(text);
             return json.RootElement.ValueKind == JsonValueKind.Object && (
-                json.RootElement.TryGetProperty("error", out _) ||
+                json.RootElement.TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null ||
                 json.RootElement.TryGetProperty("saved", out var saved) && saved.ValueKind == JsonValueKind.False ||
                 json.RootElement.TryGetProperty("changed", out var changed) && changed.ValueKind == JsonValueKind.False);
         }

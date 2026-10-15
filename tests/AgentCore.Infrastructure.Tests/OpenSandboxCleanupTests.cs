@@ -15,11 +15,95 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using AgentCore.Application.Credentials;
 using AgentCore.Infrastructure.Credentials;
+using AgentCore.Infrastructure.Workspaces;
 
 namespace AgentCore.Infrastructure.Tests;
 
 public sealed class OpenSandboxCleanupTests
 {
+    [Fact]
+    public async Task Reset_retains_unknown_file_evidence_and_staging_even_without_an_active_execution_pointer()
+    {
+        await using var host = await Host.Create(context => { context.Response.StatusCode=204; return Task.CompletedTask; });
+        var (service,store,lease,_) = await host.Service();
+        var execution = new SandboxExecution(Guid.NewGuid(),lease.SessionId,lease.AgentInstanceId,lease.Generation,Guid.NewGuid(),Guid.NewGuid(),"once","hash",
+            SandboxExecutionState.Completed,DateTimeOffset.UtcNow,ExitCode:7,WorkspaceSyncStatus:"unknown",Phase:"workspaceCommit");
+        await store.SaveExecutionAsync(execution,true);
+        var staging = new SandboxMountFiles(new() {WorkspaceMountRoot=host.MountRoot}).Prepare(lease.Generation).Host!.Path;
+        await File.WriteAllTextAsync(Path.Combine(staging,"retained.txt"),"unresolved");
+        await store.SaveLeaseAsync(lease with {Revision=2,State=SandboxLeaseState.NeedsResync,MountContractVersion=1,LastExecutionId=execution.Id},1);
+        await Assert.ThrowsAsync<AgentCoreException>(()=>service.StopSessionAsync(lease.SessionId,expectedGeneration:lease.Generation).AsTask());
+        Assert.True(File.Exists(Path.Combine(staging,"retained.txt")));
+        var retained = await service.InspectProcessAsync(lease.SessionId,execution.Id);
+        Assert.Equal("unknown",retained.WorkspaceSyncStatus);Assert.Equal(7,retained.ExitCode);
+        Assert.True(retained.RemoteTerminationConfirmed);Assert.False(retained.TerminationConfirmed);
+        Assert.Equal("NeedsResync",(await service.InspectAsync(lease.SessionId))!.State);
+    }
+
+    [Theory]
+    [InlineData("complete")]
+    [InlineData("cancelRun")]
+    [InlineData("ownerReset")]
+    [InlineData("resetIntent")]
+    [InlineData("narrowedBackground")]
+    public async Task Pending_retirement_preserves_staging_and_reconciliation_imports_only_after_confirmed_owned_absence(string resolution)
+    {
+        var allow = false; var deletes = 0;
+        await using var host = await Host.Create(context => { deletes++; context.Response.StatusCode = allow ? 204 : 403; return Task.CompletedTask; });
+        var (_, store, lease, _) = await host.Service();
+        var memory = new InMemoryMemoryStore(); var now = DateTimeOffset.UtcNow; var owner = new AgentRunOwner(lease.AgentInstanceId, Guid.NewGuid());
+        var definition = new AgentDefinition(1,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("fixture",["fixture"]));
+        var session = new SessionSnapshot(1,lease.SessionId,1,definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId);
+        await memory.SaveAsync(session,0);
+        var runs = new InMemoryAgentRunStore(memory,new SystemDiagnosticIdSource());
+        var activation = new Activation(Guid.NewGuid(),session.SessionId,ActivationKind.Initiative,[],Guid.NewGuid(),null,null,null,"retirement-fixture",now);
+        var run = AgentRun.Create(Guid.NewGuid(),owner,new(activation,definition.Id,1,definition.Identity,Guid.NewGuid(),AgentRunOutputContract.ConversationResponse),new("synthetic","synthetic","synthetic",null),3,now);
+        await runs.AdmitAsync(session with {Revision=2},1,run);
+        run = await runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(5)));
+        await store.SaveProfileAsync(lease.Profile,0);
+        await store.SaveVerificationAsync(new(lease.Profile.Id,1,now,true,"Fixture",ContractVersion:2));
+        var options = new OpenSandboxOptions {Enabled=true,AllowLocalImageIds=true,Endpoint=host.Endpoint,ApiKey="private-fixture-key",WorkspaceMountRoot=host.MountRoot};
+        var canonical = host.MountRoot + "-canonical";
+        try
+        {
+            var workspace = new FileSessionWorkspace(canonical,canonical+"-templates",sessions:memory);
+            var scratch = await workspace.CaptureScratchAsync(session.SessionId,definition);
+            var path = new SandboxMountFiles(options).Prepare(lease.Generation).Host!.Path;
+            await File.WriteAllTextAsync(Path.Combine(path,"retained.txt"),"exact");
+            var execution = new SandboxExecution(Guid.NewGuid(),session.SessionId,owner.AgentInstanceId,lease.Generation,run.AgentRunId,run.Claim!.Generation,"once","hash",SandboxExecutionState.Completed,now,
+                FinishedAt:now,ExitCode:7,WorkspaceSyncStatus:"notCommitted",Phase:"retirementRequested",Background:resolution == "narrowedBackground");
+            await store.SaveExecutionAsync(execution,true);
+            await store.SaveLeaseAsync(lease with {Revision=2,State=SandboxLeaseState.NeedsReconciliation,MountContractVersion=1,ActiveExecutionId=execution.Id,LastExecutionId=execution.Id,ScratchFingerprint=scratch.Fingerprint},1);
+            var service = new OpenSandboxService(options,store,workspace,memory,runs,TimeProvider.System);
+            await service.ReconcileAsync();
+            Assert.True(File.Exists(Path.Combine(path,"retained.txt"))); Assert.Single((await workspace.CaptureScratchAsync(session.SessionId,definition)).Transfer.Entries);
+            Assert.Equal(SandboxLeaseState.NeedsReconciliation,(await store.GetLeaseAsync(session.SessionId))!.State);
+            if(resolution == "cancelRun") await runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.RequestCancellation(run.Revision,DateTimeOffset.UtcNow,null));
+            if(resolution == "narrowedBackground")
+            {
+                var instances = new InMemoryAgentInstanceStore();
+                await instances.InsertAsync(new(lease.AgentInstanceId,definition.Id,definition.Version,definition.Identity,AgentInstanceLifecycle.Active,now,now,
+                    SettingsOverrides:new(SandboxAllowedProfileIds:new(["another-profile"]))));
+                service = new(options,store,workspace,memory,runs,TimeProvider.System,instances:instances);
+            }
+            if(resolution == "resetIntent")
+            {
+                var current = (await store.GetLeaseAsync(session.SessionId))!;
+                await store.SaveLeaseAsync(current with {Revision=current.Revision+1, State=SandboxLeaseState.Terminating, CleanupReason="reset"}, current.Revision);
+            }
+            allow=true;
+            if(resolution == "ownerReset") await service.StopSessionAsync(session.SessionId, expectedGeneration:lease.Generation);
+            else await service.ReconcileAsync();
+            var receipt = await service.InspectProcessAsync(session.SessionId,execution.Id);
+            Assert.Equal(resolution == "cancelRun"?"Canceled":"Completed",receipt.Status); Assert.Equal(7,receipt.ExitCode); Assert.Equal(resolution == "complete"?"committed":"notCommitted",receipt.WorkspaceSyncStatus);
+            Assert.Equal(resolution == "complete",receipt.GenerationRecycled); Assert.True(receipt.TerminationConfirmed); Assert.False(Directory.Exists(path)); Assert.Equal(2,deletes);
+            var files=(await workspace.CaptureScratchAsync(session.SessionId,definition)).Transfer.Entries;
+            if(resolution != "complete")Assert.Single(files);
+            else Assert.Equal("exact",System.Text.Encoding.UTF8.GetString(files.Single(e=>e.RelativePath=="retained.txt").Bytes));
+        }
+        finally { if(Directory.Exists(canonical))Directory.Delete(canonical,true);if(Directory.Exists(canonical+"-templates"))Directory.Delete(canonical+"-templates",true); }
+    }
+
     [Fact]
     public async Task Credential_rotation_retires_an_idle_generation_even_when_the_profile_revision_is_unchanged()
     {
@@ -64,10 +148,13 @@ public sealed class OpenSandboxCleanupTests
             SandboxExecutionState.Canceled,DateTimeOffset.UtcNow,FinishedAt:DateTimeOffset.UtcNow,Stdout:"retained-output",WorkspaceSyncStatus:sync,
             FailureCategory:"cancellation",CancellationReason:"userStop",TerminationConfirmed:true);
         await store.SaveExecutionAsync(execution,true);
-        await store.SaveLeaseAsync(lease with {Revision=2,State=SandboxLeaseState.NeedsResync,LastExecutionId=execution.Id,ActiveExecutionId=execution.Id},1);
+        var staging = new SandboxMountFiles(new() { WorkspaceMountRoot = host.MountRoot }).Prepare(lease.Generation).Host!.Path;
+        await File.WriteAllTextAsync(Path.Combine(staging,"retained.txt"),"private-staging");
+        await store.SaveLeaseAsync(lease with {Revision=2,MountContractVersion=1,State=SandboxLeaseState.NeedsResync,LastExecutionId=execution.Id,ActiveExecutionId=execution.Id},1);
         await service.ReconcileAsync();
         var recovered=(await store.GetLeaseAsync(lease.SessionId))!;
-        Assert.Equal(expected,recovered.State);Assert.Null(recovered.ActiveExecutionId);Assert.Equal(1,deletes);
+        Assert.Equal(expected,recovered.State);Assert.Equal(sync=="unknown"?execution.Id:(Guid?)null,recovered.ActiveExecutionId);Assert.Equal(1,deletes);
+        Assert.Equal(sync=="unknown",File.Exists(Path.Combine(staging,"retained.txt")));
         var retained=await service.InspectProcessAsync(lease.SessionId,execution.Id);
         Assert.Equal("Canceled",retained.Status);Assert.Equal(sync,retained.WorkspaceSyncStatus);Assert.Equal("userStop",retained.CancellationReason);Assert.Equal("retained-output",retained.Stdout);
     }
