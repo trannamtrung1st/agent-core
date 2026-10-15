@@ -117,6 +117,8 @@ public sealed class PromptContextBuilder(
         var turns = BuildTurnMessages(context, history).ToList();
         if (context.AuthoredAutomation && ToolResources.IsOccurrence(context.Trigger.Kind))
         {
+            if (context.RunTaskIntent is not { Source: AgentRunTaskSource.Automation })
+                throw new InvalidOperationException("Authored Automation requires a frozen Automation task intent from admission.");
             Evidence(ContextSectionId.History, ContextSourceKind.Session, BuildAutomationHistoryEvidence(turns));
             turns.Clear();
             snapshot = snapshot.Upsert(ContextSection.Core(CoreProcedure.AutomationHistory));

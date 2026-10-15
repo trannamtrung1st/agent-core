@@ -95,7 +95,8 @@ public static class ContextCutover
             row.PayloadJson = payload.ToJsonString(Json);
             var run = AgentRunStoreMapping.ToDomain(row);
             var session = sessions.Single(s => s.SessionId == row.SessionId);
-            activations[row.ActivationId].AdmissionHash = AgentRunStoreMapping.AdmissionHash(SqliteMemoryStore.ToSnapshot(session, session.Entries), run);
+            var snapshot = SqliteMemoryStore.ToSnapshot(session, session.Entries);
+            activations[row.ActivationId].AdmissionHash = AgentRunStoreMapping.AdmissionHash(snapshot, run, AdmittedSkillKeys(snapshot, run));
             if (originalPayload != row.PayloadJson || originalHash != activations[row.ActivationId].AdmissionHash) count++;
         }
         // Evaluation fingerprints intentionally remain historical. The new candidate fingerprint invalidates old publish gates.
@@ -104,6 +105,22 @@ public static class ContextCutover
         await ValidateAsync(db, ct);
         await transaction.CommitAsync(ct);
         return count;
+    }
+
+    private static IReadOnlyList<string> AdmittedSkillKeys(SessionSnapshot snapshot, AgentRun run)
+    {
+        if (run.SkillLoadCount == 0) return run.ActiveSkillKeys;
+        // Skill loading expands mutable Run state. Rebuild the original factory selection from
+        // immutable admission inputs, without re-evaluating today's availability or permissions.
+        var explicitKeys = run.Admission.Activation.Kind == ActivationKind.UserTurn && run.Admission.ComposerInput?.Error is null
+            ? run.Admission.Activation.SourceEntryIds.SelectMany(id => UserMessageContent.ExplicitSkills(snapshot.Entries.Single(e => e.EntryId == id).Parts))
+            : [];
+        var keys = run.PinnedSkillCatalog.Where(s => s.Projection == SkillProjection.Always).Select(s => s.Key)
+            .Concat(explicitKeys).Distinct(StringComparer.Ordinal).ToArray();
+        SkillPolicy.ValidateActive(run.PinnedSkillCatalog, keys);
+        if (keys.Except(run.ActiveSkillKeys, StringComparer.Ordinal).Any())
+            throw new InvalidOperationException("Run Skill admission cannot be reconstructed; migration refused.");
+        return keys;
     }
 
     private static bool CurrentCheckpoint(JsonNode node)

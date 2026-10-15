@@ -4,6 +4,7 @@ using AgentCore.Application.Execution;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -128,6 +129,59 @@ public sealed class ContextCutoverTests
                 Assert.Equal(AgentRunStoreMapping.AdmissionHash(SqliteMemoryStore.ToSnapshot(session, session.Entries), run), (await reopened.Activations.SingleAsync()).AdmissionHash);
                 await ContextCutover.ValidateAsync(reopened);
             }
+            Assert.Equal(0, await ContextCutover.MigrateAsync(path, secondBackup));
+        }
+        finally { File.Delete(path); File.Delete(backup); File.Delete(secondBackup); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Conversion_rehashes_original_skill_admission_and_replay_returns_sealed_run(bool composerError)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"context-skills-{Guid.NewGuid():N}.db");
+        var backup = path + ".backup";
+        var secondBackup = path + ".second";
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = AgentRunTestFixtures.Snapshot(new(Guid.NewGuid(), Guid.NewGuid()), Definition, now);
+        var user = snapshot.Entries.Single() with { Text = "/definition:explicit", Parts = [new("invocation", InvocationKind: "skill", SkillKey: "definition:explicit")] };
+        snapshot = snapshot with { Entries = [user] };
+        EffectiveSkill[] skills = [
+            new("definition:always", SkillOrigin.Definition, "always", "Always", "Always", "Always procedure", SkillProjection.Always, [], []),
+            new("definition:explicit", SkillOrigin.Definition, "explicit", "Explicit", "Explicit", "Explicit procedure", SkillProjection.OnDemand, [], []),
+            new("definition:late", SkillOrigin.Definition, "late", "Late", "Late", "Late procedure", SkillProjection.OnDemand, [], [])
+        ];
+        var admitted = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            snapshot, [user], now, skills, composerInput: new(["definition:explicit"], [], now, composerError ? "Unavailable reference" : null));
+        try
+        {
+            var factory = new Factory(path);
+            var memory = new SqliteMemoryStore(factory, TimeProvider.System);
+            await using (var db = Db(path))
+            {
+                await db.Database.MigrateAsync();
+                await memory.SaveAsync(snapshot, 0);
+                var run = admitted.TakeClaim(Guid.NewGuid(), now, now.AddMinutes(1));
+                run = run.AdmitActiveSkills(run.Revision, run.Claim!.Generation, ["definition:late"], now);
+                run = run.Complete(run.Revision, run.Claim!.Generation, "Original sealed outcome", now, outcomeEntryId: Guid.NewGuid());
+                var row = AgentRunStoreMapping.ToRecord(run);
+                var payload = JsonNode.Parse(row.PayloadJson)!;
+                payload["admission"]!["configuration"]!["definition"] = JsonNode.Parse(Old(JsonSerializer.Serialize(Definition, Json)));
+                row.PayloadJson = payload.ToJsonString();
+                var activation = AgentRunStoreMapping.ToActivationRecord(snapshot, admitted);
+                activation.AdmissionHash = "retired-admission-hash";
+                db.Activations.Add(activation); db.AgentRuns.Add(row);
+                var session = await db.Sessions.SingleAsync(); session.DefinitionJson = Old(session.DefinitionJson);
+                await db.SaveChangesAsync();
+            }
+            Assert.Equal(2, await ContextCutover.MigrateAsync(path, backup));
+            var store = new SqliteAgentRunStore(factory, memory, new SystemDiagnosticIdSource());
+            var replay = await store.AdmitAsync(snapshot, 0, admitted);
+            Assert.False(replay.Created);
+            Assert.Equal(admitted.AgentRunId, replay.Run.AgentRunId);
+            Assert.Equal("Original sealed outcome", replay.Run.Result!.Text);
+            Assert.Equal(admitted.ActiveSkillKeys.Append("definition:late"), replay.Run.ActiveSkillKeys);
+            Assert.Equal(1, replay.Run.SkillLoadCount);
             Assert.Equal(0, await ContextCutover.MigrateAsync(path, secondBackup));
         }
         finally { File.Delete(path); File.Delete(backup); File.Delete(secondBackup); }

@@ -110,4 +110,43 @@ public sealed class ContextAssemblerTests
         var old = new AgentCore.Domain.Conversation.AgentRunCheckpoint("{\"phase\":\"model-turn\",\"messages\":[]}", 0, 0, 1000);
         Assert.Throws<InvalidOperationException>(() => AgentCore.Application.Execution.AgentRunToolCallCheckpoint.EnsureCurrentContextContract(old));
     }
+
+    [Theory]
+    [InlineData(ModelRole.User)]
+    [InlineData(ModelRole.Assistant)]
+    public void Pending_tool_batch_cannot_be_interrupted_by_another_message(ModelRole role)
+    {
+        var context = new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)]);
+        Assert.Throws<ArgumentException>(() => ContextAssembler.Create(Guid.Empty, context, [
+            new(ModelRole.Assistant, "", ToolCalls: [new("call", "test.read", "{}")]),
+            new(role, "interrupted"), new(ModelRole.Tool, "receipt", ToolCallId: "call")
+        ]));
+        // A pending batch itself remains valid for durable checkpoint projection.
+        Assert.Single(ContextAssembler.Create(Guid.Empty, context, [
+            new(ModelRole.Assistant, "", ToolCalls: [new("call", "test.read", "{}")])
+        ]).Interaction!);
+    }
+
+    [Fact]
+    public void Tool_interaction_evidence_is_never_reported_as_a_current_user_task()
+    {
+        var request = ContextAssembler.Create(Guid.Empty,
+            new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)]),
+            [new(ModelRole.User, "image from tool", EvidenceKind: EvidenceMessageKind.ToolInteraction)]);
+        var entry = Assert.Single(request.ContextManifest!.Sections, s => s.Id == "interaction-0");
+        Assert.Equal(ContextSourceKind.Tool, entry.Source);
+        Assert.Equal(ContextSemantics.UntrustedData, entry.Semantics);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Authored_automation_without_a_frozen_automation_task_fails_before_projection(bool wrongSource)
+    {
+        var context = new AgentContext(SampleDefinitions.Examiner, [], "", null, AgentCore.Domain.Conversation.SessionMode.Text,
+            null, false, null, new(Guid.NewGuid(), TriggerKind.ScheduledOccurrence, "untrusted replacement"), AuthoredAutomation: true)
+        { RunTaskIntent = wrongSource ? new("Wrong source", AgentCore.Domain.Conversation.AgentRunTaskSource.AgentRun) : null };
+        var error = Assert.Throws<InvalidOperationException>(() => new AgentCore.Application.Agents.PromptContextBuilder().Build(context, Guid.NewGuid()));
+        Assert.Contains("task intent", error.Message);
+    }
 }

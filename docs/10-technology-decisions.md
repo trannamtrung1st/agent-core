@@ -81,7 +81,7 @@ MessagePack is case-sensitive; use explicit camelCase string keys and binary DTO
 
 **Rationale:** A hosted gateway makes it practical to experiment with model families and compare conversation latency, quality and cost while retaining one adapter protocol. The free router unblocks live adapter smoke without treating catalog quality as an acceptance criterion. Identity consistency and latency are product qualities, so the demo path must not randomly switch models.
 
-**Trade-off:** OpenRouter is hosted, not on-prem. Its model catalog, rate limits, parameters and streaming details vary; compatibility needs contract tests rather than assumptions. `openrouter/free` may route to different free models per request; do not treat a session that selected it as a quality or structured-output gate.
+**Trade-off:** OpenRouter is hosted, not on-prem. Its model catalog, rate limits, parameters and streaming details vary; compatibility needs contract tests rather than assumptions. `openrouter/free` may route to different free models per request; its low-level smoke results do not establish a separate system/developer contract or qualify it for Session execution.
 
 **Future migration:** Replace the configured endpoint and model mapping with a local OpenAI-compatible inference server; select local STT and TTS independently. vLLM is one example with a [compatible Chat API](https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/), not a required dependency. Direct OpenAI and other compatible hosted providers are also possible configurations. Operators choose the Real/demo `DefaultModel`. Agent Runtime and Interaction Controller do not change.
 

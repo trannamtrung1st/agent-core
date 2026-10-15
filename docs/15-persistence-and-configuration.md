@@ -2,11 +2,13 @@
 
 ## Three-layer context cutover
 
-`AgentRunAdmission.TaskIntent` preserves admitted Automation instructions (with ID/revision) or a manual/immediate background objective. It participates in admission hashing and remains fixed across retries; raw trigger/event JSON never substitutes for it.
+`AgentRunAdmission.TaskIntent` preserves admitted Automation instructions (with ID/revision) or a manual/immediate background objective. It participates in admission hashing and remains fixed across retries; raw trigger/event JSON never substitutes for it. Authored Automation projection fails explicitly if its frozen Automation task intent is absent or has another source.
 
 Definitions and candidates use schema **2** and canonical `agentInstructions` / `AgentInstructions`. Instance overrides use the same editable field. Retired `systemInstructions` input is rejected, with no alias or dual writer. Published versions and optimistic revisions retain their identities during the explicit structural conversion; future publications remain immutable.
 
 Normal startup does not convert populated data. `ContextCutover.ValidateAsync` inspects retained Definitions/drafts/Session snapshots, Instance overrides and Run configuration before current execution. Incompatible nonterminal checkpoints fail with an actionable maintenance error. The explicit offline `migrate-context` operation first creates a new SQLite backup using its backup API, then converts retained JSON in one transaction, validates the result and commits. It preserves Definition/draft/Instance versions, revisions, ownership and user data. Run configuration hashes and activation admission hashes use the same canonical constructors/algorithm as new admission. Existing draft evaluation fingerprints remain historical, so configuration changes require fresh evaluation before publication. Historical unsupported payloads cannot become live through a current-schema reader.
+
+Admission rehashing uses the original Skill selection: pinned Always Skills plus accepted explicit user invocations when Composer admission succeeded. Later `skills.load` additions remain on the sealed Run but do not alter its admission identity. Replaying the original input after conversion returns the same sealed outcome; conversion does not execute tools.
 
 Nonterminal Runs admitted under the retired schema must be drained/completed or explicitly cancelled using the prior application. Unknown/mixed checkpoints are never translated during normal execution. Completed Run checkpoint bytes remain inert historical audit evidence; original results and receipts are retained. No database, workspace, transcript, automation, memory, artifact or credential is automatically deleted.
 

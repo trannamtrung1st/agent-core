@@ -172,7 +172,7 @@ internal static class AgentRunStoreMapping
         };
     }
 
-    public static string AdmissionHash(SessionSnapshot snapshot, AgentRun run)
+    public static string AdmissionHash(SessionSnapshot snapshot, AgentRun run, IReadOnlyList<string>? admittedSkillKeys = null)
     {
         var a = run.Admission.Activation;
         var entries = a.SourceEntryIds.Select(id => snapshot.Entries.Single(entry => entry.EntryId == id))
@@ -183,7 +183,7 @@ internal static class AgentRunStoreMapping
             SourceFingerprint = BackgroundSourceKey(snapshot, run) is null ? a.SourceFingerprint : null,
             run.DefinitionId, run.DefinitionVersion, run.PinnedPersona, run.PinnedModel, run.PinnedSkillCatalog,
             run.Admission.Configuration, run.Admission.ExecutionBudget, run.Admission.TaskIntent,
-            run.ActiveSkillKeys, run.MaxAttempts, OriginKind = snapshot.Origin.Kind, snapshot.Origin.AutomationId,
+            ActiveSkillKeys = admittedSkillKeys ?? run.ActiveSkillKeys, run.MaxAttempts, OriginKind = snapshot.Origin.Kind, snapshot.Origin.AutomationId,
             snapshot.Origin.OriginatingSessionId, snapshot.Origin.OriginatingAgentRunId,
             snapshot.Origin.ReportCompletionToOrigin, Entries = entries
         }, Json);
