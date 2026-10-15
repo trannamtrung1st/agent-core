@@ -131,7 +131,7 @@ test.each([false, true])('mixed settings save retains disjoint edits and preserv
     });
     fireEvent.click(screen.getByLabelText('Save configuration'));
     await screen.findByText(/1 configuration group saved before the failure/, { selector: '.ant-alert-title' });
-    expect(applyIsolation).not.toHaveBeenCalled(); expect(screen.getByLabelText('Session memory')).not.toBeChecked();
+    expect(applyIsolation).not.toHaveBeenCalled(); expect(await screen.findByLabelText('Session memory')).not.toBeChecked();
     await waitFor(() => expect(screen.getByLabelText('Refresh configuration')).toBeEnabled());
     await act(async () => { fireEvent.click(screen.getByLabelText('Refresh configuration')); });
     await waitFor(() => expect(screen.getByLabelText('Refresh configuration')).toBeEnabled());

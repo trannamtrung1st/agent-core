@@ -66,7 +66,10 @@ test('saving settings refreshes dependent values and recovers a failed refresh w
   await page.getByRole('button',{name:'Save configuration',exact:true}).click();
   await started;
   await navigateAdmin(page, 'Profile');
+  await navigateAdmin(page, 'Voice');
+  await navigateAdmin(page, 'Profile');
   releaseRefresh();
+  await expect(page.getByLabel('Instance configuration status', {exact:true})).toContainText('Configuration saved.');
   await navigateAdmin(page, 'Conversation');
   await navigateAdmin(page, 'Providers');
   await expect(page.getByRole('textbox',{name:'Speech recognizer',exact:true})).toHaveValue('');
@@ -75,14 +78,15 @@ test('saving settings refreshes dependent values and recovers a failed refresh w
   await page.unroute(`**${root}/settings`);
   await expect(page.getByRole('textbox',{name:'Language',exact:true})).toHaveValue('fr-FR');
   await navigateAdmin(page, 'Voice');
-  let patches=0;
+  let patches=0;let applies=0;
+  page.on('request', request=>{if(request.method()==='POST'&&request.url().endsWith(`${root}/isolation/apply`))applies++;});
   await page.route(`**${root}/settings**`,route=>{
     if(route.request().method()==='PATCH'){patches++;return route.continue();}
     return route.fulfill({status:503,contentType:'application/problem+json',body:JSON.stringify({detail:'Settings refresh unavailable.'})});
   });
   await page.getByRole('group',{name:'Voice settings',exact:true}).getByRole('switch',{name:'Enabled',exact:true}).click();
   await page.getByRole('button',{name:'Save configuration',exact:true}).click();
-  await expect(page.getByRole('region',{name:'Instance configuration actions'}).getByRole('alert')).toContainText('Settings refresh unavailable.');
+  await expect(page.getByRole('alert').filter({hasText:'Settings refresh unavailable.'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Save configuration',exact:true})).toBeDisabled();
   await page.unroute(`**${root}/settings**`);
   await page.getByRole('button',{name:'Refresh configuration',exact:true}).click();
@@ -91,7 +95,7 @@ test('saving settings refreshes dependent values and recovers a failed refresh w
   await navigateAdmin(page, 'Conversation');
   await expect(page.getByRole('textbox',{name:'Language',exact:true})).toHaveValue('fr-FR');
   await expect(page.getByRole('button',{name:'Save configuration',exact:true})).toBeDisabled();
-  expect(patches).toBe(1);
+  expect(patches).toBe(0);expect(applies).toBe(1);
 });
 
 test('scoped settings save/reset, conflict recovery and resource inspection preserve ownership',async({page})=>{

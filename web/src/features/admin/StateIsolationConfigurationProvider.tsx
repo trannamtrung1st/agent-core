@@ -41,11 +41,17 @@ function useIsolationController({ instanceId, active, archived, onUpdated, onDir
       if (!controller.signal.aborted) { setError(reason instanceof Error ? reason.message : 'State & Isolation is unavailable. Retry.'); throw reason; }
     } finally { if (!controller.signal.aborted) setBusy(false); }
   }, [instanceId]);
+  const editor = useInstanceConfigurationEditor('State & Isolation', { dirty: changed, busy: busy || previewing, revision: view?.revisions.instance,
+    blocked: !plan ? 'Read the State & Isolation preview before saving.' : plan.blockingReasons[0], save,
+    discard, refresh });
   useEffect(() => {
+    // The ongoing Save owns its reviewed preview across route changes. Re-reading
+    // on re-entry must not replace it between two coordinated configuration groups.
+    if (editor.saving) return;
     if (!active) { presetRequest.current?.abort(); readRequest.current?.abort(); setBusy(false); return; }
     void refresh().catch(() => {});
     return () => readRequest.current?.abort();
-  }, [active, refresh]);
+  }, [active, refresh, editor.saving]);
   useEffect(() => {
     if (!view || !draft) return;
     const controller = new AbortController(); setPlan(undefined); setPreviewing(true);
@@ -55,7 +61,7 @@ function useIsolationController({ instanceId, active, archived, onUpdated, onDir
         .finally(() => { if (!controller.signal.aborted) setPreviewing(false); });
     }, 200);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [instanceId, active, draft, view]);
+  }, [instanceId, draft, view]);
   async function save(revision: number) {
     if (archived || !plan || previewing || plan.blockingReasons.length) throw new Error('Read a valid current preview before saving.');
     const request = generation.current; setBusy(true);
@@ -77,9 +83,6 @@ function useIsolationController({ instanceId, active, archived, onUpdated, onDir
     } catch (reason) { if (request === generation.current) setError(reason instanceof Error ? reason.message : 'Apply failed. Your draft is retained.'); throw reason; }
     finally { if (request === generation.current) setBusy(false); }
   }
-  const editor = useInstanceConfigurationEditor('State & Isolation', { dirty: changed, busy: busy || previewing, revision: view?.revisions.instance,
-    blocked: !plan ? 'Read the State & Isolation preview before saving.' : plan.blockingReasons[0], save,
-    discard, refresh });
   function editFlag(field: 'experienceEnabled' | 'allowMaintenance', value: boolean) {
     if (!view) return;
     if (value === view[field] && editedFlags.current.get(field) !== 'preset') editedFlags.current.delete(field);
