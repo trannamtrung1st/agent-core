@@ -9,9 +9,10 @@ public sealed record InstanceSettingConstraint(string Reason, bool? RequiredBool
 public static class InstanceSettingsResolver
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.Strict };
-    public static IReadOnlyList<string> Sections { get; } = ["instructions", "conversationPolicy", "behaviorPolicy", "initiativePolicy", "voice", "modelDefaults", "memoryPolicy", "capabilities", "triggerPolicy", "providerPreferences", "sandboxPolicy"];
+    public static IReadOnlyList<string> Sections { get; } = ["instructions", "conversationPolicy", "behaviorPolicy", "initiativePolicy", "voice", "modelDefaults", "memoryPolicy", "capabilities", "triggerPolicy", "providerPreferences", "sandboxPolicy", "stateIsolationPolicy"];
     public static IReadOnlyList<string> Fields(string section) => section switch
     {
+        "stateIsolationPolicy" => ["conversationContextScope", "homeAccess", "workingCleanup", "browserIsolation", "agentStateVisibility", "experienceRecord", "experienceRecall", "profileEvidence", "crossSessionContinuity"],
         "sandboxPolicy" => ["allowedProfileIds", "profileId", "initializationScript", "cpu", "memoryMiB", "maxCommandSeconds", "idleTtlSeconds", "maxLifetimeSeconds", "storageBytes"],
         "instructions" => ["systemInstructions"],
         "conversationPolicy" => ["responseLength", "askOneQuestionAtATime", "language", "maxOutputTokens"],
@@ -41,6 +42,15 @@ public static class InstanceSettingsResolver
                 var remove = !set.ContainsKey(field);
                 next = (section, field) switch
                 {
+                    ("stateIsolationPolicy", "conversationContextScope") => next with { ConversationContextScope = remove ? null : new(Read<string>(set[field])) },
+                    ("stateIsolationPolicy", "homeAccess") => next with { HomeAccess = remove ? null : new(Read<string>(set[field])) },
+                    ("stateIsolationPolicy", "workingCleanup") => next with { WorkingCleanup = remove ? null : new(Read<string>(set[field])) },
+                    ("stateIsolationPolicy", "browserIsolation") => next with { BrowserIsolation = remove ? null : new(Read<string>(set[field])) },
+                    ("stateIsolationPolicy", "agentStateVisibility") => next with { AgentStateVisibility = remove ? null : new(Read<string>(set[field])) },
+                    ("stateIsolationPolicy", "experienceRecord") => next with { ExperienceRecord = remove ? null : new(Read<bool>(set[field])) },
+                    ("stateIsolationPolicy", "experienceRecall") => next with { ExperienceRecall = remove ? null : new(Read<bool>(set[field])) },
+                    ("stateIsolationPolicy", "crossSessionContinuity") => next with { CrossSessionContinuity = remove ? null : new(Read<bool>(set[field])) },
+                    ("stateIsolationPolicy", "profileEvidence") => next with { ProfileEvidence = remove ? null : new(Read<bool>(set[field])) },
                     ("sandboxPolicy", "allowedProfileIds") => next with { SandboxAllowedProfileIds = remove ? null : new(Read<string[]>(set[field])) },
                     ("sandboxPolicy", "profileId") => next with { SandboxProfileId = remove ? null : new(Read<string>(set[field])) },
                     ("sandboxPolicy", "initializationScript") => next with { SandboxInitializationScript = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
@@ -124,6 +134,18 @@ public static class InstanceSettingsResolver
         }
         switch (section)
         {
+            case "stateIsolationPolicy":
+                var state = baseline.StateIsolationPolicy ?? StateIsolationPolicy.Default;
+                result["conversationContextScope"] = new("Instance continuity can only be narrowed.", Choices: state.ConversationContextScope == ConversationContextScope.CurrentRequest ? ["CurrentRequest"] : ["Session", "CurrentRequest"]);
+                result["homeAccess"] = new("Instance home access can only be narrowed.", Choices: Enum.GetValues<HomeAccess>().Where(v => v >= state.HomeAccess).Select(v => v.ToString()).ToArray());
+                result["workingCleanup"] = new("Cleanup waits for safe terminal eligibility.", Choices: ["OnSessionDeletion", "AfterTerminal"]);
+                result["browserIsolation"] = new("Browser isolation cannot broaden the Definition or host policy.", Choices: state.BrowserIsolation == BrowserIsolation.EphemeralSession ? ["EphemeralSession"] : state.BrowserIsolation == BrowserIsolation.PersistentAgent ? ["PersistentAgent", "EphemeralSession"] : ["HostDefault", "PersistentAgent", "EphemeralSession"]);
+                result["agentStateVisibility"] = new("State visibility cannot exceed Definition authorization.", Choices: Enum.GetValues<AgentStateVisibility>().Where(v => v <= state.AgentStateVisibility).Select(v => v.ToString()).ToArray());
+                CannotEnable("experienceRecord", "Experience recording", state.ExperienceRecord);
+                CannotEnable("experienceRecall", "Experience recall", state.ExperienceRecall);
+                CannotEnable("crossSessionContinuity", "Cross-Session continuity", state.CrossSessionContinuity);
+                CannotEnable("profileEvidence", "Profile evidence", state.ProfileEvidence);
+                break;
             case "sandboxPolicy":
                 result["allowedProfileIds"] = new("Instance choices may only narrow the Definition allowed list. Clear to inherit.", Choices: baseline.SandboxPolicy?.AllowedProfileIds ?? []);
                 result["profileId"] = new("Choose only a profile authorized by this Definition. Live generations retain their pinned setup until expiry or reset.", Choices: baseline.SandboxPolicy?.AllowedProfileIds ?? []);
@@ -190,6 +212,7 @@ public static class InstanceSettingsResolver
                 Language = o.Language is { } language ? language.Value : baseline.ConversationPolicy.Language,
                 MaxOutputTokens = o.MaxOutputTokens is { } maxOutputTokens ? maxOutputTokens.Value : baseline.ConversationPolicy.MaxOutputTokens,
             },
+            StateIsolationPolicy = ResolveState(baseline, o),
             BehaviorPolicy = baseline.BehaviorPolicy with
             {
                 InterruptionStyle = o.InterruptionStyle is { } interruptionStyle ? interruptionStyle.Value : baseline.BehaviorPolicy.InterruptionStyle,
@@ -298,6 +321,7 @@ public static class InstanceSettingsResolver
 
     public static IReadOnlyDictionary<string, object?> Values(AgentDefinition d, string section) => section switch
     {
+        "stateIsolationPolicy" => StateValues(d.StateIsolationPolicy ?? StateIsolationPolicy.Default),
         "sandboxPolicy" => new Dictionary<string, object?> { ["profileId"] = d.SandboxPolicy?.DefaultProfileId, ["allowedProfileIds"] = d.SandboxPolicy?.AllowedProfileIds ?? [],
             ["initializationScript"] = d.ExecutionSandboxProfile?.InstanceInitializationScript,
             ["cpu"] = d.ExecutionSandboxProfile?.Cpu, ["memoryMiB"] = d.ExecutionSandboxProfile?.MemoryMiB,
@@ -375,6 +399,17 @@ public static class InstanceSettingsResolver
         var result = new Dictionary<string, object?>();
         switch (section)
         {
+            case "stateIsolationPolicy":
+                if (o.CrossSessionContinuity is { } crossSession) result["crossSessionContinuity"] = crossSession.Value;
+                if (o.ConversationContextScope is { } stateConversationContextScope) result["conversationContextScope"] = stateConversationContextScope.Value;
+                if (o.HomeAccess is { } stateHomeAccess) result["homeAccess"] = stateHomeAccess.Value;
+                if (o.WorkingCleanup is { } stateWorkingCleanup) result["workingCleanup"] = stateWorkingCleanup.Value;
+                if (o.BrowserIsolation is { } stateBrowserIsolation) result["browserIsolation"] = stateBrowserIsolation.Value;
+                if (o.AgentStateVisibility is { } stateAgentStateVisibility) result["agentStateVisibility"] = stateAgentStateVisibility.Value;
+                if (o.ExperienceRecord is { } stateExperienceRecord) result["experienceRecord"] = stateExperienceRecord.Value;
+                if (o.ExperienceRecall is { } stateExperienceRecall) result["experienceRecall"] = stateExperienceRecall.Value;
+                if (o.ProfileEvidence is { } stateProfileEvidence) result["profileEvidence"] = stateProfileEvidence.Value;
+                break;
             case "sandboxPolicy":
                 if (o.SandboxProfileId is { } profile) result["profileId"] = profile.Value;
                 if (o.SandboxAllowedProfileIds is { } allowedProfiles) result["allowedProfileIds"] = allowedProfiles.Value;
@@ -455,4 +490,33 @@ public static class InstanceSettingsResolver
         }
         return result;
     }
+    private static IReadOnlyDictionary<string, object?> StateValues(StateIsolationPolicy p) => new Dictionary<string, object?> {
+        ["conversationContextScope"] = p.ConversationContextScope.ToString(), ["homeAccess"] = p.HomeAccess.ToString(),
+        ["workingCleanup"] = p.WorkingCleanup.ToString(), ["browserIsolation"] = p.BrowserIsolation.ToString(),
+        ["agentStateVisibility"] = p.AgentStateVisibility.ToString(), ["experienceRecord"] = p.ExperienceRecord,
+        ["experienceRecall"] = p.ExperienceRecall, ["profileEvidence"] = p.ProfileEvidence, ["crossSessionContinuity"] = p.CrossSessionContinuity
+    };
+
+    private static StateIsolationPolicy? ResolveState(AgentDefinition baseline, InstanceSettingsOverrides o)
+    {
+        if (baseline.StateIsolationPolicy is null && Overrides(o, "stateIsolationPolicy").Count == 0) return null;
+        var p = baseline.StateIsolationPolicy ?? StateIsolationPolicy.Default;
+        T Parse<T>(InstanceField<string>? field, T fallback) where T : struct, Enum => field is null ? fallback
+            : Enum.TryParse<T>(field.Value, false, out var value) && Enum.IsDefined(value) && field.Value == value.ToString()
+                ? value : throw AgentCoreErrors.Validation(Constraints(baseline, "stateIsolationPolicy")[JsonNamingPolicy.CamelCase.ConvertName(typeof(T).Name)].Reason);
+        p = p with {
+            ConversationContextScope = Parse(o.ConversationContextScope, p.ConversationContextScope),
+            HomeAccess = Parse(o.HomeAccess, p.HomeAccess), WorkingCleanup = Parse(o.WorkingCleanup, p.WorkingCleanup),
+            BrowserIsolation = Parse(o.BrowserIsolation, p.BrowserIsolation), AgentStateVisibility = Parse(o.AgentStateVisibility, p.AgentStateVisibility),
+            ExperienceRecord = o.ExperienceRecord?.Value ?? p.ExperienceRecord, ExperienceRecall = o.ExperienceRecall?.Value ?? p.ExperienceRecall,
+            ProfileEvidence = o.ProfileEvidence?.Value ?? p.ProfileEvidence, CrossSessionContinuity = o.CrossSessionContinuity?.Value ?? p.CrossSessionContinuity
+        };
+        var values = StateValues(p);
+        foreach (var (key, constraint) in Constraints(baseline, "stateIsolationPolicy"))
+            if (constraint.Choices is { } choices && values[key] is string value && !choices.Contains(value, StringComparer.Ordinal)
+                || constraint.RequiredBoolean is { } required && values[key] is bool boolean && boolean != required)
+                throw AgentCoreErrors.Validation(constraint.Reason);
+        return p;
+    }
+
 }

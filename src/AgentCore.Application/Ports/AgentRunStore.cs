@@ -12,6 +12,8 @@ public sealed record AgentRunAdmissionResult(bool Created, AgentRun Run);
 /// <summary>Admits input, Activation and run together; there is no standalone Activation insert.</summary>
 public interface IAgentRunStore
 {
+    ValueTask<DurableRunState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default) => throw new NotSupportedException();
+    ValueTask<DurableRunState> ReadSessionStateAsync(AgentRunOwner owner, Guid sessionId, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<CompletionInboxItem?> GetCompletionInboxAsync(AgentRunOwner owner, Guid parentSessionId, Guid childRunId, DateTimeOffset now, CancellationToken ct = default) => ValueTask.FromResult<CompletionInboxItem?>(null);
     ValueTask<bool> HasCompletionClaimAsync(AgentRunOwner owner, Guid parentRunId, Guid generation, DateTimeOffset now, CancellationToken ct = default) => ValueTask.FromResult(false);
     ValueTask<IReadOnlyList<BackgroundCompletionCandidate>> ListBackgroundPageAsync(AgentRunOwner owner, Guid parentSessionId, Guid? cursor, bool pendingOnly, int limit, CancellationToken ct = default) => ListBackgroundChildrenAsync(owner, parentSessionId, limit, ct);

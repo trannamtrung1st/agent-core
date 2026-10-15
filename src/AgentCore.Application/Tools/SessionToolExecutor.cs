@@ -40,7 +40,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
     AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null)
+    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, AgentCore.Application.Workspaces.SessionWorkingCleanupService? workingCleanup = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -90,7 +90,7 @@ public sealed partial class SessionToolExecutor(
     public async ValueTask<AgentCore.Application.Execution.ResolvedAgentRunConfiguration> ResolveRunConfigurationAsync(SessionSnapshot session, CancellationToken ct)
     {
         if (_agentInstances is not null && _agentDefinitions is not null && definitionResources is not null)
-            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources, credentialBindings, sandboxStore, sandboxAuthority, sandboxReadiness).ResolveAsync(session.AgentInstanceId, ct);
+            return await new AgentCore.Application.Execution.AgentRunConfigurationResolver(_agentInstances, _agentDefinitions, definitionResources, inheritedResources, credentialBindings, sandboxStore, sandboxAuthority, sandboxReadiness, browser).ResolveAsync(session.AgentInstanceId, ct);
         // Isolated fixtures can supply their immutable Definition directly. Production wires all stores.
         var owner = _agentInstances is null ? null : await _agentInstances.FindAsync(session.AgentInstanceId, ct);
         var bindings = credentialBindings is null ? [] : await credentialBindings.ListBindingsAsync(session.AgentInstanceId, ct);
@@ -123,6 +123,8 @@ public sealed partial class SessionToolExecutor(
         ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         if (admission?.OwnedSessionId is { } ownedSession && (ownedSession == Guid.Empty || ownedSession != sessionId)) return ToolPolicyDecision.Deny;
+        if (admission?.AgentInstanceId is { } isolationOwner)
+            definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, ct);
         if (ManagementTools.IsManagement(call.Name) && admission is not null)
             admission = admission with { Harness = await HarnessContextAsync(admission.AgentInstanceId, ct) };
         if (!ToolCatalog.IsIdentityMaintenance(call.Name)) return ManagementDecision(definition, call.Name, args, admission, null,
@@ -191,6 +193,11 @@ public sealed partial class SessionToolExecutor(
         ToolExecutionAdmission? admission = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (admission?.AgentInstanceId is { } isolationOwner)
+        {
+            try { definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, cancellationToken); }
+            catch (AgentCoreException) { return TextResult(Error("forbidden", "Current isolation policy is unavailable.")); }
+        }
         if (string.Equals(call.Name, ToolCatalog.SkillsLoad, StringComparison.Ordinal)
             || string.Equals(call.Name, ToolCatalog.AppMessageSend, StringComparison.Ordinal))
         {
@@ -442,14 +449,20 @@ public sealed partial class SessionToolExecutor(
                         admission.HarnessSources ?? [], admission.OwnerTurnText, cancellationToken);
                 return FitResult(remainingOutputBytes, JsonSerializer.Serialize(result));
             }
+            if (admission is not null && (call.Name.StartsWith("drive.", StringComparison.Ordinal)
+                || call.Name.StartsWith("office.", StringComparison.Ordinal) || call.Name == ToolCatalog.WebDownload))
+                admission = admission with { WorkspaceCwd = StateIsolationAccess.Cwd(await IsolationAsync(definition, sessionId, cancellationToken), admission.WorkspaceCwd) };
             if ((call.Name.StartsWith("workspace.", StringComparison.Ordinal) || call.Name == ToolCatalog.ArtifactsCreateFromWorkspace))
             {
                 if (!await AgentWorkspaceAvailableAsync(sessionId, cancellationToken))
                     return TextResult(Error("forbidden", "Workspace tools require an Agent Instance."));
+                var isolation = await IsolationAsync(definition, sessionId, cancellationToken);
+                var cwd = StateIsolationAccess.Cwd(isolation, admission?.WorkspaceCwd);
                 if (call.Name == ToolCatalog.WorkspaceCwd)
-                    return await ExecuteCwdAsync(definition, sessionId, args, admission?.WorkspaceCwd ?? "/home", cancellationToken);
-                args = AgentWorkspacePaths.Arguments(call.Name, args, sessionId, admission?.WorkspaceCwd ?? "/home");
-                ProtectCwd(call.Name, args, sessionId, admission?.WorkspaceCwd ?? "/home");
+                    return await ExecuteCwdAsync(definition, sessionId, args, cwd, cancellationToken);
+                args = AgentWorkspacePaths.Arguments(call.Name, args, sessionId, cwd);
+                CheckWorkspacePolicy(call.Name, args, isolation);
+                ProtectCwd(call.Name, args, sessionId, cwd);
             }
             if (call.Name.StartsWith("drive.", StringComparison.Ordinal))
                 return FitResult(remainingOutputBytes, await ExecuteDriveAsync(definition, sessionId, call, args, admission, approvalGrant, cancellationToken));

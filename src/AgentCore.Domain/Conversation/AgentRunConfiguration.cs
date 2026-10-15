@@ -11,7 +11,8 @@ public sealed class AgentRunConfiguration
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public AgentRunConfiguration(AgentDefinition definition, long instanceRevision, long personaRevision,
-        IReadOnlyList<EffectiveAgentResource> resources, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? credentialBindings = null)
+        IReadOnlyList<EffectiveAgentResource> resources, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? credentialBindings = null,
+        BrowserIsolation? resolvedBrowserIsolation = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(resources);
@@ -23,9 +24,12 @@ public sealed class AgentRunConfiguration
         Resources = Array.AsReadOnly(resources.ToArray());
         CredentialBindings = Array.AsReadOnly((credentialBindings ?? []).ToArray());
         InstanceRevision = instanceRevision; PersonaRevision = personaRevision;
+        ResolvedBrowserIsolation = resolvedBrowserIsolation;
         Definition = Freeze(definition) with { ExecutionResources = Resources };
-        ConfigurationHash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
-            new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings }, Json))).ToLowerInvariant();
+        var bytes = resolvedBrowserIsolation is null
+            ? JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings }, Json)
+            : JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, ResolvedBrowserIsolation }, Json);
+        ConfigurationHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     }
     public AgentDefinition Definition { get; }
     public long InstanceRevision { get; }
@@ -33,6 +37,7 @@ public sealed class AgentRunConfiguration
     public IReadOnlyList<EffectiveAgentResource> Resources { get; }
     public string ConfigurationHash { get; }
     public IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding> CredentialBindings { get; }
+    public BrowserIsolation? ResolvedBrowserIsolation { get; }
 
     private static IReadOnlyList<T> Copy<T>(IReadOnlyList<T> values) => Array.AsReadOnly(values.ToArray());
     private static AgentDefinition Freeze(AgentDefinition d) => d with {

@@ -20,7 +20,7 @@ public sealed partial class SessionToolExecutor
         if (!BrowserToolCatalog.TryGet(name, out var metadata)) return Fail("unsupported_operation", "Unknown browser feature.");
         if (!BrowserToolArguments.TryRequest(sessionId, name, args, out var request, out var argumentError))
             return Fail(argumentError, argumentError == "invalid_frame" ? BrowserFailureMessage(argumentError) : BrowserToolArguments.ArgumentGuidance(args));
-        var denied = await BindBrowserAsync(sessionId, admission, ct).ConfigureAwait(false);
+        var denied = await BindBrowserAsync(definition, sessionId, admission, ct).ConfigureAwait(false);
         if (denied is not null) return TextResult(FinishBrowser(name, started, denied));
         if (browser is null || !browser.IsAvailable && metadata.Feature != BrowserFeature.Configuration) return Fail("provider_unavailable", "Browser is unavailable.");
         if (!BrowserToolArguments.WithinOperationalLimits(request.Command, browser.HostPolicy.Limits)) return Fail("invalid", "Input exceeds the effective host browser budget.");
@@ -32,7 +32,7 @@ public sealed partial class SessionToolExecutor
             && !BrowserTargetPolicy.EvaluateDestination(navigate.Url, browser.HostPolicy.NavigationOrigins, browser.HostPolicy.PolicyMode).Allowed)
             return Fail("target_denied", BrowserFailureMessage("target_denied"));
         if (name == ToolCatalog.BrowserScreenshot)
-            return await CaptureBrowserAsync(sessionId, args, admission, remainingOutputBytes, ct);
+            return await CaptureBrowserAsync(definition, sessionId, args, admission, remainingOutputBytes, ct);
         if (name == ToolCatalog.BrowserUpload)
         {
             var uploads = new List<BrowserUpload>();
@@ -135,13 +135,29 @@ public sealed partial class SessionToolExecutor
     private readonly Dictionary<string, int> _downloadCounts = new(StringComparer.Ordinal);
     private readonly object _captureGate = new();
 
-    private async Task<string?> BindBrowserAsync(Guid sessionId, ToolExecutionAdmission? admission, CancellationToken ct)
+    private async Task<string?> BindBrowserAsync(AgentDefinition definition, Guid sessionId, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         if (admission?.AgentInstanceId is Guid id && id != Guid.Empty)
         {
             if (_agentInstances is not null && await _agentInstances.FindAsync(id, ct) is not { Lifecycle: AgentInstanceLifecycle.Active })
                 return Error("forbidden", "An active Agent Instance is required.");
-            if (browser is IBrowserProfileBinding binding) binding.BindSession(sessionId, id);
+            if (browser is IBrowserIsolationBinding isolated)
+            {
+                var isolation = await IsolationAsync(definition, sessionId, ct);
+                var resolved = isolation.BrowserIsolation;
+                if (resolved == BrowserIsolation.HostDefault && admission.AgentRunId is { } runId && emailRuns is not null && _profiles is not null)
+                {
+                    var snapshot = await _profiles.LoadMetadataAsync(sessionId, ct);
+                    var run = snapshot?.ProfileId is { } profile ? await emailRuns.GetAsync(new(id, profile), runId, ct) : null;
+                    if (run?.SessionId != sessionId) return Error("forbidden", "Current Browser Run ownership is unavailable.");
+                    resolved = run.Admission.Configuration?.ResolvedBrowserIsolation ?? BrowserIsolation.HostDefault;
+                }
+                var mode = resolved == BrowserIsolation.EphemeralSession ? BrowserProfileMode.EphemeralSession
+                    : resolved == BrowserIsolation.PersistentAgent ? BrowserProfileMode.PersistentAgent : browser.HostPolicy.ProfileMode;
+                if (await isolated.BindIsolationAsync(sessionId, id, mode, ct) is { } code)
+                    return Error(code, "Browser isolation transition is blocked or pending. Keep original effect receipts; retry after owned operations settle.");
+            }
+            else if (browser is IBrowserProfileBinding binding) binding.BindSession(sessionId, id);
         }
         else if (admission?.Detached == true) return Error("forbidden", "An Agent Instance is required.");
         return null;
@@ -263,6 +279,7 @@ public sealed partial class SessionToolExecutor
     }
 
     private async Task<ToolExecutionResult> CaptureBrowserAsync(
+        AgentDefinition definition,
         Guid sessionId,
         JsonElement args,
         ToolExecutionAdmission? admission,
@@ -273,7 +290,7 @@ public sealed partial class SessionToolExecutor
             browser is IBrowserCaptureLifetime retiring ? retiring.CaptureLifetime : CancellationToken.None);
         cancellationToken = lifetime.Token;
         var started = Stopwatch.GetTimestamp();
-        var denied = await BindBrowserAsync(sessionId, admission, cancellationToken).ConfigureAwait(false);
+        var denied = await BindBrowserAsync(definition, sessionId, admission, cancellationToken).ConfigureAwait(false);
         if (denied is not null)
         {
             return FitResult(remainingOutputBytes, FinishBrowser(ToolCatalog.BrowserScreenshot, started, denied));

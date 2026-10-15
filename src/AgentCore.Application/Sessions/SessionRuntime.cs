@@ -258,6 +258,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _epoch = _ids.NewId();
         _durableRevision = snapshot.Revision;
         _durableSnapshot = snapshot;
+        _workspaceCwd = AgentCore.Application.Agents.StateIsolationAccess.Cwd(snapshot.Definition.StateIsolationPolicy ?? StateIsolationPolicy.Default, null);
         _loop = Task.Run(() => RunAsync(_lifetime.Token));
         _persistLoop = Task.Run(() => RunPersistAsync(_lifetime.Token));
     }
@@ -1491,6 +1492,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 return;
             }
         }
+
+        try
+        {
+            var (_, resolved) = await ResolveNewRunAsync(cancellationToken);
+            if (RequestIsolation.Required(resolved.Configuration.Definition)
+                && (!RequestIsolation.Required(_snapshot.Definition) || _snapshot.DurableLastEntrySequence > 0
+                    || (await _agentRuns.ListForSessionAsync(RunOwner, SessionId, cancellationToken)).Count > 0))
+            { input.Persisted?.TrySetException(RequestIsolation.FreshSessionRequired()); return; }
+        }
+        catch (AgentCoreException error) { input.Persisted?.TrySetException(error); return; }
 
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending or SessionStatus.Paused
             || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus))
@@ -5903,6 +5914,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             then: async ct =>
             {
                 await PublishStateAsync(context, ct).ConfigureAwait(false);
+                try { await _tools.CleanupTerminalWorkingAsync(SessionId, ct).ConfigureAwait(false); }
+                catch (Exception failure) when (failure is not OperationCanceledException)
+                { LogHandledRuntimeFailure(failure, "workspace.cleanup", "workspace_cleanup_deferred"); }
                 persisted?.TrySetResult(true);
             },
             ended: persisted);
@@ -6296,6 +6310,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     await then(cancellationToken).ConfigureAwait(false);
                 }
+                if (job.Kind != PersistKind.TerminalEnd)
+                    await TryFinalizeRequestIsolationAsync(input.Context, cancellationToken).ConfigureAwait(false);
             }
             finally
             {

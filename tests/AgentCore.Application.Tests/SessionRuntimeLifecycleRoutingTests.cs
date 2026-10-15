@@ -16,6 +16,35 @@ namespace AgentCore.Application.Tests;
 public sealed class SessionRuntimeLifecycleRoutingTests
 {
     [Fact]
+    public async Task Request_isolated_text_run_completes_the_ordinary_session_and_rejects_another_request_without_losing_history()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 15, 0, 0, 0, TimeSpan.Zero));
+        var store = new InMemoryMemoryStore();
+        var definition = SampleDefinitions.Examiner with { Voice = new(false, "default", 1),
+            StateIsolationPolicy = new(ConversationContextScope: ConversationContextScope.CurrentRequest, HomeAccess: HomeAccess.Disabled,
+                BrowserIsolation: BrowserIsolation.EphemeralSession, ExperienceRecord: false, ExperienceRecall: false, ProfileEvidence: false, CrossSessionContinuity: false) };
+        var now = time.GetUtcNow();
+        var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, definition, SessionMode.Text, null, SessionStatus.Created, [], "", 0, null,
+            null, now, now, AgentInstanceId: Guid.NewGuid());
+        var output = new CapturingSessionOutput();
+        await using var runtime = Create(output, time, new ScriptedLanguageModel(), store, snapshot);
+        await runtime.AttachAsync();
+        var eventId = Guid.NewGuid();
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("First customer request", eventId));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(SessionLifecycleStatus.Completed, runtime.Snapshot.LifecycleStatus);
+        Assert.Equal(SessionStatus.Ended, runtime.Snapshot.Status);
+        Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.User);
+        Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.Assistant && e.Status == EntryStatus.Completed);
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() => runtime.SubmitPersistedUserTextAsync("Independent request two", Guid.NewGuid()));
+        Assert.Equal("fresh_session_required", error.Code);
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("First customer request", eventId));
+        var durable = (await store.LoadAsync(runtime.SessionId))!;
+        Assert.Equal(SessionLifecycleStatus.Completed, durable.LifecycleStatus);
+        Assert.DoesNotContain(durable.Entries, e => e.Text == "Independent request two");
+    }
+
+    [Fact]
     public async Task Live_paused_to_active_does_not_terminalize_and_accepts_input()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 19, 7, 0, 0, TimeSpan.Zero));

@@ -26,6 +26,8 @@ production hardening is deferred. P11 remains unopened and requirement-triggered
 
 ## Open work and acceptance gaps
 
+- [ ] **State and isolation:** finish the companion-context integration, authorized model-facing state tool/facts and two-customer context proof, then reconcile AS-01–28. Independent policy/resource/UI evidence is recorded in the [state/isolation ledger](docs/reports/agent-state-isolation-verification-2026-10-15.md). No hosted CI or live provider acceptance is implied.
+
 - [ ] **Office/Drive manual and Real acceptance:** implementation and all seven automated Synthetic/Compose gates passed on `a451600a`. Dedicated real Google UAT, desktop Office-client fidelity and actual native browser 200% zoom remain unverified; see the [successor ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md).
 
 - [ ] **Original Background Work results:** reconcile the remaining exact-source hosted acceptance after follow-up fixture/native-browser corrections. Local checks and earlier green runs are recorded in the [verification ledger](docs/reports/background-original-result-verification.md); preserve the distinction between earlier acceptance and later edits.

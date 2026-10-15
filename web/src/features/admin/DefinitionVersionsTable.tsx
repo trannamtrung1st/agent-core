@@ -11,6 +11,7 @@ import { DefinitionCandidateEditor, type DefinitionEditorView } from "./definiti
 import { candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
 import { DefinitionSkillsSection } from "./DefinitionSkillsSection";
 import { DefinitionSandboxPolicy } from './DefinitionSandboxPolicy';
+import { DefinitionStateIsolationPolicy } from './DefinitionStateIsolationPolicy';
 import { readDraftEnvironment } from "./draftEnvironment";
 
 export function DefinitionVersionsTable({ rows, publications, busy, onChat, onDeprecate, renderResources }: {
@@ -142,6 +143,7 @@ function DefinitionVersionDetails({ row, renderResources }: {
             resources={<AgentConfigurationPanel title="Resources" label="Published resources">{row.source === "durable"
             ? renderResources(row.version) : <Typography.Text type="secondary">Built-in resources use the shipped role environment and knowledge sources.</Typography.Text>}</AgentConfigurationPanel>}
           /> },
+          { key: 'state-isolation', label: 'State & Isolation', children: <AgentConfigurationPanel title="State & Isolation" label="Published State & Isolation" bodyGap="default"><DefinitionStateIsolationPolicy candidate={candidate} readOnly /></AgentConfigurationPanel> },
           { key: "sandbox", label: "Sandbox", children: <AgentConfigurationPanel title="Sandbox profiles" label="Published sandbox" bodyGap="default"
             description="This published profile policy is immutable. Fork this version to change its allowed profiles or default.">
             <DefinitionSandboxPolicy candidate={candidate} readOnly />

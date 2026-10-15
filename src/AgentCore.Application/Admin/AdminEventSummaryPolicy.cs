@@ -29,6 +29,7 @@ public static class AdminEventSummaryPolicy
             "modelDefaults",
             "capabilities",
             "sandboxPolicy",
+            "stateIsolationPolicy",
             "memoryPolicy",
             "triggerPolicy",
             "selfManagement",
@@ -233,7 +234,8 @@ public static class AdminEventSummaryPolicy
                 foreach (var property in document.RootElement.EnumerateObject())
                     if (property.Name is not ("section" or "set" or "clear")) throw AgentCoreErrors.Validation("Unsupported settings history metadata.");
                 var section = document.RootElement.GetProperty("section").GetString()!;
-                var fields = section == "automationPreferences" ? new[] { "catalogKey", "reasoningEffort" } : AgentCore.Application.Agents.InstanceSettingsResolver.Fields(section);
+                var fields = section == StateIsolationConfigurationService.AuditSection ? StateIsolationConfigurationService.AuditFields
+                    : section == "automationPreferences" ? new[] { "catalogKey", "reasoningEffort" } : AgentCore.Application.Agents.InstanceSettingsResolver.Fields(section);
                 foreach (var field in document.RootElement.GetProperty("set").EnumerateArray().Concat(document.RootElement.GetProperty("clear").EnumerateArray()))
                     if (!fields.Contains(field.GetString(), StringComparer.Ordinal)) throw AgentCoreErrors.Validation("Unsupported settings history field.");
                 return;

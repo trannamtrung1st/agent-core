@@ -24,7 +24,7 @@ public sealed partial class SessionRuntime
 
         var results = await MemoryAdmission.AdmitAsync(
             _structuredMemory,
-            ExecutionDefinition,
+            await _tools.RestrictExecutionDefinitionAsync(ExecutionDefinition, _snapshot.AgentInstanceId, cancellationToken),
             SessionId,
             _snapshot.AgentInstanceId,
             _profile,

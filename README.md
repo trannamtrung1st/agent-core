@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+State and isolation enhancement is in progress on `develop/branch-1`: owner State observations, inherited isolation configuration, atomic preset drafts and Session-owned browser views are locally verified. Model-facing integration depends on the companion context cutover. The [verification ledger](docs/reports/agent-state-isolation-verification-2026-10-15.md) records exact checks and remaining acceptance gaps.
+
 The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application
 behavior through `d279abfe`, followed by its documentation review).
 General Assistant v30 preserves main's immutable v29 and combines its current

@@ -278,7 +278,7 @@ public sealed partial class NativePlaywrightBrowser
         {
             // A native popup can be exposed as about:blank before its first routed navigation.
             // Await that native transition before deciding it is a permitted blank tab.
-            var starting = session.Context.Pages.Where(page => !ReferenceEquals(page, session.Page)
+            var starting = OwnedContextPages(session).Where(page => !ReferenceEquals(page, session.Page)
                 && !session.CallPages.Contains(page) && page.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)).ToArray();
             await Task.WhenAll(starting.Select(async page =>
             {
@@ -302,7 +302,7 @@ public sealed partial class NativePlaywrightBrowser
                 }
                 await ClosePopupsAsync(session).ConfigureAwait(false);
 
-                var extras = session.Context.Pages.Count(page => !ReferenceEquals(page, session.Page) && !KeepPopup(session, page));
+                var extras = OwnedContextPages(session).Count(page => !ReferenceEquals(page, session.Page) && !KeepPopup(session, page));
                 var stillClosing = false;
                 lock (session.PopupGate)
                 {
@@ -322,7 +322,7 @@ public sealed partial class NativePlaywrightBrowser
 
     private async Task ClosePopupsAsync(SessionBrowser session)
     {
-        foreach (var page in session.Context.Pages.ToArray())
+        foreach (var page in OwnedContextPages(session).ToArray())
         {
             if (ReferenceEquals(page, session.Page) || KeepPopup(session, page))
             {
@@ -407,9 +407,38 @@ public sealed partial class NativePlaywrightBrowser
             : IsAllowed(url) && BrowserTargetPolicy.EvaluateDestination(url, lease, BrowserPolicyMode.Restricted).Allowed;
     }
 
+    private IEnumerable<IPage> OwnedContextPages(SessionBrowser session) => session.Persistent
+        ? session.Context.Pages.Where(p => _pageScopes.TryGetValue(p, out var scope) && ReferenceEquals(scope, session))
+        : session.Context.Pages;
+
+    private async Task RouteOwnedAsync(SessionBrowser root, IRoute route)
+    {
+        SessionBrowser scope = root.ActiveView ?? root;
+        try
+        {
+            var page = route.Request.Frame.Page;
+            if (_pageScopes.TryGetValue(page, out var existing)) scope = existing;
+            else if (await page.OpenerAsync() is { } opener && _pageScopes.TryGetValue(opener, out var owner))
+            { scope = owner; RememberPage(scope, page); }
+        }
+        catch (PlaywrightException) { }
+        await RouteAsync(scope, route);
+    }
+
+    private async Task AssignPageScopeAsync(SessionBrowser root, IPage page)
+    {
+        try
+        {
+            var scope = _pageScopes.TryGetValue(page, out var known) ? known
+                : await page.OpenerAsync() is { } opener && _pageScopes.TryGetValue(opener, out var owner) ? owner : root.ActiveView ?? root;
+            OnContextPage(scope, page);
+        }
+        catch (PlaywrightException) { }
+    }
+
     private void RememberOpenPages(SessionBrowser session)
     {
-        foreach (var page in session.Context.Pages.ToArray())
+        foreach (var page in OwnedContextPages(session).ToArray())
         {
             RememberPage(session, page);
         }
@@ -458,6 +487,8 @@ public sealed partial class NativePlaywrightBrowser
             return;
         }
 
+        var actual = _pageScopes.GetOrAdd(page, session);
+        if (!ReferenceEquals(actual, session)) return;
         var added = false;
         lock (session.PopupGate)
         {
@@ -489,8 +520,9 @@ public sealed partial class NativePlaywrightBrowser
         }
     }
 
-    private static void ForgetPage(SessionBrowser session, IPage page)
+    private void ForgetPage(SessionBrowser session, IPage page)
     {
+        _pageScopes.TryRemove(new KeyValuePair<IPage, SessionBrowser>(page, session));
         lock (session.PopupGate)
         {
             session.Pages.RemoveAll(item => ReferenceEquals(item.Page, page));

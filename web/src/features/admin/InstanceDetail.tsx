@@ -21,6 +21,8 @@ import { InstanceOverview } from './InstanceOverview';
 import { InstanceResourcesSection } from "./InstanceResourcesSection";
 import { InstanceRunsSection } from "./InstanceRunsSection";
 import { InstanceSettingsSection } from "./InstanceSettingsSection";
+import { InstanceStateSection } from './InstanceStateSection';
+import { StateIsolationConfigurationSection } from './StateIsolationConfigurationSection';
 import { InstanceSkillsSection } from "./InstanceSkillsSection";
 import { InstanceWorkspaceSection } from "./InstanceWorkspaceSection";
 import { RetainedAdminPage } from './RetainedAdminPage';
@@ -47,6 +49,7 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
   const dirty = settingsDirty || Object.values(editorDirty).some(Boolean);
   const releaseConsumedInstance = useAdminUnsavedChanges(`instance:${instanceId}`, dirty);
   const reportDirty = useCallback((key: string, value: boolean) => setEditorDirty(current => current[key] === value ? current : { ...current, [key]: value }), []);
+  const reportIsolationDirty = useCallback((value: boolean) => reportDirty('state-isolation', value), [reportDirty]);
   const reportCredentialDirty = useCallback((value: boolean) => reportDirty('credentials', value), [reportDirty]);
   const runOpener = useRef<HTMLElement | null>(null);
   const restoreRunFocus = useRef(false);
@@ -123,6 +126,8 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
         <RetainedAdminPage active={page === 'memory'}><Flex vertical gap={token.padding}>{!archived && <IdentityMaintenanceSection instanceId={instanceId} />}<InstanceMemoryAutomationPanel config={resolved} section="memory" /></Flex></RetainedAdminPage>
         <RetainedAdminPage active={page === 'experience'}>{!archived ? <ExperienceSection instanceId={instanceId} active={page === 'experience'} onWork={viewRun} selection={page === 'experience' ? experienceSelection : undefined} /> : <Alert type="info" showIcon title="Unarchive from Lifecycle to inspect Experience." />}</RetainedAdminPage>
         <RetainedAdminPage active={page === 'sessions'}><InstanceSessionsSection instanceId={instanceId} archived={archived} open={page === 'sessions'} /></RetainedAdminPage>
+        <RetainedAdminPage active={page === 'state-isolation'}><section id="state-isolation" tabIndex={-1}><StateIsolationConfigurationSection instanceId={instanceId} active={page === 'state-isolation'} archived={archived} onUpdated={onInstanceChanged} onDirtyChange={reportIsolationDirty} /></section></RetainedAdminPage>
+        <RetainedAdminPage active={page === 'state'}><InstanceStateSection instanceId={instanceId} active={page === 'state'} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'runs'}><InstanceRunsSection instanceId={instanceId} open={page === 'runs'} inline onRun={viewRun} onClose={() => go('sessions')} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'effective'}><AgentConfigurationPanel title="Resolved configuration" label="Effective configuration" description="Saved Definition and Instance values. Draft overrides are not included."><EffectiveConfigView config={resolved} hidePersona /></AgentConfigurationPanel></RetainedAdminPage>
       </Flex></InstanceConfigurationContent></Flex></div></InstanceConfigurationProvider>}

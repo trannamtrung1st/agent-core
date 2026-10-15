@@ -158,6 +158,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 AgentRunStoreMapping.ObserveAdmission(snapshot, existing, false);
                 return new AgentRunAdmissionResult(false, existing);
             }
+            RequestIsolation.ValidateAdmission(run, State.Runs.Values.Any(r => r.SessionId == run.SessionId && r.Owner == run.Owner));
             if (State.Runs.ContainsKey(run.AgentRunId) || State.Activations.ContainsKey(run.ActivationId))
                 throw AgentCoreErrors.Conflict("AgentRun or Activation identity already exists.");
             State.Runs.TryGetValue(run.Admission.Activation.SourceAgentRunId ?? Guid.Empty, out var source);
@@ -250,6 +251,26 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                         && triggers?.FindAdmissionOccurrence(id)?.AutomationId == automationId;
                 })
                 .OrderByDescending(run => run.CreatedAtUtc).ThenByDescending(run => run.AgentRunId).FirstOrDefault());
+    }
+
+    public ValueTask<DurableRunState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default) => ReadStateCoreAsync(owner, null, ct);
+    public ValueTask<DurableRunState> ReadSessionStateAsync(AgentRunOwner owner, Guid sessionId, CancellationToken ct = default) => ReadStateCoreAsync(owner, sessionId, ct);
+    private ValueTask<DurableRunState> ReadStateCoreAsync(AgentRunOwner owner, Guid? sessionId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (sessions.AdmissionGate)
+        {
+            var counts = State.Runs.Values.Where(r => r.Owner == owner && (sessionId == null || r.SessionId == sessionId)).Where(r =>
+            {
+                var s = sessions.LoadMetadataAsync(r.SessionId, ct).GetAwaiter().GetResult();
+                return s is not null && s.AgentInstanceId == owner.AgentInstanceId && s.ProfileId == owner.ProfileId
+                    && s.DurablyDeletedAt is null && s.ArchivedAt is null;
+            }).GroupBy(r => r.Status).ToDictionary(g => g.Key, g => g.Count());
+            int Count(AgentRunStatus status) => counts.GetValueOrDefault(status);
+            return ValueTask.FromResult(new DurableRunState(Count(AgentRunStatus.Queued), Count(AgentRunStatus.Running),
+                Count(AgentRunStatus.WaitingForApproval), Count(AgentRunStatus.WaitingForSignal), Count(AgentRunStatus.WaitingToRetry),
+                Count(AgentRunStatus.Completed) + Count(AgentRunStatus.Failed) + Count(AgentRunStatus.Cancelled)));
+        }
     }
 
     public ValueTask<AgentRunPage> ListPageAsync(AgentRunOwner owner, Guid? sessionId, Guid? before, int limit, CancellationToken cancellationToken = default)

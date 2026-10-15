@@ -19,6 +19,9 @@ public static class AgentDefinitionValidator
 
     public static void Validate(AgentDefinition definition)
     {
+        definition.StateIsolationPolicy?.Validate();
+        if (definition.StateIsolationPolicy?.ConversationContextScope == ConversationContextScope.CurrentRequest && definition.Voice.Enabled)
+            throw new ArgumentException("Request-isolated Sessions currently support text input. Disable Voice before selecting CurrentRequest.");
         if (definition.SchemaVersion != 1)
         {
             throw new ArgumentException($"Unsupported schemaVersion {definition.SchemaVersion}.");

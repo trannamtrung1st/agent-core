@@ -9,6 +9,7 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed partial class InMemoryExperienceStore(InMemoryAdminEventStore? events = null, IAgentRunStore? runs = null) : IExperienceStore
 {
     private readonly object gate = new();
+    internal object IsolationGate => gate;
     private readonly Dictionary<Guid, ExperienceSettings> settings = [];
     private readonly Dictionary<Guid, AgentExperience> records = [];
     public ValueTask<ExperienceSettings> SettingsAsync(Guid id, CancellationToken ct = default)

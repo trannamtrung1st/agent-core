@@ -18,6 +18,9 @@ public static class ToolPolicy
             return ToolPolicyDecision.Deny;
         }
 
+        if (!IsolationAllows(definition, toolName))
+            return ToolPolicyDecision.Deny;
+
         if (admission?.ConfigurationContinuationTarget is { } continuationTarget && (ManagementTools.IsManagement(toolName) || descriptor.Effect != ToolEffect.ReadOnly && toolName != continuationTarget))
             return ToolPolicyDecision.Deny;
         if (ToolCatalog.IsCompletionTool(toolName) && admission?.OwnedSessionId is null) return ToolPolicyDecision.Deny;
@@ -159,6 +162,7 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (!IsolationAllows(definition, descriptor.Name)) return false;
         if (descriptor.Name == ToolCatalog.SandboxExec && (definition.SandboxPolicy is null || definition.ExecutionSandboxProfile is null && !(definition.ExecutionSandboxProfiles?.Any(p => p.AdmittedForExecution != false) == true))) return false;
         if (context?.ConfigurationContinuationTarget is { } continuationTarget && (ManagementTools.IsManagement(descriptor.Name) || descriptor.Effect != ToolEffect.ReadOnly && descriptor.Name != continuationTarget)) return false;
         if (descriptor.Name == ToolCatalog.BackgroundAcknowledge && context?.HasBackgroundClaim != true) return false;
@@ -276,6 +280,15 @@ public static class ToolPolicy
         IToolConfigurationGate configurationGate) =>
         ToolRegistry.TryGet(toolName, out var descriptor)
         && IsOffered(descriptor, definition, context, configurationGate);
+
+    private static bool IsolationAllows(AgentDefinition definition, string tool)
+    {
+        var isolation = definition.StateIsolationPolicy ?? StateIsolationPolicy.Default;
+        return !(tool is ToolCatalog.ContinuitySearch or ToolCatalog.ContinuityGet && !isolation.CrossSessionContinuity
+            || tool is AgentCore.Application.Experience.ExperienceService.SourceTool or ToolCatalog.ExperienceRecent && !isolation.ExperienceRecall
+            || tool == AgentCore.Application.Experience.ExperienceService.RecordTool && !isolation.ExperienceRecord
+            || ToolCatalog.IsIdentityMaintenance(tool) && !isolation.CrossSessionContinuity);
+    }
 
     private static bool BrowserAdmissionAllows(ToolExecutionAdmission? admission) =>
         admission is { Detached: false, TriggerKind: TriggerKind.UserTurn }

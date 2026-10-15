@@ -41,10 +41,14 @@ public sealed class ContinuityService(ExperienceService experience, IExperienceS
         var instance = await experience.RequireInstanceAsync(instanceId, ct);
         definition ??= await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct)
             ?? throw AgentCoreErrors.NotFound("Definition was not found.");
+        var latest = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
+        definition = StateIsolationAccess.RestrictDefinition(definition, InstanceSettingsResolver.Resolve(latest, instance.SettingsOverrides));
+        var isolation = StateIsolationPolicy.Restrict(definition.StateIsolationPolicy ?? StateIsolationPolicy.Default, await experience.IsolationPolicyAsync(instanceId, ct));
+        if (!isolation.CrossSessionContinuity) return [];
         var candidates = new List<ContinuityItem>();
         if (includeMemories) foreach (var m in await MemoryCandidates(instanceId, definition, ct))
             candidates.Add((await ProjectMemory(m, instanceId, ct)) with { Relevance = Score(m.Subject + " " + m.Content, query) });
-        if ((await experiences.SettingsAsync(instanceId, ct)).Enabled)
+        if (isolation.ExperienceRecall && (await experiences.SettingsAsync(instanceId, ct)).Enabled)
             foreach (var e in await experiences.ListAsync(instanceId, CandidateLimit, ct))
                 if (await EligibleExperience(e, instanceId, ct)) candidates.Add(ProjectExperience(e) with { Relevance = Score(ExperienceText(e), query) });
         var sessions = includeSessions
@@ -88,6 +92,11 @@ public sealed class ContinuityService(ExperienceService experience, IExperienceS
         if (id == Guid.Empty || after < 0 || limit is < 1 or > 20 || !Enum.IsDefined(kind)) throw AgentCoreErrors.Validation("Continuity inspection bounds are invalid.");
         var instance = await experience.RequireInstanceAsync(instanceId, ct);
         definition ??= await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
+        var latest = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct) ?? throw AgentCoreErrors.NotFound("Definition was not found.");
+        definition = StateIsolationAccess.RestrictDefinition(definition, InstanceSettingsResolver.Resolve(latest, instance.SettingsOverrides));
+        var isolation = StateIsolationPolicy.Restrict(definition.StateIsolationPolicy ?? StateIsolationPolicy.Default, await experience.IsolationPolicyAsync(instanceId, ct));
+        if (!isolation.CrossSessionContinuity || kind == ContinuityKind.Experience && !isolation.ExperienceRecall)
+            throw AgentCoreErrors.Forbidden("Cross-Session continuity is disabled by State & Isolation policy.");
         if (kind == ContinuityKind.Memory)
         {
             var m = (await MemoryCandidates(instanceId, definition, ct)).FirstOrDefault(m => m.MemoryId == id)

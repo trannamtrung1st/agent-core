@@ -7,6 +7,19 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class InMemoryMemoryStore : IMemoryStore
 {
+    public ValueTask<DurableSessionState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            var rows = _sessions.Values.Where(s => s.AgentInstanceId == owner.AgentInstanceId && s.ProfileId == owner.ProfileId
+                && s.DurablyDeletedAt is null && s.ArchivedAt is null).ToArray();
+            return ValueTask.FromResult(new DurableSessionState(rows.Count(s => s.LifecycleStatus == SessionLifecycleStatus.Active),
+                rows.Count(s => s.LifecycleStatus == SessionLifecycleStatus.Paused), rows.Count(s => SessionLifecycle.IsTerminal(s.LifecycleStatus)),
+                rows.Length == 0 ? null : rows.Max(s => s.UpdatedAt)));
+        }
+    }
+
     private readonly object _gate = new();
 
     public InMemoryCoreEventStore CoreEvents { get; set; } = new();
@@ -283,6 +296,14 @@ public sealed class InMemoryMemoryStore : IMemoryStore
             var items = _sessions.Values.Where(session => session.AgentInstanceId == owner.AgentInstanceId && session.ProfileId == owner.ProfileId).Select(CloneMeta).ToArray();
             return ValueTask.FromResult(CatalogCursor.Page(items, cursor, limit, true));
         }
+    }
+
+    public ValueTask<SessionCatalogPage> ListTerminalSessionsAsync(string? cursor, int limit, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_gate)
+            return ValueTask.FromResult(CatalogCursor.Page(_sessions.Values.Where(s => SessionLifecycle.IsTerminal(s.LifecycleStatus))
+                .Select(CloneMeta).ToArray(), cursor, limit, true));
     }
 
     public ValueTask<SessionCatalogPage> ListCatalogAsync(

@@ -121,6 +121,12 @@ public interface IBrowserProfileBinding
     void BindSession(Guid sessionId, Guid? agentInstanceId);
 }
 
+public interface IBrowserIsolationBinding
+{
+    // Trusted Core selection; provider reports pending instead of reinterpreting an existing context.
+    ValueTask<string?> BindIsolationAsync(Guid sessionId, Guid instanceId, BrowserProfileMode mode, CancellationToken ct = default);
+}
+
 public interface IBrowserContextUse
 {
     ValueTask<IAsyncDisposable> EnterUnattendedAsync(

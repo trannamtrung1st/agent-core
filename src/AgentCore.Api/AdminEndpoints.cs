@@ -98,6 +98,8 @@ internal static class AdminEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/admin").AddEndpointFilter<OwnerCapabilityFilter>();
+        RuntimeStateEndpoints.Map(group);
+        StateIsolationConfigurationEndpoints.Map(group);
         group.MapCredentials();
         group.MapBrowserPrivacy();
         group.MapSandboxes();

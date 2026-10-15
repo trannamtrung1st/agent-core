@@ -33,6 +33,8 @@ public interface ISandboxService
 
 public interface ISandboxStore
 {
+    ValueTask<ResourceStateObservation> ReadStateAsync(AgentRunOwner owner, DateTimeOffset observedAt, CancellationToken ct = default) => throw new NotSupportedException();
+    ValueTask<ResourceStateObservation> ReadSessionStateAsync(AgentRunOwner owner, Guid sessionId, DateTimeOffset observedAt, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<IReadOnlyList<SandboxProfile>> ListProfilesAsync(CancellationToken ct = default);
     ValueTask<SandboxProfile?> GetProfileAsync(string id, long? revision = null, CancellationToken ct = default);
     ValueTask SaveProfileAsync(SandboxProfile profile, long expectedRevision, CancellationToken ct = default, AdminEventAppend? history = null);

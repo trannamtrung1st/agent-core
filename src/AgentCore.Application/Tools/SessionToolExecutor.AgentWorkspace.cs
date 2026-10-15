@@ -31,6 +31,7 @@ public sealed partial class SessionToolExecutor
 
     private async ValueTask<WorkspaceContent> ReadExecutionWorkspaceAsync(Guid sessionId, AgentDefinition definition, string path, CancellationToken ct)
     {
+        AgentCore.Application.Agents.StateIsolationAccess.RequireHome(await IsolationAsync(definition, sessionId, ct), path, false);
         if (!AgentHomePath.IsHome(path)) return await workspace!.ReadAsync(sessionId, definition, path, ct);
         if (agentWorkspace is null) throw AgentCoreErrors.Validation("Durable home is unavailable for this execution.");
         var content = await agentWorkspace.ReadAsync(await agentWorkspace.SessionOwnerAsync(sessionId, ct), path: path, cancellationToken: ct);
@@ -39,13 +40,15 @@ public sealed partial class SessionToolExecutor
 
     private async ValueTask<IReadOnlyList<WorkspaceNode>> ListExecutionWorkspaceAsync(Guid sessionId, AgentDefinition definition, string path, CancellationToken ct)
     {
+        var isolation = await IsolationAsync(definition, sessionId, ct);
+        AgentCore.Application.Agents.StateIsolationAccess.RequireHome(isolation, path, false);
         if (AgentHomePath.IsHome(path))
         {
             if (agentWorkspace is null) throw AgentCoreErrors.Validation("Durable home is unavailable for this execution.");
             return await agentWorkspace.ListNodesAsync(await agentWorkspace.SessionOwnerAsync(sessionId, ct), AgentHomePath.Normalize(path, false), ct);
         }
         var nodes = await workspace!.ListAsync(sessionId, definition, path, ct);
-        if (path != "/" || agentWorkspace is null) return nodes;
+        if (path != "/" || agentWorkspace is null || isolation.HomeAccess == HomeAccess.Disabled) return nodes;
         try { await agentWorkspace.SessionOwnerAsync(sessionId, ct); }
         catch (AgentCoreException ex) when (ex.Code == "ValidationError") { return nodes; }
         return [..nodes, new("/home", true, 0, false)];

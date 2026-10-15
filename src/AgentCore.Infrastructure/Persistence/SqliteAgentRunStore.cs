@@ -110,6 +110,9 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
             AgentRunStoreMapping.ObserveAdmission(snapshot, AgentRunStoreMapping.ToDomain(existing), false);
             return new AgentRunAdmissionResult(false, AgentRunStoreMapping.ToDomain(existing));
         }
+        if (run.Admission.Configuration is { } requestConfig && RequestIsolation.Required(requestConfig.Definition))
+            RequestIsolation.ValidateAdmission(run, await db.AgentRuns.AnyAsync(r => r.SessionId == activation.SessionId
+                && r.AgentInstanceId == activation.AgentInstanceId && r.ProfileId == activation.ProfileId, cancellationToken));
         if (run.Admission.Configuration is { InstanceRevision: > 0 } config)
         {
             var instance = await db.AgentInstances.AsNoTracking().SingleOrDefaultAsync(r => r.InstanceId == run.AgentInstanceId.ToString("D"), cancellationToken).ConfigureAwait(false);
@@ -237,6 +240,23 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
             orderby run.CreatedAtUtc descending, run.AgentRunId descending
             select run).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         return row is null ? null : AgentRunStoreMapping.ToDomain(row);
+    }
+
+    public ValueTask<DurableRunState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default) => ReadStateCoreAsync(owner, null, ct);
+    public ValueTask<DurableRunState> ReadSessionStateAsync(AgentRunOwner owner, Guid sessionId, CancellationToken ct = default) => ReadStateCoreAsync(owner, sessionId, ct);
+    private async ValueTask<DurableRunState> ReadStateCoreAsync(AgentRunOwner owner, Guid? sessionId, CancellationToken ct)
+    {
+        var sessionKey = sessionId?.ToString("D");
+        await using var db = await contexts.CreateDbContextAsync(ct);
+        var groups = await db.AgentRuns.AsNoTracking().Where(r => (sessionKey == null || r.SessionId == sessionKey) && r.AgentInstanceId == owner.AgentInstanceId.ToString("D")
+            && r.ProfileId == owner.ProfileId.ToString("D") && db.Sessions.Any(s => s.SessionId == r.SessionId
+                && s.AgentInstanceId == r.AgentInstanceId && s.Snapshot!.ProfileId == r.ProfileId
+                && s.DurablyDeletedAtUtc == null && s.ArchivedAtUtc == null))
+            .GroupBy(r => r.Status).Select(g => new { Status = g.Key, Count = g.Count() }).ToArrayAsync(ct);
+        int Count(AgentRunStatus status) => groups.Where(g => g.Status == (int)status).Sum(g => g.Count);
+        return new(Count(AgentRunStatus.Queued), Count(AgentRunStatus.Running), Count(AgentRunStatus.WaitingForApproval),
+            Count(AgentRunStatus.WaitingForSignal), Count(AgentRunStatus.WaitingToRetry),
+            Count(AgentRunStatus.Completed) + Count(AgentRunStatus.Failed) + Count(AgentRunStatus.Cancelled));
     }
 
     public async ValueTask<AgentRunPage> ListPageAsync(AgentRunOwner owner, Guid? sessionId, Guid? before, int limit, CancellationToken cancellationToken = default)

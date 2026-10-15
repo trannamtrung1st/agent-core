@@ -2,6 +2,8 @@
 
 ## Verification policy for current work
 
+The 2026-10-15 owner-authorized State and Isolation enhancement follows the companion Three-Layer Context cutover. Independent observation, policy, resource ownership and Admin work can be verified before that dependency; model-facing integration and full AS acceptance require its finalized single assembly path. Current progress and exact local evidence are in the [state/isolation ledger](reports/agent-state-isolation-verification-2026-10-15.md). This request does not reopen historical milestones or opt into hosted CI.
+
 Complete ordinary requests within their scope using focused local checks; they do not start milestone closure or require full backend/frontend/browser/Compose suites. Broaden local verification only for affected boundaries, failures or explicitly requested milestone acceptance. [Testing Strategy](16-testing-strategy.md#verification-scope-and-optional-ci) owns the current policy.
 
 CI is optional and runs only on explicit user request. This policy supersedes older mandatory hosted/exact-SHA CI language below for current work, including milestone acceptance unless the user explicitly requests CI as part of it. Preserve historical acceptance criteria, freeze SHAs and CI receipts as records of their original versions. Report local completion separately from milestone acceptance and never claim unrun checks passed.

@@ -34,6 +34,7 @@ public sealed partial class SessionToolExecutor
             if (call.Name == "drive.download")
             {
                 var path = AgentWorkspacePaths.Resolve(Required("path"), sessionId, admission.WorkspaceCwd ?? "/home", true);
+                AgentCore.Application.Agents.StateIsolationAccess.RequireHome(await IsolationAsync(definition, sessionId, ct), path, true);
                 if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal)) return Error("forbidden", "Use /home or this Session's /working.");
                 var content = await driveService.ReadAsync(account, Required("fileId"), Required("expectedVersion"), ct); await driveService.RecheckAsync(account, true, ct);
                 await agentWorkspace.CommitBinaryAsync(sessionId, path, content.File.MimeType, content.Bytes, null, ct);

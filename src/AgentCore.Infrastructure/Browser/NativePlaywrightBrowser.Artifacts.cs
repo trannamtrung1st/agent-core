@@ -37,6 +37,7 @@ public sealed partial class NativePlaywrightBrowser
         {
             await session.Gate.WaitAsync(ct).ConfigureAwait(false);
             entered = true;
+            if (ContextTransitionBlocked(request.SessionId)) return new("policy_transition_pending", null, 0);
             if (!IsAllowed(session, session.Page.Url))
             {
                 return new BrowserScreenshotResult("target_denied", null, 0);
@@ -187,7 +188,11 @@ public sealed partial class NativePlaywrightBrowser
             {
                 foreach (var frame in maskedFrames)
                     try { await frame.EvaluateAsync(ClearMaskScript).WaitAsync(TimeSpan.FromSeconds(1)); }
-                    catch (Exception ex) when (ex is PlaywrightException or TimeoutException) { await CloseQuietlyAsync(session.Context); ForgetClosed(session); }
+                    catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
+                    {
+                        if (session.Persistent) { ForgetPage(session, session.Page); await CloseQuietlyAsync(session.Page); }
+                        else { await CloseQuietlyAsync(session.Context); ForgetClosed(session); }
+                    }
             }
 
             _logger.LogInformation("browser.screenshot.stages semantic_ms={SemanticMs} masking_ms={MaskingMs} encoding_ms={EncodingMs}",
