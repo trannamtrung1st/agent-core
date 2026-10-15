@@ -106,8 +106,27 @@ public sealed class StateIsolationConfigurationService(IAgentInstanceStore insta
             changes.Add(new("identityMaintenance", "allowAgentConsolidation", JsonSerializer.SerializeToElement(view.AllowMaintenance), JsonSerializer.SerializeToElement(draft.AllowMaintenance), "instance"));
         var fingerprint = Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { id, view.Revisions, next,
             draft.ExperienceEnabled, draft.AllowMaintenance, view.HostBrowserMode }, Json)));
+        var adoption = "";
+        if (effective is not null && (effective.StateIsolationPolicy?.BrowserIsolation ?? BrowserIsolation.HostDefault)
+            != (InstanceSettingsResolver.Resolve(baseline, current).StateIsolationPolicy?.BrowserIsolation ?? BrowserIsolation.HostDefault))
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2), time);
+                using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+                var observation = browser is IBrowserStateReader reader
+                    ? await reader.ObserveAsync(id, budget.Token).AsTask().WaitAsync(budget.Token) : null;
+                adoption = observation?.Availability == "available"
+                    ? observation.LiveContexts > 0 ? " Existing live browser contexts transition per Session at the next safe authorized use; profile bytes remain."
+                        : " No live browser context is observed; a future authorized use resolves the saved policy."
+                    : observation?.Availability == "partial" ? " Browser work is busy or uncertain. Metadata can save, but native transitions remain pending until safe."
+                    : " Browser state is unavailable. Saving allocates no browser; future authorized use must satisfy the saved policy.";
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception) { adoption = " Browser transition status is unknown. Metadata can save; unsafe native reuse remains blocked."; }
+        }
         return new(view.Revisions, draft, fingerprint, changes, blocked,
-            "New Runs use saved configuration. Tightened access gates new effects immediately; busy or uncertain browser transitions stay pending. Request isolation requires New chat for each request. Existing profiles, home files, history and Artifacts are retained.");
+            "New Runs use saved configuration. Tightened access gates new effects immediately; busy or uncertain browser transitions stay pending. Request isolation requires New chat for each request. Existing profiles, home files, history and Artifacts are retained." + adoption);
     }
 
     public async ValueTask<IsolationConfigurationView> ApplyAsync(Guid id, IsolationOwnerRevisions expected, IsolationDraft draft, string fingerprint, CancellationToken ct = default)

@@ -7,11 +7,43 @@ using AgentCore.Application.Sessions;
 using AgentCore.Domain.Definitions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AgentCore.Api.Tests;
 
 public sealed class StateIsolationConfigurationTests
 {
+    [Fact]
+    public async Task Busy_browser_preview_discloses_pending_transition_without_starting_native_work()
+    {
+        var browser = new BusyBrowser();
+        await using var host = new AgentCoreApiFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(services => {
+            services.RemoveAll<IBrowser>(); services.AddSingleton<IBrowser>(browser);
+        }));
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 31);
+        var service = host.Services.GetRequiredService<StateIsolationConfigurationService>();
+        var plan = await service.PresetAsync(instance.InstanceId, "SessionIsolated");
+        Assert.Empty(plan.BlockingReasons);
+        Assert.Contains("native transitions remain pending", plan.Notice);
+        Assert.Equal(1, browser.Observations); Assert.Equal(0, browser.Executions);
+        Assert.Equal(instance.Revision, (await host.Services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!.Revision);
+    }
+
+    private sealed class BusyBrowser : IBrowser, IBrowserStateReader
+    {
+        public int Observations { get; private set; }
+        public int Executions { get; private set; }
+        public bool IsAvailable => true;
+        public BrowserProviderDescriptor Provider { get; } = new("fixture", "Busy fixture", new HashSet<BrowserFeature>());
+        public BrowserHostPolicy HostPolicy { get; } = new(true, true, BrowserInteractionMode.InteractiveDemo, [], ProfileMode: BrowserProfileMode.PersistentAgent);
+        public ValueTask<BrowserResult> ExecuteAsync(BrowserRequest request, CancellationToken ct = default)
+        { Executions++; return ValueTask.FromResult(new BrowserResult("not_expected")); }
+        public ValueTask<ResourceStateObservation> ObserveAsync(Guid trustedInstanceId, CancellationToken ct = default)
+        { Observations++; return ValueTask.FromResult(new ResourceStateObservation("browser", "partial", "sharedCoordinated", DateTimeOffset.UtcNow, Code: "resource_busy")); }
+    }
+
     [Theory]
     [InlineData(false)] [InlineData(true)]
     public async Task Preset_is_an_unsaved_exact_plan_and_atomic_apply_rejects_stale_independent_owner_revisions(bool sqlite)
