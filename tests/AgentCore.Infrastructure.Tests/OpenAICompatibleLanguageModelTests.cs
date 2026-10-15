@@ -1692,7 +1692,7 @@ public sealed class OpenAICompatibleLanguageModelTests
     {
         request ??= Request();
         if (model is SemanticResponseLanguageModel && request.Context is null)
-            request = ContextAssembler.Project(request with { Context = new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)]), Interaction = request.Messages });
+            request = ContextAssembler.Project(request with { Context = new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)], purpose: ContextPurpose.Platform), Interaction = request.Messages });
         var events = new List<ModelGenerationEvent>();
         await foreach (var item in model.GenerateAsync(request ?? Request()))
         {

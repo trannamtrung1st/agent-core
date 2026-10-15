@@ -148,7 +148,7 @@ public sealed class PromptContextBuilder(
         else if (context.Trigger.Kind == TriggerKind.LongSilence)
             snapshot = snapshot.Upsert(ContextSection.Runtime(ContextSectionId.ExecutionPhase, ContextSourceKind.Session,
                 $"Initiative trigger: the user has been inactive while the session remains attached. Silence threshold ms: {context.Definition.InitiativePolicy.SilenceThresholdMs}. Proactive speaks this silence period: {context.SpeaksThisSilencePeriod} of {context.Definition.InitiativePolicy.MaxPerSilencePeriod}. Consecutive proactive speaks since last user activity: {context.ConsecutiveProactiveSpeaks} of {context.Definition.InitiativePolicy.ConsecutiveCap}. Only speak when another assistant message is useful; do not repeat prior wording or empty check-ins.", semantics: ContextSemantics.TrustedFact));
-        return new EffectiveContextSnapshot(snapshot.Sections, turns, snapshot.FieldSources, snapshot.Environment);
+        return new EffectiveContextSnapshot(snapshot.Sections, turns, snapshot.FieldSources, snapshot.Environment, snapshot.Purpose);
     }
 
     public ModelRequest Build(AgentContext context, Guid responseId, InitiativePlan? initiativePlan = null) =>

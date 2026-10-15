@@ -102,7 +102,7 @@ public static class CompletionEvaluator
         return ContextAssembler.Create(Guid.Empty, new EffectiveContextSnapshot([
             ContextSection.Core(CoreProcedure.OperatingContract), ContextSection.Core(CoreProcedure.Completion),
             ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, JsonSerializer.Serialize(payload, Json))
-        ]), maxOutputTokens: 80, temperature: 0, reasoningEffort: snapshot.ModelSelection?.ReasoningEffort);
+        ], purpose: ContextPurpose.Platform), maxOutputTokens: 80, temperature: 0, reasoningEffort: snapshot.ModelSelection?.ReasoningEffort);
     }
 
     private static async Task<(string Text, bool ProviderFailed)> CollectTextAsync(

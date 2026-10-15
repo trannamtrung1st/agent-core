@@ -298,8 +298,10 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner, bool pre
         ModelResponseContract contract,
         bool responseFunction)
     {
-        return ContextAssembler.Project(request, (request.Context ?? throw new ArgumentException("Typed context is required."))
-            .Upsert(ContextSection.SemanticProtocol(contract, responseFunction)));
+        var context = request.Context ?? throw new ArgumentException("Typed context is required.");
+        var updated = context.Upsert(ContextSection.SemanticProtocol(contract, responseFunction));
+        return ReferenceEquals(context, updated) && request.ContextManifest is not null
+            ? request : ContextAssembler.Project(request, updated);
     }
 
     private static bool SemanticMatches(ModelSemanticResponse peeked, ModelSemanticResponse final) =>

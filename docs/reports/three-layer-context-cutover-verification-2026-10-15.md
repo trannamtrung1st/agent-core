@@ -1,6 +1,6 @@
 # Three-layer context cutover verification
 
-Status: **local implementation complete; AC-01–AC-17 verified.** This owner-requested replacement does not reopen an application milestone. No hosted CI, live provider call, user database conversion or deployment was performed.
+Status: **local implementation complete; AC-01–AC-17 verified.** This owner-requested replacement does not reopen an application milestone. The original cutover pass performed no hosted CI, live provider call, user database conversion or deployment. Subsequent authorized stabilization verification is recorded below.
 
 ## Delivered architecture and producer inventory
 
@@ -197,3 +197,23 @@ The new boundary tests reproduced the failures before the fixes. Focused success
 An additional Playwright MCP journey used a new disposable Synthetic SQLite host on 5188/5189, with separate content/key roots and disabled Browser/OpenSandbox providers. It created General Assistant v31 Instance `01a13f41-491e-778d-8969-691ed27ea831`, saved and refreshed an Agent instructions override (revision 2), sent a Chat message and observed the completed Synthetic answer. Run `01a13f41-eb3f-726b-9d96-3a567dfe1402` showed the pinned Instance revision and **Core 9 / Runtime 9 / Evidence 5** groups. Expanding Runtime exposed section/source/size metadata with no authored/user text or editors. Affected Admin requests returned 200 and the browser recorded zero console errors. `review-provenance.md` and `review-*.log` are retained in the ignored local verification directory. Both owned hosts were stopped; the user's application/data were untouched.
 
 This review did not run CI or live providers and did not repeat unchanged viewport checks already recorded above.
+
+## Review stabilization follow-up
+
+The review of `ff875ea4` requested unique tool-call identities, lower reprojection cost and purpose-dependent Runtime validation. These are implemented without another context path or checkpoint/schema conversion:
+
+- A call ID cannot recur anywhere in one interaction, even with identical arguments. A newly generated batch is validated before held tool activity, checkpoint admission or effects. Pending-call resume keeps existing identities. Synthetic tests reject both identical and changed reused calls after one successful workspace write, retain exactly one receipt/step, and record the bounded `invalidToolCallIdentity` reason.
+- `ModelImageContent` owns immutable copied bytes and a cached SHA-256. Projections share media; the loop accumulates section updates before materialization, and repeated semantic preparation returns an unchanged prepared request. Four warmed metadata reprojections around one 2 MiB image allocated **29,120 bytes**, down from the reproduced **16,804,608 bytes**. This is an allocation bound, not a wall-clock throughput benchmark.
+- The fingerprint now explicitly includes multipart text and image metadata/content hashes. The review regression exposed an additional defect: serializing base content-part types omitted their contents, producing equal fingerprints for changed same-sized images. No image bodies are repeatedly serialized for hashing.
+- The default `AgentExecution` purpose requires nonempty Runtime identity and instructions on every projection. Compaction, completion evaluation and schedule classification explicitly use `Platform`; normal conversation, initiative and draft behavior evaluation retain agent requirements. Section updates preserve purpose.
+- Focused historical-image tests exposed stale System-role manifest parsing, a wrong repository fixture path and an undeclared fake-provider hierarchy flag. Fixtures now consume the typed Attachments Evidence section and the current transport declaration. Historical image reread, nonvision fallback, cancellation and multipart wire continuation all pass.
+
+Verification from the repository root (all offline test invocations use `--no-restore --nologo --disable-build-servers -m:1 -p:UseSharedCompilation=false`):
+
+- Application: **108 passed, 3 opt-in tests skipped**. Filter: `FullyQualifiedName~ContextAssemblerTests|FullyQualifiedName~ToolWorkflowRuntimeTests|FullyQualifiedName~ResponsesCheckpointRecoveryTests|FullyQualifiedName~HistoricalImageRereadTests|FullyQualifiedName~AdaptiveBrowserRuntimeTests|FullyQualifiedName~CompactionLifecycleTests|FullyQualifiedName~CompletionEvaluatorTests|FullyQualifiedName~InitiativeEvaluatorTests|FullyQualifiedName~PromptContextBuilderTests|FullyQualifiedName~TriggerScheduleTimeResolutionTests`.
+- Infrastructure: **169 passed, 5 opt-in tests skipped** before the new live-specific fixture was added. Filter: `FullyQualifiedName~ThreeLayerProviderTests|FullyQualifiedName~OpenAICompatibleLanguageModelTests|FullyQualifiedName~ResponsesTransportTests|FullyQualifiedName~SemanticResponseLanguageModelTests|FullyQualifiedName~SyntheticDefinitionDraftBehaviorEvaluatorTests`. Both Chat Completions and Responses retain original media bytes; semantic manifest preparation is idempotent.
+- API: **34 passed**. Filter: `FullyQualifiedName~HealthAndSessionLifecycleTests|FullyQualifiedName~ChatAutomationJourneyTests|FullyQualifiedName~ScopedInstanceConfigurationTests`.
+- Boundary/allocation recheck: **21 passed**, overlapping the Application invocation; detailed output records the allocation measurement.
+- User-authorized live `deepseek/deepseek-v4.1-flash` through OpenRouter Chat Completions: **1 passed**, exactly two generation requests, each capped at 1024 output tokens. Runtime selected the expected marker in a forced read-only fixture call despite hostile Memory Evidence; its continuation returned the same marker despite a conflicting tool-result instruction. This verifies that bounded scenario, not every provider/model or production workflow. Credentials were read privately from configured backend storage and never printed.
+
+Hosted Synthetic CI was explicitly authorized for the stabilization candidate; its exact source and final outcome are recorded below after completion. No user host/database was restarted, converted or reset. No frontend code changed; this follow-up uses backend integration and existing browser fixtures rather than repeating the unchanged Admin viewport journey.

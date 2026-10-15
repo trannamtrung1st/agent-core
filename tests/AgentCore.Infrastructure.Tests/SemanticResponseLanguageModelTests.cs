@@ -18,10 +18,12 @@ public sealed class SemanticResponseLanguageModelTests
         var model = new SemanticResponseLanguageModel(inner);
         var request = ContextAssembler.Create(Guid.NewGuid(), new EffectiveContextSnapshot([
             ContextSection.Core(CoreProcedure.OperatingContract),
+            ContextSection.Runtime(ContextSectionId.AgentIdentity, ContextSourceKind.Definition, "Fixture agent"),
             ContextSection.Runtime(ContextSectionId.AgentInstructions, ContextSourceKind.Definition, "Be concise")
         ]), [new(ModelRole.User, "task"), new(ModelRole.Assistant, "", ToolCalls: [new("read", "test.read", "{}")]),
             new(ModelRole.Tool, "receipt", ToolCallId: "read")]) with { ResponseContract = new(false) };
         var prepared = model.PrepareRequest(request);
+        Assert.Same(prepared, model.PrepareRequest(prepared));
         Assert.Single(prepared.ContextManifest!.Sections, section => section.Id == "CoreSemanticResponse");
         await CollectAsync(model, prepared);
         Assert.Equal(prepared.ContextManifest.Fingerprint, inner.LastRequest!.ContextManifest!.Fingerprint);
@@ -83,7 +85,7 @@ public sealed class SemanticResponseLanguageModelTests
     }
 
     private static readonly ModelResponseContract Contract = new(SpeechWillBeUsed: false);
-    private static readonly ModelRequest Bare = ContextAssembler.Create(Guid.NewGuid(), new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)]), [new(ModelRole.User, "Hi")]);
+    private static readonly ModelRequest Bare = ContextAssembler.Create(Guid.NewGuid(), new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)], purpose: ContextPurpose.Platform), [new(ModelRole.User, "Hi")]);
     private static readonly ModelRequest Contracted = Bare with { ResponseContract = Contract };
 
     [Fact]
@@ -875,7 +877,7 @@ public sealed class SemanticResponseLanguageModelTests
     private static async Task<List<ModelGenerationEvent>> CollectAsync(ILanguageModel model, ModelRequest request)
     {
         if (request.Context is null) request = ContextAssembler.Project(request with {
-            Context = new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)]), Interaction = request.Messages
+            Context = new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)], purpose: ContextPurpose.Platform), Interaction = request.Messages
         });
         var listed = new List<ModelGenerationEvent>();
         await foreach (var item in model.GenerateAsync(request))

@@ -1,4 +1,6 @@
 using AgentCore.Application.Memory;
+using System.Collections.Immutable;
+using System.Security.Cryptography;
 
 namespace AgentCore.Application.Ports;
 
@@ -23,7 +25,20 @@ public abstract record ModelContentPart;
 
 public sealed record ModelTextContent(string Text) : ModelContentPart;
 
-public sealed record ModelImageContent(string ContentType, byte[] Bytes, string FileName) : ModelContentPart;
+public sealed record ModelImageContent : ModelContentPart
+{
+    public ModelImageContent(string ContentType, byte[] Bytes, string FileName)
+    {
+        this.ContentType = ContentType;
+        this.Bytes = ImmutableArray.CreateRange(Bytes);
+        this.FileName = FileName;
+        ContentSha256 = Convert.ToHexString(SHA256.HashData(this.Bytes.AsSpan())).ToLowerInvariant();
+    }
+    public string ContentType { get; }
+    public ImmutableArray<byte> Bytes { get; }
+    public string FileName { get; }
+    internal string ContentSha256 { get; }
+}
 
 /// <summary>ContinuationToken is opaque adapter state, never display text or tool arguments.</summary>
 public sealed record ModelToolCall(string Id, string Name, string ArgumentsJson, string? ContinuationToken = null);

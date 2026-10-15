@@ -86,7 +86,7 @@ public sealed class AdaptiveBrowserRuntimeTests(Xunit.Abstractions.ITestOutputHe
                 using var body = JsonDocument.Parse(handler.Body!);
                 var wireImage = body.RootElement.GetProperty("messages")[1].GetProperty("content").EnumerateArray()
                     .Single(part => part.GetProperty("type").GetString() == "image_url").GetProperty("image_url").GetProperty("url").GetString();
-                Assert.Equal("data:image/png;base64," + Convert.ToBase64String(image.Bytes), wireImage);
+                Assert.Equal("data:image/png;base64," + Convert.ToBase64String(image.Bytes.AsSpan()), wireImage);
                 Assert.Equal("tool", body.RootElement.GetProperty("messages")[0].GetProperty("role").GetString());
                 Assert.Equal("user", body.RootElement.GetProperty("messages")[1].GetProperty("role").GetString());
                 Assert.DoesNotContain("base64", body.RootElement.GetProperty("messages")[0].ToString());

@@ -111,7 +111,7 @@ public sealed partial class OpenAICompatibleLanguageModel
         if (!string.IsNullOrEmpty(text)) parts.Add(new { type = message.Role == ModelRole.Assistant ? "output_text" : "input_text", text });
         foreach (var part in message.Parts ?? [])
             if (part is ModelImageContent image)
-                parts.Add(new { type = "input_image", image_url = $"data:{image.ContentType};base64,{Convert.ToBase64String(image.Bytes)}" });
+                parts.Add(new { type = "input_image", image_url = $"data:{image.ContentType};base64,{Convert.ToBase64String(image.Bytes.AsSpan())}" });
             else if (part is ModelTextContent content && content.Text != message.Text)
                 parts.Add(new { type = "input_text", text = content.Text });
         return parts.ToArray();

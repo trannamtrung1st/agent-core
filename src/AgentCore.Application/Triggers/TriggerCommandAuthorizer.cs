@@ -309,7 +309,7 @@ public sealed class ModelTriggerCommandAuthorizer(
                 $"Proposed action: {requestedAction}; conversation language: {conversationLanguage ?? "auto"}.", semantics: ContextSemantics.TrustedFact),
             ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, string.Join('\n',
                 (scheduleContext?.ToPromptLines() ?? []).Concat(scheduleDraft?.ToPromptLines() ?? [])))
-        ]), [new(ModelRole.User, text)], maxOutputTokens: 64, temperature: 0);
+        ], purpose: ContextPurpose.Platform), [new(ModelRole.User, text)], maxOutputTokens: 64, temperature: 0);
 
         var (raw, failure) = await ReadTextAsync(languageModel, request, cancellationToken).ConfigureAwait(false);
         if (failure is { } failedDecision) return failedDecision;
