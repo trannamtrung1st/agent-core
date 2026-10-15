@@ -51,6 +51,28 @@ public sealed class OpenSandboxCleanupTests
     }
 
     [Theory]
+    [InlineData(204)]
+    [InlineData(404)]
+    public async Task Remote_absence_does_not_hide_local_cleanup_failure_and_a_later_reset_recovers(int status)
+    {
+        await using var host = await Host.Create(context => { context.Response.StatusCode = status; return Task.CompletedTask; });
+        var (service, store, lease, logs) = await host.Service();
+        lease = lease with { Revision = 2, MountContractVersion = 1 };
+        await store.SaveLeaseAsync(lease, 1);
+        var path = new SandboxMountFiles(new() { WorkspaceMountRoot = host.MountRoot }).Prepare(lease.Generation).Host!.Path;
+        // Excessive workload nesting is retained safely instead of recursing without a bound.
+        for (var i = 0; i < 66; i++) path = Path.Combine(path, "nested");
+        Directory.CreateDirectory(path);
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() => service.StopSessionAsync(lease.SessionId).AsTask());
+        Assert.Contains("cleanup is pending", error.Message);
+        Assert.Equal(SandboxLeaseState.Terminating, (await store.GetLeaseAsync(lease.SessionId))!.State);
+        Assert.Single(logs.Warnings); Assert.Empty(logs.Exceptions);
+        Directory.Delete(host.MountRoot, true);
+        await service.StopSessionAsync(lease.SessionId);
+        Assert.Equal(SandboxLeaseState.Terminated, (await store.GetLeaseAsync(lease.SessionId))!.State);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Lost_delete_acknowledgement_can_confirm_absence_and_unresponsive_cleanup_stays_bounded(bool alwaysHang)
@@ -74,6 +96,24 @@ public sealed class OpenSandboxCleanupTests
         Assert.Equal(alwaysHang ? SandboxLeaseState.Terminating : SandboxLeaseState.Terminated,
             (await store.GetLeaseAsync(lease.SessionId))!.State);
         if (alwaysHang) Assert.Contains("Failure=timeout", Assert.Single(logs.Warnings));
+    }
+
+    [Fact]
+    public async Task Verification_lost_create_reconciles_exact_metadata_before_removing_private_staging()
+    {
+        var creates=0; var lists=0;
+        await using var host=await Host.Create(_=>Task.CompletedTask, async context=>
+        {
+            creates++; context.Response.StatusCode=500; await context.Response.WriteAsync("private-upstream-sentinel");
+        }, async context=>
+        {
+            lists++; Assert.Contains("agent-core-image-verification",Uri.UnescapeDataString(context.Request.QueryString.Value!));
+            await context.Response.WriteAsJsonAsync(new {items=Array.Empty<object>(),pagination=new {page=1,pageSize=100,totalItems=0,totalPages=0}});
+        });
+        var service=new OpenSandboxService(new() {Enabled=true,Endpoint=host.Endpoint,ApiKey="private-fixture-key",AllowLocalImageIds=true,WorkspaceMountRoot=host.MountRoot},new InMemorySandboxStore(),null!,null!,null!,TimeProvider.System);
+        var observed=await service.VerifyProfileAsync(new("fixture",1,"Fixture","",true,"sha256:"+new string('a',64)),default);
+        Assert.False(observed.Passed); Assert.DoesNotContain("private-upstream-sentinel",observed.Message);
+        Assert.Equal(1,creates); Assert.Equal(1,lists); Assert.Empty(Directory.EnumerateDirectories(host.MountRoot));
     }
 
     [Fact]
@@ -103,9 +143,9 @@ public sealed class OpenSandboxCleanupTests
         run = await runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));
         var store = new InMemorySandboxStore(); var image = new Uri(host.Endpoint).Authority + "/fixture/workbench@sha256:" + new string('a', 64);
         var profile = new SandboxProfile("fixture",1,"Fixture","",true,image); await store.SaveProfileAsync(profile, 0);
-        await store.SaveVerificationAsync(new(profile.Id,profile.Revision,now,true,"Fixture admission",ContractVersion:1));
+        await store.SaveVerificationAsync(new(profile.Id,profile.Revision,now,true,"Fixture admission",ContractVersion:2));
         var logs = new Logs();
-        var service = new OpenSandboxService(new() { Enabled = true, Endpoint = host.Endpoint, ApiKey = "private-fixture-key", AllowedImagePrefixes=[new Uri(host.Endpoint).Authority+"/fixture"], InsecureRegistryHosts=[new Uri(host.Endpoint).Authority] },store,null!,memory,runs,TimeProvider.System,logger:logs);
+        var service = new OpenSandboxService(new() { Enabled = true, Endpoint = host.Endpoint, ApiKey = "private-fixture-key", WorkspaceMountRoot = host.MountRoot, AllowedImagePrefixes=[new Uri(host.Endpoint).Authority+"/fixture"], InsecureRegistryHosts=[new Uri(host.Endpoint).Authority] },store,null!,memory,runs,TimeProvider.System,logger:logs);
         await Assert.ThrowsAsync<AgentCoreException>(() => service.ExecuteAsync(new(snapshot.SessionId,owner.AgentInstanceId,run.AgentRunId,run.Claim!.Generation,"create-once",profile,definition),new("true")).AsTask());
         var lease = (await store.GetLeaseAsync(snapshot.SessionId))!;
         Assert.Null(lease.ProviderId); Assert.Equal(SandboxLeaseState.NeedsReconciliation, lease.State);
@@ -137,6 +177,7 @@ public sealed class OpenSandboxCleanupTests
     private sealed class Host(WebApplication app, string endpoint) : IAsyncDisposable
     {
         public string Endpoint => endpoint;
+        public string MountRoot { get; } = Path.Combine(Path.GetTempPath(), "sandbox-cleanup-mounts-" + Guid.NewGuid().ToString("N"));
         public static async Task<Host> Create(RequestDelegate delete, RequestDelegate? create = null, RequestDelegate? list = null)
         {
             var builder = WebApplication.CreateBuilder(); builder.Logging.ClearProviders();
@@ -156,11 +197,11 @@ public sealed class OpenSandboxCleanupTests
                 SandboxLeaseState.Ready, "owned-provider", now, now.AddMinutes(5));
             await store.SaveLeaseAsync(lease, 0); var logs = new Logs();
             // StopSession touches only the durable sandbox store and SDK lifecycle.
-            var service = new OpenSandboxService(new() { Endpoint = endpoint, ApiKey = "private-fixture-key" },
+            var service = new OpenSandboxService(new() { Endpoint = endpoint, ApiKey = "private-fixture-key", WorkspaceMountRoot = MountRoot },
                 store, null!, new InMemoryMemoryStore(), null!, TimeProvider.System, logger: logs);
             return (service, store, lease, logs);
         }
-        public async ValueTask DisposeAsync() { await app.StopAsync(); await app.DisposeAsync(); }
+        public async ValueTask DisposeAsync() { await app.StopAsync(); await app.DisposeAsync(); if (Directory.Exists(MountRoot)) Directory.Delete(MountRoot, true); }
     }
     private sealed class Logs : ILogger<OpenSandboxService>
     {

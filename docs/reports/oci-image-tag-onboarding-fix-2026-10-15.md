@@ -1,5 +1,7 @@
 # OCI image tag onboarding fix — 2026-10-15
 
+The later owner-authorized [ordinary-image successor](ordinary-sandbox-images-verification-2026-10-15.md) supersedes this report’s former Python/non-root/image-owned-scratch compatibility boundary. The results below remain historical evidence for onboarding and its earlier contract.
+
 Scope: fix owner prebuilt-image saves for ordinary tags and allow common public OCI registries. This is focused maintenance; no milestone acceptance or CI was requested.
 
 ## Behavior

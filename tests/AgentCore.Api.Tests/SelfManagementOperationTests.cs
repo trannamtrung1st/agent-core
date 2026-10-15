@@ -47,7 +47,7 @@ public sealed class SelfManagementOperationTests
         var profile=(await store.GetProfileAsync("general-workbench"))!;
         await Assert.ThrowsAsync<AgentCoreException>(()=>settings.ValidatePatchAsync(owner.InstanceId,"sandboxPolicy",policy.InstanceRevision,
             new Dictionary<string,JsonElement>{["profileId"]=JsonSerializer.SerializeToElement(profile.Id)},[]).AsTask());
-        await store.SaveVerificationAsync(new(profile.Id,profile.Revision,DateTimeOffset.UtcNow,true,"Selection fixture; no provisioning is exercised here.",ContractVersion:1));
+        await store.SaveVerificationAsync(new(profile.Id,profile.Revision,DateTimeOffset.UtcNow,true,"Selection fixture; no provisioning is exercised here.",ContractVersion:2));
         var saved=await settings.PatchAsync(owner.InstanceId,"sandboxPolicy",policy.InstanceRevision,new Dictionary<string,JsonElement>{["initializationScript"]=JsonSerializer.SerializeToElement("instance-private-sentinel")},[]);
         var definition=(await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(owner.InstanceId)).Configuration.Definition;
         var executor=services.GetRequiredService<SessionToolExecutor>();var admission=new ToolExecutionAdmission(false,TriggerKind.UserTurn,AgentInstanceId:owner.InstanceId);

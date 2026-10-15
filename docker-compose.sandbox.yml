@@ -19,6 +19,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${AGENTCORE_SANDBOX_CONFIG_FILE:?Run sandbox prepare}:/etc/opensandbox/config.toml:ro
       - ./deploy/sandbox/server-bootstrap.py:/opt/agent-core/server-bootstrap.py:ro
+      - ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}:${AGENTCORE_SANDBOX_WORKSPACE_ROOT}
       - opensandbox-metadata:/var/lib/opensandbox
       - opensandbox-auth:/run/agent-core-auth
     restart: unless-stopped

@@ -57,7 +57,10 @@ def prepare(args):
     gateway = json.loads(run("docker", "network", "inspect", "bridge"))[0]["IPAM"][
         "Config"
     ][0]["Gateway"]
-    private_write(state / "server.toml", server_config(desktop, gateway, compose=True))
+    workspace_root = state / "workspace-mounts"
+    workspace_root.mkdir(exist_ok=True)
+    workspace_root.chmod(0o777)  # shared native/packaged Core staging; never canonical data
+    private_write(state / "server.toml", server_config(desktop, gateway, compose=True, workspace_root=workspace_root))
     image = None
     if args.build_workbench:
         inputs = [
@@ -104,6 +107,7 @@ def prepare(args):
         "AGENTCORE_SANDBOX_KEY_FILE": str(key_path),
         "AGENTCORE_SANDBOX_CONFIG_FILE": str(state / "server.toml"),
         "AGENTCORE_SANDBOX_PORT": str(args.port),
+        "AGENTCORE_SANDBOX_WORKSPACE_ROOT": str(workspace_root),
     }
     private_write(
         state / "compose.env", "".join(k + "=" + v + "\n" for k, v in values.items())
@@ -145,10 +149,11 @@ def readiness(endpoint, key):
     return result
 
 
-def native_handoff(state, endpoint, key, image=None):
+def native_handoff(state, endpoint, key, image=None, workspace_root=None):
+    workspace_root = workspace_root or state / "workspace-mounts"
     private_write(
         state / "native.env",
-        f"OpenSandbox__Enabled=true\nOpenSandbox__Endpoint={endpoint}\nOpenSandbox__ApiKey={key}\n",
+        f"OpenSandbox__Enabled=true\nOpenSandbox__Endpoint={endpoint}\nOpenSandbox__ApiKey={key}\nOpenSandbox__WorkspaceMountRoot={workspace_root}\n",
     )
 
 
@@ -216,7 +221,11 @@ def up(args):
                 "docker", "stop", foreign[0]
             )  # Retain its container, volume, image and private files.
         else:
-            native_handoff(state, endpoint, key, image)
+            workspace_root = ROOT / "local/opensandbox-runners" / foreign[0] / "workspace-mounts"
+            container = inspect(foreign[0])
+            if not any(m.get("Destination") == str(workspace_root) for m in container.get("Mounts", [])):
+                raise RuntimeError("Existing local runner needs the mounted-workspace contract. Reconcile its workloads, then use --migrate-local.")
+            native_handoff(state, endpoint, key, image, workspace_root)
             (state / "deployment.json").write_text(
                 json.dumps(
                     {"kind": "reused-local", "endpoint": endpoint, "name": foreign[0]}

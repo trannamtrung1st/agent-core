@@ -8,10 +8,13 @@ services:
       OpenSandbox__Endpoint: http://opensandbox:8080
       OpenSandbox__ApiKeyFile: /run/secrets/opensandbox_api_key
       OpenSandbox__TrustLocalComposeEndpoint: "true"
+      OpenSandbox__WorkspaceMountRoot: /sandbox-workspaces
+      OpenSandbox__WorkspaceMountHostRoot: ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}
       OpenSandbox__AllowLocalImageIds: ${AGENTCORE_SANDBOX_ALLOW_LOCAL_IMAGE_IDS:-false}
     # Server prepares a 0400 key owned by the image's non-root app UID (1654).
     volumes:
       - opensandbox-auth:/run/secrets:ro
+      - ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}:/sandbox-workspaces
     depends_on:
       opensandbox:
         condition: service_healthy

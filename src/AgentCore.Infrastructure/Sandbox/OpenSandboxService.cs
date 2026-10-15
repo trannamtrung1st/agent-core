@@ -79,7 +79,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             await using var sdk = await ConnectAsync(lease, ct);
             var timeout = Math.Min(command.TimeoutSeconds, lease.Profile.MaxCommandSeconds);
             var scratch = await workspace.CaptureScratchAsync(access.SessionId, access.Definition, ct);
-            if (scratch.Fingerprint != lease.ScratchFingerprint) await HydrateAsync(sdk, scratch.Transfer, ct);
+            if (scratch.Fingerprint != lease.ScratchFingerprint) await HydrateAsync(lease, scratch.Transfer, ct);
             lease = await ReserveExecutionLifetimeAsync(sdk, lease, timeout, ct);
             var receipt = new SandboxExecution(Guid.CreateVersion7(), access.SessionId, access.AgentInstanceId, lease.Generation,
                 access.AgentRunId, access.ClaimGeneration, access.ToolCallId, hash, SandboxExecutionState.Dispatching, time.GetUtcNow(), Background: command.Background,
@@ -123,7 +123,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 {
                     await ValidateAccessAsync(access, ct);
                     await ConfirmQuiescentAsync(sdk, lease, ct);
-                    var transfer = await CollectAsync(sdk, lease.Profile, ct);
+                    var transfer = await CollectAsync(lease, ct);
                     await ValidateAccessAsync(access, ct);
                     receipt = receipt with { WorkspaceSyncStatus = "committing" };
                     await SaveReceiptAsync(receipt, false, ct);
@@ -182,7 +182,10 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 {
                     try { await using var connected = await ConnectAsync(lease, ct); return lease; }
                     catch (SandboxApiException e) when (e.StatusCode == 404)
-                    { lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminated }, ct); }
+                    {
+                        if (lease.MountContractVersion == 1) Mounts.Delete(lease.Generation);
+                        lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminated }, ct);
+                    }
                 }
                 else return lease;
             }
@@ -195,7 +198,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             throw AgentCoreErrors.Conflict("Maximum sandbox lifetime cannot cover initialization. Increase it within the host ceiling.");
         lease = new(access.SessionId, access.AgentInstanceId, Guid.CreateVersion7(), (lease?.Revision ?? 0) + 1, access.Profile,
             SandboxLeaseState.Provisioning, null, now, now.AddSeconds(initialTtl),
-            Initialization: new("Pending", access.Profile.Id, access.Profile.Revision, access.Profile.InstanceRevision));
+            Initialization: new("Pending", access.Profile.Id, access.Profile.Revision, access.Profile.InstanceRevision), MountContractVersion: 1);
         await store.SaveLeaseAsync(lease, lease.Revision - 1, ct);
         SdkSandbox? sdk = null;
         var phase = "provisioning";
@@ -204,18 +207,19 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             if (!OciImageReference.Parse(lease.Profile.ImageReference).IsLocal) await RegistryAuthorizationProbe.CheckAsync(options, OciImageReference.Parse(lease.Profile.ImageReference), imageAuth, ct);
             await ValidateAccessAsync(access, ct);
             imageAuth = await Images.ResolveAuthAsync(access.Profile,ct,requireVerification:true);
+            var workingVolume = Mounts.Prepare(lease.Generation);
             sdk = await SdkSandbox.CreateAsync(new SandboxCreateOptions {
                 ConnectionConfig = Connection(), Image = lease.Profile.ImageReference, ImageAuth = imageAuth, TimeoutSeconds = initialTtl, ReadyTimeoutSeconds = 45,
                 Resource = new Dictionary<string,string> { ["cpu"] = lease.Profile.Cpu.ToString(CultureInfo.InvariantCulture), ["memory"] = lease.Profile.MemoryMiB + "Mi" },
                 Metadata = new Dictionary<string,string> { ["agent-core-generation"] = lease.Generation.ToString("N") },
+                Volumes = [workingVolume],
                 NetworkPolicy = new NetworkPolicy { DefaultAction = NetworkRuleAction.Deny, Egress = [] }
             }, ct);
             imageAuth = null;
             lease = await SaveAsync(lease with { ProviderId = sdk.Id }, ct);
-            var identity = await InternalCommandAsync(sdk, ["id", "-u"], ct);
-            if (!int.TryParse(identity.Trim(), out var uid) || uid <= 0) throw new InvalidOperationException("Non-root execution is required.");
+            await CheckImageReadinessAsync(sdk, lease.Generation, ct);
             var scratch = await workspace.CaptureScratchAsync(access.SessionId, access.Definition, ct);
-            await HydrateAsync(sdk, scratch.Transfer, ct);
+            await HydrateAsync(lease, scratch.Transfer, ct);
             lease = await SaveAsync(lease with { BaselineProcesses = await ProcessIdentitiesAsync(sdk, ct) }, ct);
             if (!string.IsNullOrWhiteSpace(lease.Profile.InitializationScript) || !string.IsNullOrWhiteSpace(lease.Profile.InstanceInitializationScript))
             {
@@ -291,6 +295,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
 
     private async Task<SdkSandbox> ConnectAsync(SandboxLease lease, CancellationToken ct)
     {
+        if (lease.MountContractVersion != 1) throw AgentCoreErrors.Conflict("This environment uses the earlier workspace contract. Reset it and reverify its profile before using commands.");
         if (lease.ProviderId is null) throw AgentCoreErrors.Conflict("Sandbox provisioning requires reconciliation.");
         var sdk = await SdkSandbox.ConnectAsync(new SandboxConnectOptions { SandboxId = lease.ProviderId, ConnectionConfig = Connection() }, ct);
         try
@@ -319,9 +324,11 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             try
             {
                 await using var manager = SandboxManager.Create(new SandboxManagerOptions { ConnectionConfig = Connection() });
-                await manager.KillSandboxAsync(lease.ProviderId, request.Token); return true;
+                try { await manager.KillSandboxAsync(lease.ProviderId, request.Token); }
+                catch (SandboxApiException e) when (e.StatusCode == 404) { /* Confirmed absent; local cleanup is still required. */ }
+                if (lease.MountContractVersion == 1) Mounts.Delete(lease.Generation);
+                return true;
             }
-            catch (SandboxApiException e) when (e.StatusCode == 404) { return true; }
             catch (SandboxApiException e)
             {
                 failure = "http"; status = e.StatusCode;
@@ -453,6 +460,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     }
     private async ValueTask FinalizeCleanupAsync(SandboxLease lease, CancellationToken ct)
     {
+        if (lease.MountContractVersion == 1) Mounts.Delete(lease.Generation);
         if (lease.ActiveExecutionId is { } id && await store.GetExecutionAsync(lease.SessionId,id,ct) is { State:SandboxExecutionState.Dispatching or SandboxExecutionState.Running } execution)
             await SaveReceiptAsync(execution with { State=SandboxExecutionState.Indeterminate,FinishedAt=time.GetUtcNow(),WorkspaceSyncStatus=await CommitStatusAsync(execution, ct) },false,ct);
         await SaveAsync(lease with { State=SandboxLeaseState.Terminated,ActiveExecutionId=null },ct);

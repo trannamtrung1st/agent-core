@@ -18,12 +18,41 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class OpenSandboxFactAttribute : FactAttribute
 {
-    public OpenSandboxFactAttribute()
-    { if (Environment.GetEnvironmentVariable("AGENTCORE_OPENSANDBOX_TESTS") != "1") Skip = "Opt-in real local OpenSandbox/Docker acceptance."; }
+    public OpenSandboxFactAttribute(bool requiresOrdinaryImage = false)
+    {
+        if (Environment.GetEnvironmentVariable("AGENTCORE_OPENSANDBOX_TESTS") != "1") Skip = "Opt-in real local OpenSandbox/Docker acceptance.";
+        else if (requiresOrdinaryImage && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")))
+            Skip = "Set AGENTCORE_OSB_ORDINARY_IMAGE to an installed stock .NET SDK image for the focused compatibility regression.";
+    }
 }
 
 public sealed class OpenSandboxIntegrationTests
 {
+    [OpenSandboxFact(requiresOrdinaryImage: true)]
+    public async Task Ordinary_dotnet_image_verifies_without_python_and_commands_commit_mounted_files()
+    {
+        await using var f = await Fixture.Create("printf compatible");
+        var ordinary = f.Profile with { ImageReference = Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")! };
+        foreach (var imageOnly in new[] { true, false })
+        {
+            var checkedImage = await f.Service.VerifyProfileAsync(ordinary, CancellationToken.None, imageOnly);
+            Assert.True(checkedImage.Passed, checkedImage.Message);
+            Assert.Equal(imageOnly ? "" : "compatible", checkedImage.Stdout);
+        }
+        await f.UseImage(ordinary.ImageReference);
+        var executed = await f.Exec("! command -v python && dotnet --version && printf normal-image > result.txt");
+        Assert.Equal("Completed", executed.Status); Assert.Equal(0, executed.ExitCode);
+        Assert.StartsWith("10.", executed.Stdout); Assert.Equal("normal-image", await f.Read("result.txt"));
+        var repeated = await f.Exec("cat result.txt && printf changed > result.txt");
+        Assert.Equal(0, repeated.ExitCode); Assert.Equal("normal-image", repeated.Stdout);
+        Assert.Equal("changed", await f.Read("result.txt"));
+        var compiled = await f.Exec("export DOTNET_CLI_USE_MSBUILD_SERVER=0 MSBUILDDISABLENODEREUSE=1; mkdir -p offline-feed; dotnet new console -o app --no-restore && dotnet restore app --source /working/offline-feed -p:UseSharedCompilation=false -nodeReuse:false && dotnet run --project app --no-restore -p:UseSharedCompilation=false");
+        Assert.Equal("Completed", compiled.Status); Assert.Equal(0, compiled.ExitCode);
+        Assert.Contains("Hello, World!", compiled.Stdout); Assert.Contains("Console.WriteLine", await f.Read("app/Program.cs"));
+        var workbench = await f.Service.VerifyProfileAsync(f.Profile with { ImageReference = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_IMAGE")! }, CancellationToken.None);
+        Assert.True(workbench.Passed, workbench.Message);
+    }
+
     [OpenSandboxFact]
     public async Task One_second_combined_setup_budget_can_execute_short_scripts_and_verify_without_rounding_it_to_zero()
     {
@@ -382,7 +411,7 @@ public sealed class OpenSandboxIntegrationTests
                 .AddInterceptors(new SqlitePragmaInterceptor(5000)).Options);
             f._memory = new(f._factory, TimeProvider.System); await f._memory.EnsureCreatedAsync();
             f._options = new() { Enabled = true, AllowLocalImageIds = true, Endpoint = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_URL") ?? "http://127.0.0.1:18080",
-                ApiKey = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_KEY") };
+                ApiKey = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_KEY"), WorkspaceMountRoot = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_MOUNT_ROOT") ?? "" };
             f._profile = new("general-workbench",1,"Workbench","Test",true,Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_IMAGE")!,InitializationScript:initializationScript,IdleTtlSeconds:idleTtl,MaxCommandSeconds:maxCommand,MaxLifetimeSeconds:maxLifetime);
             f.Definition = new(1,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("general-workbench",["general-workbench"]));
             var now = DateTimeOffset.UtcNow; var owner = new AgentRunOwner(Guid.NewGuid(),Guid.NewGuid());
@@ -394,7 +423,7 @@ public sealed class OpenSandboxIntegrationTests
             await f._runs.AdmitAsync(f.Session with {Revision=2},1,run);
             f.Run = await f._runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));
             f.Reopen(); await f.Store.SaveProfileAsync(f._profile,0);
-            await f.Store.SaveVerificationAsync(new(f._profile.Id,f._profile.Revision,DateTimeOffset.UtcNow,true,"Lifecycle fixture admission",ContractVersion:1)); return f;
+            await f.Store.SaveVerificationAsync(new(f._profile.Id,f._profile.Revision,DateTimeOffset.UtcNow,true,"Lifecycle fixture admission",ContractVersion:2)); return f;
         }
         public void Reopen()
         {
@@ -402,9 +431,16 @@ public sealed class OpenSandboxIntegrationTests
             Service = new(_options,Store,Workspace,_memory,_runs,TimeProvider.System,logger:_logs.CreateLogger<OpenSandboxService>());
         }
         public SandboxAccess Access(string? call = null) => new(Session.SessionId,Session.AgentInstanceId,Run.AgentRunId,Run.Claim!.Generation,call ?? Guid.NewGuid().ToString("N"),_profile,Definition);
+        public async Task UseImage(string image)
+        {
+            var next = _profile with { ImageReference = image, Revision = _profile.Revision + 1 };
+            await Store.SaveProfileAsync(next, _profile.Revision); _profile = next;
+            var verified = await Service.VerifyProfileAsync(next, CancellationToken.None);
+            Assert.True(verified.Passed, verified.Message); await Store.SaveVerificationAsync(verified);
+        }
         public void SetInstanceSetup(string script,long revision) => _profile = _profile with {InstanceInitializationScript=script,InstanceRevision=revision};
-        public async Task ReviseScript(string script) { var next = _profile with { Revision=_profile.Revision+1,InitializationScript=script }; await Store.SaveProfileAsync(next,_profile.Revision); _profile=next; await Store.SaveVerificationAsync(new(next.Id,next.Revision,DateTimeOffset.UtcNow,true,"Lifecycle fixture admission",ContractVersion:1)); }
-        public async Task LimitStorage(long bytes) { var next=_profile with { Revision=_profile.Revision+1,StorageBytes=bytes };await Store.SaveProfileAsync(next,_profile.Revision);_profile=next;await Store.SaveVerificationAsync(new(next.Id,next.Revision,DateTimeOffset.UtcNow,true,"Lifecycle fixture admission",ContractVersion:1)); }
+        public async Task ReviseScript(string script) { var next = _profile with { Revision=_profile.Revision+1,InitializationScript=script }; await Store.SaveProfileAsync(next,_profile.Revision); _profile=next; await Store.SaveVerificationAsync(new(next.Id,next.Revision,DateTimeOffset.UtcNow,true,"Lifecycle fixture admission",ContractVersion:2)); }
+        public async Task LimitStorage(long bytes) { var next=_profile with { Revision=_profile.Revision+1,StorageBytes=bytes };await Store.SaveProfileAsync(next,_profile.Revision);_profile=next;await Store.SaveVerificationAsync(new(next.Id,next.Revision,DateTimeOffset.UtcNow,true,"Lifecycle fixture admission",ContractVersion:2)); }
         public async ValueTask CancelRun()
         {
             var owner = new AgentRunOwner(Session.AgentInstanceId, Session.ProfileId!.Value);

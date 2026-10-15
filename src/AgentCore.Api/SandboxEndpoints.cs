@@ -18,7 +18,7 @@ internal static class SandboxEndpoints
         admin.MapGet("/sandboxes", (ISandboxReadiness readiness, ISandboxStore store, OpenSandboxOptions options, ISandboxImageAuthority authority, CancellationToken ct) => Safe(async () =>
             Results.Json(new SandboxPlatformResponse(readiness.State, readiness.SafeMessage, (await Task.WhenAll((await store.ListProfilesAsync(ct)).Select(p => MapObservedAsync(p, store, authority, readiness, ct)))).ToArray(),
                 options.AllowedImagePrefixes, options.AllowLocalImageIds, "Trusted single-user local demo; own execd loopback remains reachable.",
-                "250 MiB canonical /working ceiling; OCI writable-layer disk quota is not enforced by this Docker backend."))));
+                "250 MiB validated canonical /working ceiling; live staging and OCI writable-layer disk quotas are not enforced by this Docker backend."))));
         admin.MapGet("/sandbox-profiles/{id}", (string id, long? revision, ISandboxStore store, ISandboxImageAuthority authority, ISandboxReadiness readiness, CancellationToken ct) => Safe(async () =>
             Results.Json(await MapObservedAsync(await store.GetProfileAsync(id, revision, ct) ?? throw AgentCoreErrors.NotFound("Sandbox profile was not found."), store, authority, readiness, ct))));
         admin.MapPut("/sandbox-profiles/{id}", (string id, JsonElement body, ISandboxStore store, OpenSandboxOptions options, OpenSandboxReadiness readiness, ISandboxImageAuthority authority, CancellationToken ct) => Safe(async () =>

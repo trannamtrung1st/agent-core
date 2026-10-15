@@ -57,7 +57,7 @@ public sealed partial class OpenSandboxService
             {
                 await ValidateProcessCommitAsync(lease, execution, ct);
                 await ConfirmQuiescentAsync(sdk, lease, ct);
-                var transfer = await CollectAsync(sdk, lease.Profile, ct);
+                var transfer = await CollectAsync(lease, ct);
                 execution = execution with { WorkspaceSyncStatus = "committing" };
                 await SaveReceiptAsync(execution, false, ct);
                 await workspace.CommitScratchAsync(lease.SessionId, transfer, lease.ScratchFingerprint!, ct,

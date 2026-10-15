@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PINS = json.loads((ROOT / "scripts/opensandbox-proof/images.json").read_text())
 
 
-def server_config(desktop: bool, gateway: str, compose: bool = False) -> str:
+def server_config(desktop: bool, gateway: str, compose: bool = False, workspace_root=None) -> str:
     config = (ROOT / "scripts/opensandbox-proof/server.toml.example").read_text()
     if not desktop:
         import ipaddress
@@ -25,4 +25,6 @@ def server_config(desktop: bool, gateway: str, compose: bool = False) -> str:
         # Server and workloads inhabit different bridges; use authenticated
         # server-proxy routing through the daemon's private published ports.
         config = config.replace("resolve_internal = true", "resolve_internal = false")
+    if workspace_root is not None:
+        config = config.replace("allowed_host_paths = []", "allowed_host_paths = " + json.dumps([str(Path(workspace_root).resolve())]))
     return config

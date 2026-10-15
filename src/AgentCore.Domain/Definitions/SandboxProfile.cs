@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace AgentCore.Domain.Definitions;
 
-/// <summary>Immutable environment revision. StorageBytes bounds canonical scratch, not the OCI writable layer.</summary>
+/// <summary>Immutable environment revision. StorageBytes bounds validated canonical scratch, not live staging or the OCI writable layer.</summary>
 public sealed record SandboxProfile(string Id, long Revision, string Name, string Description, bool Enabled,
     string ImageReference, string? InitializationScript = null, double Cpu = 1, int MemoryMiB = 1024,
     int Pids = 64, int MaxCommandSeconds = 120, int IdleTtlSeconds = 1800,

@@ -108,7 +108,7 @@ export function SandboxProfilesSection() {
           <Form.Item name="id" label="Profile ID" rules={[{ required: true, pattern: /^[a-z][a-z0-9-]{0,63}$/, message: 'Use lowercase letters, digits and hyphens.' }]}><Input aria-label="Profile ID" disabled={busy || baseline.revision > 0} /></Form.Item>
         </div>
         <Form.Item name="description" label="Description"><Input.TextArea aria-label="Sandbox profile description" maxLength={2000} autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
-        <Form.Item name="imageReference" label="Image" extra="Enter a tag such as mcr.microsoft.com/dotnet/sdk:10.0 or ubuntu:24.04, or registry/repository@sha256 with 64 lowercase hex characters. Save resolves tags to a fixed digest. Names without a registry use Docker Hub; names without a tag use latest. A local sha256 image ID belongs only to this daemon." rules={[{ required: true, whitespace: true, max: 1024 }]}><Input.TextArea aria-label="Sandbox image reference" autoSize={{minRows:2,maxRows:5}} /></Form.Item>
+        <Form.Item name="imageReference" label="Image" extra="Enter a tag such as mcr.microsoft.com/dotnet/sdk:10.0 or ubuntu:24.04, or registry/repository@sha256 with 64 lowercase hex characters. Save resolves tags to a fixed digest. Names without a registry use Docker Hub; names without a tag use latest. A local sha256 image ID belongs only to this daemon. Ordinary Linux images need /bin/sh and /proc. The platform mounts writable /working; Python and a pre-created directory are not required. Verify checks the image and saved setup." rules={[{ required: true, whitespace: true, max: 1024 }]}><Input.TextArea aria-label="Sandbox image reference" autoSize={{minRows:2,maxRows:5}} /></Form.Item>
         <Form.Item name="registryCredentialId" label="Registry authentication" extra={<Flex vertical gap={token.paddingXS}><Typography.Text type="secondary">Public images need no credential. Local image IDs cannot use registry authentication.</Typography.Text><Flex align="center" wrap gap={token.paddingXS}><Button disabled={busy} onClick={()=>setCredentialDialog(true)}>Add registry credential</Button><a href="/admin/connections/credentials" onClick={followAppLink}>Manage System Credentials</a></Flex></Flex>}>
           <Select aria-label="Registry credential" allowClear placeholder="Public image · no credential" options={credentials.map(c=>({value:c.credentialId,label:`${c.displayName} · ${c.containerRegistry?.registry} · ${c.status}`,disabled:c.status!=='Active'||!!c.containerRegistry?.expiresAtUtc&&Date.parse(c.containerRegistry.expiresAtUtc)<=Date.now()||!!fields?.imageReference&&sandboxImageRegistry(fields.imageReference)!==c.containerRegistry?.registry}))} />
         </Form.Item>
@@ -126,7 +126,7 @@ export function SandboxProfilesSection() {
             <InputNumber aria-label="Canonical /working storage (MiB)" min={1/1048576} max={250} step={1} style={{width:'100%'}} />
           </Form.Item>
         </div>
-        <Form.Item name="initializationScript" label="Optional initialization script" extra="Runs once after readiness and scratch hydration, as the non-root workload user. Verify profile tests this script in a separate disposable environment without changing Session files. Reconnect does not rerun it. Preinstall packages in the image; default commands have no external network. Limit: 16,384 UTF-8 bytes."
+        <Form.Item name="initializationScript" label="Optional initialization script" extra="Runs once after readiness and scratch hydration, as the image default user. Verify profile tests this script in a separate disposable environment without changing Session files. Reconnect does not rerun it. Preinstall packages in the image; default commands have no external network. Limit: 16,384 UTF-8 bytes."
           rules={[{validator:(_:unknown,value:string|null)=>{
             try { encodeURIComponent(value??''); } catch { return Promise.reject(new Error('Remove invalid Unicode from the script.')); }
             if(value?.includes('\0'))return Promise.reject(new Error('Remove null characters from the script.'));
@@ -194,7 +194,7 @@ export function SandboxProfilesSection() {
       {baseline && !creating && baseline.revision>0 && <SandboxProfileDetails profile={historicalProfile??baseline} />}
       <AddCredentialDialog open={credentialDialog} initialPurpose="Registry" onClose={()=>setCredentialDialog(false)} onClosed={()=>{}} onSaved={loadCredentials} />
       <Descriptions {...detail} bordered size="small" column={1}>
-        <Descriptions.Item label="Network">Offline · deny-default egress</Descriptions.Item><Descriptions.Item label="Workload protections">Non-root · 64 PIDs · capabilities dropped · no Docker socket</Descriptions.Item>
+        <Descriptions.Item label="Network">Offline · deny-default egress</Descriptions.Item><Descriptions.Item label="Workload protections">Image default user · 64 PIDs · capabilities dropped · no Docker socket</Descriptions.Item>
         <Descriptions.Item label="Storage">{platform.storageScope}</Descriptions.Item><Descriptions.Item label="Deployment scope">{platform.securityScope}</Descriptions.Item>
       </Descriptions>
     </>}

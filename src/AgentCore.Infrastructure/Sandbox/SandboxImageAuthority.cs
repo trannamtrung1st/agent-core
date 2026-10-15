@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Domain.Credentials;
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using OpenSandbox.Models;
 
@@ -44,7 +45,7 @@ public sealed class SandboxImageAuthority(OpenSandboxOptions options, ISandboxSt
         if (!requireVerification) return new("SourceAuthorized", "Source authority is valid; image compatibility still requires a disposable check.", false, revision, secretRevision);
         if (!profile.Enabled) return new("Disabled", "Profile is disabled. Enabling appends a revision that requires verification.", false, revision, secretRevision);
         var observation = await profiles.GetVerificationAsync(profile.Id, profile.Revision, ct);
-        if (observation is not { ContractVersion: 1 } || observation.RegistryCredentialId != profile.RegistryCredentialId
+        if (observation?.ContractVersion != SandboxProfileVerification.CurrentContractVersion || observation.RegistryCredentialId != profile.RegistryCredentialId
             || observation.RegistryCredentialRevision != revision || observation.RegistrySecretRevision != secretRevision)
             return new("NeedsVerification", "Verify this exact saved revision under current source authority before using commands.", false, revision, secretRevision);
         return observation.Passed ? new("Eligible", "Verified for the current image and credential revision.", true, revision, secretRevision)

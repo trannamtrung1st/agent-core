@@ -840,3 +840,7 @@ POST `/api/v2/admin/container-registry-credentials` accepts displayName, kind Pa
 ### OCI expiry and storage updates
 
 Registry `expiresAtUtc` is optional nullable UTC timestamp metadata. PATCH supplies the complete typed profile: null/omitted expiry clears it, a future date renews it, and an elapsed date remains inspectable but unavailable for new source authorization. Admin preserves the loaded date unless explicitly edited or cleared. Expiry edits increment credential revision and invalidate dependent verification; replacing the protected value preserves expiry. Storage remains integer `storageBytes` even though Admin edits MiB. Validation rejects zero, over 250 MiB, lifetime below idle expiry and initialization over 16,384 UTF-8 bytes without appending a profile revision. Existing stale-write 409 and historical reads remain unchanged.
+
+### Ordinary-image verification behavior
+
+Sandbox verification/check routes accept ordinary Linux images compatible with `/bin/sh`, `/proc` and upstream execd. Python and pre-created `/working` are not prerequisites; Infrastructure supplies a private platform mount and checks write-through. Safe readiness failures name the image/mount requirement without reflecting raw provider output. Image checks remain ephemeral; full verification persists contract-2 observations without changing profile revision. Earlier observations are inspectable but require reverification. Root mappings and provider mount paths never enter these DTOs.

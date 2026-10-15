@@ -10,6 +10,16 @@ public sealed class OpenSandboxOptions
     public string? ApiKey { get => _apiKey ?? (ApiKeyFile == "/run/secrets/opensandbox_api_key" ? File.ReadAllText(ApiKeyFile).Trim() : null); set => _apiKey = value; }
     public string? ApiKeyFile { get; set; }
     public bool TrustLocalComposeEndpoint { get; set; }
+    public string WorkspaceMountRoot { get; set; } = "";
+    public string? WorkspaceMountHostRoot { get; set; }
+    internal string MountRoot()
+    {
+        static bool DedicatedRoot(string path) => Path.IsPathFullyQualified(path)
+            && Path.GetFullPath(path) != Path.GetPathRoot(Path.GetFullPath(path));
+        if (!DedicatedRoot(WorkspaceMountRoot) || WorkspaceMountHostRoot is { } host && !DedicatedRoot(host))
+            throw new ArgumentException("Configure a dedicated absolute OpenSandbox workspace mount root using the updated Sandbox launcher.");
+        return Path.GetFullPath(WorkspaceMountRoot);
+    }
     public string[] InsecureRegistryHosts { get; set; } = [];
     public string[] AllowedRegistryTokenOrigins { get; set; } = [];
     public bool AllowLocalImageIds { get; set; }

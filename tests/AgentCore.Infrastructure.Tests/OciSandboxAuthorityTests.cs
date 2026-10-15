@@ -125,7 +125,9 @@ public sealed class OciSandboxAuthorityTests
             Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
             await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Historical observation"));
             Assert.False((await authority.InspectAsync(profile)).Eligible);
-            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Current observation",ContractVersion:1,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
+            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Earlier Python-based contract",ContractVersion:1,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
+            Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
+            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Current observation",ContractVersion:2,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
             Assert.True((await authority.InspectAsync(profile)).Eligible);
             var pinned = profile with {RegistryCredentialRevision=1,RegistrySecretRevision=0};
             Assert.Equal("private-oci-sentinel",(await authority.ResolveAuthAsync(pinned,CancellationToken.None,true))!.Password);

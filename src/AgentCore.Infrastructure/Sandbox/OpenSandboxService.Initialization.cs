@@ -41,7 +41,7 @@ public sealed partial class OpenSandboxService
             }
             evidence = evidence with { Phase = "validation" };
             await ConfirmQuiescentAsync(sdk, lease, ct);
-            var transfer = await CollectAsync(sdk, lease.Profile, ct);
+            var transfer = await CollectAsync(lease, ct);
             await workspace.CommitScratchAsync(access.SessionId, transfer, scratch.Fingerprint, ct, token => ValidateAccessAsync(access, token), lease.Generation);
             var finished = time.GetUtcNow();
             evidence = evidence with { State = "Succeeded", FinishedAt = finished, ExitCode = 0, Stdout = stdout.Text, Stderr = stderr.Text,

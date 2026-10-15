@@ -51,6 +51,17 @@ class SandboxComposeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 server_config(False, address, True)
 
+    def test_mount_root_is_explicitly_allowed_and_native_handoff_maps_the_same_root(self):
+        import json
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp).resolve()/'workspace-mounts'
+            config=server_config(True,'172.17.0.1',True,workspace_root=root)
+            self.assertIn('allowed_host_paths = '+json.dumps([str(root)]),config)
+            helper.native_handoff(Path(temp),'http://127.0.0.1:18080','private-sentinel',workspace_root=root)
+            handoff=(Path(temp)/'native.env').read_text()
+            self.assertIn('OpenSandbox__WorkspaceMountRoot='+str(root),handoff)
+            self.assertNotIn('WorkbenchImage',handoff)
+
     def test_native_helper_loads_only_the_standalone_infrastructure_compose_file(self):
         args=argparse.Namespace(project='agent-core-sandbox')
         with patch.object(helper,'run',return_value='') as run:

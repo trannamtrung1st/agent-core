@@ -52,7 +52,9 @@ def prepare(args):
     gateway = ""
     if "Docker Desktop" not in platform:
         gateway = json.loads(run("docker", "network", "inspect", "bridge", capture=True))[0]["IPAM"]["Config"][0]["Gateway"]
-    config = server_config("Docker Desktop" in platform, gateway)
+    workspace_root = state / "workspace-mounts"
+    workspace_root.mkdir(exist_ok=True)
+    config = server_config("Docker Desktop" in platform, gateway, workspace_root=workspace_root)
     (state / "server.toml").write_text(config)
     return state
 
@@ -82,9 +84,12 @@ def up(args):
             "--mount", "type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock",
             "--mount", f"type=bind,src={state}/server.toml,dst=/etc/opensandbox/config.toml,readonly",
             "--mount", f"type=volume,src={args.name}-state,dst=/var/lib/opensandbox",
+            "--mount", f"type=bind,src={state}/workspace-mounts,dst={state}/workspace-mounts",
             PINS["server"], "--config", "/etc/opensandbox/config.toml")
     elif not current["State"]["Running"]:
         run("docker", "start", args.name)
+    if not any(m.get("Destination") == str(state / "workspace-mounts") for m in owned(args.name).get("Mounts", [])):
+        raise RuntimeError("Existing runner needs the mounted-workspace contract. Stop its owned workloads/server, then recreate it with the updated runner; retain the state volume.")
     env = environment(args, state, tag)
     for attempt in range(90):
         try:
@@ -122,6 +127,7 @@ def environment(args, state, tag):
     env = os.environ.copy()
     env.update(AGENTCORE_OPENSANDBOX_TESTS="1", AGENTCORE_OSB_PROOF_DISPOSABLE="1", AGENTCORE_OSB_PROOF_KEY=key,
         AGENTCORE_OSB_PROOF_URL=f"http://127.0.0.1:{args.port}",
+        AGENTCORE_OSB_PROOF_MOUNT_ROOT=str(state / "workspace-mounts"),
         AGENTCORE_OSB_PROOF_IMAGE=args.image or (run("docker", "image", "inspect", tag, "--format", "{{.Id}}", capture=True).strip() if args.build_workbench else ""),
         AGENTCORE_OSB_PROOF_PRIVATE_TARGET=owned(args.name)["NetworkSettings"]["Networks"]["bridge"]["IPAddress"],
         AGENTCORE_OSB_PROOF_GATEWAY=owned(args.name)["NetworkSettings"]["Networks"]["bridge"]["Gateway"],
@@ -209,6 +215,7 @@ def ui_acceptance(args, state, env):
         Persistence__AttachmentRoot=str(data / "attachments"), Persistence__CredentialProtectionKeyRoot=str(data / "keys"),
         OpenSandbox__Enabled="true", OpenSandbox__Endpoint=env["AGENTCORE_OSB_PROOF_URL"],
         OpenSandbox__ApiKey=env["AGENTCORE_OSB_PROOF_KEY"],
+        OpenSandbox__WorkspaceMountRoot=env["AGENTCORE_OSB_PROOF_MOUNT_ROOT"],
         OpenSandbox__AllowLocalImageIds="true", Browser__Enabled="false",
         VITE_DEV_PORT=str(args.web_port), VITE_API_PROXY_TARGET=api_url,
         AGENTCORE_OSB_UI_URL=web_url, AGENTCORE_OSB_UI_STATE=str(data / "browser-state.json"))

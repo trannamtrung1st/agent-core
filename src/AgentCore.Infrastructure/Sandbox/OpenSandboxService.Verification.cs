@@ -16,7 +16,7 @@ public sealed partial class OpenSandboxService
         var authority = await Images.InspectAsync(profile, ct, requireVerification: false);
         SandboxProfileVerification Observation(bool passed, string message, string? code = null, int? exit = null) =>
             new(profile.Id, profile.Revision, time.GetUtcNow(), passed, message, code, exit, stdout.Text, stderr.Text, stdout.Truncated || stderr.Truncated,
-                Math.Max(0,(long)(time.GetUtcNow()-started).TotalMilliseconds), passed ? null : Guid.CreateVersion7().ToString("D"), 1, profile.RegistryCredentialId, authority.CredentialRevision, authority.SecretRevision);
+                Math.Max(0,(long)(time.GetUtcNow()-started).TotalMilliseconds), passed ? null : Guid.CreateVersion7().ToString("D"), SandboxProfileVerification.CurrentContractVersion, profile.RegistryCredentialId, authority.CredentialRevision, authority.SecretRevision);
         if (authority.Status != "SourceAuthorized") return Observation(false, authority.Message, "sourceAuthority");
         if (!options.Enabled) return Observation(false, "OpenSandbox is disabled in host configuration.", "disabled");
         var budget = 45 + profile.MaxCommandSeconds + CommitGraceSeconds;
@@ -24,6 +24,7 @@ public sealed partial class OpenSandboxService
             return Observation(false, "Maximum lifetime cannot cover initialization and validation. Increase it within the host ceiling.", "lifetime");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(budget));
         SdkSandbox? sdk = null;
+        var mountId = Guid.CreateVersion7(); var mountPrepared = false;
         var result = Observation(false, "Private server or pinned image is unavailable. Check local server readiness.", "provisioning");
         var phase = "provisioning";
         try
@@ -33,19 +34,20 @@ public sealed partial class OpenSandboxService
             var currentAuthority = await Images.InspectAsync(profile,deadline.Token,requireVerification:false);
             if (currentAuthority.Status != "SourceAuthorized" || currentAuthority.CredentialRevision != authority.CredentialRevision || currentAuthority.SecretRevision != authority.SecretRevision)
                 throw AgentCoreErrors.Forbidden("Source authorization changed before provisioning. Read the current credential/profile state and verify again.");
+            var workingVolume = Mounts.Prepare(mountId); mountPrepared = true;
             sdk = await SdkSandbox.CreateAsync(new SandboxCreateOptions { ConnectionConfig = Connection(), Image = profile.ImageReference, ImageAuth = auth,
                 TimeoutSeconds = Math.Min(profile.MaxLifetimeSeconds, budget), ReadyTimeoutSeconds = 45,
                 Resource = new Dictionary<string,string> { ["cpu"] = profile.Cpu.ToString(CultureInfo.InvariantCulture), ["memory"] = profile.MemoryMiB + "Mi" },
-                Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = Guid.CreateVersion7().ToString("N") },
+                Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = mountId.ToString("N") },
+                Volumes = [workingVolume],
                 NetworkPolicy = new NetworkPolicy { DefaultAction = NetworkRuleAction.Deny, Egress = [] } }, deadline.Token);
             auth = null;
             phase = "readiness";
-            var output = await InternalCommandAsync(sdk, ["python","-I","-c","import os; assert os.getuid()>0; assert not os.path.exists('/var/run/docker.sock'); assert os.access('/working',os.W_OK); print('verified')"], deadline.Token);
-            if (output.Trim() != "verified") throw new InvalidOperationException();
-            var lease = new SandboxLease(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, profile, SandboxLeaseState.Ready, sdk.Id,
-                time.GetUtcNow(), time.GetUtcNow().AddSeconds(budget), BaselineProcesses: await ProcessIdentitiesAsync(sdk, deadline.Token));
+            await CheckImageReadinessAsync(sdk, mountId, deadline.Token);
+            var lease = new SandboxLease(Guid.NewGuid(), Guid.NewGuid(), mountId, 1, profile, SandboxLeaseState.Ready, sdk.Id,
+                time.GetUtcNow(), time.GetUtcNow().AddSeconds(budget), BaselineProcesses: await ProcessIdentitiesAsync(sdk, deadline.Token), MountContractVersion: 1);
             phase = "initialization";
-            if (imageOnly) result = Observation(true, "Image readiness passed: non-root Python is available. Initialization was not executed.");
+            if (imageOnly) result = Observation(true, "Image readiness passed: shell execution and the platform /working mount are available. Initialization was not executed.");
             else
             {
                 var setupStarted = time.GetUtcNow();
@@ -73,8 +75,8 @@ public sealed partial class OpenSandboxService
                 {
                     phase = "validation";
                     await ConfirmQuiescentAsync(sdk, lease, deadline.Token);
-                    _ = await CollectAsync(sdk, profile, deadline.Token);
-                    result = Observation(true, "Non-root Python readiness, initialization and scratch validation passed in a disposable sandbox.", exit:0);
+                    _ = await CollectAsync(lease, deadline.Token);
+                    result = Observation(true, "Shell readiness, mounted scratch, initialization and file validation passed in a disposable sandbox.", exit:0);
                 }
             }
         }
@@ -82,6 +84,10 @@ public sealed partial class OpenSandboxService
         { result = Observation(false, ct.IsCancellationRequested ? "Verification was canceled; success was not confirmed." : $"Verification timed out during {phase}. Check the profile limits and script.", "canceledOrTimeout"); }
         catch (AgentCoreException error) when (phase == "provisioning")
         { result = Observation(false, error.Message, "sourceAuthorization"); }
+        catch (ImageReadinessException error)
+        { result = Observation(false, error.Message, "imageReadiness", error.ExitCode); }
+        catch when (phase == "readiness")
+        { result = Observation(false, "Image readiness could not be confirmed. " + SandboxImageReadiness.Requirements + " If these requirements are met, check the private server connection and verify again.", "readiness"); }
         catch
         { result = Observation(false, $"Verification failed during {phase}. Check private server readiness, the pinned image and initialization script. Provider exception details are withheld; bounded script output is available separately.", phase); }
         finally
@@ -89,11 +95,40 @@ public sealed partial class OpenSandboxService
             if (sdk is not null)
             {
                 using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-                try { await sdk.KillAsync(cleanup.Token); }
+                try { await sdk.KillAsync(cleanup.Token); Mounts.Delete(mountId); mountPrepared = false; }
                 catch { result = Observation(false, "Verification sandbox cleanup was not confirmed. Inspect the local server before verifying again.", "cleanup"); }
                 finally { await sdk.DisposeAsync(); }
             }
+            else if (mountPrepared)
+            {
+                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                try
+                {
+                    await using var manager = OpenSandbox.SandboxManager.Create(new OpenSandbox.SandboxManagerOptions { ConnectionConfig = Connection() });
+                    var page = await manager.ListSandboxInfosAsync(new SandboxFilter { Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = mountId.ToString("N") }, PageSize = 100 }, cleanup.Token);
+                    foreach (var candidate in page.Items) await manager.KillSandboxAsync(candidate.Id, cleanup.Token);
+                    Mounts.Delete(mountId);
+                }
+                catch { result = Observation(false, "Verification cleanup was not confirmed. Inspect the private server and retained platform staging before retrying.", "cleanup"); }
+            }
         }
         return result;
+    }
+
+    private async Task CheckImageReadinessAsync(SdkSandbox sdk, Guid mountId, CancellationToken ct)
+    {
+        var output = new BoundedText(4096);
+        var execution = await sdk.Commands.RunAsync(["/bin/sh", "-c", SandboxImageReadiness.Script],
+            new RunCommandOptions { WorkingDirectory = "/", TimeoutSeconds = 30 },
+            new ExecutionHandlers { SkipAccumulation = true, OnStdout = m => { output.Append(m.Text); return Task.CompletedTask; } }, ct);
+        if (output.Truncated) throw new InvalidOperationException("Readiness output exceeded its bound.");
+        var incompatibility = SandboxImageReadiness.Describe(output.Text, execution.ExitCode);
+        if (incompatibility is not null) throw new ImageReadinessException(incompatibility, execution.ExitCode);
+        await Mounts.ConfirmProbeAsync(mountId, ct);
+    }
+
+    private sealed class ImageReadinessException(string message, int? exitCode) : Exception(message)
+    {
+        internal int? ExitCode { get; } = exitCode;
     }
 }
