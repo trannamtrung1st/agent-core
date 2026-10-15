@@ -44,7 +44,7 @@ public sealed partial class OpenSandboxService
             ValueTask Fence(CancellationToken token) => execution.Background ? ValidateProcessCommitAsync(lease, execution, token) : ValidateAccessAsync(access, token);
             if (execution.State == SandboxExecutionState.Canceled && execution.CancellationReason != "processStop") throw new OperationCanceledException();
             await Fence(ct);
-            if (!execution.RemoteTerminationConfirmed && execution.Phase == "processInspection")
+            if (CompletedProcessInspection is null && !execution.RemoteTerminationConfirmed && execution.Phase == "processInspection")
             {
                 try { sdk = await ConnectAsync(lease, ct); }
                 catch (SandboxApiException error) when (error.StatusCode == 404) { /* Confirm absence through exact-owned retirement before reading staging. */ }
@@ -59,7 +59,7 @@ public sealed partial class OpenSandboxService
         SdkSandbox? sdk, SandboxLease lease, SandboxExecution execution, AgentDefinition definition, Func<CancellationToken, ValueTask> fence, CancellationToken ct)
     {
         await fence(ct);
-        if (!execution.RemoteTerminationConfirmed && (execution.Phase == "retirementRequested" || sdk is null || !await IsQuiescentAsync(sdk, lease, ct)))
+        if (!execution.RemoteTerminationConfirmed && (execution.Phase == "retirementRequested" || !await CompletedGenerationIsQuiescentAsync(sdk, lease, ct)))
         {
             execution = execution with { Phase = "retirementRequested" };
             await SaveReceiptAsync(execution, false, ct);

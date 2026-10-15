@@ -37,7 +37,8 @@ public sealed class OpenSandboxCleanupTests
         var retained = await service.InspectProcessAsync(lease.SessionId,execution.Id);
         Assert.Equal("unknown",retained.WorkspaceSyncStatus);Assert.Equal(7,retained.ExitCode);
         Assert.True(retained.RemoteTerminationConfirmed);Assert.False(retained.TerminationConfirmed);
-        Assert.Equal("NeedsResync",(await service.InspectAsync(lease.SessionId))!.State);
+        var environment = (await service.InspectAsync(lease.SessionId))!;
+        Assert.Equal("NeedsResync",environment.State);Assert.True(environment.FileRecoveryRequired);Assert.False(environment.CleanupPending);
     }
 
     [Theory]
@@ -46,6 +47,9 @@ public sealed class OpenSandboxCleanupTests
     [InlineData("ownerReset")]
     [InlineData("resetIntent")]
     [InlineData("narrowedBackground")]
+    [InlineData("inspectionFailure")]
+    [InlineData("inspectionRunCancellation")]
+    [InlineData("inspectionRequestCancellation")]
     public async Task Pending_retirement_preserves_staging_and_reconciliation_imports_only_after_confirmed_owned_absence(string resolution)
     {
         var allow = false; var deletes = 0;
@@ -71,11 +75,17 @@ public sealed class OpenSandboxCleanupTests
             var path = new SandboxMountFiles(options).Prepare(lease.Generation).Host!.Path;
             await File.WriteAllTextAsync(Path.Combine(path,"retained.txt"),"exact");
             var execution = new SandboxExecution(Guid.NewGuid(),session.SessionId,owner.AgentInstanceId,lease.Generation,run.AgentRunId,run.Claim!.Generation,"once","hash",SandboxExecutionState.Completed,now,
-                FinishedAt:now,ExitCode:7,WorkspaceSyncStatus:"notCommitted",Phase:"retirementRequested",Background:resolution == "narrowedBackground");
+                FinishedAt:now,ExitCode:7,WorkspaceSyncStatus:"notCommitted",Phase:resolution.StartsWith("inspection",StringComparison.Ordinal)?"processInspection":"retirementRequested",Background:resolution == "narrowedBackground");
             await store.SaveExecutionAsync(execution,true);
             await store.SaveLeaseAsync(lease with {Revision=2,State=SandboxLeaseState.NeedsReconciliation,MountContractVersion=1,ActiveExecutionId=execution.Id,LastExecutionId=execution.Id,ScratchFingerprint=scratch.Fingerprint},1);
             var service = new OpenSandboxService(options,store,workspace,memory,runs,TimeProvider.System);
-            await service.ReconcileAsync();
+            using var inspectionCancellation = new CancellationTokenSource();
+            if(resolution.StartsWith("inspection",StringComparison.Ordinal)) service.CompletedProcessInspection = async token => {
+                if(resolution == "inspectionRunCancellation") await runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.RequestCancellation(run.Revision,DateTimeOffset.UtcNow,null));
+                if(resolution == "inspectionRequestCancellation") { inspectionCancellation.Cancel(); token.ThrowIfCancellationRequested(); }
+                throw new IOException("Injected private inspection failure must not be reflected in receipts");
+            };
+            await service.ReconcileAsync(inspectionCancellation.Token);
             Assert.True(File.Exists(Path.Combine(path,"retained.txt"))); Assert.Single((await workspace.CaptureScratchAsync(session.SessionId,definition)).Transfer.Entries);
             Assert.Equal(SandboxLeaseState.NeedsReconciliation,(await store.GetLeaseAsync(session.SessionId))!.State);
             if(resolution == "cancelRun") await runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.RequestCancellation(run.Revision,DateTimeOffset.UtcNow,null));
@@ -95,10 +105,12 @@ public sealed class OpenSandboxCleanupTests
             if(resolution == "ownerReset") await service.StopSessionAsync(session.SessionId, expectedGeneration:lease.Generation);
             else await service.ReconcileAsync();
             var receipt = await service.InspectProcessAsync(session.SessionId,execution.Id);
-            Assert.Equal(resolution == "cancelRun"?"Canceled":"Completed",receipt.Status); Assert.Equal(7,receipt.ExitCode); Assert.Equal(resolution == "complete"?"committed":"notCommitted",receipt.WorkspaceSyncStatus);
-            Assert.Equal(resolution == "complete",receipt.GenerationRecycled); Assert.True(receipt.TerminationConfirmed); Assert.False(Directory.Exists(path)); Assert.Equal(2,deletes);
+            var publish = resolution is "complete" or "inspectionFailure";
+            Assert.Equal(resolution is "cancelRun" or "inspectionRunCancellation"?"Canceled":"Completed",receipt.Status); Assert.Equal(7,receipt.ExitCode); Assert.Equal(publish?"committed":"notCommitted",receipt.WorkspaceSyncStatus);
+            Assert.Equal(publish,receipt.GenerationRecycled); Assert.True(receipt.TerminationConfirmed); Assert.False(Directory.Exists(path)); Assert.Equal(2,deletes);
+            Assert.DoesNotContain("Injected private",receipt.Stderr);
             var files=(await workspace.CaptureScratchAsync(session.SessionId,definition)).Transfer.Entries;
-            if(resolution != "complete")Assert.Single(files);
+            if(!publish)Assert.Single(files);
             else Assert.Equal("exact",System.Text.Encoding.UTF8.GetString(files.Single(e=>e.RelativePath=="retained.txt").Bytes));
         }
         finally { if(Directory.Exists(canonical))Directory.Delete(canonical,true);if(Directory.Exists(canonical+"-templates"))Directory.Delete(canonical+"-templates",true); }

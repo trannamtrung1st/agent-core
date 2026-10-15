@@ -84,6 +84,8 @@ Controlled response projections separately exercised pending retirement with kno
 
 ## Coverage limits and operations
 
+The [small final follow-up](sandbox-final-polish-acceptance-2026-10-15.md) resolves the two subsequent inspection/status observations and supplies intentional Real deployment plus disposable acceptance. The original results and unperformed deployment statement below remain historical for this report's source.
+
 - Real workload runtime: Linux ARM64 on Docker Desktop, hosted by macOS ARM64; Workbench Python/Node, stock .NET SDK 10.0.402 and BusyBox cases used existing images. Windows hosts and native Linux x64 host operation are not newly verified here.
 - AMD64: actual strict collector code passed in an emulated Linux x64 container. A real AMD64 stock-SDK OpenSandbox workload was attempted but failed at provisioning. The pinned [Docker image platform policy](https://github.com/opensandbox-group/OpenSandbox/blob/531700ca18a7fa5fab6a2f25d6dc68a76eddab12/server/opensandbox_server/services/docker/container_ops.py#L225) defaults expected platform to the daemon and repulls an incompatible cached architecture. This ARM64 daemon therefore cannot provision that cached AMD64 immutable image under its current policy. No daemon change, retag, provider override or false AMD64 workload pass was introduced. Native AMD64 full-workload verification remains open.
 - No suitable Java image was installed; optional Java compatibility was not exercised. No new language image was built just for these tests.

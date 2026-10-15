@@ -14,6 +14,8 @@ The [Sandbox selection and recovery successor](docs/reports/sandbox-selection-re
 
 The [generic Linux runtime successor](docs/reports/generic-linux-sandbox-runtime-verification-2026-10-15.md) treats a compatible Linux OCI image as opaque. Quiescent containers are reused; residual writers cause the exact owned generation to be retired before validated files are committed. Receipts distinguish command exit, file outcome, container recycling and pending cleanup. Session selection and canonical `/working` survive recycling. The earlier [.NET follow-up](docs/reports/sandbox-dotnet-quiescence-timeout-verification-2026-10-15.md) is historical; language-specific shutdown has been removed. Existing user Sessions and deployment are preserved.
 
+The [small final Sandbox follow-up](docs/reports/sandbox-final-polish-acceptance-2026-10-15.md) preserves valid completed-command files after unexpected inspection failure, distinguishes unknown file recovery from cleanup, and records intentional Real deployment with disposable write/recycle/readback acceptance.
+
 The owner-authorized P10 OpenSandbox cutover is implemented and accepted for a
 **trusted, single-user local demo** on behavior `4c8f2507`. All eight
 [hosted gates](https://github.com/trannamtrung1st/agent-core/actions/runs/38518370016)

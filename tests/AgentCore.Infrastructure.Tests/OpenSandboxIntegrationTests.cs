@@ -29,6 +29,20 @@ public sealed class OpenSandboxFactAttribute : FactAttribute
 public sealed class OpenSandboxIntegrationTests
 {
     [OpenSandboxFact]
+    public async Task Completed_inspection_failure_retires_owned_generation_and_commits_exact_files()
+    {
+        await using var f = await Fixture.Create();
+        f.Service.CompletedProcessInspection = _ => throw new IOException("Injected process inspection transport failure");
+        var result = await f.Exec("printf recovered-exact > inspection.txt; exit 7");
+        Assert.Equal("Completed",result.Status);Assert.Equal(7,result.ExitCode);Assert.Equal("committed",result.WorkspaceSyncStatus);
+        Assert.True(result.GenerationRecycled);Assert.True(result.RemoteTerminationConfirmed);Assert.True(result.TerminationConfirmed);
+        Assert.Equal("recovered-exact",await f.Read("inspection.txt"));
+        f.Service.CompletedProcessInspection = null;
+        var fresh = await f.Exec("cat inspection.txt");
+        Assert.Equal("recovered-exact",fresh.Stdout);Assert.NotEqual(result.Generation,fresh.Generation);
+    }
+
+    [OpenSandboxFact]
     public async Task Opaque_python_and_node_children_retire_generically_without_affecting_a_sibling_session()
     {
         await using var f = await Fixture.Create();

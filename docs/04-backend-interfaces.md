@@ -812,3 +812,5 @@ Command results additionally project profile ID/revision, generation, phase, fai
 ## Generic finalization evidence
 
 `SandboxCommandResult` and durable `SandboxExecution` add default-false `GenerationRecycled` and `RemoteTerminationConfirmed`; `TerminationConfirmed` retains the combined remote-absence plus staging-deletion meaning. Actual `ExitCode`/Completed evidence survives retirement, even with nonzero exit. The adapter performs generic quiescence/whole-container retirement inside its existing Session gate; private staging never crosses the port. `ISessionWorkspace` remains the only canonical collection/CAS/journal boundary. Existing process status/stop and profile selection contracts remain unchanged. [Provider findings and verification](reports/generic-linux-sandbox-runtime-verification-2026-10-15.md).
+
+`SandboxEnvironmentInfo.FileRecoveryRequired` separately projects NeedsResync. `CleanupPending` continues to describe Terminating/NeedsReconciliation; unknown canonical effects retain staging for file recovery rather than claiming cleanup has finished.

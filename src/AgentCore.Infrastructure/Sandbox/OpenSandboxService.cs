@@ -444,7 +444,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         return lease is null ? null : new(lease.SessionId, lease.Generation, lease.State.ToString(), lease.Profile.Id, lease.Profile.Revision, lease.ExpiresAt, lease.ActiveExecutionId, lease.DiagnosticId, lease.LastExecutionId, lease.SafeMessage,
             lease.CreatedAt, lease.LastActivityAt ?? lease.InitializedAt ?? lease.CreatedAt, lease.CreatedAt.AddSeconds(lease.Profile.MaxLifetimeSeconds),
             lease.CleanupReason, lease.State is SandboxLeaseState.Terminating or SandboxLeaseState.NeedsReconciliation, lease.CleanupPasses,
-            lease.LastCleanupAttemptAt, lease.Initialization, lease.Profile.Name, lease.Profile.ImageReference, lease.CleanupReason == "reset" ? null : lease.SelectedProfileId ?? lease.Profile.Id, lease.TransitionProfileId, lease.TransitionPhase, lease.FailureCategory, lease.FailurePhase, lease.AdmissionRunId);
+            lease.LastCleanupAttemptAt, lease.Initialization, lease.Profile.Name, lease.Profile.ImageReference, lease.CleanupReason == "reset" ? null : lease.SelectedProfileId ?? lease.Profile.Id, lease.TransitionProfileId, lease.TransitionPhase, lease.FailureCategory, lease.FailurePhase, lease.AdmissionRunId, lease.State == SandboxLeaseState.NeedsResync);
     }
     public ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct = default, Guid? expectedGeneration = null)
         => StopSessionAsync(trustedSessionId, ct, expectedGeneration, null, false);

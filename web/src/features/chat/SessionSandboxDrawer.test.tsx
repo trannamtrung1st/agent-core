@@ -38,6 +38,15 @@ it('distinguishes completed files from pending staging cleanup',async()=>{
   expect(screen.queryByRole('button',{name:'Lifecycle evidence'})).not.toBeInTheDocument();
   expect(screen.getByText('Container termination confirmed; staging retained')).toBeInTheDocument();
 });
+it('distinguishes retained staging for file recovery from pending termination cleanup',async()=>{
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'NeedsResync',fileRecoveryRequired:true,cleanupPending:false});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,workspaceSyncStatus:'unknown',remoteTerminationConfirmed:true});
+  render(tree());await screen.findByText('Staging retained until file recovery resolves');
+  expect(screen.getByText('File recovery')).toBeInTheDocument();
+  expect(screen.getByText(/Unknown outcomes keep staging and block further execution/)).toBeInTheDocument();
+  expect(screen.queryByText('No pending cleanup')).not.toBeInTheDocument();
+  expect(screen.getByText(/File commit outcome unknown/)).toBeInTheDocument();
+});
 it('does not promise retained selection after an explicit reset of a recycled generation',async()=>{
   vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'Terminated',cleanupReason:'reset',selectedProfileId:null});
   vi.mocked(getSandboxExecution).mockResolvedValue({...result,generationRecycled:true,remoteTerminationConfirmed:true,terminationConfirmed:true,phase:'completed'});
