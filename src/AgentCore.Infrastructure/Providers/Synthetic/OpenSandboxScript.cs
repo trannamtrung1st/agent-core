@@ -11,8 +11,9 @@ internal static class OpenSandboxScript
     public static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
     {
         var last = request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User);
-        if (last < 0) return null;
         var headless = request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal));
+        // Background intent lives in the typed RunTask, with no fabricated user turn.
+        if (last < 0 && !headless) return null;
         var text = SyntheticTaskContext.Text(request);
         // Background task intent is wrapped by PromptContextBuilder's evidence
         // boundary; direct Chat keeps its exact fixture prefix. Both still use
