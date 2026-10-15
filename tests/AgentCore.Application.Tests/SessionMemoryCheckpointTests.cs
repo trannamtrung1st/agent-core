@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
@@ -126,15 +127,15 @@ public sealed class SessionMemoryCheckpointTests
             }
 
             var request = model.LastRequest!;
-            var learned = request.Messages.Single(message => message.Text.StartsWith(SessionMemoryPrompt.LearnedDataLabel, StringComparison.Ordinal)).Text;
+            var learned = request.Context!.Text(ContextSectionId.Memory);
             Assert.Contains("fact: Ship the report | by Monday", learned, StringComparison.Ordinal);
             Assert.Contains(SessionMemoryPrompt.TrustedPrecedence, learned, StringComparison.Ordinal);
             Assert.DoesNotContain(OtherSessionSentinel, learned, StringComparison.Ordinal);
             Assert.DoesNotContain("still open", learned, StringComparison.Ordinal);
             Assert.DoesNotContain("preferredName=", learned, StringComparison.Ordinal);
-            Assert.Contains("preferredName=Pat", request.Messages[2].Text, StringComparison.Ordinal);
-            Assert.Contains("Identity: Alex", request.Messages[0].Text, StringComparison.Ordinal);
-            Assert.DoesNotContain("by Monday", request.Messages[0].Text, StringComparison.Ordinal);
+            Assert.Contains("preferredName=Pat", request.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
+            Assert.Contains("Identity: Alex", request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+            Assert.DoesNotContain("by Monday", request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
 
             var manager = new SessionManager(
                 new StaticDefinitions(Enabled()),

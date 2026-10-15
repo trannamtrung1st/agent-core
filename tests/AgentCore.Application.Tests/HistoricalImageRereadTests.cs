@@ -47,7 +47,7 @@ public sealed class HistoricalImageRereadTests
         var part = Assert.IsType<ModelImageContent>(Assert.Single(result.Parts!));
         Assert.Equal("image/png", part.ContentType);
         Assert.Equal("photo.png", part.FileName);
-        Assert.DoesNotContain(Convert.ToBase64String(part.Bytes), result.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(Convert.ToBase64String(part.Bytes.AsSpan()), result.Text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -439,7 +439,8 @@ public sealed class HistoricalImageRereadTests
                 ApiKey = "test-key",
                 Vision = true,
                 Tools = true,
-                StructuredOutput = true
+                StructuredOutput = true,
+                DeveloperRoleSupport = true
             }));
         await using var runtime = CreateRuntime(output, store, attachments, processor, model, tools);
         var uploaded = await attachments.UploadPendingAsync(
@@ -639,8 +640,12 @@ public sealed class HistoricalImageRereadTests
         }
     }
 
-    private static string FindAgents() =>
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "agents"));
+    private static string FindAgents()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            if (Directory.Exists(Path.Combine(directory.FullName, "agents"))) return Path.Combine(directory.FullName, "agents");
+        throw new DirectoryNotFoundException("agents/");
+    }
 
     private static SessionRuntime CreateRuntime(
         ISessionOutput output,
@@ -813,23 +818,16 @@ public sealed class HistoricalImageRereadTests
 
     private static Guid ExtractAttachmentIdFromManifest(ModelRequest request)
     {
-        var manifest = request.Messages.FirstOrDefault(message =>
-            message.Role == ModelRole.System
-            && message.Text.Contains("Files available in this session", StringComparison.Ordinal));
-        if (manifest is null)
-        {
-            return Guid.Empty;
-        }
-
-        var start = manifest.Text.IndexOf("\"attachmentId\":\"", StringComparison.Ordinal);
+        var manifest = request.Context!.Text(AgentCore.Application.Context.ContextSectionId.Attachments);
+        var start = manifest.IndexOf("\"attachmentId\":\"", StringComparison.Ordinal);
         if (start < 0)
         {
             return Guid.Empty;
         }
 
         start += "\"attachmentId\":\"".Length;
-        var end = manifest.Text.IndexOf('"', start);
-        return Guid.Parse(manifest.Text[start..end]);
+        var end = manifest.IndexOf('"', start);
+        return Guid.Parse(manifest[start..end]);
     }
 
     private sealed class HistoricalImageVisionRereadModel : ILanguageModel

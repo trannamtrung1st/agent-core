@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
@@ -218,8 +219,8 @@ public sealed class IdentityUserMemoryTests
         Assert.DoesNotContain(BobUserA, text, StringComparison.Ordinal);
         Assert.DoesNotContain(AliceUserB, text, StringComparison.Ordinal);
         Assert.Contains(AliceUserA, text, StringComparison.Ordinal);
-        Assert.DoesNotContain(AliceUserA, request.Messages[0].Text, StringComparison.Ordinal);
-        Assert.DoesNotContain(AliceUserA, request.Messages[2].Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(AliceUserA, request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+        Assert.DoesNotContain(AliceUserA, request.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
 
         var retrievalOff = await SessionMemoryPrompt.LoadAsync(
             service,

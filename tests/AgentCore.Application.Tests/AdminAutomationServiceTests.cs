@@ -191,7 +191,7 @@ public sealed class AdminAutomationServiceTests
 
         public IReadOnlyList<ModelDescriptor> Models { get; } =
         [
-            new(key, key, "synthetic", "small", true, false, true, false, [], null)
+            new(key, key, "synthetic", "small", true, false, true, false, [], null, DeveloperRoleSupport: true)
         ];
 
         public ModelDescriptor Default => Models[0];

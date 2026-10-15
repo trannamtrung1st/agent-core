@@ -30,6 +30,7 @@ public sealed class ComplianceRealToolLoopTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/",
                 DefaultModel = "deepseek/deepseek-v4.1-flash",

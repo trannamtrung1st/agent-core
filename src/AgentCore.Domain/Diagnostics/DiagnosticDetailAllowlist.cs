@@ -36,6 +36,7 @@ public static class DiagnosticDetailAllowlist
         "providerStreamError",
         "streamIncomplete",
         "incompleteToolCall",
+        "invalidToolCallIdentity",
         "circuitOpen",
         "invalidToolStrategy",
         "runDeadline",

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
 using AgentCore.Application.Memory;
@@ -107,10 +108,10 @@ public sealed class AgentInstanceTests
         await runtime.SubmitUserTextAsync("hello");
         await runtime.WaitUntilIdleAsync();
 
-        var identity = model.LastRequest!.Messages[0].Text;
+        var identity = model.LastRequest!.Context!.Text(ContextSectionId.AgentIdentity);
         Assert.Contains($"Tone: {alice.Persona.Tone}", identity, StringComparison.Ordinal);
         Assert.DoesNotContain("Tone: v2 tone", identity, StringComparison.Ordinal);
-        Assert.Contains("V2_MARKER", identity, StringComparison.Ordinal);
+        Assert.Contains("V2_MARKER", model.LastRequest.Context!.Text(ContextSectionId.AgentInstructions), StringComparison.Ordinal);
     }
 
     [Fact]

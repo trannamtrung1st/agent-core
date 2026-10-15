@@ -221,7 +221,7 @@ public sealed class PromptContextBuilderTests
         Assert.Contains("Speak naturally", modeSystem, StringComparison.Ordinal);
         Assert.Contains("name the relevant on-screen detail", modeSystem, StringComparison.Ordinal);
         Assert.Null(request.ResponseContract);
-        Assert.DoesNotContain("Speak naturally", request.Messages[0].Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Speak naturally", request.Context.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
         Assert.DoesNotContain("MUST begin", modeSystem, StringComparison.Ordinal);
         Assert.DoesNotContain("Here is the summary", modeSystem, StringComparison.Ordinal);
         Assert.DoesNotContain("Examples (GOOD", modeSystem, StringComparison.Ordinal);

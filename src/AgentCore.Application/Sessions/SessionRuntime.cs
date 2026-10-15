@@ -2492,7 +2492,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 try
                 {
                     decision = capturedRun?.Admission.ComposerInput?.Error is not null
-                        ? new Speak(ContextAssembler.Create(responseId, new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)])))
+                        ? new Speak(ContextAssembler.Create(responseId, new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)], purpose: ContextPurpose.Platform)))
                         : await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (evaluationToken.IsCancellationRequested)
@@ -2869,10 +2869,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (finalizationReason is not null) sections = sections.Upsert(ContextSection.Core(IsInitialBackgroundRun ? CoreProcedure.BackgroundFinalization : CoreProcedure.Finalization));
                 sections = sections.Upsert(ContextSection.Runtime(ContextSectionId.ExecutionPhase, ContextSourceKind.AgentRun,
                     $"phase={State().Phase}; finalizationReason={finalizationReason ?? "none"}; protocolRepairReason={repairReason ?? "none"}", semantics: ContextSemantics.TrustedFact));
-                var projected = ContextAssembler.Project(request, sections, (request.Interaction ?? []).Concat(messages).ToArray());
                 var working = inRepair
-                    ? projected with
+                    ? request with
                     {
+                        Context = sections,
                         Tools = null,
                         ToolChoice = ModelToolChoice.Auto,
                         ToolChoiceName = null,
@@ -2883,7 +2883,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
                     : ProjectBrowserTools(
                         WithOfferedTools(
-                            projected,
+                            request with { Context = sections },
                             authorizedTools,
                             trigger,
                             model),
@@ -2910,8 +2910,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             pageBlocked, terminalBrowserContinuation, evidence.DialogPending).Tools ?? [];
                         if (cleanupPhase) eligibleForGuide = eligibleForGuide.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray();
                     }
-                    working = ContextAssembler.Project(working, PromptContextBuilder.WithToolEnvironment(
-                        working.Context!, projectionContext, working.Tools ?? [], _tools.ConfigurationGate, eligibleForGuide));
+                    working = working with { Context = PromptContextBuilder.WithToolEnvironment(
+                        working.Context!, projectionContext, working.Tools ?? [], _tools.ConfigurationGate, eligibleForGuide) };
                 }
                 var recoveryTools = projectionContext is null ? working.Tools ?? []
                     : ProjectBrowserTools(working with { Tools = ToolCatalog.Eligible(_snapshot.Definition, projectionContext, _tools.ConfigurationGate) },
@@ -2923,7 +2923,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         (_browserLease as IBrowser)?.HostPolicy.ScreenshotAvailable ?? true,
                         (_browserLease as IBrowser)?.HostPolicy.Limits.CapturesPerScope ?? BrowserOperationalLimits.Default.CapturesPerScope,
                         working.Tools?.Select(t => t.Name) ?? []) is { } semanticRecovery)
-                    working = ContextAssembler.Project(working, working.Context!.Upsert(semanticRecovery));
+                    working = working with { Context = working.Context!.Upsert(semanticRecovery) };
+                working = ContextAssembler.Project(working, transcript: (request.Interaction ?? []).Concat(messages).ToArray());
                 working = model.PrepareRequest(working);
                 latestManifest = working.ContextManifest;
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
@@ -3218,6 +3219,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     return;
                 }
 
+                if (!resumingBatch)
+                {
+                    try
+                    {
+                        ContextAssembler.ValidateInteraction((request.Interaction ?? []).Concat(messages)
+                            .Append(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending)).ToArray());
+                    }
+                    catch (ArgumentException)
+                    {
+                        var failure = new ProviderFailure(ProviderErrorCode.InvalidResponse,
+                            "The provider returned an invalid tool-call identity or transcript.", FailureReason: "invalidToolCallIdentity");
+                        await RecordFailureAsync(failure).ConfigureAwait(false);
+                        await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(failure), generateToken).ConfigureAwait(false);
+                        return;
+                    }
+                }
                 if (!await AdmitToolActivityAsync(
                             cause,
                             request.ResponseId,

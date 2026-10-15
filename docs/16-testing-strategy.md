@@ -4,6 +4,8 @@
 
 The focused cutover matrix covers assembler source/role/budget validation and deterministic fingerprints; Definition/Instance value and field-source inheritance; current-task ordering and delivered/heard/summary/Office boundaries; tool/Skill/capability reprojection; typed checkpoint reopen, pending IDs, response/budget/effect fences and retired-format denial; explicit transactional conversion/backup/refusal; and separate Chat Completions/Responses wire roles. Synthetic uses the same production assembly path without hosted keys.
 
+Stabilization checks reject reused tool-call IDs even with identical arguments and duplicate results, preserving legitimate pending-call recovery. Exercise repeated IDs through the runtime and assert no additional effect/checkpoint is admitted. Agent-execution purposes require Runtime identity/instructions while explicit platform auxiliaries remain valid. Multipart fingerprints distinguish equal-sized changed image/text content. A warmed allocation regression performs four metadata reprojections with one 2 MiB image and requires less than 1 MiB total allocations; media allocation must not scale with payload size.
+
 Exercise real SessionRuntime conversation, load/reopen, background/wait and cancellation paths alongside unit invariants. Admin verification saves Definition Form/JSON and Instance overrides, clears to inherit, observes next-Run pins and redacted Run provenance, and checks desktop/768/390/320 layouts and keyboard focus. [The cutover ledger](reports/three-layer-context-cutover-verification-2026-10-15.md) records exact observed commands and remaining gaps. Remote-provider interoperability remains explicit opt-in; no unrun route is treated as verified.
 
 ## Verification scope and optional CI

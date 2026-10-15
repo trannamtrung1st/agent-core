@@ -12,6 +12,8 @@ The 2026-10-15 owner-authorized State and Isolation enhancement is integrated wi
 
 Complete ordinary requests within their scope using focused local checks; they do not start milestone closure or require full backend/frontend/browser/Compose suites. Broaden local verification only for affected boundaries, failures or explicitly requested milestone acceptance. [Testing Strategy](16-testing-strategy.md#verification-scope-and-optional-ci) owns the current policy.
 
+The [current main integration ledger](reports/agent-state-main-integration-2026-10-15.md) records the combined State/isolation and context-hardening checks on main `2322d492`, with earlier source ledgers preserved as historical evidence.
+
 CI is optional and runs only on explicit user request. This policy supersedes older mandatory hosted/exact-SHA CI language below for current work, including milestone acceptance unless the user explicitly requests CI as part of it. Preserve historical acceptance criteria, freeze SHAs and CI receipts as records of their original versions. Report local completion separately from milestone acceptance and never claim unrun checks passed.
 
 The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application

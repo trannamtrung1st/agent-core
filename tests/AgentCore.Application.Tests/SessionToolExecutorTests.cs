@@ -38,7 +38,7 @@ public sealed class SessionToolExecutorTests
         var image = Assert.IsType<ModelImageContent>(Assert.Single(typed.Parts!));
         Assert.Equal("image/png", image.ContentType);
         Assert.NotEmpty(image.Bytes);
-        Assert.DoesNotContain(Convert.ToBase64String(image.Bytes), typed.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(Convert.ToBase64String(image.Bytes.AsSpan()), typed.Text, StringComparison.Ordinal);
     }
 
     [Fact]

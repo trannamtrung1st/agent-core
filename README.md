@@ -4,6 +4,8 @@ The state and isolation enhancement adds owner State observations, inherited fie
 
 The owner-requested three-layer context cutover separates platform Core (`system`), effective Runtime (`developer`) and task/observation Evidence. Editable instructions use schema-2 `agentInstructions`; populated SQLite installations require the explicit backed-up [maintenance conversion](docs/17-observability-and-operations.md#three-layer-context-maintenance). [Current verification](docs/reports/three-layer-context-cutover-verification-2026-10-15.md) records focused local acceptance and deployment actions; historical acceptance below remains unchanged.
 
+The [current main integration](docs/reports/agent-state-main-integration-2026-10-15.md) verifies State/isolation together with main's context identity validation, immutable media, tool-call identity and recovery hardening.
+
 The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application
 behavior through `d279abfe`, followed by its documentation review).
 General Assistant v30 preserves main's immutable v29 and combines its current

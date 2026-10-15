@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Testing;
@@ -68,7 +69,7 @@ public sealed class ConversationCompactionTests
         Assert.Contains("Previously invoked Skill (historical, not activated): \"Say\"", source);
         Assert.Contains("Referenced session: \"AI engineering\"", source);
         Assert.DoesNotContain(key, source); Assert.DoesNotContain(parts[2].Reference!.Locator, source);
-        Assert.Contains("never new Skill activations", request.Messages[0].Text);
+        Assert.Contains("never new Skill activations", request.Context!.Text(ContextSectionId.CoreCompaction));
         Assert.Contains("invoked Say", accepted.Candidate.Summary);
         Assert.Equal(entries[0], (await store.ReadHistoryAsync(SessionId, 0, 1))[0]);
         var next = new PromptContextBuilder().Build(new AgentContext(SampleDefinitions.Examiner, entries,
@@ -151,9 +152,9 @@ public sealed class ConversationCompactionTests
                 SummarizedThroughEntrySequence: accepted.Candidate.ThroughEntrySequence,
                 LastEntrySequence: entries[^1].Sequence),
             Guid.NewGuid());
-        var turns = prompt.Messages.Where(message => message.Role is ModelRole.User or ModelRole.Assistant).ToArray();
-        var summary = prompt.Messages.Single(message => message.Role == ModelRole.System && message.Text.Contains(Legacy, StringComparison.Ordinal));
-        Assert.Contains(Goal, summary.Text, StringComparison.Ordinal);
+        var turns = prompt.Interaction!;
+        var summary = prompt.Context!.Text(ContextSectionId.Summary);
+        Assert.Contains(Goal, summary, StringComparison.Ordinal);
         Assert.DoesNotContain(turns, message => message.Text.Contains(Goal, StringComparison.Ordinal));
         Assert.DoesNotContain(turns, message => message.Text.Contains(Secret, StringComparison.Ordinal));
         Assert.DoesNotContain(turns, message => message.Text.Contains(Hidden, StringComparison.Ordinal));

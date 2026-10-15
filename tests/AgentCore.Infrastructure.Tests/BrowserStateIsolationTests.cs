@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure.Browser;
 using AgentCore.Tests.Shared;
+using Microsoft.Playwright;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -125,7 +126,7 @@ public sealed class BrowserStateIsolationTests
             {
                 // B was the most recently active view. A's delayed popup still belongs to A.
                 var popup = await pa.RunAndWaitForPopupAsync(() => pa.EvaluateAsync("window.open('/browser-native.html?popup=A')"));
-                await popup.WaitForLoadStateAsync();
+                await popup.GetByRole(AriaRole.Heading, new() { Name = "Browser workspace", Exact = true }).WaitForAsync();
                 var aPages = (await browser.ExecuteAsync(BrowserTestRequests.Tabs(a, "list"))).Pages!;
                 Assert.Equal(2, aPages.Count);
                 Assert.Single((await browser.ExecuteAsync(BrowserTestRequests.Tabs(b, "list"))).Pages!);
@@ -134,7 +135,7 @@ public sealed class BrowserStateIsolationTests
                 Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Tabs(a, "close", ownedPopup.PageId))).ErrorCode);
                 _ = await browser.ExecuteAsync(BrowserTestRequests.Tabs(b, "list"));
                 var detachedPopup = await pa.RunAndWaitForPopupAsync(() => pa.EvaluateAsync("window.open('/browser-native.html?detached=A','_blank','noopener')"));
-                await detachedPopup.WaitForLoadStateAsync();
+                await detachedPopup.GetByRole(AriaRole.Heading, new() { Name = "Browser workspace", Exact = true }).WaitForAsync();
                 var detachedPages = (await browser.ExecuteAsync(BrowserTestRequests.Tabs(a, "list"))).Pages!;
                 Assert.Equal(2, detachedPages.Count);
                 Assert.Single((await browser.ExecuteAsync(BrowserTestRequests.Tabs(b, "list"))).Pages!);

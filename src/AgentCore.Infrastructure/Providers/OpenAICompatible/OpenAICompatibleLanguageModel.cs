@@ -642,7 +642,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
                 ["type"] = "image_url",
                 ["image_url"] = new Dictionary<string, string>
                 {
-                    ["url"] = $"data:{image.ContentType};base64,{Convert.ToBase64String(image.Bytes)}"
+                    ["url"] = $"data:{image.ContentType};base64,{Convert.ToBase64String(image.Bytes.AsSpan())}"
                 }
             },
             _ => new Dictionary<string, string> { ["type"] = "text", ["text"] = "" }

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -38,7 +39,7 @@ public sealed class ProfileLiveUpdateRuntimeTests
 
             await runtime.SubmitUserTextAsync("Hello");
             await runtime.WaitUntilIdleAsync();
-            Assert.Contains("preferredName=Sam", model.LastRequest!.Messages[2].Text, StringComparison.Ordinal);
+            Assert.Contains("preferredName=Sam", model.LastRequest!.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
         }
     }
 
@@ -70,8 +71,8 @@ public sealed class ProfileLiveUpdateRuntimeTests
             await runtimeB.SubmitUserTextAsync("Hi B");
             await Task.WhenAll(runtimeA.WaitUntilIdleAsync(), runtimeB.WaitUntilIdleAsync());
 
-            Assert.Contains("preferredName=Sam", modelA.LastRequest!.Messages[2].Text, StringComparison.Ordinal);
-            Assert.Contains("preferredName=Sam", modelB.LastRequest!.Messages[2].Text, StringComparison.Ordinal);
+            Assert.Contains("preferredName=Sam", modelA.LastRequest!.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
+            Assert.Contains("preferredName=Sam", modelB.LastRequest!.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
         }
     }
 

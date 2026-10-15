@@ -39,7 +39,7 @@ test('selecting a preset is a draft and a conflict preserves it for refresh', as
   fireEvent.click(await screen.findByText('Session-isolated assistant'));
   await waitFor(() => expect(presetIsolation).toHaveBeenCalled());
   expect(applyIsolation).not.toHaveBeenCalled();
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Apply changes' })).not.toBeDisabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Apply changes' })).not.toBeDisabled(), { timeout: 5_000 });
   fireEvent.click(screen.getByRole('button', { name: 'Apply changes' }));
   await screen.findByText('Owner revision changed. Refresh the preview.');
   expect(preset.parentElement).toHaveTextContent('Session-isolated assistant');

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
@@ -189,14 +190,17 @@ public sealed class InMemoryAndScriptedTests
             TriggerScheduleKind.OneShot,
             AutomationStatus.Active,
             null);
-        var system = string.Join('\n', referent.ToPromptLines());
-        return new ModelRequest(
-            Guid.NewGuid(),
-            [
-                new ModelMessage(ModelRole.System, system),
-                new ModelMessage(ModelRole.User, "cancel that reminder")
-            ],
-            Tools: tools);
+        var referentEvidence = string.Join('\n', referent.ToPromptLines());
+        return ContextAssembler.Create(Guid.NewGuid(),
+            new EffectiveContextSnapshot([
+                ContextSection.Core(CoreProcedure.OperatingContract),
+                ContextSection.Runtime(ContextSectionId.AgentIdentity,
+                    ContextSourceKind.Definition, "Schedule fixture"),
+                ContextSection.Runtime(ContextSectionId.AgentInstructions,
+                    ContextSourceKind.Definition, "Perform the requested schedule action."),
+                ContextSection.Evidence(ContextSectionId.SchedulingEvidence,
+                    ContextSourceKind.Session, referentEvidence)
+            ]), [new(ModelRole.User, "cancel that reminder")]) with { Tools = tools };
     }
 
     private static async Task<ModelToolCall> AwaitScheduleToolCallAsync(

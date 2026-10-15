@@ -4,11 +4,17 @@
 
 Application owns `ContextLayer`, `ContextSectionId`, `ContextSourceKind`, `ContextSemantics`, immutable `ContextSection`/`EffectiveContextSnapshot`, `ContextAssembler` and redacted `ContextManifest`. Core factories accept platform procedure identities, never arbitrary authored strings. Runtime factories reject Evidence sources/section identities. Evidence cannot acquire an authoritative provider role. The optional `RuntimeEnvironmentScope` is a future binding slot, absent from current execution.
 
+`ContextPurpose.AgentExecution` is the default: projection requires nonempty effective Runtime `AgentIdentity` and `AgentInstructions`. Core-only compaction, completion evaluation and schedule classification explicitly select `Platform`. Purpose survives section updates and participates in the fingerprint; it does not grant tools or permissions.
+
 `ILanguageModel.PrepareRequest` returns the request with any selected platform output protocol before its manifest is recorded; the default implementation is identity. Semantic adapters use the same assembler and Core section identity for forwarding.
 
 `ModelRequest` carries its typed context and separate interaction transcript along with immutable projected messages. `EvidenceMessageKind` distinguishes current-task, historical and tool-interaction semantics while preserving actual user/assistant/tool roles. Reprojection preserves response IDs, image/tool parts and opaque continuation tokens. The manifest contains ordered section IDs, source kind/revision, per-field sources, character/UTF-8/token estimates, omission coverage and a content fingerprint; no raw bodies are included.
 
 Tool-interaction content remains untrusted Tool evidence even when its native transport role is `user`. A pending assistant tool-call batch permits only matching tool results before another user or assistant message. A transcript may end with pending calls for checkpoint/recovery projection.
+
+Every tool-call ID is unique across the complete interaction, including completed batches; identical arguments do not permit reuse. SessionRuntime validates a newly proposed batch before checkpointing or admitting any tool effect. Resuming the existing pending batch retains its original IDs.
+
+`ModelImageContent` takes one defensive copy into immutable bytes and caches its SHA-256 at construction. Reprojection shares these bytes. Fingerprints cover multipart text and image metadata/content hashes, without repeatedly serializing image payloads. Providers still encode the original bytes for their transport.
 
 `ModelRole.Developer` projects explicitly in both Chat Completions and Responses. Catalog/model routes must declare `DeveloperRoleSupport` and use a supported transport; unsupported choices fail selection/admission or generation before HTTP. Pinned provider/model identity must still match that catalog declaration; changed or retired routes fail explicitly without rewriting the pin. Runtime is never downgraded to `system` or `user`. Configured support is a contract declaration, not evidence that an untested remote model honors it.
 

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Diagnostics.Metrics;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
@@ -1104,7 +1105,7 @@ public sealed class InitiativeTests
             ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            var system = request.Messages.FirstOrDefault(message => message.Role == ModelRole.System)?.Text;
+            var system = request.Context?.Text(ContextSectionId.CoreInitiative);
             if (system is not null && system.Contains(InitiativeEvaluator.Marker, StringComparison.Ordinal))
             {
                 var index = Math.Min(_initiativeCalls++, initiativeJson.Count - 1);

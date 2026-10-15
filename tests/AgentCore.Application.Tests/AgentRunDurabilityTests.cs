@@ -239,7 +239,7 @@ public sealed partial class AgentRunDurabilityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Background_start_returns_committed_child_promptly_and_repeated_tool_call_returns_same_child(bool reportCompletion)
+    public async Task Background_start_returns_committed_child_promptly_and_preserves_completion_delivery(bool reportCompletion)
     {
         var memory = new InMemoryMemoryStore();
         var runs = new RuntimeAgentRunStore();
@@ -256,10 +256,9 @@ public sealed partial class AgentRunDurabilityTests
         await runtime.SubmitPersistedUserTextAsync("Do this in the background", Guid.NewGuid());
         await runtime.WaitUntilIdleAsync();
         var results = model.Results;
-        Assert.Equal(2, results.Count);
-        Assert.Equal(results[0].GetProperty("backgroundSessionId").GetGuid(), results[1].GetProperty("backgroundSessionId").GetGuid());
+        Assert.Single(results);
         Assert.True(results[0].GetProperty("started").GetBoolean());
-        Assert.True(results[1].GetProperty("alreadyStarted").GetBoolean());
+        Assert.False(results[0].GetProperty("alreadyStarted").GetBoolean());
         var childId = results[0].GetProperty("backgroundSessionId").GetGuid();
         var child = (await memory.LoadAsync(childId))!;
         Assert.Equal(SessionOriginKind.ImmediateBackground, child.Origin.Kind);
@@ -317,7 +316,7 @@ public sealed partial class AgentRunDurabilityTests
             _requests++;
             if (_requests > 1 && request.Messages.Any(message => message.Role == ModelRole.Tool))
                 Results.Add(System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(request.Messages.Last(message => message.Role == ModelRole.Tool).Text));
-            if (_requests <= 2)
+            if (_requests == 1)
             {
                 yield return new ModelToolCallEvent(new("same-start", AgentCore.Application.Tools.ToolCatalog.BackgroundStart,
                     System.Text.Json.JsonSerializer.Serialize(new { objective = "Inspect the bounded task", title = "Task inspection", reportCompletion })));

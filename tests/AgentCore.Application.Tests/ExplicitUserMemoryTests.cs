@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
@@ -252,8 +253,7 @@ public sealed class ExplicitUserMemoryTests
 
             var request = recallModel.LastRequest;
             Assert.NotNull(request);
-            var learned = request.Messages.Single(message =>
-                message.Text.StartsWith(SessionMemoryPrompt.LearnedDataLabel, StringComparison.Ordinal)).Text;
+            var learned = request.Context!.Text(ContextSectionId.Memory);
             Assert.Contains(corrected, learned, StringComparison.Ordinal);
             Assert.DoesNotContain(CodenameFact, learned, StringComparison.Ordinal);
         }
@@ -343,10 +343,9 @@ public sealed class ExplicitUserMemoryTests
             Assert.NotNull(request);
             Assert.Contains(
                 PromptContextBuilder.BuildMemoryCapability(definition.MemoryPolicy, reliableProposalChannel: true),
-                request.Messages[2].Text,
+                request.Context!.Text(ContextSectionId.Policies),
                 StringComparison.Ordinal);
-            var learned = request.Messages.Single(message =>
-                message.Text.StartsWith(SessionMemoryPrompt.LearnedDataLabel, StringComparison.Ordinal)).Text;
+            var learned = request.Context!.Text(ContextSectionId.Memory);
             Assert.Contains("project codename", learned, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(CodenameFact, learned, StringComparison.Ordinal);
         }
