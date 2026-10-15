@@ -10,6 +10,8 @@ Application owns `ContextLayer`, `ContextSectionId`, `ContextSourceKind`, `Conte
 
 `ModelRequest` carries its typed context and separate interaction transcript along with immutable projected messages. `EvidenceMessageKind` distinguishes current-task, historical and tool-interaction semantics while preserving actual user/assistant/tool roles. Reprojection preserves response IDs, image/tool parts and opaque continuation tokens. The manifest contains ordered section IDs, source kind/revision, per-field sources, character/UTF-8/token estimates, omission coverage and a content fingerprint; no raw bodies are included.
 
+For admitted user Runs, `AgentContext.CurrentUserEntryIds` identifies the accepted source batch across attempts. Context construction uses the captured Session history and these identities, so a retained streaming response placeholder cannot turn the retry's current user task, explicit invocations or attachments into historical evidence.
+
 Tool-interaction content remains untrusted Tool evidence even when its native transport role is `user`. A pending assistant tool-call batch permits only matching tool results before another user or assistant message. A transcript may end with pending calls for checkpoint/recovery projection.
 
 Every tool-call ID is unique across the complete interaction, including completed batches; identical arguments do not permit reuse. SessionRuntime validates a newly proposed batch before checkpointing or admitting any tool effect. Resuming the existing pending batch retains its original IDs.

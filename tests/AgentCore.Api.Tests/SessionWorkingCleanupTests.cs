@@ -7,6 +7,7 @@ using AgentCore.Application.Workspaces;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.TestHost;
 
 namespace AgentCore.Api.Tests;
 
@@ -15,7 +16,13 @@ public sealed class SessionWorkingCleanupTests
     [Fact]
     public async Task Cleanup_waits_for_session_terminal_and_preserves_sibling_home_artifacts_and_run_receipts()
     {
-        await using var host = new AgentCoreApiFactory();
+        await using var host = new AgentCoreApiFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            // This fixture owns and dispatches its SessionRuntime directly. A second
+            // dispatcher must not claim the same work through another SessionHost runtime.
+            foreach (var service in services.Where(s => s.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService)).ToArray())
+                services.Remove(service);
+        }));
         using var client = TestOwnerCapability.CreateOwnerClient(host);
         var services = host.Services;
         var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 31);

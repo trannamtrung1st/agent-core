@@ -635,7 +635,10 @@ public sealed class PromptContextBuilder(
         IReadOnlyList<ConversationEntry> history)
     {
         var currentBatch = context.Trigger.Kind == TriggerKind.UserTurn
-            ? TrailingUserSuffix.Of(context.History)
+            ? context.CurrentUserEntryIds is { } admitted
+                ? admitted.Select(id => context.History.Single(entry => entry.EntryId == id
+                    && entry.Role == ConversationRole.User && entry.Status == EntryStatus.Completed)).ToArray()
+                : TrailingUserSuffix.Of(context.History)
             : [];
         var currentIds = currentBatch.Select(entry => entry.EntryId).ToHashSet();
         var eligible = history

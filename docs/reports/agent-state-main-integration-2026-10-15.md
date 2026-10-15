@@ -2,6 +2,8 @@
 
 Integrated `origin/main` at `2322d4927936fe816bc1aa066e89492fae5c6b05` into `develop/branch-1`, whose prior tip was `18623c235d9255c96c2b9123175c7fedc093ca1b`. The common ancestor is `ff875ea48cb42a72829dac51f87a9c8bd939e8b8`. Main contributed context identity/media hardening (`ffbfa8e7`) and current typed-context/recovery fixtures (`dec10df3`, `2322d492`). Git reported no textual conflicts; overlapping runtime, assembler and canonical documentation were reviewed semantically before committing.
 
+While PR #17 was being created, main advanced to `76216100cc9527ada801159597f83dae89bbeaa1`. A second clean merge incorporates its admitted-user retry boundary: captured history and `CurrentUserEntryIds` preserve the original task across a retained streaming placeholder; Synthetic Experience recall reads typed Evidence. Live isolation filtering remains in place before that context is built and before later model calls. The initial integration results below remain distinct from the final retry-context rechecks.
+
 The [original implementation](agent-state-isolation-verification-2026-10-15.md), [isolation review](agent-state-isolation-review-2026-10-15.md) and [main context ledger](three-layer-context-cutover-verification-2026-10-15.md) remain evidence for their respective earlier source snapshots. This report records the combined local verification, not a deployment or milestone/CI acceptance.
 
 ## Combined behavior retained
@@ -12,9 +14,9 @@ The [original implementation](agent-state-isolation-verification-2026-10-15.md),
 - Strict Session boundaries after policy relaxation, same-Run retries, receipt-fenced completion continuations and safe child/resource settlement remain intact. Home and browser ownership restrictions and immutable resolved browser pins are retained through SQLite conversion/reopen.
 - Main's recovery fixture uses the current interaction-only checkpoint contract. Shell syntax and all four embedded Python blocks in `scripts/compose-sqlite-volume.sh` parse; Compose execution itself was not run for this integration.
 
-Only two fixture waits needed adjustment during verification: the asynchronous preset-preview assertion now permits a bounded five-second wait under concurrent build load; native popup readiness waits for the actual fixture heading rather than a page-wide load event. Ownership/foreign-handle assertions, validation and production behavior were not relaxed.
+Two fixture waits needed adjustment during verification: the asynchronous preset-preview assertion now permits a bounded five-second wait under concurrent build load; native popup readiness waits for the actual fixture heading rather than a page-wide load event. A cleanup lifecycle assertion later failed once in the combined retry-context selection and passed alone. Its direct-runtime fixture now removes the hosted Run dispatcher so another SessionHost cannot claim the same work; pause, terminal eligibility, retained-data and sibling assertions remain unchanged. Ownership/foreign-handle assertions, validation and production behavior were not relaxed.
 
-## Focused verification
+## First integration verification (`2322d492`)
 
 Backend command form: `dotnet test tests/<project>/<project>.csproj --no-restore --nologo --filter '<filter>' -m:1 /nodeReuse:false`. Each fragment below uses `FullyQualifiedName~` and alternatives use `|`.
 
@@ -30,6 +32,19 @@ Backend command form: `dotnet test tests/<project>/<project>.csproj --no-restore
 
 The first concurrent frontend invocation hit its one-second readiness wait, then passed in isolation. The initial Infrastructure invocation passed 184 tests with six opt-ins skipped but timed out waiting for one popup's load event; its isolated five-test browser rerun passed. After the targeted readiness corrections, the complete selected sets above passed. Failed attempts are not recorded as passing acceptance, and overlapping reruns are not summed as unique coverage.
 
+## Final retry-context rechecks (`76216100`)
+
+The same backend command form was used after the second merge. No frontend production code changed between these integrations; the 70-test frontend check and production build above remain applicable.
+
+| Check | Result |
+| --- | --- |
+| API filter above plus `ContinuityEnhancementJourneyTests` | 49 passed, 0 failed/skipped (44 s final run). The earlier selection passed 48 and failed the direct cleanup fixture's pause assertion; its isolated rerun passed, and the final selection passed after restricting the fixture to one dispatcher. |
+| Application filter above plus `AgentRunDurabilityTests`, `GenerationRetryTests` | 204 passed, 3 live opt-ins skipped, 0 failed (3 s). |
+| Infrastructure with Chromium opt-in: `InMemoryAndScriptedTests`, `ContextCutoverTests`, `Request_isolation`, `ThreeLayerProviderTests`, `BrowserStateIsolationTests` | 25 passed, 1 live opt-in skipped, 0 failed (10 s). Rechecks the changed Synthetic task context, provider hierarchy, durable isolation pins/reopen and native browser ownership. |
+| Final repository checks | All 14 PR Markdown files have balanced fences and valid local targets; final source fingerprint matches; no unmerged entries or whitespace errors remain. |
+
+The final Playwright journey restarts only the task-owned host using the retained disposable SQLite, sends `synthetic-fail-turn merged retry boundary`, observes the expected terminal failure and reads its owned Run status as `failed` with `attemptCount=3`. It does not turn into a generic successful answer on retry. New chat then sends `MERGED_FINAL_CORRECTION` in a different ordinary Session, completes with the Synthetic reply and contains none of the failed task marker. Final browser console has zero errors/warnings.
+
 ## Synthetic browser journey
 
 Playwright MCP used only a task-owned SQLite API on 5097 and Vite on 5187, with separate data under `/tmp/agent-state-main-sync-20261015` and Browser/OpenSandbox disabled. A new approval-demo Instance was configured through the actual State & Isolation surface: select Stateless, save with the existing configuration toolbar and verify the saved request/Home/Browser/continuity fields.
@@ -38,6 +53,6 @@ State reported Partial with unavailable Browser/Sandbox, unknown live counts and
 
 ## Source and verification scope
 
-Combined production-source SHA-256: `ed3ce5104289553f9fdf3745f5a64279fbff0eb0cc1b77cb41209e5bbf63e708` over 1,334 sorted tracked paths under `src`, `web/src` and `agents`, hashing UTF-8 path, NUL, file bytes and NUL. Test/document changes are excluded.
+Final combined production-source SHA-256 including main `76216100`: `3f2a2530c705f8f45ab015590957190bfb8ae75bf3e880b24377a74f91082db7` over 1,334 sorted tracked paths under `src`, `web/src` and `agents`, hashing UTF-8 path, NUL, file bytes and NUL. Test/document changes are excluded. The first integration on main `2322d492` had fingerprint `ed3ce5104289553f9fdf3745f5a64279fbff0eb0cc1b77cb41209e5bbf63e708`.
 
 No full local CI suite or hosted CI was dispatched or awaited for this integration. Live models, live OpenSandbox, external customer accounts and device-audio qualification remain separate opt-ins. No Real application, user database or deployment was restarted, converted or reset. Task-owned verification hosts/tabs are stopped after checks; disposable data remains available for inspection.
