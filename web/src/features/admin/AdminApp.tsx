@@ -1,6 +1,7 @@
 import { Alert, App, Button, Result } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { followAppLink } from "../../app/appLink";
+import { appMessageConfig } from "../../app/appFeedback";
 import { adminDefinitionPath, adminHomePath, adminInstancePath, navigateToAppPath, type AdminRoute } from "../../app/appRoute";
 import { getAdminEffectiveConfig, listAdminDefinitions, listAdminInstances, type AdminDefinitionInventoryItem, type AdminInstanceInventoryItem } from "../../services/adminApi";
 import { formatAdminLoadError } from "./adminErrors";
@@ -112,7 +113,7 @@ function AdminAppContent({ route }: { route: AdminRoute }) {
     : undefined;
 
   return (
-    <App className="antd-root" message={{ duration: 3, maxCount: 3 }}>
+    <App className="antd-root" message={appMessageConfig}>
     <AdminShell route={route} ownerName={route.view === "instance" && effectiveConfig.data?.instanceId === route.instanceId ? effectiveConfig.data.persona.name : undefined}
       headingActions={inventoryActions} headingMetadata={inventoryCount}>
         {route.view === "home" ? (

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T02:20:26.502681+00:00",
+  "generatedAt": "2026-10-15T02:49:09.081876+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -310,17 +310,17 @@
     ],
     "inspection": {
       "branch": "main",
-      "baseCommit": "58bd05b34a7bac6d3f4db00b426d4fd3ec4a9dcc",
+      "baseCommit": "aba8cd9448ebd8cdfb48f912a679dcc61487a2e3",
       "sourceSha256": {
         "web/src/app/AppShell.tsx": "7117c0cb06b9f29bcb5158e5dab2c742e69a88d8e25df3a16a6cfb80b77ed83a",
         "web/src/app.css": "f7a3a9fc5e3b810fc39c5019fb85dfd830445ceb89d1518d7c38b89cb6812d01",
-        "web/src/features/admin/SandboxProfilesSection.tsx": "0a63f67930f6f9df1257b4f2d31f41ad6d7347bcdbc0126ec5c394ddc0560011",
+        "web/src/features/admin/SandboxProfilesSection.tsx": "32d236b2e1c1382fb7b0003c511cb2b3963558182cde336eeaabb1c712001b18",
         "web/src/features/admin/SandboxProfileDetails.tsx": "8c6ca0a5851648c0c700b36e1f226616a9f9b24150a4147ae88674cc2bed6d86",
         "web/src/features/admin/CredentialsSection.tsx": "17406d7a757110be6d783a5f98abb8c94d1495e438cf982826de7dda8bc8dba6",
         "web/src/features/admin/AddCredentialDialog.tsx": "e9e217a5e84579e386bfb8610e104e48e2955c426db4b192cc714459036b0127",
         "web/src/features/admin/DefinitionSandboxPolicy.tsx": "5b121400af8e6927cb9cad2b214fe4bd5f115419062c53c6e1d3cdc5dd2088be",
         "web/src/features/admin/InstanceSettingsSection.tsx": "2fd99f54fc535282c23d6c567e65bf69588caf64d10e2125f3ba35a1143ae5f8",
-        "web/src/features/admin/InstanceSandboxSummary.tsx": "f05447de28ee47f1d67de8e46e74389dd8543598f4bc6f858573e80b2a90d81b",
+        "web/src/features/admin/InstanceSandboxSummary.tsx": "820341e453db5c584aa57af96b1ab02bce91329ccba51d2b371848f3d16af557",
         "web/src/features/chat/SessionSandboxDrawer.tsx": "d1d036d2cdd6d0a486ee14d69dd8a0d041c32d21e6708f10e70d491e542ff950",
         "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66",
         "web/src/features/admin/AgentConfigurationLayout.tsx": "b36bde3bb2f8a11cc14abb20f29df25656b9ee2ee5490b1663d724513589e73b",
@@ -334,18 +334,22 @@
         "web/src/features/admin/SkillDrawer.tsx": "48c5aab113b87567037d4a275c220f9d436f0751299117e2de3e5dfdf1705ce2",
         "web/src/features/admin/InstanceSkillsSection.tsx": "874bd6ecdaf4fadc261bc9e61954a0184b24cb590cb665fafe69f889da952868",
         "web/src/features/admin/InstanceAutomationsSection.tsx": "fe80f38993e493dc9e5c021ea068d9ba90e108a058dcabf62be06f885aa7a421",
-        "web/src/services/sandboxes.ts": "aea331050554a77af5c4aa94a70a663c546ea64c8c78f0afb69cca1289ef1a28"
+        "web/src/services/sandboxes.ts": "aea331050554a77af5c4aa94a70a663c546ea64c8c78f0afb69cca1289ef1a28",
+        "web/src/app/appFeedback.ts": "f6c4d75c561c730657e7aa063b1ee4e2a67caf42e97cb2ff6181172ffbb3ac2f",
+        "web/src/features/admin/AdminApp.tsx": "59d46f1a41c694953ceb2c8386ab1ec50bee97ff7c07aee035bd464b9cd84587",
+        "web/src/features/chat/ChatApp.tsx": "fc593d3a21d8b7b4810753940ade2d9867fa66f35d07e16b7fa7ba0fff0b350d"
       },
-      "evidence": "docs/reports/admin-form-feedback-verification-2026-10-15.md",
-      "scope": "Documentation sync against current working-tree source: shared Ant Design form spacing and responsive grids; guarded Sandbox creation Modal; Global/Instance MiB and script presentation; immediate submission warnings/errors with persistent details, draft retention and first-invalid-field focus. Image tags resolve to saved immutable digests. Existing theme primitives retained.",
-      "snapshotKind": "working-tree",
-      "inspectedAt": "2026-10-15T02:20:26.502681+00:00",
+      "evidence": "docs/reports/compact-feedback-verification-2026-10-15.md",
+      "scope": "Shared native Ant Design messages in Chat/Admin: 40rem maximum, full wrapping, bottom placement with 96px action/safe-area clearance, flow layout on resize and bounded local overflow. Existing Sandbox creation, sparse Instance settings and submission-recovery patterns retained. Source hashes identify staged candidate files, excluding concurrent uncommitted work.",
+      "snapshotKind": "commit-candidate",
+      "inspectedAt": "2026-10-15T02:49:09.081876+00:00",
       "evidenceRecords": [
+        "docs/reports/compact-feedback-verification-2026-10-15.md",
         "docs/reports/admin-form-feedback-verification-2026-10-15.md",
         "docs/reports/oci-sandbox-final-hardening-2026-10-15.md",
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
-      "verification": "Source/document consistency and structured-metadata checks only in this sync. Runtime evidence comes from the earlier local implementation checks recorded in evidenceRecords; no new application run or milestone acceptance."
+      "verification": "Playwright MCP against isolated Synthetic API 5088/Vite 5188: actual Sandbox save rejection/correction and failed verification; five-width resize checks; mobile nested validation; controlled long diagnostic and overflow fixtures; non-destructive Chat rename fixture. 22 focused tests, build and detector passed. No CI or milestone acceptance."
     }
   },
   "components": [
@@ -556,6 +560,14 @@
       "description": "Static excerpt of the shared six-column Admin collection, with a table-local 1080px minimum and full-value titles/copy in the application. Add prebuilt image opens the guarded 800px Ant Design Modal; saved-profile editing remains inline. The shared Global/Instance grid owns 16px gaps, full-column controls and MiB/exact-byte presentation. Tags and Docker Hub names resolve to a fixed digest on Save. Failed submissions retain drafts, announce errors and focus client-invalid fields, including collapsed Advanced controls. Credentials owns optional UTC expiry. Real registry values, modal interactions and notifications are omitted from this static catalog excerpt.",
       "html": "<section class=\"ds-oci\"><header><input aria-label=\"Search sandbox profiles\" placeholder=\"Search sandbox profiles\"><button type=\"button\">Add prebuilt image</button></header><div class=\"ds-oci-scroll\"><table><thead><tr><th>Profile</th><th>Profile ID</th><th>Revision</th><th>Source</th><th>Image</th><th>Availability</th></tr></thead><tbody><tr><td><a href=\"#profile\">Example OCI</a></td><td>example</td><td>3</td><td>Remote OCI</td><td><code title=\"Illustrative image identity\">sha256:illustrative\u2026</code></td><td><span>Verified \u00b7 eligible</span></td></tr></tbody></table></div></section>",
       "css": ".ds-oci{background:var(--ac-color-container,#141414);color:var(--ac-color-text,rgba(255,255,255,.85));font:14px/1.57 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;padding:16px}.ds-oci header{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}.ds-oci input,.ds-oci button{min-height:32px;border:1px solid var(--ac-color-border,#303030);border-radius:6px;padding:4px 12px;font:inherit}.ds-oci input{min-width:0;flex:1;background:transparent;color:inherit}.ds-oci button{background:var(--ac-color-primary,#1668dc);color:white}.ds-oci-scroll{overflow:auto}.ds-oci table{min-width:1080px;width:100%;border-collapse:collapse}.ds-oci th,.ds-oci td{text-align:start;white-space:nowrap;padding:8px;border-bottom:1px solid var(--ac-color-border,#303030)}.ds-oci code{white-space:nowrap}.ds-oci small{color:var(--ac-color-text-secondary,rgba(255,255,255,.65))}.ds-oci a{color:var(--ac-color-primary,#1668dc)}.ds-oci span{color:var(--ac-color-success,#49aa19)}.ds-oci button{cursor:pointer}.ds-oci button:hover{filter:brightness(1.1)}.ds-oci button:active{filter:brightness(.9)}.ds-oci :is(button,input,a):focus-visible{outline:2px solid var(--ac-color-focus,#3c89e8);outline-offset:2px}@media(max-width:767px){.ds-oci input,.ds-oci button{min-height:40px}}"
+    },
+    {
+      "name": "Message feedback",
+      "kind": "custom",
+      "refersTo": "feedback-toast",
+      "description": "Static message excerpt with illustrative recovery text. Chat and Admin use the same native AntD message configuration: maximum 40rem, 16px inline clearance, full wrapping and a top-aligned icon. Runtime messages sit above a 96px bottom action clearance plus the device safe area, with 8px stack gaps, at most three messages, local overflow beyond half the dynamic viewport and native hover pause. Normal-flow notices preserve position on resize. Persistent field/local details remain after dismissal; this static example has no timer, notification behavior or diagnostic controls.",
+      "html": "<div class=\"ds-feedback\" aria-label=\"Message feedback preview\"><svg viewBox=\"0 0 16 16\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"8\" cy=\"8\" r=\"8\" fill=\"currentColor\"/><path d=\"m5.5 5.5 5 5m0-5-5 5\" stroke=\"var(--ac-color-elevated,#1f1f1f)\" stroke-width=\"1.5\"/></svg><span>Verification failed. Check server readiness, the saved image and initialization output. Your profile remains available for correction.</span></div>",
+      "css": ".ds-feedback{display:flex;align-items:flex-start;gap:var(--ac-space-compact,8px);width:max-content;max-width:min(40rem,calc(100vw - 32px));margin-inline:auto;padding:9px var(--ac-space-default,12px);border-radius:var(--ac-radius-surface,8px);background:var(--ac-color-elevated,#1f1f1f);color:var(--ac-color-text,rgba(255,255,255,.85));font:400 14px/1.5714285714 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;box-shadow:0 6px 16px 0 rgba(255,255,255,.016),0 3px 6px -4px rgba(255,255,255,.024),0 9px 28px 8px rgba(255,255,255,.01)}.ds-feedback svg{flex-shrink:0;margin-block-start:.2em;color:var(--ac-color-error,#dc4446)}.ds-feedback span{min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:start}"
     }
   ],
   "narrative": {
@@ -613,6 +625,11 @@
       {
         "name": "The Submission Feedback Rule",
         "body": "A failed submission must be immediately visible and lead to a correction. Client validation shows a deduplicated Ant Design warning with the first field error, keeps inline field errors, reveals any collapsed containing section, then scrolls to and focuses that field. Server failures show an action-specific error toast and preserve local details, safe diagnostics and editable drafts. A toast supplements persistent guidance; its disappearance must not erase the recovery path.",
+        "section": "components"
+      },
+      {
+        "name": "The Bounded Feedback Rule",
+        "body": "Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack near the bottom, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. Leave 96px (six section units) plus the device safe area below the stack for form/composer actions. The stack uses normal flow, grows upward, and scrolls locally beyond half the dynamic viewport so resized messages do not retain stale measured heights. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains available after the toast closes.",
         "section": "components"
       }
     ],

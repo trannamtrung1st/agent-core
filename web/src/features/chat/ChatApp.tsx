@@ -1,4 +1,5 @@
 import { followAppLink } from "../../app/appLink";
+import { appMessageConfig } from "../../app/appFeedback";
 import { adminHomePath } from "../../app/appRoute";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWorkReadState } from "./workReadState";
@@ -298,7 +299,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
   );
 
   return (
-    <AntApp className="antd-root" message={{ duration: 3, maxCount: 3 }}>
+    <AntApp className="antd-root" message={appMessageConfig}>
       <ApprovalModal
         approval={state.pendingApproval}
         onApprove={() => void respondToApproval("approve")}

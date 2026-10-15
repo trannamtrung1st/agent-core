@@ -53,13 +53,14 @@ related_targets:
   - web/src/features/admin/AdminCollectionToolbar.tsx
   - web/src/features/admin/useAdminDetailLayout.ts
   - web/src/app/confirmAction.ts
+  - web/src/app/appFeedback.ts
   - web/src/features/filePreview/FilePreview.tsx
   - web/src/app.css
 ---
 
 # Admin configuration and continuity
 
-CURRENT SYNC (2026-10-15): This brief follows the current working tree based on `58bd05b3`, including uncommitted Sandbox modal/form and shared Admin feedback changes. [DESIGN.md](../../.agents/context/DESIGN.md) owns presentation guidance; [Frontend Implementation](../../docs/13-frontend-implementation-spec.md) owns behavior. The preview sidecar records inspected source hashes. Earlier source stamps and captures below remain historical; this documentation update does not rerun the app or renew acceptance.
+CURRENT SYNC (2026-10-15): This brief follows the commit candidate based on `aba8cd94`, including compact bottom feedback shared by Admin and Chat. [DESIGN.md](../../.agents/context/DESIGN.md) owns presentation guidance; [Frontend Implementation](../../docs/13-frontend-implementation-spec.md) owns behavior. The preview sidecar records candidate source hashes. [Compact feedback verification](../../docs/reports/compact-feedback-verification-2026-10-15.md) records current local checks; earlier source stamps and captures below remain historical. No hosted or milestone acceptance is renewed.
 
 Definition Automation permissions use two primary checkboxes, Schedule and Events, with Built-in/Webhook children indented by Ant Design paddingLG. Checked/mixed/unchecked state derives from canonical child values. Concise descriptions explain explicit both-family enable and local restricted pause/resume; overall-disabled configuration is visible with inactive-authority guidance. Published inspection uses the same disabled controls. Keep ordinary text wrapping, shared section spacing and keyboard focus; no extra boxes or new tokens. Effective/Instance summaries and publish diffs name exact family grants. `/docs/13` owns behavior and canonical mappings.
 
@@ -153,5 +154,7 @@ Add prebuilt image opens a centered, viewport-bounded 800px Ant Design Modal; sa
 Forms retain a 48rem maximum and 72ch supporting copy. The Sandbox stack and shared field grid own 16px sibling gaps with no added field margins. Related fields use two equal columns at 768px+, stacking below; numeric controls fill their column. Global and Instance Sandbox storage displays MiB and persists exact integer bytes, including inherited hints. Scripts use 4–14 rows; Instance source/reset controls remain explicit. Image comes before optional Registry authentication. Tags and Docker Hub short names resolve to fixed digests on Save; the stored image identity remains copyable. Separate Save/Discard from readiness/verification actions. Inventory uses six columns with table-local 1080px scrolling.
 
 Client submission errors use the shared keyed AntD warning, persistent inline field guidance, disclosure of hidden invalid fields and deferred scroll/focus. Failed writes use action-specific error toasts plus retained local details, diagnostics and drafts. Reuse `adminFormFeedback` for native forms and explicit modal validation, and `showAdminFailure` for errors. Shared Instance configuration emits one coordinated notification and distinguishes a failed save from a failed refresh after a successful write. Background reads and polling keep local recovery; Reload does not stand in for correcting a failed save.
+
+Shared `appMessageConfig` caps native messages at 40rem, wraps full text/unbroken references and centers the stack near the bottom with 16px inline clearance. The 96px bottom clearance plus device safe area keeps footer actions accessible. Normal-flow stacking handles live resizing; overflow stays local within half the dynamic viewport, with at most three messages and native hover pause. Sandbox readiness and Profile/Instance verification errors use the same six-second feedback. Do not restore page-wide header strips or per-feature notification geometry.
 
 Credential and Sandbox creation share the bounded container/body/footer rules with 16px viewport clearance and 40px narrow controls. Preserve native Modal keyboard/focus behavior and native AntD inner insets. The [feedback verification record](../../docs/reports/admin-form-feedback-verification-2026-10-15.md) records the earlier desktop/mobile interactions and remaining gaps. The [OCI hardening record](../../docs/reports/oci-sandbox-final-hardening-2026-10-15.md) owns storage, expiry and catalog checks; historical narrower catalog captures do not define the current table width.

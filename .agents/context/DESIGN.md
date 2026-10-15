@@ -164,13 +164,19 @@ components:
     textColor: "{colors.text}"
     typography: "{typography.body}"
     padding: "{spacing.section}"
+  feedback-toast:
+    backgroundColor: "{colors.elevated}"
+    textColor: "{colors.text}"
+    typography: "{typography.body}"
+    rounded: "{rounded.surface}"
+    width: "40rem"
 ---
 
 # Design System: Agent Core
 
 This file records the current Ant Design v6 presentation system. Screens, copy and behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md); `/docs` wins on conflicts. Resolved values come from `antdTheme`, `AppShell`, `app.css` and the product components, rather than an independent runtime token system.
 
-Synchronized on 2026-10-15 against the current working tree, based on `58bd05b3`, including uncommitted Sandbox form/modal and shared Admin submission-feedback changes. The companion [preview metadata](../../.impeccable/design.json) records the inspected source hashes; these identify working-tree files, not a released commit. This documentation update reuses earlier runtime evidence and adds no application run or milestone acceptance.
+Synchronized on 2026-10-15 against the commit candidate based on `aba8cd94`, including the compact bottom-message refinement. The companion [preview metadata](../../.impeccable/design.json) records candidate source hashes. [Compact feedback verification](../../docs/reports/compact-feedback-verification-2026-10-15.md) records the new local runtime checks; earlier reports retain their original scope. This is not milestone or hosted acceptance.
 
 The [recent Git and UI review](../../docs/reports/recent-git-ui-design-review-2026-10-14.md) records the earlier attachment/artifact cards, compact pending uploads, FortuneSheet previews, Drive approvals and credential creation review on `d279abfe`. The [integrated verification](../../docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14) records the XLSX clipping-notice and Drive keyboard-rejection corrections. Historical reports retain their original source, hosted acceptance and manual verification gaps.
 
@@ -386,7 +392,9 @@ Add prebuilt image opens a centered 800px maximum Ant Design Modal, using the sa
 
 **The Submission Feedback Rule.** A failed submission must be immediately visible and lead to a correction. Client validation shows a deduplicated Ant Design warning with the first field error, keeps inline field errors, reveals any collapsed containing section, then scrolls to and focuses that field. Server failures show an action-specific error toast and preserve local details, safe diagnostics and editable drafts. A toast supplements persistent guidance; its disappearance must not erase the recovery path.
 
-Reuse [adminFormFeedback.ts](../../web/src/features/admin/adminFormFeedback.ts): `validateAdminForm` for explicit modal validation and `showAdminFormValidation` for native `onFinishFailed`. The containing feature opens collapsed sections before deferred scroll/focus. The warning lasts 6 seconds; [showAdminFailure](../../web/src/features/admin/adminFailure.tsx) displays errors for 6 seconds, or 8 with diagnostic details. Keep diagnostic Copy available through the existing details popover. Neither helper introduces a custom control or notification system.
+**The Bounded Feedback Rule.** Chat and Admin share native Ant Design messages through [appMessageConfig](../../web/src/app/appFeedback.ts). Center the stack near the bottom, cap each toast at `{components.feedback-toast.width}` (640px), and retain 16px inline viewport clearance. Wrap full text and unbroken references with a top-aligned severity icon; do not truncate the recovery message. Leave 96px (six section units) plus the device safe area below the stack for form/composer actions. The stack uses normal flow, grows upward, and scrolls locally beyond half the dynamic viewport so resized messages do not retain stale measured heights. Keep at most three messages, native hover pause, diagnostics and field focus; persistent local guidance remains available after the toast closes.
+
+Reuse [adminFormFeedback.ts](../../web/src/features/admin/adminFormFeedback.ts): `validateAdminForm` for explicit modal validation and `showAdminFormValidation` for native `onFinishFailed`. The containing feature opens collapsed sections before deferred scroll/focus. Validation warnings and Sandbox verification errors last 6 seconds; [showAdminFailure](../../web/src/features/admin/adminFailure.tsx) displays errors for 6 seconds, or 8 with diagnostic details. Keep diagnostic Copy available through the existing details popover. Neither helper introduces a custom control or notification system.
 
 The current shared pattern covers Sandbox profiles, credential/account/binding dialogs, Browser privacy, Skill forms and shared Instance configuration; Skill and Automation mutations reuse the error notification. Instance configuration owns one notification for a coordinated save, preserves remaining drafts after partial success, and distinguishes Save failed from Refresh failed. Background reads/polling keep their local recovery. A failed save does not replay the mutation or present a read-only Reload as a validation fix. See the [form-feedback verification record](../../docs/reports/admin-form-feedback-verification-2026-10-15.md) for the previously exercised desktop/mobile recovery paths and limits.
 

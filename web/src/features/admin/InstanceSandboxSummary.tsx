@@ -17,7 +17,7 @@ export function InstanceSandboxSummary({ instanceId, revision, verifySetup, arch
   },[instanceId,revision,refresh]);
   async function verify() {
     if (!value || archived || dirty || busy) return; const current=epoch.current;setBusy(true);setError(null);
-    try { const result=await verifyInstanceSandbox(instanceId,value.instanceRevision);if(current!==epoch.current)return;setVerification(result);result.passed?message.success(result.message):message.error(result.message); }
+    try { const result=await verifyInstanceSandbox(instanceId,value.instanceRevision);if(current!==epoch.current)return;setVerification(result);result.passed?message.success(result.message):message.error({key:'sandbox-verification',content:result.message,duration:6}); }
     catch {if(current===epoch.current)setError('Setup verification was not confirmed. Refresh configuration and inspect retained evidence before retrying.');}
     finally{if(current===epoch.current)setBusy(false);}
   }

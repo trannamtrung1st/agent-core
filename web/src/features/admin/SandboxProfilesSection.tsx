@@ -86,13 +86,13 @@ export function SandboxProfilesSection() {
   async function verify() {
     if (!baseline || dirty || busy || !baseline.revision) return;
     setBusy(true); setError(null);
-    try { const result = await verifySandboxProfile(baseline); if(!alive.current)return; accept(result.profile); setVerificationOutput({stdout:result.stdout??"",stderr:result.stderr??"",truncated:result.truncated??false}); await load(); if(alive.current)result.passed ? message.success(result.message) : message.error(result.message); }
+    try { const result = await verifySandboxProfile(baseline); if(!alive.current)return; accept(result.profile); setVerificationOutput({stdout:result.stdout??"",stderr:result.stderr??"",truncated:result.truncated??false}); await load(); if(alive.current)result.passed ? message.success(result.message) : message.error({key:'sandbox-verification',content:result.message,duration:6}); }
     catch (e) { if(alive.current)setError(describeAdminError(e, 'Profile verification failed. Reload status before retrying.')); }
     finally { if(alive.current)setBusy(false); }
   }
   async function checkImage() {
     if (!baseline || dirty || busy || !baseline.revision) return;setBusy(true);
-    try {const result=await checkSandboxImage(baseline);if(alive.current)result.passed?message.success(result.message):message.error(result.message);}
+    try {const result=await checkSandboxImage(baseline);if(alive.current)result.passed?message.success(result.message):message.error({key:'sandbox-verification',content:result.message,duration:6});}
     catch(e){if(alive.current)setError(describeAdminError(e,'Image readiness could not be checked. Retry.'));}finally{if(alive.current)setBusy(false);}
   }
   async function readHistory(revision:number) {
