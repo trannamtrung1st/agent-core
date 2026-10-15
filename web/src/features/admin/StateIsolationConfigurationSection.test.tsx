@@ -84,6 +84,53 @@ test('visibility recipe follows Definition constraints and inheritance resolves 
     set: Object.fromEntries(Object.entries(s.set).filter(([key]) => key !== 'workingCleanup')), clear: ['workingCleanup'] })) })).toBe('SessionIsolated');
 });
 
+test('inheriting isolated Definition defaults is never labeled Persistent', () => {
+  const defaults: IsolationView = { ...view, settings: view.settings.map(s => s.section === 'stateIsolationPolicy'
+    ? { ...s, effective: { ...isolated.settings[0].set, conversationContextScope: 'CurrentRequest' }, definitionDefaults: { ...isolated.settings[0].set, conversationContextScope: 'CurrentRequest' } }
+    : s.section === 'memoryPolicy' ? { ...s, effective: Object.fromEntries(Object.keys(s.effective).map(field => [field, false])), definitionDefaults: Object.fromEntries(Object.keys(s.effective).map(field => [field, false])) } : s) };
+  expect(deriveIsolationPreset(defaults, { settings: [], experienceEnabled: false, allowMaintenance: false })).toBe('Stateless');
+});
+
+test('Use Definition defaults requests a separate unsaved reset action', async () => {
+  render(<ConfigProvider theme={{ token: { motion: false } }}><StateIsolationConfigurationSection instanceId="owner" active archived={false} onUpdated={() => {}} onDirtyChange={() => {}} /></ConfigProvider>);
+  const reset = await screen.findByRole('button', { name: 'Use Definition defaults' });
+  await waitFor(() => expect(reset).toBeEnabled());
+  fireEvent.click(reset);
+  await waitFor(() => expect(presetIsolation).toHaveBeenCalledWith('owner', 'DefinitionDefaults', expect.any(AbortSignal)));
+  expect(applyIsolation).not.toHaveBeenCalled();
+});
+
+test.each(['clean', 'policy edit', 'preset'] as const)('refresh rebases untouched opt-ins and preserves explicit intent: %s', async kind => {
+  const onDirtyChange = vi.fn();
+  const props = { instanceId: 'owner', archived: false, onUpdated: () => {}, onDirtyChange };
+  const surface = (active: boolean) => <ConfigProvider theme={{ token: { motion: false } }}><StateIsolationConfigurationSection {...props} active={active} /></ConfigProvider>;
+  const { rerender } = render(surface(true));
+  const experience = await screen.findByRole('switch', { name: 'Experience enablement' });
+  await waitFor(() => expect(experience).not.toBeDisabled());
+  if (kind === 'policy edit') fireEvent.click(screen.getByRole('switch', { name: 'Allow Experience recording' }));
+  if (kind === 'preset') {
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Isolation preset' }));
+    fireEvent.click(await screen.findByText('Session-isolated assistant'));
+    await waitFor(() => expect(presetIsolation).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Allow Experience recording' })).not.toBeChecked());
+  }
+  vi.mocked(readIsolation).mockResolvedValue({ ...view, revisions: { ...view.revisions, experience: 1, maintenance: 1 }, experienceEnabled: true, allowMaintenance: true });
+  rerender(surface(false)); rerender(surface(true));
+  await waitFor(() => expect(readIsolation).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(experience).not.toBeDisabled());
+  await waitFor(() => {
+    if (kind === 'preset') {
+      expect(experience).not.toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Autonomous identity maintenance' })).not.toBeChecked();
+    } else {
+      expect(experience).toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Autonomous identity maintenance' })).toBeChecked();
+    }
+  });
+  expect(onDirtyChange).toHaveBeenLastCalledWith(kind !== 'clean');
+  if (kind === 'policy edit') expect(screen.getByRole('switch', { name: 'Allow Experience recording' })).not.toBeChecked();
+});
+
 test('switching presets protects the dirty draft on cancel and replaces it only after confirmation', async () => {
   render(<ConfigProvider theme={{ token: { motion: false } }}><StateIsolationConfigurationSection instanceId="owner" active archived={false} onUpdated={() => {}} onDirtyChange={() => {}} /></ConfigProvider>);
   const preset = await screen.findByRole('combobox', { name: 'Isolation preset' });
@@ -96,7 +143,7 @@ test('switching presets protects the dirty draft on cancel and replaces it only 
   fireEvent.click(await screen.findByText('Session-isolated assistant'));
   // AntD test-mode ids collide with Select ids; browser verification checks the accessible name.
   const dialog = (await screen.findByText('Replace unsaved isolation changes?', { selector: '.ant-modal-title' })).closest('[role="dialog"]')!;
-  expect(dialog).toHaveTextContent('Memory, Experience and maintenance');
+  expect(dialog).toHaveTextContent('Memory, Voice, Experience and maintenance');
   expect(presetIsolation).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
   expect(screen.getByRole('switch', { name: 'Experience enablement' })).toBeChecked();
@@ -122,4 +169,20 @@ test('selecting a preset is a draft and a conflict preserves it for refresh', as
   await screen.findByText('Owner revision changed. Refresh the preview.');
   expect(preset.parentElement).toHaveTextContent('Session-isolated assistant');
   expect(applyIsolation).toHaveBeenCalledTimes(1);
+});
+
+test('inherit previews the Definition value and removes the redundant reset until edited again', async () => {
+  vi.mocked(readIsolation).mockResolvedValue({ ...view, settings: view.settings.map(s => s.section === 'stateIsolationPolicy'
+    ? { ...s, effective: { ...s.effective, experienceRecord: false }, overrides: { experienceRecord: false }, sources: { ...s.sources, experienceRecord: 'instance' } }
+    : s) });
+  render(<ConfigProvider theme={{ token: { motion: false } }}><StateIsolationConfigurationSection instanceId="owner" active archived={false} onUpdated={() => {}} onDirtyChange={() => {}} /></ConfigProvider>);
+  const inherit = await screen.findByRole('button', { name: 'Inherit Allow Experience recording' });
+  await waitFor(() => expect(inherit).not.toBeDisabled());
+  fireEvent.click(inherit);
+  expect(screen.getByRole('switch', { name: 'Allow Experience recording' })).toBeChecked();
+  expect(screen.getByText('Will inherit on save')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Inherit Allow Experience recording' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('switch', { name: 'Allow Experience recording' }));
+  expect(screen.getByRole('button', { name: 'Inherit Allow Experience recording' })).toBeEnabled();
+  expect(applyIsolation).not.toHaveBeenCalled();
 });

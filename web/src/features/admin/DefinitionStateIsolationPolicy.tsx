@@ -1,32 +1,37 @@
-import { Button, Flex, Form, Select, Switch, Typography, theme } from 'antd';
+import type { ReactNode } from 'react';
+import { Button, Flex, Form, Typography, theme } from 'antd';
 import type { DefinitionCandidate } from './definitionCandidate';
-import { isolationChoiceLabels, isolationLabels } from './stateIsolationPresentation';
+import { StateIsolationPolicyFields, stateIsolationChoices, stateIsolationDefaults as defaults } from './StateIsolationPolicyFields';
+import { AgentConfigurationPanel } from './AgentConfigurationLayout';
+import { IsolationPresetControl } from './IsolationPresetControl';
+import { IsolationChangePreview } from './IsolationChangePreview';
+import { applyDefinitionIsolationPreset, definitionIsolationChanges, definitionIsolationPreset, isolationRecord } from './definitionIsolationPresets';
 
-const defaults: Record<string, string | boolean> = { conversationContextScope: 'Session', homeAccess: 'ReadWrite', workingCleanup: 'OnSessionDeletion', browserIsolation: 'HostDefault',
-  agentStateVisibility: 'Off', experienceRecord: true, experienceRecall: true, profileEvidence: true, crossSessionContinuity: true };
-const choices: Record<string, string[]> = { conversationContextScope: ['Session', 'CurrentRequest'], homeAccess: ['ReadWrite', 'ReadOnly', 'Disabled'], workingCleanup: ['OnSessionDeletion', 'AfterTerminal'],
-  browserIsolation: ['HostDefault', 'PersistentAgent', 'EphemeralSession'], agentStateVisibility: ['Off', 'CurrentSession', 'InstanceSummary'] };
-
-export function DefinitionStateIsolationPolicy({ candidate, disabled = false, readOnly = false, onChange }: {
-  candidate: DefinitionCandidate; disabled?: boolean; readOnly?: boolean; onChange?: (next: DefinitionCandidate) => void;
+export function DefinitionStateIsolationPolicy({ candidate, savedCandidate = candidate, disabled = false, readOnly = false, active = true, id, details, onChange }: {
+  candidate: DefinitionCandidate; savedCandidate?: DefinitionCandidate; disabled?: boolean; readOnly?: boolean; active?: boolean;
+  id?: string; details?: ReactNode; onChange?: (next: DefinitionCandidate) => void;
 }) {
   const { token } = theme.useToken();
-  const policy = candidate.stateIsolationPolicy && typeof candidate.stateIsolationPolicy === 'object' && !Array.isArray(candidate.stateIsolationPolicy)
-    ? candidate.stateIsolationPolicy as Record<string, unknown> : null;
+  const policy = isolationRecord(candidate.stateIsolationPolicy);
+  const changes = definitionIsolationChanges(candidate, savedCandidate);
   function change(field: string, value: string | boolean) { onChange?.({ ...candidate, stateIsolationPolicy: { ...defaults, ...policy, [field]: value } }); }
   return <Flex vertical gap={token.padding}>
-    <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Instances may narrow home access, sharing, learning and visibility. State visibility also requires an explicitly authorized state-inspection capability. A persistent browser profile requires host support. Current-request continuity requires a fresh ordinary Session and text input.</Typography.Paragraph>
-    {!policy && <Typography.Text type="secondary">No explicit policy. Existing continuity and host browser behavior are preserved; agent state awareness is off.</Typography.Text>}
-    <Form layout="vertical" className="admin-config-form admin-settings-field-grid">
-      {Object.entries(defaults).map(([field, fallback]) => {
-        const value = policy?.[field] ?? fallback;
-        return <Form.Item key={field} label={isolationLabels[field]}>
-          {typeof fallback === 'boolean' ? <Switch aria-label={isolationLabels[field]} checked={value === true} disabled={disabled || readOnly} onChange={v => change(field, v)} /> :
-            <Select aria-label={isolationLabels[field]} value={typeof value === 'string' ? value : String(value)} disabled={disabled || readOnly}
-              options={choices[field].map(v => ({ value: v, label: isolationChoiceLabels[v] ?? v }))} onChange={v => change(field, v)} />}
-        </Form.Item>;
-      })}
-    </Form>
-    {!readOnly && <Button style={{ alignSelf: 'flex-start' }} disabled={disabled || !policy} onClick={() => onChange?.({ ...candidate, stateIsolationPolicy: null })}>Use compatibility defaults</Button>}
+    <AgentConfigurationPanel id={id} title="Continuity and resource policy" label={readOnly ? 'Published State & Isolation' : 'Draft State & Isolation'} bodyGap="section"
+      description={readOnly ? 'Published policy is read-only. Create a draft to change it.' : 'Presets prepare editable drafts. Save and publish a new version; existing Instances adopt it explicitly.'}>
+      <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Instances may narrow home access, sharing, learning and visibility. State visibility also requires an explicitly authorized state-inspection capability. A persistent browser profile requires host support. Current-request continuity requires a fresh ordinary Session and text input.</Typography.Paragraph>
+      {!candidate.stateIsolationPolicy && <Typography.Text type="secondary">No explicit policy. Existing continuity and host browser behavior are preserved; agent state awareness is off.</Typography.Text>}
+      <Form layout="vertical" className="admin-config-form instance-settings-form">
+        <Flex vertical gap={token.padding}>
+          <IsolationPresetControl value={definitionIsolationPreset(candidate, savedCandidate)} disabled={disabled || readOnly} dirty={changes.length > 0}
+            active={active} scope="Definition" onSelect={preset => { if (preset !== 'DefinitionDefaults') onChange?.(applyDefinitionIsolationPreset(candidate, savedCandidate, preset)); }} />
+          <StateIsolationPolicyFields value={field => (policy[field] ?? defaults[field]) as string | boolean}
+            choices={field => stateIsolationChoices[field]} disabled={() => disabled || readOnly} onChange={change} />
+        </Flex>
+      </Form>
+      {!readOnly && <Button style={{ alignSelf: 'flex-start' }} disabled={disabled || !candidate.stateIsolationPolicy} onClick={() => onChange?.({ ...candidate, stateIsolationPolicy: null })}>Use compatibility defaults</Button>}
+      {details}
+      <Typography.Text type="secondary">Experience enablement and autonomous identity maintenance are Instance-owned opt-ins. Definition eligibility limits apply to their use. Shared accounts retain their own authority and external effects.</Typography.Text>
+    </AgentConfigurationPanel>
+    {!readOnly && <IsolationChangePreview changes={changes} notice="Changes stay in this Definition draft until saved and published. Existing Instances require explicit version adoption. Existing history, home files, browser profiles and Artifacts are retained. Working files remain until Session deletion unless safe terminal cleanup is selected." />}
   </Flex>;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Breadcrumb, Button, Drawer, Empty, Flex, Input, Layout, Modal, Divider, Typography, theme } from 'antd';
+import { Breadcrumb, Button, Drawer, Empty, Flex, Input, Layout, Modal, Divider, Tooltip, Typography, theme } from 'antd';
 import { ArrowLeftOutlined, MenuOutlined, MessageOutlined, SearchOutlined } from '@ant-design/icons';
 import { AdminNavigationIcon } from './AdminNavigationIcon';
 import { followAppLink } from '../../app/appLink';
@@ -68,7 +68,7 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
     {route.view === 'draft' && <a className="admin-nav-back" href={adminDefinitionPath(route.definitionId, 'drafts')} onClick={followAppLink}><ArrowLeftOutlined aria-hidden /> Back to drafts</a>}
     {[...new Set(items.map(p => p.group))].map(group => <div className="admin-nav-group" key={group}>
       {group && <Typography.Text type="secondary" className="admin-nav-group-title">{group}</Typography.Text>}
-      {items.filter(p => p.group === group).map(p => <a key={p.id} href={p.href} aria-label={p.label} aria-description={dirtyPages.includes(p.id) ? "Unsaved changes" : undefined} aria-current={active?.id === p.id ? 'page' : undefined} className="admin-nav-link" onClick={event => { followAppLink(event); if (event.defaultPrevented) { menuNavigation.current = true; setMenuOpen(false); } }}><AdminNavigationIcon id={p.id} /><span>{p.label}</span>{dirtyPages.includes(p.id) && <span className="admin-nav-unsaved" aria-hidden="true"> · Unsaved</span>}</a>)}
+      {items.filter(p => p.group === group).map(p => <Tooltip key={p.id} title={dirtyPages.includes(p.id) ? 'Unsaved changes' : undefined} placement="right" trigger={['hover', 'focus']}><a href={p.href} aria-label={p.label} aria-description={dirtyPages.includes(p.id) ? "Unsaved changes" : undefined} aria-current={active?.id === p.id ? 'page' : undefined} className="admin-nav-link" onClick={event => { followAppLink(event); if (event.defaultPrevented) { menuNavigation.current = true; setMenuOpen(false); } }}><AdminNavigationIcon id={p.id} /><span className="admin-nav-label">{p.label}</span>{dirtyPages.includes(p.id) && <span className="admin-nav-unsaved" aria-hidden="true" />}</a></Tooltip>)}
     </div>)}
   </nav>;
   const fieldResults = route.view === 'instance' || route.view === 'draft' ? settingSearch.filter(p => route.view === 'instance' ? !('draftOnly' in p) : !('instanceOnly' in p)).map(p => ({

@@ -294,6 +294,29 @@ describe("AdminApp", () => {
     useAppSpy?.mockRestore();
     useAppSpy = undefined;
   });
+  it("marks State & Isolation dirty in Definition navigation and clears the indicator on save", async () => {
+    const draftId = "019944af-00d1-7000-8000-0000000000de";
+    const draft = { draftId, definitionId: "examiner", revision: 1, sourceKind: "ForkBuiltIn", sourceVersion: 1,
+      createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", candidate: { definitionId: "examiner" } };
+    vi.mocked(listAdminDefinitions).mockResolvedValue([{ definitionId: "examiner", version: 1, source: "builtIn", status: "published", displayName: "Examiner" }]);
+    vi.mocked(listAdminInstances).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([]);
+    vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
+    vi.mocked(listAdminDraftResources).mockResolvedValue([]);
+    vi.mocked(getAdminDefinitionDraft).mockResolvedValue(draft);
+    vi.mocked(updateAdminDefinitionDraft).mockImplementation(async (_id, _revision, candidate) => ({ ...draft, revision: 2, candidate }));
+    render(<AdminApp route={{ area: "admin", view: "draft", definitionId: "examiner", draftId, page: "state-isolation" }} />);
+    const recording = await screen.findByRole('switch', { name: 'Allow Experience recording' });
+    fireEvent.click(recording);
+    const link = within(screen.getByRole('navigation', { name: 'Admin navigation' })).getByRole('link', { name: 'State & Isolation' });
+    await waitFor(() => expect(link).toHaveAttribute('aria-description', 'Unsaved changes'));
+    expect(link.querySelector('.admin-nav-unsaved')).toBeInTheDocument();
+    expect(link).toHaveTextContent(/^State & Isolation$/);
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(link).not.toHaveAttribute('aria-description'));
+    expect(link.querySelector('.admin-nav-unsaved')).not.toBeInTheDocument();
+    expect(recording).not.toBeChecked();
+  });
   it("keeps an exact draft read failure when the Definition catalog finishes loading", async () => {
     const draftId = "019944af-00d1-7000-8000-0000000000de";
     vi.mocked(getAdminDefinitionDraft).mockRejectedValue(new Error("Draft not found."));

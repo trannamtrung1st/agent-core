@@ -143,7 +143,7 @@ function DefinitionVersionDetails({ row, renderResources }: {
             resources={<AgentConfigurationPanel title="Resources" label="Published resources">{row.source === "durable"
             ? renderResources(row.version) : <Typography.Text type="secondary">Built-in resources use the shipped role environment and knowledge sources.</Typography.Text>}</AgentConfigurationPanel>}
           /> },
-          { key: 'state-isolation', label: 'State & Isolation', children: <AgentConfigurationPanel title="State & Isolation" label="Published State & Isolation" bodyGap="default"><DefinitionStateIsolationPolicy candidate={candidate} readOnly /></AgentConfigurationPanel> },
+          { key: 'state-isolation', label: 'State & Isolation', children: <DefinitionStateIsolationPolicy candidate={candidate} readOnly /> },
           { key: "sandbox", label: "Sandbox", children: <AgentConfigurationPanel title="Sandbox profiles" label="Published sandbox" bodyGap="default"
             description="This published profile policy is immutable. Fork this version to change its allowed profiles or default.">
             <DefinitionSandboxPolicy candidate={candidate} readOnly />

@@ -1,8 +1,8 @@
 export const isolationLabels: Record<string, string> = { conversationContextScope: 'Conversation context', homeAccess: 'Home access', workingCleanup: 'Working cleanup', browserIsolation: 'Browser isolation',
   agentStateVisibility: 'Agent state visibility', experienceRecord: 'Allow Experience recording', experienceRecall: 'Allow Experience recall', profileEvidence: 'Use stored profile evidence', crossSessionContinuity: 'Use cross-Session continuity',
   sessionMemory: 'Session Memory', identityUserPromotion: 'Instance Memory promotion', identityUserRetrieval: 'Instance Memory retrieval', userPromotion: 'User Memory promotion', userRetrieval: 'User Memory retrieval',
-  enabled: 'Enabled', allowAgentConsolidation: 'Autonomous consolidation' };
-export const isolationOwnerLabels: Record<string, string> = { stateIsolationPolicy: 'State & Isolation', memoryPolicy: 'Memory policy', voice: 'Voice', experience: 'Experience', identityMaintenance: 'Identity maintenance' };
+  enabled: 'Enabled', allowAgentConsolidation: 'Autonomous consolidation', speechRecognizer: 'Speech recognizer', speechSynthesizer: 'Speech synthesizer' };
+export const isolationOwnerLabels: Record<string, string> = { stateIsolationPolicy: 'State & Isolation', memoryPolicy: 'Memory policy', voice: 'Voice', experience: 'Experience', identityMaintenance: 'Identity maintenance', providerPreferences: 'Provider preferences' };
 export const isolationChoiceLabels: Record<string, string> = { Session: 'Within this Session', CurrentRequest: 'Current request · new Session each time', ReadWrite: 'Read and write', ReadOnly: 'Read only', Disabled: 'Disabled',
   OnSessionDeletion: 'On Session deletion', AfterTerminal: 'After safe terminal cleanup', HostDefault: 'Host default', PersistentAgent: 'Shared persistent profile', EphemeralSession: 'Isolated per Session',
   Off: 'Off', CurrentSession: 'Current Session only', InstanceSummary: 'Aggregate Instance summary' };

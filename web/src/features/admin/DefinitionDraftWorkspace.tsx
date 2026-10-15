@@ -557,10 +557,12 @@ export function DefinitionDraftWorkspace({
         </AgentConfigurationPanel>
       </RetainedAdminPage>
       <RetainedAdminPage active={page === 'state-isolation'}>
-        <AgentConfigurationPanel id="state-isolation" title="State & Isolation" label="Draft State & Isolation" bodyGap="default">
-          {candidateLocked && <Alert type="error" showIcon title="Fix Advanced JSON before changing State & Isolation. Your draft is retained." />}
-          <DefinitionStateIsolationPolicy candidate={candidate} disabled={busy || candidateLocked} onChange={onCandidateChange} />
-        </AgentConfigurationPanel>
+        {candidateLocked && <Alert type="error" showIcon title="Fix Advanced JSON before changing State & Isolation. Your draft is retained." />}
+        <DefinitionStateIsolationPolicy id="state-isolation" candidate={candidate} savedCandidate={activeDraft.candidate} active={page === 'state-isolation'}
+          disabled={busy || candidateLocked} onChange={onCandidateChange} details={<Flex wrap gap={token.paddingSM}>
+            <a href={adminDraftPath(activeDraft.definitionId, activeDraft.draftId, 'memory-policy')} onClick={followAppLink}>Edit detailed Memory policy</a>
+            <a href={adminDraftPath(activeDraft.definitionId, activeDraft.draftId, 'voice')} onClick={followAppLink}>Edit Voice settings</a>
+          </Flex>} />
       </RetainedAdminPage>
       <RetainedAdminPage active={page === 'capabilities'}>
               <AgentConfigurationPanel id="capabilities" title="Capabilities" label="Draft capabilities" description="Choose the tools, workspace behavior, and knowledge references available to this definition." bodyClassName="admin-draft-tab">

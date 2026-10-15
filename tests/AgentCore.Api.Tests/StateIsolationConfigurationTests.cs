@@ -15,6 +15,109 @@ namespace AgentCore.Api.Tests;
 public sealed class StateIsolationConfigurationTests
 {
     [Fact]
+    public async Task Preset_rejects_an_owner_change_between_reading_its_recipe_and_preparing_the_exact_preview()
+    {
+        DefinitionReadHook? hook = null;
+        await using var host = new AgentCoreApiFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(services => {
+            services.RemoveAll<IAgentDefinitionStore>();
+            services.AddSingleton<IAgentDefinitionStore>(sp => hook = new DefinitionReadHook(sp.GetRequiredService<IBuiltInAgentDefinitionStore>()));
+        }));
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 31);
+        var experience = host.Services.GetRequiredService<IExperienceStore>();
+        hook!.OnSecondRead = async () => { await experience.ConfigureAsync(owner.InstanceId, 0, true); };
+        var service = host.Services.GetRequiredService<StateIsolationConfigurationService>();
+        var rejected = await Assert.ThrowsAsync<AgentCoreException>(async () => await service.PresetAsync(owner.InstanceId, "Persistent"));
+        Assert.Equal("Conflict", rejected.Code);
+        Assert.True((await experience.SettingsAsync(owner.InstanceId)).Enabled);
+        Assert.Equal(owner.Revision, (await service.ReadAsync(owner.InstanceId)).Revisions.Instance);
+        var current = await service.PresetAsync(owner.InstanceId, "Persistent");
+        Assert.True(current.Draft.ExperienceEnabled);
+        Assert.Equal(1, current.Expected.Experience);
+    }
+
+    private sealed class DefinitionReadHook(IBuiltInAgentDefinitionStore inner) : IAgentDefinitionStore
+    {
+        private int reads;
+        public Func<ValueTask>? OnSecondRead { get; set; }
+        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default) => inner.ListAsync(ct);
+        public async ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken ct = default)
+        {
+            if (OnSecondRead is { } callback && ++reads == 2) { OnSecondRead = null; await callback(); }
+            return await inner.GetAsync(id, version, ct);
+        }
+    }
+
+    [Fact]
+    public async Task Persistent_requests_an_explicit_recipe_and_definition_defaults_restore_inheritance()
+    {
+        await using var host = new AgentCoreApiFactory();
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 31);
+        var settings = host.Services.GetRequiredService<AgentInstanceSettingsService>();
+        await settings.PatchAsync(instance.InstanceId, "stateIsolationPolicy", instance.Revision,
+            new Dictionary<string, System.Text.Json.JsonElement> { ["homeAccess"] = System.Text.Json.JsonSerializer.SerializeToElement("Disabled") }, []);
+        var service = host.Services.GetRequiredService<StateIsolationConfigurationService>();
+        var persistent = await service.PresetAsync(instance.InstanceId, "Persistent");
+        Assert.Empty(persistent.BlockingReasons);
+        Assert.Equal("ReadWrite", persistent.Draft.Settings.Single(p => p.Section == "stateIsolationPolicy").Set["homeAccess"].GetString());
+        var applied = await service.ApplyAsync(instance.InstanceId, persistent.Expected, persistent.Draft, persistent.Fingerprint);
+        Assert.Equal("instance", applied.Settings.Single(s => s.Section == "stateIsolationPolicy").Sources["homeAccess"]);
+        var reset = await service.PresetAsync(instance.InstanceId, "DefinitionDefaults");
+        Assert.Contains("homeAccess", reset.Draft.Settings.Single(p => p.Section == "stateIsolationPolicy").Clear);
+        applied = await service.ApplyAsync(instance.InstanceId, reset.Expected, reset.Draft, reset.Fingerprint);
+        Assert.Empty(applied.Settings.Single(s => s.Section == "stateIsolationPolicy").Overrides);
+        Assert.Equal("definition", applied.Settings.Single(s => s.Section == "stateIsolationPolicy").Sources["homeAccess"]);
+    }
+
+    [Fact]
+    public async Task Restrictive_definition_blocks_Persistent_while_defaults_reset_all_coordinated_overrides_and_preserve_opt_ins()
+    {
+        await using var host = new AgentCoreApiFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(services => {
+            services.RemoveAll<IAgentDefinitionStore>();
+            services.AddSingleton<IAgentDefinitionStore>(sp => new IsolatedDefinitionStore(sp.GetRequiredService<IBuiltInAgentDefinitionStore>()));
+        }));
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 31);
+        var service = host.Services.GetRequiredService<StateIsolationConfigurationService>();
+        var persistent = await service.PresetAsync(instance.InstanceId, "Persistent");
+        Assert.NotEmpty(persistent.BlockingReasons);
+        var denied = await client.PostAsJsonAsync($"/api/v2/admin/agent-instances/{instance.InstanceId}/isolation/apply", new { persistent.Expected, persistent.Draft, persistent.Fingerprint });
+        Assert.Equal(HttpStatusCode.BadRequest, denied.StatusCode);
+        Assert.Equal(instance.Revision, (await service.ReadAsync(instance.InstanceId)).Revisions.Instance);
+        var settings = host.Services.GetRequiredService<AgentInstanceSettingsService>();
+        var revision = instance.Revision;
+        foreach (var (section, field, value) in new[] { ("stateIsolationPolicy", "workingCleanup", (object)"AfterTerminal"), ("memoryPolicy", "sessionMemory", (object)false), ("voice", "enabled", (object)false) })
+        {
+            var updated = await settings.PatchAsync(instance.InstanceId, section, revision,
+                new Dictionary<string, System.Text.Json.JsonElement> { [field] = System.Text.Json.JsonSerializer.SerializeToElement(value) }, []);
+            revision = updated.InstanceRevision;
+        }
+        var experience = host.Services.GetRequiredService<IExperienceStore>();
+        await experience.ConfigureAsync(instance.InstanceId, 0, true);
+        await experience.ConfigureMaintenanceAsync(instance.InstanceId, 0, true);
+        var reset = await service.PresetAsync(instance.InstanceId, "DefinitionDefaults");
+        Assert.Empty(reset.BlockingReasons);
+        Assert.True(reset.Draft.ExperienceEnabled); Assert.True(reset.Draft.AllowMaintenance);
+        var applied = await service.ApplyAsync(instance.InstanceId, reset.Expected, reset.Draft, reset.Fingerprint);
+        Assert.All(applied.Settings, section => Assert.Empty(section.Overrides));
+        Assert.Equal("Disabled", applied.Settings.Single(s => s.Section == "stateIsolationPolicy").Effective["homeAccess"]);
+        Assert.True(applied.ExperienceEnabled); Assert.True(applied.AllowMaintenance);
+    }
+
+    private sealed class IsolatedDefinitionStore(IBuiltInAgentDefinitionStore inner) : IAgentDefinitionStore
+    {
+        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default) => inner.ListAsync(ct);
+        public async ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken ct = default)
+        {
+            var definition = await inner.GetAsync(id, version, ct);
+            return definition is null ? null : definition with { StateIsolationPolicy = new(HomeAccess: HomeAccess.Disabled,
+                BrowserIsolation: BrowserIsolation.EphemeralSession, AgentStateVisibility: AgentStateVisibility.CurrentSession,
+                ExperienceRecord: false, ExperienceRecall: false, ProfileEvidence: false, CrossSessionContinuity: false), MemoryPolicy = new(true) };
+        }
+    }
+
+    [Fact]
     public async Task Preview_explains_retained_scratch_and_explicit_terminal_cleanup_without_applying_either()
     {
         await using var host = new AgentCoreApiFactory();

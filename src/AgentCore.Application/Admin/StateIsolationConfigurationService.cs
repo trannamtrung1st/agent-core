@@ -39,15 +39,23 @@ public sealed class StateIsolationConfigurationService(IAgentInstanceStore insta
 
     public async ValueTask<IsolationChangePlan> PresetAsync(Guid id, string preset, CancellationToken ct = default)
     {
-        if (preset is not ("Persistent" or "SessionIsolated" or "Stateless")) throw AgentCoreErrors.Validation("Choose a supported preset draft.");
+        if (preset is not ("Persistent" or "SessionIsolated" or "Stateless" or "DefinitionDefaults")) throw AgentCoreErrors.Validation("Choose a supported preset draft.");
         var view = await ReadAsync(id, ct);
         var state = view.Settings.Single(s => s.Section == "stateIsolationPolicy");
         var memory = view.Settings.Single(s => s.Section == "memoryPolicy");
         var patches = new List<IsolationSectionPatch>();
         var persistent = preset == "Persistent";
-        if (persistent)
+        if (preset == "DefinitionDefaults")
         {
             patches.Add(new("stateIsolationPolicy", new Dictionary<string, JsonElement>(), state.Overrides.Keys.ToArray()));
+            patches.Add(new("memoryPolicy", new Dictionary<string, JsonElement>(), memory.Overrides.Keys.ToArray()));
+            var voice = view.Settings.Single(s => s.Section == "voice");
+            patches.Add(new("voice", new Dictionary<string, JsonElement>(), voice.Overrides.ContainsKey("enabled") ? ["enabled"] : []));
+        }
+        else if (persistent)
+        {
+            patches.Add(new("stateIsolationPolicy", JsonSerializer.SerializeToElement(StateIsolationPolicy.Default, Json)
+                .EnumerateObject().ToDictionary(p => p.Name, p => p.Value), []));
             patches.Add(new("memoryPolicy", new Dictionary<string, JsonElement>(), memory.Overrides.Keys.ToArray()));
         }
         else
@@ -65,7 +73,11 @@ public sealed class StateIsolationConfigurationService(IAgentInstanceStore insta
             patches.Add(new("memoryPolicy", learned, []));
             if (preset == "Stateless") patches.Add(new("voice", new Dictionary<string, JsonElement> { ["enabled"] = JsonSerializer.SerializeToElement(false) }, []));
         }
-        return await PreviewAsync(id, new(patches, persistent && view.ExperienceEnabled, persistent && view.AllowMaintenance), ct);
+        var preserveOptIns = persistent || preset == "DefinitionDefaults";
+        var plan = await PreviewAsync(id, new(patches, preserveOptIns && view.ExperienceEnabled, preserveOptIns && view.AllowMaintenance), ct);
+        if (plan.Expected != view.Revisions)
+            throw AgentCoreErrors.Conflict("State & Isolation changed while preparing the preset. Retry; your draft is retained.");
+        return plan;
     }
 
     public async ValueTask<IsolationChangePlan> PreviewAsync(Guid id, IsolationDraft draft, CancellationToken ct = default)

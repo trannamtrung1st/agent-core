@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Descriptions, Flex, Form, Modal, Select, Spin, Switch, Typography, theme } from 'antd';
+import { Alert, Button, Flex, Form, Spin, Typography, theme } from 'antd';
+import { StateIsolationPolicyFields, StateIsolationToggleField } from './StateIsolationPolicyFields';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { applyIsolation, deriveIsolationPreset, isolationValue, presetIsolation, previewIsolation, readIsolation,
-  type IsolationDraft, type IsolationPlan, type IsolationPreset, type IsolationView } from '../../services/stateIsolation';
+  type IsolationDraft, type IsolationPlan, type IsolationPresetAction, type IsolationView } from '../../services/stateIsolation';
 import type { SettingValue } from '../../services/instanceConfiguration';
 import { followAppLink } from '../../app/appLink';
 import { instancePath } from './adminNavigation';
 
-import { isolationLabels as labels, isolationChoiceLabels as choiceLabels, isolationOwnerLabels } from './stateIsolationPresentation';
+import { isolationLabels as labels } from './stateIsolationPresentation';
+import { IsolationPresetControl } from './IsolationPresetControl';
+import { IsolationChangePreview } from './IsolationChangePreview';
 
 const emptyDraft = (view: IsolationView): IsolationDraft => ({ settings: [], experienceEnabled: view.experienceEnabled, allowMaintenance: view.allowMaintenance });
-const display = (value: SettingValue) => typeof value === 'boolean' ? value ? 'On' : 'Off' : value == null ? 'None' : choiceLabels[String(value)] ?? String(value);
 
 export function StateIsolationConfigurationSection({ instanceId, active, archived, onUpdated, onDirtyChange }: {
   instanceId: string; active: boolean; archived: boolean; onUpdated: () => void; onDirtyChange: (dirty: boolean) => void;
@@ -20,12 +22,13 @@ export function StateIsolationConfigurationSection({ instanceId, active, archive
   const [view, setView] = useState<IsolationView>(); const [draft, setDraft] = useState<IsolationDraft>();
   const [plan, setPlan] = useState<IsolationPlan>(); const [error, setError] = useState<string>(); const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
-  const [pendingPreset, setPendingPreset] = useState<IsolationPreset>();
   const presetRequest = useRef<AbortController | null>(null);
   const readRequest = useRef<AbortController | null>(null);
+  // A preset may deliberately keep a flag false even when its saved baseline is false.
+  const editedFlags = useRef(new Map<'experienceEnabled' | 'allowMaintenance', 'manual' | 'preset'>());
   const generation = useRef(0);
   useEffect(() => {
-    generation.current++; setView(undefined); setDraft(undefined); setPlan(undefined); setError(undefined); setPendingPreset(undefined);
+    generation.current++; editedFlags.current.clear(); setView(undefined); setDraft(undefined); setPlan(undefined); setError(undefined);
     return () => { generation.current++; presetRequest.current?.abort(); readRequest.current?.abort(); };
   }, [instanceId]);
   const changed = !!draft && !!view && (draft.settings.some(p => Object.keys(p.set).length > 0 || p.clear.length > 0)
@@ -37,7 +40,12 @@ export function StateIsolationConfigurationSection({ instanceId, active, archive
     try {
       const next = await readIsolation(instanceId, controller.signal);
       if (controller.signal.aborted) return;
-      setView(next); setDraft(current => current ?? emptyDraft(next)); setError(undefined);
+      setView(next);
+      setDraft(current => current ? { ...current,
+        experienceEnabled: editedFlags.current.has('experienceEnabled') ? current.experienceEnabled : next.experienceEnabled,
+        allowMaintenance: editedFlags.current.has('allowMaintenance') ? current.allowMaintenance : next.allowMaintenance
+      } : emptyDraft(next));
+      setError(undefined);
     } catch (reason) {
       if (!controller.signal.aborted) { setError(reason instanceof Error ? reason.message : 'State & Isolation is unavailable. Retry.'); throw reason; }
     } finally { if (!controller.signal.aborted) setBusy(false); }
@@ -63,14 +71,20 @@ export function StateIsolationConfigurationSection({ instanceId, active, archive
     const request = generation.current; setBusy(true);
     try {
       const saved = await applyIsolation(instanceId, plan);
-      if (request === generation.current) { setView(saved); setDraft(emptyDraft(saved)); setError(undefined); onUpdated(); }
+      if (request === generation.current) { editedFlags.current.clear(); setView(saved); setDraft(emptyDraft(saved)); setError(undefined); onUpdated(); }
       return saved.revisions.instance;
     } catch (reason) { if (request === generation.current) setError(reason instanceof Error ? reason.message : 'Apply failed. Your draft is retained.'); throw reason; }
     finally { if (request === generation.current) setBusy(false); }
   }
   const editor = useInstanceConfigurationEditor('State & Isolation', { dirty: changed, busy: busy || previewing, revision: view?.revisions.instance,
     blocked: !plan ? 'Read the State & Isolation preview before saving.' : plan.blockingReasons[0], save,
-    discard: () => { if (view) setDraft(emptyDraft(view)); }, refresh });
+    discard: () => { if (view) { editedFlags.current.clear(); setDraft(emptyDraft(view)); } }, refresh });
+  function editFlag(field: 'experienceEnabled' | 'allowMaintenance', value: boolean) {
+    if (!view) return;
+    if (value === view[field] && editedFlags.current.get(field) !== 'preset') editedFlags.current.delete(field);
+    else editedFlags.current.set(field, editedFlags.current.get(field) ?? 'manual');
+    setDraft(current => current ? { ...current, [field]: value } : current);
+  }
   function edit(field: string, value: SettingValue | undefined) {
     setDraft(current => {
       if (!current) return current;
@@ -80,55 +94,48 @@ export function StateIsolationConfigurationSection({ instanceId, active, archive
       return { ...current, settings: [...current.settings.filter(p => p.section !== patch.section), next] };
     });
   }
-  async function choose(preset: IsolationPreset) {
+  async function choose(preset: IsolationPresetAction) {
     presetRequest.current?.abort(); const controller = new AbortController(); presetRequest.current = controller; setBusy(true);
-    try { const next = await presetIsolation(instanceId, preset, controller.signal); if (!controller.signal.aborted) { setDraft(next.draft); setPlan(next); setError(undefined); } }
+    try { const next = await presetIsolation(instanceId, preset, controller.signal); if (!controller.signal.aborted) {
+      editedFlags.current.set('experienceEnabled', 'preset'); editedFlags.current.set('allowMaintenance', 'preset');
+      setDraft(next.draft); setPlan(next); setError(undefined);
+    } }
     catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Preset preview unavailable. Retry.'); }
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
   const state = view?.settings.find(s => s.section === 'stateIsolationPolicy');
   return <Flex vertical gap={token.padding}>
-    <Modal className="isolation-preset-dialog" title="Replace unsaved isolation changes?" open={active && !!pendingPreset} centered
-      okText="Replace draft" cancelText="Keep editing" onCancel={() => setPendingPreset(undefined)}
-      onOk={() => { if (pendingPreset) { void choose(pendingPreset); setPendingPreset(undefined); } }}>
-      <Typography.Paragraph>The selected preset will replace your unsaved State & Isolation draft, including Memory, Experience and maintenance changes. Review its preview before saving.</Typography.Paragraph>
-    </Modal>
     {error && <Alert type="error" showIcon title={error} action={<Button onClick={() => void refresh().catch(() => {})}>Retry isolation</Button>} />}
     {!view && busy && <Spin aria-label="Loading State & Isolation" />}
     {view && draft && state && <>
       <AgentConfigurationPanel title="Continuity and resource policy" label="State & Isolation configuration" bodyGap="section"
         description="Presets prepare editable drafts. Existing history, home files and browser profile bytes are retained.">
-        <Form layout="vertical" className="admin-config-form admin-settings-field-grid">
-          <Form.Item label="Preset" className="instance-settings-field-wide" extra="Session-isolated keeps multi-turn conversation within one Session. Stateless requires New chat for each request and supports text input.">
-            <Select aria-label="Isolation preset" value={deriveIsolationPreset(view, draft)} disabled={archived || busy}
-              options={[{ value: 'Persistent', label: 'Persistent assistant' }, { value: 'SessionIsolated', label: 'Session-isolated assistant' }, { value: 'Stateless', label: 'Stateless · new Session for each request' }, { value: 'Custom', label: 'Custom', disabled: true }]}
-              onChange={value => { if (value !== 'Custom') { if (changed) setPendingPreset(value as IsolationPreset); else void choose(value as IsolationPreset); } }} />
-          </Form.Item>
-          {Object.keys(state.effective).map(field => {
-            const value = isolationValue(view, draft, state.section, field);
-            const patch = draft.settings.find(p => p.section === state.section);
-            const source = patch?.clear.includes(field) ? 'Will inherit' : patch && field in patch.set ? 'Draft override' : state.sources[field] === 'instance' ? 'Instance override' : 'Inherited Definition';
-            return <Form.Item key={field} label={labels[field] ?? field} extra={<Flex wrap align="center" gap={token.paddingXS}><Typography.Text type="secondary">{source}</Typography.Text>
-              {(field in state.overrides || patch && field in patch.set) && <Button size="small" type="link" disabled={archived || busy} aria-label={`Inherit ${labels[field] ?? field}`} onClick={() => edit(field, undefined)}>Inherit</Button>}</Flex>}>
-              {typeof value === 'boolean' ? <Switch aria-label={labels[field] ?? field} checked={value} disabled={archived || busy || state.constraints?.[field]?.requiredBoolean === false} onChange={v => edit(field, v)} /> :
-                <Select aria-label={labels[field] ?? field} value={value as string} disabled={archived || busy}
-                  options={(state.constraints?.[field]?.choices ?? []).map(v => ({ value: v, label: choiceLabels[v] ?? v }))} onChange={v => edit(field, v)} />}
-            </Form.Item>;
-          })}
-          <Form.Item label="Experience enablement" extra="The existing Experience owner is updated in the same transaction."><Switch aria-label="Experience enablement" checked={draft.experienceEnabled} disabled={archived || busy} onChange={v => setDraft({ ...draft, experienceEnabled: v })} /></Form.Item>
-          <Form.Item label="Autonomous identity maintenance" extra="The existing maintenance owner is updated in the same transaction."><Switch aria-label="Autonomous identity maintenance" checked={draft.allowMaintenance} disabled={archived || busy} onChange={v => setDraft({ ...draft, allowMaintenance: v })} /></Form.Item>
+        <Form layout="vertical" className="admin-config-form instance-settings-form">
+          <Flex vertical gap={token.padding}>
+            <IsolationPresetControl value={deriveIsolationPreset(view, draft)} disabled={archived || busy} dirty={changed}
+              active={active} scope="Instance" useDefinitionDefaults onSelect={preset => void choose(preset)} />
+            <StateIsolationPolicyFields value={field => isolationValue(view, draft, state.section, field)}
+              choices={field => state.constraints?.[field]?.choices ?? []}
+              disabled={field => archived || busy || state.constraints?.[field]?.requiredBoolean === false}
+              onChange={edit} extra={field => {
+              const patch = draft.settings.find(p => p.section === state.section);
+              const source = patch?.clear.includes(field) ? 'Will inherit on save' : patch && field in patch.set ? 'Unsaved Instance override' : state.sources[field] === 'instance' ? 'Instance override' : 'Inherited Definition';
+              return <Flex wrap align="center" gap={token.paddingXS}><Typography.Text type="secondary">{source}</Typography.Text>
+                {!patch?.clear.includes(field) && (field in state.overrides || patch && field in patch.set) && <Button size="small" type="link" disabled={archived || busy} aria-label={`Inherit ${labels[field] ?? field}`} onClick={() => edit(field, undefined)}>Inherit</Button>}</Flex>;
+            }}>
+              <StateIsolationToggleField label="Experience enablement" checked={draft.experienceEnabled} disabled={archived || busy}
+                extra="The existing Experience owner is updated in the same transaction." onChange={v => editFlag('experienceEnabled', v)} />
+              <StateIsolationToggleField label="Autonomous identity maintenance" checked={draft.allowMaintenance} disabled={archived || busy}
+                extra="The existing maintenance owner is updated in the same transaction." onChange={v => editFlag('allowMaintenance', v)} />
+            </StateIsolationPolicyFields>
+          </Flex>
         </Form>
-        <Flex wrap gap={token.paddingSM}>{(['memory-policy', 'experience', 'memory', 'credentials'] as const).map(page => <a key={page} href={instancePath(instanceId, page)} onClick={followAppLink}>{page === 'memory-policy' ? 'Edit detailed Memory policy' : page === 'credentials' ? 'Inspect shared credentials' : page === 'memory' ? 'Inspect learned Memory' : 'Inspect Experience'}</a>)}</Flex>
+        <Flex wrap gap={token.paddingSM}>{(['memory-policy', 'voice', 'experience', 'memory', 'credentials'] as const).map(page => <a key={page} href={instancePath(instanceId, page)} onClick={followAppLink}>{page === 'memory-policy' ? 'Edit detailed Memory policy' : page === 'voice' ? 'Edit Voice settings' : page === 'credentials' ? 'Inspect shared credentials' : page === 'memory' ? 'Inspect learned Memory' : 'Inspect Experience'}</a>)}</Flex>
         <Typography.Text type="secondary">Shared email, Drive and other bound accounts retain their own authority and external effects. Conversation isolation does not isolate those accounts.</Typography.Text>
       </AgentConfigurationPanel>
-      <AgentConfigurationPanel title="Change preview" label="Isolation change preview" bodyGap="default">
-        {previewing && <Spin aria-label="Preparing isolation preview" />}
-        {plan?.blockingReasons.map(reason => <Alert key={reason} type="warning" showIcon title={reason} />)}
-        {plan && <><Typography.Paragraph type="secondary" style={{ margin: 0 }}>{plan.notice}</Typography.Paragraph>
-          {plan.changes.length ? <Descriptions column={1} size="small" items={plan.changes.map(change => ({ key: `${change.owner}:${change.field}`, label: `${isolationOwnerLabels[change.owner] ?? 'Configuration'} · ${labels[change.field] ?? change.field}`,
-            children: `${display(change.before)} → ${display(change.after)} · ${change.source === 'instance' ? 'Instance override' : 'Inherited Definition'}` }))} /> : <Typography.Text>No configuration changes.</Typography.Text>}</>}
+      <IsolationChangePreview changes={plan?.changes} notice={plan?.notice} blockingReasons={plan?.blockingReasons} busy={previewing}>
         {!editor.managed && <Button type="primary" disabled={archived || busy || previewing || !changed || !plan || !!plan.blockingReasons.length} onClick={() => { if (view) void save(view.revisions.instance).catch(() => {}); }}>Apply changes</Button>}
-      </AgentConfigurationPanel>
+      </IsolationChangePreview>
     </>}
   </Flex>;
 }
