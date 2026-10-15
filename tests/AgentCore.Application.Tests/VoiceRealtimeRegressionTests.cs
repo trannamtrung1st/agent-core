@@ -713,6 +713,7 @@ public sealed class VoiceRealtimeRegressionTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",

@@ -379,9 +379,13 @@ def insert_run(run_id, status, sequence):
         dedupeKey="compose:" + run_id, admittedAtUtc=utc(now), evidenceJson='{"fixture":"SECRET_EVIDENCE"}')
     admission = dict(activation=activation, definitionId="examiner", definitionVersion=1,
         pinnedPersona=json.loads(con.execute("SELECT DefinitionJson FROM Sessions WHERE SessionId=?", (session_id,)).fetchone()[0])["identity"], responseId=response_id)
+    # Seed a current interaction-only checkpoint. Active retired formats must fail startup.
+    checkpoint_document = dict(Phase="model-turn", ContextFormatVersion=2, CoreContractVersion=1, BrowserContractVersion=1,
+        Messages=[dict(Role="Assistant", Text="SECRET_CHECKPOINT", ToolCalls=[dict(Id="compose-http", Name="http.request", ArgumentsJson="{}")])],
+        ExecutionState=dict(Phase=0, TranscriptId=response_id))
     payload = dict(admission=admission, pinnedModel=dict(catalogKey="scripted-alpha", providerAlias="primary-llm", modelId="scripted-alpha", reasoningEffort="medium"),
         attemptCount=1, maxAttempts=3, claim=None, cancellationRequested=False, cancellationRequestedAtUtc=None, knownEffectSummary=None,
-        progress=None, checkpoint=dict(payloadJson='{"fixture":"SECRET_CHECKPOINT"}', stepCount=1, outputBytes=0, remainingOverallBudgetMs=180000),
+        progress=None, checkpoint=dict(payloadJson=json.dumps(checkpoint_document), stepCount=1, outputBytes=0, remainingOverallBudgetMs=180000),
         result=None, failure=None, sideEffect=dict(disposition=0, toolCallId=None, actionHash=None, updatedAtUtc=None), approval=None,
         pinnedSkillCatalog=[], activeSkillKeys=[], skillLoadCount=0, loadedCapabilityIds=[], capabilityLoadCount=0)
     if status == 4:

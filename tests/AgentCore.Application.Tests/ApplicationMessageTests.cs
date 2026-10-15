@@ -462,6 +462,19 @@ public sealed class ApplicationMessageTests
     }
 
     [Fact]
+    public async Task Reused_provider_call_id_fails_without_publishing_changed_notice()
+    {
+        var model = new MessagingLanguageModel(reuseProviderId: true);
+        await using var runtime = Create(model, new RuntimeAgentRunStore(), Definition());
+        await runtime.AttachAsync();
+        await runtime.SubmitUserTextAsync("hello");
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(FirstText, Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.ApplicationMessage).Text);
+        Assert.Equal(EntryStatus.Failed, Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.Assistant).Status);
+        Assert.DoesNotContain(runtime.Snapshot.Entries, e => e.Text.Contains(ChangedText, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Next_user_turn_receives_a_fresh_message_budget_in_tool_description()
     {
         var model = new TwoTurnBudgetLanguageModel();
@@ -624,7 +637,7 @@ public sealed class ApplicationMessageTests
         }
     }
 
-    private sealed class MessagingLanguageModel : ILanguageModel
+    private sealed class MessagingLanguageModel(bool reuseProviderId = false) : ILanguageModel
     {
         private int _generation;
 
@@ -651,7 +664,8 @@ public sealed class ApplicationMessageTests
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 case 3:
-                    yield return Call("m1", JsonSerializer.Serialize(new { text = ChangedText }));
+                    yield return Call(reuseProviderId ? "m1" : "m-duplicate-1",
+                        JsonSerializer.Serialize(new { text = reuseProviderId ? ChangedText : FirstText }));
                     yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 case 4:

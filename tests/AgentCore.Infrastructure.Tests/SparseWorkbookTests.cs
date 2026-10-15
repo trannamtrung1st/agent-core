@@ -186,7 +186,7 @@ public sealed class SparseWorkbookTests(ITestOutputHelper output)
         var next = processor.ReadWorkbookContent(record.Bytes, null, fitted.RootElement.GetProperty("nextCursor").GetString(), default);
         Assert.Equal("A" + (int.Parse(last![1..]) + 1), next.Cells[0].Address);
         Assert.Contains("attachments.read", prompt.Text);
-        Assert.Contains("partial coverage", prompt.Text);
+        Assert.Equal("partial", fitted.RootElement.GetProperty("coverage").GetString());
     }
 
     [Fact]
