@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Context;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 
@@ -14,7 +15,8 @@ internal static class OpenSandboxScript
         var headless = request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal));
         // Background intent lives in the typed RunTask, with no fabricated user turn.
         if (last < 0 && !headless) return null;
-        var text = SyntheticTaskContext.Text(request);
+        var text = headless && request.Context?.Sections.FirstOrDefault(section => section.Id == ContextSectionId.RunTask) is { } task
+            ? task.Message.Text : SyntheticTaskContext.Text(request);
         // Background task intent is wrapped by PromptContextBuilder's evidence
         // boundary; direct Chat keeps its exact fixture prefix. Both still use
         // only offered capabilities and the real owned execution/complete path.
