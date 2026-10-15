@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -48,17 +49,17 @@ public sealed class IdentityRuntimeTests
         var builder = new PromptContextBuilder();
         var examiner = Context(Load("examiner"), "Please explain.");
         var support = Context(Load("customer-support"), "Please explain.");
-        var examinerSections = builder.BuildSections(examiner);
-        var supportSections = builder.BuildSections(support);
+        var examinerSections = builder.BuildContext(examiner);
+        var supportSections = builder.BuildContext(support);
 
-        Assert.Equal(PromptContextBuilder.BuildIdentitySystem(examiner.Definition), examinerSections.IdentitySystem);
-        Assert.Equal(PromptContextBuilder.BuildIdentitySystem(support.Definition), supportSections.IdentitySystem);
-        Assert.Contains("Alex", examinerSections.IdentitySystem, StringComparison.Ordinal);
-        Assert.Contains("Sam", supportSections.IdentitySystem, StringComparison.Ordinal);
-        Assert.DoesNotContain("Sam", examinerSections.IdentitySystem, StringComparison.Ordinal);
-        Assert.Equal(examinerSections.ModeSystem, supportSections.ModeSystem);
-        Assert.Equal(1, examinerSections.TurnMessages.Count(message => message.Role == ModelRole.User && message.Text == "Please explain."));
-        Assert.Equal(1, examinerSections.TurnMessages.Count(message => message.Role == ModelRole.User));
+        Assert.Equal(PromptContextBuilder.BuildAgentIdentity(examiner.Definition), examinerSections.Text(ContextSectionId.AgentIdentity));
+        Assert.Equal(PromptContextBuilder.BuildAgentIdentity(support.Definition), supportSections.Text(ContextSectionId.AgentIdentity));
+        Assert.Contains("Alex", examinerSections.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+        Assert.Contains("Sam", supportSections.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+        Assert.DoesNotContain("Sam", examinerSections.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+        Assert.Equal(examinerSections.Text(ContextSectionId.Session), supportSections.Text(ContextSectionId.Session));
+        Assert.Equal(1, examinerSections.Interaction.Count(message => message.Role == ModelRole.User && message.Text == "Please explain."));
+        Assert.Equal(1, examinerSections.Interaction.Count(message => message.Role == ModelRole.User));
     }
 
     [Fact]

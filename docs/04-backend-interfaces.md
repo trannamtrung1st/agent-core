@@ -1,5 +1,17 @@
 # Backend Interfaces
 
+## Typed context projection
+
+Application owns `ContextLayer`, `ContextSectionId`, `ContextSourceKind`, `ContextSemantics`, immutable `ContextSection`/`EffectiveContextSnapshot`, `ContextAssembler` and redacted `ContextManifest`. Core factories accept platform procedure identities, never arbitrary authored strings. Runtime factories reject Evidence sources/section identities. Evidence cannot acquire an authoritative provider role. The optional `RuntimeEnvironmentScope` is a future binding slot, absent from current execution.
+
+`ILanguageModel.PrepareRequest` returns the request with any selected platform output protocol before its manifest is recorded; the default implementation is identity. Semantic adapters use the same assembler and Core section identity for forwarding.
+
+`ModelRequest` carries its typed context and separate interaction transcript along with immutable projected messages. `EvidenceMessageKind` distinguishes current-task, historical and tool-interaction semantics while preserving actual user/assistant/tool roles. Reprojection preserves response IDs, image/tool parts and opaque continuation tokens. The manifest contains ordered section IDs, source kind/revision, per-field sources, character/UTF-8/token estimates, omission coverage and a content fingerprint; no raw bodies are included.
+
+Tool-interaction content remains untrusted Tool evidence even when its native transport role is `user`. A pending assistant tool-call batch permits only matching tool results before another user or assistant message. A transcript may end with pending calls for checkpoint/recovery projection.
+
+`ModelRole.Developer` projects explicitly in both Chat Completions and Responses. Catalog/model routes must declare `DeveloperRoleSupport` and use a supported transport; unsupported choices fail selection/admission or generation before HTTP. Pinned provider/model identity must still match that catalog declaration; changed or retired routes fail explicitly without rewriting the pin. Runtime is never downgraded to `system` or `user`. Configured support is a contract declaration, not evidence that an untested remote model honors it.
+
 ## Activation and AgentRun admission foundation
 
 `IAgentRunStore` admits a Session snapshot, accepted source entries, immutable Activation and initial queued AgentRun in one operation. It exposes no standalone Activation insert. SQLite shares `SqliteMemoryStore.StageSaveAsync` inside one transaction; InMemory shares the Session store's gate and execution state. `(SessionId, DedupeKey)`, background source receipts, unique accepted source-entry ownership and unique run-per-Activation identity prevent competing admissions. Replaying a background receipt returns the originally committed child/run even if the proposed child identifiers differ; changed source content or execution pins conflict.
@@ -83,7 +95,7 @@ public sealed record ProviderFailure(
     TimeSpan? RetryAfter = null,
     string? FailureReason = null,
     string? ResponseChannel = null);
-public enum ModelRole { System, User, Assistant, Tool }
+public enum ModelRole { System, User, Assistant, Tool, Developer }
 public enum ModelStopReason { Completed, LengthLimit, ContentFiltered, ToolCalls }
 public sealed record ModelToolCall(string Id, string Name, string ArgumentsJson);
 public sealed record ModelToolDefinition(string Name, string Description, string ParametersJson);

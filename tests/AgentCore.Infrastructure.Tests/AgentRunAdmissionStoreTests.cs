@@ -18,7 +18,7 @@ public sealed class AgentRunAdmissionStoreTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 8, 0, 0, 0, TimeSpan.Zero);
     private static readonly AgentRunOwner Owner = new(Guid.Parse("019944af-0009-7000-8000-0000000000a1"), Guid.Parse("019944af-0009-7000-8000-0000000000b1"));
-    private static readonly AgentDefinition Definition = new(1, "examiner", 1,
+    private static readonly AgentDefinition Definition = new(2, "examiner", 1,
         new AgentIdentity("Alex", "Examiner", "Practice", "Calm"), ["Practice"], "Instructions",
         new BehaviorPolicy("acknowledgeThenContinue", true, true), new ConversationPolicy("concise", true, "en", 256),
         new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]), new VoiceConfiguration(true, "default", 1),
@@ -69,7 +69,7 @@ public sealed class AgentRunAdmissionStoreTests
         await f.Runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
         var claimed = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(1, Now, Guid.NewGuid(), Now.AddMinutes(1)));
         var saved = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(claimed.Revision, Now.AddSeconds(1), claimed.Claim!.Generation,
-            new("{}", 30, 5000, 450000, 150000), null));
+            new(AgentRunToolCallCheckpoint.Write([], executionState: new(TranscriptId: run.ResponseId)), 30, 5000, 450000, 150000), null));
         var retry = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Fail(saved.Revision, Now.AddSeconds(2), saved.Claim!.Generation,
             "provider-unavailable", "Temporary provider failure", true, Now.AddSeconds(3)));
         await f.ReopenAsync();
@@ -352,7 +352,7 @@ public sealed class AgentRunAdmissionStoreTests
             new Dictionary<string, UserProfileValue>(), Now), 0);
         var models = new ConfigurationModelCatalog("synthetic",
             [new ModelDescriptor("synthetic", "Synthetic", "synthetic", "synthetic", true, false, false,
-                false, [], null)]);
+                false, [], null, DeveloperRoleSupport: true)]);
         return (new BackgroundOccurrenceIntake(f.Triggers, f.Runs, instances, new Definitions(definition),
             f.Memory, models, new SystemIdGenerator(TimeProvider.System), new FakeTimeProvider(Now)), instances, definition);
     }
@@ -1179,7 +1179,7 @@ public sealed class AgentRunAdmissionStoreTests
         var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var call = new ModelToolCall("wait-1", "execution.wait", "{}");
-        var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 15000);
+        var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])], executionState: new(TranscriptId: parent.ResponseId)), 1, 0, 15000);
         var wait = new AgentRunWait(call.Id, background ? AgentRunWaitMode.Background : AgentRunWaitMode.Duration,
             background ? [child.Run.SessionId] : [], AgentRunWaitUntil.All, Now, Now.AddSeconds(10));
         var suspended = await f.Runs.ApplyAsync(Owner, parent.AgentRunId, new AgentRunCommand.SuspendWait(parent.Revision, Now, parent.Claim.Generation, checkpoint, wait));
@@ -1248,7 +1248,7 @@ public sealed class AgentRunAdmissionStoreTests
         var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var call = new ModelToolCall("wait", "execution.wait", "{}");
-        var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 15000);
+        var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])], executionState: new(TranscriptId: parent.ResponseId)), 1, 0, 15000);
         var wait = new AgentRunWait(call.Id, AgentRunWaitMode.Background, [child.Run.SessionId], AgentRunWaitUntil.Any, Now, Now.AddSeconds(1));
         var waiting = await f.Runs.ApplyAsync(Owner, parent.AgentRunId, new AgentRunCommand.SuspendWait(parent.Revision, Now, parent.Claim.Generation, checkpoint, wait));
         if (cancel) waiting = await f.Runs.ApplyAsync(Owner, parent.AgentRunId, new AgentRunCommand.RequestCancellation(waiting.Revision, Now, null));
@@ -1410,7 +1410,7 @@ public sealed class AgentRunAdmissionStoreTests
         foreach (var target in new[] { parent.SessionId, child.Run.SessionId, Guid.NewGuid() })
         {
             var call = new ModelToolCall("wait-denied", "execution.wait", "{}");
-            var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 15000);
+            var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])], executionState: new(TranscriptId: parent.ResponseId)), 1, 0, 15000);
             var wait = new AgentRunWait(call.Id, AgentRunWaitMode.Background, [target], AgentRunWaitUntil.Any, Now, Now.AddSeconds(10));
             Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.ApplyAsync(Owner, parent.AgentRunId,
                 new AgentRunCommand.SuspendWait(parent.Revision, Now, parent.Claim!.Generation, checkpoint, wait)).AsTask())).Code);
@@ -1499,7 +1499,7 @@ public sealed class AgentRunAdmissionStoreTests
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var call = new ModelToolCall("wait-unavailable", "execution.wait", "{}");
         var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([
-            new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])]), 1, 0, 15000);
+            new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])], executionState: new(TranscriptId: parent.ResponseId)), 1, 0, 15000);
         var wait = new AgentRunWait(call.Id, AgentRunWaitMode.Background, [child.Run.SessionId], AgentRunWaitUntil.All, Now, Now.AddSeconds(10));
         Assert.Throws<ArgumentException>(() => AgentRunWaitExecution.Apply(parent,
             new AgentRunCommand.SuspendWait(parent.Revision, Now, parent.Claim.Generation, checkpoint, wait), []));

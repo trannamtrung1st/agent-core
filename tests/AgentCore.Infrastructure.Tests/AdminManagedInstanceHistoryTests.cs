@@ -284,7 +284,7 @@ public abstract class AdminManagedInstanceHistoryTests
 
     protected static AgentDefinition SampleExaminerDefinition() =>
         new(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "Examiner", "Practice.", "Calm"),

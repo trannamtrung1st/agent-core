@@ -127,7 +127,7 @@ public sealed class AdminDefinitionDraftEvaluationServiceTests
         var updated = await lifecycle.UpdateDraftAsync(
             afterScenario.DraftId,
             afterScenario.Revision,
-            candidate with { SystemInstructions = "Bump revision after eval." },
+            candidate with { AgentInstructions = "Bump revision after eval." },
             CancellationToken.None);
 
         var error = await Assert.ThrowsAsync<AgentCoreException>(() =>

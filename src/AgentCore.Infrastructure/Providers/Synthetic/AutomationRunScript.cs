@@ -10,7 +10,7 @@ internal static class AutomationRunScript
     public static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
     {
         if (!request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal))) return null;
-        var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
+        var prompt = SyntheticTaskContext.Text(request);
         if (prompt.Contains("synthetic-sandbox:demo", StringComparison.Ordinal)) return OpenSandboxScript.Generate(request);
         bool Offers(string name) => request.Tools?.Any(t => t.Name == name) == true;
         var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();

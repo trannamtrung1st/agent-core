@@ -5,7 +5,7 @@ namespace AgentCore.Application.Tests;
 internal static class SampleDefinitions
 {
     public static AgentDefinition Examiner { get; } = new(
-        1,
+        2,
         "examiner",
         1,
         new AgentIdentity("Alex", "Speaking examiner", "Practice a speaking examination.", "Calm, formal and patient"),
@@ -19,7 +19,7 @@ internal static class SampleDefinitions
         new Dictionary<string, string> { ["scenario"] = "practice-exam" });
 
     public static AgentDefinition Support { get; } = new(
-        1,
+        2,
         "customer-support",
         1,
         new AgentIdentity("Sam", "Customer support", "Help with orders.", "Warm, concise and practical"),

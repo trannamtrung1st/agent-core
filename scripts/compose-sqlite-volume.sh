@@ -99,7 +99,7 @@ status, fork_body = request(
 fork = json.loads(fork_body)
 draft_id = fork["draftId"]
 candidate = fork["candidate"]
-candidate["systemInstructions"] = candidate.get("systemInstructions", "") + "\n" + marker
+candidate["agentInstructions"] = candidate.get("agentInstructions", "") + "\n" + marker
 status, updated_body = request(
     f"http://127.0.0.1:{port}/api/v2/admin/definition-drafts/{draft_id}",
     method="PUT",

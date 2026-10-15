@@ -13,7 +13,7 @@ internal static class OpenSandboxScript
         var last = request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User);
         if (last < 0) return null;
         var headless = request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal));
-        var text = request.Messages[last].Text;
+        var text = SyntheticTaskContext.Text(request);
         // Background task intent is wrapped by PromptContextBuilder's evidence
         // boundary; direct Chat keeps its exact fixture prefix. Both still use
         // only offered capabilities and the real owned execution/complete path.

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Observability;
@@ -37,9 +38,9 @@ public sealed class SessionMemoryPromptTests
             profile.UpdatedAt,
             profile.UpdatedAt);
         var request = new PromptContextBuilder().Build(Context(definition, profile, [learned]), Guid.NewGuid());
-        var identity = request.Messages[0].Text;
-        var profileBlock = request.Messages[2].Text;
-        var learnedBlock = request.Messages.Single(message => message.Text.StartsWith(SessionMemoryPrompt.LearnedDataLabel, StringComparison.Ordinal)).Text;
+        var identity = request.Context!.Text(ContextSectionId.AgentIdentity);
+        var profileBlock = request.Context!.Text(ContextSectionId.Profile);
+        var learnedBlock = request.Context!.Text(ContextSectionId.Memory);
 
         Assert.Contains("Identity: Alex", identity, StringComparison.Ordinal);
         Assert.DoesNotContain("Ship the report", identity, StringComparison.Ordinal);
@@ -278,8 +279,7 @@ public sealed class SessionMemoryPromptTests
         var request = new PromptContextBuilder().Build(
             Context(definition, profile, learned),
             Guid.NewGuid());
-        var learnedBlock = request.Messages.Single(message =>
-            message.Text.StartsWith(SessionMemoryPrompt.LearnedDataLabel, StringComparison.Ordinal)).Text;
+        var learnedBlock = request.Context!.Text(ContextSectionId.Memory);
         Assert.Contains(identityMarker, learnedBlock, StringComparison.Ordinal);
         Assert.Contains(userMarker, learnedBlock, StringComparison.Ordinal);
     }
@@ -348,12 +348,12 @@ public sealed class SessionMemoryPromptTests
         await runtime.WaitUntilIdleAsync();
 
         var request = model.LastRequest!;
-        var learned = request.Messages.Single(message => message.Text.StartsWith(SessionMemoryPrompt.LearnedDataLabel, StringComparison.Ordinal)).Text;
+        var learned = request.Context!.Text(ContextSectionId.Memory);
         Assert.Contains("Ship the report", learned, StringComparison.Ordinal);
         Assert.DoesNotContain("Other session fact", learned, StringComparison.Ordinal);
-        Assert.Contains("preferredName=Pat", request.Messages[2].Text, StringComparison.Ordinal);
-        Assert.Contains("Identity: Alex", request.Messages[0].Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("Ship the report", request.Messages[0].Text, StringComparison.Ordinal);
+        Assert.Contains("preferredName=Pat", request.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
+        Assert.Contains("Identity: Alex", request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+        Assert.DoesNotContain("Ship the report", request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
     }
 
     private static AgentDefinition Enabled() =>

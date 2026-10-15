@@ -11,7 +11,7 @@ export const instancePages = [
   {"id": "overview", "path": "overview", "label": "Overview", "group": "", "description": "Saved identity, configuration sources and operational destinations.", "aliases": []},
   {"id": "profile", "path": "profile", "label": "Profile", "group": "Configuration", "description": "Agent persona and identity.", "aliases": ["name", "role", "tone"]},
   {"id": "version", "path": "version", "label": "Definition version", "group": "Configuration", "description": "Inspect and adopt an immutable Definition version.", "aliases": ["upgrade", "rollback"]},
-  {"id": "instructions", "path": "instructions", "label": "Instructions", "group": "Configuration", "description": "Operating instructions for the agent.", "aliases": ["system instructions", "prompt"]},
+  {"id": "instructions", "path": "instructions", "label": "Instructions", "group": "Configuration", "description": "Agent instructions for the agent.", "aliases": ["agent instructions", "prompt"]},
   {"id": "conversation", "path": "conversation", "label": "Conversation", "group": "Configuration", "description": "Language, response length and conversational preferences.", "aliases": ["language", "max output tokens", "ask one question"]},
   {"id": "behavior", "path": "interruption", "label": "Behavior", "group": "Configuration", "description": "Interruption and response behavior.", "aliases": ["interruption", "unsupported claims"]},
   {"id": "initiative", "path": "initiative", "label": "Initiative", "group": "Configuration", "description": "Proactive responses, silence and inactivity limits.", "aliases": ["cooldown", "silence"]},
@@ -44,7 +44,7 @@ export const definitionPages = [
 export const draftPages = [
   {"id": "overview", "path": "overview", "label": "Overview", "group": "", "description": "Draft identity, source, revision and unsaved status.", "aliases": []},
   {"id": "profile", "path": "profile", "label": "Identity & goals", "group": "Configuration", "description": "Definition identity and goals.", "aliases": ["name", "role", "description", "tone"]},
-  {"id": "instructions", "path": "instructions", "label": "Instructions", "group": "Configuration", "description": "Operating instructions for the agent.", "aliases": ["system instructions", "prompt"]},
+  {"id": "instructions", "path": "instructions", "label": "Instructions", "group": "Configuration", "description": "Agent instructions for the agent.", "aliases": ["agent instructions", "prompt"]},
   {"id": "conversation", "path": "conversation", "label": "Conversation", "group": "Configuration", "description": "Language, response length and conversational preferences.", "aliases": ["language", "max output tokens", "ask one question"]},
   {"id": "behavior", "path": "interruption", "label": "Behavior", "group": "Configuration", "description": "Interruption and response behavior.", "aliases": ["interruption", "unsupported claims"]},
   {"id": "initiative", "path": "initiative", "label": "Initiative", "group": "Configuration", "description": "Proactive responses, silence and inactivity limits.", "aliases": ["cooldown", "silence"]},
@@ -93,7 +93,7 @@ export function globalPath(page: AdminCollection = 'instances') { return `/admin
 
 /** Approved presentation labels only, with stable section anchors; no private content. */
 export const settingSearch = [
-  { label: 'Operating instructions', page: 'instructions', anchor: 'instructions', aliases: ['system instructions', 'prompt'] },
+  { label: 'Agent instructions', page: 'instructions', anchor: 'instructions', aliases: ['agent instructions', 'prompt'] },
   { label: 'Conversation language & response length', page: 'conversation', anchor: 'conversationPolicy', aliases: ['maximum output tokens', 'ask one question'] },
   { label: 'Interruption behavior', page: 'behavior', anchor: 'behaviorPolicy', aliases: ['unsupported claims', 'acknowledge'] },
   { label: 'Initiative & silence', page: 'initiative', anchor: 'initiativePolicy', aliases: ['proactive', 'cooldown', 'inactivity'] },

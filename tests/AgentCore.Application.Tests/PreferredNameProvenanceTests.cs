@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -27,12 +28,12 @@ public sealed class PreferredNameProvenanceTests
                 ["preferredName"] = LocalUserProfile.ApplicationProfileValue("friend", now)
             },
             now);
-        var sections = builder.BuildSections(Context(seeded));
-        Assert.DoesNotContain("friend", sections.MemorySystem, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("preferredName=", sections.MemorySystem, StringComparison.Ordinal);
-        Assert.Contains("language=en", sections.MemorySystem, StringComparison.Ordinal);
-        Assert.Contains("No preferred user name or form of address is known. Do not invent one.", sections.MemorySystem, StringComparison.Ordinal);
-        Assert.DoesNotContain("friend", sections.IdentitySystem, StringComparison.OrdinalIgnoreCase);
+        var sections = builder.BuildContext(Context(seeded));
+        Assert.DoesNotContain("friend", sections.Text(ContextSectionId.Profile), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("preferredName=", sections.Text(ContextSectionId.Profile), StringComparison.Ordinal);
+        Assert.Contains("language=en", sections.Text(ContextSectionId.Profile), StringComparison.Ordinal);
+        Assert.Contains("No preferred user name or form of address is known.", sections.Text(ContextSectionId.Profile), StringComparison.Ordinal);
+        Assert.DoesNotContain("friend", sections.Text(ContextSectionId.AgentIdentity), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -49,9 +50,9 @@ public sealed class PreferredNameProvenanceTests
                 ["preferredName"] = new UserProfileValue("Pat", UserProfileValueSource.UserSet, now)
             },
             now);
-        var sections = builder.BuildSections(Context(profile));
-        Assert.Contains("preferredName=Pat", sections.MemorySystem, StringComparison.Ordinal);
-        Assert.DoesNotContain("Do not invent one.", sections.MemorySystem, StringComparison.Ordinal);
+        var sections = builder.BuildContext(Context(profile));
+        Assert.Contains("preferredName=Pat", sections.Text(ContextSectionId.Profile), StringComparison.Ordinal);
+        Assert.DoesNotContain("Do not invent one.", sections.Text(ContextSectionId.Profile), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -82,10 +83,10 @@ public sealed class PreferredNameProvenanceTests
         await runtime.SubmitUserTextAsync("Hello");
         await runtime.WaitUntilIdleAsync();
         Assert.NotNull(model.LastRequest);
-        var memory = model.LastRequest!.Messages[2].Text;
+        var memory = model.LastRequest!.Context!.Text(ContextSectionId.Profile);
         Assert.DoesNotContain("friend", memory, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("preferredName=", memory, StringComparison.Ordinal);
-        Assert.Contains("Do not invent one.", memory, StringComparison.Ordinal);
+        Assert.Contains("Never invent a preferred user name", model.LastRequest.Context!.Text(ContextSectionId.OperatingContract));
         Assert.Contains(model.LastRequest.Messages, message => message.Role == ModelRole.User && message.Text == "Hello");
     }
 

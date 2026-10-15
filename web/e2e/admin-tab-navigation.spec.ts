@@ -16,11 +16,11 @@ for (const width of [1440, 390]) test(`canonical Admin routes, drafts and histor
   await page.waitForLoadState('networkidle');
   let reads = 0; page.on('request', r => { if (r.url().endsWith(`${instanceId}/effective-config`)) reads++; });
   await navigateAdmin(page, 'Instructions');
-  await page.getByRole('textbox', { name: 'Operating instructions', exact: true }).fill('Unsaved instructions fixture');
+  await page.getByRole('textbox', { name: 'Agent instructions', exact: true }).fill('Unsaved instructions fixture');
   await navigateAdmin(page, 'Conversation');
   await page.getByRole('textbox', { name: 'Language', exact: true }).fill('vi');
   await navigateAdmin(page, 'Models'); await navigateAdmin(page, 'Instructions');
-  await expect(page.getByRole('textbox', { name: 'Operating instructions', exact: true })).toHaveValue('Unsaved instructions fixture');
+  await expect(page.getByRole('textbox', { name: 'Agent instructions', exact: true })).toHaveValue('Unsaved instructions fixture');
   await navigateAdmin(page, 'Conversation');
   await expect(page.getByRole('textbox', { name: 'Language', exact: true })).toHaveValue('vi');
   expect(reads).toBe(0);
@@ -48,9 +48,9 @@ for (const width of [1440, 390]) test(`canonical Admin routes, drafts and histor
   await expect(page).toHaveURL(/\/drafts$/); await page.goForward(); await expect(page).toHaveURL(/\/versions$/);
   await page.getByRole('button', { name: /Fork v1 \(builtIn\)/ }).click(); await expect(page).toHaveURL(/\/drafts\/[0-9a-f-]+\/overview$/);
   const draftBase = new URL(page.url()).pathname.replace(/\/overview$/, '');
-  await navigateAdmin(page, 'Instructions'); await page.getByLabel('System instructions', { exact: true }).fill('Candidate retained through draft pages');
+  await navigateAdmin(page, 'Instructions'); await page.getByLabel('Agent instructions', { exact: true }).fill('Candidate retained through draft pages');
   await navigateAdmin(page, 'Models'); await navigateAdmin(page, 'Instructions');
-  await expect(page.getByLabel('System instructions', { exact: true })).toHaveValue('Candidate retained through draft pages');
+  await expect(page.getByLabel('Agent instructions', { exact: true })).toHaveValue('Candidate retained through draft pages');
   await navigateAdmin(page, 'Advanced JSON'); await page.getByRole('textbox', { name: 'Advanced JSON', exact: true }).fill('{ invalid');
   await navigateAdmin(page, 'Skills'); await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toBeDisabled();
   await navigateAdmin(page, 'Advanced JSON'); await expect(page.getByRole('textbox', { name: 'Advanced JSON', exact: true })).toHaveValue('{ invalid');
@@ -58,7 +58,7 @@ for (const width of [1440, 390]) test(`canonical Admin routes, drafts and histor
   // Repair through the same candidate JSON, save explicitly, then reload every draft route.
   const draftId = draftBase.split('/').at(-1)!;
   const saved = await (await page.request.get(`/api/v2/admin/definition-drafts/${draftId}`, { headers })).json();
-  await page.getByRole('textbox', { name: 'Advanced JSON', exact: true }).fill(JSON.stringify({ ...saved.candidate, systemInstructions: 'Saved canonical draft fixture' }, null, 2));
+  await page.getByRole('textbox', { name: 'Advanced JSON', exact: true }).fill(JSON.stringify({ ...saved.candidate, agentInstructions: 'Saved canonical draft fixture' }, null, 2));
   await page.getByRole('button', { name: 'Save draft', exact: true }).click(); await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
   for (const p of draftPages) { await navigateAdmin(page, p.label); await page.reload(); await expect(page).toHaveURL(new URL(`${draftBase}/${p.path}`, page.url()).href); await expect(page.getByRole('heading', { name: p.label, exact: true, level: 2 })).toBeVisible(); }
   await page.goto('/admin/instances/not-valid'); await expect(page.getByText('Admin page not found', { exact: true })).toBeVisible();
@@ -114,14 +114,14 @@ test('Search Admin scopes approved labels, focuses anchors and recovers after de
   await expect(page).toHaveURL(/\/drafts\/[0-9a-f-]+\/overview$/);
   const draftUrl = page.url();
   await navigateAdmin(page, 'Instructions');
-  await page.getByLabel('System instructions', { exact: true }).fill('Unsaved draft being explicitly deleted');
+  await page.getByLabel('Agent instructions', { exact: true }).fill('Unsaved draft being explicitly deleted');
   await page.getByRole('button', { name: 'Search Admin', exact: true }).click();
   await search.getByRole('textbox').fill('browser privacy');
   await search.getByRole('link', { name: /Browser privacy/ }).click();
   await page.getByRole('dialog', { name: 'Discard unsaved changes?', exact: true }).getByRole('button', { name: 'Stay', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Discard unsaved changes?', exact: true })).toBeHidden();
   await expect(page.getByRole('button', { name: 'Search Admin', exact: true })).toBeFocused();
-  await expect(page.getByLabel('System instructions', { exact: true })).toHaveValue('Unsaved draft being explicitly deleted');
+  await expect(page.getByLabel('Agent instructions', { exact: true })).toHaveValue('Unsaved draft being explicitly deleted');
   await page.getByRole('button', { name: 'Delete draft', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete draft', exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/definitions\/examiner\/drafts$/);

@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Testing;
@@ -128,7 +129,7 @@ public sealed partial class TerminalDisplayRepairTests
         Assert.NotNull(model.Requests.Last().ResponseContract);
         Assert.Equal(EntryStatus.Completed, runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant).Status);
         var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime));
-        Assert.Contains("Core finalization phase: runDeadline", run.Checkpoint!.PayloadJson);
+        Assert.Equal("runDeadline", AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).FinalizationReason);
     }
 
     [Fact]
@@ -152,7 +153,7 @@ public sealed partial class TerminalDisplayRepairTests
         Assert.True(await runtime.SubmitUserTextAsync("Why did that fail?"));
         await runtime.WaitUntilIdleAsync();
         Assert.True(model.Requests.Count == 3, "Requests=" + model.Requests.Count + "; Runs=" + string.Join(",", (await SessionRuntimeFixture.RunsForAsync(runtime)).Select(r => r.Status + ":" + r.Failure?.Code)) + "; Errors=" + string.Join(";", logger.Errors));
-        var facts = Assert.Single(model.Requests.Last().Messages, m => m.Role == ModelRole.System && m.Text.StartsWith("Trusted Core execution facts (previous"));
+        var facts = Assert.Single(model.Requests.Last().Messages, m => m.Role == ModelRole.Developer && m.Text.StartsWith("Trusted Core execution facts (previous"));
         Assert.Contains("run-deadline", facts.Text);
         Assert.Contains("browser.close", facts.Text);
         Assert.DoesNotContain("sign-out confirmed", facts.Text);

@@ -40,20 +40,20 @@ public sealed class HarnessManagementBoundaryTests
         await using var factory = new AgentCoreApiFactory();
         var (instance, review) = await Start(factory, HarnessManagementMode.Assisted, [HarnessManagementScope.Instructions]);
         var service = factory.Services.GetRequiredService<HarnessManagementService>();
-        var before = review.Draft!.Candidate.SystemInstructions;
+        var before = review.Draft!.Candidate.AgentInstructions;
         instance = await service.RequestOperationAsync(instance.InstanceId, review.State.Preparation!.PreparationId,
             new("instructions.update", review.Draft.Revision, Content: "Use a concise operations review."));
-        Assert.Equal(before, (await service.ReviewAsync(instance.InstanceId)).Draft!.Candidate.SystemInstructions);
+        Assert.Equal(before, (await service.ReviewAsync(instance.InstanceId)).Draft!.Candidate.AgentInstructions);
         var approval = Assert.Single(instance.HarnessManagement!.Preparation!.Approvals);
         await Assert.ThrowsAsync<AgentCoreException>(async () => await service.DecideApprovalAsync(instance.InstanceId,
             instance.Revision, approval.ApprovalId, "altered", true));
         instance = await service.DecideApprovalAsync(instance.InstanceId, instance.Revision, approval.ApprovalId, approval.ActionHash, false);
-        Assert.Equal(before, (await service.ReviewAsync(instance.InstanceId)).Draft!.Candidate.SystemInstructions);
+        Assert.Equal(before, (await service.ReviewAsync(instance.InstanceId)).Draft!.Candidate.AgentInstructions);
         instance = await service.RequestOperationAsync(instance.InstanceId, review.State.Preparation.PreparationId,
             new("instructions.update", review.Draft.Revision, Content: "Use another concise operations review."));
         approval = instance.HarnessManagement!.Preparation!.Approvals.Last();
         await factory.Services.GetRequiredService<AgentDefinitionLifecycleService>().UpdateDraftAsync(review.Draft.DraftId,
-            review.Draft.Revision, review.Draft.Candidate with { SystemInstructions = "Concurrent owner change." });
+            review.Draft.Revision, review.Draft.Candidate with { AgentInstructions = "Concurrent owner change." });
         await Assert.ThrowsAsync<AgentCoreException>(async () => await service.DecideApprovalAsync(instance.InstanceId,
             instance.Revision, approval.ApprovalId, approval.ActionHash, true));
         Assert.Equal(21, (await service.ReviewAsync(instance.InstanceId)).ActiveVersion);

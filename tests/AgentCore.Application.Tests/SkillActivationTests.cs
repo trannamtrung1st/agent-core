@@ -137,9 +137,9 @@ public sealed class SkillActivationTests
         var later = await service.WriteAsync(owner.InstanceId, "create", input: new("Later", "Later", "LATER", SkillProjection.OnDemand, true, []), actor: SkillAuthor.Agent);
         var loaded = SkillLoadAdmission.Plan(pin, ["definition:review"], 0, [local.Key, later.Key]);
         Assert.Equal([local.Key], loaded.Admitted); Assert.Equal("unknown", Assert.Single(loaded.Rejected).Reason);
-        Assert.Contains("OLD", PromptContextBuilder.BuildActiveSkillSystem(pin, loaded.Admitted));
-        Assert.DoesNotContain("NEW", PromptContextBuilder.BuildActiveSkillSystem(pin, loaded.Admitted));
-        Assert.Contains("NEW", PromptContextBuilder.BuildActiveSkillSystem(await resolver.ResolveAsync(owner.InstanceId, d), [local.Key]));
+        Assert.Contains("OLD", PromptContextBuilder.BuildActiveSkillContext(pin, loaded.Admitted));
+        Assert.DoesNotContain("NEW", PromptContextBuilder.BuildActiveSkillContext(pin, loaded.Admitted));
+        Assert.Contains("NEW", PromptContextBuilder.BuildActiveSkillContext(await resolver.ResolveAsync(owner.InstanceId, d), [local.Key]));
     }
     [Fact]
     public async Task Resources_missing_authority_and_archived_lifecycle_fail_without_mutation()

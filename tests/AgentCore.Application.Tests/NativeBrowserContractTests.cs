@@ -175,7 +175,7 @@ public sealed class NativeBrowserContractTests
 
     private static AgentDefinition Definition(params string[] names)
     {
-        return new AgentDefinition(1, "subset", 1, new("Subset", "Role", "Description", "Tone"), [], "instructions",
+        return new AgentDefinition(2, "subset", 1, new("Subset", "Role", "Description", "Tone"), [], "instructions",
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048),
             new(false, 60_000, 120_000, 1, ["longSilence"], 0), new(false, "default", 1),
             new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),

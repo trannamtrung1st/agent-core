@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
+import { App } from "antd";
 import { applyCandidateJson, candidateForPersistence, candidateToJson, type DefinitionCandidate } from "./definitionCandidate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminTestWorkspace as AdminApp } from "../../test/AdminTestWorkspace";
@@ -81,11 +82,11 @@ const authoringOptions = {
 const draftId = "019944af-00d1-7000-8000-0000000000c1";
 
 const storedCandidate = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   definitionId: "examiner",
   identity: { name: "Alex", role: "Examiner", description: "Practice speaking.", tone: "Calm" },
   goals: ["Assess the speaker"],
-  systemInstructions: "Stored body",
+  agentInstructions: "Stored body",
   behaviorPolicy: {
     interruptionStyle: "acknowledgeThenContinue",
     acknowledgeInterruption: false,
@@ -203,7 +204,7 @@ function mockDraft(candidate: Record<string, unknown> = storedCandidate) {
 
 async function openDraft() {
   await act(async () => { render(<AdminApp route={{ area: 'admin', view: 'draft', definitionId: 'examiner', draftId, page: 'instructions' }} />); });
-  await screen.findByLabelText('System instructions');
+  await screen.findByLabelText('Agent instructions');
 }
 
 async function navigateDraft(label: string) {
@@ -211,7 +212,7 @@ async function navigateDraft(label: string) {
 }
 async function openDraftSettings(...sections: string[]) {
   const owners: Record<string, string> = { 'Memory policy': 'Memory policy', 'Trigger restrictions': 'Trigger restrictions', 'Advanced / metadata': 'Metadata', 'Agent self-management defaults': 'Self-management', 'Model defaults': 'Models', 'Provider preferences': 'Providers', 'Execution budgets': 'Execution budgets', Conversation: 'Conversation', Behavior: 'Behavior', Initiative: 'Initiative', Voice: 'Voice' };
-  for (const name of sections.length ? sections : ['Operating instructions']) {
+  for (const name of sections.length ? sections : ['Agent instructions']) {
     await navigateDraft(owners[name] ?? 'Instructions');
     const header = screen.getByRole('button', { name });
     if (header.getAttribute('aria-expanded') === 'false') fireEvent.click(header);
@@ -245,7 +246,7 @@ async function renderCandidate(candidate: DefinitionCandidate = storedCandidate)
 function openSettings(...sections: string[]) {
   fireEvent.click(exposedRoles().getByRole("tab", { name: "Settings" }));
   const settings = document.querySelector<HTMLElement>(".admin-definition-settings > .ant-collapse")!;
-  const names = sections.length ? sections : ["Operating instructions", "Model defaults"];
+  const names = sections.length ? sections : ["Agent instructions", "Model defaults"];
   for (const name of names) {
     const header = exposedRoles(settings).getByRole("button", { name });
     if (header.getAttribute("aria-expanded") === "false") fireEvent.click(header);
@@ -338,7 +339,7 @@ describe("definition candidate editor", () => {
       return <DefinitionSkillsSection candidate={value} busy={false} readOnly={false}
         onChange={next => { changed(next); setValue(next); }} />;
     }
-    await act(async () => { render(<ControlledSkills />); });
+    await act(async () => { render(<App><ControlledSkills /></App>); });
 
     expect(screen.getByText(/Required capabilities are requirements, not grants/)).toBeInTheDocument();
     fireEvent.click(exposedRoles().getByRole("button", { name: "Details" }));
@@ -441,7 +442,7 @@ describe("definition candidate editor", () => {
     fireEvent.click(exposedRoles().getByRole("button", { name: "Add goal" }));
     setText("Goal 2", "Keep answers short");
     await openDraftSettings();
-    setText("System instructions", "Edited instructions");
+    setText("Agent instructions", "Edited instructions");
     await navigateDraft('Skills');
     fireEvent.click(exposedRoles().getByRole("button", { name: "Edit" }));
     setText("Procedure", "REFUND_PROCEDURE_EDITED");
@@ -515,7 +516,7 @@ describe("definition candidate editor", () => {
     const parsed = JSON.parse(json.value) as {
       identity: { name: string; role: string; description: string; tone: string };
       goals: string[];
-      systemInstructions: string;
+      agentInstructions: string;
       behaviorPolicy: { interruptionStyle: string; acknowledgeInterruption: boolean; avoidUnsupportedClaims: boolean };
       conversationPolicy: {
         responseLength: string;
@@ -564,7 +565,7 @@ describe("definition candidate editor", () => {
       tone: "Direct"
     });
     expect(parsed.goals).toEqual(["Coach the operator", "Keep answers short"]);
-    expect(parsed.systemInstructions).toBe("Edited instructions");
+    expect(parsed.agentInstructions).toBe("Edited instructions");
     expect(parsed.behaviorPolicy).toMatchObject({
       interruptionStyle: "answerNewTurn",
       acknowledgeInterruption: true,
@@ -730,7 +731,7 @@ describe("definition candidate editor", () => {
     const actions = within(document.querySelector<HTMLElement>('.admin-draft-actions')!);
     const save = actions.getByRole('button', { name: 'Save draft' });
     const publish = actions.getByRole('button', { name: 'Publish…' });
-    setText("System instructions", "Unsaved instruction edit");
+    setText("Agent instructions", "Unsaved instruction edit");
     await navigateDraft('Advanced JSON');
     const json = screen.getByLabelText("Advanced JSON", { selector: "textarea" }) as HTMLTextAreaElement;
     expect(screen.getByText("Unsaved changes — save before using Test & Publish.")).toBeInTheDocument();
@@ -747,7 +748,7 @@ describe("definition candidate editor", () => {
     expect(publishAdminDefinitionDraft).not.toHaveBeenCalled();
 
     await navigateDraft('Instructions');
-    expect(screen.getByLabelText('System instructions')).toBeDisabled();
+    expect(screen.getByLabelText('Agent instructions')).toBeDisabled();
     await navigateDraft('Capabilities');
     expect(screen.getByText(/Fix Advanced JSON before changing capabilities/)).toBeInTheDocument();
     expect(exposedRoles().getByRole('button', { name: 'Add knowledge source' })).toBeDisabled();
@@ -765,7 +766,7 @@ describe("definition candidate editor", () => {
     mockDraft({ ...storedCandidate, environment: { ...storedCandidate.environment, toolAllowlist: tools.slice(0, 33) } });
     vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: tools, maxToolAllowlistEntries: null });
     await openDraft();
-    setText("System instructions", "Keep this edit");
+    setText("Agent instructions", "Keep this edit");
     await navigateDraft('Capabilities');
     expect(await screen.findByText("Authorized: 33 · Always selected: 33")).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByLabelText("Authorized capabilities"));
@@ -781,7 +782,7 @@ describe("definition candidate editor", () => {
       projection: { alwaysCapabilities: ["workspace.read"] } } });
     vi.mocked(getAdminToolRegistry).mockResolvedValue({ toolNames: ["workspace.read", "knowledge.retrieve", "browser.navigate"], maxToolAllowlistEntries: null });
     await openDraft();
-    setText("System instructions", "Keep this edit");
+    setText("Agent instructions", "Keep this edit");
     await navigateDraft('Capabilities');
     expect(await screen.findByText("Authorized: 3 · Always selected: 1")).toBeInTheDocument();
     expect(screen.getByLabelText("Always projected capabilities")).toBeInTheDocument();
@@ -799,8 +800,8 @@ describe("definition candidate editor", () => {
     await openDraft();
     await navigateDraft('Advanced JSON');
     const json = exposedRoles().getByRole("textbox", { name: "Advanced JSON" }) as HTMLTextAreaElement;
-    const edited = JSON.parse(json.value) as { systemInstructions: string; untouchedMarker: { nested: string } };
-    edited.systemInstructions = "Saved from JSON";
+    const edited = JSON.parse(json.value) as { agentInstructions: string; untouchedMarker: { nested: string } };
+    edited.agentInstructions = "Saved from JSON";
     fireEvent.change(json, { target: { value: JSON.stringify(edited, null, 2) } });
     await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Save draft" })); });
     await waitFor(() => {
@@ -808,7 +809,7 @@ describe("definition candidate editor", () => {
         draftId,
         2,
         expect.objectContaining({
-          systemInstructions: "Saved from JSON",
+          agentInstructions: "Saved from JSON",
           untouchedMarker: { nested: "preserve-me" }
         })
       );

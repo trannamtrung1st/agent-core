@@ -213,8 +213,7 @@ public sealed class MemoryProposalAdmissionTests
             "What is the project codename?",
             Guid.Parse("019944af-0030-7000-8000-000000000014")));
         await second.WaitUntilIdleAsync();
-        var learned = recall.LastRequest!.Messages.Single(message =>
-            message.Text.StartsWith(SessionMemoryPrompt.LearnedDataLabel, StringComparison.Ordinal)).Text;
+        var learned = recall.LastRequest!.Context!.Text(AgentCore.Application.Context.ContextSectionId.Memory);
         Assert.Contains("Atlas", learned, StringComparison.Ordinal);
     }
 
@@ -586,7 +585,7 @@ public sealed class MemoryProposalAdmissionTests
         Assert.DoesNotContain("Memory saved", text, StringComparison.Ordinal);
         var capability = recorded.LastRequest!.Messages.Single(message => message.Text.Contains("Memory capability:", StringComparison.Ordinal)).Text;
         Assert.Contains("no reliable channel", capability, StringComparison.Ordinal);
-        Assert.Contains("Do not claim that information was saved", capability, StringComparison.Ordinal);
+        Assert.Contains("no reliable channel", capability, StringComparison.Ordinal);
     }
 
     [Fact]

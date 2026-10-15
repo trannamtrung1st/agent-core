@@ -161,7 +161,7 @@ public sealed class HarnessManagementRecoveryTests
                 Assert.NotEqual(draftId, instance.HarnessManagement!.Preparation!.DraftId);
                 Assert.Equal(publishedVersion, instance.ActiveVersion);
                 var same = await reopened.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync(instance.DefinitionId, publishedVersion);
-                Assert.Equal(published!.SystemInstructions, same!.SystemInstructions);
+                Assert.Equal(published!.AgentInstructions, same!.AgentInstructions);
                 Assert.Equal(published.SkillList.Select(s => s.Id), same.SkillList.Select(s => s.Id));
                 var history = await reopened.Services.GetRequiredService<IAdminEventStore>().ListAsync(new(TargetType: "agent.instance", TargetId: id.ToString("D")));
                 Assert.Contains(history, e => e.ActorKind == AdminEventActorKind.Agent && e.SummaryJson.Contains("CandidateCommitted"));

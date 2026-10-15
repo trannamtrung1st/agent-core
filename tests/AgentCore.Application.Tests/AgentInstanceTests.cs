@@ -48,7 +48,7 @@ public sealed class AgentInstanceTests
         Assert.Equal(alice.InstanceId, first.AgentInstanceId);
         Assert.Equal(1, first.Definition.Version);
         Assert.Equal(alice.Persona, first.PinnedPersona);
-        Assert.DoesNotContain("V2_MARKER", first.Definition.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("V2_MARKER", first.Definition.AgentInstructions, StringComparison.Ordinal);
         var memory = new StructuredMemoryService(memories, Ids(4, "019944af-0018-7000-8000-"), clock);
         var admission = new MemoryAdmissionContext("application", [], new HashSet<string>(StringComparer.Ordinal));
         await memory.WriteAsync(
@@ -64,7 +64,7 @@ public sealed class AgentInstanceTests
         Assert.Equal(1, historical.Definition.Version);
         Assert.Equal(alice.InstanceId, historical.AgentInstanceId);
         Assert.Equal(alice.Persona, historical.PinnedPersona);
-        Assert.DoesNotContain("V2_MARKER", historical.Definition.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("V2_MARKER", historical.Definition.AgentInstructions, StringComparison.Ordinal);
         Assert.Equal("by Monday", Assert.Single(await memory.SearchAsync(
             new TrustedMemoryOwner(first.SessionId),
             new MemorySearchQuery(null, null),
@@ -73,7 +73,7 @@ public sealed class AgentInstanceTests
         var later = await manager.CreateForInstanceAsync(alice.InstanceId, SessionMode.Text);
         Assert.Equal(alice.InstanceId, later.AgentInstanceId);
         Assert.Equal(2, later.Definition.Version);
-        Assert.Contains("V2_MARKER", later.Definition.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("V2_MARKER", later.Definition.AgentInstructions, StringComparison.Ordinal);
         Assert.Equal("v2 tone", later.Definition.Identity.Tone);
         Assert.Equal(alice.Persona, later.PinnedPersona);
         Assert.NotEqual(first.SessionId, later.SessionId);
@@ -280,7 +280,7 @@ public sealed class AgentInstanceTests
         SampleDefinitions.Examiner with
         {
             Version = 2,
-            SystemInstructions = SampleDefinitions.Examiner.SystemInstructions + "\nV2_MARKER",
+            AgentInstructions = SampleDefinitions.Examiner.AgentInstructions + "\nV2_MARKER",
             Identity = SampleDefinitions.Examiner.Identity with { Tone = "v2 tone" }
         };
 
@@ -288,7 +288,7 @@ public sealed class AgentInstanceTests
         V2() with
         {
             Version = 3,
-            SystemInstructions = V2().SystemInstructions + "\nV3_MARKER",
+            AgentInstructions = V2().AgentInstructions + "\nV3_MARKER",
             Identity = V2().Identity with { Tone = "v3 tone" }
         };
 

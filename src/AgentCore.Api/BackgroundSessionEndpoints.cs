@@ -161,7 +161,17 @@ public static class BackgroundSessionEndpoints
         run.Admission.Configuration is { } config ? new(config.Definition.Id, config.Definition.Version, config.InstanceRevision,
             config.PersonaRevision, config.ConfigurationHash, config.Resources.Select(r => new AgentRunResourceResponse(r.Key, r.VirtualPath, r.ContentSha256, r.ByteLength)).ToArray()) : null, ToTriggerOrigin(run),
         run.Admission.ComposerInput is { } input ? new(input.ExplicitSkillKeys, "userExplicit", HttpMapping.Format(input.AdmittedAtUtc), input.Error,
-            input.References.Select(r => new ComposerReferenceResponse(r.Reference.Kind, r.Reference.Locator, r.Label, r.Status, r.Revision, r.Sha256, r.Truncated)).ToArray()) : null, ToExecutionDiagnostic(run));
+            input.References.Select(r => new ComposerReferenceResponse(r.Reference.Kind, r.Reference.Locator, r.Label, r.Status, r.Revision, r.Sha256, r.Truncated)).ToArray()) : null, ToExecutionDiagnostic(run), ToContextManifest(run));
+
+    private static ContextManifestResponse? ToContextManifest(AgentRun run)
+    {
+        if (!AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out _)) return null;
+        var manifest = AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).ContextManifest;
+        return manifest is null ? null : new(manifest.ContextFormatVersion, manifest.CoreContractVersion,
+            manifest.Sections.Select(s => new ContextManifestSectionResponse(s.Id, s.Layer.ToString(), s.Source.ToString(),
+                s.Semantics.ToString(), s.SourceRevision, s.Characters, s.Utf8Bytes, s.EstimatedTokens, s.Omitted, s.OriginalCharacters)).ToArray(), manifest.Fingerprint,
+            manifest.FieldSources?.ToDictionary(p => p.Key, p => new ContextFieldSourceResponse(p.Value.Kind, p.Value.Revision)));
+    }
 
     private static RunExecutionDiagnosticResponse? ToExecutionDiagnostic(AgentRun run) => RunDiagnosticProjection.From(run) is { } diagnostic
         ? new(diagnostic.RemainingBudgetMs, diagnostic.LastTool, diagnostic.RecordedToolResults,

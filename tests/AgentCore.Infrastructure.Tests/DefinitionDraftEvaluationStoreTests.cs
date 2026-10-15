@@ -288,11 +288,11 @@ public sealed class DefinitionDraftEvaluationStoreTests
                 Assert.Equal(409, conflict.StatusCode);
                 var editConflict = await Assert.ThrowsAsync<AgentCoreException>(() => admin.UpdateDraftAsync(
                     new AgentDefinitionDraftUpdate(draft.DraftId, draft.Revision,
-                        draft.Candidate with { SystemInstructions = "Contended edit" }, DateTimeOffset.UtcNow)).AsTask());
+                        draft.Candidate with { AgentInstructions = "Contended edit" }, DateTimeOffset.UtcNow)).AsTask());
                 Assert.Equal("Conflict", editConflict.Code);
                 Assert.Equal(409, editConflict.StatusCode);
                 Assert.Equal(draft.Revision, (await admin.GetDraftAsync(draft.DraftId))!.Revision);
-                Assert.Equal(draft.Candidate.SystemInstructions, (await admin.GetDraftAsync(draft.DraftId))!.Candidate.SystemInstructions);
+                Assert.Equal(draft.Candidate.AgentInstructions, (await admin.GetDraftAsync(draft.DraftId))!.Candidate.AgentInstructions);
                 Assert.Empty(await store.ListScenariosAsync(draft.DraftId));
             }
             await store.UpsertScenarioWithRevisionBumpAsync(draft.DraftId, draft.Revision, Scenario(draft.DraftId));
@@ -324,7 +324,7 @@ public sealed class DefinitionDraftEvaluationStoreTests
 
     private static AgentDefinitionCandidate SampleCandidate(string definitionId) =>
         new(
-            1,
+            2,
             definitionId,
             new AgentIdentity("Demo", "Guide", "Helps with demos.", "Calm"),
             ["Help the user"],

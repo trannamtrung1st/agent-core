@@ -20,7 +20,7 @@ public enum SkillAuthor { Admin, Agent }
 public sealed record SkillSpec(
     string Id, string Name, string Description, string Procedure,
     [property: System.Text.Json.Serialization.JsonRequired] SkillProjection Projection, [property: System.Text.Json.Serialization.JsonRequired] bool DefaultEnabled,
-    IReadOnlyList<string> RequiredCapabilities, IReadOnlyList<string> ResourcePaths);
+    IReadOnlyList<string> RequiredCapabilities, IReadOnlyList<string> ResourcePaths, string? SourceRevision = null);
 
 public sealed record AgentDefinitionSkillState(Guid AgentInstanceId, string DefinitionSkillId,
     bool? EnabledOverride, long Revision, DateTimeOffset UpdatedAt);
@@ -33,7 +33,7 @@ public sealed record AgentInstanceSkill(string SkillId, Guid AgentInstanceId,
 
 public sealed record EffectiveSkill(string Key, SkillOrigin Origin, string SourceId,
     string Name, string Description, string Procedure, SkillProjection Projection,
-    IReadOnlyList<string> RequiredCapabilities, IReadOnlyList<string> ResourcePaths);
+    IReadOnlyList<string> RequiredCapabilities, IReadOnlyList<string> ResourcePaths, string? SourceRevision = null);
 
 public static class SkillKeys
 {

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
@@ -2464,7 +2465,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ExperienceContext: await RunExperienceContextAsync(evaluationToken),
                     ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, executionDefinition, evaluationToken))
                 {
-                    EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective
+                    EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,
+                    Configuration = capturedRun?.Admission.Configuration ?? resolved?.Configuration,
+                    RunTaskIntent = capturedRun?.Admission.TaskIntent
                 };
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");
@@ -2473,7 +2476,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 try
                 {
                     decision = capturedRun?.Admission.ComposerInput?.Error is not null
-                        ? new Speak(new ModelRequest(responseId, []))
+                        ? new Speak(ContextAssembler.Create(responseId, new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)])))
                         : await _brain.DecideAsync(context, responseId, evaluationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (evaluationToken.IsCancellationRequested)
@@ -2676,12 +2679,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             SessionId, request.ResponseId, cause.CorrelationId, _snapshot.AgentInstanceId, _boundAgentRun?.AgentRunId,
             FailureReference.IsSafeToken(_snapshot.ModelSelection?.ProviderAlias) ? _snapshot.ModelSelection?.ProviderAlias : null);
         var checkpoint = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.Checkpoint : null;
+        AgentRunToolCallCheckpoint.EnsureCurrentContextContract(checkpoint, request.ResponseId);
         AgentRunToolCallCheckpoint.EnsureCurrentBrowserContract(checkpoint);
         var restored = AgentRunToolCallCheckpoint.TryRead(checkpoint, out var restoredMessages);
-        var messages = restored ? request.Messages.Concat(restoredMessages!).ToList() : request.Messages.ToList();
+        var messages = restored ? restoredMessages!.ToList() : new List<ModelMessage>();
         if (restored) messages = await _tools.RehydrateCapturesAsync(SessionId, messages, model.Capabilities.Vision, cancellationToken).ConfigureAwait(false);
-        var checkpointPrefixCount = request.Messages.Count(message => !PromptContextBuilder.IsActiveSkillSystem(message));
-        ModelMessage[] CheckpointSuffix() => messages.Where(message => !PromptContextBuilder.IsActiveSkillSystem(message)).Skip(checkpointPrefixCount).ToArray();
+        var executionState = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint);
+        if (executionState.TranscriptId is { } transcriptId && transcriptId != request.ResponseId)
+            throw AgentCoreErrors.Conflict("Checkpoint belongs to a different response transcript.");
+        var failedAttempts = (executionState.FailedAttempts ?? []).ToList();
+        var latestManifest = request.ContextManifest;
         var resumePending = restored ? AgentRunToolCallCheckpoint.PendingCalls(messages).ToList() : [];
         var authorizedTools = request.Tools;
         var pinnedSkills = (_boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun.ActiveSkillKeys : activeSkillKeys).ToArray();
@@ -2702,9 +2709,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var blockedNoProgress = 0;
         var terminalBrowserContinuation = false;
         var checkpointCapacityReached = false;
-        string? continuationInstruction = null;
-        var evidence = new BrowserEvidenceProgress(CheckpointSuffix());
-        var invalidCalls = new InvalidToolCallRecovery(CheckpointSuffix());
+        var terminalBrowserProcedure = CoreProcedure.TerminalBrowser;
+        var evidence = new BrowserEvidenceProgress(messages.ToArray());
+        var invalidCalls = new InvalidToolCallRecovery(messages.ToArray());
         var executionRun = _boundAgentRun?.ResponseId == request.ResponseId ? _boundAgentRun : null;
         var previousFacts = executionRun is null ? null : await PreviousExecutionFactsAsync(executionRun, cancellationToken).ConfigureAwait(false);
         var budgetTools = ExecutionDefinition.Environment?.Capabilities is null
@@ -2732,8 +2739,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         using ITimer? overallTimer = toolDeadline ? ScheduleCancel(_time, overallCts, remainingBudget) : null;
         var overallDeadline = toolDeadline ? _time.GetUtcNow() + remainingBudget : (DateTimeOffset?)null;
         var generateToken = toolDeadline ? overallCts.Token : cancellationToken;
-        var finalizationReason = RunFinalization.Restore(CheckpointSuffix());
-        var cleanupPhase = CheckpointSuffix().Any(m => m.Role == ModelRole.System && m.Text == RunFinalization.CleanupMarker);
+        var finalizationReason = executionState.FinalizationReason ?? RunFinalization.ObservedRecovery(messages);
+        var cleanupPhase = executionState.Phase == RunPhase.Cleanup || executionState.CleanupStartedAtMessage is not null;
+        var cleanupStartedAtMessage = executionState.CleanupStartedAtMessage;
+        ToolLoopExecutionState State() => new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
+            finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId);
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
         var cleanupSteps = cleanupRequested ? budget.CleanupStepReserve : 0;
@@ -2743,8 +2753,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 || overallDeadline - _time.GetUtcNow() > budget.CleanupReserve + finalizationReserve
                     && steps < budget.MaxSteps - cleanupSteps) return;
             cleanupPhase = true;
-            messages.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker));
-            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+            cleanupStartedAtMessage ??= messages.Count;
+            await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
         }
         using var workCts = CancellationTokenSource.CreateLinkedTokenSource(generateToken);
         using ITimer? workTimer = toolDeadline && finalizationReserve > TimeSpan.Zero
@@ -2764,21 +2774,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 overallTimer?.Change(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
             }
             // Answer every unexecuted pending call before persisting: recovery cannot replay it.
-            foreach (var unexecuted in AgentRunToolCallCheckpoint.PendingCalls(CheckpointSuffix()))
+            foreach (var unexecuted in AgentRunToolCallCheckpoint.PendingCalls(messages.ToArray()))
                 messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"finalization_reserve\"}", ToolCallId: unexecuted.Id, Name: unexecuted.Name));
-            messages.Add(new ModelMessage(ModelRole.System, RunFinalization.Marker + reason));
-            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+            await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
         }
         async Task RecordFailureAsync(ProviderFailure failure)
         {
-            messages.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, failure));
-            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
-                overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+            failedAttempts.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, failure));
+            await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
         }
         try
         {
-            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
-                overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+            await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
             while (!generateToken.IsCancellationRequested)
             {
                 await BeginCleanupAsync().ConfigureAwait(false);
@@ -2811,55 +2820,29 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 authorizedTools = _tools.ProjectTools(ExecutionDefinition, projectionContext);
                 var visibleCatalog = ManagementBuiltInSkills.Visible(pinnedCatalog, projectionContext.Harness, initial: false);
                 var visibleKeys = pinnedSkills.Where(k => visibleCatalog.Any(s => s.Key == k)).ToArray();
-                messages = PromptContextBuilder.WithActiveSkillSystem(messages, visibleCatalog, visibleKeys).ToList();
-                // Rebuild metadata from pinned procedures and current revocations, including checkpoint restoration.
-                messages.RemoveAll(m => m.Role == ModelRole.System && m.Text.StartsWith(PromptContextBuilder.SkillCatalogPrefix, StringComparison.Ordinal));
-                var skillMetadata = PromptContextBuilder.BuildSkillCatalogSystem(ManagementBuiltInSkills.Visible(pinnedCatalog, projectionContext.Harness,
-                    initial: !loadedCapabilities.Any(ManagementTools.IsManagement)));
-                if (skillMetadata.Length > 0) messages.Insert(0, new(ModelRole.System, skillMetadata));
+                var sections = PromptContextBuilder.WithSkills(request.Context ?? throw new InvalidOperationException("Typed context is required."), visibleCatalog, visibleKeys,
+                    ManagementBuiltInSkills.Visible(pinnedCatalog, projectionContext.Harness, initial: !loadedCapabilities.Any(ManagementTools.IsManagement)));
                 var pageBlocked = browserPageOrigin is not null && blockedBrowserOrigins.Contains(browserPageOrigin);
-                var prompt = messages;
-                if (inRepair)
-                {
-                    prompt = messages.ToList();
-                    prompt.Add(new ModelMessage(ModelRole.System, ProtocolFailures.RepairInstruction(repairReason)!));
-                }
-                else if (checkpointCapacityReached)
-                {
-                    prompt = messages.ToList();
-                    prompt.Add(new ModelMessage(ModelRole.System, IsInitialBackgroundRun
-                        ? "Checkpoint capacity reached. Finish this task using work.complete from evidence already collected. Do not request other tools."
-                        : "Checkpoint capacity reached. Finish your response from evidence already collected. Do not request tools."));
-                }
-                else if (terminalBrowserContinuation)
-                {
-                    prompt = messages.ToList();
-                    prompt.Add(new ModelMessage(ModelRole.System, continuationInstruction ?? TerminalBrowserContinuationInstruction));
-                }
-                else if (pageBlocked)
-                {
-                    prompt = messages.ToList();
-                    prompt.Add(new ModelMessage(ModelRole.System, ChallengedBrowserInstruction));
-                }
-
-                prompt = prompt.ToList();
-                var factsIndex = prompt.FindIndex(message => message.Role != ModelRole.System);
-                if (factsIndex < 0) factsIndex = prompt.Count;
-                prompt.Insert(factsIndex, new ModelMessage(ModelRole.System, RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, CheckpointSuffix())));
-                if (previousFacts is not null) prompt.Insert(factsIndex + 1, new ModelMessage(ModelRole.System, previousFacts));
-                if (invalidCalls.HasBlockedStrategies) prompt.Add(new ModelMessage(ModelRole.System, "Equivalent invalid or ineffective strategies remain blocked. Corrected valid calls and unrelated offered tools, including independently requested cleanup, remain available within the remaining execution budget."));
-                if (evidence.DialogPending) prompt.Add(new ModelMessage(ModelRole.System, BrowserEvidenceProgress.DialogInstruction));
-                if (evidence.RepeatedDialogInstruction is { } repeatedDialogInstruction) prompt.Add(new ModelMessage(ModelRole.System, repeatedDialogInstruction));
-                if (budget.CleanupReserve > TimeSpan.Zero) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.BrowserLifecycleInstruction));
-                if (cleanupPhase && finalizationReason is null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupInstruction));
-                if (finalizationReason == "sandboxRecovery") prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.SandboxRecoveryInstruction));
-                if (finalizationReason is not null) prompt.Add(new ModelMessage(ModelRole.System,
-                    IsInitialBackgroundRun ? RunFinalization.BackgroundInstruction : RunFinalization.Instruction));
-
+                if (inRepair) sections = sections.Upsert(ContextSection.ProtocolRepair(repairReason!));
+                else if (checkpointCapacityReached) sections = sections.Upsert(ContextSection.Core(IsInitialBackgroundRun ? CoreProcedure.BackgroundCheckpointCapacity : CoreProcedure.CheckpointCapacity));
+                else if (terminalBrowserContinuation) sections = sections.Upsert(ContextSection.Core(terminalBrowserProcedure));
+                else if (pageBlocked) sections = sections.Upsert(ContextSection.Core(CoreProcedure.ChallengedBrowser));
+                sections = sections.Upsert(ContextSection.Runtime(ContextSectionId.ExecutionFacts, ContextSourceKind.AgentRun,
+                    RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, messages), semantics: ContextSemantics.TrustedFact));
+                if (previousFacts is not null) sections = sections.Upsert(ContextSection.Runtime(ContextSectionId.PreviousExecution, ContextSourceKind.AgentRun, previousFacts, semantics: ContextSemantics.TrustedFact));
+                if (invalidCalls.HasBlockedStrategies) sections = sections.Upsert(ContextSection.Core(CoreProcedure.InvalidStrategies));
+                if (evidence.DialogPending) sections = sections.Upsert(ContextSection.Core(CoreProcedure.Dialog));
+                if (evidence.RepeatedDialogInstruction is not null) sections = sections.Upsert(ContextSection.Core(CoreProcedure.RepeatedDialog));
+                if (budget.CleanupReserve > TimeSpan.Zero) sections = sections.Upsert(ContextSection.Core(CoreProcedure.BrowserLifecycle));
+                if (cleanupPhase && finalizationReason is null) sections = sections.Upsert(ContextSection.Core(CoreProcedure.Cleanup));
+                if (finalizationReason == "sandboxRecovery") sections = sections.Upsert(ContextSection.Core(CoreProcedure.SandboxRecovery));
+                if (finalizationReason is not null) sections = sections.Upsert(ContextSection.Core(IsInitialBackgroundRun ? CoreProcedure.BackgroundFinalization : CoreProcedure.Finalization));
+                sections = sections.Upsert(ContextSection.Runtime(ContextSectionId.ExecutionPhase, ContextSourceKind.AgentRun,
+                    $"phase={State().Phase}; finalizationReason={finalizationReason ?? "none"}; protocolRepairReason={repairReason ?? "none"}", semantics: ContextSemantics.TrustedFact));
+                var projected = ContextAssembler.Project(request, sections, (request.Interaction ?? []).Concat(messages).ToArray());
                 var working = inRepair
-                    ? request with
+                    ? projected with
                     {
-                        Messages = prompt,
                         Tools = null,
                         ToolChoice = ModelToolChoice.Auto,
                         ToolChoiceName = null,
@@ -2870,7 +2853,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
                     : ProjectBrowserTools(
                         WithOfferedTools(
-                            request with { Messages = prompt },
+                            projected,
                             authorizedTools,
                             trigger,
                             model),
@@ -2897,20 +2880,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             pageBlocked, terminalBrowserContinuation, evidence.DialogPending).Tools ?? [];
                         if (cleanupPhase) eligibleForGuide = eligibleForGuide.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray();
                     }
-                    working = working with { Messages = PromptContextBuilder.WithToolEnvironmentSystem(
-                        working.Messages, projectionContext, working.Tools ?? [], _tools.ConfigurationGate, eligibleForGuide) };
+                    working = ContextAssembler.Project(working, PromptContextBuilder.WithToolEnvironment(
+                        working.Context!, projectionContext, working.Tools ?? [], _tools.ConfigurationGate, eligibleForGuide));
                 }
                 var recoveryTools = projectionContext is null ? working.Tools ?? []
                     : ProjectBrowserTools(working with { Tools = ToolCatalog.Eligible(_snapshot.Definition, projectionContext, _tools.ConfigurationGate) },
                         pageBlocked, terminalBrowserContinuation, evidence.DialogPending).Tools ?? [];
                 if (cleanupPhase) recoveryTools = recoveryTools.Where(t => RunFinalization.CleanupTool(t.Name)).ToArray();
                 if (finalizationReason is null && !inRepair && !checkpointCapacityReached
-                    && evidence.SemanticRecoveryInstruction(
+                    && ContextSection.BrowserRecovery(evidence,
                         recoveryTools.Select(t => t.Name), model.Capabilities.Vision,
                         (_browserLease as IBrowser)?.HostPolicy.ScreenshotAvailable ?? true,
                         (_browserLease as IBrowser)?.HostPolicy.Limits.CapturesPerScope ?? BrowserOperationalLimits.Default.CapturesPerScope,
                         working.Tools?.Select(t => t.Name) ?? []) is { } semanticRecovery)
-                    working = working with { Messages = working.Messages.Append(new ModelMessage(ModelRole.System, semanticRecovery)).ToArray() };
+                    working = ContextAssembler.Project(working, working.Context!.Upsert(semanticRecovery));
+                working = model.PrepareRequest(working);
+                latestManifest = working.ContextManifest;
                 var projectionModel = _boundAgentRun is { } binding && binding.ResponseId == request.ResponseId
                     ? binding.PinnedModel.CatalogKey : ToolResources.IsOccurrence(trigger.Kind)
                         ? _activeOccurrencePin?.CatalogKey : _snapshot.ModelSelection?.CatalogKey;
@@ -3055,8 +3040,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         repairOpen = true;
                         _protocolRepair = "attempted";
                         RuntimeTelemetry.RecordResponseRepair(repairReason!, "started", repairPhase);
-                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
-                            overallDeadline, generateToken, repairReason, ActiveExecutionMs()).ConfigureAwait(false);
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                            overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
                         retryGeneration = true;
                         break;
                     }
@@ -3069,17 +3054,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
 
                     if (!IsInitialBackgroundRun && evt is ModelFailed finalFailure && finalizationReason is null && workTimer is not null
                         && !publishedVisible && pending.Count == 0 && !cancellationToken.IsCancellationRequested
-                        && RunFinalization.HasEvidence(CheckpointSuffix()) && RunFinalization.RecoveryReason(finalFailure.Failure) is { } reason)
+                        && RunFinalization.HasEvidence(messages.ToArray()) && RunFinalization.RecoveryReason(finalFailure.Failure) is { } reason)
                     {
                         await BeginFinalizationAsync(reason).ConfigureAwait(false);
                         retryGeneration = true;
                         break;
                     }
                     if (evt is ModelFailed observedFailure)
-                        messages.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, observedFailure.Failure));
+                        failedAttempts.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, observedFailure.Failure));
                     if (evt is ModelFailed or ModelCompleted)
-                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
-                            overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                            overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
                     if (evt is ModelFailed { Failure.Code: ProviderErrorCode.Cancelled } providerCancelled && !cancellationToken.IsCancellationRequested)
                     {
                         await MailboxModelAsync(cause, request.ResponseId, providerCancelled with
@@ -3218,18 +3203,19 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     // Pending identity/arguments must fit before any effect is admitted.
                     // A refused, uncommitted batch cannot be replayed after recovery.
-                    var proposed = CheckpointSuffix().Append(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending)).ToArray();
+                    var proposed = messages.ToArray().Append(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending)).ToArray();
                     var admissionReserve = AgentRunToolCallCheckpoint.CompletionReserve(trigger.Kind)
                         + (!cleanupPhase && cleanupRequested ? budget.CleanupCheckpointReserve : 0);
                     if (!AgentRunToolCallCheckpoint.TryWriteWithReserve(proposed, false, null, admissionReserve,
-                            out _, _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0))
+                            out _, _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0,
+                            new(pinnedSkills, _boundAgentRun?.SkillLoadCount ?? 0), repairReason, State()))
                     {
                         if (cleanupRequested && !cleanupPhase)
                         {
                             cleanupPhase = true;
-                            messages.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker));
-                            await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes,
-                                overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                            cleanupStartedAtMessage ??= messages.Count;
+                            await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                                overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
                         }
                         else await BeginFinalizationAsync("checkpointCapacity").ConfigureAwait(false);
                         continue;
@@ -3237,7 +3223,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: pending));
                     steps += pending.Count;
                 }
-                await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
                 var allowedIntermediate = _intermediateMessagingAllowed;
                 var substantiveWorkInBatch = false;
                 foreach (var call in pending)
@@ -3262,19 +3248,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             : "{\"completed\":true,\"recovered\":true,\"message\":\"The action completed before recovery; it was not repeated.\"}";
                         messages.Add(new ModelMessage(ModelRole.Tool, recovered, ToolCallId: call.Id, Name: call.Name));
                         outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(recovered));
-                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
                         continue;
                     }
                     if (finalizationReason is null && cleanupPhase && !RunFinalization.CleanupTool(call.Name))
                     {
                         messages.Add(new ModelMessage(ModelRole.Tool, "{\"error\":\"finish_required\",\"reason\":\"cleanup_reserve\"}", ToolCallId: call.Id, Name: call.Name));
-                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
                         continue;
                     }
-                    var checkpointBudget = AgentRunToolCallCheckpoint.ToolResultBudget(CheckpointSuffix(), call,
+                    var checkpointBudget = AgentRunToolCallCheckpoint.ToolResultBudget(messages.ToArray(), call,
                             _boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate, _boundAgentRun?.SideEffect.ActionHash, trigger.Kind, _boundAgentRun?.LoadedCapabilityIds, _boundAgentRun?.CapabilityLoadCount ?? 0,
-                            cleanupReserve: !cleanupPhase && cleanupRequested ? budget.CleanupCheckpointReserve : 0);
+                            skillState: new(pinnedSkills, _boundAgentRun?.SkillLoadCount ?? 0),
+                            cleanupReserve: !cleanupPhase && cleanupRequested ? budget.CleanupCheckpointReserve : 0, executionState: State());
                     var resultBudget = Math.Min(ToolLimits.MaxOutputBytes - outputBytes, checkpointBudget);
                     if (call.Name != ToolCatalog.WorkComplete && (resultBudget < 256 || checkpointCapacityReached))
                     {
@@ -3283,13 +3270,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         if (!cleanupPhase && cleanupRequested && capacityReason == "checkpointCapacity")
                         {
                             cleanupPhase = true;
-                            messages.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker));
+                            cleanupStartedAtMessage ??= messages.Count;
                         }
                         else checkpointCapacityReached = true;
                         var refusal = AgentRunToolCallCheckpoint.FinishRequired;
                         messages.Add(new ModelMessage(ModelRole.Tool, refusal, ToolCallId: call.Id, Name: call.Name));
                         outputBytes = checked(outputBytes + Encoding.UTF8.GetByteCount(refusal));
-                        await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                        await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
                         if (checkpointCapacityReached) await BeginFinalizationAsync(capacityReason).ConfigureAwait(false);
                         continue;
                     }
@@ -3618,7 +3605,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         if (blockedNoProgress >= 2)
                                         {
                                             terminalBrowserContinuation = true;
-                                            continuationInstruction = TerminalBrowserContinuationInstruction;
+                                            terminalBrowserProcedure = CoreProcedure.TerminalBrowser;
                                         }
                                     }
                                     else
@@ -3789,7 +3776,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             if (evidence.ShouldStop)
                             {
                                 terminalBrowserContinuation = true;
-                                continuationInstruction = NoProgressBrowserContinuationInstruction;
+                                terminalBrowserProcedure = CoreProcedure.NoProgressBrowser;
                             }
                         }
                     }
@@ -3832,7 +3819,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         Parts: executionResult.Parts,
                         ToolCallId: call.Id,
                         Name: call.Name));
-                    await SaveRunCheckpointAsync(cause, request.ResponseId, CheckpointSuffix(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs()).ConfigureAwait(false);
+                    await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes, overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
                     if (sandboxUnknown)
                     {
                         await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest,

@@ -13,7 +13,7 @@ internal static class BackgroundSessionScript
         var report = request.Messages.LastOrDefault(message => message.Role == ModelRole.System && message.Text.StartsWith(ReportPrefix, StringComparison.Ordinal));
         if (report is not null)
         {
-            var evidence = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? "";
+            var evidence = SyntheticTaskContext.Text(request);
             var jsonStart = evidence.IndexOf('{');
             try
             {
@@ -29,7 +29,7 @@ internal static class BackgroundSessionScript
             return [new ModelTextDelta("Fixture prose without an explicit completion."), new ModelCompleted(ModelStopReason.Completed)];
         // Background work never fans out, even when the original objective contains this fixture marker.
         if (request.Messages.Any(message => message.Role == ModelRole.System && message.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal))) return null;
-        var prompt = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? "";
+        var prompt = SyntheticTaskContext.Text(request);
         if (prompt.Contains("[test:followup-file]", StringComparison.Ordinal))
         {
             var userIndex = request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User);

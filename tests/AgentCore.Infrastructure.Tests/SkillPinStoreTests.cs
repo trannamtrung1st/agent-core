@@ -15,7 +15,7 @@ public sealed class SkillPinStoreTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 8, 0, 0, 0, TimeSpan.Zero);
     private static readonly AgentRunOwner Owner = new(Guid.NewGuid(), Guid.NewGuid());
-    private static readonly AgentDefinition Definition = new(1, "skill-guide", 1,
+    private static readonly AgentDefinition Definition = new(2, "skill-guide", 1,
         new("Guide", "Role", "Guidance", "Calm"), [], "Instructions", new("answerNewTurn", true, true),
         new("concise", false, "en", 256), new(false, 8000, 30000, 1, ["longSilence"]),
         new(false, "default", 1), new("primary-llm", null, null), new Dictionary<string, string>());

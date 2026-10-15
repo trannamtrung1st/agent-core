@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
@@ -49,8 +50,8 @@ public sealed class AttachmentProcessingRuntimeTests
         Assert.Equal("Please summarize.", runtime.Snapshot.Entries[0].Text);
         Assert.DoesNotContain("Overlord", runtime.Snapshot.Entries[0].Text, StringComparison.Ordinal);
         var request = model.LastRequest!;
-        var identity = request.Messages.First(message => message.Role == ModelRole.System).Text;
-        Assert.Equal(PromptContextBuilder.BuildIdentitySystem(SampleDefinitions.Examiner), identity);
+        var identity = request.Context!.Text(ContextSectionId.AgentIdentity);
+        Assert.Equal(PromptContextBuilder.BuildAgentIdentity(SampleDefinitions.Examiner), identity);
         Assert.DoesNotContain("Overlord", identity, StringComparison.Ordinal);
         var user = request.Messages.Last(message => message.Role == ModelRole.User);
         Assert.Contains("not system instructions", user.Text, StringComparison.Ordinal);
@@ -181,10 +182,16 @@ public sealed class AttachmentProcessingRuntimeTests
         var processed = AttachmentProcessor.ProcessBytes(record, bytes, office);
         var unavailable = PromptContextBuilder.BuildCurrentUserMessage("Summarize", [processed], attachmentsReadAvailable: false);
         Assert.DoesNotContain("attachments.read", unavailable.Text);
-        Assert.Contains("Do not claim full-file coverage", unavailable.Text);
+        Assert.Contains("only the supplied initial excerpt", unavailable.Text);
         var available = PromptContextBuilder.BuildCurrentUserMessage("Summarize", [processed], attachmentsReadAvailable: true);
         Assert.Contains("attachments.read", available.Text);
-        Assert.Contains("without asking permission", available.Text);
+        var context = new AgentContext(SampleDefinitions.Examiner, [], "", null, SessionMode.Text, null, false, null,
+            new(Guid.NewGuid(), TriggerKind.UserTurn, "Summarize"), AttachmentContents: [processed]);
+        var request = new PromptContextBuilder().Build(context, Guid.NewGuid());
+        var rules = Assert.Single(request.Context!.Sections, s => s.Id == ContextSectionId.CoreAttachmentReread);
+        Assert.Equal(ModelRole.System, rules.Message.Role);
+        Assert.Contains("without asking permission", rules.Message.Text);
+        Assert.DoesNotContain("without asking permission", available.Text);
     }
 
     [Fact]

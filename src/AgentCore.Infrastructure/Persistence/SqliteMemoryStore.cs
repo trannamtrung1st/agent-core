@@ -60,6 +60,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         }
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
+        await ContextCutover.ValidateAsync(db, cancellationToken).ConfigureAwait(false);
         await ValidateStoredSkillContractAsync(db, cancellationToken).ConfigureAwait(false);
     }
 

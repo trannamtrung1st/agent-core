@@ -39,19 +39,19 @@ describe("Definition version inspection", () => {
   it("retries a failed inspection and renders the immutable form and JSON read-only", async () => {
     vi.mocked(getAdminDefinitionVersion)
       .mockRejectedValueOnce(new Error("Version load failed"))
-      .mockResolvedValueOnce({ definitionId: "examiner", systemInstructions: "Built-in instructions", goals: ["A long immutable goal that remains readable on a narrow screen"], skills: [{ id: "sample.hello", name: "Sample hello", description: "A greeting procedure", procedure: "Say hello", projection: "OnDemand", defaultEnabled: true, requiredCapabilities: [] }] });
+      .mockResolvedValueOnce({ definitionId: "examiner", agentInstructions: "Built-in instructions", goals: ["A long immutable goal that remains readable on a narrow screen"], skills: [{ id: "sample.hello", name: "Sample hello", description: "A greeting procedure", procedure: "Say hello", projection: "OnDemand", defaultEnabled: true, requiredCapabilities: [] }] });
     await renderVersions();
     fireEvent.click(exposedRoles().getByRole("button", { name: "View v1 (builtIn)" }));
     expect(await screen.findByText("Version load failed")).toBeInTheDocument();
     fireEvent.click(exposedRoles().getByRole("button", { name: "Retry" }));
     const details = exposedRoles().getByRole("region", { name: "Version details" });
     fireEvent.click(await exposedRoles(details).findByRole("tab", { name: "Settings" }));
-    fireEvent.click(exposedRoles(details).getByRole("button", { name: "Operating instructions" }));
-    await waitFor(() => expect(within(details).getByLabelText("System instructions")).toHaveValue("Built-in instructions"));
-    expect(within(details).getByLabelText("System instructions")).not.toBeDisabled();
-    expect(within(details).getByLabelText("System instructions")).toHaveAttribute("readonly");
-    act(() => { within(details).getByLabelText("System instructions").focus(); });
-    expect(within(details).getByLabelText("System instructions")).toHaveFocus();
+    fireEvent.click(exposedRoles(details).getByRole("button", { name: "Agent instructions" }));
+    await waitFor(() => expect(within(details).getByLabelText("Agent instructions")).toHaveValue("Built-in instructions"));
+    expect(within(details).getByLabelText("Agent instructions")).not.toBeDisabled();
+    expect(within(details).getByLabelText("Agent instructions")).toHaveAttribute("readonly");
+    act(() => { within(details).getByLabelText("Agent instructions").focus(); });
+    expect(within(details).getByLabelText("Agent instructions")).toHaveFocus();
     fireEvent.click(exposedRoles(details).getByRole("tab", { name: "Profile" }));
     expect(within(details).getByLabelText("Goal 1").tagName).toBe("TEXTAREA");
     expect(within(details).getByLabelText("Goal 1")).toHaveValue("A long immutable goal that remains readable on a narrow screen");
@@ -81,8 +81,8 @@ describe("Definition version inspection", () => {
 
   it("keeps colliding source versions distinct when filtering and reopening the drawer", async () => {
     vi.mocked(getAdminDefinitionVersion)
-      .mockResolvedValueOnce({ definitionId: "examiner", systemInstructions: "Built-in instructions" })
-      .mockResolvedValueOnce({ definitionId: "examiner", systemInstructions: "Durable instructions" });
+      .mockResolvedValueOnce({ definitionId: "examiner", agentInstructions: "Built-in instructions" })
+      .mockResolvedValueOnce({ definitionId: "examiner", agentInstructions: "Durable instructions" });
     await renderVersions();
     const search = screen.getByLabelText("Search versions");
     fireEvent.change(search, { target: { value: "Built-in" } });
@@ -91,14 +91,14 @@ describe("Definition version inspection", () => {
     expect(exposedRoles().getByRole("button", { name: "View v1 (durable)" })).toBeInTheDocument();
     fireEvent.click(exposedRoles().getByRole("button", { name: "View v1 (builtIn)" }));
     fireEvent.click(await exposedRoles().findByRole("tab", { name: "Settings" }));
-    fireEvent.click(exposedRoles().getByRole("button", { name: "Operating instructions" }));
-    await waitFor(() => expect(screen.getByLabelText("System instructions")).toHaveValue("Built-in instructions"));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Agent instructions" }));
+    await waitFor(() => expect(screen.getByLabelText("Agent instructions")).toHaveValue("Built-in instructions"));
     await act(async () => { fireEvent.click(exposedRoles().getByRole("button", { name: "Close" })); });
     await waitFor(() => expect(screen.queryByRole("region", { name: "Version details" })).not.toBeInTheDocument());
     fireEvent.click(exposedRoles().getByRole("button", { name: "View v1 (durable)" }));
     fireEvent.click(await exposedRoles().findByRole("tab", { name: "Settings" }));
-    fireEvent.click(exposedRoles().getByRole("button", { name: "Operating instructions" }));
-    await waitFor(() => expect(screen.getByLabelText("System instructions")).toHaveValue("Durable instructions"));
+    fireEvent.click(exposedRoles().getByRole("button", { name: "Agent instructions" }));
+    await waitFor(() => expect(screen.getByLabelText("Agent instructions")).toHaveValue("Durable instructions"));
     expect(getAdminDefinitionVersion).toHaveBeenNthCalledWith(1, "examiner", 1, "builtIn");
     expect(getAdminDefinitionVersion).toHaveBeenNthCalledWith(2, "examiner", 1, "durable");
   });

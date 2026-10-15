@@ -143,7 +143,7 @@ public sealed class ExecutionModelPolicyTests
                     StructuredOutput: false,
                     Reasoning: true,
                     ["low", "medium", "high"],
-                    "medium"),
+                    "medium", DeveloperRoleSupport: true),
                 new ModelDescriptor(
                     "scripted-vision",
                     "Scripted Vision",
@@ -154,7 +154,7 @@ public sealed class ExecutionModelPolicyTests
                     StructuredOutput: false,
                     Reasoning: false,
                     [],
-                    null),
+                    null, DeveloperRoleSupport: true),
                 new ModelDescriptor(
                     "text-only",
                     "Text only",
@@ -165,7 +165,7 @@ public sealed class ExecutionModelPolicyTests
                     StructuredOutput: false,
                     Reasoning: false,
                     [],
-                    null)
+                    null, DeveloperRoleSupport: true)
             ]);
 
     private static AgentInstance Instance(AgentDefinition definition, string? catalogKey, string? effort) =>

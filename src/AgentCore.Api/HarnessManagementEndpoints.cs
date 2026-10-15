@@ -113,7 +113,7 @@ internal static class HarnessManagementEndpoints
                 p.Approvals.Select(a => new HarnessApprovalResponse(a.ApprovalId.ToString("D"), a.ActionHash, Operation(a.Operation), a.Status)).ToArray(),
                 p.Evidence.Select(e => new HarnessEvidenceResponse(e.Actor, e.DraftRevision, e.Check, e.Status.ToString(), e.Expected, e.Observed, e.Limitation)).ToArray(),
                 p.PublishedVersion, p.DiagnosticId?.ToString("D"), p.PublishedDraftRevision),
-            review.Draft?.Revision, review.Draft?.Candidate.SystemInstructions,
+            review.Draft?.Revision, review.Draft?.Candidate.AgentInstructions,
             review.Draft?.Candidate.SkillList.Select(Skill).ToArray() ?? [],
             review.Draft?.Candidate.Environment?.KnowledgeList.Select(k => new HarnessKnowledgeResponse(k.Identity, k.Title, k.Citation, k.ResourcePath)).ToArray() ?? [],
             review.Draft?.Candidate.Environment?.ToolList ?? [], p?.PublishedChanges is { } changes ? new AdminDefinitionDraftDiffResponse(p.DraftId.ToString("D"), p.PublishedDraftRevision!.Value, "PublishedCandidate", p.BaseVersion,

@@ -17,14 +17,17 @@ public static class RunBudgetDiagnosticProjection
         if (run.Admission.ExecutionBudget is not { } pin) return null; // Do not invent historical admission provenance.
         AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var messages);
         messages ??= [];
-        var finalization = RunFinalization.Restore(messages);
-        var cleanup = messages.Any(m => m.Role == ModelRole.System && m.Text == RunFinalization.CleanupMarker);
+        var state = messages.Count == 0 && run.Checkpoint is not null && !AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out _)
+            ? new ToolLoopExecutionState() : AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint);
+        var finalization = state.FinalizationReason;
+        var cleanup = state.CleanupStartedAtMessage is not null;
         var closure = false;
         var unresolved = new HashSet<string>(StringComparer.Ordinal);
         var inCleanup = false;
+        var receiptIndex = 0;
         foreach (var receipt in messages)
         {
-            if (receipt.Role == ModelRole.System && receipt.Text == RunFinalization.CleanupMarker) inCleanup = true;
+            if (state.CleanupStartedAtMessage is { } start && receiptIndex++ >= start) inCleanup = true;
             if (receipt.Role != ModelRole.Tool || receipt.Name?.StartsWith("browser.", StringComparison.Ordinal) != true) continue;
             try
             {

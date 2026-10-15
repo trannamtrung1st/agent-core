@@ -287,7 +287,7 @@ public sealed class ScopedInstanceConfigurationTests
         owner = await harness.ConfigureAsync(owner.InstanceId, owner.Revision, new(HarnessManagementMode.Managed, [HarnessManagementScope.Instructions], [], []));
         var settings = services.GetRequiredService<AgentInstanceSettingsService>();
         await settings.PatchAsync(owner.InstanceId, "instructions", owner.Revision,
-            new Dictionary<string,JsonElement> { ["systemInstructions"] = JsonSerializer.SerializeToElement("Selected reusable instructions.") }, []);
+            new Dictionary<string,JsonElement> { ["agentInstructions"] = JsonSerializer.SerializeToElement("Selected reusable instructions.") }, []);
         owner = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(owner.InstanceId))!;
         await settings.PatchAsync(owner.InstanceId, "conversationPolicy", owner.Revision,
             new Dictionary<string,JsonElement> { ["maxOutputTokens"] = JsonSerializer.SerializeToElement(2048) }, []);
@@ -297,9 +297,9 @@ public sealed class ScopedInstanceConfigurationTests
         var selected = Assert.Single(added.Resources, r => r.Origin == "Instance");
         var unselected = await resources.UpsertAsync(owner.InstanceId, added.InstanceRevision, null, null, "private.md", AgentDefinitionResourceKind.Knowledge, "text/markdown", Encoding.UTF8.GetBytes("Unselected private knowledge."));
         owner = await harness.ProposeSharedAsync(owner.InstanceId, unselected.InstanceRevision, "Explicitly promote selected instructions and knowledge.",
-            new Dictionary<string,IReadOnlyList<string>> { ["instructions"] = new[] { "systemInstructions" } }, [selected.Key]);
+            new Dictionary<string,IReadOnlyList<string>> { ["instructions"] = new[] { "agentInstructions" } }, [selected.Key]);
         var proposed = await harness.ReviewAsync(owner.InstanceId);
-        Assert.Equal("Selected reusable instructions.", proposed.Draft!.Candidate.SystemInstructions);
+        Assert.Equal("Selected reusable instructions.", proposed.Draft!.Candidate.AgentInstructions);
         Assert.NotEqual(2048, proposed.Draft.Candidate.ConversationPolicy!.MaxOutputTokens);
         var reviewedDraft = await services.GetRequiredService<AgentDefinitionLifecycleService>().UpdateDraftAsync(
             proposed.Draft.DraftId, proposed.Draft.Revision, HarnessLegacyFixture.WithoutRetiredSandboxTool(proposed.Draft.Candidate) with {
@@ -375,7 +375,7 @@ public sealed class ScopedInstanceConfigurationTests
             var generation = Guid.NewGuid();
             var claimed = await runs.ApplyAsync(owner, admitted.AgentRunId, new AgentRunCommand.Claim(admitted.Revision, now, generation, now.AddMinutes(1)));
             var call = new ModelToolCall("wait-frozen", "execution.wait", "{}");
-            var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])]), 7, 123, 400000, 200000);
+            var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])], executionState: new(TranscriptId: claimed.ResponseId)), 7, 123, 400000, 200000);
             var waiting = await runs.ApplyAsync(owner, claimed.AgentRunId, new AgentRunCommand.SuspendWait(claimed.Revision, now, generation, checkpoint,
                 new(call.Id, AgentRunWaitMode.Duration, [], AgentRunWaitUntil.All, now, now.AddMinutes(5))));
             instance = (await services.GetRequiredService<IAgentInstanceStore>().FindAsync(instance.InstanceId))!;

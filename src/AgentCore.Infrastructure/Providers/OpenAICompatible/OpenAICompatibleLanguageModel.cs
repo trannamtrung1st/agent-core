@@ -63,6 +63,12 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
         ModelRequest request,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (!Enum.IsDefined(_options.Transport) || request.Messages.Any(m => m.Role == ModelRole.Developer) && !_options.DeveloperRoleSupport)
+        {
+            yield return Fail(ProviderErrorCode.UnsupportedCapability,
+                "This model/transport has not declared support for separate system and developer roles; generation was not sent.");
+            yield break;
+        }
         if (_breaker.IsOpen)
         {
             yield return Fail(ProviderErrorCode.Unavailable, "Language model circuit is open.", ProviderFailureReason.CircuitOpen);
@@ -542,6 +548,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
         var role = message.Role switch
         {
             ModelRole.System => "system",
+            ModelRole.Developer => "developer",
             ModelRole.Assistant => "assistant",
             _ => "user"
         };

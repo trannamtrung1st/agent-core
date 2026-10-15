@@ -196,7 +196,7 @@ test("Lifecycle and version changes preserve unsaved persona edits", async ({ pa
   for (const version of [1, 2]) {
     const created = version === 1
       ? await page.request.post("/api/v2/admin/definition-drafts", { headers,
-        data: { definitionId, candidate: { ...candidate, definitionId, systemInstructions: "Retention fixture" } } })
+        data: { definitionId, candidate: { ...candidate, definitionId, agentInstructions: "Retention fixture" } } })
       : await page.request.post("/api/v2/admin/definition-drafts/fork", { headers,
         data: { definitionId, sourceVersion: 1, sourceKind: "ForkDurable" } });
     expect(created.ok()).toBeTruthy();
@@ -283,8 +283,8 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await page.getByRole("button", { name: "View v1 (builtIn)", exact: true }).click();
   const details = page.getByRole("region", { name: "Version details", exact: true });
   await openDefinitionSettings(details);
-  await expect(details.getByLabel("System instructions", { exact: true })).toHaveAttribute("readonly", "");
-  const instructions = details.getByLabel("System instructions", { exact: true });
+  await expect(details.getByLabel("Agent instructions", { exact: true })).toHaveAttribute("readonly", "");
+  const instructions = details.getByLabel("Agent instructions", { exact: true });
   await instructions.focus();
   await expect(instructions).toBeFocused();
   await instructions.press("ControlOrMeta+A");
@@ -307,7 +307,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   await dialog.getByRole("button", { name: "Create draft", exact: true }).click();
   const editor = draftEditorSection(page);
   await openDefinitionSettings(editor);
-  await editor.getByLabel("System instructions", { exact: true }).fill("Follow the published inspection guide.");
+  await editor.getByLabel("Agent instructions", { exact: true }).fill("Follow the published inspection guide.");
   const longGoal = "Inspect the complete published configuration, including long identity values and goals, without truncation on a narrow screen. Keep the version immutable and preserve the current collection context.";
   await navigateAdmin(editor, "Profile");
   await editor.getByLabel("Goal 1", { exact: true }).fill(longGoal);
@@ -333,7 +333,7 @@ test("Version inspection creates no draft and the shared actions publish from Te
   expect((await publishedRow.boundingBox())!.height).toBeLessThan(60);
   await page.getByRole("button", { name: "View v1 (durable)", exact: true }).click();
   await openDefinitionSettings(details);
-  await expect(details.getByLabel("System instructions", { exact: true })).toHaveValue("Follow the published inspection guide.");
+  await expect(details.getByLabel("Agent instructions", { exact: true })).toHaveValue("Follow the published inspection guide.");
   await page.setViewportSize({ width: 390, height: 844 });
   await navigateAdmin(details, "Profile");
   const goal = details.getByLabel("Goal 1", { exact: true });
@@ -397,8 +397,8 @@ test("Collection navigation and version drawer preserve context and keyboard foc
   await trigger.press("Enter");
   const drawer = page.getByRole("dialog", { name: "Version details", exact: true });
   await openDefinitionSettings(drawer);
-  await expect(drawer.getByLabel("System instructions", { exact: true })).not.toBeDisabled();
-  await expect(drawer.getByLabel("System instructions", { exact: true })).toHaveAttribute("readonly", "");
+  await expect(drawer.getByLabel("Agent instructions", { exact: true })).not.toBeDisabled();
+  await expect(drawer.getByLabel("Agent instructions", { exact: true })).toHaveAttribute("readonly", "");
   expect(await page.evaluate(() => window.scrollY)).toBe(scroll);
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();

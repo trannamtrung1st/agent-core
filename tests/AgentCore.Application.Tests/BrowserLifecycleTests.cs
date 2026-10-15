@@ -156,7 +156,7 @@ public sealed class BrowserLifecycleTests
         var generation = Guid.NewGuid();
         run = await store.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, now, generation, now.AddMinutes(5)));
         var call = new ModelToolCall("nav-1", ToolCatalog.BrowserNavigate, "{\"url\":\"http://127.0.0.1:5091/\"}");
-        var payload = AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])]);
+        var payload = AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [call])], executionState: new(TranscriptId: run.Admission.ResponseId));
         run = await store.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, now, generation,
             new(payload, 1, 0, (int)ToolLimits.Overall.TotalMilliseconds), null));
         var hash = ToolActionHash.Compute(call.Name, JsonDocument.Parse(call.ArgumentsJson).RootElement);
@@ -183,7 +183,7 @@ public sealed class BrowserLifecycleTests
         var original = new ModelToolCall("original", ToolCatalog.BrowserClick, "{\"target\":{\"by\":\"role\",\"value\":\"button\",\"name\":\"el_aaaaaaaaaaaaaaaaaaaaaa\"}}");
         var hash = ToolActionHash.Compute(original.Name, JsonDocument.Parse(original.ArgumentsJson).RootElement);
         run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, now, generation,
-            new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [original])]), 1, 0, 180000), null));
+            new(AgentRunToolCallCheckpoint.Write([new(ModelRole.Assistant, "", ToolCalls: [original])], executionState: new(TranscriptId: run.Admission.ResponseId)), 1, 0, 180000), null));
         foreach (var disposition in new[] { AgentRunSideEffectDisposition.Prepared, AgentRunSideEffectDisposition.InFlight })
             run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.MarkSideEffect(run.Revision, now, generation, disposition, original.Id, hash));
         clock.Advance(TimeSpan.FromMinutes(6));
@@ -347,7 +347,7 @@ public sealed class BrowserLifecycleTests
 
     private static AgentDefinition BrowserDefinition() =>
         new(
-            1,
+            2,
             "general-assistant",
             11,
             new AgentIdentity("Test", "Role", "desc", "Tone"),

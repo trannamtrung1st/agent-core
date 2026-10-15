@@ -53,7 +53,7 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
         if (!recover) Assert.DoesNotContain(model.Requests.SelectMany(r => r.Messages).SelectMany(m => m.ToolCalls ?? []), c => c.Name == ToolCatalog.BrowserFind);
         Assert.Equal(recover ? 3 : 0, result.MalformedCalls);
         Assert.Equal(recover ? 1 : 0, result.BlockedCalls);
-        Assert.Contains(model.Requests.SelectMany(r => r.Messages), m => m.Role == ModelRole.System && m.Text.Contains("Trusted Core execution facts (current"));
+        Assert.Contains(model.Requests.SelectMany(r => r.Messages), m => m.Role == ModelRole.Developer && m.Text.Contains("Trusted Core execution facts (current"));
     }
 
     [Fact]
@@ -77,8 +77,8 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
         var result = await Trial(fixture, model, steer: true);
         Assert.False(result.DomVerified); Assert.Equal(0, fixture.AcceptedLogins);
         var final = model.Requests.Last();
-        var previous = Assert.Single(final.Messages, m => m.Role == ModelRole.System && m.Text.StartsWith("Trusted Core execution facts (previous"));
-        var current = Assert.Single(final.Messages, m => m.Role == ModelRole.System && m.Text.StartsWith("Trusted Core execution facts (current"));
+        var previous = Assert.Single(final.Messages, m => m.Role == ModelRole.Developer && m.Text.StartsWith("Trusted Core execution facts (previous"));
+        var current = Assert.Single(final.Messages, m => m.Role == ModelRole.Developer && m.Text.StartsWith("Trusted Core execution facts (current"));
         Assert.Contains("Cancelled", previous.Text); Assert.Contains("userSteer", previous.Text);
         Assert.Contains("browser.fill_credential", previous.Text); Assert.Contains("succeeded", previous.Text);
         Assert.Contains("\"loadedCapabilities\":[]", current.Text);
@@ -230,7 +230,7 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
             {
                 Assert.All(runs, run => Assert.Empty(run.ActiveSkillKeys));
                 Assert.DoesNotContain(recording.Calls, call => call.Name == ToolCatalog.SkillsLoad);
-                Assert.DoesNotContain(recording.Requests.SelectMany(r => r.Messages), PromptContextBuilder.IsActiveSkillSystem);
+                Assert.DoesNotContain(recording.Requests.SelectMany(r => r.Context!.Sections), s => s.Id == AgentCore.Application.Context.ContextSectionId.Skills);
             }
             AgentRunToolCallCheckpoint.TryRead(runs.OrderByDescending(r => r.CreatedAtUtc).FirstOrDefault()?.Checkpoint, out var durable);
             var receipts = (durable ?? recording.Requests.SelectMany(r => r.Messages).ToArray()).Where(m => m.Role == ModelRole.Tool).DistinctBy(m => m.ToolCallId).ToArray();
@@ -284,7 +284,7 @@ public sealed class BrowserModelCompatibilityTests(ITestOutputHelper output)
         {
             await Task.Yield();
             var step = _step++;
-            var environment = Assert.Single(request.Messages, m => m.Role == ModelRole.System && m.Text.StartsWith(PromptContextBuilder.ToolEnvironmentPrefix)).Text;
+            var environment = Assert.Single(request.Messages, m => m.Role == ModelRole.Developer && m.Text.StartsWith(PromptContextBuilder.ToolEnvironmentPrefix)).Text;
             if (step == 0)
             {
                 Assert.Contains("- browser.fill_credential: Fill an existing-account password input", environment);

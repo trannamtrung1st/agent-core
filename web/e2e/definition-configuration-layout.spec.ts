@@ -26,8 +26,8 @@ test('Definition configuration retains edits and navigation across shared sectio
   await navigateAdmin(page, 'Identity & goals');
   await editor.getByLabel('Definition name').fill('A long Definition name that must wrap without moving the configuration controls outside the viewport');
   await openDefinitionSettings(editor);
-  await expect(editor.getByRole('button', { name: 'Operating instructions', exact: true })).toHaveAttribute('aria-expanded', 'true');
-  await editor.getByLabel('System instructions').fill('Retain this instruction across every configuration view.');
+  await expect(editor.getByRole('button', { name: 'Agent instructions', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await editor.getByLabel('Agent instructions').fill('Retain this instruction across every configuration view.');
   await openDefinitionSettings(editor, 'Conversation');
   const questionSwitch = editor.getByRole('switch', { name: 'Ask one question at a time', exact: true });
   const initialQuestion = await questionSwitch.getAttribute('aria-checked');
@@ -69,7 +69,7 @@ test('Definition configuration retains edits and navigation across shared sectio
   await navigateAdmin(editor, 'Resources');
   await expect(editor.getByLabel('Resource logical path')).toHaveValue('references/retained-input.txt');
   await navigateAdmin(editor, 'Instructions');
-  await expect(editor.getByLabel('System instructions')).toHaveValue('Retain this instruction across every configuration view.');
+  await expect(editor.getByLabel('Agent instructions')).toHaveValue('Retain this instruction across every configuration view.');
   for (const width of [1440, 768, 767, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await openDefinitionSettings(editor, 'Conversation');
@@ -85,8 +85,8 @@ test('Definition configuration retains edits and navigation across shared sectio
       })).toBeLessThanOrEqual(1);
     }
     await openDefinitionSettings(editor);
-    await editor.getByLabel('System instructions').scrollIntoViewIfNeeded();
-    const instructions = await editor.getByLabel('System instructions').boundingBox();
+    await editor.getByLabel('Agent instructions').scrollIntoViewIfNeeded();
+    const instructions = await editor.getByLabel('Agent instructions').boundingBox();
     const instructionsSection = await editor.getByRole('region', { name: 'Instructions', exact: true }).boundingBox();
     expect(Math.abs(instructions!.width - instructionsSection!.width)).toBeLessThanOrEqual(1);
     if (width === 1440) expect(instructions!.width).toBeGreaterThan(768);

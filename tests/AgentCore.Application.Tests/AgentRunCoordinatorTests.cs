@@ -13,7 +13,7 @@ public sealed class AgentRunCoordinatorTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 8, 0, 0, 0, TimeSpan.Zero);
     private static readonly AgentRunOwner Owner = new(Guid.NewGuid(), Guid.NewGuid());
-    private static readonly AgentDefinition Definition = new(1, "general-assistant", 1,
+    private static readonly AgentDefinition Definition = new(2, "general-assistant", 1,
         new AgentIdentity("Alex", "Assistant", "Help", "Calm"), ["Help"], "Instructions",
         new BehaviorPolicy("acknowledgeThenContinue", true, true), new ConversationPolicy("concise", true, "en", 256),
         new InitiativePolicy(true, 8000, 30000, 1, ["longSilence"]), new VoiceConfiguration(false, "default", 1),

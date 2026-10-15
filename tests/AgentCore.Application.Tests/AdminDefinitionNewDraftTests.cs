@@ -33,11 +33,11 @@ public sealed class AdminDefinitionNewDraftTests
         Assert.Equal("primary-llm", draft.Candidate.ProviderPreferences.LanguageModel);
         Assert.Null(draft.Candidate.ProviderPreferences.SpeechRecognizer);
         Assert.Null(draft.Candidate.ProviderPreferences.SpeechSynthesizer);
-        Assert.DoesNotContain("OPENROUTER_API_KEY", draft.Candidate.SystemInstructions, StringComparison.Ordinal);
-        Assert.DoesNotContain("sk-", draft.Candidate.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("OPENROUTER_API_KEY", draft.Candidate.AgentInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("sk-", draft.Candidate.AgentInstructions, StringComparison.Ordinal);
 
         var reopened = await lifecycle.GetDraftAsync(draft.DraftId, CancellationToken.None);
-        Assert.Equal(draft.Candidate.SystemInstructions, reopened.Candidate.SystemInstructions);
+        Assert.Equal(draft.Candidate.AgentInstructions, reopened.Candidate.AgentInstructions);
         Assert.Equal(draft.Candidate.Identity, reopened.Candidate.Identity);
     }
 

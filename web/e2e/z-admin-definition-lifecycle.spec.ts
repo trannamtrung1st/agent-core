@@ -43,7 +43,7 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
 
   const draftEditor = await forkBuiltInV1Draft(page);
 
-  const instructions = draftEditor.getByLabel("System instructions");
+  const instructions = draftEditor.getByLabel("Agent instructions");
   const prior = (await instructions.inputValue()) || "";
   await instructions.fill(`${prior}\n${marker}`);
 
@@ -65,7 +65,7 @@ test("admin definition fork edit and publish durable version", async ({ page }) 
   const draftsList = definitionDraftsSection(page);
   await expect(draftsList.getByRole("region", { name: "Definition versions", exact: true })).toBeVisible({ timeout: 15_000 });
   const forkedEditor = await forkDurablePublicationDraft(page, Number(version));
-  await expect(forkedEditor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
+  await expect(forkedEditor.getByLabel("Agent instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
   });
 

@@ -1045,7 +1045,7 @@ public sealed class BrowserToolTests
 
     private static AgentDefinition BrowserDefinition() =>
         new(
-            1,
+            2,
             "general-assistant",
             11,
             new AgentIdentity("Test", "Role", "desc", "Tone"),

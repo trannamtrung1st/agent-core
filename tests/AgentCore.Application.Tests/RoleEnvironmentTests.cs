@@ -179,7 +179,7 @@ public sealed class RoleEnvironmentTests
     public async Task Model_text_does_not_grant_process()
     {
         var definition = await Load("customer-support");
-        Assert.Contains("never", definition.SystemInstructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("never", definition.AgentInstructions, StringComparison.OrdinalIgnoreCase);
         Assert.False(RolePermissions.AllowsTool(definition, "process"));
         Assert.False(RolePermissions.AllowsTool(definition, "shell"));
     }

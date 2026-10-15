@@ -13,38 +13,6 @@ internal static class AssistantResponseSchema
 
     public const string CompatibilityInstructionPrefix = "Infrastructure output format: ";
 
-    public static string CompatibilityInstruction(ModelResponseContract contract, bool responseFunction = false) =>
-        responseFunction ? ResponseFunctionInstruction(contract) : MarkerCompatibilityInstruction(contract);
-
-    private static string ResponseFunctionInstruction(ModelResponseContract contract) =>
-        CompatibilityInstructionPrefix
-        + "Call agent_core_respond for the terminal semantic response. "
-        + "Put rich content in blocks, speech in speech, and memory proposals in memory. "
-        + "Represent artifacts with a typed artifactReference block containing the returned artifactId. "
-        + "displayText is ordinary display text; never place compatibility control markers in displayText or ordinary output. "
-        + "Do not include hidden reasoning. "
-        + ResponseFunctionDescription(contract);
-
-    private static string MarkerCompatibilityInstruction(ModelResponseContract contract)
-    {
-        var speech = contract.SpeechWillBeUsed
-            ? "A spoken projection may be needed; omit [[speech:...]] when the display is natural to say aloud. "
-            : "Omit [[speech:...]] unless spoken wording must differ from the display. ";
-        var terminal = contract.RequireChatResponse
-            ? "This plain-text channel requires Complete or Continue with one chat.respond. "
-            : "This plain-text channel is Complete with one chat.respond. ";
-        return CompatibilityInstructionPrefix
-            + "write the visible answer as ordinary text. "
-            + speech
-            + "Optional custom speech uses [[speech:<spoken text>]] immediately before display text. "
-            + "Use [[speech:none]] when the answer must stay visual-only. "
-            + "Rich blocks: [[md:...]], [[attachment:<id>]], [[artifact:<id>]]. "
-            + ArtifactReferenceInstruction + " "
-            + "Do not include hidden reasoning. Do not emit JSON. "
-            + terminal
-            + "[[memory:...]] is best effort only. Do not claim that memory was saved. ";
-    }
-
     public const string ResponseFunctionName = "agent_core_respond";
 
     public const string ArtifactReferenceInstruction =

@@ -264,19 +264,20 @@ function DefinitionCandidateForm({
           ) : null}
           <Collapse key={page} defaultActiveKey={page ? [...(draftSettingGroups[page] ?? [])] : undefined} items={[
             {
-              key: "instructions", label: "Operating instructions", children: (
+              key: "instructions", label: "Agent instructions", children: (
                 <section className="admin-draft-form-section admin-settings-form admin-settings-instructions" aria-label="Instructions">
+                  <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Configures agent behavior at Runtime. Agent Core rules, permissions and approvals cannot be overridden.</Typography.Paragraph>
                   <label className="admin-draft-field">
-                    <Typography.Text>System instructions</Typography.Text>
+                    <Typography.Text>Agent instructions</Typography.Text>
                     <Input.TextArea
-                      aria-label="System instructions"
+                      aria-label="Agent instructions"
                       readOnly={readOnly}
                       rows={8}
-                      value={readString(candidate, ["systemInstructions"])}
+                      value={readString(candidate, ["agentInstructions"])}
                       disabled={busy}
                       className="admin-draft-instructions"
                       onChange={(event) =>
-                        onCandidateChange(writePath(candidate, ["systemInstructions"], event.target.value))
+                        onCandidateChange(writePath(candidate, ["agentInstructions"], event.target.value))
                       }
                     />
                   </label>

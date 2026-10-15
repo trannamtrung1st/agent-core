@@ -11,6 +11,8 @@ public enum ProtocolFailureDisposition
     Terminal
 }
 
+public enum ProtocolRepairKind { MissingDisplayText, InvalidBlocks }
+
 public static class ProtocolFailures
 {
     public const int MaxRepairDisplayCharacters = 64 * 1024;
@@ -32,6 +34,21 @@ public static class ProtocolFailures
         ProviderFailureReason.SpeechOmitted or ProviderFailureReason.SpeechMalformed => ProtocolFailureDisposition.Normalize,
         ProviderFailureReason.MissingDisplayText or ProviderFailureReason.InvalidBlocks => ProtocolFailureDisposition.Repairable,
         _ => ProtocolFailureDisposition.Terminal
+    };
+
+    public static ProtocolRepairKind? RepairKind(string? reason) => reason switch
+    {
+        null => null,
+        ProviderFailureReason.MissingDisplayText => ProtocolRepairKind.MissingDisplayText,
+        ProviderFailureReason.InvalidBlocks => ProtocolRepairKind.InvalidBlocks,
+        _ => throw new ArgumentException("Unsupported protocol repair reason.")
+    };
+    public static string? RepairReason(ProtocolRepairKind? kind) => kind switch
+    {
+        null => null,
+        ProtocolRepairKind.MissingDisplayText => ProviderFailureReason.MissingDisplayText,
+        ProtocolRepairKind.InvalidBlocks => ProviderFailureReason.InvalidBlocks,
+        _ => throw new ArgumentException("Unsupported protocol repair kind.")
     };
 
     public static string? RepairInstruction(string? reason) => reason switch

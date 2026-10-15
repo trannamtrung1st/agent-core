@@ -15,7 +15,7 @@ public sealed record ProviderFailure(
     string? FailureReason = null,
     string? ResponseChannel = null);
 
-public enum ModelRole { System, User, Assistant, Tool }
+public enum ModelRole { System, User, Assistant, Tool, Developer }
 
 public enum ModelStopReason { Completed, LengthLimit, ContentFiltered, ToolCalls }
 
@@ -30,13 +30,15 @@ public sealed record ModelToolCall(string Id, string Name, string ArgumentsJson,
 
 public sealed record ModelToolDefinition(string Name, string Description, string ParametersJson);
 
+public enum EvidenceMessageKind { Historical, CurrentTask, ToolInteraction }
+
 public sealed record ModelMessage(
     ModelRole Role,
     string Text,
     IReadOnlyList<ModelContentPart>? Parts = null,
     string? ToolCallId = null,
     string? Name = null,
-    IReadOnlyList<ModelToolCall>? ToolCalls = null);
+    IReadOnlyList<ModelToolCall>? ToolCalls = null, EvidenceMessageKind? EvidenceKind = null);
 
 public sealed record ModelCapabilities(
     bool StreamingText,
@@ -67,7 +69,10 @@ public sealed record ModelRequest(
     string? ReasoningEffort = null,
     ModelResponseContract? ResponseContract = null,
     ModelToolChoice ToolChoice = ModelToolChoice.Auto,
-    string? ToolChoiceName = null);
+    string? ToolChoiceName = null,
+    AgentCore.Application.Context.EffectiveContextSnapshot? Context = null,
+    IReadOnlyList<ModelMessage>? Interaction = null,
+    AgentCore.Application.Context.ContextManifest? ContextManifest = null);
 
 public abstract record ModelGenerationEvent;
 
@@ -138,6 +143,9 @@ public sealed record ModelFailed(ProviderFailure Failure, Guid? DiagnosticId = n
 public interface ILanguageModel
 {
     ModelCapabilities Capabilities { get; }
+
+    /// <summary>Expose selected platform output context before recording its redacted manifest.</summary>
+    ModelRequest PrepareRequest(ModelRequest request) => request;
 
     IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
         ModelRequest request,

@@ -54,7 +54,7 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
                 .Concat(manifest.Where(r => r.Key.StartsWith("instance:", StringComparison.Ordinal) && r.Kind == AgentDefinitionResourceKind.Knowledge)
                     .Select(r => new KnowledgeSourceRef(r.Key, r.LogicalPath, r.VirtualPath, r.LogicalPath))).ToArray();
             effective = effective with { Environment = environment with { KnowledgeSources = knowledge } };
-            return new(new(effective, owner.Revision, owner.PersonaRevision, manifest, bindings), owner.Persona,
+            return new(new(effective, owner.Revision, owner.PersonaRevision, manifest, bindings, InstanceSettingsResolver.Sources(baseline, owner.SettingsOverrides, owner.Revision, owner.PersonaRevision)), owner.Persona,
                 EffectiveSkillCatalogResolver.Resolve(effective, skillState), owner.ExecutionBudgets);
         }
         throw AgentCoreErrors.Conflict("Instance changed while resolving configuration. Retry admission.");

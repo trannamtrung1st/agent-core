@@ -228,7 +228,7 @@ public sealed class WorkspaceStructureTests
         Assert.False(Directory.Exists(sessionRoot));
     }
 
-    private static readonly AgentDefinition Definition = new(1,"examiner",1,new AgentIdentity("Alex","Examiner","Practice.","Calm"),["Practice"],"Instructions",new BehaviorPolicy("acknowledgeThenContinue",true,true),new ConversationPolicy("concise",true,"en",256),new InitiativePolicy(true,8000,30000,1,["longSilence"]),new VoiceConfiguration(true,"default",1),new ProviderPreferences("primary-llm","primary-stt","primary-tts"),new Dictionary<string,string>());
+    private static readonly AgentDefinition Definition = new(2,"examiner",1,new AgentIdentity("Alex","Examiner","Practice.","Calm"),["Practice"],"Instructions",new BehaviorPolicy("acknowledgeThenContinue",true,true),new ConversationPolicy("concise",true,"en",256),new InitiativePolicy(true,8000,30000,1,["longSilence"]),new VoiceConfiguration(true,"default",1),new ProviderPreferences("primary-llm","primary-stt","primary-tts"),new Dictionary<string,string>());
     private sealed class Fixture : IDisposable
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(),"workspace-structure-tests",Guid.NewGuid().ToString("N"));

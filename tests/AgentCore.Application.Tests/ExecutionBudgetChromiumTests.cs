@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -46,15 +47,15 @@ public sealed partial class TerminalDisplayRepairTests
             var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime));
             Assert.Equal(AgentRunStatus.Completed, run.Status);
             Assert.True(model.AssetObserved); Assert.Equal(grantHover, model.SignOutVerified);
-            Assert.Contains(RunFinalization.CleanupMarker, run.Checkpoint!.PayloadJson);
-            Assert.Contains("closed", run.Checkpoint.PayloadJson);
+            Assert.NotNull(AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).CleanupStartedAtMessage);
+            Assert.Contains("closed", run.Checkpoint!.PayloadJson);
             Assert.True(run.Checkpoint.StepCount <= 48);
             var diagnostic = RunBudgetDiagnosticProjection.From(run)!;
             Assert.True(diagnostic.ClosureConfirmed); Assert.False(diagnostic.LogoutVerified);
             Assert.True(diagnostic.LogoutRequested); Assert.True(diagnostic.ClosureRequested);
             Assert.Equal("partial", diagnostic.CleanupStatus);
-            Assert.True(Encoding.UTF8.GetByteCount(run.Checkpoint.PayloadJson) + 8192 < AgentRunLimits.MaxCheckpointBytes);
-            Assert.DoesNotContain("synthetic-budget-password", run.Checkpoint.PayloadJson);
+            Assert.True(Encoding.UTF8.GetByteCount(run.Checkpoint!.PayloadJson) + 8192 < AgentRunLimits.MaxCheckpointBytes);
+            Assert.DoesNotContain("synthetic-budget-password", run.Checkpoint!.PayloadJson);
             Assert.DoesNotContain("synthetic-budget-password", string.Join('\n', model.Requests.SelectMany(r => r.Messages).Select(m => m.Text)));
             Assert.DoesNotContain(model.Requests.SelectMany(r => r.Messages).SelectMany(m => m.ToolCalls ?? []), c => c.ArgumentsJson.Contains("synthetic-budget-password"));
             Assert.DoesNotContain(model.Requests.Last().Tools ?? [], t => t.Name == ToolCatalog.BrowserType);
@@ -99,7 +100,7 @@ public sealed partial class TerminalDisplayRepairTests
                 36 => (ToolCatalog.BrowserClose, new { }),
                 _ => ("", new { })
             };
-            if (step >= 36) Assert.Contains(request.Messages, m => m.Text == RunFinalization.CleanupMarker);
+            if (step >= 36) Assert.Contains(request.Context!.Sections, section => section.Id == ContextSectionId.CoreCleanup);
             if (action.Tool.Length == 0)
             {
                 yield return new ModelSemanticResponseReady(new(grantHover ? "Inspected Attribute, Table and Media. Sign-out verified independently. Browser closure recorded." : "Inspected Attribute, Table and Media. Sign-out unverified: account hover is not authorized. Browser closure recorded.", new(ModelSpeechMode.Same, null), []));

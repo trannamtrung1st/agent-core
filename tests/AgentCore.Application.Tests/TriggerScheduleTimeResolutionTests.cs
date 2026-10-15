@@ -100,19 +100,20 @@ public sealed class TriggerScheduleTimeResolutionTests
             null,
             new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, "schedule"),
             UtcNow: Now);
-        var text = PromptContextBuilder.BuildSchedulingContextSystem(context);
+        var text = PromptContextBuilder.BuildSchedulingContext(context);
         Assert.NotNull(text);
         Assert.Contains("currentUtc=2026-09-23T17:17:00.0000000+00:00", text, StringComparison.Ordinal);
-        Assert.Contains("relativeDelaySeconds", text, StringComparison.Ordinal);
-        Assert.Contains("confirmation_required", text, StringComparison.Ordinal);
-        Assert.Contains("runs its configured Instructions", text, StringComparison.Ordinal);
-        Assert.Contains("does not pre-authorize its future actions", text, StringComparison.Ordinal);
-        Assert.Contains("currently authorized and eligible", text, StringComparison.Ordinal);
-        Assert.Contains("exact-action approvals still apply", text, StringComparison.Ordinal);
-        Assert.Contains("reminder-style Instructions when the user asks for a reminder", text, StringComparison.Ordinal);
-        Assert.Contains("action-oriented Instructions that preserve the requested work", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("deliver reminder text", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("not perform the action each time", text, StringComparison.Ordinal);
+        var request = new PromptContextBuilder().Build(context, Guid.NewGuid());
+        var clock = Assert.Single(request.Context!.Sections, section => section.Id == AgentCore.Application.Context.ContextSectionId.Scheduling);
+        Assert.Equal(ModelRole.Developer, clock.Message.Role);
+        Assert.Contains("currentUtc=2026-09-23T17:17:00.0000000+00:00", clock.Message.Text);
+        var rules = Assert.Single(request.Context.Sections, section => section.Id == AgentCore.Application.Context.ContextSectionId.CoreScheduling);
+        Assert.Equal(ModelRole.System, rules.Message.Role);
+        Assert.Contains("relativeDelaySeconds", rules.Message.Text);
+        Assert.Contains("confirmation_required", rules.Message.Text);
+        Assert.Contains("never pre-authorize future actions", rules.Message.Text);
+        Assert.DoesNotContain("relativeDelaySeconds", text);
+
     }
 
     [Fact]

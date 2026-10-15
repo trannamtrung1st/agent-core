@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
@@ -79,7 +80,7 @@ public sealed class CompletionEvaluatorTests
                 new SessionPurpose(SessionPurposeKind.Goal, "Collect a name"),
                 new SessionCompletionPolicy(AgentCompletionAuthority.Advisory, true, true)),
             now);
-        var system = request.Messages.First(message => message.Role == ModelRole.System).Text;
+        var system = request.Context!.Text(ContextSectionId.CoreCompletion);
         Assert.Contains(CompletionEvaluator.Marker, system, StringComparison.Ordinal);
         Assert.Contains("requestComplete", system, StringComparison.Ordinal);
         Assert.DoesNotContain("[[speech:", system, StringComparison.Ordinal);

@@ -35,9 +35,9 @@ public sealed class SecretaryIdentityTests
         var assistant = await LoadGeneralAssistantAsync(12);
         Assert.Equal("Morgan", secretary.Identity.Name);
         Assert.Equal("Secretary", secretary.Identity.Role);
-        Assert.Contains("Loading a skill does not grant", secretary.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("not completion", secretary.SystemInstructions, StringComparison.Ordinal);
-        Assert.Contains("Refuse passwords", secretary.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("Loading a skill does not grant", secretary.AgentInstructions, StringComparison.Ordinal);
+        Assert.Contains("not completion", secretary.AgentInstructions, StringComparison.Ordinal);
+        Assert.Contains("Refuse passwords", secretary.AgentInstructions, StringComparison.Ordinal);
         Assert.True(secretary.MemoryPolicy?.SessionMemory);
         Assert.True(secretary.MemoryPolicy?.IdentityUserPromotion);
         Assert.True(secretary.MemoryPolicy?.IdentityUserRetrieval);

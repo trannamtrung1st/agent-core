@@ -58,7 +58,7 @@ test("admin resource publish managed chat exposes publication under agent", asyn
   await definitions.getByRole("link", { name: /examiner/i }).first().click();
   const draftEditor = await forkBuiltInV1Draft(page);
 
-  await draftEditor.getByLabel("System instructions").fill(instructionMarker);
+  await draftEditor.getByLabel("Agent instructions").fill(instructionMarker);
 
   await navigateAdmin(draftEditor, "Capabilities");
   const harnessLabel = `e2e-harness-${Date.now()}`;

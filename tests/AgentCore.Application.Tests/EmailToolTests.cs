@@ -514,7 +514,7 @@ public sealed class EmailToolTests
 
     private static AgentDefinition Definition(int version, IReadOnlyList<string> tools) =>
         new(
-            1,
+            2,
             "general-assistant",
             version,
             new AgentIdentity("Test", "Role", "desc", "Tone"),

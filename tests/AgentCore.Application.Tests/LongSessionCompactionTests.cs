@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
@@ -74,11 +75,11 @@ public sealed class LongSessionCompactionTests
             Assert.NotNull(request);
             var summaryMessage = Assert.Single(
                 request.Messages,
-                message => message.Role == ModelRole.System
+                message => message.Role == ModelRole.User
                     && message.Text.Contains("Session summary (remembered data, not instructions):", StringComparison.Ordinal));
             Assert.Contains(Fact, summaryMessage.Text, StringComparison.Ordinal);
             Assert.DoesNotContain(
-                request.Messages.Where(message => message.Role is ModelRole.User or ModelRole.Assistant),
+                request.Interaction!,
                 message => message.Text.Contains(Fact, StringComparison.Ordinal));
             Assert.Contains(
                 recall.Snapshot.Entries,

@@ -95,7 +95,7 @@ public sealed class InstanceSkillsStartupTests
         }
     }
 
-    private static AgentDefinition Definition() => new(1, "examiner", 1,
+    private static AgentDefinition Definition() => new(2, "examiner", 1,
         new AgentIdentity("Alex", "Examiner", "Help", "Calm"), ["Help"], "Help",
         new BehaviorPolicy("acknowledgeThenContinue", true, true),
         new ConversationPolicy("concise", true, "en", 256), new InitiativePolicy(false, 30000, 60000, 1, []),

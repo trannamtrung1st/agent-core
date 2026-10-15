@@ -2,13 +2,14 @@ using System.Text.Json.Serialization;
 
 namespace AgentCore.Domain.Definitions;
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record AgentDefinition(
     int SchemaVersion,
     string Id,
     int Version,
     AgentIdentity Identity,
     IReadOnlyList<string> Goals,
-    string SystemInstructions,
+    string AgentInstructions,
     BehaviorPolicy BehaviorPolicy,
     ConversationPolicy ConversationPolicy,
     InitiativePolicy InitiativePolicy,

@@ -9,7 +9,7 @@ internal static class IdentityMaintenanceScript
 {
     internal static IReadOnlyList<ModelGenerationEvent>? Generate(ModelRequest request)
     {
-        var prompt = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
+        var prompt = SyntheticTaskContext.Text(request);
         if (!prompt.Contains("synthetic-maintain-", StringComparison.Ordinal)) return null;
         var automation = request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal));
         bool Offers(string name) => request.Tools?.Any(t => t.Name == name) == true;

@@ -69,6 +69,8 @@ public sealed record AgentContext(
     public AgentIdentity EffectiveIdentity => Persona ?? Definition.Identity;
 
     public string? EffectiveSpeechLocale { get; init; }
+    public AgentRunConfiguration? Configuration { get; init; }
+    public AgentRunTaskIntent? RunTaskIntent { get; init; }
 }
 
 public abstract record AgentDecision;

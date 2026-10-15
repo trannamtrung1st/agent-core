@@ -108,7 +108,7 @@ public sealed class BackgroundOccurrenceIntake(
             var run = AgentRun.Create(ids.NewId(), new(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
                 new(activation, target.Definition.Id, target.Definition.Version, target.PinnedPersona ?? target.Definition.Identity,
                     ids.NewId(), AgentRunOutputContract.ConversationResponse,
-                    ExecutionBudgetResolver.Resolve(definition, resolved?.InstanceBudgets ?? instance.ExecutionBudgets, false), configuration),
+                    ExecutionBudgetResolver.Resolve(definition, resolved?.InstanceBudgets ?? instance.ExecutionBudgets, false), configuration, taskIntent: RunTaskIntents.FromOccurrence(occurrence)),
                 new(selected.CatalogKey, selected.ProviderAlias, selected.ModelId, selected.ReasoningEffort),
                 AgentRunLimits.DefaultMaxAttempts, time.GetUtcNow(), catalog,
                 catalog.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());

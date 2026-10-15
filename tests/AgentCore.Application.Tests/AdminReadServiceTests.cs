@@ -124,7 +124,7 @@ public sealed class AdminReadServiceTests
 
     private static AgentDefinition Sample(string id, int version, string name) =>
         new(
-            1,
+            2,
             id,
             version,
             new AgentIdentity(name, "role", "desc", "tone"),

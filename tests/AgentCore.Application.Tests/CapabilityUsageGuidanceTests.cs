@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Ports;
@@ -17,13 +18,13 @@ public sealed class CapabilityUsageGuidanceTests
         var builder = new PromptContextBuilder(ToolConfigurationGates.AllowAll);
         var request = builder.Build(context, Guid.NewGuid());
         var tools = builder.OfferTools(definition, context);
-        var messages = PromptContextBuilder.WithToolEnvironmentSystem(request.Messages, context, tools,
+        var messages = PromptContextBuilder.WithToolEnvironment(request.Context!, context, tools,
             ToolConfigurationGates.AllowAll, [ToolRegistry.Get(ToolCatalog.WorkspaceWrite).ModelDefinition]);
-        var environment = Assert.Single(messages, m => m.Text.StartsWith(PromptContextBuilder.ToolEnvironmentPrefix)).Text;
+        var environment = messages.Text(ContextSectionId.Capabilities);
         Assert.Contains("- workspace.write:", environment);
         Assert.DoesNotContain(ToolCatalog.BrowserFillCredential, environment);
-        var finalizing = PromptContextBuilder.WithToolEnvironmentSystem(messages, context, [], ToolConfigurationGates.AllowAll);
-        Assert.DoesNotContain(finalizing, m => m.Text.Contains(CapabilityUsageGuidance.CatalogPrefix));
+        var finalizing = PromptContextBuilder.WithToolEnvironment(messages, context, [], ToolConfigurationGates.AllowAll);
+        Assert.DoesNotContain(CapabilityUsageGuidance.CatalogPrefix, finalizing.Text(ContextSectionId.Capabilities));
     }
 
     [Fact]
@@ -48,7 +49,7 @@ public sealed class CapabilityUsageGuidanceTests
         Assert.DoesNotContain("\"properties\"", environment);
         Assert.DoesNotContain(builder.OfferTools(definition, context), t => t.Name == ToolCatalog.BrowserFillCredential);
         var loaded = context with { LoadedCapabilityIds = [ToolCatalog.BrowserFillCredential] };
-        var updated = builder.BuildSections(loaded).EnvironmentSystem;
+        var updated = builder.BuildContext(loaded).Text(ContextSectionId.Capabilities);
         Assert.Contains("Tools offered now (schemas attached):", updated);
         Assert.Contains(ToolCatalog.BrowserFillCredential, updated);
         Assert.DoesNotContain("- browser.fill_credential:", updated);
@@ -62,13 +63,13 @@ public sealed class CapabilityUsageGuidanceTests
         var definition = await CapabilityProjectionTests.Definition(ToolCatalog.CapabilitiesLoad,
             ToolCatalog.WorkspaceRead, ToolCatalog.BrowserFillCredential);
         var context = CapabilityProjectionTests.Context(definition) with { AgentInstanceId = Guid.NewGuid() };
-        var unavailable = new PromptContextBuilder().BuildSections(context).EnvironmentSystem;
+        var unavailable = new PromptContextBuilder().BuildContext(context).Text(ContextSectionId.Capabilities);
         Assert.Contains("- workspace.read:", unavailable);
         Assert.DoesNotContain(ToolCatalog.BrowserFillCredential, unavailable);
         Assert.DoesNotContain(ToolCatalog.EmailSend, unavailable);
         var detached = context with { DetachedExecution = true, Trigger = new(Guid.NewGuid(), TriggerKind.ScheduledOccurrence, null) };
-        Assert.DoesNotContain(ToolCatalog.BrowserFillCredential, new PromptContextBuilder(ToolConfigurationGates.AllowAll).BuildSections(detached).EnvironmentSystem);
-        var toolLess = new PromptContextBuilder(ToolConfigurationGates.AllowAll).BuildSections(context with { ModelSupportsTools = false }).EnvironmentSystem;
+        Assert.DoesNotContain(ToolCatalog.BrowserFillCredential, new PromptContextBuilder(ToolConfigurationGates.AllowAll).BuildContext(detached).Text(ContextSectionId.Capabilities));
+        var toolLess = new PromptContextBuilder(ToolConfigurationGates.AllowAll).BuildContext(context with { ModelSupportsTools = false }).Text(ContextSectionId.Capabilities);
         Assert.Contains("Tools offered now (schemas attached): (none).", toolLess);
         Assert.DoesNotContain(CapabilityUsageGuidance.CatalogPrefix, toolLess);
     }

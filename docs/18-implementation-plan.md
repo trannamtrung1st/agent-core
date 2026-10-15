@@ -1,5 +1,11 @@
 # Implementation Plan
 
+## Three-layer context cutover (owner-authorized 2026-10-15)
+
+The requested clean replacement covers one typed assembler, separate Core/system and Runtime/developer roles, bounded Evidence, per-field Run provenance, versioned interaction-only checkpoints, the breaking schema-2 `agentInstructions` cutover, explicit backup/transactional maintenance and existing Admin provenance/instruction surfaces. No parallel legacy builder/alias/resume translator is retained. Existing tool/approval/session/provider boundaries and historical milestone freezes remain unchanged.
+
+AC-01–AC-17 are locally verified through focused producer/role/source/injection tests, both provider transports, durable resume/migration/hash/security regressions, Synthetic Admin journeys at 320/390/768/desktop and canonical-doc consistency. [Verification and the producer inventory](reports/three-layer-context-cutover-verification-2026-10-15.md) own exact results and the offline conversion/deployment procedure. No user database conversion or deployment was performed; CI and live-provider qualification remain opt-in. Historical milestone acceptance is unchanged.
+
 ## Verification policy for current work
 
 Complete ordinary requests within their scope using focused local checks; they do not start milestone closure or require full backend/frontend/browser/Compose suites. Broaden local verification only for affected boundaries, failures or explicitly requested milestone acceptance. [Testing Strategy](16-testing-strategy.md#verification-scope-and-optional-ci) owns the current policy.
@@ -440,7 +446,7 @@ General Assistant exit for this closure:
 
 ## Handoff rule
 
-Implementation begins with Milestone 1 in a separate task. Native realtime is not an implementation milestone, prerequisite or runtime branch anywhere in this MVP plan. If a provider cannot meet a capability, implement the specified degraded policy and report its measured trade-off; do not quietly change the architecture. Each implementation milestone should update run/test instructions to actual commands as its artifacts are introduced. Apply the [hosted-provider verification policy](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in): default tests stay Synthetic/offline; OpenRouter opt-in adapter smoke may use `openrouter/free`; the Real/demo catalog default is the shipped fixed model ID `deepseek/deepseek-v4.1-flash`, and the same catalog also offers `openai/gpt-6-luna`, `anthropic/claude-haiku-5.5`, `openai/gpt-6.1-sol`, and experimental `openrouter/free` as session choices; OpenAI speech live checks may wait for `OPENAI_API_KEY`. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`).
+Implementation begins with Milestone 1 in a separate task. Native realtime is not an implementation milestone, prerequisite or runtime branch anywhere in this MVP plan. If a provider cannot meet a capability, implement the specified degraded policy and report its measured trade-off; do not quietly change the architecture. Each implementation milestone should update run/test instructions to actual commands as its artifacts are introduced. Apply the [hosted-provider verification policy](10-technology-decisions.md#decision-default-verification-is-offline-live-providers-are-explicit-opt-in): default tests stay Synthetic/offline; OpenRouter opt-in adapter smoke may use `openrouter/free`; the Real/demo catalog default is the shipped fixed model ID `deepseek/deepseek-v4.1-flash`, and the same catalog offers fixed `openai/gpt-6-luna`, `anthropic/claude-haiku-5.5` and `openai/gpt-6.1-sol` choices; `openrouter/free` is ineligible for three-layer execution; OpenAI speech live checks may wait for `OPENAI_API_KEY`. Intended repository CI is GitHub Actions (`.github/workflows/synthetic.yml`).
 
 ## P9.7 — Agent-assisted / self-managed harness authoring
 

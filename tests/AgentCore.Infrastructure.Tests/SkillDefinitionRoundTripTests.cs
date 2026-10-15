@@ -175,7 +175,7 @@ public sealed class SkillDefinitionRoundTripTests
 
     private static AgentDefinitionCandidate Candidate(IReadOnlyList<SkillSpec> skills) =>
         new(
-            1,
+            2,
             "skill-guide",
             new AgentIdentity("Sam", "Guide", "Helps with demos.", "Calm"),
             ["Help the user"],
@@ -190,7 +190,7 @@ public sealed class SkillDefinitionRoundTripTests
 
     private static AgentDefinition Definition() =>
         new(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "role", "desc", "tone"),

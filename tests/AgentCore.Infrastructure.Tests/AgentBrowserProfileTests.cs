@@ -80,7 +80,7 @@ public sealed class AgentBrowserProfileTests
 
     private static AgentDefinition BrowserDefinition() =>
         new(
-            1,
+            2,
             "secretary",
             1,
             new AgentIdentity("Morgan", "Secretary", "desc", "Tone"),

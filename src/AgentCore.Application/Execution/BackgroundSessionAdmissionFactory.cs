@@ -20,7 +20,7 @@ public static class BackgroundSessionAdmissionFactory
         var model = currentModel ?? source.PinnedModel;
         var skills = resolved?.Skills ?? source.PinnedSkillCatalog;
         var run = AgentRun.Create(runId, source.Owner, new(activation, configuration.Definition.Id, configuration.Definition.Version,
-            persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration), model, AgentRunLimits.DefaultMaxAttempts, now,
+            persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration, taskIntent: new(objective, AgentRunTaskSource.AgentRun, source.AgentRunId.ToString("D"))), model, AgentRunLimits.DefaultMaxAttempts, now,
             skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var origin = new SessionOrigin(SessionOriginKind.ImmediateBackground, parent.SessionId, source.AgentRunId,
             runId, reportCompletionToOrigin: reportCompletion,
@@ -43,7 +43,7 @@ public static class BackgroundSessionAdmissionFactory
         var entry = new ConversationEntry(entryId, 1, activationId, ConversationRole.User, objective, null, EntryStatus.Completed, SessionMode.Text, 0, objective.Length, now);
         var activation = new Activation(activationId, sessionId, ActivationKind.ManualBackground, [entryId], activationId, null, null, null, key, now);
         var run = AgentRun.Create(runId, new(instance.InstanceId, profileId), new(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome,
-                ExecutionBudgetResolver.Resolve(definition, instance.ExecutionBudgets, false), configuration ?? new(definition, 0, instance.PersonaRevision, [])),
+                ExecutionBudgetResolver.Resolve(definition, instance.ExecutionBudgets, false), configuration ?? new(definition, 0, instance.PersonaRevision, []), taskIntent: new(objective, AgentRunTaskSource.AgentRun, instance.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture))),
             model, AgentRunLimits.DefaultMaxAttempts, now, skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
         var session = new SessionSnapshot(1, sessionId, 1, definition, SessionMode.Text, null, SessionStatus.Created, [entry], "", 0, null,
             profileId, now, now, instance.InstanceId, Title: title, LastEntrySequence: 1, PinnedPersona: persona,
@@ -77,7 +77,7 @@ public static class BackgroundSessionAdmissionFactory
             occurrence.OccurrenceId, null, null, occurrence.DedupeKey, admittedAtUtc, occurrence.EvidenceJson);
         var run = AgentRun.Create(agentRunId,
             new AgentRunOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
-            new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration ?? new(definition, 0, personaRevision, [])),
+            new AgentRunAdmission(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome, budget, configuration ?? new(definition, 0, personaRevision, []), taskIntent: RunTaskIntents.FromOccurrence(occurrence)),
             new AgentRunModelPin(model.CatalogKey, model.ProviderAlias, model.ModelId, model.ReasoningEffort),
             AgentRunLimits.DefaultMaxAttempts, admittedAtUtc, pinnedSkillCatalog: skills,
             activeSkillKeys: skills.Where(skill => skill.Projection == SkillProjection.Always)

@@ -91,7 +91,7 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
             || effective.ProviderPreferences.SpeechRecognizer is { } stt && !aliases.SpeechRecognizers.Contains(stt)
             || effective.ProviderPreferences.SpeechSynthesizer is { } tts && !aliases.SpeechSynthesizers.Contains(tts)))
             throw AgentCoreErrors.Validation("Provider alias is not configured on this host.");
-        DefinitionResourcePolicies.RejectSecretTokens(effective.SystemInstructions);
+        DefinitionResourcePolicies.RejectSecretTokens(effective.AgentInstructions);
         return (next, effective);
     }
 

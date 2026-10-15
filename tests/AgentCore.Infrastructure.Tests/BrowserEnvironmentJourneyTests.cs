@@ -32,7 +32,7 @@ public sealed class BrowserEnvironmentJourneyTests
         await browser.StartAsync(CancellationToken.None);
         var gate = new ToolConfigurationGate(null, null, null, browser, enabled);
         var executor = new SessionToolExecutor(browser: browser, configurationGate: gate);
-        var definition = new AgentDefinition(1, "inspection", 1, new("Inspection", "Role", "Description", "Tone"), [], "instructions",
+        var definition = new AgentDefinition(2, "inspection", 1, new("Inspection", "Role", "Description", "Tone"), [], "instructions",
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048),
             new(false, 60_000, 120_000, 1, ["longSilence"], 0), new(false, "default", 1),
             new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),

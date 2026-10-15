@@ -313,7 +313,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
 
     private static AgentDefinitionCandidate SampleCandidate(string definitionId, string? workspaceTemplateId = null) =>
         new(
-            1,
+            2,
             definitionId,
             new AgentIdentity("Demo", "Guide", "Helps with demos.", "Calm"),
             ["Help the user"],

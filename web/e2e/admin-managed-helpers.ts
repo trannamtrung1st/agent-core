@@ -66,7 +66,7 @@ async function reopenExaminerDraftByMarker(page: Page, marker: string) {
   await draftsList.getByRole("link", { name: /Draft rev .*ForkBuiltIn/ }).first().click();
   const editor = draftEditorSection(page);
   await openDefinitionSettings(editor);
-  await expect(editor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
+  await expect(editor.getByLabel("Agent instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
   });
   return editor;
@@ -91,7 +91,7 @@ export async function publishExaminerP7gFirstPublication(page: Page) {
   const forkBody = (await forkResponse.json()) as { draftId: string };
 
   const marker = `p7g-whole-${Date.now()}`;
-  await draftEditor.getByLabel("System instructions").fill(marker);
+  await draftEditor.getByLabel("Agent instructions").fill(marker);
 
   await navigateAdmin(draftEditor, "Capabilities");
   const harnessLabel = `p7g-harness-${Date.now()}`;
@@ -178,7 +178,7 @@ export async function publishExaminerDraftAndCreateManagedInstance(page: Page) {
 
   const draftEditor = await forkBuiltInV1Draft(page);
   const marker = `p7d-managed-${Date.now()}`;
-  await draftEditor.getByLabel("System instructions").fill(marker);
+  await draftEditor.getByLabel("Agent instructions").fill(marker);
   await draftEditor.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible({ timeout: 15_000 });
 
@@ -259,14 +259,14 @@ export async function openExaminerDefinitionDrafts(page: Page) {
 export async function publishExaminerForkedVersion(page: Page, forkFromVersion: number): Promise<number> {
   await openExaminerDefinitionDrafts(page);
   let draftEditor = await forkDurablePublicationDraft(page, forkFromVersion);
-  const instructions = draftEditor.getByLabel("System instructions");
+  const instructions = draftEditor.getByLabel("Agent instructions");
   const marker = `p7g-next-${Date.now()}`;
   const prior = (await instructions.inputValue()) || "";
   await instructions.fill(`${prior}\n${marker}`);
   await ensureToolAllowlisted(page, draftEditor, "knowledge.retrieve");
   draftEditor = draftEditorSection(page);
   await openDefinitionSettings(draftEditor);
-  await expect(draftEditor.getByLabel("System instructions")).toHaveValue(new RegExp(marker), {
+  await expect(draftEditor.getByLabel("Agent instructions")).toHaveValue(new RegExp(marker), {
     timeout: 15_000
   });
   const save = draftEditor.getByRole("button", { name: "Save draft" });

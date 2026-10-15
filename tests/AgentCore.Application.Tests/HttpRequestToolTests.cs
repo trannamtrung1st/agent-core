@@ -89,7 +89,7 @@ public sealed class HttpRequestToolTests
     }
 
     private static AgentDefinition HttpTools() => new(
-        1,
+        2,
         "http-tools",
         1,
         new AgentIdentity("H", "HTTP", "Test.", "Neutral"),

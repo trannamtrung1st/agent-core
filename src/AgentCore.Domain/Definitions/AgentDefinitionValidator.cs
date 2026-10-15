@@ -19,7 +19,7 @@ public static class AgentDefinitionValidator
 
     public static void Validate(AgentDefinition definition)
     {
-        if (definition.SchemaVersion != 1)
+        if (definition.SchemaVersion != 2)
         {
             throw new ArgumentException($"Unsupported schemaVersion {definition.SchemaVersion}.");
         }
@@ -48,9 +48,10 @@ public static class AgentDefinitionValidator
             throw new ArgumentException("goals must be 1..10 nonempty strings of at most 500 characters.");
         }
 
-        if (definition.SystemInstructions.Length is 0 or > 8000)
+        if (string.IsNullOrEmpty(definition.AgentInstructions)) throw new ArgumentException("agentInstructions is required.");
+        if (definition.AgentInstructions.Length > 8000)
         {
-            throw new ArgumentException("systemInstructions must be 1..8000 characters.");
+            throw new ArgumentException("agentInstructions must be 1..8000 characters.");
         }
 
         if (!InterruptionStyles.Contains(definition.BehaviorPolicy.InterruptionStyle))

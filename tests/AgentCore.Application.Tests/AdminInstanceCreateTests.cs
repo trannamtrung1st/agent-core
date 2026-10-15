@@ -117,7 +117,7 @@ public sealed class AdminInstanceCreateTests
 
     private static AgentDefinition SampleDefinition() =>
         new(
-            1,
+            2,
             "examiner",
             1,
             DefinitionPersona(),

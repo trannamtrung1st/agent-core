@@ -70,7 +70,7 @@ public sealed class InitiativePlanTests
     [Fact]
     public void Examiner_identity_instructs_direct_hints_when_candidate_asks()
     {
-        var identity = PromptContextBuilder.BuildIdentitySystem(SampleDefinitions.Examiner);
+        var identity = PromptContextBuilder.BuildAgentIdentity(SampleDefinitions.Examiner);
         Assert.Contains("explicitly asks for help or a hint", identity, StringComparison.Ordinal);
         Assert.Contains("give the hint directly", identity, StringComparison.OrdinalIgnoreCase);
     }

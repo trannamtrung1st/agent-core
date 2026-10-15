@@ -41,7 +41,7 @@ export async function expectAdminPage(page: Page, label: string) {
 }
 export async function expandAdminSection(target: Page | Locator, name: string) {
   const page = 'goto' in target ? target : target.page();
-  const owners: Record<string, string> = { 'Operating instructions': 'Instructions', Conversation: 'Conversation', Behavior: 'Behavior', Initiative: 'Initiative', Voice: 'Voice', 'Model defaults': 'Models', 'Provider preferences': 'Providers', 'Memory policy': 'Memory policy', 'Trigger restrictions': 'Trigger restrictions' };
+  const owners: Record<string, string> = { 'Agent instructions': 'Instructions', Conversation: 'Conversation', Behavior: 'Behavior', Initiative: 'Initiative', Voice: 'Voice', 'Model defaults': 'Models', 'Provider preferences': 'Providers', 'Memory policy': 'Memory policy', 'Trigger restrictions': 'Trigger restrictions' };
   if (owners[name] && !await target.getByRole('button', { name: new RegExp('^' + name) }).first().isVisible().catch(() => false)) await navigateAdmin(page, owners[name]);
   const header = target.getByRole('button', { name: new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) });
   if (await header.getAttribute('aria-expanded') !== 'true') await header.click();

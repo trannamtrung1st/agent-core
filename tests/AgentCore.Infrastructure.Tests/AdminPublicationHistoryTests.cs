@@ -183,7 +183,7 @@ public abstract class AdminPublicationHistoryTests
 
     private static AgentDefinitionCandidate SampleCandidate(string definitionId) =>
         new(
-            1,
+            2,
             definitionId,
             new AgentIdentity("Demo", "Guide", "Helps with demos.", "Calm"),
             ["Help the user"],
@@ -203,7 +203,7 @@ public abstract class AdminPublicationHistoryTests
             var now = DateTimeOffset.Parse("2026-09-25T12:00:00Z");
             var candidate = SampleCandidate("examiner") with
             {
-                SystemInstructions = SampleCandidate("examiner").SystemInstructions + "\nHistory marker."
+                AgentInstructions = SampleCandidate("examiner").AgentInstructions + "\nHistory marker."
             };
             var draft = await fixture.Admin.CreateDraftAsync(
                 new AgentDefinitionDraftCreate(

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Ports;
@@ -95,7 +96,7 @@ public sealed partial class TerminalDisplayRepairTests
         foreach (var tool in new[] { ToolCatalog.BrowserHover, ToolCatalog.BrowserWait, ToolCatalog.BrowserPressKey, "browser.scroll", "browser.verify" })
             Assert.Contains(cleanupRequest.Tools!, t => t.Name == tool);
         Assert.DoesNotContain(cleanupRequest.Tools!, t => t.Name == ToolCatalog.BrowserType);
-        Assert.Contains(cleanupRequest.Messages, m => m.Text == RunFinalization.CleanupMarker);
+        Assert.Contains(cleanupRequest.Context!.Sections, section => section.Id == ContextSectionId.CoreCleanup);
         var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime));
         Assert.Equal(37, run.Checkpoint!.StepCount); Assert.Equal(AgentRunStatus.Completed, run.Status);
         Assert.Equal(1, browser.CloseCalls);

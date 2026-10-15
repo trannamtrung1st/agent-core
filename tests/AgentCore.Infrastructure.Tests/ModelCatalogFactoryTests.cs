@@ -11,6 +11,31 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class ModelCatalogFactoryTests
 {
     [Fact]
+    public void A_scripted_catalog_key_cannot_declare_hierarchy_support_for_a_real_custom_route()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
+            ["Providers:ModelCatalog:Models:0:Key"] = "scripted-alpha",
+            ["Providers:ModelCatalog:Models:0:ModelId"] = "unknown-real-model",
+            ["Providers:ModelCatalog:Models:1:Key"] = "custom",
+            ["Providers:ModelCatalog:Models:1:ModelId"] = "another-real-model"
+        }).Build();
+        var catalog = ModelCatalogFactory.Create("Real", new() { Adapter = "OpenAICompatible" }, configuration);
+        Assert.All(catalog.Models, model => Assert.False(model.DeveloperRoleSupport));
+    }
+
+    [Theory]
+    [InlineData("primary-llm", "changed-model")]
+    [InlineData("other-provider", "scripted-alpha")]
+    public void Resolver_refuses_a_pinned_route_that_differs_from_its_declared_catalog_contract(string provider, string model)
+    {
+        var resolver = new LanguageModelResolver(new ServiceCollection().BuildServiceProvider(), "Synthetic",
+            new() { Adapter = "Scripted" }, ModelCatalogFactory.Synthetic());
+        var error = Assert.Throws<InvalidOperationException>(() => resolver.Resolve(new("scripted-alpha", provider, model,
+            AgentCore.Domain.Conversation.ModelSelectionSource.User, "low"), ModelPurpose.Conversation));
+        Assert.Contains("hierarchy contract", error.Message);
+    }
+
+    [Fact]
     public void Missing_primary_and_configured_catalog_efforts_default_to_low()
     {
         var primary = ModelCatalogFactory.FromPrimary(new() { DefaultModel = ModelCatalogFactory.DeepSeekV41FlashModelId });

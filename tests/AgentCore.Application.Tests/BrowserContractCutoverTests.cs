@@ -22,7 +22,7 @@ public sealed class BrowserContractCutoverTests
     public void Historical_mentions_and_upgrade_guidance_are_not_executable(string text)
     {
         Assert.False(BrowserContractCutover.Retired(text));
-        BrowserContractCutover.EnsureCurrent(SampleDefinitions.Examiner with { SystemInstructions = text });
+        BrowserContractCutover.EnsureCurrent(SampleDefinitions.Examiner with { AgentInstructions = text });
     }
 
     [Theory]
@@ -38,14 +38,14 @@ public sealed class BrowserContractCutoverTests
         var old = new EffectiveSkill("instance:old-browser", SkillOrigin.Instance, "old-browser", "Old browser", "Historical", "Use browser.find and pass its opaque ref as scopeRef.", SkillProjection.OnDemand, [ToolCatalog.BrowserClick], []);
         var context = new AgentContext(SampleDefinitions.Examiner, [], "", null, SessionMode.Text, null, false, null,
             new(Guid.NewGuid(), TriggerKind.UserTurn, "Hello"), PinnedSkillCatalog: [old], ActiveSkillKeys: []);
-        new PromptContextBuilder().BuildSections(context);
+        new PromptContextBuilder().BuildContext(context);
         var plan = SkillLoadAdmission.Plan([old], [], 0, [old.Key]);
         Assert.Empty(plan.Admitted);
         Assert.Contains("browser_contract_retired", Assert.Single(plan.Rejected).Reason);
         Assert.Contains("Update this Skill", Assert.Single(plan.Rejected).Message);
-        var error = Assert.Throws<AgentCoreException>(() => new PromptContextBuilder().BuildSections(context with { ActiveSkillKeys = [old.Key] }));
+        var error = Assert.Throws<AgentCoreException>(() => new PromptContextBuilder().BuildContext(context with { ActiveSkillKeys = [old.Key] }));
         Assert.Contains(old.Key, error.Message);
-        Assert.Throws<AgentCoreException>(() => PromptContextBuilder.BuildActiveSkillSystem([old], [old.Key]));
+        Assert.Throws<AgentCoreException>(() => PromptContextBuilder.BuildActiveSkillContext([old], [old.Key]));
         // An independent execution starts with its own active keys, never prior Run activation.
         BrowserContractCutover.EnsureCurrent(SampleDefinitions.Examiner, [old], []);
         var current = old with { Procedure = "Use browser.click with target by role and accessible name." };
@@ -119,7 +119,7 @@ public sealed class BrowserContractCutoverTests
     [Fact]
     public void Old_pinned_instructions_are_rejected_before_building_a_model_context()
     {
-        var historical = SampleDefinitions.Examiner with { SystemInstructions = "Use browser.find and its opaque ref as scopeRef." };
+        var historical = SampleDefinitions.Examiner with { AgentInstructions = "Use browser.find and its opaque ref as scopeRef." };
         Assert.Throws<AgentCoreException>(() => BrowserContractCutover.EnsureCurrent(historical));
         BrowserContractCutover.EnsureCurrent(SampleDefinitions.Examiner);
     }

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
@@ -100,6 +101,16 @@ public sealed partial class MessagingSkillJourneyTests
         await runtime.WaitUntilIdleAsync();
 
         Assert.Equal(4, recording.Requests.Count);
+        foreach (var projected in recording.Requests)
+        {
+            Assert.NotNull(projected.ContextManifest);
+            Assert.Equal(ContextSectionId.OperatingContract, projected.Context!.Sections[0].Id);
+            Assert.Equal(projected.Context.Sections.Count, projected.Context.Sections.Select(s => s.Id).Distinct().Count());
+            var roles = projected.Messages.Select(m => m.Role).ToArray();
+            Assert.DoesNotContain(roles.SkipWhile(r => r is ModelRole.System or ModelRole.Developer), r => r is ModelRole.System or ModelRole.Developer);
+            Assert.Equal(1, projected.Messages.Count(m => m.Role == ModelRole.User && m.Text == userText));
+            Assert.DoesNotContain(projected.Messages.Where(m => m.Role == ModelRole.System), m => m.Text.Contains(ScriptedLanguageModel.MessagingSkillJourneyProcedure));
+        }
         var first = Text(recording.Requests[0]);
         var afterMessage = Text(recording.Requests[2]);
         var afterLoad = Text(recording.Requests[3]);
@@ -131,6 +142,10 @@ public sealed partial class MessagingSkillJourneyTests
         Assert.Equal(["definition:" + ScriptedLanguageModel.MessagingSkillJourneyTargetSkill], pinned!.ActiveSkillKeys);
         Assert.Equal(1, pinned.SkillLoadCount);
 
+        Assert.True(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.TryRead(pinned.Checkpoint, out var checkpointMessages));
+        Assert.DoesNotContain(checkpointMessages!, m => m.Role is ModelRole.System or ModelRole.Developer);
+        Assert.Equal(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.FormatVersion,
+            System.Text.Json.JsonDocument.Parse(pinned.Checkpoint!.PayloadJson).RootElement.GetProperty("ContextFormatVersion").GetInt32());
         var saved = await memory.LoadAsync(runtime.SessionId);
         Assert.NotNull(saved);
         var reopenedRecording = new RecordingModel(new ScriptedLanguageModel());

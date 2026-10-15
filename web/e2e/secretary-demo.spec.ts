@@ -99,7 +99,7 @@ test.describe('Morgan secretary Synthetic journey', () => {
       ['Definition tone', 'Concise, calm, practical']
     ]) await editor.getByLabel(label, { exact: true }).fill(value);
     await openDefinitionSettings(editor);
-    await editor.getByLabel('System instructions', { exact: true }).fill('You are Morgan. Organize Atlas follow-ups, use relevant Memory and Experience, put blockers first, and obey current policy and approvals.');
+    await editor.getByLabel('Agent instructions', { exact: true }).fill('You are Morgan. Organize Atlas follow-ups, use relevant Memory and Experience, put blockers first, and obey current policy and approvals.');
     await openDefinitionSettings(editor, 'Memory policy');
     for (const label of ['Session memory', 'Identity user promotion', 'Identity user retrieval']) {
       await editor.getByRole('switch', { name: label, exact: true }).click();

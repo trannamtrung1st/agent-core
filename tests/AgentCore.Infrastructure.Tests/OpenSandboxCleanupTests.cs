@@ -56,7 +56,7 @@ public sealed class OpenSandboxCleanupTests
         await using var host = await Host.Create(context => { deletes++; context.Response.StatusCode = allow ? 204 : 403; return Task.CompletedTask; });
         var (_, store, lease, _) = await host.Service();
         var memory = new InMemoryMemoryStore(); var now = DateTimeOffset.UtcNow; var owner = new AgentRunOwner(lease.AgentInstanceId, Guid.NewGuid());
-        var definition = new AgentDefinition(1,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("fixture",["fixture"]));
+        var definition = new AgentDefinition(2,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("fixture",["fixture"]));
         var session = new SessionSnapshot(1,lease.SessionId,1,definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId);
         await memory.SaveAsync(session,0);
         var runs = new InMemoryAgentRunStore(memory,new SystemDiagnosticIdSource());
@@ -131,7 +131,7 @@ public sealed class OpenSandboxCleanupTests
             RegistryCredentialRevision = credential.Revision, RegistrySecretRevision = 0 };
         await store.SaveProfileAsync(profile, 0);
         var memory = new InMemoryMemoryStore(); var now = DateTimeOffset.UtcNow; var owner = new AgentRunOwner(lease.AgentInstanceId, Guid.NewGuid());
-        var definition = new AgentDefinition(1,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("fixture",["fixture"]));
+        var definition = new AgentDefinition(2,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("fixture",["fixture"]));
         await memory.SaveAsync(new SessionSnapshot(1,lease.SessionId,1,definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId),0);
         await store.SaveLeaseAsync(lease with { Revision = 2, Profile = profile, SelectedProfileId = profile.Id }, 1);
         var options = new OpenSandboxOptions { Enabled = true, Endpoint = host.Endpoint, ApiKey = "private-fixture-key", WorkspaceMountRoot = host.MountRoot };
@@ -303,7 +303,7 @@ public sealed class OpenSandboxCleanupTests
         });
         var now = DateTimeOffset.UtcNow;
         var owner = new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid());
-        var definition = new AgentDefinition(1,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("fixture",["fixture"]));
+        var definition = new AgentDefinition(2,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("fixture",["fixture"]));
         var snapshot = new SessionSnapshot(1,Guid.NewGuid(),1,definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId);
         var memory = new InMemoryMemoryStore(); await memory.SaveAsync(snapshot, 0);
         var runs = new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource());

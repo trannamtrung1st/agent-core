@@ -206,7 +206,7 @@ public sealed class BrowserRecordJourneyTests
 
     private static AgentDefinition Definition() =>
         new(
-            1,
+            2,
             "general-assistant",
             11,
             new AgentIdentity("Test", "Role", "desc", "Tone"),

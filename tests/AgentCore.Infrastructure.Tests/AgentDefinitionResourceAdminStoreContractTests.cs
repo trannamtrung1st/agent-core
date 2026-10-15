@@ -758,7 +758,7 @@ public abstract class AgentDefinitionResourceAdminStoreContractTests
 
     protected static AgentDefinitionCandidate SampleCandidate(string definitionId) =>
         new(
-            1,
+            2,
             definitionId,
             new AgentIdentity("Demo", "Guide", "Helps with demos.", "Calm"),
             ["Help the user"],

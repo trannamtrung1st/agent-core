@@ -38,7 +38,7 @@ public sealed class DefinitionLifecycleSessionSnapshotTests
 
         var candidate = AgentDefinitionCandidate.FromDefinition(definition) with
         {
-            SystemInstructions = "Durable publication body must not leak into snapshots."
+            AgentInstructions = "Durable publication body must not leak into snapshots."
         };
         var draft = await admin.CreateDraftAsync(
             new AgentDefinitionDraftCreate("examiner", candidate, DefinitionDraftSourceKind.ForkBuiltIn, 1, now),
@@ -53,7 +53,7 @@ public sealed class DefinitionLifecycleSessionSnapshotTests
         var reloaded = await memory.LoadAsync(sessionId);
         Assert.NotNull(reloaded);
         Assert.Equal(1, reloaded!.Definition.Version);
-        Assert.Equal("Built-in instructions v1.", reloaded.Definition.SystemInstructions);
+        Assert.Equal("Built-in instructions v1.", reloaded.Definition.AgentInstructions);
         Assert.Equal(pinned, reloaded.PinnedPersona);
         Assert.Equal(pinned, reloaded.Definition.Identity);
     }
@@ -64,7 +64,7 @@ public sealed class DefinitionLifecycleSessionSnapshotTests
         AgentIdentity identity,
         string instructions) =>
         new(
-            1,
+            2,
             id,
             version,
             identity,

@@ -8,7 +8,7 @@ internal static class InstanceSkillScript
     {
         var user = request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text ?? "";
         if (user is not ("Learn this accounting Skill." or "Use my accounting Skill." or "Show my pinned Skills.")) return null;
-        var prompt = string.Join('\n', request.Messages.Where(m => m.Role == ModelRole.System).Select(m => m.Text));
+        var prompt = string.Join('\n', request.Messages.Where(m => m.Role is ModelRole.System or ModelRole.Developer).Select(m => m.Text));
         var results = request.Messages.Where(m => m.Role == ModelRole.Tool).ToArray();
         bool Offered(string name) => request.Tools?.Any(t => t.Name == name) == true;
         if (user == "Show my pinned Skills.") return Answer(prompt.Contains("Available Skills pinned", StringComparison.Ordinal)

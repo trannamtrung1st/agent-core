@@ -29,7 +29,7 @@ public static class BrowserContractCutover
 
     public static string? Diagnostic(AgentDefinition definition, IReadOnlyList<EffectiveSkill>? catalog = null, IReadOnlyList<string>? activeKeys = null)
     {
-        if (Retired(definition.SystemInstructions)) return "Definition systemInstructions: " + Message;
+        if (Retired(definition.AgentInstructions)) return "Definition agentInstructions: " + Message;
         if (catalog is not null)
         {
             foreach (var skill in catalog.Where(skill => (activeKeys ?? []).Contains(skill.Key, StringComparer.Ordinal)))

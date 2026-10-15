@@ -1,6 +1,6 @@
 import { ConversationDestination } from "./AutomationDestination";
 import { useEffect, useRef, useState } from "react";
-import { App, Alert, Button, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from "antd";
+import { App, Alert, Button, Collapse, Descriptions, Drawer, Empty, Flex, Spin, Tag, Typography, theme } from "antd";
 import { CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, LoadingOutlined, RedoOutlined, StopOutlined } from "@ant-design/icons";
 import { cancelAgentRun, decideAgentRunApproval, listAgentRuns, type AgentRun } from "../../services/api";
 import { useCursorPages } from "./useCursorPages";
@@ -25,7 +25,7 @@ function ReadingRegion({ label, text }: { label: string; text: string }) {
     </div>
   </section>;
 }
-export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (run: AgentRun) => void }) {
+export function AgentRunDetails({ run, onChange, showContextProvenance = false }: { run: AgentRun; onChange: (run: AgentRun) => void; showContextProvenance?: boolean }) {
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false); const [now, setNow] = useState(Date.now);
@@ -106,6 +106,20 @@ export function AgentRunDetails({ run, onChange }: { run: AgentRun; onChange: (r
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },
       { key: "updated", label: "Updated", children: <time dateTime={run.updatedAt}>{formatChatTime(run.updatedAt) ?? "Unknown time"}</time> }
     ]} />
+    {showContextProvenance ? <section aria-label="Context provenance" className="background-work-detail-section"><Flex vertical gap={token.paddingXS}>
+      <Typography.Text strong>Context provenance</Typography.Text>
+      <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Read-only section metadata from the last model request. Contents and credentials are excluded.</Typography.Paragraph>
+      {run.contextManifest ? <Collapse size="small" items={(["Core", "Runtime", "Evidence"] as const).map(layer => ({
+        key: layer, label: `${layer} · ${run.contextManifest!.sections.filter(s => s.layer === layer).length} sections`,
+        children: <Flex vertical gap={token.paddingXS}>{run.contextManifest!.sections.filter(s => s.layer === layer).map(section =>
+          <Flex vertical key={section.id} gap={token.paddingXXS}>
+            <Typography.Text style={{ overflowWrap: "anywhere" }}>{section.id}</Typography.Text>
+            <Typography.Text type="secondary" style={{ overflowWrap: "anywhere" }}>{section.omitted ? "Omitted by Evidence budget · " : ""}{section.source}{section.sourceRevision ? ` · revision ${section.sourceRevision}` : ""} · {section.characters.toLocaleString()} characters · ~{section.estimatedTokens.toLocaleString()} tokens</Typography.Text>
+          </Flex>)}{!run.contextManifest!.sections.some(s => s.layer === layer) ? <Typography.Text type="secondary">No sections selected for this request.</Typography.Text> : null}</Flex>
+      }))} /> : <Typography.Text type="secondary">No context manifest recorded. Historical Runs retain their original results.</Typography.Text>}
+      {run.contextManifest?.fieldSources?.["instructions.agentInstructions"] ? <Typography.Text type="secondary">Agent instructions: {run.contextManifest.fieldSources["instructions.agentInstructions"].kind} · {run.contextManifest.fieldSources["instructions.agentInstructions"].revision}</Typography.Text> : null}
+      {run.contextManifest ? <Typography.Text type="secondary">Context format {run.contextManifest.contextFormatVersion} · Core contract {run.contextManifest.coreContractVersion}</Typography.Text> : null}
+    </Flex></section> : null}
     {run.composerInput ? <section aria-label="Selected input" className="background-work-detail-section">
       <Typography.Text strong>Selected for this turn</Typography.Text>
       {run.composerInput.explicitSkillKeys.length ? <ReadingRegion label="Explicit Skills" text={run.composerInput.explicitSkillKeys.join("\n")} /> : null}
