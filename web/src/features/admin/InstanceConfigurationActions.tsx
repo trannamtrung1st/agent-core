@@ -1,5 +1,8 @@
+import { AdminRequestError } from '../../services/adminApi';
+import { describeAdminError } from './adminErrors';
+import { showAdminFailure } from './adminFailure';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, Button, Flex, Typography } from 'antd';
+import { Alert, App, Button, Flex, Typography } from 'antd';
 import { ReloadOutlined, SaveOutlined, UndoOutlined } from '@ant-design/icons';
 
 type Editor = { dirty: boolean; busy: boolean; revision?: number; blocked?: string; save: (revision: number) => Promise<number>; discard: () => void; refresh?: () => Promise<unknown> };
@@ -7,6 +10,7 @@ type ConfigurationContext = { register: (key: string, editor: Editor | null) => 
 const Configuration = createContext<ConfigurationContext | null>(null);
 /** Coordinates existing Instance configuration commands; each endpoint retains its CAS boundary. */
 export function InstanceConfigurationProvider({ revision, disabled, onUpdated, children }: { revision: number; disabled: boolean; onUpdated: () => void | Promise<void>; children: ReactNode }) {
+  const { message } = App.useApp();
   const [editors, setEditors] = useState<Record<string, Editor>>({});
   const [saving, setSaving] = useState(false); const lock = useRef(false); const generation = useRef(0);
   useEffect(() => () => { generation.current++; }, []);
@@ -40,11 +44,13 @@ export function InstanceConfigurationProvider({ revision, disabled, onUpdated, c
       }
     } catch (reason) {
       if (request !== generation.current) return;
-      const detail = reason instanceof Error ? reason.message : 'Configuration could not be saved.';
-      setError(`${committed ? `${committed} configuration group${committed === 1 ? '' : 's'} saved before the failure. ` : ''}${detail}${/uncommitted edits are retained/i.test(detail) ? '' : ' Uncommitted edits are retained.'}`);
+      const failure = describeAdminError(reason, 'Configuration could not be saved.');
+      const detail = failure.message;
+      const notice = showAdminFailure(message, new AdminRequestError(`${committed ? `${committed} configuration group${committed === 1 ? '' : 's'} saved before the failure. ` : ''}${detail}${/uncommitted edits are retained/i.test(detail) ? '' : ' Uncommitted edits are retained.'}`, failure.diagnosticId), 'Configuration could not be saved.', action === 'save' ? 'Save failed' : 'Refresh failed');
+      setError(notice.message);
     } finally {
       if (request !== generation.current) return;
-      try { await onUpdated(); } catch { setError('Saved state could not be refreshed. Retry the Instance read; uncommitted edits are retained.'); } finally { lock.current = false; setSaving(false); }
+      try { await onUpdated(); } catch { setError(showAdminFailure(message, new Error('Saved state could not be refreshed. Retry the Instance read; uncommitted edits are retained.'), 'Refresh failed.', 'Refresh failed').message); } finally { lock.current = false; setSaving(false); }
     }
   }
   return <Configuration.Provider value={{ register, saving, editors, revision, disabled, run, error, status }}>{children}</Configuration.Provider>;

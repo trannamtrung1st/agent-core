@@ -27,6 +27,12 @@ export const saveSandboxProfile = (profile: SandboxProfile) => {
 };
 export const getSandboxProfile = (id:string, revision:number) => request<SandboxProfile>(`/api/v2/admin/sandbox-profiles/${encodeURIComponent(id)}?revision=${revision}`);
 export const sandboxSourceLabel = (p:SandboxProfile) => p.imageReference.startsWith('sha256:') ? 'Local image' : 'Remote OCI';
+export const sandboxImageRegistry = (value: string) => {
+  const image = value.trim();
+  if (!image || image.startsWith('sha256:')) return null;
+  const first = image.split('/')[0];
+  return image.includes('/') && (first.includes('.') || first.includes(':') || first === 'localhost') ? first : 'docker.io';
+};
 export const sandboxStatusLabel = (p:SandboxProfile) => ({Eligible:'Verified · eligible', NeedsVerification:'Needs verification', VerificationFailed:'Verification failed', SourceUnavailable:'Source unavailable', Forbidden:'Forbidden by host', ServerUnavailable:'Server unavailable', Disabled:'Disabled'}[p.availability??''] ?? (p.enabled?'Needs verification':'Disabled'));
 export const sandboxEligible = (p:SandboxProfile) => p.availability==='Eligible';
 export const verifySandboxProfile = (profile: SandboxProfile) => request<{ passed: boolean; message: string; profile: SandboxProfile; exitCode?:number|null; stdout?:string; stderr?:string; truncated?:boolean; durationMs?:number; diagnosticId?:string|null }>(`/api/v2/admin/sandbox-profiles/${encodeURIComponent(profile.id)}/verify`, 'POST', { expectedRevision: profile.revision });

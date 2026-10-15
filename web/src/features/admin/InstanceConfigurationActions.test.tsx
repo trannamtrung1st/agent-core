@@ -1,5 +1,7 @@
+import { AdminRequestError } from '../../services/adminApi';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
+import { App } from 'antd';
 import { afterEach, expect, it, vi } from 'vitest';
 import { InstanceConfigurationActions, InstanceConfigurationProvider, useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 afterEach(cleanup);
@@ -9,7 +11,7 @@ function Editor({ name, persist }: { name: string; persist: (revision: number) =
   return <input aria-label={name} value={value} onChange={event => setValue(event.target.value)} />;
 }
 function fixture(persist: Array<(revision: number) => Promise<number>>, key = 'owner') {
-  return <InstanceConfigurationProvider key={key} revision={1} disabled={false} onUpdated={() => {}}><InstanceConfigurationActions />{persist.map((save, i) => <Editor key={i} name={`Page ${i + 1}`} persist={save} />)}</InstanceConfigurationProvider>;
+  return <App><InstanceConfigurationProvider key={key} revision={1} disabled={false} onUpdated={() => {}}><InstanceConfigurationActions />{persist.map((save, i) => <Editor key={i} name={`Page ${i + 1}`} persist={save} />)}</InstanceConfigurationProvider></App>;
 }
 function edit(count: number) { for (let i = 1; i <= count; i++) fireEvent.change(screen.getByLabelText(`Page ${i}`), { target: { value: `draft ${i}` } }); }
 it('saves retained edits across pages in order with the preceding write receipt', async () => {
@@ -19,9 +21,11 @@ it('saves retained edits across pages in order with the preceding write receipt'
   expect(first).toHaveBeenCalledWith(1); expect(second).toHaveBeenCalledWith(2); expect(screen.getByRole('button', { name: 'Save configuration' })).toBeDisabled();
 });
 it('stops after a failed write, reports partial success and retains uncommitted fields', async () => {
-  const first = vi.fn(async () => 2); const second = vi.fn(async () => { throw new Error('Revision conflict.'); }); const third = vi.fn(async () => 4); render(fixture([first, second, third])); edit(3);
+  const first = vi.fn(async () => 2); const second = vi.fn(async () => { throw new AdminRequestError('Revision conflict.', 'configuration-diag'); }); const third = vi.fn(async () => 4); render(fixture([first, second, third])); edit(3);
   fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('1 configuration group saved before the failure. Revision conflict.');
+  await waitFor(()=>expect(screen.getByRole('region', { name: 'Instance configuration actions' })).toHaveTextContent('1 configuration group saved before the failure. Revision conflict.'));
+  expect(await screen.findByText(/^Save failed: 1 configuration group saved before the failure/)).toBeVisible();
+  expect(screen.getByRole('button',{name:'Error details'})).toBeVisible();
   expect(second).toHaveBeenCalledWith(2); expect(third).not.toHaveBeenCalled(); expect(screen.getByLabelText('Page 2')).toHaveValue('draft 2'); expect(screen.getByLabelText('Page 3')).toHaveValue('draft 3');
   fireEvent.click(screen.getByRole('button', { name: 'Discard configuration changes' })); expect(screen.getByLabelText('Page 1')).toHaveValue('draft 1'); expect(screen.getByLabelText('Page 2')).toHaveValue('inherited');
 });

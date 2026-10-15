@@ -9,6 +9,25 @@ namespace AgentCore.Infrastructure.Sandbox;
 public sealed class SandboxImageAuthority(OpenSandboxOptions options, ISandboxStore profiles, TimeProvider time,
     ICredentialStore? credentials = null, ICredentialProtector? protector = null) : ISandboxImageAuthority
 {
+    public async ValueTask<SandboxProfile> ResolveAsync(SandboxProfile profile, CancellationToken ct = default)
+    {
+        OciImageSource source;
+        try { source = OciImageSource.Parse(profile.ImageReference); }
+        catch (ArgumentException) { throw AgentCoreErrors.Validation("Enter a valid image, such as mcr.microsoft.com/dotnet/sdk:10.0, ubuntu:24.04 or registry/repository@sha256:<64 lowercase hex characters>."); }
+        var candidate = profile with { ImageReference = source.Image.Value };
+        candidate.Validate();
+        // Check host and credential scope before making any registry request or revealing secrets.
+        try { options.ValidateProfile(candidate); }
+        catch (ArgumentException) { throw AgentCoreErrors.Validation("Image registry or repository is not allowed by host policy. Use an approved source shown in Sandboxes or update the host image allowlist."); }
+        if (source.Tag is not null)
+        {
+            var auth = await ResolveAuthAsync(candidate, ct, requireVerification: false);
+            candidate = candidate with { ImageReference = await RegistryAuthorizationProbe.ResolveTagAsync(options, source.Image, source.Tag, auth, ct) };
+        }
+        options.ValidateProfile(candidate);
+        return candidate;
+    }
+
     public async ValueTask<SandboxImageAvailability> InspectAsync(SandboxProfile profile, CancellationToken ct = default, bool requireVerification = true)
     {
         try { options.ValidateProfile(profile); }

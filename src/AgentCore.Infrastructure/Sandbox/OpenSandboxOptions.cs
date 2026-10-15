@@ -13,7 +13,7 @@ public sealed class OpenSandboxOptions
     public string[] InsecureRegistryHosts { get; set; } = [];
     public string[] AllowedRegistryTokenOrigins { get; set; } = [];
     public bool AllowLocalImageIds { get; set; }
-    public string[] AllowedImagePrefixes { get; set; } = ["docker.io/agent-core/", "ghcr.io/trannamtrung1st/"];
+    public string[] AllowedImagePrefixes { get; set; } = ["docker.io", "ghcr.io", "mcr.microsoft.com", "quay.io", "public.ecr.aws"];
     public void ValidateProfile(SandboxProfile profile)
     {
         profile.Validate();

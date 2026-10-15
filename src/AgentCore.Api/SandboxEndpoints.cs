@@ -27,7 +27,9 @@ internal static class SandboxEndpoints
             var profile = new SandboxProfile(id,checked(request.ExpectedRevision+1),request.Name,request.Description,request.Enabled,request.ImageReference,
                 request.InitializationScript,request.Cpu,request.MemoryMiB,request.Pids,request.MaxCommandSeconds,request.IdleTtlSeconds,request.MaxLifetimeSeconds,request.StorageBytes,RegistryCredentialId:request.RegistryCredentialId);
             var current = await store.GetProfileAsync(id,ct:ct);
+            if ((current?.Revision ?? 0) != request.ExpectedRevision) throw AgentCoreErrors.Conflict("Profile changed. Reload before saving.");
             var disablingUnchangedSource = !profile.Enabled && current is not null && current.ImageReference == profile.ImageReference && current.RegistryCredentialId == profile.RegistryCredentialId;
+            if (!disablingUnchangedSource) profile = await authority.ResolveAsync(profile, ct);
             profile.Validate();
             if (!disablingUnchangedSource)
             {

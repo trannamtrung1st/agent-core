@@ -1,5 +1,7 @@
+import { showAdminFailure } from './adminFailure';
+import { isAdminFormValidationFailure, validateAdminForm } from './adminFormFeedback';
 import { useEffect, useState } from 'react';
-import { Alert, Form, Input, Modal, Select } from 'antd';
+import { Alert, App, Form, Input, Modal, Select } from 'antd';
 import { createDriveAccount, getDriveOptions } from '../../services/drive';
 import {
   updateCredential,
@@ -16,6 +18,7 @@ export function DriveAccountDialog({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const { message } = App.useApp();
   const [form] = Form.useForm<{ displayName: string; status: string }>();
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -38,7 +41,7 @@ export function DriveAccountDialog({
   async function save() {
     if (busy || !ready) return;
     try {
-      const fields = await form.validateFields();
+      const fields = await validateAdminForm(form, message);
       setBusy(true);
       setError(null);
       if (account)
@@ -51,11 +54,7 @@ export function DriveAccountDialog({
       await onSaved();
       onClose();
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : 'Drive account could not be saved. Retry.',
-      );
+      if (!isAdminFormValidationFailure(reason)) setError(showAdminFailure(message, reason, 'Drive account could not be saved. Retry.', 'Save failed').message);
     } finally {
       setBusy(false);
     }

@@ -8,5 +8,6 @@ public sealed record SandboxImageAvailability(string Status, string Message, boo
 /// <summary>Safe current host/source authority. Protected values and SDK auth stay in Infrastructure.</summary>
 public interface ISandboxImageAuthority
 {
+    ValueTask<SandboxProfile> ResolveAsync(SandboxProfile profile, CancellationToken ct = default);
     ValueTask<SandboxImageAvailability> InspectAsync(SandboxProfile profile, CancellationToken ct = default, bool requireVerification = true);
 }

@@ -4,14 +4,16 @@ import { describeAdminError } from "./adminErrors";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 
 export function showAdminFailure(
-  messageApi: { error: (config: { content: React.ReactNode; duration?: number }) => void },
+  messageApi: { error: (config: { content: React.ReactNode; duration?: number; key?: string }) => void },
   error: unknown,
-  fallback: string
+  fallback: string,
+  summary?: string
 ) {
   const notice = describeAdminError(error, fallback);
   messageApi.error({
-    content: <AdminErrorNotice message={notice.message} diagnosticId={notice.diagnosticId} />,
-    duration: notice.diagnosticId ? 8 : 3
+    key: 'admin-operation-failure',
+    content: <AdminErrorNotice message={summary ? `${summary}: ${notice.message}` : notice.message} diagnosticId={notice.diagnosticId} />,
+    duration: notice.diagnosticId ? 8 : 6
   });
   return notice;
 }

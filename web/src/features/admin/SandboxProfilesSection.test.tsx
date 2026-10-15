@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { App, ConfigProvider } from 'antd';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { SandboxProfilesSection } from './SandboxProfilesSection';
@@ -17,6 +17,46 @@ async function mountReady() {
   await waitFor(()=>expect(verify).toBeEnabled());
   return view;
 }
+it('tracks storage-only drafts, converts MiB to exact bytes, and retains a conflicting draft until discard',async()=>{
+  await mountReady();
+  fireEvent.click(screen.getByRole('button',{name:'Advanced settings · limits and initialization'}));
+  const storage=screen.getByRole('spinbutton',{name:'Canonical /working storage (MiB)'});
+  expect(storage).toHaveValue('250');
+  fireEvent.change(storage,{target:{value:'128.5'}});
+  const save=screen.getByRole('button',{name:'Save profile'});
+  await waitFor(()=>expect(save).toBeEnabled());
+  expect(screen.getByRole('button',{name:'Verify profile'})).toBeDisabled();
+  vi.mocked(saveSandboxProfile).mockRejectedValueOnce(new Error('Storage revision changed.'));
+  fireEvent.click(save);await screen.findByText('Storage revision changed.');
+  expect(saveSandboxProfile).toHaveBeenCalledWith(expect.objectContaining({revision:1,storageBytes:134742016}));
+  expect(storage).toHaveValue('128.5');
+  fireEvent.click(screen.getByRole('button',{name:'Discard edits'}));
+  await waitFor(()=>expect(screen.getByRole('spinbutton',{name:'Canonical /working storage (MiB)'})).toHaveValue('250'));
+  expect(save).toBeDisabled();
+});
+
+it('reveals collapsed lifetime and UTF-8 script validation errors without submitting or losing edits',async()=>{
+  await mountReady();
+  const advanced=screen.getByRole('button',{name:'Advanced settings · limits and initialization'});
+  fireEvent.click(advanced);
+  fireEvent.change(screen.getByRole('spinbutton',{name:'Maximum lifetime (seconds)'}),{target:{value:'60'}});
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Save profile'})).toBeEnabled());
+  fireEvent.click(advanced);
+  fireEvent.click(screen.getByRole('button',{name:'Save profile'}));
+  await screen.findByText('Maximum lifetime must be at least the idle expiry.');
+  await waitFor(()=>expect(advanced).toHaveAttribute('aria-expanded','true'));
+  fireEvent.change(screen.getByRole('spinbutton',{name:'Maximum lifetime (seconds)'}),{target:{value:'7200'}});
+  const script=screen.getByRole('textbox',{name:'Sandbox initialization script'});
+  fireEvent.change(script,{target:{value:'界'.repeat(5500)}});
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Save profile'})).toBeEnabled());
+  fireEvent.click(advanced);
+  fireEvent.click(screen.getByRole('button',{name:'Save profile'}));
+  await screen.findByText('Initialization script must fit within 16,384 UTF-8 bytes. Shorten the script, including multibyte characters.');
+  await waitFor(()=>expect(advanced).toHaveAttribute('aria-expanded','true'));
+  expect(script).toHaveValue('界'.repeat(5500));
+  expect(saveSandboxProfile).not.toHaveBeenCalled();
+});
+
 it('refreshes selected clean source eligibility after credential revocation',async () => {
   await mountReady();
   const refresh=screen.getByRole('button',{name:'Refresh status'});
@@ -141,4 +181,48 @@ it('suppresses late image-check messages after leaving the catalog',async()=>{
   await act(async()=>finish({passed:true,message:'Late image success',profileId:'workbench',profileRevision:1,instanceRevision:null,verifiedAt:'2026-10-15T00:00:00Z',exitCode:null,stdout:'',stderr:'',truncated:false,durationMs:1,diagnosticId:null}));
   await waitFor(()=>expect(screen.getByText('Other admin page')).toBeInTheDocument());
   expect(screen.queryByText('Late image success')).not.toBeInTheDocument();
+});
+
+
+it('adds in a modal, keeps a canceled dirty draft, and restores the selected profile after discard',async()=>{
+  await mountReady();
+  fireEvent.click(screen.getByRole('button',{name:'Add prebuilt image'}));
+  await act(async()=>{await Promise.resolve();});
+  // AntD's test-only title ID collides with the underlying table's Page Size ID.
+  const dialog=await screen.findByRole('dialog');
+  expect(within(dialog).queryByRole('button',{name:'Verify profile'})).not.toBeInTheDocument();
+  fireEvent.change(within(dialog).getByRole('textbox',{name:'Sandbox profile name'}),{target:{value:'New image'}});
+  await waitFor(()=>expect(within(dialog).getByRole('button',{name:'Save profile'})).toBeEnabled());
+  fireEvent.click(within(dialog).getByRole('button',{name:'Cancel'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Keep editing'}));
+  expect(within(dialog).getByRole('textbox',{name:'Sandbox profile name'})).toHaveValue('New image');
+  fireEvent.click(within(dialog).getByRole('button',{name:'Cancel'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Discard changes'}));
+  await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(screen.getByRole('textbox',{name:'Sandbox profile name'})).toHaveValue('Workbench');
+  expect(saveSandboxProfile).not.toHaveBeenCalled();
+});
+
+it('retains a failed creation in the modal and selects the saved profile after retry',async()=>{
+  await mountReady();
+  fireEvent.click(screen.getByRole('button',{name:'Add prebuilt image'}));
+  const dialog=await screen.findByRole('dialog');
+  fireEvent.change(within(dialog).getByRole('textbox',{name:'Sandbox profile name'}),{target:{value:'New image'}});
+  fireEvent.change(within(dialog).getByRole('textbox',{name:'Sandbox image reference'}),{target:{value:'mcr.microsoft.com/dotnet/sdk:10.0'}});
+  vi.mocked(saveSandboxProfile).mockRejectedValueOnce(new Error('Image save unavailable.'));
+  const save=within(dialog).getByRole('button',{name:'Save profile'});
+  await waitFor(()=>expect(save).toBeEnabled());fireEvent.click(save);
+  await within(dialog).findByText('Image save unavailable.');
+  expect(within(dialog).getByRole('textbox',{name:'Sandbox image reference'})).toHaveValue('mcr.microsoft.com/dotnet/sdk:10.0');
+  expect(within(dialog).getByRole('textbox',{name:'Profile ID'})).toHaveValue('new-image');
+  const created={...profile,id:'new-image',name:'New image',availability:'NeedsVerification',imageReference:'mcr.microsoft.com/dotnet/sdk@sha256:'+'b'.repeat(64)};
+  vi.mocked(saveSandboxProfile).mockResolvedValueOnce(created);
+  vi.mocked(getSandboxPlatform).mockResolvedValue({...platform,profiles:[profile,created]});
+  await waitFor(()=>expect(save).toBeEnabled());fireEvent.click(save);
+  await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(screen.getByRole('textbox',{name:'Sandbox profile name'})).toHaveValue('New image');
+  expect(screen.getByRole('textbox',{name:'Profile ID'})).toBeDisabled();
+  expect(screen.getByRole('textbox',{name:'Sandbox image reference'})).toHaveValue(created.imageReference);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Verify profile'})).toBeEnabled());
+  expect(saveSandboxProfile).toHaveBeenLastCalledWith(expect.objectContaining({id:'new-image',revision:0,imageReference:'mcr.microsoft.com/dotnet/sdk:10.0'}));
 });

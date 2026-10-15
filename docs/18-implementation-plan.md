@@ -16,6 +16,8 @@ prior acceptance below remains evidence for its original behavior SHA.
 
 ## OCI-only sandbox profile catalog (authorized 2026-10-14)
 
+The 2026-10-15 owner-requested onboarding fix accepts image tags and Docker Hub short names at save time, resolves them to immutable digests, and expands default host sources to Docker Hub, GHCR, MCR, Quay and ECR Public. Existing profile revisions and verification/admission rules remain unchanged. This is focused maintenance, not milestone acceptance.
+
 The owner requested the complete OCI catalog proposal on `develop/branch-1`: strict immutable registry sources, protected host-side registry credentials and epochs, exact verification/eligibility, modern-only execution, no startup Workbench build/seed/default, searchable owner catalog and synchronized Definition/Instance/Chat presentation. This scoped cutover preserves data and historical publications and does not reopen P11 or production isolation. Required focused parser/credential/migration/runtime/browser/private-pull/Impeccable evidence is tracked in the [OCI ledger](reports/oci-sandbox-profile-catalog-verification-2026-10-15.md). Implemented local behavior and actual checks must remain distinct from optional hosted CI and separate Linux/customer-registry/device acceptance.
 
 ## OpenSandbox configuration and deployment enhancement (authorized 2026-10-14)

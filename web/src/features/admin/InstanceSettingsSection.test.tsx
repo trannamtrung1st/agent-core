@@ -4,9 +4,11 @@ import { App, ConfigProvider } from 'antd';
 import { InstanceSettingsSection } from './InstanceSettingsSection';
 import * as api from '../../services/instanceConfiguration';
 import * as modelApi from '../../services/api';
+import { getSandboxPlatform, getInstanceSandbox } from '../../services/sandboxes';
 
 vi.mock('../../services/instanceConfiguration', () => ({ listInstanceSettings: vi.fn(), patchInstanceSettings: vi.fn() }));
 vi.mock('../../services/api', () => ({ listModels: vi.fn(async () => ({ models: [] })) }));
+vi.mock('../../services/sandboxes', async (importOriginal) => ({ ...await importOriginal<typeof import('../../services/sandboxes')>(), getSandboxPlatform: vi.fn(), getInstanceSandbox: vi.fn() }));
 vi.mock('./ExecutionBudgetsSection', () => ({ InstanceExecutionBudgets: () => null }));
 afterEach(cleanup);
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(modelApi.listModels).mockResolvedValue({ defaultKey: 'host', models: [] }); });
@@ -171,4 +173,27 @@ it('explains published restrictions before saving while allowing independent tog
   fireEvent.click(screen.getByRole('switch', { name: 'Acknowledge interruption' }));
   expect(screen.getByRole('button', { name: 'Save Behavior' })).toBeEnabled();
   expect(api.patchInstanceSettings).not.toHaveBeenCalled();
+});
+
+
+it('edits sandbox storage in MiB while saving exact sparse bytes and preserving discard behavior',async()=>{
+  const profile={id:'fixture',revision:1,name:'Fixture',description:'',enabled:true,availability:'Eligible',imageReference:'sha256:'+'a'.repeat(64),initializationScript:null,cpu:1,memoryMiB:1024,pids:64,maxCommandSeconds:120,idleTtlSeconds:1800,maxLifetimeSeconds:7200,storageBytes:262144000,lastVerifiedAt:null,verificationReason:null};
+  const effective={profileId:'fixture',cpu:1,memoryMiB:1024,maxCommandSeconds:120,idleTtlSeconds:1800,maxLifetimeSeconds:7200,storageBytes:262144000,initializationScript:null};
+  const section:api.SettingsSection={section:'sandboxPolicy',instanceRevision:1,definitionId:'agent',definitionVersion:1,overrides:{},effective,definitionDefaults:effective,sources:{storageBytes:'profile'},configurationHash:'hash',constraints:{storageBytes:{minimum:1,maximum:262144000,requiredBoolean:null,reason:'Profile ceiling'}}};
+  vi.mocked(getSandboxPlatform).mockResolvedValue({state:'Ready',message:'Ready',profiles:[profile],allowedImagePrefixes:[],localImageIdsAllowed:true,storageScope:'Canonical scratch',securityScope:'Local demo'});
+  vi.mocked(getInstanceSandbox).mockResolvedValue({profile,policy:{defaultProfileId:'fixture',allowedProfileIds:['fixture']},instanceRevision:1,instanceInitializationScript:null,state:'Ready',message:'Ready',verification:null});
+  vi.mocked(api.listInstanceSettings).mockResolvedValue([section]);
+  render(<ConfigProvider theme={{token:{motion:false}}}><App><InstanceSettingsSection instanceId="owner" page="sandbox" archived={false} onUpdated={()=>{}} /></App></ConfigProvider>);
+  const storage=await screen.findByRole('spinbutton',{name:'Canonical /working storage (MiB)'});
+  expect(storage).toHaveValue('250');
+  fireEvent.change(storage,{target:{value:'128.5'}});
+  const saved={...section,instanceRevision:2,overrides:{storageBytes:134742016},effective:{...effective,storageBytes:134742016},sources:{storageBytes:'instance' as const}};
+  vi.mocked(api.patchInstanceSettings).mockResolvedValue(saved);vi.mocked(api.listInstanceSettings).mockResolvedValue([saved]);
+  fireEvent.click(screen.getByRole('button',{name:'Save Sandbox environment'}));
+  await waitFor(()=>expect(api.patchInstanceSettings).toHaveBeenCalledWith('owner',expect.objectContaining({instanceRevision:1}),{storageBytes:134742016},[]));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Save Sandbox environment'})).toBeDisabled());
+  fireEvent.change(storage,{target:{value:'100'}});
+  fireEvent.click(screen.getByRole('button',{name:'Discard Sandbox environment changes'}));
+  expect(storage).toHaveValue('128.5');
+  expect(api.patchInstanceSettings).toHaveBeenCalledTimes(1);
 });

@@ -1,6 +1,7 @@
+import { showAdminFormValidation } from './adminFormFeedback';
 import { useAdminDetailLayout } from './useAdminDetailLayout';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Button, Descriptions, Drawer, Flex, Form, Grid, Input, Select, Switch, Typography, theme } from 'antd';
+import { App, Button, Descriptions, Drawer, Flex, Form, Grid, Input, Select, Switch, Typography, theme } from 'antd';
 
 export type SkillDrawerValue = {
   id?: string; name: string; description: string; procedure: string;
@@ -34,6 +35,7 @@ export function SkillDrawer({ open, title: incomingTitle, value: incomingValue, 
     title: incomingTitle, value: incomingValue, definition: incomingDefinition,
     readOnly: incomingReadOnly, idReadOnly: incomingIdReadOnly, context: incomingContext, notice: incomingNotice, contentLabel: incomingContentLabel
   } : lastOpenPresentation;
+  const { message } = App.useApp();
   const { token } = theme.useToken(); const compact = !Grid.useBreakpoint().md;
   const detailLayout = useAdminDetailLayout();
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -64,7 +66,7 @@ export function SkillDrawer({ open, title: incomingTitle, value: incomingValue, 
         ]} />
         <Flex vertical gap={token.paddingXS}><Typography.Title level={5} style={{ margin: 0 }}>Procedure</Typography.Title>
           <Typography.Paragraph style={textStyle}>{value.procedure}</Typography.Paragraph></Flex>
-      </> : <Form id={formId} name={formId} form={form} layout="vertical" disabled={busy} onFinish={onSave}>
+      </> : <Form id={formId} name={formId} form={form} layout="vertical" disabled={busy} onFinish={onSave} onFinishFailed={failure=>showAdminFormValidation(message,form,failure)}>
         <Form.Item name="id" label="Skill ID" extra={idReadOnly ? 'The ID stays fixed after creation.' : `Optional. Empty generates from the Skill name. Unique within this ${definition ? 'Definition' : 'Agent Instance'}.`}
           rules={idReadOnly ? [] : [{ validator: (_, value: string) => {
             const id = (value ?? '').trim();

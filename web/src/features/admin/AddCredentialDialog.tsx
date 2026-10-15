@@ -1,5 +1,8 @@
+import { showAdminFailure } from './adminFailure';
+import { validateAdminForm } from './adminFormFeedback';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, App, Flex, Form, Input, Modal, Select, theme } from 'antd';
+import { Alert, App, DatePicker, Flex, Form, Input, Modal, Select, theme } from 'antd';
+import dayjs, { type Dayjs } from 'dayjs';
 import {
   createCredential,
   createContainerRegistry,
@@ -26,8 +29,8 @@ import { describeAdminError, type AdminFailureNotice } from './adminErrors';
 import { AdminErrorNotice } from './adminFailure';
 
 type Purpose = 'Drive' | 'Gmail' | 'Custom' | 'General' | 'Registry';
-export type RegistryCredentialFieldsValue = {registry:string;username:string;repositories:string};
-type Fields = CredentialFieldsValue & EmailAccountFieldsValue & {registry:string; username:string; repositories:string};
+export type RegistryCredentialFieldsValue = {registry:string;username:string;repositories:string;expiresAtUtc?:string|null};
+type Fields = CredentialFieldsValue & EmailAccountFieldsValue & RegistryCredentialFieldsValue;
 const choices = [
   { value: 'Drive', label: 'Google Drive account' },
   { value: 'Gmail', label: 'Gmail account' },
@@ -116,14 +119,14 @@ export function AddCredentialDialog({
   }
   async function save() {
     if (inFlight.current) return;
-    const values = await form.validateFields();
+    const values = await validateAdminForm(form, message);
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setError(undefined);
     try {
       if (purpose === 'Drive') await createDriveAccount(values.displayName);
-      else if (purpose === 'Registry') await createContainerRegistry({displayName:values.displayName, kind:values.kind, protectedValue:values.protectedValue!, profile:{registry:values.registry, username:values.username, repositoryPrefixes:(values.repositories??'').split(/\r?\n/).map(v=>v.trim()).filter(Boolean)}});
+      else if (purpose === 'Registry') await createContainerRegistry({displayName:values.displayName, kind:values.kind, protectedValue:values.protectedValue!, profile:{registry:values.registry, username:values.username, repositoryPrefixes:(values.repositories??'').split(/\r?\n/).map(v=>v.trim()).filter(Boolean),expiresAtUtc:values.expiresAtUtc??null}});
       else if (purpose === 'General')
         await createCredential({
           ...safeFields(values),
@@ -156,12 +159,12 @@ export function AddCredentialDialog({
       message.success('Credential saved');
     } catch (e) {
       setError(
-        describeAdminError(
+        showAdminFailure(message,
           e,
           created
             ? 'The account was saved. Retry connecting with Google.'
             : 'Credential could not be saved or connected. Enter the protected value again to retry.',
-        ),
+          'Save failed'),
       );
     } finally {
       form.setFieldValue('protectedValue', undefined);
@@ -285,6 +288,12 @@ export function ContainerRegistryFields({edit=false}:{edit?:boolean}) {
       <Form.Item name="registry" label="Registry host" extra="Exact lowercase host and optional port, such as ghcr.io. No URL, path or wildcard." rules={[{required:true}]}><Input autoComplete="off" /></Form.Item>
       <Form.Item name="username" label="Registry username" rules={[{required:true,max:256}]}><Input autoComplete="off" /></Form.Item>
       <Form.Item name="repositories" label="Repository scopes" extra="Optional narrower scopes, one registry/repository prefix per line. Empty permits repositories on this exact host, within the host image policy."><Input.TextArea autoSize={{minRows:2,maxRows:5}} /></Form.Item>
+      <Form.Item name="expiresAtUtc" label="Expiry (optional)"
+        extra={`Times shown in ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Saved in UTC. Clear to remove expiry; renewing requires profile reverification.`}
+        getValueProps={(value?:string|null)=>({value:value?dayjs(value):null})}
+        normalize={(value:Dayjs|null)=>value?.toISOString()??null}>
+        <DatePicker aria-label="Registry credential expiry" classNames={{popup:{root:'registry-date-picker-popup'}}} showTime format="YYYY-MM-DD HH:mm:ss" style={{width:'100%'}} />
+      </Form.Item>
       {!edit && <Form.Item name="kind" label="Authentication kind"><Select options={['Password','Token'].map(value=>({value,label:value}))} /></Form.Item>}
       {!edit && <ProtectedValueField />}
     </>

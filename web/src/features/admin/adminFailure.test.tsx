@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { AdminErrorNotice, AdminRetryAction } from "./adminFailure";
+import { describe, expect, it, vi } from "vitest";
+import { AdminErrorNotice, AdminRetryAction, showAdminFailure } from "./adminFailure";
 
 describe("admin failure details", () => {
   it("shows error details beside the message when a diagnostic id exists", () => {
@@ -32,4 +32,17 @@ describe("admin failure details", () => {
     await waitFor(() => expect(screen.getByText("019944af-0008-7000-8000-0000000000e1")).toBeVisible());
     expect(screen.getByRole("button", { name: "Copy details" })).toBeVisible();
   });
+});
+
+
+it("announces a failed save while preserving the unprefixed persistent diagnostic",()=>{
+  const error=Object.assign(new Error('Revision changed.'),{name:'AdminRequestError',diagnosticId:'diagnostic-1'});
+  const notify=vi.fn();
+  const notice=showAdminFailure({error:notify},error,'Save was not confirmed.','Save failed');
+  expect(notice).toEqual({message:'Revision changed.',diagnosticId:'diagnostic-1'});
+  const config=notify.mock.calls[0][0];
+  expect(config).toMatchObject({key:'admin-operation-failure',duration:8});
+  render(config.content);
+  expect(screen.getByText('Save failed: Revision changed.')).toBeVisible();
+  expect(screen.getByRole('button',{name:'Error details'})).toBeVisible();
 });

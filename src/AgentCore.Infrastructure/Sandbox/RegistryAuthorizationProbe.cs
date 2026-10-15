@@ -14,14 +14,40 @@ internal static class RegistryAuthorizationProbe
 {
     internal static async Task CheckAsync(OpenSandboxOptions options, OciImageReference image, ImageAuth? auth, CancellationToken ct)
     {
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+        await CheckAsync(options, image, auth, client, ct);
+    }
+
+    internal static async Task CheckAsync(OpenSandboxOptions options, OciImageReference image, ImageAuth? auth, HttpClient client, CancellationToken ct)
+        => _ = await ManifestAsync(options, image, null, auth, client, ct);
+
+    internal static async Task<string> ResolveTagAsync(OpenSandboxOptions options, OciImageReference image, string tag, ImageAuth? auth, CancellationToken ct)
+    {
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+        return await ResolveTagAsync(options, image, tag, auth, client, ct);
+    }
+
+    internal static async Task<string> ResolveTagAsync(OpenSandboxOptions options, OciImageReference image, string tag, ImageAuth? auth, HttpClient client, CancellationToken ct)
+        => (await ManifestAsync(options, image, tag, auth, client, ct))!;
+
+    private static async Task<string?> ManifestAsync(OpenSandboxOptions options, OciImageReference image, string? tag, ImageAuth? auth, HttpClient client, CancellationToken ct)
+    {
         try
         {
+            // Docker Hub's canonical image identity differs from its Registry API origin.
+            // Keep the exception exact; no alias, port, redirect or other registry inherits it.
+            var dockerHub = image.Registry == "docker.io";
             var insecure = options.InsecureRegistryHosts.Contains(image.Registry!, StringComparer.Ordinal);
-            var origin = new Uri((insecure ? "http://" : "https://") + image.Registry);
+            var origin = new Uri(dockerHub ? "https://registry-1.docker.io" : (insecure ? "http://" : "https://") + image.Registry);
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct); deadline.CancelAfter(TimeSpan.FromSeconds(15));
-            using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
             var basic = auth is null ? null : new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(auth.Username + ":" + auth.Password)));
-            var manifest = new Uri(origin, "/v2/" + image.Repository + "/manifests/sha256:" + image.Digest);
+            var manifest = new Uri(origin, "/v2/" + image.Repository + "/manifests/" + (tag ?? "sha256:" + image.Digest));
+            string? Resolved(HttpResponseMessage result)
+            {
+                if (tag is null) return null;
+                var digest = result.Headers.GetValues("Docker-Content-Digest").Single();
+                return OciImageReference.Parse(image.Registry + "/" + image.Repository + "@" + digest).Value;
+            }
             async Task<HttpResponseMessage> Head(AuthenticationHeaderValue? authorization)
             {
                 using var request = new HttpRequestMessage(HttpMethod.Head, manifest);
@@ -29,15 +55,18 @@ internal static class RegistryAuthorizationProbe
                 request.Headers.Accept.ParseAdd("application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json");
                 return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
             }
-            using var response = await Head(basic);
-            if (response.IsSuccessStatusCode) return;
+            using var response = await Head(dockerHub ? null : basic);
+            if (response.IsSuccessStatusCode) return Resolved(response);
             var challenge = response.Headers.WwwAuthenticate.FirstOrDefault(h => h.Scheme.Equals("Bearer", StringComparison.OrdinalIgnoreCase));
             if (response.StatusCode != HttpStatusCode.Unauthorized || challenge?.Parameter is not { Length: <=4096 } parameters) throw new InvalidOperationException();
             var fields = Regex.Matches(parameters, "([a-z]+)=\"([^\"]*)\"").ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
+            var trustedHubToken = dockerHub && fields.GetValueOrDefault("realm") == "https://auth.docker.io/token"
+                && fields.GetValueOrDefault("service") == "registry.docker.io";
             if (!fields.TryGetValue("realm", out var realm) || !Uri.TryCreate(realm, UriKind.Absolute, out var tokenUri)
                 || tokenUri.UserInfo.Length != 0 || tokenUri.Query.Length != 0 || tokenUri.Fragment.Length != 0
                 || tokenUri.Scheme != "https" && !(insecure && tokenUri.GetLeftPart(UriPartial.Authority) == origin.GetLeftPart(UriPartial.Authority))
-                || tokenUri.GetLeftPart(UriPartial.Authority) != origin.GetLeftPart(UriPartial.Authority)
+                || dockerHub && !trustedHubToken
+                || !trustedHubToken && tokenUri.GetLeftPart(UriPartial.Authority) != origin.GetLeftPart(UriPartial.Authority)
                     && !options.AllowedRegistryTokenOrigins.Contains(tokenUri.GetLeftPart(UriPartial.Authority), StringComparer.Ordinal)) throw new InvalidOperationException();
             var query = "scope=" + Uri.EscapeDataString("repository:" + image.Repository + ":pull")
                 + (fields.TryGetValue("service", out var service) ? "&service=" + Uri.EscapeDataString(service) : "");
@@ -53,8 +82,10 @@ internal static class RegistryAuthorizationProbe
             var token = json.RootElement.TryGetProperty("token", out var value) ? value.GetString() : json.RootElement.GetProperty("access_token").GetString();
             using var authorized = await Head(new("Bearer", token));
             authorized.EnsureSuccessStatusCode();
+            return Resolved(authorized);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch when (tag is not null) { throw AgentCoreErrors.Validation("Image tag could not be resolved. Check that the image and tag exist, public access or the selected credential permits pulling, and the registry is reachable. Retry or enter an immutable sha256 digest."); }
         catch { throw AgentCoreErrors.Forbidden("Registry manifest authorization failed. Check the credential, digest, registry availability and host token-service policy, then verify again."); }
     }
 }

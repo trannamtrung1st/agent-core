@@ -1,5 +1,7 @@
 # OCI sandbox profile catalog — local verification
 
+Subsequent [OCI final hardening](oci-sandbox-final-hardening-2026-10-15.md) adds Docker Hub transport compatibility, expiry management, storage editing and Advanced validation. Its focused evidence and remaining private-Hub/workload gaps supplement this historical cutover record.
+
 Owner-authorized on 14 October 2026; implementation, observed verification and final review span 14–15 October in Asia/Ho_Chi_Minh. Work remains on `develop/branch-1`, based on `ebabbbd1722d34c92819ca220c14d5fd37c0d9a3` (clean at start). The containing Git commit identifies this reviewed cutover; the [source manifest](oci-sandbox-profile-catalog-2026-10-15/source-manifest.json) fingerprints its final source/config/test owners. This is focused local evidence, not a new historical P10/P11 or production-isolation acceptance. The owner expressly authorized review, fixes, commit and push on 15 October. No hosted CI was requested or run.
 
 ## Result and owners

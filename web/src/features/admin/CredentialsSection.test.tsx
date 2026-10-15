@@ -3,6 +3,7 @@ import { App, ConfigProvider } from "antd";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CredentialsSection, InstanceCredentialsSection } from "./CredentialsSection";
+import dayjs from 'dayjs';
 import * as api from "../../services/adminApi";
 
 vi.mock("../../services/adminApi", () => ({ listCredentials: vi.fn(), createCredential: vi.fn(),
@@ -16,6 +17,23 @@ beforeEach(() => { vi.clearAllMocks(); vi.mocked(api.listCredentialBindings).moc
 afterEach(cleanup);
 
 describe("System credentials", () => {
+  it.each(['renew','clear'])('explicitly manages registry expiry (%s) through the existing revision-protected editor',async(action)=>{
+    const registry:api.SystemCredential={...credential,purpose:'ContainerRegistry',metadata:{},allowedOrigins:[],bindingCount:0,
+      containerRegistry:{registry:'docker.io',username:'owner',repositoryPrefixes:[],expiresAtUtc:'2020-01-01T00:00:00Z'}};
+    vi.mocked(api.listCredentials).mockResolvedValue([registry]);
+    vi.mocked(api.updateContainerRegistry).mockResolvedValue(registry);
+    view();fireEvent.click(await screen.findByRole('button',{name:'Expand row'}));
+    expect(await screen.findByText('Expired',{exact:true})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Edit'}));
+    const dialog=within(await screen.findByRole('dialog',{name:'Edit credential'}));
+    const expiry=dialog.getByRole('textbox',{name:'Registry credential expiry'});
+    await waitFor(()=>expect(expiry).not.toHaveValue(''));
+    if(action==='clear')fireEvent.click(dialog.getByRole('button',{name:'Clear'}));
+    else {fireEvent.change(expiry,{target:{value:'2030-12-31 23:59:45'}});fireEvent.keyDown(expiry,{key:'Enter',code:'Enter'});}
+    fireEvent.click(dialog.getByRole('button',{name:'Save credential'}));
+    await waitFor(()=>expect(api.updateContainerRegistry).toHaveBeenCalledWith(registry,expect.objectContaining({profile:{...registry.containerRegistry,expiresAtUtc:action==='clear'?null:dayjs('2030-12-31 23:59:45').toISOString()}})));
+    expect(api.replaceCredentialValue).not.toHaveBeenCalled();
+  });
   it("preserves registry expiry while editing safe scope and name fields", async () => {
     const registry: api.SystemCredential = {...credential,purpose:"ContainerRegistry",metadata:{},allowedOrigins:[],bindingCount:0,
       containerRegistry:{registry:"ghcr.io",username:"owner",repositoryPrefixes:["ghcr.io/acme"],expiresAtUtc:"2026-10-14T00:00:00Z"}};

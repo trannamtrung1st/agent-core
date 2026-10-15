@@ -1,3 +1,5 @@
+import { showAdminFailure } from './adminFailure';
+import { validateAdminForm } from './adminFormFeedback';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -129,7 +131,7 @@ export function EmailAccountDialog({
   }, [open, account?.credentialId, form]);
   async function preserveDetails() {
     if (!current || !form.isFieldsTouched(['displayName', 'status'])) return;
-    const value = await form.validateFields(['displayName', 'status']);
+    const value = await validateAdminForm(form, message, ['displayName', 'status']);
     // Safe name/status only, same-tab only. Never store provider authorization or secrets.
     try {
       sessionStorage.setItem(
@@ -165,7 +167,7 @@ export function EmailAccountDialog({
     onClose();
   }
   async function save() {
-    const values = await form.validateFields();
+    const values = await validateAdminForm(form, message);
     setBusy(true);
     setError(undefined);
     const profile: EmailAccountProfile =
@@ -199,10 +201,10 @@ export function EmailAccountDialog({
       message.success('Email account saved');
     } catch (e) {
       setError(
-        describeAdminError(
+        showAdminFailure(message,
           e,
           'Account could not be saved or connected. Refresh after a conflict and retry.',
-        ),
+          'Save failed'),
       );
     } finally {
       form.setFieldValue('protectedValue', undefined);

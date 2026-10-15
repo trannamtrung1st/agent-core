@@ -1,10 +1,11 @@
+import { showAdminFormValidation } from './adminFormFeedback';
 import { useAdminUnsavedChanges } from './useAdminUnsavedChanges';
 import { useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Descriptions, Flex, Form, Select, Spin, Typography, theme } from "antd";
 import { confirmAction } from "../../app/confirmAction";
 import { getBrowserPrivacy, saveBrowserPrivacy, type BrowserPrivacy, type BrowserPrivacyMode } from "../../services/adminApi";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
-import { AdminErrorNotice } from "./adminFailure";
+import { AdminErrorNotice, showAdminFailure } from "./adminFailure";
 import { useAdminDetailLayout } from "./useAdminDetailLayout";
 
 type Fields = { mode: BrowserPrivacyMode; unmaskedOrigins: string[]; trustedGraphicsOrigins: string[] };
@@ -12,7 +13,7 @@ const exposure = "Unmasked screenshots can expose credentials, OTPs, personal in
 
 /** Global Host policy has one edit owner under Platform → Browser privacy. */
 export function BrowserPrivacySection() {
-  const { modal } = App.useApp();
+  const { modal, message } = App.useApp();
   const { token } = theme.useToken();
   const detailLayout = useAdminDetailLayout();
   const [form] = Form.useForm<Fields>();
@@ -57,12 +58,14 @@ export function BrowserPrivacySection() {
       if (!controller.signal.aborted) { accept(value); setNotice(value.durable
         ? "Screenshot privacy saved. Restart the host to activate this revision." : value.activation); }
     } catch (failure) {
-      if (!controller.signal.aborted) setError(describeAdminError(failure, "Unable to save screenshot privacy. Your edits are retained."));
+      if (!controller.signal.aborted) setError(showAdminFailure(message, failure, "Unable to save screenshot privacy. Your edits are retained.", 'Save failed'));
     } finally { if (!controller.signal.aborted) setSaving(false); }
   }
   function submit(values: Fields) {
     if (values.mode === "Unmasked" && !values.unmaskedOrigins?.length) {
-      form.setFields([{ name: "unmaskedOrigins", errors: ["Select at least one deployment-approved exact origin."] }]);
+      const errorFields = [{ name: ["unmaskedOrigins"] as ["unmaskedOrigins"], errors: ["Select at least one deployment-approved exact origin."] }];
+      form.setFields(errorFields);
+      showAdminFormValidation(message, form, {errorFields});
       return;
     }
     if (values.mode === "Unmasked") confirmAction(modal, { title: "Authorize unmasked screenshots?", danger: true,
@@ -90,7 +93,7 @@ export function BrowserPrivacySection() {
         <Descriptions.Item label="Deployment restrictions">{!policy.deployment.captureAllowed ? "Screenshots prohibited" : policy.deployment.unmaskedAllowed ? "Unmasked capture limited to deployment-approved exact origins" : "Unmasked capture prohibited"}</Descriptions.Item>
         <Descriptions.Item label="Activation">{policy.activation}</Descriptions.Item>
       </Descriptions>
-      <Form form={form} layout="vertical" className="admin-config-form" disabled={saving || loading} onFinish={submit}>
+      <Form form={form} layout="vertical" className="admin-config-form" disabled={saving || loading} onFinish={submit} onFinishFailed={failure=>showAdminFormValidation(message,form,failure)}>
         <Form.Item name="mode" label="Saved screenshot privacy mode" rules={[{ required: true }]}>
           <Select options={[
             { value: "Protected", label: "Protected — mask sensitive pixels", disabled: !policy.deployment.captureAllowed },

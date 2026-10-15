@@ -1,4 +1,7 @@
+import { showAdminFailure } from './adminFailure';
+import { validateAdminForm } from './adminFormFeedback';
 import { ContainerRegistryFields, AddCredentialDialog, type RegistryCredentialFieldsValue } from './AddCredentialDialog';
+import dayjs from 'dayjs';
 import { CredentialConnectionTag } from './CredentialConnectionTag';
 import {
   CredentialFields,
@@ -225,7 +228,10 @@ function CredentialDetails({
             label: 'Kind / purpose',
             children: `${credential.kind} · ${credential.purpose === 'GoogleDriveAccount' ? 'Google Drive Account' : credential.purpose === 'EmailAccount' ? 'Email account' : credential.containerRegistry ? 'Container registry' : 'General'}`,
           },
-          ...(credential.containerRegistry ? [{key:'registry',label:'Registry scope',children:credential.containerRegistry.repositoryPrefixes.join(', ')||credential.containerRegistry.registry},{key:'registry-user',label:'Registry username',children:credential.containerRegistry.username}] : []),
+          ...(credential.containerRegistry ? [{key:'registry',label:'Registry scope',children:credential.containerRegistry.repositoryPrefixes.join(', ')||credential.containerRegistry.registry},{key:'registry-user',label:'Registry username',children:credential.containerRegistry.username},
+            {key:'registry-expiry',label:'Expiry',children:credential.containerRegistry.expiresAtUtc
+              ? <Flex align="center" wrap gap={token.paddingXS}><Typography.Text>{dayjs(credential.containerRegistry.expiresAtUtc).format('YYYY-MM-DD HH:mm:ss Z')}</Typography.Text><Tag color={Date.parse(credential.containerRegistry.expiresAtUtc)<=Date.now()?'error':'default'}>{Date.parse(credential.containerRegistry.expiresAtUtc)<=Date.now()?'Expired':'Not expired'}</Tag></Flex>
+              : 'No expiry'}] : []),
           ...(credential.emailAccount?.preset === 'Custom'
             ? [
                 {
@@ -435,7 +441,7 @@ export function CredentialsSection() {
               key,
               value,
             })),
-            registry:item.containerRegistry?.registry, username:item.containerRegistry?.username, repositories:item.containerRegistry?.repositoryPrefixes.join('\n'),
+            registry:item.containerRegistry?.registry, username:item.containerRegistry?.username, repositories:item.containerRegistry?.repositoryPrefixes.join('\n'), expiresAtUtc:item.containerRegistry?.expiresAtUtc??null,
             origins: item.allowedOrigins.join('\n'),
           }
         : { kind: 'Password', status: 'Active', metadata: [], origins: '' },
@@ -460,24 +466,24 @@ export function CredentialsSection() {
     setDialogError(undefined);
   }
   async function save() {
-    const values = await form.validateFields();
+    const values = await validateAdminForm(form, message);
     if (!dialog) return;
     setBusy(true);
     setDialogError(undefined);
     try {
       if (dialog.kind === 'replace')
         await replaceCredentialValue(dialog.item!, values.protectedValue!);
-      else if (dialog.item?.containerRegistry) await updateContainerRegistry(dialog.item,{displayName:values.displayName,status:values.status,profile:{registry:values.registry,username:values.username,repositoryPrefixes:(values.repositories??'').split(/\r?\n/).map(v=>v.trim()).filter(Boolean),expiresAtUtc:dialog.item.containerRegistry.expiresAtUtc}});
+      else if (dialog.item?.containerRegistry) await updateContainerRegistry(dialog.item,{displayName:values.displayName,status:values.status,profile:{registry:values.registry,username:values.username,repositoryPrefixes:(values.repositories??'').split(/\r?\n/).map(v=>v.trim()).filter(Boolean),expiresAtUtc:values.expiresAtUtc??null}});
       else await updateCredential(dialog.item!, safeFields(values));
       close();
       await load();
       message.success('Credential saved');
     } catch (e) {
       setDialogError(
-        describeAdminError(
+        showAdminFailure(message,
           e,
           'Credential could not be saved. Enter the protected value again to retry.',
-        ),
+          'Save failed'),
       );
     } finally {
       form.setFieldValue('protectedValue', undefined);
@@ -887,7 +893,7 @@ export function InstanceCredentialsSection({
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { token } = theme.useToken();
-  const { modal } = App.useApp();
+  const { modal, message } = App.useApp();
   const [monitoringDirty, setMonitoringDirty] = useState<
     Record<string, boolean>
   >({});
@@ -948,10 +954,10 @@ export function InstanceCredentialsSection({
       await onUpdated?.();
       await load();
     } catch (e) {
-      const notice = describeAdminError(
+      const notice = showAdminFailure(message,
         e,
         'Binding operation failed. Reload the instance if its revision changed.',
-      );
+        'Binding update failed');
       if (inDialog) setBindingError(notice);
       else setError(notice);
     } finally {
@@ -1166,8 +1172,7 @@ export function InstanceCredentialsSection({
           'aria-label': 'Bind credential',
         }}
         onOk={() =>
-          void form
-            .validateFields()
+          void validateAdminForm(form, message)
             .then((v) =>
               mutate(
                 () =>

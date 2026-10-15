@@ -96,7 +96,7 @@ describe("BrowserPrivacySection", () => {
     mount(); await screen.findByText("Protected · revision 0 · active as saved");
     await choose("Saved screenshot privacy mode", "Disabled — no screenshots");
     fireEvent.click(screen.getByRole("button", { name: "Save screenshot privacy" }));
-    await screen.findByText(/Browser privacy changed/);
+    await within(screen.getByRole("region", {name:"Screenshot privacy"})).findByText(/Browser privacy changed/);
     expect(screen.getByRole("combobox", { name: "Saved screenshot privacy mode" }).closest(".ant-select")).toHaveTextContent("Disabled — no screenshots");
     vi.mocked(getBrowserPrivacy).mockResolvedValue({ ...policy, saved: { ...policy.saved, revision: 2 }, restartRequired: true });
     fireEvent.click(screen.getByRole("button", { name: "Reload saved privacy policy" }));

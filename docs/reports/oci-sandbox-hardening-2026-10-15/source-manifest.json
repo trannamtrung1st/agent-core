@@ -1,0 +1,22 @@
+{
+  "baseCommit": "58bd05b34a7bac6d3f4db00b426d4fd3ec4a9dcc",
+  "capturedAtUtc": "2026-10-15T01:53:25.422343+00:00",
+  "scope": "OCI final hardening plus retained concurrent UI changes; source snapshot, not milestone acceptance",
+  "sha256": {
+    "src/AgentCore.Infrastructure/Sandbox/RegistryAuthorizationProbe.cs": "e5576285f124deb2ed56fb87b6eb29e13af5ebd1370f6f7772bbc0addcd9feac",
+    "tests/AgentCore.Infrastructure.Tests/RegistryAuthorizationProbeTests.cs": "b92e6c87de393709ec4f0ec28ed3b5901d7447cecca1da88d9ba1af56f907578",
+    "tests/AgentCore.Infrastructure.Tests/OciSandboxAuthorityTests.cs": "c9ea26b7906a688d3d684a08eebd94d29fe1393a38ad2d20f403bb7a0da893aa",
+    "tests/AgentCore.Api.Tests/SandboxApiTests.cs": "5f36fa934908bb09719d67bad0fc5949997a246c239518e335de463d20814c7a",
+    "web/src/app.css": "f7a3a9fc5e3b810fc39c5019fb85dfd830445ceb89d1518d7c38b89cb6812d01",
+    "web/src/features/admin/SandboxProfilesSection.tsx": "f0696ddc68c1bf8d76d6b1dbc8378b624052281f3dc29013fd76a2d9cd424d90",
+    "web/src/features/admin/SandboxProfilesSection.test.tsx": "3121e2413df86f529a8846bee25285561d5ba597e8c7cca584fd96f1933c1986",
+    "web/src/features/admin/AddCredentialDialog.tsx": "c9ce264e5b4bd64b49d5e7ab6cac9f9ba8662ebbf2fd41ef1f7839d8a6e34364",
+    "web/src/features/admin/AddCredentialDialog.test.tsx": "b0c9c0e9d36b01fcc6c2ef32f79630b3606ac41b1cb29357da5a45d35981291a",
+    "web/src/features/admin/CredentialsSection.tsx": "76a05ed55baed5a97dc6a03df00835d2973e643365501449af824c2ac632bbc4",
+    "web/src/features/admin/CredentialsSection.test.tsx": "995cb79eced59b3b5866f0b40ee64aebe66ff227fe8bada7ef077424d92a510d",
+    "web/src/features/admin/DefinitionSandboxPolicy.tsx": "5b121400af8e6927cb9cad2b214fe4bd5f115419062c53c6e1d3cdc5dd2088be",
+    "web/src/features/admin/InstanceSettingsSection.tsx": "2fd99f54fc535282c23d6c567e65bf69588caf64d10e2125f3ba35a1143ae5f8",
+    "web/src/features/admin/InstanceSettingsSection.test.tsx": "aa494437fc7e63b37d30b5b587bb3d8ecf448422655bb55c3652db23ca212158",
+    "web/src/features/admin/InstanceSandboxSummary.tsx": "f05447de28ee47f1d67de8e46e74389dd8543598f4bc6f858573e80b2a90d81b"
+  }
+}

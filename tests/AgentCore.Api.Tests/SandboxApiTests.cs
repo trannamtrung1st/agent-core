@@ -5,14 +5,143 @@ using AgentCore.Infrastructure.Sandbox;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Configuration;
 
 namespace AgentCore.Api.Tests;
 
 public sealed class SandboxApiTests
 {
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public async Task Explicit_empty_registry_policy_does_not_restore_public_defaults(string configured)
+    {
+        await using var factory = new AgentCoreApiFactory().WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddJsonStream(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{\"OpenSandbox\":{\"AllowedImagePrefixes\":" + configured + "}}")))));
+        using var owner = TestOwnerCapability.CreateOwnerClient(factory);
+        var platform = (await owner.GetFromJsonAsync<SandboxPlatformResponse>("/api/v2/admin/sandboxes"))!;
+        Assert.Empty(platform.AllowedImagePrefixes);
+        var request = new SaveSandboxProfileRequest(0, "Blocked", "", true, "docker.io/library/busybox@sha256:" + new string('a', 64));
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/blocked", request)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Dotted_docker_hub_short_digest_is_saved_with_the_same_host_as_credential_selection()
+    {
+        await using var factory = new SandboxFactory(); using var owner = TestOwnerCapability.CreateOwnerClient(factory);
+        var digest = "sha256:" + new string('a', 64);
+        var request = new SaveSandboxProfileRequest(0, "Dotted image", "", true, "my.image@" + digest);
+        var response = await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/dotted-image", request);
+        response.EnsureSuccessStatusCode();
+        var saved = (await response.Content.ReadFromJsonAsync<SandboxProfileResponse>())!;
+        Assert.Equal("docker.io/library/my.image@" + digest, saved.ImageReference);
+        Assert.Equal(saved, await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/dotted-image"));
+    }
+
+    [Fact]
+    public async Task Configured_registry_allowlist_replaces_public_defaults_and_rejects_other_sources()
+    {
+        await using var factory = new AgentCoreApiFactory().WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?> { ["OpenSandbox:AllowedImagePrefixes:0"] = "mcr.microsoft.com/dotnet" })));
+        using var owner = TestOwnerCapability.CreateOwnerClient(factory);
+        var platform = (await owner.GetFromJsonAsync<SandboxPlatformResponse>("/api/v2/admin/sandboxes"))!;
+        Assert.Equal(["mcr.microsoft.com/dotnet"], platform.AllowedImagePrefixes);
+        var request = new SaveSandboxProfileRequest(0, "Restricted", "", true, "docker.io/library/busybox@sha256:" + new string('a', 64));
+        var forbidden = await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/restricted", request);
+        Assert.Equal(HttpStatusCode.BadRequest, forbidden.StatusCode);
+        Assert.Contains("not allowed by host policy", await forbidden.Content.ReadAsStringAsync());
+        (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/restricted", request with { ImageReference = "mcr.microsoft.com/dotnet/sdk@sha256:" + new string('a', 64) })).EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task Tagged_images_resolve_before_save_and_failed_resolution_preserves_the_saved_revision()
+    {
+        var builder = Microsoft.AspNetCore.Builder.WebApplication.CreateSlimBuilder();
+        await using var registry = builder.Build(); registry.Urls.Add("http://127.0.0.1:0");
+        var calls = 0; var digest = new string('a', 64);
+        registry.MapMethods("/v2/dotnet/sdk/manifests/{tag}", ["HEAD"], (Microsoft.AspNetCore.Http.HttpContext context, string tag) =>
+        {
+            calls++;
+            if (tag != "10.0") { context.Response.StatusCode = 404; return; }
+            context.Response.Headers["Docker-Content-Digest"] = "sha256:" + digest;
+        });
+        await registry.StartAsync();
+        var host = new Uri(registry.Urls.Single()).Authority;
+        await using var factory = new SandboxFactory(new OpenSandboxOptions { AllowedImagePrefixes = [host + "/dotnet"], InsecureRegistryHosts = [host] });
+        using var owner = TestOwnerCapability.CreateOwnerClient(factory);
+        var request = new SaveSandboxProfileRequest(0, ".NET Workbench", ".NET SDK workbench", true, host + "/dotnet/sdk:10.0");
+        var response = await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/dotnet-workbench", request);
+        response.EnsureSuccessStatusCode();
+        var saved = (await response.Content.ReadFromJsonAsync<SandboxProfileResponse>())!;
+        Assert.Equal(host + "/dotnet/sdk@sha256:" + digest, saved.ImageReference);
+        Assert.Equal("NeedsVerification", saved.Availability); Assert.Equal(1, calls);
+        digest = new string('b', 64);
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/dotnet-workbench", request)).StatusCode);
+        Assert.Equal(1, calls);
+        response = await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/dotnet-workbench", request with { ExpectedRevision = 1 });
+        response.EnsureSuccessStatusCode(); Assert.Equal(2, calls);
+        var missing = await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/dotnet-workbench", request with { ExpectedRevision = 2, ImageReference = host + "/dotnet/sdk:missing" });
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Contains("Image tag could not be resolved", await missing.Content.ReadAsStringAsync());
+        var readback = (await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/dotnet-workbench"))!;
+        Assert.Equal(2, readback.Revision); Assert.EndsWith(digest, readback.ImageReference);
+        var history = (await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/dotnet-workbench?revision=1"))!;
+        Assert.Equal(saved.ImageReference, history.ImageReference);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/dotnet-workbench", request with { ExpectedRevision = 2, ImageReference = host + "/forbidden/sdk:10.0" })).StatusCode);
+        Assert.Equal(3, calls);
+    }
+
+    [Fact]
+    public async Task Registry_expiry_can_be_renewed_and_cleared_with_revision_guards_without_exposing_the_secret()
+    {
+        await using var factory = new SandboxFactory(); using var owner = TestOwnerCapability.CreateOwnerClient(factory);
+        var expired = new ContainerRegistryProfileDto("docker.io", "owner", [], DateTimeOffset.UnixEpoch);
+        var created = await owner.PostAsJsonAsync("/api/v2/admin/container-registry-credentials",
+            new AdminCreateContainerRegistryRequest("Expiring Hub", "Token", expired, "expiry-secret-sentinel"));
+        created.EnsureSuccessStatusCode();
+        var credential = (await created.Content.ReadFromJsonAsync<AdminCredentialResponse>())!;
+        Assert.Equal(expired.ExpiresAtUtc, credential.ContainerRegistry!.ExpiresAtUtc);
+        var renewed = expired with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(30) };
+        var patch = new { expectedRevision = credential.Revision, displayName = credential.DisplayName, status = "Active", profile = renewed };
+        var saved = await owner.PatchAsJsonAsync($"/api/v2/admin/container-registry-credentials/{credential.CredentialId}", patch);
+        saved.EnsureSuccessStatusCode();
+        Assert.DoesNotContain("expiry-secret-sentinel", await saved.Content.ReadAsStringAsync());
+        var current = (await saved.Content.ReadFromJsonAsync<AdminCredentialResponse>())!;
+        Assert.Equal(credential.Revision + 1, current.Revision);
+        Assert.Equal(renewed.ExpiresAtUtc, current.ContainerRegistry!.ExpiresAtUtc);
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PatchAsJsonAsync($"/api/v2/admin/container-registry-credentials/{credential.CredentialId}", patch)).StatusCode);
+        var cleared = await owner.PatchAsJsonAsync($"/api/v2/admin/container-registry-credentials/{credential.CredentialId}",
+            new { expectedRevision = current.Revision, displayName = current.DisplayName, status = "Active", profile = renewed with { ExpiresAtUtc = null } });
+        cleared.EnsureSuccessStatusCode();
+        var readback = (await owner.GetFromJsonAsync<AdminCredentialResponse>($"/api/v2/admin/credentials/{credential.CredentialId}"))!;
+        Assert.Null(readback.ContainerRegistry!.ExpiresAtUtc);
+        Assert.Equal(current.Revision + 1, readback.Revision);
+    }
+
+    [Fact]
+    public async Task Storage_edits_append_exact_byte_revisions_and_rejected_limits_preserve_the_saved_profile()
+    {
+        await using var factory = new SandboxFactory(); using var owner = TestOwnerCapability.CreateOwnerClient(factory);
+        var request = new SaveSandboxProfileRequest(0, "Storage fixture", "", true, "sha256:" + new string('a',64), StorageBytes: 128 * 1024 * 1024 + 1);
+        (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/storage", request)).EnsureSuccessStatusCode();
+        var update = request with { ExpectedRevision = 1, StorageBytes = 64 * 1024 * 1024 };
+        (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/storage", update)).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/storage", update)).StatusCode);
+        foreach (var invalid in new[] {
+            update with { ExpectedRevision = 2, StorageBytes = 0 },
+            update with { ExpectedRevision = 2, StorageBytes = 250L * 1024 * 1024 + 1 },
+            update with { ExpectedRevision = 2, MaxLifetimeSeconds = 60 },
+            update with { ExpectedRevision = 2, InitializationScript = new string('界', 5500) } })
+            Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/storage", invalid)).StatusCode);
+        var readback = (await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/storage"))!;
+        Assert.Equal(2, readback.Revision); Assert.Equal(update.StorageBytes, readback.StorageBytes);
+        Assert.Equal(request.StorageBytes, (await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/storage?revision=1"))!.StorageBytes);
+    }
+
     [Fact]
     public async Task Historical_drafts_require_explicit_owner_repair_and_never_restore_retired_execution()
     {
@@ -151,7 +280,7 @@ public sealed class SandboxApiTests
         var response = await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/workbench",request); response.EnsureSuccessStatusCode();
         Assert.Equal(1,(await response.Content.ReadFromJsonAsync<SandboxProfileResponse>())!.Revision);
         Assert.Equal(HttpStatusCode.Conflict,(await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/workbench",request)).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest,(await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/workbench",request with { ExpectedRevision=1, ImageReference="busybox:latest" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/workbench",request with { ExpectedRevision=1, ImageReference="busybox:invalid/tag" })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/workbench",request with { ExpectedRevision=1, Cpu=4 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/workbench",request with { ExpectedRevision=1, Pids=128 })).StatusCode);
         (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/workbench",request with { ExpectedRevision=1, Name="Changed" })).EnsureSuccessStatusCode();
@@ -167,12 +296,12 @@ public sealed class SandboxApiTests
         Assert.Equal(2, (await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/workbench?revision=2"))!.Revision);
     }
 
-    private sealed class SandboxFactory : AgentCoreApiFactory
+    private sealed class SandboxFactory(OpenSandboxOptions? options = null) : AgentCoreApiFactory
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);
-            builder.ConfigureTestServices(s => { s.RemoveAll<OpenSandboxOptions>(); s.AddSingleton(new OpenSandboxOptions { AllowLocalImageIds=true }); });
+            builder.ConfigureTestServices(s => { s.RemoveAll<OpenSandboxOptions>(); s.AddSingleton(options ?? new OpenSandboxOptions { AllowLocalImageIds=true }); });
         }
     }
 

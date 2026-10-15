@@ -1,3 +1,6 @@
+import { AdminRequestError } from '../../services/adminApi';
+import { App } from 'antd';
+import { showAdminFailure } from './adminFailure';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listInstanceSettings, patchInstanceSettings, type SettingValue, type SettingsSection } from '../../services/instanceConfiguration';
 import { listModels } from '../../services/api';
@@ -6,6 +9,7 @@ export type SettingsDraft = { set: Record<string, SettingValue>; clear: string[]
 export const emptyDraft = (): SettingsDraft => ({ set: {}, clear: [] });
 /** Exact-owner reads and independent sparse section drafts; pages only select presentation. */
 export function useInstanceSettingsController(instanceId: string, archived: boolean, active: boolean, onUpdated: () => void) {
+  const { message } = App.useApp();
   const [sections, setSections] = useState<SettingsSection[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, SettingsDraft>>({});
   const [loading, setLoading] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
@@ -47,9 +51,14 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
       setSections(null); setLoading(true);
       const refreshed = await listInstanceSettings(instanceId);
       if (request === epoch.current && owner.current === instanceId) setSections(refreshed);
-    } catch (e) { if (request === epoch.current) setError(committed
-      ? `Settings were saved. ${describeAdminError(e, 'Settings could not be refreshed.').message} Retry settings; other drafts are retained.`
-      : describeAdminError(e, 'Settings could not be saved. Reload while retaining your draft.').message); }
+    } catch (e) {
+      if (request === epoch.current) {
+        const detail = describeAdminError(e, committed ? 'Settings could not be refreshed.' : 'Settings could not be saved. Reload while retaining your draft.');
+        const text = committed ? `Settings were saved. ${detail.message} Retry settings; other drafts are retained.` : detail.message;
+        setError(text);
+        showAdminFailure(message, new AdminRequestError(text, detail.diagnosticId), 'Settings could not be saved.', committed ? 'Refresh failed' : 'Save failed');
+      }
+    }
     finally { if (request === epoch.current) { saving.current = false; setBusy(false); setLoading(false); } }
   }
   async function saveAll(expectedRevision: number): Promise<number> {
@@ -70,9 +79,10 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
       if (request === epoch.current && owner.current === instanceId) setSections(refreshed);
       return nextRevision;
     } catch (reason) {
-      const message = `${committed ? `${committed} settings section(s) were saved. ` : ''}${describeAdminError(reason, 'Settings could not be saved.').message} Refresh settings; uncommitted edits are retained.`;
+      const failure = describeAdminError(reason, 'Settings could not be saved.');
+      const message = `${committed ? `${committed} settings section(s) were saved. ` : ''}${failure.message} Refresh settings; uncommitted edits are retained.`;
       if (request === epoch.current) setError(message);
-      throw new Error(message);
+      throw new AdminRequestError(message, failure.diagnosticId);
     } finally { if (request === epoch.current) { saving.current = false; setBusy(false); setLoading(false); } }
   }
   return { sections, drafts, setDrafts, loading, busy, error, models, defaultModelKey, reload, change, inherit, save, saveAll };

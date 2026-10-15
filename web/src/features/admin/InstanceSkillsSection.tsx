@@ -1,3 +1,4 @@
+import { showAdminFailure } from './adminFailure';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,7 +12,7 @@ import { AdminCollectionToolbar, useAdminCollectionSearch } from './AdminCollect
 
 
 export function InstanceSkillsSection({ instanceId, archived, active = true, onUpdated, onDirtyChange }: { instanceId: string; archived: boolean; active?: boolean; onDirtyChange?: (dirty: boolean) => void; onUpdated?: () => void }) {
-  const { token } = theme.useToken(); const { modal } = App.useApp();
+  const { token } = theme.useToken(); const { modal, message } = App.useApp();
   const compact = !Grid.useBreakpoint().md;
   const [skills, setSkills] = useState<InstanceSkill[] | null>(null); const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false); const [error, setError] = useState<AdminFailureNotice | null>(null);
@@ -50,7 +51,7 @@ export function InstanceSkillsSection({ instanceId, archived, active = true, onU
     const current = () => generation.current === request && owner.current === instanceId;
     setBusy(true); setError(null);
     try { await action(); if (!current()) return; if (close) closePanel(); await reload(); if (owner.current === instanceId) onUpdated?.(); }
-    catch (e) { if (current()) setError(describeAdminError(e, 'The Skill changed or could not be saved. Reload and reopen it before retrying; your draft is retained.')); }
+    catch (e) { if (current()) setError(showAdminFailure(message, e, 'The Skill changed or could not be saved. Reload and reopen it before retrying; your draft is retained.', 'Save failed')); }
     finally { if (owner.current === instanceId) setBusy(false); }
   }
   async function open(skill?: InstanceSkill) {

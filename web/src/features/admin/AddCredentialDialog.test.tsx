@@ -13,8 +13,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AddCredentialDialog } from './AddCredentialDialog';
 import * as api from '../../services/adminApi';
 import * as drive from '../../services/drive';
+import dayjs from 'dayjs';
 vi.mock('../../services/adminApi', () => ({
   createCredential: vi.fn(),
+  createContainerRegistry: vi.fn(),
   createEmailAccount: vi.fn(),
   emailOAuthConfiguration: vi.fn(),
   startEmailOAuth: vi.fn(),
@@ -76,6 +78,20 @@ async function choose(label: string) {
     }),
   );
 }
+it('creates registry expiry as UTC metadata and clears protected input after a failed save',async()=>{
+  show();await choose('Container registry');
+  const d=within(screen.getByRole('dialog',{name:'Add credential'}));
+  for(const [label,value] of [['Display name','Hub fixture'],['Registry host','docker.io'],['Registry username','owner'],['Protected value','expiry-test-sentinel']])
+    fireEvent.change(d.getByLabelText(label,{exact:true}),{target:{value}});
+  const expiry=d.getByRole('textbox',{name:'Registry credential expiry'});
+  fireEvent.change(expiry,{target:{value:'2030-12-31 23:59:45'}});fireEvent.keyDown(expiry,{key:'Enter',code:'Enter'});
+  vi.mocked(api.createContainerRegistry).mockRejectedValue(new Error('Registry save unavailable.'));
+  fireEvent.click(d.getByRole('button',{name:'Save credential'}));
+  await waitFor(()=>expect(api.createContainerRegistry).toHaveBeenCalledWith(expect.objectContaining({protectedValue:'expiry-test-sentinel',profile:{registry:'docker.io',username:'owner',repositoryPrefixes:[],expiresAtUtc:dayjs('2030-12-31 23:59:45').toISOString()}})));
+  await screen.findByText('Registry save unavailable.');
+  expect(expiry).toHaveValue('2030-12-31 23:59:45');
+  expect(d.getByLabelText('Protected value',{exact:true})).toHaveValue('');
+});
 it('switching purposes clears transient secrets and names and submits a typed Custom profile', async () => {
   show();
   await choose('Custom email account');

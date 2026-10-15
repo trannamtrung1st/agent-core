@@ -55,7 +55,13 @@ public static class InfrastructureServiceCollectionExtensions
         browser ??= new BrowserOptions();
         services.TryAddSingleton(browser);
         services.TryAddSingleton(provider => {
-            var options = provider.GetService<IConfiguration>()?.GetSection("OpenSandbox").Get<OpenSandboxOptions>() ?? new OpenSandboxOptions();
+            var section = provider.GetService<IConfiguration>()?.GetSection("OpenSandbox");
+            var options = section?.Get<OpenSandboxOptions>() ?? new OpenSandboxOptions();
+            // ConfigurationBinder appends array entries to property initializers. An explicit
+            // host allowlist must replace the public defaults so it can actually narrow them.
+            // GetChildren also detects an explicitly null entry, whose section.Exists() is false.
+            if (section?.GetChildren().FirstOrDefault(child => child.Key.Equals("AllowedImagePrefixes", StringComparison.OrdinalIgnoreCase)) is { } prefixes)
+                options.AllowedImagePrefixes = prefixes.Get<string[]>() ?? [];
             options.ValidatePolicy(); return options;
         });
         services.TryAddSingleton<SandboxImageAuthority>();

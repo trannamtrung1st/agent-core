@@ -1,3 +1,4 @@
+import { showAdminFailure } from './adminFailure';
 import { followAppLink } from "../../app/appLink";
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { adminHomePath, adminInstancePath } from "../../app/appRoute";
@@ -32,7 +33,7 @@ const blank = (): AutomationDraft => ({ executionTarget: { kind: "backgroundSess
   triggers: [{ triggerId: crypto.randomUUID(), enabled: true, revision: 1, kind: "schedule", schedule: defaultTiming() }] });
 
 export function InstanceAutomationsSection({ instanceId, onWork, selection, active = true, onDirtyChange }: { instanceId: string; active?: boolean; onDirtyChange?: (dirty: boolean) => void; onWork: (workId?: string) => void; selection?: AutomationSelection }) {
-  const { token } = theme.useToken(); const { modal } = App.useApp();
+  const { token } = theme.useToken(); const { modal, message } = App.useApp();
   const { search, setSearch, pagination } = useAdminCollectionSearch();
   const screens = Grid.useBreakpoint();
   const formId = useId();
@@ -158,7 +159,7 @@ export function InstanceAutomationsSection({ instanceId, onWork, selection, acti
       apply(await request<AutomationReview>(instanceId, "automations"));
     } catch (reason) {
       if (runId && !accepted) { const next = { ...order.current.pending }; delete next[runId]; order.current.pending = next; setPending(next); }
-      const failure = describeAdminError(reason, "Automation update failed. Reload for the current revision.");
+      const failure = showAdminFailure(message, reason, "Automation update failed. Reload for the current revision.", 'Update failed');
       if (saveEditor && !accepted) setEditorError(failure); else setError(failure);
     } finally {
       if (saveEditor && accepted) {

@@ -16,6 +16,52 @@ public sealed class OciSandboxAuthorityTests
 {
     private const string Digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     [Theory]
+    [InlineData("mcr.microsoft.com/dotnet/sdk:10.0", "mcr.microsoft.com/dotnet/sdk", "10.0")]
+    [InlineData("ubuntu:24.04", "docker.io/library/ubuntu", "24.04")]
+    [InlineData("my.image:v1", "docker.io/library/my.image", "v1")]
+    [InlineData("my.image", "docker.io/library/my.image", "latest")]
+    [InlineData("library/busybox", "docker.io/library/busybox", "latest")]
+    [InlineData("acme/tool:v1", "docker.io/acme/tool", "v1")]
+    [InlineData("docker.io/ubuntu", "docker.io/library/ubuntu", "latest")]
+    [InlineData("localhost:5000/acme/tool:V1", "localhost:5000/acme/tool", "V1")]
+    [InlineData(" ghcr.io/acme/tool:latest ", "ghcr.io/acme/tool", "latest")]
+    public void Onboarding_names_normalize_without_weakening_immutable_runtime_references(string input, string path, string tag)
+    {
+        var source = OciImageSource.Parse(input);
+        Assert.Equal(path + "@sha256:" + new string('0', 64), source.Image.Value);
+        Assert.Equal(tag, source.Tag);
+        Assert.Throws<ArgumentException>(() => OciImageReference.Parse(input));
+    }
+
+    [Theory]
+    [InlineData("ubuntu:")] [InlineData("ubuntu:bad/tag")]
+    [InlineData("https://mcr.microsoft.com/dotnet/sdk:10.0")]
+    [InlineData("ghcr.io/acme/../tool:latest")] [InlineData("ghcr.io/acme/tool:tag?token=secret")]
+    [InlineData("ghcr.io/acme/tool:tag\nsecret")] [InlineData("sha256:invalid")]
+    public void Invalid_onboarding_sources_are_rejected(string input) => Assert.Throws<ArgumentException>(() => OciImageSource.Parse(input));
+
+    [Fact]
+    public void Onboarding_digests_and_local_ids_remain_pinned()
+    {
+        Assert.Equal("docker.io/library/ubuntu@sha256:" + Digest, OciImageSource.Parse("ubuntu@sha256:" + Digest).Image.Value);
+        var local = OciImageSource.Parse("sha256:" + Digest);
+        Assert.Null(local.Tag); Assert.True(local.Image.IsLocal);
+    }
+
+    [Theory]
+    [InlineData("docker.io/library/ubuntu")]
+    [InlineData("ghcr.io/astral-sh/uv")]
+    [InlineData("mcr.microsoft.com/dotnet/sdk")]
+    [InlineData("quay.io/prometheus/prometheus")]
+    [InlineData("public.ecr.aws/docker/library/busybox")]
+    public void Default_policy_allows_common_public_registries(string path)
+    {
+        var options = new OpenSandboxOptions(); options.ValidatePolicy();
+        options.ValidateProfile(new("public", 1, "Public", "", true, path + "@sha256:" + Digest));
+        Assert.Throws<ArgumentException>(() => options.ValidateProfile(new("foreign", 1, "Foreign", "", true, "mcr.microsoft.com.evil/tool@sha256:" + Digest)));
+    }
+
+    [Theory]
     [InlineData("ghcr.io/acme/tool", true)]
     [InlineData("ghcr.io/acme", true)]
     [InlineData("ghcr.io/acme-evil/tool", false)]

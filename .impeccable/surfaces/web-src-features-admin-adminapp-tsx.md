@@ -35,6 +35,12 @@ related_targets:
   - web/src/features/admin/InstanceWorkspaceSection.tsx
   - web/src/features/admin/CredentialsSection.tsx
   - web/src/features/admin/AddCredentialDialog.tsx
+  - web/src/features/admin/SandboxProfilesSection.tsx
+  - web/src/features/admin/SandboxProfileDetails.tsx
+  - web/src/features/admin/DefinitionSandboxPolicy.tsx
+  - web/src/features/admin/InstanceSandboxSummary.tsx
+  - web/src/features/admin/adminFormFeedback.ts
+  - web/src/features/admin/adminFailure.tsx
   - web/src/features/admin/CredentialFields.tsx
   - web/src/features/admin/CredentialConnectionTag.tsx
   - web/src/features/admin/DriveFiles.tsx
@@ -52,6 +58,8 @@ related_targets:
 ---
 
 # Admin configuration and continuity
+
+CURRENT SYNC (2026-10-15): This brief follows the current working tree based on `58bd05b3`, including uncommitted Sandbox modal/form and shared Admin feedback changes. [DESIGN.md](../../.agents/context/DESIGN.md) owns presentation guidance; [Frontend Implementation](../../docs/13-frontend-implementation-spec.md) owns behavior. The preview sidecar records inspected source hashes. Earlier source stamps and captures below remain historical; this documentation update does not rerun the app or renew acceptance.
 
 Definition Automation permissions use two primary checkboxes, Schedule and Events, with Built-in/Webhook children indented by Ant Design paddingLG. Checked/mixed/unchecked state derives from canonical child values. Concise descriptions explain explicit both-family enable and local restricted pause/resume; overall-disabled configuration is visible with inactive-authority guidance. Published inspection uses the same disabled controls. Keep ordinary text wrapping, shared section spacing and keyboard focus; no extra boxes or new tokens. Effective/Instance summaries and publish diffs name exact family grants. `/docs/13` owns behavior and canonical mappings.
 
@@ -137,3 +145,13 @@ The [successor verification ledger](../../docs/reports/drive-credentials-ux-veri
 ## P10 local sandbox extension
 
 Platform profiles and the Session sandbox drawer preserve the incumbent Ant Design operate surface and shared Office/Drive file preview. Theme tokens own spacing; output uses Collapse/copyable text and existing confirmations. A bounded 1440/1024/768/390/320px runtime review found no horizontal overflow after transitions settled. Save/Discard/navigation protection, actual artifacts, cancellation/reset and Core restart were exercised. Canonical docs and the OpenSandbox verification ledger own scope/remaining acceptance; this is local evidence, not production hardening.
+
+## Current Sandbox forms and submission feedback
+
+Add prebuilt image opens a centered, viewport-bounded 800px Ant Design Modal; saved-profile editing keeps the same fields in its existing panel. The body scrolls while Cancel/Save stay reachable. Dirty Cancel/Escape offers Keep editing or Discard changes, busy saves block dismissal, and nested credential creation owns Escape until it closes. Cancel restores the previous selection; close restores the creation trigger. Successful Save selects the saved revision for explicit verification.
+
+Forms retain a 48rem maximum and 72ch supporting copy. The Sandbox stack and shared field grid own 16px sibling gaps with no added field margins. Related fields use two equal columns at 768px+, stacking below; numeric controls fill their column. Global and Instance Sandbox storage displays MiB and persists exact integer bytes, including inherited hints. Scripts use 4–14 rows; Instance source/reset controls remain explicit. Image comes before optional Registry authentication. Tags and Docker Hub short names resolve to fixed digests on Save; the stored image identity remains copyable. Separate Save/Discard from readiness/verification actions. Inventory uses six columns with table-local 1080px scrolling.
+
+Client submission errors use the shared keyed AntD warning, persistent inline field guidance, disclosure of hidden invalid fields and deferred scroll/focus. Failed writes use action-specific error toasts plus retained local details, diagnostics and drafts. Reuse `adminFormFeedback` for native forms and explicit modal validation, and `showAdminFailure` for errors. Shared Instance configuration emits one coordinated notification and distinguishes a failed save from a failed refresh after a successful write. Background reads and polling keep local recovery; Reload does not stand in for correcting a failed save.
+
+Credential and Sandbox creation share the bounded container/body/footer rules with 16px viewport clearance and 40px narrow controls. Preserve native Modal keyboard/focus behavior and native AntD inner insets. The [feedback verification record](../../docs/reports/admin-form-feedback-verification-2026-10-15.md) records the earlier desktop/mobile interactions and remaining gaps. The [OCI hardening record](../../docs/reports/oci-sandbox-final-hardening-2026-10-15.md) owns storage, expiry and catalog checks; historical narrower catalog captures do not define the current table width.
