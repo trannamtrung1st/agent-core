@@ -79,62 +79,62 @@ function Workspace() {
     </StateIsolationConfigurationProvider></InstanceConfigurationProvider></App></ConfigProvider>;
 }
 async function save() {
-  const button = screen.getByRole('button', { name: 'Save configuration' });
+  const button = screen.getByLabelText('Save configuration');
   await waitFor(() => expect(button).toBeEnabled(), { timeout: 5000 }); await act(async () => { fireEvent.click(button); });
-  await waitFor(() => expect(screen.getByRole('region', { name: 'Instance configuration actions' })).toHaveTextContent('Configuration saved. Changes apply to the next new Run.'), { timeout: 5000 });
+  await waitFor(() => expect(screen.getByLabelText('Instance configuration actions')).toHaveTextContent('Configuration saved. Changes apply to the next new Run.'), { timeout: 5000 });
 }
 
 test('preset, detailed pages, manual edits, discard and reset share one atomic draft', async () => {
   render(<Workspace />);
-  const preset = await screen.findByRole('combobox', { name: 'Isolation preset' });
+  const preset = await screen.findByLabelText('Isolation preset');
   await waitFor(() => expect(preset).toBeEnabled()); fireEvent.mouseDown(preset);
   fireEvent.click(await screen.findByText('Stateless · new Session for each request'));
   await waitFor(() => expect(presetIsolation).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByRole('button', { name: 'Go voice' }));
-  expect(await screen.findByRole('switch', { name: 'Enabled' })).not.toBeChecked();
-  fireEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+  expect(await screen.findByLabelText('Enabled')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('Enabled'));
   await screen.findAllByText('Request isolation requires Voice off.');
-  expect(screen.getByRole('button', { name: 'Save configuration' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: 'Discard configuration changes' }));
-  expect(screen.getByRole('switch', { name: 'Enabled' })).toBeChecked();
+  expect(screen.getByLabelText('Save configuration')).toBeDisabled();
+  fireEvent.click(screen.getByLabelText('Discard configuration changes'));
+  expect(screen.getByLabelText('Enabled')).toBeChecked();
   fireEvent.click(screen.getByRole('button', { name: 'Go isolation' }));
-  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Isolation preset' })); fireEvent.click(await screen.findByText('Stateless · new Session for each request'));
+  fireEvent.mouseDown(screen.getByLabelText('Isolation preset')); fireEvent.click(await screen.findByText('Stateless · new Session for each request'));
   fireEvent.click(screen.getByRole('button', { name: 'Go memory' }));
-  expect(await screen.findByRole('switch', { name: 'Session memory' })).not.toBeChecked();
+  expect(await screen.findByLabelText('Session memory')).not.toBeChecked();
   await save();
   expect(applyIsolation).toHaveBeenCalledOnce(); expect(patchInstanceSettings).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Reset Memory policy to Definition' }));
+  fireEvent.click(screen.getByLabelText('Reset Memory policy to Definition'));
   fireEvent.click(await screen.findByRole('button', { name: 'Reset section' }));
   expect(applyIsolation).toHaveBeenCalledOnce();
-  expect(screen.getByRole('switch', { name: 'Session memory' })).toBeChecked();
-  expect(screen.getByRole('switch', { name: 'Session memory' })).toBeEnabled();
+  expect(screen.getByLabelText('Session memory')).toBeChecked();
+  expect(screen.getByLabelText('Session memory')).toBeEnabled();
   await save(); expect(applyIsolation).toHaveBeenCalledTimes(2);
   expect(vi.mocked(applyIsolation).mock.calls[1][1].draft.settings).toEqual([{ section: 'memoryPolicy', set: {}, clear: expect.arrayContaining(['sessionMemory']) }]);
-  fireEvent.click(screen.getByRole('button', { name: 'Go voice' })); expect(await screen.findByRole('switch', { name: 'Enabled' })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: 'Go voice' })); expect(await screen.findByLabelText('Enabled')).not.toBeChecked();
 });
 
 test.each([false, true])('mixed settings save retains disjoint edits and preserves opt-in fences (race=%s)', async race => {
   render(<Workspace />);
-  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Isolation preset' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByLabelText('Isolation preset')).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Go voice' }));
-  const voiceId = await screen.findByRole('textbox', { name: 'Voice ID' });
+  const voiceId = await screen.findByLabelText('Voice ID', { selector: 'input' });
   await waitFor(() => expect(voiceId).toBeEnabled());
   fireEvent.change(voiceId, { target: { value: 'custom-voice' } });
   fireEvent.click(screen.getByRole('button', { name: 'Go memory' }));
-  const memory = await screen.findByRole('switch', { name: 'Session memory' });
+  const memory = await screen.findByLabelText('Session memory');
   await waitFor(() => expect(memory).toBeEnabled()); fireEvent.click(memory);
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Save configuration' })).toBeEnabled(), { timeout: 5000 });
+  await waitFor(() => expect(screen.getByLabelText('Save configuration')).toBeEnabled(), { timeout: 5000 });
   if (race) {
     const persist = vi.mocked(patchInstanceSettings).getMockImplementation()!;
     vi.mocked(patchInstanceSettings).mockImplementation(async (...args) => {
       const result = await persist(...args); current.revisions.maintenance++; current.allowMaintenance = true; return result;
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+    fireEvent.click(screen.getByLabelText('Save configuration'));
     await screen.findByText(/1 configuration group saved before the failure/, { selector: '.ant-alert-title' });
-    expect(applyIsolation).not.toHaveBeenCalled(); expect(screen.getByRole('switch', { name: 'Session memory' })).not.toBeChecked();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh configuration' })).toBeEnabled());
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh configuration' })); });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh configuration' })).toBeEnabled());
+    expect(applyIsolation).not.toHaveBeenCalled(); expect(screen.getByLabelText('Session memory')).not.toBeChecked();
+    await waitFor(() => expect(screen.getByLabelText('Refresh configuration')).toBeEnabled());
+    await act(async () => { fireEvent.click(screen.getByLabelText('Refresh configuration')); });
+    await waitFor(() => expect(screen.getByLabelText('Refresh configuration')).toBeEnabled());
   }
   await save();
   expect(patchInstanceSettings).toHaveBeenCalledOnce(); expect(applyIsolation).toHaveBeenCalledOnce();
@@ -148,12 +148,12 @@ test('an unavailable coordinated read disables shared fields and recovers withou
   render(<Workspace />);
   await screen.findByText('Isolation read unavailable.');
   fireEvent.click(screen.getByRole('button', { name: 'Go voice' }));
-  expect(await screen.findByRole('switch', { name: 'Enabled' })).toBeDisabled();
-  const voiceId = screen.getByRole('textbox', { name: 'Voice ID' });
+  expect(await screen.findByLabelText('Enabled')).toBeDisabled();
+  const voiceId = screen.getByLabelText('Voice ID', { selector: 'input' });
   await waitFor(() => expect(voiceId).toBeEnabled());
   fireEvent.change(voiceId, { target: { value: 'retained' } });
   fireEvent.click(screen.getByRole('button', { name: 'Retry isolation' }));
-  await waitFor(() => expect(screen.getByRole('switch', { name: 'Enabled' })).toBeEnabled());
-  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Voice ID' })).toHaveValue('retained'));
+  await waitFor(() => expect(screen.getByLabelText('Enabled')).toBeEnabled());
+  await waitFor(() => expect(screen.getByLabelText('Voice ID', { selector: 'input' })).toHaveValue('retained'));
   expect(patchInstanceSettings).not.toHaveBeenCalled(); expect(applyIsolation).not.toHaveBeenCalled();
 });

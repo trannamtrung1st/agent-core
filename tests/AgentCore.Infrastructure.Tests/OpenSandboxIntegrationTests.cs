@@ -572,8 +572,11 @@ public sealed class OpenSandboxIntegrationTests
         Assert.Null(await f.Store.GetLeaseAsync(f.Session.SessionId));
         foreach (var arguments in new[] { """{"command":"true","timeoutSeconds":"120"}""", """{"command":"true","background":"false"}""", """{"command":123}""" })
             Assert.Contains("invalid",(await executor.ExecuteAsync(definition,f.Session.SessionId,new(Guid.NewGuid().ToString(),ToolCatalog.SandboxExec,arguments),8192,admission:admission)).Text);
-        var unknown = await executor.ExecuteAsync(definition,f.Session.SessionId,new("unknown-clipped",ToolCatalog.SandboxExec,"""{"command":"ln -s /etc/passwd link"}"""),64,admission:admission);
-        Assert.True(unknown.OutcomeUnknown); Assert.InRange(Encoding.UTF8.GetByteCount(unknown.Text),0,64);
+        var rejected = await executor.ExecuteAsync(definition,f.Session.SessionId,new("unsafe-clipped",ToolCatalog.SandboxExec,"""{"command":"ln -s /etc/passwd link"}"""),64,admission:admission);
+        Assert.False(rejected.OutcomeUnknown); Assert.True(rejected.EffectObserved);
+        Assert.InRange(Encoding.UTF8.GetByteCount(rejected.Text),0,64);
+        var receipt = await f.Store.GetOperationAsync(f.Session.SessionId, f.Run.AgentRunId, "unsafe-clipped");
+        Assert.Equal("unsafeFiles", receipt!.FailureCategory); Assert.Equal("notCommitted", receipt.WorkspaceSyncStatus);
     }
 
     [OpenSandboxFact]

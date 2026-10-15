@@ -634,11 +634,17 @@ public sealed class NativePlaywrightBrowserAdapterTests(BrowserHostFixture fixtu
                 }
             ]);
 
+            // Each Session closes only its own view, even when the profile context is shared.
+            Assert.Equal("already_closed", (await session.ExecuteAsync(BrowserTestRequests.Close(sessionB))).Status);
+            Assert.NotNull(session.ContextFor(sessionA));
+            Assert.Null((await session.ExecuteAsync(BrowserTestRequests.Navigate(sessionB, new Uri(origin + "/")))).ErrorCode);
             var closed = await session.ExecuteAsync(BrowserTestRequests.Close(sessionB));
             Assert.Equal("closed", closed.Status);
-            Assert.Null(session.ContextFor(sessionA));
+            Assert.NotNull(session.ContextFor(sessionA));
             Assert.Null(session.ContextFor(sessionB));
-            Assert.Equal("already_closed", (await session.ExecuteAsync(BrowserTestRequests.Close(sessionA))).Status);
+            Assert.Equal("already_closed", (await session.ExecuteAsync(BrowserTestRequests.Close(sessionB))).Status);
+            Assert.Equal("closed", (await session.ExecuteAsync(BrowserTestRequests.Close(sessionA))).Status);
+            Assert.Null(session.ContextFor(sessionA));
 
             var reopened = await session.ExecuteAsync(BrowserTestRequests.Navigate(sessionA, new Uri(origin + "/")));
             Assert.Null(reopened.ErrorCode);

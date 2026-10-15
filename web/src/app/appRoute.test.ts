@@ -54,6 +54,8 @@ it('redirects saved Execution sandbox anchors to the dedicated Instance Sandbox 
  it('relocates Definition Sandbox anchors and shares navigation placement with Instances', () => {
   const draft = `/admin/definitions/examiner/drafts/${id}`;
   expect(canonicalAppUrl(`${draft}/capabilities#sandboxPolicy`)).toBe(`${draft}/sandbox#sandboxPolicy`);
-  expect(draftPages.findIndex(page => page.id === 'sandbox')).toBe(draftPages.findIndex(page => page.id === 'execution') + 1);
-  expect(instancePages.findIndex(page => page.id === 'sandbox')).toBe(instancePages.findIndex(page => page.id === 'execution') + 1);
+  for (const pages of [draftPages, instancePages]) {
+    const execution = pages.findIndex(page => page.id === 'execution');
+    expect(pages.slice(execution, execution + 3).map(page => page.id)).toEqual(['execution', 'state-isolation', 'sandbox']);
+  }
 });

@@ -744,6 +744,8 @@ The generic Linux follow-up replaces SDK-recognition assertions with persistent/
 
 The [small final Sandbox follow-up](reports/sandbox-final-polish-acceptance-2026-10-15.md) injects completed-command inspection failures with denied/confirmed retirement, Run and request cancellation, and verifies independent file-recovery projection. Focused real SDK, Synthetic recovery UI and an intentionally deployed Real disposable Session provide separate evidence; prior native AMD64/Java gaps and opt-in CI policy remain unchanged.
 
+`SandboxCommandPermissionsTests` executes the real POSIX shell/argv wrapper and verifies literal arguments, exact exit status, permissive new-directory modes inside private scratch and no argument interpolation. Real OpenSandbox acceptance exercises nested Python/npm/Office output collection and staging cleanup with a different image UID.
+
 ## State and isolation verification
 
 `InstanceIsolationWorkspace.test.tsx` exercises preset changes across State/Memory/Voice, independent edits, common Discard, staged resets, mixed disjoint saves, an opt-in revision race with refresh/retry, and unavailable-read recovery. The [workspace consistency review](reports/state-isolation-workspace-review-2026-10-15.md) records the reproduced stale detailed-page state and focused verification.

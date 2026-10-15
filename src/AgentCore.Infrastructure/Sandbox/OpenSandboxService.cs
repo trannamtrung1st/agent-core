@@ -162,8 +162,8 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 };
                 var opts = new RunCommandOptions { WorkingDirectory = command.Cwd, Background = command.Background, TimeoutSeconds = timeout };
                 var execution = await GuardCommandStorageAsync(lease, token => command.Command is { } shell
-                    ? sdk.Commands.RunAsync(shell, opts, handlers, token)
-                    : sdk.Commands.RunAsync(command.Argv!, opts, handlers, token), ct);
+                    ? sdk.Commands.RunAsync(SandboxCommandPermissions.Shell(shell), opts, handlers, token)
+                    : sdk.Commands.RunAsync(SandboxCommandPermissions.Argv(command.Argv!), opts, handlers, token), ct);
                 if (!command.Background && (execution.ExitCode is null or < 0 or > 255
                     || execution.Error?.Name?.Contains("Timeout",StringComparison.OrdinalIgnoreCase) == true))
                     throw execution.Error?.Name?.Contains("Timeout", StringComparison.OrdinalIgnoreCase) == true

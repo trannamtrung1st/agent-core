@@ -48,7 +48,9 @@ async function choose(page: Page, key: string, plus = false) {
 
 async function send(page: Page, count: number) {
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(page.locator(".chat-message-assistant")).toHaveCount(count);
+  // Admission and durable finalization can queue behind other Synthetic work on CI.
+  // Use the same bounded response budget as the terminal-state helper below.
+  await expect(page.locator(".chat-message-assistant")).toHaveCount(count, { timeout: 30_000 });
   await expect(page.locator(".chat-message-assistant").last()).toContainText("Hello from synthetic.");
   await waitForResponseSettled(page);
 }
