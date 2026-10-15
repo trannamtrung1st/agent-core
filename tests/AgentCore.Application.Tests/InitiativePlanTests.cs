@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
@@ -70,7 +71,8 @@ public sealed class InitiativePlanTests
     [Fact]
     public void Examiner_identity_instructs_direct_hints_when_candidate_asks()
     {
-        var identity = PromptContextBuilder.BuildAgentIdentity(SampleDefinitions.Examiner);
+        var context = new PromptContextBuilder().BuildContext(ExaminerContext(DateTimeOffset.UtcNow, 0, "help", VietnamQuestion));
+        var identity = context.Text(ContextSectionId.AgentInstructions);
         Assert.Contains("explicitly asks for help or a hint", identity, StringComparison.Ordinal);
         Assert.Contains("give the hint directly", identity, StringComparison.OrdinalIgnoreCase);
     }
@@ -117,7 +119,7 @@ public sealed class InitiativePlanTests
             new AgentTrigger(Guid.NewGuid(), TriggerKind.UserTurn, null),
             UtcNow: now);
         var request = builder.Build(context, Guid.NewGuid());
-        var identity = request.Messages.First(message => message.Role == ModelRole.System).Text;
+        var identity = request.Context!.Text(ContextSectionId.AgentInstructions);
         Assert.Contains("give the hint directly", identity, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -295,7 +297,7 @@ public sealed class InitiativePlanTests
         var request = InitiativeEvaluator.CreateEvaluationRequest(
             ExaminerContext(DateTimeOffset.UtcNow, 90, "hmmm", VietnamQuestion),
             new PromptContextBuilder());
-        var system = request.Messages.First(message => message.Role == ModelRole.System).Text;
+        var system = request.Context!.Text(ContextSectionId.CoreInitiative);
         Assert.Contains("staySilent", system, StringComparison.Ordinal);
         Assert.Contains("nextWaitMs is optional on staySilent and speak only", system, StringComparison.Ordinal);
         Assert.DoesNotContain("nextWaitMs is optional on every decision", system, StringComparison.Ordinal);
@@ -524,7 +526,7 @@ public sealed class InitiativePlanTests
             ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            var system = request.Messages.FirstOrDefault(message => message.Role == ModelRole.System)?.Text;
+            var system = request.Context?.Text(ContextSectionId.CoreInitiative);
             if (system is null || !system.Contains(InitiativeEvaluator.Marker, StringComparison.Ordinal))
             {
                 LastGenerationRequest = string.Join('\n', request.Messages.Select(message => message.Text));
@@ -549,7 +551,7 @@ public sealed class InitiativePlanTests
             ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            var system = request.Messages.FirstOrDefault(message => message.Role == ModelRole.System)?.Text;
+            var system = request.Context?.Text(ContextSectionId.CoreInitiative);
             if (system is not null && system.Contains(InitiativeEvaluator.Marker, StringComparison.Ordinal))
             {
                 var index = Math.Min(_initiativeCalls++, initiativeJson.Count - 1);

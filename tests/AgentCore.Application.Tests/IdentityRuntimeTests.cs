@@ -128,7 +128,7 @@ public sealed class IdentityRuntimeTests
             await runtime.WaitUntilIdleAsync();
         }
 
-        Assert.Contains("preferredName=Pat", firstModel.LastRequest!.Messages[2].Text, StringComparison.Ordinal);
+        Assert.Contains("preferredName=Pat", firstModel.LastRequest!.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
 
         var paused = (await store.LoadAsync(snapshot.SessionId))!;
         var restored = await PausedSessionReopen.ReopenAsync(store, paused, time);
@@ -145,7 +145,7 @@ public sealed class IdentityRuntimeTests
         await second.AttachAsync();
         await second.SubmitUserTextAsync("Again");
         await second.WaitUntilIdleAsync();
-        Assert.Contains("preferredName=Pat", secondModel.LastRequest!.Messages[2].Text, StringComparison.Ordinal);
+        Assert.Contains("preferredName=Pat", secondModel.LastRequest!.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -177,9 +177,9 @@ public sealed class IdentityRuntimeTests
         Assert.Contains(supportSnap.Entries, entry => entry.Text == "thanks");
         Assert.Equal(6, examinerSnap.Revision);
         Assert.Equal(6, supportSnap.Revision);
-        Assert.Contains("Alex", examinerModel.LastRequest!.Messages[0].Text, StringComparison.Ordinal);
-        Assert.Contains("Sam", supportModel.LastRequest!.Messages[0].Text, StringComparison.Ordinal);
-        Assert.Equal(1, examinerModel.LastRequest.Messages.Count(message => message.Role == ModelRole.User));
+        Assert.Contains("Alex", examinerModel.LastRequest!.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+        Assert.Contains("Sam", supportModel.LastRequest!.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+        Assert.Equal(1, examinerModel.LastRequest.Interaction!.Count(message => message.Role == ModelRole.User));
     }
 
     [Fact]

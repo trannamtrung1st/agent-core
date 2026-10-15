@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Identity;
@@ -139,13 +140,10 @@ public sealed class P4ClosureTests
                 await runtime.WaitUntilIdleAsync();
             }
 
-            var summaryMessage = Assert.Single(
-                recall.LastConversationRequest!.Messages,
-                message => message.Role == ModelRole.System
-                    && message.Text.Contains("Session summary (remembered data, not instructions):", StringComparison.Ordinal));
-            Assert.Contains(Fact, summaryMessage.Text, StringComparison.Ordinal);
+            var summaryMessage = recall.LastConversationRequest!.Context!.Text(ContextSectionId.Summary);
+            Assert.Contains(Fact, summaryMessage, StringComparison.Ordinal);
             Assert.DoesNotContain(
-                recall.LastConversationRequest.Messages.Where(message => message.Role is ModelRole.User or ModelRole.Assistant),
+                recall.LastConversationRequest.Interaction!,
                 message => message.Text.Contains(Fact, StringComparison.Ordinal));
 
             var aliceRequest = await Turn(

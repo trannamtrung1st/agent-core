@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
@@ -252,8 +253,8 @@ public sealed class UserMemoryTests
         Assert.DoesNotContain(PrivateB, text, StringComparison.Ordinal);
         Assert.Contains("preferredName=Pat", text, StringComparison.Ordinal);
         Assert.Contains(SessionMemoryPrompt.TrustedPrecedence, text, StringComparison.Ordinal);
-        Assert.DoesNotContain(Shared, request.Messages[0].Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("call them Sam", request.Messages[2].Text, StringComparison.Ordinal);
+        Assert.DoesNotContain(Shared, request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+        Assert.DoesNotContain("call them Sam", request.Context!.Text(ContextSectionId.Profile), StringComparison.Ordinal);
 
         var denied = await SessionMemoryPrompt.LoadAsync(
             service,
