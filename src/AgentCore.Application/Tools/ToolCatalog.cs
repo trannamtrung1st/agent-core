@@ -94,6 +94,7 @@ public static class ToolCatalog
     public const string BrowserConfiguration = "browser.get_config";
     public const string BrowserGeolocation = "browser.set_geolocation";
     public const string ContinuitySearch = "continuity.search";
+    public const string AgentStateInspect = "agent.state.inspect";
     public const string ContinuityGet = "continuity.get";
     public const string MemoryConsolidate = "memory.consolidate";
     public const string MemoryForget = "memory.forget";

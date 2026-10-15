@@ -15,14 +15,14 @@ public sealed record InstanceSettingsSection(string Section, long InstanceRevisi
 
 public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
     IIdGenerator ids, TimeProvider time, IModelCatalog? models = null, ProviderAliasSet? aliases = null,
-    Triggers.InstanceAutomationPolicy? automationPolicy = null, ISandboxStore? sandboxes = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null)
+    Triggers.InstanceAutomationPolicy? automationPolicy = null, ISandboxStore? sandboxes = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, IBrowser? browser = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public async ValueTask<IReadOnlyList<InstanceSettingsSection>> ReadAllAsync(Guid id, CancellationToken ct = default)
     {
         var owner = await RequireAsync(id, ct);
         var definition = await BindSandboxAsync(await DefinitionAsync(owner, ct), owner.SettingsOverrides ?? new(), ct);
-        return InstanceSettingsResolver.Sections.Select(section => View(owner, definition, section)).ToArray();
+        return InstanceSettingsResolver.Sections.Select(section => WithHostConstraints(View(owner, definition, section))).ToArray();
     }
     public async ValueTask<InstanceSettingsSection> ReadAsync(Guid id, string section, CancellationToken ct = default)
     {
@@ -40,7 +40,8 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         await ValidateSandboxChoiceAsync(section, set, ct);
         definition = await BindSandboxAsync(definition, candidate, ct);
         if (section == "sandboxPolicy" && definition.ExecutionSandboxProfile is { } profile) _ = SandboxSetupResolver.Resolve(profile, candidate, owner.Revision, rejectExpansion:true);
-        _ = ResolvePatch(definition, owner.SettingsOverrides ?? new(), section, set, clear);
+        var (_, effective) = ResolvePatch(definition, owner.SettingsOverrides ?? new(), section, set, clear);
+        ValidateBrowser(effective);
     }
 
     public async ValueTask<InstanceSettingsSection> PatchAsync(Guid id, string section, long expectedRevision,
@@ -56,6 +57,7 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         var bound = await BindSandboxAsync(definition, candidate, ct);
         if (section == "sandboxPolicy" && bound.ExecutionSandboxProfile is { } profile) _ = SandboxSetupResolver.Resolve(profile, candidate, owner.Revision, rejectExpansion:true);
         var (next, effective) = ResolvePatch(bound, current, section, set, clear);
+        ValidateBrowser(effective);
         if (JsonSerializer.Serialize(current, Json) == JsonSerializer.Serialize(next, Json)) return await ViewAsync(owner, definition, section, ct);
         var now = time.GetUtcNow();
         var history = new AdminEventAppend(ids.NewId(), now, actor, AdminEventOperationKind.InstanceSettingsChanged,
@@ -65,6 +67,13 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         var updated = await instances.UpdateWithExpectedRevisionAsync(new(id, expectedRevision,
             History: history, SetSettingsOverrides: true, SettingsOverrides: next, AutomationPolicyChanges: reconciliation, HarnessManagement: harnessManagement), now, ct);
         return await ViewAsync(updated, definition, section, ct);
+    }
+
+    private void ValidateBrowser(AgentDefinition effective)
+    {
+        if (effective.StateIsolationPolicy?.BrowserIsolation == BrowserIsolation.PersistentAgent
+            && browser?.HostPolicy.ProfileMode != BrowserProfileMode.PersistentAgent)
+            throw AgentCoreErrors.Validation("This host does not permit persistent browser profiles.");
     }
 
     private async ValueTask ValidateSandboxChoiceAsync(string section, IReadOnlyDictionary<string, JsonElement> set, CancellationToken ct)
@@ -105,7 +114,16 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
     private async Task<InstanceSettingsSection> ViewAsync(AgentInstance owner, AgentDefinition definition, string section, CancellationToken ct)
     {
         definition = await BindSandboxAsync(definition, owner.SettingsOverrides ?? new(), ct);
-        return View(owner, definition, section);
+        return WithHostConstraints(View(owner, definition, section));
+    }
+    private InstanceSettingsSection WithHostConstraints(InstanceSettingsSection view)
+    {
+        if (view.Section != "stateIsolationPolicy" || browser?.HostPolicy.ProfileMode == BrowserProfileMode.PersistentAgent) return view;
+        var constraints = view.Constraints.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+        var profile = constraints["browserIsolation"];
+        constraints["browserIsolation"] = profile with { Reason = "This host permits ephemeral Session contexts. Persistent profiles require a deployment that permits them.",
+            Choices = profile.Choices?.Where(c => c != "PersistentAgent").ToArray() };
+        return view with { Constraints = constraints };
     }
     private static InstanceSettingsSection View(AgentInstance owner, AgentDefinition definition, string section)
     {

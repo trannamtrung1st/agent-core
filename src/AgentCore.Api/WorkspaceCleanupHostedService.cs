@@ -16,6 +16,7 @@ public sealed class WorkspaceCleanupHostedService(
             {
                 // Resolve inside supervision so an unavailable cleanup dependency does not block host startup.
                 await services.GetRequiredService<IAdminLifecycleDeletion>().RecoverWorkspaceCleanupAsync(stoppingToken);
+                await services.GetRequiredService<AgentCore.Application.Workspaces.SessionWorkingCleanupService>().RecoverAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             catch (Exception ex)

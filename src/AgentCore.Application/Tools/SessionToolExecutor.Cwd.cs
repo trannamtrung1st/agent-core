@@ -18,6 +18,7 @@ public sealed partial class SessionToolExecutor
             return args.TryGetProperty("path", out _) ? TextResult(Error("invalid", "get does not accept path.")) : TextResult(JsonSerializer.Serialize(new { cwd }));
         if (!TryString(args, "path", out var path)) return TextResult(Error("invalid", "set requires path."));
         path = AgentWorkspacePaths.Resolve(path, sessionId, cwd);
+        AgentCore.Application.Agents.StateIsolationAccess.RequireHome(await IsolationAsync(definition, sessionId, ct), path, false);
         if (!AgentHomePath.IsHome(path) && path != WorkspaceLogicalPath.WorkingDirectory
             && !path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal))
             return TextResult(Error("forbidden", "cwd must be an authorized /home or /working directory."));

@@ -13,7 +13,8 @@ public sealed class AgentInstanceWorkspaceService(
     IAgentInstanceWorkspaceStore store,
     IMemoryStore sessions,
     ISessionWorkspace scratch,
-    AdminLifecycleCoordinator lifecycle)
+    AdminLifecycleCoordinator lifecycle,
+    IAgentDefinitionStore? definitions = null)
 {
     public ValueTask<AgentWorkspacePage> ListAsync(Guid owner, string prefix = "/home", string? afterPath = null,
         int limit = AgentWorkspaceLimits.MaxPageItems, CancellationToken cancellationToken = default) =>
@@ -69,6 +70,7 @@ public sealed class AgentInstanceWorkspaceService(
         return await lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
+            await RequireSessionHomeAsync(sessionId, path, true, ct);
             return await store.WriteFileAsync(owner, path, contentType, bytes, sessionId, expectedRevision, expectedSha256, ct);
         }, cancellationToken);
     }
@@ -84,6 +86,7 @@ public sealed class AgentInstanceWorkspaceService(
         await lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
+            await RequireSessionHomeAsync(sessionId, path, true, ct);
             if (AgentHomePath.IsHome(path)) await store.WriteFileAsync(owner, path, contentType, bytes, sessionId, null, expectedSha256, ct);
             else
             {
@@ -103,6 +106,7 @@ public sealed class AgentInstanceWorkspaceService(
         return await lifecycle.WithInstanceAsync<WorkspacePatchResult>(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
+            await RequireSessionHomeAsync(sessionId, path, true, ct);
             var original = await store.ReadAsync(owner, null, path, ct);
             if (original.Item.Sha256Hex != expectedSha256) throw AgentCoreErrors.Conflict("Home file hash does not match expectedSha256.");
             var bytes = WorkspaceTextPatches.Apply(original.Bytes, edits);
@@ -127,6 +131,8 @@ public sealed class AgentInstanceWorkspaceService(
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
             await scratch.EnsureAsync(sessionId, snapshot.Definition, ct);
+            await RequireSessionHomeAsync(sessionId, source, false, ct);
+            await RequireSessionHomeAsync(sessionId, destination, true, ct);
             var transfer = sourceHome ? await store.ExportAsync(owner, source, ct) : await scratch.ExportAsync(sessionId, source, ct);
             if (destinationHome) await store.ImportAsync(owner, destination, transfer, sessionId, expectedRevision, expectedSha256, ct);
             else await scratch.ImportAsync(sessionId, destination, transfer, expectedRevision, expectedSha256, ct);
@@ -146,6 +152,7 @@ public sealed class AgentInstanceWorkspaceService(
         return await lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
+            await RequireSessionHomeAsync(sessionId, "/home", true, ct);
             return await store.StructureAsync(owner, operations, expectedTreeSha256, ct);
         }, cancellationToken);
     }
@@ -185,6 +192,17 @@ public sealed class AgentInstanceWorkspaceService(
                 if (page.TreeSha256 != token) throw AgentCoreErrors.Conflict("Home changed during listing. Reload its current tree.");
             }
         }, cancellationToken);
+
+    public async ValueTask RequireSessionHomeAsync(Guid sessionId, string path, bool write, CancellationToken ct = default)
+    {
+        if (!AgentHomePath.IsHome(path)) return;
+        var snapshot = await SessionAsync(sessionId, write, ct);
+        var instance = await RequireAsync(snapshot.AgentInstanceId, write, ct);
+        var baseline = definitions is null ? snapshot.Definition : await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct)
+            ?? throw AgentCoreErrors.Persistence("Current Definition is unavailable.");
+        var current = AgentCore.Application.Agents.InstanceSettingsResolver.Resolve(baseline, instance.SettingsOverrides);
+        AgentCore.Application.Agents.StateIsolationAccess.RequireHome(current.StateIsolationPolicy ?? StateIsolationPolicy.Default, path, write);
+    }
 
     private async ValueTask<AgentInstance> RequireAsync(Guid owner, bool mutation, CancellationToken ct)
     {

@@ -8,7 +8,11 @@ AC-01–AC-17 are locally verified through focused producer/role/source/injectio
 
 ## Verification policy for current work
 
+The 2026-10-15 owner-authorized State and Isolation enhancement is integrated with the reviewed Three-Layer Context cutover (`ff875ea4`). Observation, ordinary field policy, atomic preset drafts, resource ownership and scoped model-facing state use the existing owners and single assembler. The [state/isolation ledger](reports/agent-state-isolation-verification-2026-10-15.md) records AS-01–28 local evidence, including Synthetic/SQLite and explicitly enabled disposable Chromium; optional live-provider/CI and deployment boundaries remain disclosed. The [review follow-up](reports/agent-state-isolation-review-2026-10-15.md) records strict-boundary and browser sibling-coordination corrections. This scope does not reopen historical milestones.
+
 Complete ordinary requests within their scope using focused local checks; they do not start milestone closure or require full backend/frontend/browser/Compose suites. Broaden local verification only for affected boundaries, failures or explicitly requested milestone acceptance. [Testing Strategy](16-testing-strategy.md#verification-scope-and-optional-ci) owns the current policy.
+
+The [current main integration ledger](reports/agent-state-main-integration-2026-10-15.md) records the combined State/isolation and context-hardening checks through main `76216100`, including its admitted-user retry correction, with earlier source ledgers preserved as historical evidence.
 
 CI is optional and runs only on explicit user request. This policy supersedes older mandatory hosted/exact-SHA CI language below for current work, including milestone acceptance unless the user explicitly requests CI as part of it. Preserve historical acceptance criteria, freeze SHAs and CI receipts as records of their original versions. Report local completion separately from milestone acceptance and never claim unrun checks passed.
 

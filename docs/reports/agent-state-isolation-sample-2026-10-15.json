@@ -1,0 +1,60 @@
+{
+  "agentInstanceId": "<owned-instance>",
+  "observedAtUtc": "2026-10-15T11:43:36.771628+00:00",
+  "freshThroughUtc": "2026-10-15T11:43:51.771628+00:00",
+  "availability": "partial",
+  "sessions": {
+    "open": 2,
+    "paused": 0,
+    "terminal": 3,
+    "lastActivityAtUtc": "2026-10-15T11:43:26.106+00:00"
+  },
+  "hostedSessions": {
+    "runtimes": 2,
+    "attached": 2
+  },
+  "runs": {
+    "queued": 0,
+    "executing": 0,
+    "waitingApproval": 0,
+    "waitingSignal": 0,
+    "retrying": 0,
+    "terminal": 7
+  },
+  "resources": [
+    {
+      "kind": "browser",
+      "availability": "unavailable",
+      "sharing": "unknown",
+      "observedAtUtc": "2026-10-15T11:43:36.772164+00:00",
+      "liveContexts": null,
+      "openPages": null,
+      "activeGenerations": null,
+      "activeCommands": null,
+      "cleanupPending": null,
+      "code": "provider_unavailable"
+    },
+    {
+      "kind": "sandbox",
+      "availability": "unavailable",
+      "sharing": "isolated",
+      "observedAtUtc": "2026-10-15T11:43:36.771628+00:00",
+      "liveContexts": null,
+      "openPages": null,
+      "activeGenerations": null,
+      "activeCommands": null,
+      "cleanupPending": 0,
+      "code": "provider_unavailable"
+    }
+  ],
+  "issues": [
+    {
+      "kind": "browser",
+      "code": "provider_unavailable"
+    },
+    {
+      "kind": "sandbox",
+      "code": "provider_unavailable"
+    }
+  ]
+}

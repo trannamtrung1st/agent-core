@@ -23,6 +23,7 @@ public sealed partial class SessionToolExecutor
             || !TryString(args, "url", out var urlText) || urlText.Length > 4096
             || !Uri.TryCreate(urlText, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https") || url.UserInfo.Length != 0)
             return Error("invalid", "Use an absolute public HTTP(S) URL without credentials and only the documented download arguments.");
+        var isolation = await IsolationAsync(definition, sessionId, ct);
         string? path = null;
         if (args.TryGetProperty("path", out _))
         {
@@ -43,7 +44,7 @@ public sealed partial class SessionToolExecutor
         RuntimeTelemetry.Record("web.download", RuntimeTelemetry.ElapsedMs(started));
         ct.ThrowIfCancellationRequested();
         if (result.ErrorCode is not null) return JsonSerializer.Serialize(new { status = "failed", untrusted = true, sourceUrl = url.AbsoluteUri, finalUrl = result.FinalUrl, error = result.ErrorCode, message = result.ErrorMessage });
-        path ??= DownloadPath("/home/downloads/" + SafeDownloadName(result.SuggestedFileName ?? new Uri(result.FinalUrl).AbsolutePath.Split('/').Last()));
+        path ??= DownloadPath((isolation.HomeAccess == HomeAccess.ReadWrite ? "/home/downloads/" : "/working/downloads/") + SafeDownloadName(result.SuggestedFileName ?? new Uri(result.FinalUrl).AbsolutePath.Split('/').Last()));
         var mismatch = DownloadTypeMismatch(path, result.Bytes);
         if (mismatch is not null) return JsonSerializer.Serialize(new { status = "failed", untrusted = true, finalUrl = result.FinalUrl, contentType = result.ContentType, error = "file_type_mismatch", message = mismatch });
         var contentType = DownloadContentType(path, result.ContentType);
@@ -57,6 +58,7 @@ public sealed partial class SessionToolExecutor
             var resolved = AgentWorkspacePaths.Resolve(raw, sessionId, admission.WorkspaceCwd ?? "/home", structural: true);
             if (!resolved.StartsWith("/home/", StringComparison.Ordinal) && !resolved.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal))
                 throw AgentCoreErrors.Forbidden("Download destinations must be files in /home or current Session /working.");
+            AgentCore.Application.Agents.StateIsolationAccess.RequireHome(isolation, resolved, true);
             return resolved;
         }
         async Task PreflightAsync(string destination)

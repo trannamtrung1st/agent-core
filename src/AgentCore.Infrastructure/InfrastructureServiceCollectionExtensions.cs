@@ -292,6 +292,7 @@ public static class InfrastructureServiceCollectionExtensions
         });
         services.TryAddSingleton<AdminLifecycleCoordinator>();
         services.TryAddSingleton<AgentInstanceWorkspaceService>();
+        services.TryAddSingleton<AgentCore.Application.Workspaces.SessionWorkingCleanupService>();
         services.TryAddSingleton<ISessionWorkspace>(provider =>
         {
             var options = provider.GetRequiredService<PersistenceOptions>();
@@ -416,10 +417,14 @@ public static class InfrastructureServiceCollectionExtensions
             privacy: sp.GetRequiredService<BrowserPrivacyService>(), diagnostics: sp.GetRequiredService<IDiagnosticIdSource>()));
         services.TryAddSingleton<IBrowser>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.TryAddSingleton<IBrowserLease>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
+        services.TryAddSingleton<IBrowserStateReader>(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.AddHostedService(sp => sp.GetRequiredService<NativePlaywrightBrowser>());
         services.TryAddSingleton<AgentInstanceSkillService>();
         services.TryAddSingleton<InstanceAutomationPolicy>();
         services.TryAddSingleton<AgentInstanceSettingsService>();
+        services.TryAddSingleton<IStateIsolationConfigurationStore>(p => p.GetRequiredService<IAgentInstanceStore>() is IStateIsolationConfigurationStore sqlite
+            ? sqlite : new InMemoryStateIsolationConfigurationStore((InMemoryAgentInstanceStore)p.GetRequiredService<IAgentInstanceStore>(), (InMemoryExperienceStore)p.GetRequiredService<IExperienceStore>()));
+        services.TryAddSingleton<StateIsolationConfigurationService>();
         services.TryAddSingleton<InheritedDefinitionResourceCatalog>();
         services.TryAddSingleton<AgentInstanceResourceService>();
         services.TryAddSingleton<AgentCore.Application.Execution.AgentRunConfigurationResolver>();
@@ -452,7 +457,7 @@ public static class InfrastructureServiceCollectionExtensions
             provider.GetRequiredService<AgentInstanceSkillService>(),
             provider.GetRequiredService<ICoreEventStore>(),
             provider.GetRequiredService<InheritedDefinitionResourceCatalog>(),
-            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>(), provider.GetService<ILogger<SessionToolExecutor>>(), provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<IOfficeProcessor>(), provider.GetRequiredService<AgentCore.Application.Drive.DriveService>(), provider.GetRequiredService<ISandboxService>(), provider.GetRequiredService<ISandboxStore>(), provider.GetRequiredService<ISandboxImageAuthority>(), provider.GetRequiredService<ISandboxReadiness>()));
+            provider.GetService<SelfManagementService>(), provider.GetService<AgentInstanceSettingsService>(), provider.GetService<AgentInstanceResourceService>(), provider.GetService<IAgentCredentialBindingStore>(), provider.GetService<AdminAgentInstanceService>(), provider.GetService<AgentCore.Application.Email.EmailAccountService>(), provider.GetService<IEmailStore>(), provider.GetService<IAgentRunStore>(), provider.GetService<ILogger<SessionToolExecutor>>(), provider.GetRequiredService<IDiagnosticIdSource>(), provider.GetRequiredService<IOfficeProcessor>(), provider.GetRequiredService<AgentCore.Application.Drive.DriveService>(), provider.GetRequiredService<ISandboxService>(), provider.GetRequiredService<ISandboxStore>(), provider.GetRequiredService<ISandboxImageAuthority>(), provider.GetRequiredService<ISandboxReadiness>(), provider.GetRequiredService<AgentCore.Application.Workspaces.SessionWorkingCleanupService>(), () => provider.GetService<RuntimeStateService>()));
         services.TryAddSingleton(provider =>
         {
             var speech = provider.GetRequiredService<SpeechResolution>();

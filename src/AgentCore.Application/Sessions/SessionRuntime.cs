@@ -259,6 +259,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         _epoch = _ids.NewId();
         _durableRevision = snapshot.Revision;
         _durableSnapshot = snapshot;
+        _workspaceCwd = AgentCore.Application.Agents.StateIsolationAccess.Cwd(snapshot.Definition.StateIsolationPolicy ?? StateIsolationPolicy.Default, null);
         _loop = Task.Run(() => RunAsync(_lifetime.Token));
         _persistLoop = Task.Run(() => RunPersistAsync(_lifetime.Token));
     }
@@ -1087,6 +1088,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case TimerElapsedReceived timer:
                     await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
                     break;
+                case RequestIsolationRecheck:
+                    _requestIsolationRecheckPending = false;
+                    await TryFinalizeRequestIsolationAsync(NewContext(), cancellationToken).ConfigureAwait(false);
+                    break;
                 case CompletionReturned completion:
                     try
                     {
@@ -1492,6 +1497,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 return;
             }
         }
+
+        try
+        {
+            var (_, resolved) = await ResolveNewRunAsync(cancellationToken);
+            if ((RequestIsolation.Required(_snapshot.Definition) || RequestIsolation.Required(resolved.Configuration.Definition))
+                && (!RequestIsolation.Required(_snapshot.Definition) || _snapshot.DurableLastEntrySequence > 0
+                    || (await _agentRuns.ListForSessionAsync(RunOwner, SessionId, cancellationToken)).Count > 0))
+            { input.Persisted?.TrySetException(RequestIsolation.FreshSessionRequired()); return; }
+        }
+        catch (AgentCoreException error) { input.Persisted?.TrySetException(error); return; }
 
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending or SessionStatus.Paused
             || SessionLifecycle.IsTerminal(_snapshot.LifecycleStatus))
@@ -2402,6 +2417,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             {
                 var resolved = capturedRun is null ? await _tools.ResolveRunConfigurationAsync(capturedSnapshot, evaluationToken).ConfigureAwait(false) : null;
                 var executionDefinition = boundDefinition ?? resolved!.Configuration.Definition;
+                executionDefinition = await _tools.RestrictExecutionDefinitionAsync(executionDefinition, capturedSnapshot.AgentInstanceId, evaluationToken);
                 var persona = boundPersona ?? resolved!.Persona;
                 var selection = capturedSnapshot.ModelSelection;
                 if (capturedRun is not null) selection = new(capturedRun.PinnedModel.CatalogKey, capturedRun.PinnedModel.ProviderAlias, capturedRun.PinnedModel.ModelId, ModelSelectionSource.Host, capturedRun.PinnedModel.ReasoningEffort);
@@ -2462,7 +2478,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     Harness: trigger.Kind == TriggerKind.UserTurn ? await _tools.HarnessContextAsync(_snapshot.AgentInstanceId, evaluationToken) : null,
                     AgentWorkspaceAvailable: await _tools.AgentWorkspaceAvailableAsync(SessionId, evaluationToken),
                     AllowAgentConsolidation: await _tools.AllowsAgentConsolidationAsync(_snapshot.AgentInstanceId, evaluationToken),
-                    ExperienceContext: await RunExperienceContextAsync(evaluationToken),
+                    ExperienceContext: executionDefinition.StateIsolationPolicy?.ExperienceRecall != false ? await RunExperienceContextAsync(evaluationToken) : null,
                     ContinuityContext: await _tools.ContinuityContextAsync(_snapshot.AgentInstanceId, trigger.Text, _snapshot.SessionId, executionDefinition, evaluationToken))
                 {
                     EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,
@@ -2817,19 +2833,33 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 }
 
                 BrowserSnapshotCompaction.Compact(messages);
+                var restrictedDefinition = await _tools.RestrictExecutionDefinitionAsync(ExecutionDefinition, _snapshot.AgentInstanceId, generateToken);
                 var projectionContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken);
-                authorizedTools = _tools.ProjectTools(ExecutionDefinition, projectionContext);
+                projectionContext = projectionContext with { Definition = restrictedDefinition };
+                authorizedTools = _tools.ProjectTools(restrictedDefinition, projectionContext);
                 var visibleCatalog = ManagementBuiltInSkills.Visible(pinnedCatalog, projectionContext.Harness, initial: false);
                 var visibleKeys = pinnedSkills.Where(k => visibleCatalog.Any(s => s.Key == k)).ToArray();
                 var sections = PromptContextBuilder.WithSkills(request.Context ?? throw new InvalidOperationException("Typed context is required."), visibleCatalog, visibleKeys,
                     ManagementBuiltInSkills.Visible(pinnedCatalog, projectionContext.Harness, initial: !loadedCapabilities.Any(ManagementTools.IsManagement)));
+                sections = await RestrictContinuityContextAsync(sections, restrictedDefinition, generateToken);
                 var pageBlocked = browserPageOrigin is not null && blockedBrowserOrigins.Contains(browserPageOrigin);
                 if (inRepair) sections = sections.Upsert(ContextSection.ProtocolRepair(repairReason!));
                 else if (checkpointCapacityReached) sections = sections.Upsert(ContextSection.Core(IsInitialBackgroundRun ? CoreProcedure.BackgroundCheckpointCapacity : CoreProcedure.CheckpointCapacity));
                 else if (terminalBrowserContinuation) sections = sections.Upsert(ContextSection.Core(terminalBrowserProcedure));
                 else if (pageBlocked) sections = sections.Upsert(ContextSection.Core(CoreProcedure.ChallengedBrowser));
+                var executionFacts = RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, messages);
+                if (restrictedDefinition.StateIsolationPolicy is { } access)
+                    executionFacts += "\nEffective restrictive access: " + JsonSerializer.Serialize(new { access.HomeAccess, access.ExperienceRecord,
+                        access.ExperienceRecall, access.ProfileEvidence, access.CrossSessionContinuity, restrictedDefinition.MemoryPolicy });
+                if (authorizedTools?.Any(t => t.Name == ToolCatalog.AgentStateInspect) == true)
+                {
+                    sections = sections.Upsert(ContextSection.Core(CoreProcedure.StateObservation));
+                    if (await _tools.RuntimeStateFactsAsync(SessionId, executionRun?.AgentRunId, generateToken) is { } observation)
+                        executionFacts += "\nTrusted runtime observation: " + SessionToolExecutor.RenderRuntimeStateFacts(observation);
+                }
+                else sections = sections.Remove(ContextSectionId.CoreStateObservation);
                 sections = sections.Upsert(ContextSection.Runtime(ContextSectionId.ExecutionFacts, ContextSourceKind.AgentRun,
-                    RunExecutionFacts.Current(executionRun?.AgentRunId, loadedCapabilities, messages), semantics: ContextSemantics.TrustedFact));
+                    executionFacts, executionRun?.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture), semantics: ContextSemantics.TrustedFact));
                 if (previousFacts is not null) sections = sections.Upsert(ContextSection.Runtime(ContextSectionId.PreviousExecution, ContextSourceKind.AgentRun, previousFacts, semantics: ContextSemantics.TrustedFact));
                 if (invalidCalls.HasBlockedStrategies) sections = sections.Upsert(ContextSection.Core(CoreProcedure.InvalidStrategies));
                 if (evidence.DialogPending) sections = sections.Upsert(ContextSection.Core(CoreProcedure.Dialog));
@@ -5908,6 +5938,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             then: async ct =>
             {
                 await PublishStateAsync(context, ct).ConfigureAwait(false);
+                try { await _tools.CleanupTerminalWorkingAsync(SessionId, ct).ConfigureAwait(false); }
+                catch (Exception failure) when (failure is not OperationCanceledException)
+                { LogHandledRuntimeFailure(failure, "workspace.cleanup", "workspace_cleanup_deferred"); }
                 persisted?.TrySetResult(true);
             },
             ended: persisted);
@@ -6301,6 +6334,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     await then(cancellationToken).ConfigureAwait(false);
                 }
+                if (job.Kind != PersistKind.TerminalEnd)
+                    await TryFinalizeRequestIsolationAsync(input.Context, cancellationToken).ConfigureAwait(false);
             }
             finally
             {

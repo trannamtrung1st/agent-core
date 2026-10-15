@@ -60,7 +60,16 @@ public sealed record InstanceSettingsOverrides(
     InstanceField<int>? SandboxIdleTtlSeconds = null,
     InstanceField<int>? SandboxMaxLifetimeSeconds = null,
     InstanceField<long>? SandboxStorageBytes = null,
-    InstanceField<string[]>? SandboxAllowedProfileIds = null)
+    InstanceField<string[]>? SandboxAllowedProfileIds = null,
+    InstanceField<string>? ConversationContextScope = null,
+    InstanceField<string>? HomeAccess = null,
+    InstanceField<string>? WorkingCleanup = null,
+    InstanceField<string>? BrowserIsolation = null,
+    InstanceField<string>? AgentStateVisibility = null,
+    InstanceField<bool>? ExperienceRecord = null,
+    InstanceField<bool>? ExperienceRecall = null,
+    InstanceField<bool>? ProfileEvidence = null,
+    InstanceField<bool>? CrossSessionContinuity = null)
 {
     public InstanceSettingsOverrides Copy() => this with {
         SandboxAllowedProfileIds = SandboxAllowedProfileIds is { } profiles ? new(profiles.Value.ToArray()) : null,

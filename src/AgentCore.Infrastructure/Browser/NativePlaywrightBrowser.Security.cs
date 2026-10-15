@@ -75,6 +75,7 @@ public sealed partial class NativePlaywrightBrowser
         await using var held = await EnterInteractiveAsync(sessionId, ct);
         if (!IsAvailable || !_sessions.TryGetValue(sessionId, out var session)) return Result("provider_unavailable");
         await session.Gate.WaitAsync(ct);
+        if (ContextTransitionBlocked(sessionId)) { session.Gate.Release(); return Result("policy_transition_pending"); }
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(OperationTimeout);
         var token = deadline.Token;

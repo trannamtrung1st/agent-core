@@ -93,6 +93,8 @@ builder.Services.AddSingleton<AgentDefinitionDraftDiffService>();
 builder.Services.AddSingleton<AgentDefinitionDraftEvaluationService>();
 builder.Services.AddSingleton<AgentDefinitionResourceService>();
 builder.Services.AddSingleton<SessionHost>();
+builder.Services.AddSingleton<IHostedSessionStateReader>(services => services.GetRequiredService<SessionHost>());
+builder.Services.AddSingleton<RuntimeStateService>();
 builder.Services.AddSingleton<IProfileLiveUpdateNotifier, LazyProfileLiveUpdateNotifier>();
 builder.Services.AddHostedService<SessionShutdownHostedService>();
 builder.Services.AddHostedService<AttachmentTtlHostedService>();

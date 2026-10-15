@@ -16,6 +16,20 @@ public sealed class SandboxExecutionRow { public string Id { get; set; } = ""; p
 
 public sealed class SqliteSandboxStore(IDbContextFactory<AgentCoreDbContext> factory) : ISandboxStore
 {
+    public async ValueTask<ResourceStateObservation> ReadSessionStateAsync(AgentRunOwner owner, Guid sessionId, DateTimeOffset observedAt, CancellationToken ct = default)
+    {
+        var lease = await GetLeaseAsync(sessionId, ct);
+        return SandboxStateProjection.Observe(lease is not null && lease.AgentInstanceId == owner.AgentInstanceId
+            && lease.State != SandboxLeaseState.Terminated ? [lease] : [], observedAt);
+    }
+    public async ValueTask<ResourceStateObservation> ReadStateAsync(AgentRunOwner owner, DateTimeOffset observedAt, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var rows = await db.Set<SandboxLeaseRow>().AsNoTracking().Where(r => r.AgentInstanceId == owner.AgentInstanceId.ToString("D")
+            && r.State != (int)SandboxLeaseState.Terminated).OrderBy(r => r.SessionId).Take(101).Select(r => r.Json).ToArrayAsync(ct);
+        return SandboxStateProjection.Observe(rows.Take(100).Select(Read<SandboxLease>).ToArray(), observedAt, rows.Length > 100);
+    }
+
     private readonly SemaphoreSlim _gate = new(1, 1);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static T Read<T>(string value) => JsonSerializer.Deserialize<T>(value, Json) ?? throw AgentCoreErrors.Persistence("Sandbox record is invalid.");

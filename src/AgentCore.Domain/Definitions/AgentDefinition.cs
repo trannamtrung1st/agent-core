@@ -29,7 +29,8 @@ public sealed record AgentDefinition(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] HarnessManagementPolicy? SelfManagement = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SandboxPolicy? SandboxPolicy = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SandboxProfile? ExecutionSandboxProfile = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SandboxProfile>? ExecutionSandboxProfiles = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<SandboxProfile>? ExecutionSandboxProfiles = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateIsolationPolicy? StateIsolationPolicy = null)
 {
     public IReadOnlyList<SkillSpec> SkillList => Skills ?? [];
 }

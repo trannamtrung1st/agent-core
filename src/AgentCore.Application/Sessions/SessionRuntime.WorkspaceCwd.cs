@@ -23,7 +23,10 @@ public sealed partial class SessionRuntime
             || _epoch != input.Epoch || input.Context.Epoch != _epoch
             || !await OwnsWorkerAsync(input.Context, input.ResponseId, ct).ConfigureAwait(false))
         { input.Completed.TrySetResult(null); return; }
-        if (input.Next is not null) _workspaceCwd = input.Next;
+        var permitted = await _tools.RestrictExecutionDefinitionAsync(ExecutionDefinition, _snapshot.AgentInstanceId, ct);
+        var policy = permitted.StateIsolationPolicy ?? StateIsolationPolicy.Default;
+        _workspaceCwd = AgentCore.Application.Agents.StateIsolationAccess.Cwd(policy, _workspaceCwd);
+        if (input.Next is not null) _workspaceCwd = AgentCore.Application.Agents.StateIsolationAccess.Cwd(policy, input.Next);
         input.Completed.TrySetResult(_workspaceCwd);
     }
 }

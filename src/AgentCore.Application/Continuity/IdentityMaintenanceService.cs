@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AgentCore.Application.Experience;
+using AgentCore.Application.Agents;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
@@ -36,6 +37,7 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
         {
             var instance = await instances.RequireInstanceAsync(id, ct);
             return instance.HarnessManagement?.Policy.Frozen != true
+                && (await instances.IsolationPolicyAsync(id, ct)).CrossSessionContinuity
                 && (await experiences.MaintenanceSettingsAsync(id, ct)).AllowAgentConsolidation;
         }
         catch (AgentCoreException ex) when (ex.StatusCode == 404) { return false; }
@@ -54,6 +56,9 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
             && !(await experiences.MaintenanceSettingsAsync(id, ct)).AllowAgentConsolidation) return ToolPolicyDecision.Deny;
         var current = await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct)
             ?? throw AgentCoreErrors.NotFound("Current Definition was not found.");
+        var isolation = StateIsolationPolicy.Restrict(definition.StateIsolationPolicy ?? StateIsolationPolicy.Default, await instances.IsolationPolicyAsync(id, ct));
+        if (!isolation.CrossSessionContinuity || !isolation.ExperienceRecord && tool == ToolCatalog.ExperienceConsolidate)
+            return ToolPolicyDecision.Deny;
         if (tool == ToolCatalog.MemoryForget)
         {
             Only(args, "memoryId");
@@ -232,6 +237,8 @@ public sealed class IdentityMaintenanceService(ExperienceService instances, IExp
     private async ValueTask<StructuredMemoryItem> ResolveMemoryAsync(Guid id, Guid sessionId, Guid memoryId,
         AgentDefinition pinned, AgentDefinition current, bool detached, CancellationToken ct)
     {
+        var instance = await instances.RequireInstanceAsync(id, ct);
+        current = InstanceSettingsResolver.Resolve(current, instance.SettingsOverrides);
         StructuredMemoryItem? found = null;
         if (!detached && pinned.MemoryPolicy?.SessionMemory == true && current.MemoryPolicy?.SessionMemory == true)
         {

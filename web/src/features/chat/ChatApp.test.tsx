@@ -615,6 +615,7 @@ describe("ChatApp accessibility", () => {
     await act(async () => renderChat());
     expect(screen.getByTestId("connection")).toHaveTextContent("Completed");
     expect(screen.getByText("This conversation is completed.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start another chat" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Voice" })).not.toBeInTheDocument();

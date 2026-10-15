@@ -29,6 +29,9 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
     private readonly SemaphoreSlim _launch = new(1, 1);
     private readonly ConcurrentDictionary<Guid, SessionBrowser> _sessions = new();
     private readonly ConcurrentDictionary<Guid, Guid?> _sessionOwners = new();
+    private readonly ConcurrentDictionary<Guid, BrowserProfileMode> _sessionModes = new();
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _sessionUse = new();
+    private readonly ConcurrentDictionary<IPage, SessionBrowser> _pageScopes = new();
     private readonly ConcurrentDictionary<Guid, SessionBrowser> _persistent = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _profileGates = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _contextUse = new();
@@ -175,6 +178,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         _sessions.Clear();
         _persistent.Clear();
         _sessionOwners.Clear();
+        _sessionModes.Clear();
+        _pageScopes.Clear();
         if (_browser is not null)
         {
             try
@@ -245,6 +250,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             session = await EnsureSessionAsync(request.SessionId, ct).ConfigureAwait(false);
             await session.Gate.WaitAsync(ct).ConfigureAwait(false);
             entered = true;
+            ActivateView(session);
+            if (ContextTransitionBlocked(request.SessionId)) return new("policy_transition_pending");
             session.DeniedNavigation = false;
             session.PopupCode = null;
             session.TimedOut = false;
@@ -580,6 +587,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         try
         {
             session.Page = await session.Context.NewPageAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
+            RememberPage(session, session.Page);
         }
         finally
         {
@@ -790,8 +798,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
             && decision.Reason is "pageClosed" or "contextClosed"
             && PageIsClosed(session))
         {
-            await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
-            ForgetClosed(session);
+            if (session.Persistent) { ForgetPage(session, session.Page); await CloseQuietlyAsync(session.Page); }
+            else { await CloseQuietlyAsync(session.Context).ConfigureAwait(false); ForgetClosed(session); }
         }
 
         return decision.Code == "provider_unavailable" ? Unavailable() : Result(decision.Code);
@@ -884,8 +892,11 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         session.Frames.Clear();
     }
 
+    private sealed record SharedContextMutation(Guid SessionId, Task Completion);
+
     private sealed class SessionBrowser(IBrowserContext context, IPage page)
     {
+        public Guid SessionId { get; init; }
         public BrowserEnvironment Environment { get; init; } = new(null, "en-US", TimeZoneInfo.Local.Id, false, false, 1);
         public ConcurrentDictionary<string, OwnedFrame> Frames { get; } = new();
         public Dictionary<IPage, PageEmulateMediaOptions> Media { get; } = new();
@@ -900,6 +911,8 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         public ProtectedBrowserValues ProtectedValues { get; } = new();
 
         public IBrowserContext Context { get; } = context;
+        public SessionBrowser? ActiveView { get; set; }
+        public SharedContextMutation? PendingContextMutation { get; set; }
 
         public IPage Page { get; set; } = page;
 
@@ -946,7 +959,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         public List<Task> PopupCloses { get; } = [];
         public HashSet<IPage> CallPages { get; set; } = [];
 
-        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public SemaphoreSlim Gate { get; init; } = new(1, 1);
 
         public List<PageBinding> Pages { get; } = [];
 

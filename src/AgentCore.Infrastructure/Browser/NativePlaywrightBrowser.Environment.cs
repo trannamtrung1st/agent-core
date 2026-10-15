@@ -173,9 +173,11 @@ public sealed partial class NativePlaywrightBrowser
         try { await mutation.WaitAsync(ct); }
         catch (OperationCanceledException)
         {
-            // Context changes outlive a page. Close the context before releasing its owner gate.
-            await CloseQuietlyAsync(session.Context);
-            ForgetClosed(session);
+            // Shared-context cancellation cannot close sibling Sessions. Fence new native effects
+            // until the mutation is confirmed or the owner explicitly resets the context.
+            if (session.Persistent && session.AgentInstanceId is { } owner && _persistent.TryGetValue(owner, out var root))
+                root.PendingContextMutation = new(session.SessionId, mutation);
+            else { await CloseQuietlyAsync(session.Context); ForgetClosed(session); }
             _ = mutation.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
             throw;
         }

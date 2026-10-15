@@ -48,7 +48,7 @@ public static class SessionCatalogEndpoints
                 try
                 {
                     agent = await sessions
-                        .GetAgentAsync(item.DefinitionId, item.ActiveVersion, cancellationToken)
+                        .GetInstanceAgentAsync(item, cancellationToken)
                         .ConfigureAwait(false);
                 }
                 catch (AgentCoreException ex) when (ex.Code == "NotFound")

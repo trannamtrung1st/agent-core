@@ -465,9 +465,12 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref }:
               <div className="conversation-composer">
                 <div className="conversation-column">
                   {readonly ? (
-                    <Typography.Text type="secondary" className="conversation-ended-note">
-                      {terminalSessionNote(state.lifecycleStatus)}
-                    </Typography.Text>
+                    <Flex align="center" justify="center" wrap gap={16}>
+                      <Typography.Text type="secondary" className="conversation-ended-note">
+                        {terminalSessionNote(state.lifecycleStatus)}
+                      </Typography.Text>
+                      <Button aria-label="Start another chat" onClick={() => handleNewChat()}>New chat</Button>
+                    </Flex>
                   ) : state.status === "paused" ? (
                     <Flex
                       align="center"

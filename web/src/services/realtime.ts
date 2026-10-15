@@ -884,7 +884,7 @@ function handleEvent(raw: ServerEvent): void {
       clientOwnsVoice = false;
       setCaptureAuthorized(false);
       clearAwaitingAgentResponseStart();
-      void stopConnection();
+      void stopAfterTerminalCommands();
       stopReceipts();
       capture.release();
       void releaseClientSpeech();
@@ -1859,6 +1859,20 @@ async function attachAfterReconnect(): Promise<void> {
   if (!attached && useSessionStore.getState().connection === "reconnecting") {
     markConnectionFailed("Connection lost. Retry to continue.", { force: true });
   }
+}
+
+async function stopAfterTerminalCommands(): Promise<void> {
+  const current = connection;
+  const sessionId = useSessionStore.getState().sessionId;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    // A fast request can terminalize before its SendText/render receipt ack arrives.
+    // Drain the already queued commands before closing their transport, with a small bound.
+    await Promise.race([commandDispatchChain, new Promise<void>(resolve => { timer = setTimeout(resolve, 1000); })]);
+  } finally { clearTimeout(timer); }
+  const latest = useSessionStore.getState();
+  if (connection === current && latest.sessionId === sessionId && (latest.status === "paused" || latest.status === "ended"))
+    await stopConnection();
 }
 
 async function stopConnection(options?: { keepPreparedCapture?: boolean }): Promise<void> {

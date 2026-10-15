@@ -93,6 +93,8 @@ public sealed class AgentDefinitionDraftDiffService(
         AgentDefinitionCandidate current,
         AgentDefinitionCandidate baseline)
     {
+        if (current.StateIsolationPolicy is not null || baseline.StateIsolationPolicy is not null)
+            yield return TextSection("stateIsolationPolicy", "State & Isolation", System.Text.Json.JsonSerializer.Serialize(baseline.StateIsolationPolicy), System.Text.Json.JsonSerializer.Serialize(current.StateIsolationPolicy));
         if (current.SandboxPolicy is not null || baseline.SandboxPolicy is not null)
             yield return TextSection("sandboxPolicy", "Sandbox profile policy", System.Text.Json.JsonSerializer.Serialize(baseline.SandboxPolicy), System.Text.Json.JsonSerializer.Serialize(current.SandboxPolicy));
         yield return TextSection("instructions", "Instructions", baseline.AgentInstructions, current.AgentInstructions);
@@ -153,6 +155,7 @@ public sealed class AgentDefinitionDraftDiffService(
 
     private static IEnumerable<DefinitionDiffSection> AddedCandidateSections(AgentDefinitionCandidate current)
     {
+        if (current.StateIsolationPolicy is not null) yield return AddedSection("stateIsolationPolicy", "State & Isolation", System.Text.Json.JsonSerializer.Serialize(current.StateIsolationPolicy));
         if (current.SandboxPolicy is not null) yield return AddedSection("sandboxPolicy", "Sandbox profile policy", System.Text.Json.JsonSerializer.Serialize(current.SandboxPolicy));
         if (current.SelfManagement is not null) yield return AddedSection("selfManagement", "Agent self-management defaults", System.Text.Json.JsonSerializer.Serialize(current.SelfManagement));
         yield return AddedSection("instructions", "Instructions", current.AgentInstructions);

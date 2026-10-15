@@ -11,7 +11,7 @@ public sealed record ResolvedAgentRunConfiguration(AgentRunConfiguration Configu
     IReadOnlyList<EffectiveSkill> Skills, ExecutionBudgetPolicy? InstanceBudgets);
 
 public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
-    IAgentDefinitionResourceAdminStore resources, InheritedDefinitionResourceCatalog? inheritedResources = null, IAgentCredentialBindingStore? credentialBindings = null, ISandboxStore? sandboxes = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null)
+    IAgentDefinitionResourceAdminStore resources, InheritedDefinitionResourceCatalog? inheritedResources = null, IAgentCredentialBindingStore? credentialBindings = null, ISandboxStore? sandboxes = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, IBrowser? browser = null)
 {
     public async ValueTask<ResolvedAgentRunConfiguration> ResolveAsync(Guid id, CancellationToken ct = default, bool allowArchived = false, bool inspectSandbox = false)
     {
@@ -54,7 +54,12 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
                 .Concat(manifest.Where(r => r.Key.StartsWith("instance:", StringComparison.Ordinal) && r.Kind == AgentDefinitionResourceKind.Knowledge)
                     .Select(r => new KnowledgeSourceRef(r.Key, r.LogicalPath, r.VirtualPath, r.LogicalPath))).ToArray();
             effective = effective with { Environment = environment with { KnowledgeSources = knowledge } };
-            return new(new(effective, owner.Revision, owner.PersonaRevision, manifest, bindings, InstanceSettingsResolver.Sources(baseline, owner.SettingsOverrides, owner.Revision, owner.PersonaRevision)), owner.Persona,
+            var isolation = effective.StateIsolationPolicy?.BrowserIsolation ?? BrowserIsolation.HostDefault;
+            if (isolation == BrowserIsolation.HostDefault && browser is not null)
+                isolation = browser.HostPolicy.ProfileMode == BrowserProfileMode.PersistentAgent ? BrowserIsolation.PersistentAgent : BrowserIsolation.EphemeralSession;
+            return new(new(effective, owner.Revision, owner.PersonaRevision, manifest, bindings,
+                InstanceSettingsResolver.Sources(baseline, owner.SettingsOverrides, owner.Revision, owner.PersonaRevision),
+                resolvedBrowserIsolation: browser is null && isolation == BrowserIsolation.HostDefault ? null : isolation), owner.Persona,
                 EffectiveSkillCatalogResolver.Resolve(effective, skillState), owner.ExecutionBudgets);
         }
         throw AgentCoreErrors.Conflict("Instance changed while resolving configuration. Retry admission.");

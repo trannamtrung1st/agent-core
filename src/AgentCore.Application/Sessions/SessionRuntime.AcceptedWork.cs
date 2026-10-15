@@ -55,6 +55,9 @@ public sealed partial class SessionRuntime
 
     private bool HasAcceptedConversationWork()
     {
+        if (_requestIsolationRecheckPending && !LifecycleTransition.IsTerminal(_snapshot)
+            && _snapshot.Status != SessionStatus.Paused) return true;
+
         if (_boundAgentRun is { IsTerminal: false }
             && (_boundAgentRun.Status == AgentRunStatus.Running
                 || !_responseTerminal || HasPendingConversationTerminalPersist()))

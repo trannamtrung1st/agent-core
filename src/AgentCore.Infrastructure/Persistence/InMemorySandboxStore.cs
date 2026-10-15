@@ -9,6 +9,26 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class InMemorySandboxStore(InMemoryAdminEventStore? events = null) : ISandboxStore
 {
+    public ValueTask<ResourceStateObservation> ReadSessionStateAsync(AgentRunOwner owner, Guid sessionId, DateTimeOffset observedAt, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            var lease = _leases.GetValueOrDefault(sessionId);
+            return ValueTask.FromResult(SandboxStateProjection.Observe(lease is not null && lease.AgentInstanceId == owner.AgentInstanceId
+                && lease.State != SandboxLeaseState.Terminated ? [lease] : [], observedAt));
+        }
+    }
+    public ValueTask<ResourceStateObservation> ReadStateAsync(AgentRunOwner owner, DateTimeOffset observedAt, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            var leases = _leases.Values.Where(l => l.AgentInstanceId == owner.AgentInstanceId && l.State != SandboxLeaseState.Terminated).ToArray();
+            return ValueTask.FromResult(SandboxStateProjection.Observe(leases, observedAt));
+        }
+    }
+
     private readonly object _gate = new();
     private readonly Dictionary<(string Id, long Revision), SandboxProfile> _profiles = [];
     private readonly Dictionary<(string, long), SandboxProfileVerification> _verifications = [];

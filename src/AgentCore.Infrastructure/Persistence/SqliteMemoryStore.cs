@@ -13,6 +13,18 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> contexts, TimeProvider time) : IMemoryStore
 {
+    public async ValueTask<DurableSessionState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct);
+        var groups = await db.Sessions.AsNoTracking().Where(s => s.AgentInstanceId == owner.AgentInstanceId.ToString("D")
+            && s.Snapshot!.ProfileId == owner.ProfileId.ToString("D") && s.DurablyDeletedAtUtc == null && s.ArchivedAtUtc == null)
+            .GroupBy(s => s.Snapshot!.LifecycleStatus ?? (s.Status == "Ended" ? "Ended" : s.Status == "Paused" ? "Paused" : "Active"))
+            .Select(g => new { Status = g.Key, Count = g.Count(), UpdatedAt = g.Max(s => s.UpdatedAtUtc) }).ToArrayAsync(ct);
+        return new(groups.Where(g => g.Status == "Active").Sum(g => g.Count), groups.Where(g => g.Status == "Paused").Sum(g => g.Count),
+            groups.Where(g => g.Status is "Completed" or "Expired" or "Cancelled" or "Ended").Sum(g => g.Count),
+            groups.Length == 0 ? null : DateTimeOffset.FromUnixTimeMilliseconds(groups.Max(g => g.UpdatedAt)));
+    }
+
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -471,11 +483,14 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     public ValueTask<SessionCatalogPage> ListInstanceSessionsAsync(AgentRunOwner owner, string? cursor, int limit, CancellationToken ct = default) =>
         ListSurfaceCatalogAsync(SessionSurface.None, owner, cursor, limit, true, ct);
 
+    public ValueTask<SessionCatalogPage> ListTerminalSessionsAsync(string? cursor, int limit, CancellationToken ct = default) =>
+        ListSurfaceCatalogAsync(SessionSurface.None, null, cursor, limit, true, ct, terminalOnly: true);
+
     public ValueTask<SessionCatalogPage> ListCatalogAsync(string? cursor, int limit, bool includeArchived, CancellationToken cancellationToken = default) =>
         ListSurfaceCatalogAsync(SessionSurface.ChatList, null, cursor, limit, includeArchived, cancellationToken);
 
     private async ValueTask<SessionCatalogPage> ListSurfaceCatalogAsync(SessionSurface surface, AgentRunOwner? owner, string? cursor,
-        int limit, bool includeArchived, CancellationToken cancellationToken)
+        int limit, bool includeArchived, CancellationToken cancellationToken, bool terminalOnly = false)
     {
         if (limit is < 1 or > 100)
         {
@@ -486,6 +501,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         var query = db.Sessions.AsNoTracking().Include(item => item.Snapshot)
             .Where(row => row.DurablyDeletedAtUtc == null);
         if (surface != SessionSurface.None) query = query.Where(row => (row.Surfaces & (int)surface) != 0);
+        if (terminalOnly) query = query.Where(row => row.Snapshot!.LifecycleStatus == "Completed" || row.Snapshot.LifecycleStatus == "Ended"
+            || row.Snapshot.LifecycleStatus == "Cancelled" || row.Snapshot.LifecycleStatus == "Expired" || row.Status == "Ended");
         if (owner is { } scopedOwner) query = query.Where(row => row.AgentInstanceId == scopedOwner.AgentInstanceId.ToString("D") && row.Snapshot!.ProfileId == scopedOwner.ProfileId.ToString("D"));
         if (!includeArchived)
         {

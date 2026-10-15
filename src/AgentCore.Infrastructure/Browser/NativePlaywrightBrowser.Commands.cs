@@ -54,6 +54,8 @@ public sealed partial class NativePlaywrightBrowser
         }
         await using var interactive = await EnterInteractiveAsync(command.SessionId, cancellationToken).ConfigureAwait(false);
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        ActivateView(session);
+        if (ContextTransitionBlocked(command.SessionId)) { session.Gate.Release(); return new("policy_transition_pending"); }
         // One deadline spans validation, provider reads, waits, action and final capture.
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromMilliseconds(TimeoutMs()));
@@ -164,7 +166,15 @@ public sealed partial class NativePlaywrightBrowser
                             // Page creation can finish late; close the context if cancellation wins that race.
                             effectAttempted = true; effectConfirmed = false;
                             var creation = session.Context.NewPageAsync();
-                            await MutateContextAsync(session, creation, ct);
+                            try { await creation.WaitAsync(ct); }
+                            catch (OperationCanceledException)
+                            {
+                                _ = creation.ContinueWith(async task => {
+                                    if (task.IsCompletedSuccessfully) { ForgetPage(session, task.Result); await CloseQuietlyAsync(task.Result); }
+                                    else _ = task.Exception;
+                                }, TaskScheduler.Default).Unwrap();
+                                throw;
+                            }
                             var page = await creation; RememberPage(session, page);
                             var navigation = page.GotoAsync(url!, new PageGotoOptions { Timeout = TimeoutMs(), WaitUntil = WaitUntilState.DOMContentLoaded });
                             try { await navigation.WaitAsync(ct); effectConfirmed = true; }

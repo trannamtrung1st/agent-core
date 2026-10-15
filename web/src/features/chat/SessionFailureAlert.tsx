@@ -1,3 +1,4 @@
+import { beginNewChat } from "../../services/realtime";
 import type { ReactNode } from "react";
 import { Alert, Button, Flex, Popover, Typography } from "antd";
 import { DetailFieldList, type DetailLine } from "./detailFields";
@@ -15,7 +16,7 @@ function sessionFailureDetailLines(
   options?: { includeCategoryCode?: boolean }
 ): DetailLine[] {
   const includeCategoryCode = options?.includeCategoryCode ?? true;
-  const retryHint = view.fatal
+  const retryHint = view.code === "fresh_session_required" ? "Create a new Session for the next request." : view.fatal
     ? "Not retryable from this alert."
     : view.retryAfterMs != null
       ? `Retry possible after ${view.retryAfterMs} ms.`
@@ -134,7 +135,7 @@ export function SessionFailureAlert({
       action={
         <Flex wrap gap={8} align="center" className="session-failure-actions">
           {detailsControl}
-          {action}
+          {view.code === "fresh_session_required" ? <Button size="small" onClick={() => void beginNewChat()}>New chat</Button> : action}
         </Flex>
       }
     />

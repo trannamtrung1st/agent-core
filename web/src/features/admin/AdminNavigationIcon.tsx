@@ -7,7 +7,7 @@ const icons: Record<string, typeof UserOutlined> = {
   skills: ToolOutlined, resources: FolderOutlined, workspace: CodeOutlined, capabilities: SafetyOutlined,
   'self-management': SettingOutlined, 'trigger-policy': NodeIndexOutlined, 'memory-policy': DatabaseOutlined,
   automations: FieldTimeOutlined, unattended: RobotOutlined, memory: DatabaseOutlined, experience: ExperimentOutlined,
-  sessions: MessageOutlined, runs: HistoryOutlined, lifecycle: IdcardOutlined, effective: ProfileOutlined,
+  'state-isolation': SafetyOutlined, state: InfoCircleOutlined, sessions: MessageOutlined, runs: HistoryOutlined, lifecycle: IdcardOutlined, effective: ProfileOutlined,
   versions: BranchesOutlined, drafts: FileTextOutlined, metadata: UnorderedListOutlined,
   'test-publish': CloudUploadOutlined, 'advanced-json': CodeOutlined,
 };

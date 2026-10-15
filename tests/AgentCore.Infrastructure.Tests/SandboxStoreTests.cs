@@ -11,6 +11,34 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SandboxStoreTests
 {
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task State_observation_redacts_uncertain_lease_and_preserves_original_command_receipt(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "sandbox-state-" + Guid.NewGuid().ToString("N") + ".db");
+        var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + path).Options);
+        try
+        {
+            if (sqlite) { await using var db = factory.CreateDbContext(); await db.Database.MigrateAsync(); }
+            ISandboxStore store = sqlite ? new SqliteSandboxStore(factory) : new InMemorySandboxStore();
+            var now = DateTimeOffset.UtcNow;
+            var profile = new SandboxProfile("fixture", 1, "Fixture", "", true, "sha256:" + new string('a', 64));
+            var lease = new SandboxLease(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, profile,
+                SandboxLeaseState.NeedsReconciliation, "SECRET_PROVIDER_ID", now, now.AddMinutes(30));
+            var execution = new SandboxExecution(Guid.NewGuid(), lease.SessionId, lease.AgentInstanceId, lease.Generation, Guid.NewGuid(), Guid.NewGuid(),
+                "original", "hash", SandboxExecutionState.Indeterminate, now, Stdout: "SECRET_COMMAND_OUTPUT", CommandText: "SECRET_COMMAND");
+            await store.SaveLeaseAsync(lease, 0); await store.SaveExecutionAsync(execution, true);
+            var observed = await store.ReadStateAsync(new(lease.AgentInstanceId, Guid.NewGuid()), now);
+            Assert.Equal("partial", observed.Availability); Assert.Null(observed.ActiveGenerations); Assert.Null(observed.ActiveCommands);
+            Assert.Equal("reconciliation_required", observed.Code);
+            Assert.DoesNotContain("SECRET", System.Text.Json.JsonSerializer.Serialize(observed));
+            Assert.Equal(lease, await store.GetLeaseAsync(lease.SessionId));
+            Assert.Equal(execution, await store.GetOperationAsync(lease.SessionId, execution.AgentRunId, execution.ToolCallId));
+            Assert.Equal(0, (await store.ReadStateAsync(new(Guid.NewGuid(), Guid.NewGuid()), now)).ActiveGenerations);
+        }
+        finally { SqliteClear(); if (File.Exists(path)) File.Delete(path); }
+    }
+
     [Fact]
     public async Task Oci_upgrade_preserves_populated_profiles_policy_instance_pins_observations_and_live_receipts()
     {

@@ -22,6 +22,7 @@ import { RESOURCE_FILE_HELP, resourceBatchLimitProblem, resourceMediaType, resou
 import { ResourceDeletionContent, ResourceSelectionToolbar } from "./ResourceSelectionToolbar";
 import { RetainedAdminPage } from './RetainedAdminPage';
 import { DefinitionSandboxPolicy } from './DefinitionSandboxPolicy';
+import { DefinitionStateIsolationPolicy } from './DefinitionStateIsolationPolicy';
 
 import { adminCollectionPagination } from "./AdminCollectionToolbar";
 
@@ -553,6 +554,12 @@ export function DefinitionDraftWorkspace({
           {candidateLocked && <Alert type="error" showIcon title="Advanced JSON is invalid" description="Fix Advanced JSON before changing Sandbox profiles. Your invalid text is retained." />}
           <DefinitionSandboxPolicy candidate={candidate} disabled={busy || candidateLocked} onChange={onCandidateChange} />
           <a href={adminDraftPath(activeDraft.definitionId, activeDraft.draftId, 'capabilities')} onClick={followAppLink}>Configure Sandbox command capabilities</a>
+        </AgentConfigurationPanel>
+      </RetainedAdminPage>
+      <RetainedAdminPage active={page === 'state-isolation'}>
+        <AgentConfigurationPanel id="state-isolation" title="State & Isolation" label="Draft State & Isolation" bodyGap="default">
+          {candidateLocked && <Alert type="error" showIcon title="Fix Advanced JSON before changing State & Isolation. Your draft is retained." />}
+          <DefinitionStateIsolationPolicy candidate={candidate} disabled={busy || candidateLocked} onChange={onCandidateChange} />
         </AgentConfigurationPanel>
       </RetainedAdminPage>
       <RetainedAdminPage active={page === 'capabilities'}>

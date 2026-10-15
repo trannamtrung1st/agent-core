@@ -28,7 +28,10 @@ public sealed partial class SessionToolExecutor
         {
             if (args.GetRawText().Length > 256 * 1024) return Error("office_operation_unsupported", "Office command exceeds 256 KiB. Use smaller operations.");
             if (!TryString(args, "path", out var raw)) return Error("invalid", "path is required.");
+            var isolation = await IsolationAsync(definition, sessionId, ct);
+            cwd = AgentCore.Application.Agents.StateIsolationAccess.Cwd(isolation, cwd);
             var path = AgentWorkspacePaths.Resolve(raw, sessionId, cwd, structural: true);
+            AgentCore.Application.Agents.StateIsolationAccess.RequireHome(isolation, path, name.Split('.')[2] != "inspect");
             if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal))
                 return Error("forbidden", "Office processing uses files in /home or this Session's /working.");
             var document = name.StartsWith("office.document.", StringComparison.Ordinal); var action = name.Split('.')[2];

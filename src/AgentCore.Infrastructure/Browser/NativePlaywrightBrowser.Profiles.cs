@@ -25,22 +25,8 @@ public sealed partial class NativePlaywrightBrowser
             return new BrowserCloseResult("provider_unavailable");
         }
 
-        if (_options.ResolveProfile() == BrowserProfileMode.PersistentAgent
-            && _sessionOwners.TryGetValue(sessionId, out var owner)
-            && owner is Guid agentInstanceId)
-        {
-            return await ClosePersistentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (!_sessions.TryGetValue(sessionId, out var session))
-        {
-            return new BrowserCloseResult("already_closed");
-        }
-
-        if (session.Persistent && session.AgentInstanceId is Guid persistentAgent)
-        {
-            return await ClosePersistentAsync(persistentAgent, cancellationToken).ConfigureAwait(false);
-        }
+        if (!_sessions.TryGetValue(sessionId, out var session)) return new BrowserCloseResult("already_closed");
+        if (session.Persistent) return await CloseViewAsync(sessionId, session, cancellationToken);
 
         await session.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -168,7 +154,8 @@ public sealed partial class NativePlaywrightBrowser
             }
         }
 
-        foreach (var sessionId in _sessions.Where(pair => ReferenceEquals(pair.Value, session)).Select(pair => pair.Key).ToArray())
+        foreach (var page in _pageScopes.Where(p => ReferenceEquals(p.Value.Context, session.Context)).Select(p => p.Key).ToArray()) _pageScopes.TryRemove(page, out _);
+        foreach (var sessionId in _sessions.Where(pair => ReferenceEquals(pair.Value.Context, session.Context)).Select(pair => pair.Key).ToArray())
         {
             _sessions.TryRemove(sessionId, out _);
         }
@@ -190,7 +177,8 @@ public sealed partial class NativePlaywrightBrowser
             DisposeQuietly(session.PlaywrightDriver);
         }
 
-        foreach (var sessionId in _sessions.Where(pair => ReferenceEquals(pair.Value, session)).Select(pair => pair.Key).ToArray())
+        foreach (var page in _pageScopes.Where(p => ReferenceEquals(p.Value.Context, session.Context)).Select(p => p.Key).ToArray()) _pageScopes.TryRemove(page, out _);
+        foreach (var sessionId in _sessions.Where(pair => ReferenceEquals(pair.Value.Context, session.Context)).Select(pair => pair.Key).ToArray())
         {
             _sessions.TryRemove(sessionId, out _);
         }
@@ -209,17 +197,20 @@ public sealed partial class NativePlaywrightBrowser
         cancellationToken.ThrowIfCancellationRequested();
         await using var interactive = await EnterInteractiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
         _sessionOwners.TryRemove(sessionId, out _);
+        _sessionModes.TryRemove(sessionId, out _);
         if (_sessions.TryRemove(sessionId, out var session))
         {
-            if (!session.Persistent)
-            {
-                await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
-            }
+            if (!session.Persistent) await CloseQuietlyAsync(session.Context).ConfigureAwait(false);
+            else foreach (var binding in OpenPages(session)) { ForgetPage(session, binding.Page); await CloseQuietlyAsync(binding.Page); }
         }
     }
 
-    public void BindSession(Guid sessionId, Guid? agentInstanceId) =>
-        _sessionOwners[sessionId] = agentInstanceId;
+    public void BindSession(Guid sessionId, Guid? agentInstanceId)
+    {
+        if (_sessionOwners.TryGetValue(sessionId, out var existing) && existing != agentInstanceId)
+            throw new ArgumentException("Browser Session owner cannot change.");
+        _sessionOwners.TryAdd(sessionId, agentInstanceId);
+    }
 
     public async ValueTask<IAsyncDisposable> EnterUnattendedAsync(
         Guid agentInstanceId,
@@ -257,23 +248,27 @@ public sealed partial class NativePlaywrightBrowser
 
     private async ValueTask<IAsyncDisposable> EnterInteractiveAsync(Guid sessionId, CancellationToken cancellationToken)
     {
-        if (!_sessionOwners.TryGetValue(sessionId, out var owner)
-            || owner is not Guid agentInstanceId
-            || agentInstanceId == Guid.Empty
-            || _unattendedOwner.Value is { } flow && _unattendedLeases.TryGetValue(agentInstanceId, out var current)
-                && ReferenceEquals(flow, current))
+        var sessionGate = _sessionUse.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
+        SemaphoreSlim? ownerGate = null;
+        bool Ephemeral() => SessionMode(sessionId) == BrowserProfileMode.EphemeralSession
+            && (!_sessions.TryGetValue(sessionId, out var view) || !view.Persistent);
+        if (!Ephemeral() && _sessionOwners.TryGetValue(sessionId, out var owner) && owner is Guid agentInstanceId
+            && agentInstanceId != Guid.Empty && !(_unattendedOwner.Value is { } flow
+                && _unattendedLeases.TryGetValue(agentInstanceId, out var current) && ReferenceEquals(flow, current)))
         {
-            return NoopHold.Instance;
+            ownerGate = _contextUse.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
+            if (_interactiveWaiters.TryGetValue(agentInstanceId, out var waiting)) waiting.TrySetResult();
+            // Acquire the shared owner before the Session. A waiter must not hold a
+            // Session needed by the already admitted unattended owner of this gate.
+            await ownerGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-
-        var gate = _contextUse.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
-        if (_interactiveWaiters.TryGetValue(agentInstanceId, out var waiting))
+        try
         {
-            waiting.TrySetResult();
+            await sessionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (ownerGate is not null && Ephemeral()) { ownerGate.Release(); ownerGate = null; }
+            return new InteractiveHold(sessionGate, ownerGate);
         }
-
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        return new InteractiveHold(gate);
+        catch { ownerGate?.Release(); throw; }
     }
 
     // Null inherits the host policy; an empty restriction denies every origin.
@@ -307,17 +302,27 @@ public sealed partial class NativePlaywrightBrowser
             return existing;
         }
 
-        if (_options.ResolveProfile() == BrowserProfileMode.PersistentAgent
+        if (SessionMode(sessionId) == BrowserProfileMode.PersistentAgent
             && _sessionOwners.TryGetValue(sessionId, out var owner)
             && owner is Guid agentInstanceId)
         {
             var persistent = await EnsurePersistentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
-            if (!_sessions.TryAdd(sessionId, persistent))
+            // Profile bytes/context are shared; page, targets, observations and foreground selection are Session-owned.
+            var view = new SessionBrowser(persistent.Context, persistent.Page) { SessionId = sessionId, Persistent = true, AgentInstanceId = agentInstanceId,
+                Environment = persistent.Environment, Gate = persistent.Gate, AcceptingMainPage = true };
+            persistent.ActiveView = view;
+            // Discard only the provider's unowned startup placeholder, never a sibling's page.
+            foreach (var placeholder in OpenPages(persistent))
+            { ForgetPage(persistent, placeholder.Page); await CloseQuietlyAsync(placeholder.Page); }
+            var page = await CreateViewPageAsync(persistent, view, cancellationToken);
+            view.Page = page; view.AcceptingMainPage = false;
+            RememberPage(view, page);
+            if (!_sessions.TryAdd(sessionId, view))
             {
+                ForgetPage(view, page); await CloseQuietlyAsync(page);
                 return _sessions[sessionId];
             }
-
-            return persistent;
+            return view;
         }
 
         var browser = await EnsureBrowserAsync(cancellationToken).ConfigureAwait(false);
@@ -334,6 +339,7 @@ public sealed partial class NativePlaywrightBrowser
             page.SetDefaultNavigationTimeout(TimeoutMs());
             var session = new SessionBrowser(context, page)
             {
+                SessionId = sessionId,
                 Environment = DescribeEnvironment(environmentOptions),
                 AgentInstanceId = _sessionOwners.TryGetValue(sessionId, out var ownerId) ? ownerId : null
             };
@@ -359,16 +365,37 @@ public sealed partial class NativePlaywrightBrowser
         if (InitializationProbe is { } probe) await probe(stage, context).WaitAsync(ct);
     }
 
+    private async Task<IPage> CreateViewPageAsync(SessionBrowser root, SessionBrowser view, CancellationToken ct)
+    {
+        var creation = root.Context.NewPageAsync();
+        try { return await creation.WaitAsync(ct); }
+        catch (OperationCanceledException)
+        {
+            // NewPage is not cancellable in the native SDK. Retire only this late page;
+            // preserve sibling views and fence transitions until retirement is confirmed.
+            async Task RetireAsync()
+            {
+                var page = await creation;
+                await page.CloseAsync();
+                ForgetPage(view, page);
+            }
+            var retirement = RetireAsync();
+            root.PendingContextMutation = new(view.SessionId, retirement);
+            _ = retirement.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            throw;
+        }
+    }
+
     private async Task InstallRoutesAsync(SessionBrowser session, CancellationToken ct)
     {
         var context = session.Context;
         RememberPage(session, session.Page);
         await InitializeStageAsync("routes", context, ct);
-        await context.RouteAsync("**/*", route => RouteAsync(session, route)).WaitAsync(ct);
-        await context.RouteWebSocketAsync("**/*", socket => RouteWebSocket(session, socket)).WaitAsync(ct);
+        await context.RouteAsync("**/*", route => RouteOwnedAsync(session, route)).WaitAsync(ct);
+        await context.RouteWebSocketAsync("**/*", socket => RouteWebSocket(session.ActiveView ?? session, socket)).WaitAsync(ct);
         // Publish lifecycle hooks only after setup; unpublished contexts cannot evict live entries.
         context.Close += (_, _) => ForgetClosed(session);
-        context.Page += (_, opened) => OnContextPage(session, opened);
+        context.Page += (_, opened) => _ = AssignPageScopeAsync(session, opened);
     }
 
     private static async Task<IPlaywright> OwnDriverAsync(Task<IPlaywright> creation, CancellationToken ct)
@@ -541,18 +568,12 @@ public sealed partial class NativePlaywrightBrowser
         public string Code { get; } = code;
     }
 
-    private sealed class NoopHold : IAsyncDisposable
-    {
-        public static NoopHold Instance { get; } = new();
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private sealed class InteractiveHold(SemaphoreSlim gate) : IAsyncDisposable
+    private sealed class InteractiveHold(SemaphoreSlim gate, SemaphoreSlim? ownerGate = null) : IAsyncDisposable
     {
         public ValueTask DisposeAsync()
         {
             gate.Release();
+            ownerGate?.Release();
             return ValueTask.CompletedTask;
         }
     }

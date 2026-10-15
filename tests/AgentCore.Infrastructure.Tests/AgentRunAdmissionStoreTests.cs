@@ -26,6 +26,104 @@ public sealed class AgentRunAdmissionStoreTests
     private const string Hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Terminal_cleanup_scan_includes_background_surfaces_and_excludes_nonterminal_and_deleted_sessions(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var terminal = Snapshot(Guid.NewGuid(), []) with { Surfaces = SessionSurface.BackgroundWork,
+            LifecycleStatus = SessionLifecycleStatus.Completed };
+        var paused = Snapshot(Guid.NewGuid(), []) with { Status = SessionStatus.Paused, LifecycleStatus = SessionLifecycleStatus.Paused };
+        var deleted = terminal with { SessionId = Guid.NewGuid(), DurablyDeletedAt = Now };
+        await f.Memory.SaveAsync(terminal, 0); await f.Memory.SaveAsync(paused, 0); await f.Memory.SaveAsync(deleted, 0);
+        await f.ReopenAsync();
+        var candidates = await f.Memory.ListTerminalSessionsAsync(null, 100);
+        Assert.Equal(terminal.SessionId, Assert.Single(candidates.Items).SessionId);
+        Assert.Empty(await f.Memory.ReadHistoryAsync(terminal.SessionId, 0, 10));
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Request_isolation_preserves_same_admission_retry_but_rejects_another_request_after_reopen(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var entry = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User, "First request", null,
+            EntryStatus.Completed, SessionMode.Text, 0, 0, Now);
+        var definition = Definition with { Voice = Definition.Voice with { Enabled = false },
+            StateIsolationPolicy = new(ConversationContextScope.CurrentRequest) };
+        var snapshot = Snapshot(Guid.NewGuid(), [entry]) with { Definition = definition,
+            ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.SystemDefault, null) };
+        await f.Memory.SaveAsync(snapshot, 0);
+        var configuration = new AgentRunConfiguration(definition, 0, 0, []);
+        var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), snapshot,
+            [entry], Now, [], configuration: configuration);
+        var proposed = snapshot with { Revision = 2 };
+        Assert.True((await f.Runs.AdmitAsync(proposed, 1, run)).Created);
+        await f.ReopenAsync();
+        var replay = await f.Runs.AdmitAsync(proposed, 1, run);
+        Assert.False(replay.Created); Assert.Equal(run.AgentRunId, replay.Run.AgentRunId);
+        var next = entry with { EntryId = Guid.NewGuid(), SourceEventId = Guid.NewGuid(), Sequence = 2, Text = "Another request" };
+        var second = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), snapshot with { Entries = [entry, next] },
+            [next], Now, [], configuration: configuration);
+        Assert.Equal("fresh_session_required", (await Assert.ThrowsAsync<AgentCoreException>(() =>
+            f.Runs.AdmitAsync(proposed with { Revision = 3, Entries = [entry, next] }, 2, second).AsTask())).Code);
+        var relaxed = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), snapshot with { Entries = [entry, next] },
+            [next], Now, [], configuration: new AgentRunConfiguration(definition with { StateIsolationPolicy = StateIsolationPolicy.Default }, 0, 0, []));
+        Assert.Equal("fresh_session_required", (await Assert.ThrowsAsync<AgentCoreException>(() =>
+            f.Runs.AdmitAsync(proposed with { Revision = 3, Entries = [entry, next] }, 2, relaxed).AsTask())).Code);
+        Assert.Single(await f.Runs.ListForSessionAsync(Owner, snapshot.SessionId));
+        Assert.Equal(2, (await f.Memory.LoadAsync(snapshot.SessionId))!.Revision);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Resolved_browser_isolation_is_fingerprinted_and_survives_durable_reopen(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var entry = new ConversationEntry(Guid.NewGuid(), 1, Guid.NewGuid(), ConversationRole.User, "Request", null,
+            EntryStatus.Completed, SessionMode.Text, 0, 0, Now);
+        var snapshot = Snapshot(Guid.NewGuid(), [entry]) with { ModelSelection = new("synthetic", "synthetic", "synthetic", ModelSelectionSource.SystemDefault, null) };
+        await f.Memory.SaveAsync(snapshot, 0);
+        var configuration = new AgentRunConfiguration(Definition, 0, 0, [], resolvedBrowserIsolation: BrowserIsolation.EphemeralSession);
+        var shared = new AgentRunConfiguration(Definition, 0, 0, [], resolvedBrowserIsolation: BrowserIsolation.PersistentAgent);
+        Assert.NotEqual(configuration.ConfigurationHash, shared.ConfigurationHash);
+        var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), snapshot, [entry], Now,
+            [], configuration: configuration);
+        await f.Runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
+        await f.ReopenAsync();
+        var admitted = (await f.Runs.GetAsync(Owner, run.AgentRunId))!.Admission.Configuration!;
+        Assert.Equal(BrowserIsolation.EphemeralSession, admitted.ResolvedBrowserIsolation);
+        Assert.Equal(configuration.ConfigurationHash, admitted.ConfigurationHash);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task State_counts_runs_once_across_retry_and_reopen_without_reading_transcripts(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var snapshot = Snapshot(Guid.NewGuid(), []);
+        await f.Memory.SaveAsync(snapshot, 0);
+        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "state-count", Now);
+        var run = NewRun(activation);
+        await f.Runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
+        var initial = await f.Runs.ReadStateAsync(Owner);
+        Assert.Equal(1, initial.Queued); Assert.Equal(0, initial.Executing);
+        var claimed = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(1, Now, Guid.NewGuid(), Now.AddMinutes(1)));
+        Assert.Equal(1, (await f.Runs.ReadStateAsync(Owner)).Executing);
+        await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Fail(claimed.Revision, Now, claimed.Claim!.Generation,
+            "provider-unavailable", "Temporary failure", true, Now.AddSeconds(1)));
+        await f.ReopenAsync();
+        var retry = await f.Runs.ReadStateAsync(Owner);
+        Assert.Equal(0, retry.Executing); Assert.Equal(0, retry.Queued); Assert.Equal(1, retry.Retrying);
+        Assert.Equal(0, retry.Terminal);
+        Assert.Equal(1, (await f.Runs.ReadSessionStateAsync(Owner, snapshot.SessionId)).Retrying);
+        Assert.Equal(0, (await f.Runs.ReadSessionStateAsync(Owner, Guid.NewGuid())).Retrying);
+        var state = await f.Memory.ReadStateAsync(Owner);
+        Assert.Equal(1, state.Open); Assert.Equal(0, state.Paused); Assert.Equal(0, state.Terminal);
+        Assert.Equal(0, (await f.Memory.ReadStateAsync(new AgentRunOwner(Guid.NewGuid(), Owner.ProfileId))).Open);
+        Assert.Equal(0, (await f.Runs.ReadStateAsync(new AgentRunOwner(Owner.AgentInstanceId, Guid.NewGuid()))).Retrying);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Batched_explicit_input_and_reference_evidence_are_frozen_across_retry_and_reopen(bool sqlite)
@@ -945,6 +1043,37 @@ public sealed class AgentRunAdmissionStoreTests
     }
 
     [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Request_isolation_completion_requires_atomic_owned_child_receipt_and_survives_reopen(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var parent = await ParentTurn(f);
+        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
+        var completed = await CompleteChild(f, child, quiet: false);
+        await CompleteParent(f, parent);
+        var snapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
+        var definition = Definition with { Voice = Definition.Voice with { Enabled = false },
+            StateIsolationPolicy = new(ConversationContextScope.CurrentRequest) };
+        AgentRun Report() => NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.BackgroundCompleted, [],
+            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:strict", Now, "{}"),
+            new AgentRunConfiguration(definition, 0, 0, []));
+        var report = Report(); var proposed = snapshot with { Revision = snapshot.Revision + 1 };
+        Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitAsync(proposed, snapshot.Revision, report).AsTask())).Code);
+        var missingSource = await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitCompletionReportAsync(proposed,
+            snapshot.Revision, report, Guid.NewGuid()).AsTask());
+        Assert.Contains(missingSource.Code, new[] { "Conflict", "NotFound" });
+        Assert.Equal(snapshot.Revision, (await f.Memory.LoadAsync(parent.SessionId))!.Revision);
+        var first = await f.Runs.AdmitCompletionReportAsync(proposed, snapshot.Revision, report, completed.AgentRunId);
+        Assert.True(first.Created);
+        await f.ReopenAsync();
+        var replay = await f.Runs.AdmitCompletionReportAsync(proposed, snapshot.Revision, Report(), completed.AgentRunId);
+        Assert.False(replay.Created); Assert.Equal(first.Run.AgentRunId, replay.Run.AgentRunId);
+        Assert.Equal(2, (await f.Runs.ListForSessionAsync(Owner, parent.SessionId)).Count);
+        Assert.True(await f.Runs.HasCompletionReceiptAsync(Owner, completed.AgentRunId));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Quiet_completion_cannot_admit_parent_prose_and_skip_receipt_survives_reopen(bool sqlite)
@@ -1705,9 +1834,10 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.Empty(duplicate.Run.Admission.Activation.SourceEntryIds);
     }
 
-    private static AgentRun NewRun(Activation activation) => AgentRun.Create(Guid.NewGuid(), Owner,
+    private static AgentRun NewRun(Activation activation, AgentRunConfiguration? configuration = null) => AgentRun.Create(Guid.NewGuid(), Owner,
         new AgentRunAdmission(activation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), activation.Kind == ActivationKind.BackgroundCompleted ? AgentRunOutputContract.CompletionReport
-            : activation.SourceEntryIds.Count > 0 && activation.Kind != ActivationKind.UserTurn ? AgentRunOutputContract.BackgroundOutcome : AgentRunOutputContract.ConversationResponse),
+            : activation.SourceEntryIds.Count > 0 && activation.Kind != ActivationKind.UserTurn ? AgentRunOutputContract.BackgroundOutcome : AgentRunOutputContract.ConversationResponse,
+            configuration: configuration),
         new AgentRunModelPin("synthetic", "synthetic", "synthetic", null), 3, Now);
 
     private sealed class Diagnostics : IDiagnosticIdSource { public Guid NewId() => Guid.NewGuid(); }

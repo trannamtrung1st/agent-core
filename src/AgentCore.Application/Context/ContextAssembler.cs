@@ -12,7 +12,7 @@ public enum ContextSourceKind { AgentCore, Definition, Instance, Environment, Se
 public enum ContextSectionId
 {
     CoreToolUse, CoreWorkspace, CoreMemory, CoreReferences, CoreContinuity, CoreBackground, CoreAutomation, CoreBackgroundReport, CoreConfigurationContinuation, CoreBrowserLifecycle, CoreCleanup, CoreFinalization, CoreBackgroundFinalization, CoreSandboxRecovery, CoreInvalidStrategies, CoreCheckpointCapacity, CoreBackgroundCheckpointCapacity, CoreTerminalBrowser, CoreChallengedBrowser, CoreDialog, CoreRepeatedDialog, CoreBrowserObservation, CoreInitiative, CoreCompletion, CoreCompaction, CoreDraftEvaluation, CoreProtocolRepair, CoreSemanticResponse,
-    OperatingContract, BrowserRecoveryRules, CoreVoiceOutput, CoreAttachmentReading, CoreAttachmentReread,
+    OperatingContract, BrowserRecoveryRules, CoreVoiceOutput, CoreAttachmentReading, CoreAttachmentReread, CoreStateObservation,
     CoreConfigurationAssistance, CoreHarnessAuthoring, CoreNoProgressBrowser, CoreTriggerAuthorization, CoreAutomationHistory, CoreScheduling, CoreMemoryReceipts, CoreInitiativePlan,
     AgentIdentity, AgentInstructions, Policies, Session, Environment, RunTask, Capabilities, SkillCatalog, Skills, InstanceSkills,
     Scheduling, ExecutionFacts, ExecutionPhase, PreviousExecution,
@@ -26,7 +26,7 @@ public enum CoreProcedure
     BackgroundReport, ConfigurationContinuation, BrowserLifecycle, Cleanup, Finalization, BackgroundFinalization,
     SandboxRecovery, InvalidStrategies, CheckpointCapacity, BackgroundCheckpointCapacity, TerminalBrowser,
     ChallengedBrowser, Dialog, RepeatedDialog, BrowserObservation, Initiative, Completion, Compaction, DraftEvaluation,
-    ProtocolRepair, SemanticResponse, NoProgressBrowser, TriggerAuthorization, AutomationHistory, Scheduling, MemoryReceipts, VoiceOutput, AttachmentReading, AttachmentReread
+    ProtocolRepair, SemanticResponse, NoProgressBrowser, TriggerAuthorization, AutomationHistory, Scheduling, MemoryReceipts, VoiceOutput, AttachmentReading, AttachmentReread, StateObservation
 }
 
 public sealed record ContextSection

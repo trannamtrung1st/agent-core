@@ -864,3 +864,21 @@ Environment reads add `selectedProfileId`, transition profile/stage and safe pro
 A known `Completed` receipt can carry `error: recovery_required` when retirement or commit cleanup remains pending. It preserves the real exit code and actual workspace outcome; a new call blocked by that receipt creates no dispatch, whereas the originating completed call remains an observed effect. `workspaceSyncStatus: unknown` is never projected as definitely uncommitted. Ordinary successful reuse/recycling has no recovery error. Detailed lifecycle evidence is progressively disclosed in Chat.
 
 Sandbox environment GET and `sandbox.status` add boolean `fileRecoveryRequired` for NeedsResync. It is independent of `cleanupPending` (Terminating/NeedsReconciliation). Retained staging with unknown file outcome must not be labeled “No pending cleanup”; the UI explains file recovery before staging deletion.
+
+## Admin State and State & Isolation
+
+All routes below reuse the existing owner capability boundary under `/api/v2/admin/agent-instances/{instanceId}`.
+
+| Method/path | Contract |
+| --- | --- |
+| `GET /state` | `agentInstanceId`, `observedAtUtc`, `freshThroughUtc`, `availability`, nullable `sessions`, `hostedSessions`, `runs`, bounded `resources` and typed `issues`. Unknown resource counts are null. No page handles, URLs, content, credentials, shell text or provider exception bodies. |
+| `GET /isolation` | Current State/Memory/Voice sections with effective values, sources, constraints, three owner revisions, Experience/maintenance flags and browser host ceiling. |
+| `POST /isolation/preset` | `{ "preset": "Persistent" }`, `SessionIsolated` or `Stateless`; returns an unsaved exact draft/plan. |
+| `POST /isolation/preview` | Draft `{settings:[{section,set,clear}],experienceEnabled,allowMaintenance}`; returns expected revisions, fingerprint, exact changes, blocking reasons and adoption notice. |
+| `POST /isolation/apply` | `{expected,draft,fingerprint}` from a current preview; atomically updates the existing metadata owners or returns conflict/validation without partial apply. |
+
+The `stateIsolationPolicy` settings section uses finite string values and sparse per-field inheritance. Unknown fields and unsupported enum values are rejected. Presets do not persist a discriminator. A CurrentRequest text Session rejects another request with `fresh_session_required` (409); Chat offers New chat. Idempotent replay of the original accepted input remains valid. Existing Session/Run/checkpoint and wire response identity are unchanged.
+
+`agent.state.inspect` is an optional ordinary tool capability. Its JSON input is `{}` or `{"scope":"currentSession"}` / `{"scope":"instanceSummary"}` with no additional properties. CurrentSession is the default; InstanceSummary requires its explicit ceiling. Responses include safe counts, scope, availability and observed/fresh-through timestamps, at most 4096 bytes. Refresh within one second returns `state_refresh_limited`; live revocation or mismatched Run scope returns forbidden. The result is Evidence, never a permission or instruction.
+
+The Chat identity catalog projects effective Instance Voice availability and language, so a request-isolated text-only preset does not advertise Voice. Terminal state immediately disables input/capture, then allows already queued command acknowledgements to drain for at most one second before stopping that same connection. A later Session/connection cannot be stopped by the old drain callback.

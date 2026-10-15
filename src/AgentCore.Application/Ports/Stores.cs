@@ -17,6 +17,7 @@ public interface IBuiltInAgentDefinitionStore : IAgentDefinitionStore;
 
 public interface IMemoryStore
 {
+    ValueTask<DurableSessionState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default) => throw new NotSupportedException();
     ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default);
 
     ValueTask<SessionSnapshot?> LoadMetadataAsync(
@@ -60,6 +61,9 @@ public interface IMemoryStore
         bool includeArchived = false, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
     ValueTask<SessionCatalogPage> ListInstanceSessionsAsync(AgentRunOwner owner, string? cursor, int limit,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+    ValueTask<SessionCatalogPage> ListTerminalSessionsAsync(string? cursor, int limit,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
     ValueTask<SessionCatalogPage> ListCatalogAsync(
