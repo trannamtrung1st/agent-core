@@ -23,6 +23,7 @@ import { InstanceRunsSection } from "./InstanceRunsSection";
 import { InstanceSettingsSection } from "./InstanceSettingsSection";
 import { InstanceStateSection } from './InstanceStateSection';
 import { StateIsolationConfigurationSection } from './StateIsolationConfigurationSection';
+import { StateIsolationConfigurationProvider } from './StateIsolationConfigurationProvider';
 import { InstanceSkillsSection } from "./InstanceSkillsSection";
 import { InstanceWorkspaceSection } from "./InstanceWorkspaceSection";
 import { RetainedAdminPage } from './RetainedAdminPage';
@@ -104,7 +105,7 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
     {resolved && archived && new URLSearchParams(window.location.search).get('notice') === 'archived-automations' && <Alert type="info" showIcon title="Automations are unavailable for this archived Instance" description="Unarchive from Lifecycle before enabling or executing work." />}
     {effective.kind === 'loading' && <Spin aria-label="Loading effective configuration" />}
     {effective.kind === 'error' && <Alert type={effective.unauthorized ? 'warning' : 'error'} showIcon title={effective.message} action={<AdminRetryAction onRetry={onRetryEffective} diagnosticId={effective.diagnosticId} />} />}
-    {resolved && <InstanceConfigurationProvider key={instanceId} revision={resolved.instanceRevision} disabled={archived || effective.kind !== 'ready'} onUpdated={onInstanceChanged}><div inert={effective.kind !== 'ready'}><Flex vertical gap={token.padding}><InstanceConfigurationActions /><InstanceConfigurationContent><Flex vertical gap={token.padding}>
+    {resolved && <InstanceConfigurationProvider key={instanceId} revision={resolved.instanceRevision} disabled={archived || effective.kind !== 'ready'} onUpdated={onInstanceChanged}><StateIsolationConfigurationProvider instanceId={instanceId} active={page === 'state-isolation' || page === 'memory-policy' || page === 'voice'} archived={archived} onUpdated={onInstanceChanged} onDirtyChange={reportIsolationDirty}><div inert={effective.kind !== 'ready'}><Flex vertical gap={token.padding}><InstanceConfigurationActions /><InstanceConfigurationContent><Flex vertical gap={token.padding}>
         {archived && <Alert type="info" showIcon title="Archived Instance" description="Configuration is read-only. Automations cannot execute; unarchive from Lifecycle to resume owner operations." />}
         <RetainedAdminPage active={page === 'overview'}><InstanceOverview config={resolved} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'profile' || page === 'version' || page === 'lifecycle'}><InstanceManagedControls page={page === 'version' || page === 'lifecycle' ? page : 'profile'} config={resolved} onUpdated={onInstanceChanged} onDeleted={() => { releaseConsumedInstance(); onInstanceDeleted(); }} onDirtyChange={value => reportDirty('profile', value)} /></RetainedAdminPage>
@@ -130,7 +131,7 @@ export function InstanceDetail({ instanceId, page = 'overview', instances, effec
         <RetainedAdminPage active={page === 'state'}><InstanceStateSection instanceId={instanceId} active={page === 'state'} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'runs'}><InstanceRunsSection instanceId={instanceId} open={page === 'runs'} inline onRun={viewRun} onClose={() => go('sessions')} /></RetainedAdminPage>
         <RetainedAdminPage active={page === 'effective'}><AgentConfigurationPanel title="Resolved configuration" label="Effective configuration" description="Saved Definition and Instance values. Draft overrides are not included."><EffectiveConfigView config={resolved} hidePersona /></AgentConfigurationPanel></RetainedAdminPage>
-      </Flex></InstanceConfigurationContent></Flex></div></InstanceConfigurationProvider>}
+      </Flex></InstanceConfigurationContent></Flex></div></StateIsolationConfigurationProvider></InstanceConfigurationProvider>}
     {resolved && <InstanceRunsSection instanceId={instanceId} open={runDetailsOpen} detailsOnly selectedAgentRunId={selectedAgentRunId} onSource={viewSource} onClose={closeRun} afterClose={() => { if (restoreRunFocus.current && runOpener.current?.isConnected) runOpener.current.focus({ preventScroll: true }); }} />}
   </Flex>;
 }

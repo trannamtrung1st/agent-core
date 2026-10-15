@@ -1,6 +1,10 @@
 import { getSandboxPlatform, sandboxEligible, sandboxStatusLabel, type SandboxProfile } from '../../services/sandboxes';
 import { InstanceSandboxSummary } from "./InstanceSandboxSummary";
 import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
+import { useStateIsolationConfiguration } from './StateIsolationConfigurationProvider';
+import { IsolationChangePreview } from './IsolationChangePreview';
+import { followAppLink } from '../../app/appLink';
+import { instancePath } from './adminNavigation';
 import { emptyDraft, useInstanceSettingsController } from './useInstanceSettingsController';
 import { useAdminDraftStatus } from './AdminDraftStatus';
 import { useEffect, useId, useState } from 'react';
@@ -25,7 +29,41 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
   const { token } = theme.useToken(); const { modal } = App.useApp();
   const [expanded, setExpanded] = useState<string[]>([]);
   const formId = useId();
-  const { sections, drafts, setDrafts, loading, busy, error, models, defaultModelKey, reload, change, inherit, save, saveAll } = useInstanceSettingsController(instanceId, archived, active, onUpdated);
+  const isolation = useStateIsolationConfiguration();
+  const settings = useInstanceSettingsController(instanceId, archived, active, onUpdated, isolation?.view?.revisions.instance, isolation?.editor.saving);
+  const coordinated = (section: string, field: string) => !!isolation && (section === 'memoryPolicy' || section === 'voice' && field === 'enabled');
+  const coordinatedPage = !!isolation && (page === 'memory-policy' || page === 'voice');
+  // Saved values and sparse edits share one owner with the coordinated preset preview.
+  const sections = settings.sections?.map(section => {
+    const shared = isolation?.view?.settings.find(s => s.section === section.section);
+    if (!shared) return section;
+    const result = { ...section, effective: { ...section.effective }, overrides: { ...section.overrides }, sources: { ...section.sources } };
+    for (const field of Object.keys(shared.effective).filter(field => coordinated(section.section, field))) {
+      result.effective[field] = shared.effective[field];
+      result.sources[field] = shared.sources[field];
+      if (field in shared.overrides) result.overrides[field] = shared.overrides[field]; else delete result.overrides[field];
+    }
+    return result;
+  }) ?? null;
+  const drafts = { ...settings.drafts };
+  for (const patch of isolation?.draft?.settings ?? []) {
+    if (patch.section !== 'memoryPolicy' && patch.section !== 'voice') continue;
+    const own = drafts[patch.section] ?? emptyDraft();
+    drafts[patch.section] = { set: { ...own.set, ...patch.set }, clear: [...new Set([...own.clear, ...patch.clear])] };
+  }
+  const { setDrafts, error, models, defaultModelKey, save, saveAll } = settings;
+  const busy = settings.busy || !!isolation?.busy;
+  const loading = settings.loading || coordinatedPage && !isolation?.view;
+  const reload = async () => { await Promise.all([settings.reload(), ...(coordinatedPage ? [isolation!.refresh().catch(() => {})] : [])]); };
+  const change: typeof settings.change = (section, field, value) => coordinated(section.section, field)
+    ? isolation!.edit(section.section, field, value) : settings.change(section, field, value);
+  const inherit: typeof settings.inherit = (section, field) => coordinated(section.section, field)
+    ? isolation!.edit(section.section, field, undefined) : settings.inherit(section, field);
+  function resetSection(section: NonNullable<typeof sections>[number]) {
+    if (!isolation || section.section !== 'memoryPolicy' && section.section !== 'voice') return save(section, true);
+    isolation.reset(section.section);
+    if (section.section === 'voice') setDrafts(current => ({ ...current, voice: { set: {}, clear: Object.keys(section.overrides).filter(field => field !== 'enabled') } }));
+  }
   useEffect(() => { setExpanded([]); }, [instanceId]);
   const [sandboxProfiles,setSandboxProfiles]=useState<SandboxProfile[]|null>(null);const [sandboxInventoryError,setSandboxInventoryError]=useState(false);const [catalogAttempt,setCatalogAttempt]=useState(0);
   useEffect(()=>{if(page!=='sandbox')return;const controller=new AbortController();setSandboxProfiles(null);setSandboxInventoryError(false);
@@ -34,12 +72,15 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
   const requested = page ? instanceSettingGroups[page] ?? [] : undefined;
   const dirtySections = Object.entries(drafts).filter(([, draft]) => Object.keys(draft.set).length + draft.clear.length > 0).map(([key]) => key);
   useAdminDraftStatus(Object.entries(instanceSettingGroups).filter(([, sections]) => sections?.some(section => dirtySections.includes(section))).map(([key]) => key));
-  useEffect(() => { onDirtyChange?.(dirtySections.length > 0); }, [dirtySections.join(','), onDirtyChange]);
+  const independentDirty = Object.values(settings.drafts).some(draft => Object.keys(draft.set).length + draft.clear.length > 0);
+  useEffect(() => { onDirtyChange?.(independentDirty); }, [independentDirty, onDirtyChange]);
   useEffect(() => { if (requested) setExpanded(current => [...new Set([...current, ...requested])]); }, [page]);
-  const configuration = useInstanceConfigurationEditor('Settings', { dirty: dirtySections.length > 0, busy: busy || loading, revision: sections?.[0]?.instanceRevision, blocked: !sections ? 'Read current settings before saving.' : undefined, save: saveAll, discard: () => setDrafts({}), refresh: reload });
+  const configuration = useInstanceConfigurationEditor('Settings', { dirty: independentDirty, busy: busy || loading, revision: sections?.[0]?.instanceRevision, blocked: !sections ? 'Read current settings before saving.' : undefined, save: saveAll, discard: () => setDrafts({}), refresh: settings.reload });
   return <Flex vertical gap={token.padding}>
     <Typography.Paragraph type="secondary" className="admin-settings-intro" style={{ margin: 0 }}>{page==='sandbox'?'Unchanged values inherit the Definition policy and chosen Global Profile. Only edited fields become Instance overrides. The next Run adopts saved changes; a changed environment is replaced only after safe termination.':'Only fields you change become Instance overrides. Unchanged fields inherit the selected Definition. Changes apply to the next new Run in any existing conversation. Current Runs are unchanged.'}</Typography.Paragraph>
     <Button style={{ alignSelf: "flex-start" }} disabled={busy || loading} onClick={() => void reload()}>Reload settings</Button>
+    {coordinatedPage && <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Memory policy and Voice enablement share the State &amp; Isolation draft and Save. <a href={instancePath(instanceId, 'state-isolation')} onClick={followAppLink}>Review State &amp; Isolation</a></Typography.Paragraph>}
+    {coordinatedPage && isolation?.error && <Alert type="error" showIcon title={isolation.error} action={<Button onClick={() => void isolation.refresh().catch(() => {})}>Retry isolation</Button>} />}
     {error && <Alert type="error" showIcon title={error} action={<Button disabled={busy || loading} onClick={() => void reload()}>Retry settings</Button>} />}
     {sandboxInventoryError && <Alert type="warning" showIcon title="Sandbox catalog unavailable" description="Saved choices are preserved. Retry before selecting another image." action={<Button onClick={()=>setCatalogAttempt(v=>v+1)}>Retry profiles</Button>} />}
     {loading && <Spin aria-label="Loading Instance settings" />}
@@ -48,6 +89,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
       const changed = Object.keys(draft.set).length + draft.clear.length > 0;
       const title = titles[section.section];
       const hasOverrides = Object.keys(draft.set).some(field => field !== 'allowUnreadUnsupportedTypes') || Object.keys(section.overrides).some(field => field !== 'allowUnreadUnsupportedTypes' && !draft.clear.includes(field));
+      const sharedSection = !!isolation && (section.section === 'memoryPolicy' || section.section === 'voice');
       return { key: section.section, label: <Flex wrap align="center" gap={token.paddingXS}>
         <span id={section.section === "triggerPolicy" ? "restrictions" : section.section} tabIndex={-1} className="admin-settings-anchor">{title}</span>
         {changed && <Typography.Text type="secondary">Unsaved changes</Typography.Text>}
@@ -61,7 +103,7 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
             const value = draft.clear.includes(field) ? section.definitionDefaults?.[field] ?? null : field in draft.set ? draft.set[field] : inherited;
             const constraint = section.constraints?.[field];
             const locked = typeof constraint?.requiredBoolean === 'boolean';
-            const disabled = archived || busy || draft.clear.includes(field) || locked;
+            const disabled = archived || busy || draft.clear.includes(field) && !coordinated(section.section, field) || locked || coordinated(section.section, field) && !isolation?.view;
             const label = labels[field] ?? field[0].toUpperCase() + field.slice(1);
             const id = `${formId}-${section.section}-${field}`;
             const boolean = typeof inherited === 'boolean';
@@ -107,11 +149,12 @@ export function InstanceSettingsSection({ instanceId, archived, active = true, p
           {!configuration.managed && <Button aria-label={`Discard ${title} changes`} disabled={busy || archived || !changed && Object.keys(section.overrides).length > 0} onClick={() => {
             setDrafts(current => ({ ...current, [section.section]: emptyDraft() }));
           }}>Discard</Button>}
-          <Button aria-label={`Reset ${title} to Definition`} disabled={archived || busy || !Object.keys(section.overrides).length} onClick={() => confirmAction(modal, { title: `Reset ${title}?`, content: "Clears only this section’s overrides and discards its unsaved edits. Other settings and budget profiles are preserved.", okText: "Reset section", onOk: () => save(section, true) })}>{section.section === "sandboxPolicy" ? "Reset to inherited" : "Reset"}</Button>
+          <Button aria-label={`Reset ${title} to Definition`} disabled={archived || busy || (sharedSection ? !isolation?.view || !hasOverrides : !Object.keys(section.overrides).length)} onClick={() => confirmAction(modal, { title: `Reset ${title}?`, content: `Clears only this section’s overrides and discards its unsaved edits. Other settings and budget profiles are preserved.${sharedSection ? ' Review and Save the resulting draft to apply it.' : ''}`, okText: "Reset section", onOk: () => resetSection(section) })}>{section.section === "sandboxPolicy" ? "Reset to inherited" : "Reset"}</Button>
         </Flex>
         <Typography.Text type="secondary">Instance adopted v{section.definitionVersion} · revision {section.instanceRevision}</Typography.Text>
       </Flex> };
     })} />}
+    {coordinatedPage && isolation?.changed && <IsolationChangePreview changes={isolation.plan?.changes} notice={isolation.plan?.notice} blockingReasons={isolation.plan?.blockingReasons} busy={isolation.previewing} />}
     {page === 'sandbox' && <InstanceSandboxSummary instanceId={instanceId} revision={sections?.[0]?.instanceRevision} verifySetup archived={archived} dirty={dirtySections.length > 0} />}
 
   </Flex>;
