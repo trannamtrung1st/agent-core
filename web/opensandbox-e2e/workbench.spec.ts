@@ -86,7 +86,10 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     await drawer.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('button', { name: 'Stop', exact: true }).click();
     await page.getByRole('button', { name: 'Session sandbox', exact: true }).click();
-    await expect(drawer).toContainText('NeedsResync');
+    await expect(drawer.getByText('Terminated', { exact: true })).toBeVisible({ timeout: 30000 });
+    await expect(drawer.getByText('Canceled', { exact: true })).toBeVisible();
+    await expect(drawer).toContainText('Files not committed');
+    await expect(drawer).toContainText('Termination and staging cleanup confirmed');
     await drawer.getByRole('button', { name: 'Reset sandbox', exact: true }).click();
     await page.getByRole('button', { name: 'Reset sandbox', exact: true }).last().click();
     await expect(drawer).toContainText('Terminated');
@@ -204,7 +207,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     const actual = await environment(page, sessionId, headers);
     const executionUrl = `**/api/v2/sessions/${sessionId}/sandbox/executions/*`;
     for (const scenario of [
-      { state:'Failed', status:'Indeterminate', sync:'notCommitted', title:'Environment setup failed', message:'Environment initialization failed. Correct and verify the profile script, then reset before retrying.' },
+      { state:'Failed', status:'Indeterminate', sync:'notCommitted', title:'Setup failed', message:'Environment initialization failed. Correct and verify the profile script, then reset before retrying.' },
       { state:'Terminated', status:'Completed', sync:'committed', title:'Environment ended', message:null },
       { state:'NeedsResync', status:'Indeterminate', sync:'unknown', title:'Inspect before retrying', message:null },
       { state:'NeedsResync', status:'Indeterminate', sync:'committed', title:'Inspect before retrying', message:null },
@@ -215,6 +218,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
         await page.setViewportSize({ width,height:900 });
         await page.getByRole('button', { name:'Session sandbox',exact:true }).click();
         await expect(drawer.getByText(scenario.title,{exact:true})).toBeVisible();
+        if (scenario.message) await expect(drawer).toContainText(scenario.message);
         if (scenario.sync==='unknown') await expect(drawer).toContainText('Files may already have been committed');
         if (scenario.status==='Indeterminate' && scenario.sync==='committed') await expect(drawer).toContainText('Canonical files were committed');
         await expect.poll(async () => drawer.evaluate(e => Math.round(e.getBoundingClientRect().width))).toBe(width < 768 ? width : 640);
