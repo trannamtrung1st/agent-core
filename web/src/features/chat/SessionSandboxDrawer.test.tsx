@@ -4,8 +4,8 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { SessionSandboxDrawer } from './SessionSandboxDrawer';
 import { getSessionSandbox, getSandboxExecution, resetSessionSandbox, stopSandboxExecution, type SandboxEnvironment, type SandboxExecution } from '../../services/sandboxes';
 vi.mock('../../services/sandboxes', () => ({ getSessionSandbox:vi.fn(),getSandboxExecution:vi.fn(),resetSessionSandbox:vi.fn(),stopSandboxExecution:vi.fn() }));
-const env: SandboxEnvironment = { sessionId:'s1',generation:'g1',state:'Ready',profileId:'workbench',profileRevision:2,expiresAt:'2026-10-14T03:00:00Z',activeExecutionId:null,lastExecutionId:'e1',diagnosticId:null };
-const result: SandboxExecution = { executionId:'e1',status:'Completed',exitCode:7,stdout:'test failed',stderr:'failure details',truncated:true,durationMs:1200,workspaceSyncStatus:'committed',diagnosticId:null,background:false,commandText:'python -m pytest' };
+const env: SandboxEnvironment = { sessionId:'s1',generation:'g1',state:'Ready',profileId:'workbench',profileRevision:2,expiresAt:'2099-10-14T03:00:00Z',activeExecutionId:null,lastExecutionId:'e1',diagnosticId:null };
+const result: SandboxExecution = { executionId:'e1',status:'Completed',exitCode:7,stdout:'test failed',stderr:'failure details',truncated:true,durationMs:1200,filesystemEffectsMayHaveOccurred:true,diagnosticId:null,background:false,commandText:'python -m pytest' };
 beforeEach(() => { vi.mocked(getSessionSandbox).mockReset().mockResolvedValue(env); vi.mocked(getSandboxExecution).mockReset().mockResolvedValue(result); vi.mocked(resetSessionSandbox).mockReset().mockResolvedValue({reset:true}); vi.mocked(stopSandboxExecution).mockReset().mockResolvedValue(result); });
 function tree(id='s1') { return <ConfigProvider theme={{token:{motion:false}}}><App><SessionSandboxDrawer sessionId={id} open narrow={false} onClose={() => {}} /></App></ConfigProvider>; }
 async function resetDialog() {
@@ -14,7 +14,7 @@ async function resetDialog() {
   return (await screen.findByText('Reset this Session sandbox?', { selector: '.ant-modal-confirm-title' })).closest('[role="dialog"]') as HTMLElement;
 }
 it('shows failed command evidence with separate collapsed stderr and truthful truncation',async () => {
-  render(tree()); await screen.findByText('test failed'); expect(screen.getByText(/Exit 7.*committed/)).toBeInTheDocument();
+  render(tree()); await screen.findByText('test failed'); expect(screen.getByText(/Exit 7.*writes may have occurred/)).toBeInTheDocument();
   expect(screen.queryByRole('button', {name:'Command diagnostics'})).not.toBeInTheDocument();
   expect(screen.getByText('Output was truncated at the bounded log limit.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Standard error'})); await screen.findByText('failure details');
@@ -25,27 +25,26 @@ it('keeps completed recycled commands concise and reveals lifecycle evidence on 
   render(tree());await screen.findByText('Environment recycled');
   expect(screen.getByText('Container recycled')).toBeInTheDocument();
   expect(screen.queryByText('Previous execution needs review')).not.toBeInTheDocument();
-  expect(screen.queryByText('Termination and staging cleanup confirmed')).not.toBeInTheDocument();
+  expect(screen.queryByText('Container termination confirmed')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Lifecycle evidence'}));
-  await screen.findByText('Termination and staging cleanup confirmed');
+  await screen.findByText('Container termination confirmed');
   expect(screen.getByText(/Exit 7/)).toBeInTheDocument();
 });
-it('distinguishes completed files from pending staging cleanup',async()=>{
+it('distinguishes completed command exit from pending process termination',async()=>{
   vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'NeedsReconciliation',cleanupPending:true});
-  vi.mocked(getSandboxExecution).mockResolvedValue({...result,exitCode:0,generationRecycled:true,remoteTerminationConfirmed:true,phase:'stagingCleanup'});
-  render(tree());await screen.findByText(/Command completion and canonical file commit are confirmed/);
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,exitCode:0,generationRecycled:true,remoteTerminationConfirmed:true,phase:'retirementRequested'});
+  render(tree());await screen.findByText(/Process retirement is pending/);
   expect(screen.queryByText(/command completion was not confirmed/)).not.toBeInTheDocument();
   expect(screen.queryByRole('button',{name:'Lifecycle evidence'})).not.toBeInTheDocument();
-  expect(screen.getByText('Container termination confirmed; staging retained')).toBeInTheDocument();
+  expect(screen.getByText('Container termination remains unconfirmed')).toBeInTheDocument();
 });
-it('distinguishes retained staging for file recovery from pending termination cleanup',async()=>{
-  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'NeedsResync',fileRecoveryRequired:true,cleanupPending:false});
-  vi.mocked(getSandboxExecution).mockResolvedValue({...result,workspaceSyncStatus:'unknown',remoteTerminationConfirmed:true});
-  render(tree());await screen.findByText('Staging retained until file recovery resolves');
-  expect(screen.getByText('File recovery')).toBeInTheDocument();
-  expect(screen.getByText(/Unknown outcomes keep staging and block further execution/)).toBeInTheDocument();
-  expect(screen.queryByText('No pending cleanup')).not.toBeInTheDocument();
-  expect(screen.getByText(/File commit outcome unknown/)).toBeInTheDocument();
+it('shows pending mount-policy enforcement without implying file rollback',async()=>{
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'EnforcementPending',cleanupPending:true,homeAccess:'ReadOnly',storageEnforcement:'sampled'});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,filesystemEffectsMayHaveOccurred:true,terminationConfirmed:false});
+  render(tree());await screen.findByText('Access enforcement pending');
+  expect(screen.getByText(/Complete or partial writes are already visible/)).toBeInTheDocument();
+  expect(screen.getByText(/Read-only · shared by this Instance/)).toBeInTheDocument();
+  expect(screen.queryByText('File recovery')).not.toBeInTheDocument();
 });
 it('does not promise retained selection after an explicit reset of a recycled generation',async()=>{
   vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'Terminated',cleanupReason:'reset',selectedProfileId:null});
@@ -64,7 +63,7 @@ it('groups labeled command diagnostics with metadata and copies the owned contex
   const section = await screen.findByRole('region', {name:'Sandbox command result'});
   const trigger = within(section).getByRole('button', {name:'Command diagnostics'});
   expect(trigger).toHaveTextContent('Command diagnostics');
-  expect(trigger.closest('.ant-flex')).toHaveTextContent('Exit 0 · 1.2s · Files committed');
+  expect(trigger.closest('.ant-flex')).toHaveTextContent('Exit 0 · 1.2s · Filesystem writes may have occurred');
   expect(trigger.compareDocumentPosition(within(section).getByRole('button', {name:'Standard output'})) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   fireEvent.click(trigger);
   await waitFor(() => expect(screen.getByText('Command diagnostics', {selector:'.ant-popover-title'})).toBeVisible());
@@ -152,15 +151,15 @@ it('resets only the observed owned generation and keeps foreground cancellation 
   await waitFor(() => expect(resetSessionSandbox).toHaveBeenCalledWith('s1','g1',env.activeExecutionId??env.lastExecutionId));
 });
 
-it('explains a confirmed commit even when command completion is uncertain', async () => {
-  vi.mocked(getSandboxExecution).mockResolvedValue({ ...result, status:'Indeterminate', workspaceSyncStatus:'committed' });
-  render(tree()); await screen.findByText(/Canonical files were committed, but command completion was not confirmed/);
-  expect(screen.queryByText(/Files may already/)).not.toBeInTheDocument();
+it('retains filesystem effects when command completion is uncertain', async () => {
+  vi.mocked(getSandboxExecution).mockResolvedValue({ ...result, status:'Indeterminate', filesystemEffectsMayHaveOccurred:true });
+  render(tree()); await screen.findByText(/The command outcome is uncertain/);
+  expect(screen.getByText(/Filesystem writes may have occurred/)).toBeInTheDocument();
 });
-it('does not label an unknown commit as definitely absent', async () => {
-  vi.mocked(getSandboxExecution).mockResolvedValue({ ...result, status:'Indeterminate', workspaceSyncStatus:'unknown' });
-  render(tree()); await screen.findByText(/Files may already have been committed/);
-  expect(screen.getByText(/File commit outcome unknown/)).toBeInTheDocument();
+it('keeps process cleanup distinct from present files', async () => {
+  vi.mocked(getSandboxExecution).mockResolvedValue({ ...result, status:'Indeterminate', filesystemEffectsMayHaveOccurred:true });
+  render(tree()); await screen.findByText(/The command outcome is uncertain/);
+  expect(screen.getByText(/Edits are visible immediately/)).toBeInTheDocument();
   expect(screen.queryByText(/Files not committed/)).not.toBeInTheDocument();
 });
 it('explains initialization recovery without losing the diagnostic or reset action', async () => {
@@ -172,7 +171,7 @@ it('explains initialization recovery without losing the diagnostic or reset acti
 it('explains expiry and retained files while leaving a terminated generation stopped', async () => {
   vi.mocked(getSessionSandbox).mockResolvedValue({ ...env, state:'Terminated' });
   render(tree()); await screen.findByText('Environment ended');
-  expect(screen.getByText(/Saved Workspace files and Artifacts are retained/)).toBeInTheDocument();
+  expect(screen.getByText(/Saved files and Artifacts are retained/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name:'Reset sandbox' })).toBeDisabled();
 });
 it('allows reset to clear a retained profile choice after clean termination', async () => {
@@ -216,8 +215,8 @@ it('rejects a recovery confirmation when another execution replaces its evidence
 });
 
 it('retains evidence after failed reset and requires a successful inspection before retrying',async()=>{
-  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'NeedsResync'});
-  vi.mocked(getSandboxExecution).mockResolvedValue({...result,status:'Indeterminate',workspaceSyncStatus:'unknown'});
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'EnforcementPending'});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,status:'Indeterminate',filesystemEffectsMayHaveOccurred:true});
   vi.mocked(resetSessionSandbox).mockRejectedValueOnce(new Error('cleanup pending'));
   render(tree());await screen.findByText('test failed');
   fireEvent.click(screen.getByRole('button',{name:'Reset sandbox'}));
@@ -232,9 +231,9 @@ it('retains evidence after failed reset and requires a successful inspection bef
 
 it('explains known clean cancellation with retained files and a new independent command',async()=>{
   vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'Terminated',cleanupReason:'cancelled',profileName:'Workbench'});
-  vi.mocked(getSandboxExecution).mockResolvedValue({...result,status:'Canceled',workspaceSyncStatus:'notCommitted',failureCategory:'cancellation',cancellationReason:'userStop',terminationConfirmed:true});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,status:'Canceled',filesystemEffectsMayHaveOccurred:true,failureCategory:'cancellation',cancellationReason:'userStop',terminationConfirmed:true});
   render(tree());await screen.findByText('Stopped by user');
-  expect(screen.getByText(/Review the retained execution receipt before starting a new authorized command/)).toBeInTheDocument();
+  expect(screen.getByText(/Inspect present files before starting a new authorized command/)).toBeInTheDocument();
   expect(screen.getByText('Last selected profile')).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Reset sandbox'})).toBeDisabled();
 });

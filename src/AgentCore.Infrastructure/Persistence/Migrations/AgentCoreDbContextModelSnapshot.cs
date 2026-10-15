@@ -705,46 +705,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("AgentRuns", (string)null);
                 });
 
-            modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentWorkspaceRow", b =>
-                {
-                    b.Property<string>("ItemId")
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("AgentInstanceId")
-                        .IsRequired()
-                        .HasMaxLength(36)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("BlobKey")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("ByteSize")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("MetadataJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PathKey")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("Revision")
-                        .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("ItemId");
-
-                    b.HasIndex("AgentInstanceId", "PathKey")
-                        .IsUnique();
-
-                    b.ToTable("AgentWorkspaceItems", (string)null);
-                });
-
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ArtifactRecordRow", b =>
                 {
                     b.Property<string>("ArtifactId")

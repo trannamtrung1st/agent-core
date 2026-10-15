@@ -11,7 +11,7 @@ public sealed partial class SessionToolExecutor
     private static readonly JsonSerializerOptions SandboxJson = new(JsonSerializerDefaults.Web);
     internal static bool SandboxEffectUnknown(SandboxCommandResult result, bool currentCall)
         => result.Error is null && result.Status == "Indeterminate"
-            || currentCall && (result.Status == "Indeterminate" || result.WorkspaceSyncStatus is "unknown" or "committing");
+            || currentCall && result.Status == "Indeterminate";
     private async Task<ToolExecutionResult> ExecuteSandboxToolAsync(AgentDefinition definition, Guid sessionId, ModelToolCall call,
         JsonElement args, ToolExecutionAdmission? admission, int remainingBytes, CancellationToken ct)
     {
@@ -99,8 +99,12 @@ public sealed partial class SessionToolExecutor
             if (args.EnumerateObject().Any(p => !allowed.Contains(p.Name, StringComparer.Ordinal))) return SandboxError("invalid", "Unknown sandbox argument; infrastructure and ownership settings are not tool arguments.");
             int? timeout = args.TryGetProperty("timeoutSeconds", out var seconds) && seconds.TryGetInt32(out var parsed) ? parsed : null;
             var background = args.TryGetProperty("background", out var bg) && bg.ValueKind == JsonValueKind.True;
+            var isolation = await IsolationAsync(definition, sessionId, ct);
+            var effectiveCwd = AgentCore.Application.Agents.StateIsolationAccess.Cwd(isolation, admission.WorkspaceCwd);
+            cwd = args.TryGetProperty("cwd", out _) ? AgentWorkspacePaths.Resolve(cwd, sessionId, effectiveCwd) : effectiveCwd;
+            AgentCore.Application.Agents.StateIsolationAccess.RequireHome(isolation, cwd, false);
             result = await sandboxService.ExecuteAsync(access, new(args.TryGetProperty("command",out _) ? command : null, argv,
-                args.TryGetProperty("cwd",out _) ? cwd : "/working", timeout, background, args.TryGetProperty("profileId", out _) ? selectedId : null), ct);
+                cwd, timeout, background, args.TryGetProperty("profileId", out _) ? selectedId : null), ct);
         }
         var effectObserved = call.Name == ToolCatalog.SandboxExec && result.ExecutionId != Guid.Empty
             && (await sandboxStore.GetOperationAsync(sessionId, run.AgentRunId, call.Id, ct))?.Id == result.ExecutionId;
@@ -108,10 +112,10 @@ public sealed partial class SessionToolExecutor
         return TextResult(ToolJsonResults.FitJsonWithContentField(remainingBytes, result.Stdout,
             (stdout, truncated) => JsonSerializer.Serialize(new { result.ExecutionId, result.Status, result.ExitCode, stdout, stderr,
                 combinedLogs = result.Background,
-                truncated = truncated || result.Truncated, result.DurationMs, result.WorkspaceSyncStatus, result.DiagnosticId,
+                truncated = truncated || result.Truncated, result.DurationMs, result.FilesystemEffectsMayHaveOccurred, result.DiagnosticId,
                 result.ProfileId, result.ProfileRevision, result.Generation, result.EnvironmentState, result.EnvironmentGeneration, result.Phase, result.FailureCategory, result.CancellationReason, result.TerminationConfirmed,
                 result.GenerationRecycled, result.RemoteTerminationConfirmed,
                 error = result.Error ?? (result.Status == "Indeterminate" ? "outcome_unknown" : null),
-                recovery = result.Recovery ?? (result.Status == "Indeterminate" ? "Outcome unknown. Do not repeat automatically; inspect and explicitly reset." : null) }, SandboxJson))) with { OutcomeUnknown = SandboxEffectUnknown(result, effectObserved), RecoveryRequired = result.Error == "recovery_required", EffectObserved = effectObserved, SafeFailureSummary = result.FailureCategory is null ? null : SandboxFailureSummary.Describe(result.FailureCategory, result.Phase, result.WorkspaceSyncStatus, result.TerminationConfirmed) };
+                recovery = result.Recovery ?? (result.Status == "Indeterminate" ? "Outcome unknown. Do not repeat automatically; inspect and explicitly reset." : null) }, SandboxJson))) with { OutcomeUnknown = SandboxEffectUnknown(result, effectObserved), RecoveryRequired = result.Error == "recovery_required", EffectObserved = effectObserved, SafeFailureSummary = result.FailureCategory is null ? null : SandboxFailureSummary.Describe(result.FailureCategory, result.Phase, result.FilesystemEffectsMayHaveOccurred, result.TerminationConfirmed) };
     }
 }

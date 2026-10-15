@@ -109,7 +109,7 @@ public static partial class HttpMapping
             Format(document.RetrievedAt));
 
     public static WorkspaceNodeResponse ToWorkspaceNode(AgentCore.Application.Ports.WorkspaceNode node) =>
-        new(node.LogicalPath, node.Directory, node.ByteSize, node.Writable);
+        new(node.LogicalPath, node.Directory, node.ByteSize, node.Writable, node.Directory ? "directory" : node.Kind, node.ModifiedAt, node.LinkTarget, node.Mode);
 
     public static ArtifactResponse ToArtifact(AgentCore.Application.Ports.ArtifactRecord record) =>
         new(

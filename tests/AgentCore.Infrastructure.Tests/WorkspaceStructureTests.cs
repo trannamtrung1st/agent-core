@@ -1,257 +1,123 @@
+using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
-using AgentCore.Domain.Definitions;
-using AgentCore.Infrastructure.Identity;
+using AgentCore.Domain.Conversation;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Workspaces;
-using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Tests;
 
 public sealed class WorkspaceStructureTests
 {
-    [Fact]
-    public async Task Sandbox_commit_is_exact_atomic_and_rejects_stale_unsafe_or_over_quota_trees()
-    {
-        using var f = await Fixture.Create(0, 12);
-        await f.Write("old", "original"u8.ToArray());
-        var snapshot = await f.Scratch!.CaptureScratchAsync(f.Id, Definition);
-        var tree = new WorkspaceTransfer([new("", true, "inode/directory", []), new("folder", true, "inode/directory", []), new("folder/exact", false, "application/octet-stream", [0, 255, 128])]);
-        await f.Write("concurrent", "new"u8.ToArray());
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, snapshot.Fingerprint));
-        Assert.Equal("original"u8.ToArray(), await f.Read("old"));
-        snapshot = await f.Scratch.CaptureScratchAsync(f.Id, Definition);
-        foreach (var invalid in new WorkspaceTransfer[] {
-            new([new("",true,"",[]),new("../escape",false,"",[1])]),
-            new([new("",true,"",[]),new(".env",false,"",[1])]),
-            new([new("",true,"",[]),new("x",false,"",[1]),new("X",false,"",[2])]),
-            new([new("",true,"",[]),new("folder",true,"",[]),new("Folder/file",false,"",[1])]),
-            new([new("",true,"",[]),new("big",false,"",new byte[13])]),
-            new([new("",true,"",[]),new("missing/child",false,"",[1])]) })
-        {
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.CommitScratchAsync(f.Id, invalid, snapshot.Fingerprint));
-            Assert.Equal(snapshot.Fingerprint, (await f.Scratch.CaptureScratchAsync(f.Id, Definition)).Fingerprint);
-        }
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, snapshot.Fingerprint,
-            validateCommit: _ => throw AgentCoreErrors.Conflict("Run claim revoked during staging.")));
-        Assert.Equal(snapshot.Fingerprint, (await f.Scratch.CaptureScratchAsync(f.Id, Definition)).Fingerprint);
-        using (var canceled = new CancellationTokenSource())
-        {
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, snapshot.Fingerprint, canceled.Token,
-                _ => { canceled.Cancel(); return ValueTask.CompletedTask; }));
-        }
-        Assert.Equal(snapshot.Fingerprint, (await f.Scratch.CaptureScratchAsync(f.Id, Definition)).Fingerprint);
-        await f.Scratch.CommitScratchAsync(f.Id, tree, snapshot.Fingerprint);
-        Assert.Equal(new byte[] { 0,255,128 }, await f.Read("folder/exact"));
-        Assert.DoesNotContain(f.P("old"), await f.Paths());
-    }
     [Theory]
-    [InlineData("beforeSwap", "notCommitted")]
-    [InlineData("afterBackup", "notCommitted")]
-    [InlineData("afterSwap", "committed")]
-    [InlineData("afterEvidence", "committed")]
-    public async Task Sandbox_swap_crashes_recover_durable_evidence_and_never_reapply_a_commit(string point, string expected)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Filesystem_operations_preserve_exact_bytes_empty_folders_and_links_without_tree_tokens(bool home)
     {
-        using var f = await Fixture.Create(0);
-        await f.Write("original", "old"u8.ToArray());
-        var before = await f.Scratch!.CaptureScratchAsync(f.Id, Definition);
-        var tree = new WorkspaceTransfer([new("", true, "", []), new("result", false, "", "new"u8.ToArray())]);
-        var id = Guid.NewGuid();
-        f.Scratch.ScratchCommitFault = phase => { if (phase == point) throw new IOException("Injected process crash"); };
-        await Assert.ThrowsAsync<IOException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, before.Fingerprint, commitId: id));
-        f.ReopenScratch();
-        Assert.Equal(expected, await f.Scratch.GetScratchCommitStatusAsync(f.Id, id));
-        await f.Scratch.EnsureAsync(f.Id, Definition);
-        Assert.Equal(expected, await f.Scratch.GetScratchCommitStatusAsync(f.Id, id));
-        Assert.Equal(expected == "committed" ? "new"u8.ToArray() : "old"u8.ToArray(), await f.Read(expected == "committed" ? "result" : "original"));
-        var current = await f.Scratch.CaptureScratchAsync(f.Id, Definition);
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.CommitScratchAsync(f.Id, tree, current.Fingerprint, commitId: id));
-        Assert.Equal(current.Fingerprint, (await f.Scratch.CaptureScratchAsync(f.Id, Definition)).Fingerprint);
-        await f.Write("later", "later"u8.ToArray());
-        Assert.Equal(expected, await f.Scratch.GetScratchCommitStatusAsync(f.Id, id));
-        Assert.Equal("notCommitted", await f.Scratch.GetScratchCommitStatusAsync(f.Id, Guid.NewGuid()));
-    }
-    [Theory]
-    [InlineData(0)] [InlineData(1)] [InlineData(2)]
-    public async Task Restructure_exact_tree_empty_directories_and_ordered_batch(int profile)
-    {
-        using var f = await Fixture.Create(profile);
+        using var f = new Fixture(home);
         await f.Write("project/text.txt", "hello"u8.ToArray());
-        byte[] binary = [0, 255, 128, 13, 10]; await f.Write("project/sub/raw.bin", binary);
-        await f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.P("project/empty/deep")));
-        var copied = await f.Run(new WorkspaceStructuralOperation("copy", Source:f.P("project"), Destination:f.P("copies/project")));
-        Assert.True(copied.Completed); Assert.Equal(2, copied.Results[0].FilesAffected);
-        Assert.Equal(binary, await f.Read("copies/project/sub/raw.bin"));
-        Assert.Equal("hello"u8.ToArray(), await f.Read("copies/project/text.txt"));
-        Assert.Contains(f.P("copies/project/empty/deep"), await f.Paths());
-        var moved = await f.Run(new WorkspaceStructuralOperation("move", Source:f.P("copies/project"), Destination:f.P("renamed")));
-        Assert.True(moved.Completed); Assert.DoesNotContain(f.P("copies/project"), await f.Paths());
-        Assert.Equal(binary, await f.Read("renamed/sub/raw.bin"));
-        var batch = await f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.P("work")),
-            new("move", Source:f.P("renamed/text.txt"), Destination:f.P("work/notes.txt")),
-            new("copy", Source:f.P("renamed/sub/raw.bin"), Destination:f.P("work/raw.bin")),
-            new("delete", Path:f.P("renamed"), Recursive:true));
-        Assert.True(batch.Completed); Assert.Equal(4, batch.CompletedCount); Assert.Null(batch.FailedIndex);
+        byte[] binary = [0,255,128,13,10]; await f.Write("project/sub/raw.bin", binary);
+        Assert.True((await f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.Path("project/empty/deep")))).Completed);
+        Assert.True((await f.Run(new WorkspaceStructuralOperation("copy", Source:f.Path("project"), Destination:f.Path("backup")))).Completed);
+        Assert.Equal(binary, await f.Read("backup/sub/raw.bin"));
+        Assert.True(Directory.Exists(System.IO.Path.Combine(f.Physical, "backup", "empty", "deep")));
+        File.CreateSymbolicLink(System.IO.Path.Combine(f.Physical, "backup", "link"), "text.txt");
+        Assert.True((await f.Run(new WorkspaceStructuralOperation("move", Source:f.Path("backup"), Destination:f.Path("renamed")))).Completed);
+        Assert.Equal("hello", Encoding.UTF8.GetString(await f.Read("renamed/link")));
+        var batch = await f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.Path("work")), new("move", Source:f.Path("renamed/text.txt"), Destination:f.Path("work/notes.txt")),
+            new("copy", Source:f.Path("renamed/sub/raw.bin"), Destination:f.Path("work/raw.bin")), new("delete", Path:f.Path("renamed"), Recursive:true));
+        Assert.True(batch.Completed); Assert.Equal(4, batch.CompletedCount);
         Assert.Equal(binary, await f.Read("work/raw.bin"));
         Assert.Equal("hello"u8.ToArray(), await f.Read("work/notes.txt"));
-        Assert.DoesNotContain(f.P("renamed"), await f.Paths());
-        Assert.Equal("alreadyExists", (await f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.P("work")))).Results[0].Status);
-        await f.Run(new WorkspaceStructuralOperation("delete", Path:f.P("project/empty/deep")));
-        await f.Run(new WorkspaceStructuralOperation("delete", Path:f.P("project/text.txt")));
-        Assert.DoesNotContain(f.P("project/text.txt"), await f.Paths());
-        if (profile == 2) { f.Reopen(); Assert.Contains(f.P("project/empty"), await f.Paths()); Assert.Equal(binary, await f.Read("work/raw.bin")); }
+        Assert.False(Directory.Exists(System.IO.Path.Combine(f.Physical, "renamed")));
+        Assert.True((await f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.Path("work")))).Completed);
     }
 
     [Theory]
-    [InlineData(0)] [InlineData(1)] [InlineData(2)]
-    public async Task Entire_preflight_rejects_conflicts_cycles_scope_and_quota_before_changes(int profile)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Input_scope_and_protected_root_validation_precede_all_mutations(bool home)
     {
-        using var f = await Fixture.Create(profile, 12);
-        await f.Write("source.txt", "12345678"u8.ToArray());
-        var initial = await f.Paths();
-        foreach (var ops in new WorkspaceStructuralOperation[][] {
-            [new("mkdir",Path:f.P("created")), new("move",Source:f.P("missing"),Destination:f.P("new"))],
-            [new("copy",Source:f.P("source.txt"),Destination:f.P("copy.txt"))],
-            [new("mkdir",Path:f.P("created")),new("mkdir",Path:f.P("source.txt"))],
-            [new("mkdir",Path:f.P("created")),new("move",Source:f.P("created"),Destination:f.P("created/child"))],
-            [new("delete",Path:profile == 0 ? "/workspace" : "/home",Recursive:true)],
-            [new("mkdir",Path:f.P("../escape"))],
-            [new("move",Source:f.P("source.txt"),Destination:profile == 0 ? "/home/cross" : "/workspace/working/cross")],
-            [new("copy",Source:f.P("source.txt"),Destination:f.P("source.txt"))],
-            [new("copy",Source:f.P("source.txt"),Destination:f.P("SOURCE.txt"))],
-            [new("delete",Path:f.P("*.txt"))] })
-        {
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Run(ops));
-            Assert.Equal(initial, await f.Paths()); Assert.Equal("12345678"u8.ToArray(), await f.Read("source.txt"));
-        }
-        await f.Run(new WorkspaceStructuralOperation("mkdir",Path:f.P("folder")),new("move",Source:f.P("source.txt"),Destination:f.P("folder/file")));
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Run(new WorkspaceStructuralOperation("delete",Path:f.P("folder"))));
-        Assert.Equal("12345678"u8.ToArray(), await f.Read("folder/file"));
-        // A deletion earlier in the batch frees cumulative capacity for a later copy.
-        await f.Write("small", "abc"u8.ToArray());
-        await f.Run(new WorkspaceStructuralOperation("delete",Path:f.P("folder"),Recursive:true),new("copy",Source:f.P("small"),Destination:f.P("copied")));
-        Assert.Equal("abc"u8.ToArray(), await f.Read("copied"));
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Run(Enumerable.Range(0,17).Select(i => new WorkspaceStructuralOperation("mkdir",Path:f.P("d"+i))).ToArray()));
+        using var f = new Fixture(home);
+        var otherRoot = home ? "/working/foreign" : "/home/foreign";
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.Path("must-not-exist")), new("delete", Path:otherRoot)));
+        Assert.False(Directory.Exists(System.IO.Path.Combine(f.Physical, "must-not-exist")));
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Run(new WorkspaceStructuralOperation("delete", Path:home ? "/home" : "/working", Recursive:true)));
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.Path("../escape"))));
     }
 
     [Theory]
-    [InlineData(0)] [InlineData(1)] [InlineData(2)]
-    public async Task Execution_failure_preserves_previous_operations_and_cancellation_is_observed(int profile)
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Ordered_batch_stops_at_actual_failure_and_reports_retained_partial_effects(bool home)
     {
-        using var f = await Fixture.Create(profile);
-        f.Hook((i, _) => i == 1 ? ValueTask.FromException(new IOException("host private details")) : ValueTask.CompletedTask);
-        var result = await f.Run(new WorkspaceStructuralOperation("mkdir",Path:f.P("kept")),new("mkdir",Path:f.P("never")),new("mkdir",Path:f.P("also-never")));
-        Assert.False(result.Completed); Assert.Equal(1, result.CompletedCount); Assert.Equal(1,result.FailedIndex);
-        Assert.True(result.MutationsMayHaveOccurred); Assert.DoesNotContain("host private",result.Message);
-        Assert.Equal(3,result.OperationCount); Assert.Equal(["completed","failed","notExecuted"],result.Results.Select(r => r.Status).ToArray());
-        Assert.Contains(f.P("kept"),await f.Paths()); Assert.DoesNotContain(f.P("never"),await f.Paths());
-        f.Hook(null);
-        using var cancel = new CancellationTokenSource(); cancel.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await f.Run([new("mkdir",Path:f.P("cancelled"))],cancel.Token));
-        Assert.DoesNotContain(f.P("cancelled"), await f.Paths());
-    }
-
-    [Theory] [InlineData(1)] [InlineData(2)]
-    public async Task Home_stale_tree_cannot_replay_and_other_identity_has_no_access(int profile)
-    {
-        using var f = await Fixture.Create(profile);
-        var token = (await f.Home!.ListAsync(f.Id,"/home",null,100)).TreeSha256!;
-        await f.Write("new", "a"u8.ToArray());
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Home.StructureAsync(f.Id,[new("mkdir",Path:"/home/stale")],token));
-        var other = Guid.NewGuid(); Assert.Empty((await f.Home.ListAsync(other,"/home",null,100)).Items);
-        var otherToken = (await f.Home.ListAsync(other,"/home",null,100)).TreeSha256!;
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Home.StructureAsync(other,[new("move",Source:"/home/new",Destination:"/home/stolen")],otherToken));
-        Assert.Equal("a"u8.ToArray(),await f.Read("new"));
+        using var f = new Fixture(home); await f.Write("source", "bytes"u8.ToArray());
+        var result = await f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.Path("created")), new("copy", Source:f.Path("source"), Destination:f.Path("created/copy")),
+            new("delete", Path:f.Path("missing")), new("mkdir", Path:f.Path("not-executed")));
+        Assert.False(result.Completed); Assert.Equal(2, result.CompletedCount); Assert.Equal(2, result.FailedIndex);
+        Assert.True(result.MutationsMayHaveOccurred);
+        Assert.Equal(new[] {"completed","completed","failed","notExecuted"},result.Results.Select(r => r.Status));
+        Assert.Equal("bytes"u8.ToArray(), await f.Read("created/copy"));
+        Assert.False(Directory.Exists(System.IO.Path.Combine(f.Physical, "not-executed")));
+        Assert.False((await f.Run(new WorkspaceStructuralOperation("delete", Path:f.Path("created")))).Completed);
+        Assert.True((await f.Run(new WorkspaceStructuralOperation("delete", Path:f.Path("created"), Recursive:true))).Completed);
     }
 
     [Fact]
-    public async Task Scratch_recursive_symlink_and_foreign_session_are_denied_for_every_operation()
+    public async Task Cross_scope_copy_streams_bytes_and_directories_but_never_links_owners_or_merges()
     {
-        using var f = await Fixture.Create(0);
-        await f.Write("tree/file", "safe"u8.ToArray());
-        var outside = Path.Combine(f.Root,"outside"); Directory.CreateDirectory(outside);
-        await File.WriteAllTextAsync(Path.Combine(outside,"sentinel"),"untouched");
-        Directory.CreateSymbolicLink(Path.Combine(await f.Scratch!.PhysicalWorkingDirectoryAsync(f.Id),"tree","link"),outside);
-        foreach (var op in new WorkspaceStructuralOperation[] {new("copy",Source:f.P("tree"),Destination:f.P("copy")),new("move",Source:f.P("tree"),Destination:f.P("moved")),new("delete",Path:f.P("tree"),Recursive:true),new("mkdir",Path:f.P("tree/link/pwn"))})
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Run(op));
-        Assert.Equal("untouched",await File.ReadAllTextAsync(Path.Combine(outside,"sentinel")));
-        Directory.Delete(Path.Combine(await f.Scratch!.PhysicalWorkingDirectoryAsync(f.Id),"tree","link"));
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Run(new WorkspaceStructuralOperation("move",Source:f.P("tree"),Destination:f.P(Guid.NewGuid().ToString("N")+"/stolen"))));
-        var other = Guid.NewGuid(); await f.Scratch!.EnsureAsync(other,Definition);
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Scratch.StructureAsync(other,[new("delete",Path:f.P("tree"),Recursive:true)]));
-        Assert.Equal("safe"u8.ToArray(),await f.Read("tree/file"));
-    }
-
-    [Theory] [InlineData(1)] [InlineData(2)]
-    public async Task Home_linked_child_blob_blocks_recursive_mutation_before_any_change(int profile)
-    {
-        using var f = await Fixture.Create(profile); await f.Write("tree/file", "safe"u8.ToArray());
-        var blob = Assert.Single(Directory.GetFiles(AgentWorkspacePhysicalPaths.HomeBlobRoot(Path.Combine(f.Root,"blobs"),f.Id)));
-        var outside = Path.Combine(f.Root,"sentinel"); await File.WriteAllTextAsync(outside,"untouched");
-        File.Delete(blob); File.CreateSymbolicLink(blob,outside);
-        var before = await f.Paths();
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Run(new WorkspaceStructuralOperation("mkdir",Path:f.P("new")),new("delete",Path:f.P("tree"),Recursive:true)));
-        Assert.Equal(before,await f.Paths());Assert.Equal("untouched",await File.ReadAllTextAsync(outside));
+        using var f = new Fixture(false);
+        await f.Write("project/data", "exact"u8.ToArray());
+        await f.Run(new WorkspaceStructuralOperation("mkdir", Path:f.Path("project/empty")));
+        await f.Working.CopyAcrossScopesAsync(f.Session, "/working/project", "/home/shared");
+        var home = new FileAgentInstanceWorkspaceStore(f.Root, f.Metadata.Instances, f.Metadata.Sandboxes);
+        Assert.Equal("exact"u8.ToArray(), (await home.ReadAsync(f.Metadata.Owner, "/home/shared/data")).Bytes);
+        Assert.Contains((await home.ListAsync(f.Metadata.Owner, "/home/shared", null, 100)).Items, i => i.Directory && i.LogicalPath.EndsWith("/empty"));
+        await f.Working.CopyAcrossScopesAsync(f.Session, "/home/shared", "/working/copied");
+        Assert.Equal("exact"u8.ToArray(), await f.Read("copied/data"));
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Working.CopyAcrossScopesAsync(f.Session, "/home/shared", "/working/copied").AsTask());
     }
 
     [Fact]
-    public async Task Scratch_structure_serializes_write_and_session_teardown_cancels_pending_work()
+    public async Task Deletion_cancels_outstanding_io_and_live_mounts_block_physical_purge()
     {
-        using var f = await Fixture.Create(0); await f.Write("file","old"u8.ToArray());
+        using var f = new Fixture(false); await f.Write("retained", "bytes"u8.ToArray());
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        f.Hook(async (_,ct) => {entered.TrySetResult();await release.Task.WaitAsync(ct);});
-        var operation = f.Run(new WorkspaceStructuralOperation("move",Source:f.P("file"),Destination:f.P("moved")));
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var write = f.Write("next","new"u8.ToArray()); Assert.False(write.IsCompleted);
-        release.SetResult(); Assert.True((await operation).Completed); await write;
-        Assert.Equal("old"u8.ToArray(),await f.Read("moved"));
-        entered = new(TaskCreationOptions.RunContinuationsAsynchronously); release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        var pending = f.Run(new WorkspaceStructuralOperation("mkdir",Path:f.P("cancelled")));
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        await f.Scratch!.DeleteSessionAsync(f.Id);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Write("late","x"u8.ToArray()));
+        f.Working.BeforeFilesystemRead = async token => { entered.SetResult(); await Task.Delay(Timeout.InfiniteTimeSpan,token); };
+        var read = f.Read("retained"); await entered.Task;
+        await f.Working.DeleteSessionAsync(f.Session);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => read);
+        Assert.False(Directory.Exists(f.Physical));
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Write("late", "x"u8.ToArray()));
+        using var mounted = new Fixture(false); await mounted.Write("retained", "data"u8.ToArray());
+        var lease = new SandboxLease(mounted.Session,mounted.Metadata.Owner,Guid.NewGuid(),1,
+            new("fixture",1,"Fixture","",true,"sha256:"+new string('a',64)),SandboxLeaseState.Ready,"owned",DateTimeOffset.UtcNow,DateTimeOffset.UtcNow.AddMinutes(1));
+        await mounted.Metadata.Sandboxes.SaveLeaseAsync(lease,0);
+        await Assert.ThrowsAsync<AgentCoreException>(() => mounted.Working.DeleteSessionAsync(mounted.Session).AsTask());
+        Assert.Equal("data"u8.ToArray(), await mounted.Read("retained"));
     }
 
-    [Fact]
-    public async Task Session_teardown_cancels_a_read_which_holds_the_shared_filesystem_gate()
-    {
-        using var f = await Fixture.Create(0); await f.Write("read", "content"u8.ToArray());
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        f.Scratch!.BeforeFilesystemRead = async ct => { entered.TrySetResult(); await release.Task.WaitAsync(ct); };
-        var read = f.Read("read"); await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        var sessionRoot = Path.GetDirectoryName(await f.Scratch.PhysicalWorkingDirectoryAsync(f.Id))!;
-        await f.Scratch.DeleteSessionAsync(f.Id).AsTask().WaitAsync(TimeSpan.FromSeconds(10));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await read);
-        Assert.False(Directory.Exists(sessionRoot));
-    }
-
-    private static readonly AgentDefinition Definition = new(2,"examiner",1,new AgentIdentity("Alex","Examiner","Practice.","Calm"),["Practice"],"Instructions",new BehaviorPolicy("acknowledgeThenContinue",true,true),new ConversationPolicy("concise",true,"en",256),new InitiativePolicy(true,8000,30000,1,["longSilence"]),new VoiceConfiguration(true,"default",1),new ProviderPreferences("primary-llm","primary-stt","primary-tts"),new Dictionary<string,string>());
     private sealed class Fixture : IDisposable
     {
-        public string Root { get; } = Path.Combine(Path.GetTempPath(),"workspace-structure-tests",Guid.NewGuid().ToString("N"));
-        public Guid Id { get; } = Guid.NewGuid(); public FileSessionWorkspace? Scratch; public FileAgentInstanceWorkspaceStore? Home;
-        private Factory? factory; private long quota; private readonly WorkspaceTestSessions scratchSessions = new();
-        public string P(string path) => (Scratch is null ? "/home/" : "/workspace/working/")+path;
-        public static async Task<Fixture> Create(int profile,long quota=1000)
+        internal string Root { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "workspace-structure-"+Guid.NewGuid().ToString("N"));
+        internal Guid Session { get; } = Guid.NewGuid(); internal WorkspaceTestSessions Metadata { get; } = new();
+        internal FileSessionWorkspace Working { get; }
+        private readonly FileAgentInstanceWorkspaceStore _home;
+        private readonly bool _useHome;
+        internal string Physical => _useHome ? AgentWorkspacePhysicalPaths.HomeDirectory(Root,Metadata.Owner) : AgentWorkspacePhysicalPaths.WorkingDirectory(Root,Metadata.Owner,Session);
+        internal Fixture(bool home)
         {
-            var f = new Fixture { quota=quota }; Directory.CreateDirectory(f.Root);
-            if(profile==0) { f.Scratch=new(Path.Combine(f.Root,"scratch"),Path.Combine(f.Root,"templates"),maxWritableBytes:quota, sessions: f.scratchSessions); await f.Scratch.EnsureAsync(f.Id,Definition); }
-            else { if(profile==2) {f.factory=new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db").Options); await new SqliteMemoryStore(f.factory,TimeProvider.System).EnsureCreatedAsync();} f.Reopen(); }
-            return f;
+            _useHome=home;
+            Working = new(Root, Root+"-templates",sessions:Metadata,instances:Metadata.Instances,sandboxes:Metadata.Sandboxes);
+            _home = new(Root,Metadata.Instances,Metadata.Sandboxes);
         }
-        public void ReopenScratch() => Scratch = new(Path.Combine(Root,"scratch"),Path.Combine(Root,"templates"),maxWritableBytes:quota,sessions:scratchSessions);
-        public void Reopen() => Home=new(Path.Combine(Root,"blobs"),TimeProvider.System,new SystemIdGenerator(TimeProvider.System),factory,maxFileBytes:quota,maxInstanceBytes:quota);
-        public async Task Write(string path,byte[] bytes) { if(Scratch is not null) await Scratch.WriteAsync(Id,P(path),bytes); else await Home!.WriteFileAsync(Id,P(path),"application/octet-stream",bytes,null,null,null); }
-        public async Task<byte[]> Read(string path) => Scratch is not null ? (await Scratch.ReadAsync(Id,Definition,P(path))).Bytes : (await Home!.ReadAsync(Id,null,P(path))).Bytes;
-        public async Task<string[]> Paths() => Scratch is null ? (await Home!.ListAsync(Id,"/home",null,100)).Items.Select(i=>i.LogicalPath).Order().ToArray() : (await Enumerate("/workspace/working")).Order().ToArray();
-        private async Task<List<string>> Enumerate(string path) {var result=new List<string>(); foreach(var n in await Scratch!.ListAsync(Id,Definition,path)) {result.Add(n.LogicalPath);if(n.Directory)result.AddRange(await Enumerate(n.LogicalPath));}return result;}
-        public Task<WorkspaceStructureResult> Run(params WorkspaceStructuralOperation[] ops) => Run(ops,CancellationToken.None);
-        public async Task<WorkspaceStructureResult> Run(WorkspaceStructuralOperation[] ops,CancellationToken ct) => Scratch is not null ? await Scratch.StructureAsync(Id,ops,ct) : await Home!.StructureAsync(Id,ops,(await Home.ListAsync(Id,"/home",null,100,ct)).TreeSha256!,ct);
-        public void Hook(Func<int,CancellationToken,ValueTask>? hook) {if(Scratch is not null)Scratch.BeforeStructuralOperation=hook;else Home!.BeforeStructuralOperation=hook;}
-        public void Dispose() {Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();Directory.Delete(Root,true);}
+        internal string Path(string relative) => (_useHome ? "/home/" : "/working/") + relative;
+        internal async Task Write(string path, byte[] bytes)
+        { if(_useHome) await _home.WriteFileAsync(Metadata.Owner,Path(path),bytes); else await Working.WriteAsync(Session,Path(path),bytes); }
+        internal async Task<byte[]> Read(string path) => _useHome ? (await _home.ReadAsync(Metadata.Owner,Path(path))).Bytes
+            : (await Working.ReadAsync(Session,(await Metadata.LoadAsync(Session))!.Definition,Path(path))).Bytes;
+        internal async Task<WorkspaceStructureResult> Run(params WorkspaceStructuralOperation[] operations) => _useHome
+            ? await _home.StructureAsync(Metadata.Owner,operations) : await Working.StructureAsync(Session,operations);
+        public void Dispose() { if(Directory.Exists(Root))Directory.Delete(Root,true); }
     }
-    private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext> {public AgentCoreDbContext CreateDbContext()=>new(options);public Task<AgentCoreDbContext>CreateDbContextAsync(CancellationToken ct=default)=>Task.FromResult(CreateDbContext());}
 }

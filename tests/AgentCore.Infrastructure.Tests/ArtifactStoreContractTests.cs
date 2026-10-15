@@ -64,29 +64,6 @@ public sealed class ArtifactStoreContractTests
         Assert.Equal(1, bytes.ReadByte());
     }
 
-    [Fact]
-    public async Task Ownership_migration_preserves_historical_artifacts_without_inventing_a_run()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"artifact-owner-{Guid.NewGuid():N}.db");
-        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
-        var artifactId = Guid.NewGuid().ToString("D"); var sessionId = Guid.NewGuid().ToString("D");
-        try
-        {
-            await using (var db = new AgentCoreDbContext(options))
-            {
-                await db.GetService<IMigrator>().MigrateAsync("20261008161708_SharedWebhookEvents");
-                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Artifacts (ArtifactId, SessionId, BlobKey, DisplayName, ContentType, ByteSize, Sha256Hex, CreatedAtUtc) VALUES ({artifactId}, {sessionId}, 'unchanged/blob', 'legacy.md', 'text/markdown', 7, 'hash', 1234)");
-                await db.Database.MigrateAsync();
-                Assert.False(db.Database.HasPendingModelChanges());
-            }
-            await using var reopened = new AgentCoreDbContext(options);
-            var row = await reopened.Artifacts.SingleAsync();
-            Assert.Equal(artifactId, row.ArtifactId); Assert.Equal(sessionId, row.SessionId);
-            Assert.Null(row.AgentRunId); Assert.Equal("unchanged/blob", row.BlobKey);
-            Assert.Equal(1234, row.CreatedAtUtc); Assert.Equal(7, row.ByteSize);
-        }
-        finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
-    }
 
     [Fact]
     public async Task Sqlite_blobs_stay_out_of_rows_and_delete_does_not_resurrect()
@@ -99,7 +76,7 @@ public sealed class ArtifactStoreContractTests
             "text/markdown",
             bytes,
             sourceAttachmentId: null,
-            workspaceLogicalPath: "/workspace/working/report.md");
+            workspaceLogicalPath: "/working/report.md");
         Assert.Equal(bytes.Length, created.ByteSize);
         await using (var db = await harness.Factory.CreateDbContextAsync())
         {

@@ -24,7 +24,7 @@ internal static class DriveTransferScript
         {
             using var source = JsonDocument.Parse(results[1].Text);
             return Call(request, "drive.upload", new { accountRef = ready[0].GetProperty("accountRef").GetString(), authEpoch = ready[0].GetProperty("authEpoch").GetInt64(),
-                path = "/home/binary.dat", expectedSha256 = source.RootElement.GetProperty("homeItem").GetProperty("Sha256Hex").GetString(), name = "compose-binary.dat" });
+                path = "/home/binary.dat", name = "compose-binary.dat" });
         }
         return Done(results[5].Text);
     }

@@ -16,7 +16,7 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
         var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
@@ -50,9 +50,9 @@ public sealed class WorkspaceArtifactToolTests
     [Fact]
     public async Task Workspace_write_rejects_host_absolute_paths_with_path_outside_workspace()
     {
-        var workspace = new FileSessionWorkspace(
+        var workspace = WorkspaceTestSessions.CreateWorkspace(
             Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), sessions: new WorkspaceTestSessions());
+            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
         var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
         var definition = WorkspaceTools();
         var session = Guid.CreateVersion7();
@@ -69,10 +69,10 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
-        await workspace.WriteAsync(session, "/workspace/working/note.md", "hello"u8.ToArray());
+        await workspace.WriteAsync(session, "/working/note.md", "hello"u8.ToArray());
 
         var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
         var json = await ExecuteTextAsync(
@@ -91,14 +91,14 @@ public sealed class WorkspaceArtifactToolTests
     }
 
     [Fact]
-    public async Task Workspace_patch_applies_exact_once_and_rejects_stale_hash()
+    public async Task Workspace_patch_applies_current_exact_once_text_and_rejects_removed_hash_fields()
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
-        const string path = "/workspace/working/report.md";
+        const string path = "/working/report.md";
         await workspace.WriteAsync(session, path, "alpha beta gamma"u8.ToArray());
         var hash = Sha256Hex("alpha beta gamma");
 
@@ -110,7 +110,7 @@ public sealed class WorkspaceArtifactToolTests
             new ModelToolCall(
                 "c1",
                 ToolCatalog.WorkspacePatch,
-                $$"""{"path":"{{AgentWorkspacePaths.Public(path)}}","expectedSha256":"{{hash}}","edits":[{"oldText":"beta","newText":"BETA"}]}"""));
+                $$"""{"path":"{{AgentWorkspacePaths.Public(path)}}","edits":[{"oldText":"beta","newText":"BETA"}]}"""));
         Assert.Contains("\"editsApplied\":1", patched, StringComparison.Ordinal);
         var read = await workspace.ReadAsync(session, definition, path);
         Assert.Equal("alpha BETA gamma", Encoding.UTF8.GetString(read.Bytes));
@@ -123,7 +123,7 @@ public sealed class WorkspaceArtifactToolTests
                 "c2",
                 ToolCatalog.WorkspacePatch,
                 $$"""{"path":"{{AgentWorkspacePaths.Public(path)}}","expectedSha256":"{{hash}}","edits":[{"oldText":"BETA","newText":"x"}]}"""));
-        Assert.Contains("Conflict", stale, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ValidationError", stale, StringComparison.OrdinalIgnoreCase);
         read = await workspace.ReadAsync(session, definition, path);
         Assert.Equal("alpha BETA gamma", Encoding.UTF8.GetString(read.Bytes));
     }
@@ -133,11 +133,11 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
-        const string path = "/workspace/working/out.md";
+        const string path = "/working/out.md";
         await workspace.WriteAsync(session, path, "# Title"u8.ToArray());
 
         var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace), artifacts: artifacts);
@@ -172,13 +172,13 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
-        await workspace.WriteAsync(session, "/workspace/working/notes.md", "sample workspace content"u8.ToArray());
-        await workspace.WriteAsync(session, "/workspace/working/reports/summary.txt", "hello workspace"u8.ToArray());
-        await workspace.WriteAsync(session, "/workspace/working/draft..txt", "sample in a dotted name"u8.ToArray());
-        await workspace.WriteAsync(session, "/workspace/working/pixel.bin", new byte[] { 0, 1, 2, 3 });
+        await workspace.WriteAsync(session, "/working/notes.md", "sample workspace content"u8.ToArray());
+        await workspace.WriteAsync(session, "/working/reports/summary.txt", "hello workspace"u8.ToArray());
+        await workspace.WriteAsync(session, "/working/draft..txt", "sample in a dotted name"u8.ToArray());
+        await workspace.WriteAsync(session, "/working/pixel.bin", new byte[] { 0, 1, 2, 3 });
         var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
 
         var json = await ExecuteTextAsync(
@@ -203,7 +203,7 @@ public sealed class WorkspaceArtifactToolTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot);
         var definition = WorkspaceTools();
         await workspace.EnsureAsync(session, definition);
         var executor = new SessionToolExecutor(workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace));
@@ -240,10 +240,10 @@ public sealed class WorkspaceArtifactToolTests
         (await executor.ExecuteAsync(definition, sessionId, call, ToolLimits.MaxOutputBytes, admission: new(false, TriggerKind.UserTurn, WorkspaceCwd: "/working"))).Text;
 
     [Fact]
-    public void Canonical_move_schema_includes_tree_guards_for_every_definition()
+    public void Canonical_move_schema_uses_current_paths_without_a_tree_token()
     {
         using var schema = JsonDocument.Parse(ToolRegistry.Get(ToolCatalog.WorkspaceMove).ModelDefinition.ParametersJson);
-        Assert.True(schema.RootElement.GetProperty("properties").TryGetProperty("expectedTreeSha256", out _));
+        Assert.False(schema.RootElement.GetProperty("properties").TryGetProperty("expectedTreeSha256", out _));
     }
 
     private static AgentDefinition WorkspaceTools() => new(

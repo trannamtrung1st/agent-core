@@ -60,7 +60,7 @@ OpenAICompatibleLanguageModel lives in Infrastructure and accepts OpenRouter/dir
 
 ## Post-MVP observed layout
 
-Infrastructure-only physical layout for session workspaces (`data/workspaces/agent-<instanceN>/sessions/session-<sessionN>/working`, with home opaque blobs under the same agent root at `home/blobs`), attachment blobs (`data/attachments`), and artifact blobs (`data/artifacts`). Domain/Contracts never receive host paths. Application data stays outside developer `local/` scratch, including `local/tdp-workspace`. Current sandbox: Infrastructure `Sandbox/OpenSandboxService*.cs` uses the SDK with no canonical host mounts. `deploy/sandbox/` owns optional maintainer Workbench build/notice sources and the pinned trusted server deployment; `scripts/opensandbox-local.py` owns disposable local acceptance orchestration. Application ports and Domain records remain vendor-neutral; legacy Docker CLI execution is retired.
+Infrastructure-only workspace layout is `data/workspaces/agent-<instanceN>/home/` and `sessions/session-<sessionN>/working/`, with ordinary file names/bytes. Attachments and Artifacts use separate roots. Domain/Contracts never receive host paths. `Workspaces/CanonicalWorkspaceFilesystem*.cs` owns descriptor-relative access; the two adapters own metadata-derived authorization. `Sandbox/CanonicalSandboxMountResolver.cs` builds exact binds and `OpenSandboxService*.cs` owns process lifecycle. `deploy/sandbox/` and the launchers own explicit host/daemon topology, identity-compatible optional Workbench and private server credentials. No transfer planner, file row or scratch journal remains.
 
 ## P9.8-P9.9 ownership locations
 

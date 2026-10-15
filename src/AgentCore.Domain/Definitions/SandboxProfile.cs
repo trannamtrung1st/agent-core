@@ -3,13 +3,14 @@ using System.Text.RegularExpressions;
 
 namespace AgentCore.Domain.Definitions;
 
-/// <summary>Immutable environment revision. StorageBytes bounds validated canonical scratch, not live staging or the OCI writable layer.</summary>
+/// <summary>Immutable environment revision. StorageBytes is a sampled canonical /working budget, independent of /home and the OCI writable layer.</summary>
 public sealed record SandboxProfile(string Id, long Revision, string Name, string Description, bool Enabled,
     string ImageReference, string? InitializationScript = null, double Cpu = 1, int MemoryMiB = 1024,
     int Pids = 64, int MaxCommandSeconds = 120, int IdleTtlSeconds = 1800,
     int MaxLifetimeSeconds = 7200, long StorageBytes = 250L * 1024 * 1024,
     DateTimeOffset? LastVerifiedAt = null, string? VerificationReason = null, string? InstanceInitializationScript = null, long? InstanceRevision = null, Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null, bool? AdmittedForExecution = null)
 {
+    public const long MaximumStorageBytes = 16L * 1024 * 1024 * 1024;
     public void Validate()
     {
         var source = OciImageReference.Parse(ImageReference);
@@ -23,7 +24,7 @@ public sealed record SandboxProfile(string Id, long Revision, string Name, strin
             || !double.IsFinite(Cpu) || Cpu is < 0.25 or > 2 || MemoryMiB is < 256 or > 2048
             || Pids != 64 || MaxCommandSeconds is < 1 or > 180 || IdleTtlSeconds is < 60 or > 3600
             || MaxLifetimeSeconds < IdleTtlSeconds || MaxLifetimeSeconds > 86400
-            || StorageBytes is < 1 or > 250L * 1024 * 1024)
+            || StorageBytes is < 1 or > MaximumStorageBytes)
             throw new ArgumentException("Invalid sandbox profile: use immutable images and bounded environment limits.");
     }
     private static bool ValidText(string value)

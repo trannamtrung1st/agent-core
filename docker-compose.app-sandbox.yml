@@ -3,18 +3,24 @@
 # docker-compose.sandbox.yml and this file with the generated private compose.env.
 services:
   agent-core:
+    build:
+      args:
+        AGENTCORE_RUNTIME_UID: ${AGENTCORE_SANDBOX_UID:?Run sandbox prepare}
+        AGENTCORE_RUNTIME_GID: ${AGENTCORE_SANDBOX_GID:?Run sandbox prepare}
+    user: "${AGENTCORE_SANDBOX_UID:?Run sandbox prepare}:${AGENTCORE_SANDBOX_GID:?Run sandbox prepare}"
     environment:
       OpenSandbox__Enabled: "true"
       OpenSandbox__Endpoint: http://opensandbox:8080
       OpenSandbox__ApiKeyFile: /run/secrets/opensandbox_api_key
       OpenSandbox__TrustLocalComposeEndpoint: "true"
-      OpenSandbox__WorkspaceMountRoot: /sandbox-workspaces
-      OpenSandbox__WorkspaceMountHostRoot: ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}
+      Persistence__WorkspaceRoot: /canonical-workspaces
+      OpenSandbox__WorkspaceDockerHostRoot: ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}
       OpenSandbox__AllowLocalImageIds: ${AGENTCORE_SANDBOX_ALLOW_LOCAL_IMAGE_IDS:-false}
-    # Server prepares a 0400 key owned by the image's non-root app UID (1654).
+    # Core and workload commands use the selected host owner UID/GID; no shared writable permissions.
+    # Server projects a 0400 key to that same identity.
     volumes:
       - opensandbox-auth:/run/secrets:ro
-      - ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}:/sandbox-workspaces
+      - ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}:/canonical-workspaces
     depends_on:
       opensandbox:
         condition: service_healthy

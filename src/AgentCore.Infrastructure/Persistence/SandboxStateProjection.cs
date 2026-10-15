@@ -8,7 +8,7 @@ internal static class SandboxStateProjection
     internal static ResourceStateObservation Observe(IReadOnlyList<SandboxLease> leases, DateTimeOffset observedAt, bool truncated = false)
     {
         var uncertain = leases.Any(l => l.State is SandboxLeaseState.Provisioning or SandboxLeaseState.NeedsReconciliation
-            or SandboxLeaseState.NeedsResync or SandboxLeaseState.Failed);
+            or SandboxLeaseState.Failed);
         return new("sandbox", uncertain || truncated ? "partial" : "available", "isolated", observedAt,
             ActiveGenerations: uncertain || truncated ? null : leases.Count(l => l.State is SandboxLeaseState.Ready or SandboxLeaseState.Executing),
             ActiveCommands: uncertain || truncated ? null : leases.Count(l => l.ActiveExecutionId is not null),

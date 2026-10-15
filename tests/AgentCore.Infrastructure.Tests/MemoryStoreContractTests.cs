@@ -34,23 +34,6 @@ public sealed class MemoryStoreContractTests
         }
     }
 
-    [Fact]
-    public async Task Completion_time_migration_preserves_historical_entries_without_inventing_a_time()
-    {
-        var legacy = Entry(Guid.NewGuid(), 1, EntryStatus.Completed, "Historical reply");
-        var snapshot = First() with { Entries = [legacy] };
-        // Seed the historical schema directly: scoped owned data deliberately forbids destructive downgrade.
-        var historicalPath = Path.Combine(Path.GetTempPath(), $"completion-migration-{Guid.NewGuid():N}.db");
-        var factory = new HistoricalFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={historicalPath}").Options);
-        await MigrationSessionSeed.CopyPersistedSessionAsync(factory, snapshot, "20261008171951_ArtifactAgentRunOwnership");
-        var store = new SqliteMemoryStore(factory, TimeProvider.System);
-        await store.EnsureCreatedAsync();
-        var restored = (await store.LoadAsync(snapshot.SessionId))!.Entries[0];
-        Assert.Equal(legacy.Text, restored.Text);
-        Assert.Equal(legacy.Sequence, restored.Sequence);
-        Assert.Equal(legacy.CreatedAt, restored.CreatedAt);
-        Assert.Null(restored.CompletedAt);
-    }
 
     [Fact]
     public async Task Assistant_completion_time_survives_save_retry_and_sqlite_reopen()
@@ -451,7 +434,7 @@ public sealed class MemoryStoreContractTests
     }
 
     [Fact]
-    public async Task Sqlite_migrate_reopens_legacy_ensurecreated_database()
+    public async Task Sqlite_refuses_untracked_ensurecreated_database_without_erasing_existing_rows()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-core-{Guid.NewGuid():N}.db");
         await using (var opened = OpenSqlite(path, deleteOnDispose: false))
@@ -462,14 +445,14 @@ public sealed class MemoryStoreContractTests
         }
 
         await using var reopened = OpenSqlite(path, deleteOnDispose: true);
-        await reopened.Store.EnsureCreatedAsync();
+        var error = await Assert.ThrowsAsync<AgentCoreException>(() => reopened.Store.EnsureCreatedAsync().AsTask());
+        Assert.Contains("data_reset_required", error.Message);
         var loaded = await reopened.Store.LoadAsync(First().SessionId);
         Assert.Equal("examiner", loaded!.Definition.Id);
         Assert.Equal(1, loaded.Revision);
         await using var verify = await reopened.Factory.CreateDbContextAsync();
         var applied = await verify.Database.GetAppliedMigrationsAsync();
-        Assert.Contains("20260926175411_P7ConversationTurnExecution", applied);
-        Assert.Contains("20261007101836_AutomationTriggerRevision", applied);
+        Assert.Empty(applied);
     }
 
     [Fact]
@@ -490,7 +473,7 @@ public sealed class MemoryStoreContractTests
             var error = await Assert.ThrowsAsync<AgentCoreException>(
                 () => reopened.Store.EnsureCreatedAsync().AsTask());
             Assert.Equal("SessionPersistenceUnavailable", error.Code);
-            Assert.Contains("AgentRuns", error.Message, StringComparison.Ordinal);
+            Assert.Contains("data_reset_required", error.Message, StringComparison.Ordinal);
         }
         finally
         {

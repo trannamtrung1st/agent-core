@@ -52,9 +52,9 @@ def prepare(args):
     gateway = ""
     if "Docker Desktop" not in platform:
         gateway = json.loads(run("docker", "network", "inspect", "bridge", capture=True))[0]["IPAM"]["Config"][0]["Gateway"]
-    workspace_root = state / "workspace-mounts"
+    workspace_root = state / "canonical-workspaces"
     workspace_root.mkdir(exist_ok=True)
-    workspace_root.chmod(0o1777)
+    workspace_root.chmod(0o700)
     config = server_config("Docker Desktop" in platform, gateway, workspace_root=workspace_root)
     (state / "server.toml").write_text(config)
     return state
@@ -72,7 +72,7 @@ def up(args):
     state = prepare(args)
     tag = args.name + "-workbench:local"
     if args.build_workbench:
-        run("docker", "build", "--label", LABEL + "=" + args.name, "-t", tag,
+        run("docker", "build", "--build-arg", f"AGENTCORE_RUNTIME_UID={os.getuid()}", "--build-arg", f"AGENTCORE_RUNTIME_GID={os.getgid()}", "--label", LABEL + "=" + args.name, "-t", tag,
             "-f", "deploy/sandbox/Dockerfile.workbench", "deploy/sandbox")
     for component in ("server", "execd", "egress"):
         if subprocess.run(["docker", "image", "inspect", PINS[component]],capture_output=True).returncode:
@@ -85,11 +85,11 @@ def up(args):
             "--mount", "type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock",
             "--mount", f"type=bind,src={state}/server.toml,dst=/etc/opensandbox/config.toml,readonly",
             "--mount", f"type=volume,src={args.name}-state,dst=/var/lib/opensandbox",
-            "--mount", f"type=bind,src={state}/workspace-mounts,dst={state}/workspace-mounts",
+            "--mount", f"type=bind,src={state}/canonical-workspaces,dst={state}/canonical-workspaces",
             PINS["server"], "--config", "/etc/opensandbox/config.toml")
     elif not current["State"]["Running"]:
         run("docker", "start", args.name)
-    if not any(m.get("Destination") == str(state / "workspace-mounts") for m in owned(args.name).get("Mounts", [])):
+    if not any(m.get("Destination") == str(state / "canonical-workspaces") for m in owned(args.name).get("Mounts", [])):
         raise RuntimeError("Existing runner needs the mounted-workspace contract. Stop its owned workloads/server, then recreate it with the updated runner; retain the state volume.")
     env = environment(args, state, tag)
     for attempt in range(90):
@@ -128,11 +128,13 @@ def environment(args, state, tag):
     env = os.environ.copy()
     env.update(AGENTCORE_OPENSANDBOX_TESTS="1", AGENTCORE_OSB_PROOF_DISPOSABLE="1", AGENTCORE_OSB_PROOF_KEY=key,
         AGENTCORE_OSB_PROOF_URL=f"http://127.0.0.1:{args.port}",
-        AGENTCORE_OSB_PROOF_MOUNT_ROOT=str(state / "workspace-mounts"),
+        AGENTCORE_OSB_PROOF_MOUNT_ROOT=str(state / "canonical-workspaces"),
         AGENTCORE_OSB_PROOF_IMAGE=args.image or (run("docker", "image", "inspect", tag, "--format", "{{.Id}}", capture=True).strip() if args.build_workbench else ""),
         AGENTCORE_OSB_PROOF_PRIVATE_TARGET=owned(args.name)["NetworkSettings"]["Networks"]["bridge"]["IPAddress"],
         AGENTCORE_OSB_PROOF_GATEWAY=owned(args.name)["NetworkSettings"]["Networks"]["bridge"]["Gateway"],
         DOTNET_CLI_USE_MSBUILD_SERVER="0", MSBUILDDISABLENODEREUSE="1")
+    for field, key in (("ordinary_image", "AGENTCORE_OSB_ORDINARY_IMAGE"), ("alternate_image", "AGENTCORE_OSB_ALTERNATE_IMAGE")):
+        if getattr(args, field, None): env[key] = getattr(args, field)
     return env
 
 
@@ -172,7 +174,7 @@ def accept(args):
             "--nologo", "-m:1", "--logger", "trx;LogFileName=opensandbox-acceptance.trx", env=env)
         if args.ui:
             ui_acceptance(args, state, env)
-        print("Real SDK, durable lifecycle, Workbench and atomic scratch acceptance passed.")
+        print("Real SDK, durable lifecycle, Workbench and canonical filesystem acceptance passed.")
     finally:
         down(args)
 
@@ -204,6 +206,7 @@ def ui_acceptance(args, state, env):
     run("dotnet", "build", "src/AgentCore.Api/AgentCore.Api.csproj", "--nologo", "-m:1", env=env)
     data = state / ("ui-" + secrets.token_hex(4))
     data.mkdir()
+    workspaces = Path(env["AGENTCORE_OSB_PROOF_MOUNT_ROOT"]) / data.name
     api_url = f"http://127.0.0.1:{args.api_port}"
     web_url = f"http://127.0.0.1:{args.web_port}"
     env = env.copy()
@@ -212,11 +215,11 @@ def ui_acceptance(args, state, env):
         raise RuntimeError("Browser acceptance requires the project's supported Node 22 runtime on PATH.")
     env.update(AgentCore__Profile="Synthetic", Persistence__Provider="Sqlite",
         Persistence__ConnectionString=f"Data Source={data}/core.db",
-        Persistence__WorkspaceRoot=str(data / "workspaces"), Persistence__ArtifactRoot=str(data / "artifacts"),
+        Persistence__WorkspaceRoot=str(workspaces), Persistence__ArtifactRoot=str(data / "artifacts"),
         Persistence__AttachmentRoot=str(data / "attachments"), Persistence__CredentialProtectionKeyRoot=str(data / "keys"),
         OpenSandbox__Enabled="true", OpenSandbox__Endpoint=env["AGENTCORE_OSB_PROOF_URL"],
         OpenSandbox__ApiKey=env["AGENTCORE_OSB_PROOF_KEY"],
-        OpenSandbox__WorkspaceMountRoot=env["AGENTCORE_OSB_PROOF_MOUNT_ROOT"],
+        OpenSandbox__WorkspaceDockerHostRoot=str(workspaces),
         OpenSandbox__AllowLocalImageIds="true", Browser__Enabled="false",
         VITE_DEV_PORT=str(args.web_port), VITE_API_PROXY_TARGET=api_url,
         AGENTCORE_OSB_UI_URL=web_url, AGENTCORE_OSB_UI_STATE=str(data / "browser-state.json"))
@@ -266,6 +269,8 @@ def main():
     parser.add_argument("--name", default="agent-core-opensandbox-local")
     parser.add_argument("--port", type=int, default=18080)
     parser.add_argument("--image", help="Exact installed local sha256 ID for opt-in tests, never a runtime default.")
+    parser.add_argument("--ordinary-image", help="Explicit installed identity-compatible SDK image digest for compatibility cases.")
+    parser.add_argument("--alternate-image", help="Explicit installed third compatible Linux image digest for profile switching.")
     parser.add_argument("--build-workbench", action="store_true", help="Explicit optional maintainer fixture build.")
     parser.add_argument("--ui", action="store_true", help="Include browser journeys and actual Core/server restart.")
     parser.add_argument("--api-port", type=int, default=6280)

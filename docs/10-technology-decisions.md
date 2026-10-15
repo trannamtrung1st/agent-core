@@ -12,7 +12,7 @@ The final migration removes both old execution schemas and their production stor
 
 The current worktree has adopted AgentRun dispatch in SessionRuntime/SessionHost, real background Session intake, immediate admission, completion receipts and Session-first APIs/UI. Approved destructive schema retirement and native live occurrence recovery are complete. Final local backend/browser and hosted acceptance pass on behavior `8cec78c5d47a43e0236a5c38f2e312f4e36ce283`; all five hosted jobs are [green](https://github.com/trannamtrung1st/agent-core/actions/runs/37756244306). The [implementation plan](18-implementation-plan.md#activation-agentrun-and-background-sessions-cutover) owns acceptance requirements; the [verification report](reports/activation-agent-run-background-sessions-verification.md) distinguishes targeted evidence from final acceptance.
 
-Physical Infrastructure paths use one `Persistence:WorkspaceRoot`: `agent-<instanceN>/home/blobs/<opaqueBlobIdN>` for immutable home bytes and `agent-<instanceN>/sessions/session-<sessionN>/working/` for scratch. The model sees `/home` and `/working`, never these host paths. Artifacts, attachments and definition resources retain separate roots. The sibling `.provisioned` marker prevents repeat template seeding; no scratch artifacts/state or intermediate workspace directory is created.
+Physical Infrastructure paths use one `Persistence:WorkspaceRoot`: `agent-<instanceN>/home/` contains ordinary durable files and `agent-<instanceN>/sessions/session-<sessionN>/working/` contains ordinary Session-private files. The model sees only `/home` and `/working`. Artifacts, attachments, credentials and definition resources retain separate unmounted roots. The sibling `.provisioned` marker guards one-time template seeding outside the mounted working directory.
 
 ## Decision: scalable capability authorization and contextual projection
 
@@ -21,7 +21,42 @@ The accepted capability enhancement removes the arbitrary 32-grant validation li
 Use deterministic lexical discovery through one `capabilities.load` bootstrap. Project active Skill requirements and execution-local loaded IDs; preserve current execution policy and approvals. Context-only tools cannot be forced into an always set (the loader may dedupe there). No embeddings, LLM routing, keyword capability routing, parallel permission list or model-tool ceiling. Measure normalized schema bytes before considering any future provider/model projection budget. Historical workspace decisions and freezes stay historical; dynamic projection is now this separate authorized enhancement.
 
 
-## Decision: one Agent Instance and workspace model
+## Decision: canonical filesystem and direct sandbox mounts (2026-10-15)
+
+The owner-authorized breaking cutover supersedes the SQLite home metadata/blob,
+file revision/hash/tree-CAS and scratch synchronization decisions below. One
+`Persistence:WorkspaceRoot` contains ordinary Instance-owned `agent-<id>/home`
+and Session-owned `agent-<id>/sessions/session-<id>/working` directories. Filesystem
+names, bytes, links, modes and timestamps are authoritative. There is no file index,
+copy-back stage, rollback, compatibility reader or automatic conversion. Startup
+must refuse incompatible installed data and require an explicit backed-up reset.
+
+Workspace tools and sandbox commands operate on these exact directories. Trusted
+ownership determines physical roots; descriptor-relative operations enforce
+containment. `/home` mounts RW, RO or is absent according to the most restrictive
+admitted/current policy; `/working` mounts RW for its Session alone. Generation
+reuse requires matching root identity and home access. Restriction enforcement
+requires confirmed retirement of previously broader generations. Separate bind
+mounts and verified Unix identity must prevent cross-root hard-link aliases.
+
+Mailbox-owned logical cwd applies to workspace tools and each sandbox dispatch,
+starting at `/home` or `/working` with disabled home. Explicit command cwd affects
+only that command. Files use ordinary concurrent-writer semantics; atomic file
+replacement is allowed, ordered batches can partially succeed, and failed/canceled
+commands may leave writes behind. Run/configuration/profile/lease revisions and
+effect deduplication remain mandatory. Artifacts remain immutable and separate.
+
+Mounted storage limits must identify verified kernel enforcement versus sampled
+observations or unknown usage. Unsupported topology, Unix identity or mount access
+fails visibly as `MountIncompatible`; never use hidden staging or world-writable
+permissions. Native and packaged Core must share proven daemon-visible backing
+storage. Remote Git still requires Profile-authorized egress.
+
+Implementation and scoped local acceptance completed on 2026-10-16; the
+[verification ledger](reports/canonical-workspace-cutover-verification-2026-10-16.md) records exact source, native/packaged/runtime evidence and deployment limits.
+Earlier decision text below is historical context for the superseded implementation; it is not authority for retaining compatibility.
+
+## Superseded decision: one Agent Instance and workspace model
 
 Every Session requires a real active Agent Instance at creation and pins its active Definition/persona. Every instance owns durable `/home`; every Session owns temporary `/working`. The runtime catalog contains supported built-ins, including capability-aware General Assistant v18 with `background.start` and deliberately retained published versions for pinned owners. Unsupported historical versions remain in Git history. A fresh Chat with no instances directs the owner to Admin. No identity backfill, Definition-based Session creation, version fallback or workspace mode discriminator exists.
 
@@ -481,15 +516,15 @@ Exact new frontend production package inventory:
 
 ## Public binary download limits
 
-The approved public-file enhancement reuses the public HTTP transport, owned Workspace commits and existing Artifact/Office capabilities. No additional HTTP client, storage engine or document conversion stack is introduced. Binary transfer buffering is bounded: default 10 MiB, configurable through `PublicWeb:MaxDownloadBytes` from 1 byte to the existing 50 MiB home-file ceiling; Workspace aggregate/scratch quotas still apply at commit. The default 15-second total download deadline is configurable from 1 to 30 seconds and remains subject to the admitted Run's per-tool/overall budgets. Text fetch/HTTP response limits remain 2 MiB and text projection remains 256 KiB characters. Neither declared MIME types nor a media allowlist restrict ordinary binary downloads; basic known-extension signature checks reject obvious mismatches, while Office inspection owns full supported-format validation.
+The approved public-file enhancement reuses the public HTTP transport, owned Workspace commits and existing Artifact/Office capabilities. No additional HTTP client, storage engine or document conversion stack is introduced. Binary transfer buffering is bounded: default 10 MiB, configurable through `PublicWeb:MaxDownloadBytes` from 1 byte to the existing 50 MiB home-file ceiling; Separate home/working usage and tool-file limits apply at the present-path write. The default 15-second total download deadline is configurable from 1 to 30 seconds and remains subject to the admitted Run's per-tool/overall budgets. Text fetch/HTTP response limits remain 2 MiB and text projection remains 256 KiB characters. Neither declared MIME types nor a media allowlist restrict ordinary binary downloads; basic known-extension signature checks reject obvious mismatches, while Office inspection owns full supported-format validation.
 
 ## Trusted-local OpenSandbox decision
 
 The approved P10 execution backend is `Alibaba.OpenSandbox` exactly 1.1.1, paired with the 1.1.1 server/execd/egress digests in [images.json](../scripts/opensandbox-proof/images.json). The SDK stays in Infrastructure. No Docker CLI or daemon client remains in production Core. Deployment/acceptance scripts may operate only their disposable project resources. A single trusted server uses the existing local Docker daemon; no DinD, additional VM, Kubernetes or alternate runtime is introduced for this local-demo target.
 
-Profiles pin immutable OCI registry digests; explicit local-development configuration may allow a content-addressed local image ID. The optional maintainer General Workbench fixture preinstalls Python 3.13.7, Node 22.20.0, TypeScript 5.9.3, pandas/numpy/openpyxl/python-docx/matplotlib/pytest/reportlab, LibreOffice and utilities. Python hashes, base-image digests and a Debian snapshot fix build inputs. Initialization is optional, bounded and once per generation, after scratch hydration; it is not a dependency installer.
+Profiles pin immutable OCI registry digests; explicit local-development configuration may allow a content-addressed local image ID. The optional maintainer General Workbench fixture preinstalls Python 3.13.7, Node 22.20.0, TypeScript 5.9.3, pandas/numpy/openpyxl/python-docx/matplotlib/pytest/reportlab, LibreOffice and utilities. Python hashes, base-image digests and a Debian snapshot fix build inputs. Initialization is optional, bounded and once per generation, after direct mount verification; setup is bounded by the saved command budget.
 
-Workloads retain the image default user with capabilities dropped, no-new-privileges, 64 PIDs, bounded CPU/memory/TTL and deny-default egress (see the ordinary-image successor below). The actual SDK acceptance probes resource enforcement, DNS/external IP, metadata, private lifecycle and gateway access. Own execd loopback remains reachable; trusted local use explicitly accepts that limitation. Canonical scratch has a 250 MiB ceiling (50 MiB per transferred file, 4096 files, 8192 entries); Docker writable-layer disk quota is not enforced. Production isolation and signed supply-chain attestation remain separate deferred hardening.
+Workloads retain the image default user with capabilities dropped, no-new-privileges, 64 PIDs, bounded CPU/memory/TTL and deny-default egress (see the ordinary-image successor below). The actual SDK acceptance probes resource enforcement, DNS/external IP, metadata, private lifecycle and gateway access. Own execd loopback remains reachable; trusted local use explicitly accepts that limitation. Session `/working` defaults to a 250 MiB sampled budget and permits saved host-bounded budgets up to 16 GiB. Shared `/home` has a separate 250 MiB sampled budget and 50 MiB tool-file bound. There is no obsolete snapshot entry ceiling; unreliable scans stop execution with unknown usage. Docker writable-layer disk quota is independent and not enforced by these directory budgets. Production isolation and signed supply-chain attestation remain separate deferred hardening.
 
 Ordinary per-tool ceilings remain 30 seconds. Sandbox commands have a separate pinned Run allowance, default 120 seconds and maximum 180 seconds, clamped to the profile and remaining Run deadline. The OCI catalog cutover retires executable `sandbox.run` completely; old publications require explicit modern republishing and Instance adoption. Earlier BusyBox limits above are historical Phase H values, superseded by this decision.
 
@@ -509,16 +544,16 @@ The exact added runtime closure uses MIT except bessel's Apache-2.0 terms; jStat
 
 ## Ordinary Linux sandbox images (owner-authorized 2026-10-15)
 
-The owner requested ordinary Linux OCI images without Python or pre-created `/working`. Core allocates and mounts isolated per-generation staging, and validates/imports it through existing journaled Workspace commits. Python is optional; `/bin/sh` and Linux `/proc` are needed for command/process checks. The image default user, including container root, is supported under the trusted-local capability/no-new-privileges policy. This supersedes earlier non-root/Python workload requirements. `/home` retains durable Instance ownership and explicit Workspace copy/tool access, and canonical host files are not mounted.
+The canonical filesystem decision above supersedes the earlier per-generation workspace transport. Compatible Linux images require shell/proc/Unix file utilities and the declared non-root UID/GID; Python and pre-created workspace directories are optional. Canonical home and working are exact binds, with independent effective home mount access. The provider keeps dropped capabilities/no-new-privileges; mismatched images fail MountIncompatible rather than receiving broader access.
 
-Verification contract 2 confirms shell execution, platform mount write-through, process quiescence and file validation. Old observations require reverification and legacy generations require explicit reset; immutable image pins, credentials/epochs, command receipts, limits and recovery retain their owners. No image wrapping/building, package installation, daemon access from Core, or command replay is introduced.
+Workspace/profile verification contract 3 confirms direct shared bytes, RW/RO/disabled home, HOME/cwd, UID/GID, modes, links and cleanup using disposable mounts. Old evidence never substitutes for this qualification. Independent source epochs, Profile/Run/lease revisions, receipts and exact-action hashes remain authoritative.
 
 ### Sandbox selection and recovery successor (owner-authorized 2026-10-15)
 
-The existing OpenSandbox backend supports multiple exact authorized profiles on demand with one active generation per Session. Definition authority remains bounded at 16; sparse Instance allowed subsets only narrow it. Runs snapshot all effective profile revisions, eligibility and source epochs; Session lease selection survives Runs/reconnects/restarts/TTL and explicit reset returns to the default. Safe switching validates the target before confirming old termination/cleanup and hydrates current canonical scratch. Unresolved processes, cleanup, setup or commits cannot be bypassed through selection. No per-profile Compose workload, parallel writable generation, alternate engine or separate Agent State framework is introduced.
+The existing OpenSandbox backend retains multiple exact authorized profiles with one active generation per Session. Definition authority remains bounded at 16; sparse Instance allowed subsets only narrow it. Runs pin effective revisions, eligibility and source epochs. Selection survives Runs/reopen/expiry and reset returns to the effective default. Safe switching confirms old process retirement before a new generation mounts the current canonical directories. Cleanup/authority uncertainty cannot be bypassed by selection.
 
-Descriptor-relative collection/cleanup uses platform-specific no-follow flags at every directory depth. Sticky shared staging roots and private generation parents retain native/packaged default-user compatibility. Bounded live staging sampling is a safeguard, not a hard disk quota. Known clean cancellation converges to a terminated environment with retained receipts; unknown effects remain fenced and never authorize command replay. The [successor verification ledger](reports/sandbox-selection-recovery-verification-2026-10-15.md) owns local evidence and remaining platform limits; historical acceptance is unchanged.
+Descriptor-relative canonical access/purge uses platform-specific no-follow primitives. Private roots and compatible execution UID/GID preserve Core access without shared writable modes. Directory sampling is advisory; unsupported strict quotas fail closed. Known cancellation retains partial files and the original receipt; unknown effects never authorize replay. Historical selection/recovery reports describe their original revisions only.
 
 ## Generic Linux retirement (owner-authorized 2026-10-15)
 
-Use bounded generic process-identity inspection and whole owned-container retirement for residual writers. The pinned SDK/execd process-group API does not establish safe escaped-descendant cleanup after main exit; Core must not signal reused numeric IDs or recognize SDK installations. Authoritative Docker-provider deletion/absence precedes collection; staging is retained through validated commit/journal resolution, then deleted. Reuse safe containers and preserve selected profiles/canonical scratch across recycle. No privileged supervisor, alternate engine, provider fork or new state subsystem is introduced. Setup remains quiescent in its original generation, with no automatic initialization replay. [Provider findings and verification](reports/generic-linux-sandbox-runtime-verification-2026-10-15.md).
+Use bounded generic process-identity inspection and exact whole-container retirement for residual writers. The pinned process-group API does not prove escaped-descendant cleanup, so Core never guesses reused numeric IDs. Authoritative absence settles process evidence only: canonical writes already occurred. Reuse safe containers and preserve files/selection across recycle. Setup remains once-per-generation and never automatically replays an uncertain script. No alternative supervisor or synchronization service is introduced.

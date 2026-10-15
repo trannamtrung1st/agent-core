@@ -12,30 +12,30 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class FileSessionWorkspaceTests
 {
     [Fact]
-    public async Task Isolation_denies_traversal_symlink_secrets_and_other_sessions()
+    public async Task Isolation_allows_ordinary_names_and_denies_traversal_symlink_escapes_and_cross_session_reads()
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
         var other = Guid.CreateVersion7();
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, attachments, maxWritableBytes: 64, sessions: new WorkspaceTestSessions());
+        var metadata = new WorkspaceTestSessions();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, attachments, maxWritableBytes: 64, sessions: metadata, instances: metadata.Instances, sandboxes: metadata.Sandboxes);
         var definition = Examiner();
 
         await workspace.EnsureAsync(session, definition);
         await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.ReadAsync(session, definition, "/workspace/working/../../secret.txt").AsTask());
-        await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.WriteAsync(session, $"/workspace/working/{other:N}/x.txt", "no"u8.ToArray()).AsTask());
-        await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.WriteAsync(session, "/workspace/working/.env", "SECRET=1"u8.ToArray()).AsTask());
+            workspace.ReadAsync(session, definition, "/working/../../secret.txt").AsTask());
+        await workspace.WriteAsync(session, $"/working/{other:N}/x.txt", "no"u8.ToArray());
+        await Assert.ThrowsAsync<AgentCoreException>(() => workspace.ReadAsync(other, definition, $"/working/{other:N}/x.txt").AsTask());
+        await workspace.WriteAsync(session, "/working/.env", "SECRET=1"u8.ToArray());
         await Assert.ThrowsAsync<AgentCoreException>(() =>
             workspace.WriteAsync(session, "/workspace/state/CancellationTokenSource.bin", "x"u8.ToArray()).AsTask());
         await Assert.ThrowsAsync<AgentCoreException>(() =>
             workspace.WriteAsync(session, "/agent/definition.json", "{}"u8.ToArray()).AsTask());
 
-        await workspace.WriteAsync(session, "/workspace/working/a.txt", new byte[40]);
+        await workspace.WriteAsync(session, "/working/a.txt", new byte[40]);
         var quota = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.WriteAsync(session, "/workspace/working/b.txt", new byte[40]).AsTask());
+            workspace.WriteAsync(session, "/working/b.txt", new byte[40]).AsTask());
         Assert.Equal("WorkspaceQuotaExceeded", quota.Code);
 
         var outside = Path.Combine(dir.Root, "outside.txt");
@@ -43,7 +43,7 @@ public sealed class FileSessionWorkspaceTests
         var link = Path.Combine(await workspace.PhysicalWorkingDirectoryAsync(session), "escape.txt");
         File.CreateSymbolicLink(link, outside);
         var escaped = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.ReadAsync(session, definition, "/workspace/working/escape.txt").AsTask());
+            workspace.ReadAsync(session, definition, "/working/escape.txt").AsTask());
         Assert.Equal("Forbidden", escaped.Code);
 
         var outsideDir = Path.Combine(dir.Root, "outside-dir");
@@ -51,7 +51,7 @@ public sealed class FileSessionWorkspaceTests
         var linkedDir = Path.Combine(await workspace.PhysicalWorkingDirectoryAsync(session), "out");
         File.CreateSymbolicLink(linkedDir, outsideDir);
         var writeThrough = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.WriteAsync(session, "/workspace/working/out/pwn.txt", "x"u8.ToArray()).AsTask());
+            workspace.WriteAsync(session, "/working/out/pwn.txt", "x"u8.ToArray()).AsTask());
         Assert.Equal("Forbidden", writeThrough.Code);
         Assert.False(File.Exists(Path.Combine(outsideDir, "pwn.txt")));
 
@@ -59,18 +59,18 @@ public sealed class FileSessionWorkspaceTests
         File.CreateSymbolicLink(deepLink, outsideDir);
         Directory.CreateDirectory(Path.Combine(deepLink, "b", "c", "d", "e", "f", "g", "h", "i"));
         var deepWrite = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.WriteAsync(session, "/workspace/working/a/b/c/d/e/f/g/h/i/pwn.txt", "x"u8.ToArray()).AsTask());
+            workspace.WriteAsync(session, "/working/a/b/c/d/e/f/g/h/i/pwn.txt", "x"u8.ToArray()).AsTask());
         Assert.Equal("Forbidden", deepWrite.Code);
         Assert.False(File.Exists(Path.Combine(outsideDir, "b", "c", "d", "e", "f", "g", "h", "i", "pwn.txt")));
 
         await workspace.DeleteSessionAsync(session);
         var late = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.WriteAsync(session, "/workspace/working/late.txt", "x"u8.ToArray()).AsTask());
+            workspace.WriteAsync(session, "/working/late.txt", "x"u8.ToArray()).AsTask());
         Assert.Equal("NotFound", late.Code);
     }
 
     [Fact]
-    public async Task Template_copies_working_files_without_secrets_or_knowledge()
+    public async Task Template_copies_explicit_normal_files_once_without_knowledge_or_harness_corpus()
     {
         using var dir = new TempDir();
         Directory.CreateDirectory(Path.Combine(dir.TemplateRoot, "notes", "knowledge"));
@@ -81,18 +81,18 @@ public sealed class FileSessionWorkspaceTests
         await File.WriteAllTextAsync(Path.Combine(dir.TemplateRoot, "notes", "harness", "pack.txt"), "pack");
 
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
+        var metadata = new WorkspaceTestSessions();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: metadata, instances: metadata.Instances, sandboxes: metadata.Sandboxes);
         var definition = Examiner() with
         {
             Environment = new RoleEnvironment(Workspace: new WorkspaceTemplatePolicy("notes"))
         };
         await workspace.EnsureAsync(session, definition);
-        var welcome = await workspace.ReadAsync(session, definition, "/workspace/working/welcome.txt");
+        var welcome = await workspace.ReadAsync(session, definition, "/working/welcome.txt");
         Assert.Equal("hello", Encoding.UTF8.GetString(welcome.Bytes));
+        Assert.Equal("SECRET=1", Encoding.UTF8.GetString((await workspace.ReadAsync(session, definition, "/working/.env")).Bytes));
         await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.ReadAsync(session, definition, "/workspace/working/.env").AsTask());
-        await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.ReadAsync(session, definition, "/workspace/working/knowledge/body.md").AsTask());
+            workspace.ReadAsync(session, definition, "/working/knowledge/body.md").AsTask());
 
         var agent = await workspace.ReadAsync(session, definition, "/agent/definition.json");
         Assert.Contains("examiner", Encoding.UTF8.GetString(agent.Bytes), StringComparison.Ordinal);
@@ -105,10 +105,11 @@ public sealed class FileSessionWorkspaceTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
+        var metadata = new WorkspaceTestSessions();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: metadata, instances: metadata.Instances, sandboxes: metadata.Sandboxes);
         var definition = Examiner();
         await workspace.EnsureAsync(session, definition);
-        const string path = "/workspace/working/binary.txt";
+        const string path = "/working/binary.txt";
         await workspace.WriteAsync(session, path, new byte[] { 0xFF, 0xFE });
 
         await Assert.ThrowsAsync<AgentCoreException>(() =>
@@ -116,7 +117,6 @@ public sealed class FileSessionWorkspaceTests
                 session,
                 definition,
                 path,
-                new string('a', 64),
                 [new WorkspaceTextEdit("x", "y")]).AsTask());
 
         await workspace.WriteAsync(session, path, "aa"u8.ToArray());
@@ -126,7 +126,6 @@ public sealed class FileSessionWorkspaceTests
                 session,
                 definition,
                 path,
-                hash,
                 [new WorkspaceTextEdit("a", "b")]).AsTask());
         Assert.Equal("Conflict", ambiguous.Code);
         var content = await workspace.ReadAsync(session, definition, path);
@@ -134,14 +133,15 @@ public sealed class FileSessionWorkspaceTests
     }
 
     [Fact]
-    public async Task Concurrent_patch_applies_one_winner_and_rejects_stale_hash()
+    public async Task Concurrent_exact_text_patches_report_no_match_after_the_first_replacement()
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: new WorkspaceTestSessions());
+        var metadata = new WorkspaceTestSessions();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: metadata, instances: metadata.Instances, sandboxes: metadata.Sandboxes);
         var definition = Examiner();
         await workspace.EnsureAsync(session, definition);
-        const string path = "/workspace/working/race.txt";
+        const string path = "/working/race.txt";
         await workspace.WriteAsync(session, path, "start"u8.ToArray());
         var startHash = Sha256Hex("start");
 
@@ -149,13 +149,11 @@ public sealed class FileSessionWorkspaceTests
             session,
             definition,
             path,
-            startHash,
             [new WorkspaceTextEdit("start", "winner")]);
         var second = workspace.PatchTextAsync(
             session,
             definition,
             path,
-            startHash,
             [new WorkspaceTextEdit("start", "loser")]);
         var results = await Task.WhenAll(CapturePatch(first), CapturePatch(second));
 
@@ -171,16 +169,17 @@ public sealed class FileSessionWorkspaceTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, maxWritableBytes: 50, sessions: new WorkspaceTestSessions());
+        var metadata = new WorkspaceTestSessions();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, maxWritableBytes: 50, sessions: metadata, instances: metadata.Instances, sandboxes: metadata.Sandboxes);
         var definition = Examiner();
         await workspace.EnsureAsync(session, definition);
-        const string path = "/workspace/working/quota.txt";
+        const string path = "/working/quota.txt";
         await workspace.WriteAsync(session, path, "aa"u8.ToArray());
         var hash = Sha256Hex("aa");
         var edit = new WorkspaceTextEdit("aa", new string('b', 40));
 
-        var first = workspace.PatchTextAsync(session, definition, path, hash, [edit]);
-        var second = workspace.PatchTextAsync(session, definition, path, hash, [edit]);
+        var first = workspace.PatchTextAsync(session, definition, path, [edit]);
+        var second = workspace.PatchTextAsync(session, definition, path, [edit]);
         var results = await Task.WhenAll(CapturePatch(first), CapturePatch(second));
         Assert.Contains(results, result => result is null);
         Assert.Contains(results, result => result is { Code: "WorkspaceQuotaExceeded" } or { Code: "Conflict" });
@@ -191,11 +190,12 @@ public sealed class FileSessionWorkspaceTests
     {
         using var dir = new TempDir();
         var session = Guid.CreateVersion7();
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, maxWritableBytes: 50, sessions: new WorkspaceTestSessions());
+        var metadata = new WorkspaceTestSessions();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, maxWritableBytes: 50, sessions: metadata, instances: metadata.Instances, sandboxes: metadata.Sandboxes);
         var definition = Examiner();
         await workspace.EnsureAsync(session, definition);
-        var first = workspace.WriteAsync(session, "/workspace/working/one.txt", new byte[40]);
-        var second = workspace.WriteAsync(session, "/workspace/working/two.txt", new byte[40]);
+        var first = workspace.WriteAsync(session, "/working/one.txt", new byte[40]);
+        var second = workspace.WriteAsync(session, "/working/two.txt", new byte[40]);
         var results = await Task.WhenAll(Capture(first), Capture(second));
         Assert.Contains(results, result => result is null);
         Assert.Contains(results, result => result is { Code: "WorkspaceQuotaExceeded" });

@@ -52,6 +52,7 @@ public static class InfrastructureServiceCollectionExtensions
     {
         services.AddHttpErrorDiagnostics();
         persistence ??= new PersistenceOptions();
+        persistence.WorkspaceRoot = Path.GetFullPath(persistence.WorkspaceRoot);
         browser ??= new BrowserOptions();
         services.TryAddSingleton(browser);
         services.TryAddSingleton(provider => {
@@ -62,6 +63,7 @@ public static class InfrastructureServiceCollectionExtensions
             // GetChildren also detects an explicitly null entry, whose section.Exists() is false.
             if (section?.GetChildren().FirstOrDefault(child => child.Key.Equals("AllowedImagePrefixes", StringComparison.OrdinalIgnoreCase)) is { } prefixes)
                 options.AllowedImagePrefixes = prefixes.Get<string[]>() ?? [];
+            options.CanonicalWorkspaceRoot = persistence.WorkspaceRoot;
             options.ValidatePolicy(); return options;
         });
         services.TryAddSingleton<SandboxImageAuthority>();
@@ -286,9 +288,7 @@ public static class InfrastructureServiceCollectionExtensions
         {
             var options = provider.GetRequiredService<PersistenceOptions>();
             return new FileAgentInstanceWorkspaceStore(options.WorkspaceRoot,
-                provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<IIdGenerator>(),
-                string.Equals(options.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase)
-                    ? provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>() : null);
+                provider.GetRequiredService<IAgentInstanceStore>(), provider.GetRequiredService<ISandboxStore>());
         });
         services.TryAddSingleton<AdminLifecycleCoordinator>();
         services.TryAddSingleton<AgentInstanceWorkspaceService>();
@@ -299,7 +299,7 @@ public static class InfrastructureServiceCollectionExtensions
             return new FileSessionWorkspace(options.WorkspaceRoot, options.TemplateRoot,
                 provider.GetService<IAttachmentStore>(),
                 publicationResources: provider.GetService<DefinitionPublicationResourceReader>(),
-                sessions: provider.GetRequiredService<IMemoryStore>());
+                sessions: provider.GetRequiredService<IMemoryStore>(), instances: provider.GetRequiredService<IAgentInstanceStore>(), sandboxes: provider.GetRequiredService<ISandboxStore>());
         });
         if (string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {
@@ -424,6 +424,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<AgentInstanceSettingsService>();
         services.TryAddSingleton<IStateIsolationConfigurationStore>(p => p.GetRequiredService<IAgentInstanceStore>() is IStateIsolationConfigurationStore sqlite
             ? sqlite : new InMemoryStateIsolationConfigurationStore((InMemoryAgentInstanceStore)p.GetRequiredService<IAgentInstanceStore>(), (InMemoryExperienceStore)p.GetRequiredService<IExperienceStore>()));
+        services.TryAddSingleton<SandboxPolicyEnforcement>();
         services.TryAddSingleton<StateIsolationConfigurationService>();
         services.TryAddSingleton<InheritedDefinitionResourceCatalog>();
         services.TryAddSingleton<AgentInstanceResourceService>();

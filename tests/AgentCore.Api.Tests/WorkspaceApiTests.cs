@@ -23,13 +23,13 @@ public sealed class WorkspaceApiTests : IClassFixture<AgentCoreApiFactory>
         var denied = await anonymous.GetAsync($"/api/v2/sessions/{view!.SessionId}/workspace");
         Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
 
-        var listed = await Owner().GetFromJsonAsync<WorkspaceNodeResponse[]>(
+        var listed = await Owner().GetFromJsonAsync<WorkspaceNodePageResponse>(
             $"/api/v2/sessions/{view.SessionId}/workspace?prefix=/working");
-        Assert.Empty(listed!);
-        var agentNodes = await Owner().GetFromJsonAsync<WorkspaceNodeResponse[]>($"/api/v2/sessions/{view.SessionId}/workspace?prefix=/agent");
-        Assert.Contains(agentNodes!, node => node.LogicalPath == "/agent/definition.json");
-        var attachmentNodes = await Owner().GetFromJsonAsync<WorkspaceNodeResponse[]>($"/api/v2/sessions/{view.SessionId}/workspace?prefix=/attachments");
-        Assert.Empty(attachmentNodes!);
+        Assert.Empty(listed!.Entries);
+        var agentNodes = await Owner().GetFromJsonAsync<WorkspaceNodePageResponse>($"/api/v2/sessions/{view.SessionId}/workspace?prefix=/agent");
+        Assert.Contains(agentNodes!.Entries, node => node.LogicalPath == "/agent/definition.json");
+        var attachmentNodes = await Owner().GetFromJsonAsync<WorkspaceNodePageResponse>($"/api/v2/sessions/{view.SessionId}/workspace?prefix=/attachments");
+        Assert.Empty(attachmentNodes!.Entries);
 
         var definition = await Owner().GetByteArrayAsync(
             $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/agent/definition.json");

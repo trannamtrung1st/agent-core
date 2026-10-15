@@ -16,7 +16,7 @@ public sealed partial class TerminalDisplayRepairTests
         var root = Path.Combine(Path.GetTempPath(), "budget-capacity-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var workspace = new AgentCore.Infrastructure.Workspaces.FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"), sessions: new WorkspaceTestSessions());
+            var workspace = AgentCore.Tests.Shared.WorkspaceTestSessions.CreateWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"));
             var rounds = Enumerable.Range(0, 50).Select(i => new ModelGenerationEvent[] {
                 new ModelToolCallEvent(new("write-" + i, ToolCatalog.WorkspaceWrite, System.Text.Json.JsonSerializer.Serialize(new { path = "/working/part-" + i + ".txt", content = new string('x', 7000) + i }))), new ModelCompleted(ModelStopReason.ToolCalls) }).ToArray();
             var model = new CapacityFinalizationModel(rounds);
@@ -34,8 +34,8 @@ public sealed partial class TerminalDisplayRepairTests
             Assert.InRange(run.Checkpoint.StepCount - writes.Length, 0, 1);
             Assert.Empty(AgentRunToolCallCheckpoint.PendingCalls(messages!));
             var last = writes.Length - 1;
-            Assert.Equal(new string('x', 7000) + last, System.Text.Encoding.UTF8.GetString((await workspace.ReadAsync(runtime.SessionId, runtime.Snapshot.Definition, "/workspace/working/part-" + last + ".txt")).Bytes));
-            await Assert.ThrowsAsync<AgentCoreException>(() => workspace.ReadAsync(runtime.SessionId, runtime.Snapshot.Definition, "/workspace/working/part-" + writes.Length + ".txt").AsTask());
+            Assert.Equal(new string('x', 7000) + last, System.Text.Encoding.UTF8.GetString((await workspace.ReadAsync(runtime.SessionId, runtime.Snapshot.Definition, "/working/part-" + last + ".txt")).Bytes));
+            await Assert.ThrowsAsync<AgentCoreException>(() => workspace.ReadAsync(runtime.SessionId, runtime.Snapshot.Definition, "/working/part-" + writes.Length + ".txt").AsTask());
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

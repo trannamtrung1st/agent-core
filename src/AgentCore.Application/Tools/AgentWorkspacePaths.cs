@@ -9,14 +9,12 @@ namespace AgentCore.Application.Tools;
 public static class AgentWorkspacePaths
 {
     public const string Working = "/working";
-    public static string Public(string path) => path == WorkspaceLogicalPath.WorkingDirectory
-        || path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal)
-        ? Working + path[WorkspaceLogicalPath.WorkingDirectory.Length..] : path;
+    public static string Public(string path) => path;
 
     public static string Resolve(string raw, Guid sessionId, string cwd = "/home", bool structural = false)
     {
         if (string.IsNullOrWhiteSpace(raw)) throw AgentCoreErrors.Validation("path is required.");
-        var path = raw.Replace('\\', '/').Trim();
+        var path = raw;
         if (structural && (WorkspaceLogicalPath.HasParentSegment(path) || path.IndexOfAny(['*', '?', '[', ']']) >= 0))
             throw AgentCoreErrors.Validation("Structural operations require concrete paths without globs or parent traversal.");
         if (!path.StartsWith('/')) path = cwd.TrimEnd('/') + "/" + path;
@@ -68,6 +66,8 @@ public static class AgentWorkspacePaths
             var names = new HashSet<string>(StringComparer.Ordinal);
             foreach (var property in element.EnumerateObject())
             {
+                if (property.Name is "expectedRevision" or "expectedSha256" or "expectedTreeSha256")
+                    throw AgentCoreErrors.Validation("Workspace file revision/hash/tree arguments have been removed. Use current paths and exact text edits.");
                 if (!names.Add(property.Name)) throw AgentCoreErrors.Validation("Duplicate workspace argument.");
                 ValidateObject(property.Value);
             }

@@ -71,17 +71,6 @@ public sealed class DrivePersistenceTests
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
-    [Fact]
-    public async Task Additive_migration_up_down_preserves_preexisting_General_and_Email_data()
-    {
-        var path = Path.Combine(Path.GetTempPath(), "drive-migration-" + Guid.NewGuid().ToString("N") + ".db"); var f = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
-        try
-        {
-            await using var db = f.CreateDbContext(); var migrator = db.GetService<IMigrator>(); await migrator.MigrateAsync("20261013040224_EmailMonitoringEventSource"); var store = new SqliteCredentialStore(f); var now = DateTimeOffset.UtcNow; var general = new Credential(Guid.NewGuid(), "Sentinel", CredentialKind.Password, CredentialStatus.Active, new Dictionary<string, string>(), [], "protected-sentinel", 1, 1, now, now); await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Credentials (CredentialId, DisplayName, Kind, Status, MetadataJson, AllowedOriginsJson, ProtectedPayload, ProtectionVersion, Revision, CreatedAtUtc, UpdatedAtUtc, Purpose, SecretRevision) VALUES ({general.CredentialId.ToString("D")}, 'Sentinel', 'Password', 'Active', '{{}}', '[]', 'protected-sentinel', 1, 1, 0, 0, 'General', 0)");
-            await migrator.MigrateAsync(); Assert.Equal(general.ProtectedPayload, (await store.GetAsync(general.CredentialId))!.ProtectedPayload); await migrator.MigrateAsync("20261013040224_EmailMonitoringEventSource"); Assert.Equal("protected-sentinel", await db.Credentials.AsNoTracking().Select(c => c.ProtectedPayload).SingleAsync()); Assert.DoesNotContain("20261013171144_GoogleDriveAccountsAndOperations", await db.Database.GetAppliedMigrationsAsync()); await migrator.MigrateAsync(); Assert.Equal(1, await db.Credentials.CountAsync());
-        }
-        finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
-    }
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

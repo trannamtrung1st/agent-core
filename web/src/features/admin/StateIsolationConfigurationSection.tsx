@@ -110,6 +110,7 @@ export function StateIsolationConfigurationSection({ instanceId, active, archive
     {view && draft && state && <>
       <AgentConfigurationPanel title="Continuity and resource policy" label="State & Isolation configuration" bodyGap="section"
         description="Presets prepare editable drafts. Existing history, home files and browser profile bytes are retained.">
+        {view.sandboxEnforcementState === 'EnforcementPending' && <Alert type="warning" showIcon title="Sandbox access enforcement pending" description="Saved restrictions block new commands. An older mounted process may still write until termination is confirmed. Inspect the affected Session sandbox and refresh after cleanup." />}
         <Form layout="vertical" className="admin-config-form instance-settings-form">
           <Flex vertical gap={token.padding}>
             <IsolationPresetControl value={deriveIsolationPreset(view, draft)} disabled={archived || busy} dirty={changed}

@@ -27,7 +27,7 @@ public sealed class SandboxApiTests
         var alternate = first with { Id="alternate",Name="Alternate",Enabled=true,Cpu=.5,MemoryMiB=512 };
         foreach(var profile in new[]{first,alternate}) {
             await store.SaveProfileAsync(profile,0);
-            await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Deterministic admission observation",ContractVersion:2));
+            await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Deterministic admission observation",ContractVersion:3));
         }
         var definitions=factory.Services.GetRequiredService<IAgentDefinitionAdminStore>();
         var baseline=(await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant",31))!;
@@ -47,7 +47,7 @@ public sealed class SandboxApiTests
         await store.SaveProfileAsync(alternate with {Revision=2,Cpu=.25},1);
         var beforeVerification=(await resolver.ResolveAsync(id)).Configuration;
         Assert.False(beforeVerification.Definition.ExecutionSandboxProfiles!.Single(p=>p.Id=="alternate").AdmittedForExecution);
-        await store.SaveVerificationAsync(new(alternate.Id,2,DateTimeOffset.UtcNow,true,"New exact observation",ContractVersion:2));
+        await store.SaveVerificationAsync(new(alternate.Id,2,DateTimeOffset.UtcNow,true,"New exact observation",ContractVersion:3));
         Assert.Equal(1,alternatePin.Revision);Assert.True(alternatePin.AdmittedForExecution);
         Assert.False(beforeVerification.Definition.ExecutionSandboxProfiles!.Single(p=>p.Id=="alternate").AdmittedForExecution);
         var next=(await resolver.ResolveAsync(id)).Configuration.Definition.ExecutionSandboxProfiles!.Single(p=>p.Id=="alternate");
@@ -179,7 +179,7 @@ public sealed class SandboxApiTests
         Assert.Equal(HttpStatusCode.Conflict, (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/storage", update)).StatusCode);
         foreach (var invalid in new[] {
             update with { ExpectedRevision = 2, StorageBytes = 0 },
-            update with { ExpectedRevision = 2, StorageBytes = 250L * 1024 * 1024 + 1 },
+            update with { ExpectedRevision = 2, StorageBytes = SandboxProfile.MaximumStorageBytes + 1 },
             update with { ExpectedRevision = 2, MaxLifetimeSeconds = 60 },
             update with { ExpectedRevision = 2, InitializationScript = new string('界', 5500) } })
             Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync("/api/v2/admin/sandbox-profiles/storage", invalid)).StatusCode);
@@ -239,7 +239,7 @@ public sealed class SandboxApiTests
         var store=factory.Services.GetRequiredService<ISandboxStore>();
         var profile=new SandboxProfile("general-workbench",1,"Verified fixture","",true,"sha256:"+new string('a',64));
         await store.SaveProfileAsync(profile,0);
-        await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Policy fixture observation",ContractVersion:2));
+        await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Policy fixture observation",ContractVersion:3));
         var created=await owner.PostAsJsonAsync("/api/v2/admin/agent-instances",new{definitionId="general-assistant",version=30});created.EnsureSuccessStatusCode();
         var instance=(await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>());var id=instance.GetProperty("instanceId").GetGuid();
         var saved=(await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/general-workbench"))!;
@@ -304,13 +304,13 @@ public sealed class SandboxApiTests
     }
 
     [Fact]
-    public async Task Shipped_host_enables_sandbox_but_missing_private_configuration_remains_unavailable()
+    public async Task Shipped_host_enables_sandbox_but_missing_mount_handoff_remains_incompatible()
     {
         await using var factory = new UnconfiguredSandboxFactory();
         using var owner = TestOwnerCapability.CreateOwnerClient(factory);
         Assert.True(factory.Services.GetRequiredService<OpenSandboxOptions>().Enabled);
         var platform = (await owner.GetFromJsonAsync<SandboxPlatformResponse>("/api/v2/admin/sandboxes"))!;
-        Assert.Equal("Unavailable", platform.State);
+        Assert.Equal("MountIncompatible", platform.State);
         Assert.Empty(platform.Profiles);
     }
 

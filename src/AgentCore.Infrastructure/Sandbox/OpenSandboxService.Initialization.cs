@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Sandbox;
 
 public sealed partial class OpenSandboxService
 {
-    private async ValueTask<SandboxLease> InitializeLockedAsync(SdkSandbox sdk, SandboxLease lease, SandboxAccess access, ScratchSnapshot scratch, CancellationToken ct)
+    private async ValueTask<SandboxLease> InitializeLockedAsync(SdkSandbox sdk, SandboxLease lease, SandboxAccess access, CancellationToken ct)
     {
         var evidence = new SandboxInitializationEvidence("Running", lease.Profile.Id, lease.Profile.Revision, lease.Profile.InstanceRevision, time.GetUtcNow());
         lease = await SaveAsync(lease with { Initialization = evidence }, ct);
@@ -32,7 +32,7 @@ public sealed partial class OpenSandboxService
                 if (remaining <= 0) throw new TimeoutException();
                 using var scriptDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 scriptDeadline.CancelAfter(TimeSpan.FromSeconds(remaining));
-                var result = await GuardCommandStorageAsync(lease, token => sdk.Commands.RunAsync(script, new RunCommandOptions { WorkingDirectory = "/working", TimeoutSeconds = Math.Max(1, (int)Math.Ceiling(remaining)) },
+                var result = await GuardCommandStorageAsync(lease, token => sdk.Commands.RunAsync(script, CommandOptions(lease, "/working", Math.Max(1, (int)Math.Ceiling(remaining))),
                     new ExecutionHandlers { SkipAccumulation = true,
                         OnStdout = async m => { stdout.Append(m.Text); await SaveOutputAsync(); },
                         OnStderr = async m => { stderr.Append(m.Text); await SaveOutputAsync(); } }, token), scriptDeadline.Token);
@@ -41,8 +41,6 @@ public sealed partial class OpenSandboxService
             }
             evidence = evidence with { Phase = "validation" };
             await ConfirmQuiescentAsync(sdk, lease, ct);
-            var transfer = await CollectAsync(lease, ct);
-            await workspace.CommitScratchAsync(access.SessionId, transfer, scratch.Fingerprint, ct, token => ValidateAccessAsync(access, token), lease.Generation);
             var finished = time.GetUtcNow();
             evidence = evidence with { State = "Succeeded", FinishedAt = finished, ExitCode = 0, Stdout = stdout.Text, Stderr = stderr.Text,
                 Truncated = stdout.Truncated || stderr.Truncated, DurationMs = Math.Max(0,(long)(finished-evidence.StartedAt!.Value).TotalMilliseconds) };

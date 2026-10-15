@@ -16,7 +16,7 @@ public sealed class UserMessageContentTests
     public void Foreign_fields_and_client_labels_fail_closed_and_reference_only_has_a_task()
     {
         Assert.Throws<ArgumentException>(()=>UserMessageContent.Normalize([new("reference",Reference:new("artifact",ArtifactId:Guid.NewGuid()))]));
-        Assert.Throws<ArgumentException>(()=>UserMessageContent.Normalize([new("reference",Reference:new("session",SessionId:Guid.NewGuid(),ItemId:Guid.NewGuid()))]));
+        Assert.Throws<ArgumentException>(()=>UserMessageContent.Normalize([new("reference",Reference:new("session",SessionId:Guid.NewGuid(),Path:"/home/foreign.txt"))]));
         Assert.Throws<ArgumentException>(()=>UserMessageContent.Normalize([new("invocation",InvocationKind:"skill",SkillKey:"definition:review",Label:"forged")],input:true));
         Assert.True(UserMessageContent.HasTask([new("invocation",InvocationKind:"skill",SkillKey:"definition:review")]));
         Assert.False(UserMessageContent.HasTask([new("invocation",InvocationKind:"skill",SkillKey:"invalid")]));

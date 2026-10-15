@@ -17,8 +17,8 @@ public sealed partial class SessionToolExecutor
     private sealed record DocumentInspect(string Path, int Offset = 0, int Limit = 20);
     private sealed record WorkbookInspect(string Path, string? Sheet = null, string? Range = null, string? Cursor = null);
     private sealed record OfficeAttachmentRead(string AttachmentId, string? Sheet = null, string? Range = null, int Offset = 0, int Limit = 100, string? Cursor = null);
-    private sealed record DocumentEdit(string Path, string ExpectedSha256, IReadOnlyList<OfficeDocumentEdit>? Operations);
-    private sealed record WorkbookEdit(string Path, string ExpectedSha256, IReadOnlyList<OfficeSpreadsheetEdit>? Operations);
+    private sealed record DocumentEdit(string Path, IReadOnlyList<OfficeDocumentEdit>? Operations);
+    private sealed record WorkbookEdit(string Path, IReadOnlyList<OfficeSpreadsheetEdit>? Operations);
     private static T OfficeArgs<T>(JsonElement args) => args.Deserialize<T>(OfficeJson) ?? throw AgentCoreErrors.Validation("office_operation_unsupported: Arguments are required.");
     private async Task<string> ExecuteOfficeAsync(string name, AgentDefinition definition, Guid sessionId, JsonElement args, string cwd, int outputBudget, CancellationToken ct)
     {
@@ -36,7 +36,7 @@ public sealed partial class SessionToolExecutor
                 return Error("forbidden", "Office processing uses files in /home or this Session's /working.");
             var document = name.StartsWith("office.document.", StringComparison.Ordinal); var action = name.Split('.')[2];
             if (!path.EndsWith(document ? ".docx" : ".xlsx", StringComparison.OrdinalIgnoreCase)) return Error("invalid_office_package", "Use the matching .docx or .xlsx extension.");
-            OfficeProcessedFile? result = null; string? expectedHash = null;
+            OfficeProcessedFile? result = null;
             if (action == "create")
             {
                 if (document)
@@ -68,15 +68,11 @@ public sealed partial class SessionToolExecutor
                             page => JsonSerializer.Serialize(new { untrusted = true, path = AgentWorkspacePaths.Public(path), inspection = page }, OfficeJson));
                     }
                 }
-                if (!TryString(args, "expectedSha256", out expectedHash) || expectedHash.Length != 64 || !expectedHash.All(Uri.IsHexDigit)) return Error("invalid", "expectedSha256 is required for edits.");
-                expectedHash = expectedHash.ToLowerInvariant();
-                var actual = Convert.ToHexStringLower(SHA256.HashData(source.Bytes));
-                if (!string.Equals(actual, expectedHash, StringComparison.OrdinalIgnoreCase)) return Error("office_revision_conflict", "The file changed. Inspect it again before editing; original bytes are unchanged.");
                 if (document) { var input = OfficeArgs<DocumentEdit>(args); if (input.Operations is null || input.Operations.Any(o => o is null)) return Error("invalid", "operations are required."); result = officeProcessor.EditDocument(source.Bytes, input.Operations, ct); }
                 else { var input = OfficeArgs<WorkbookEdit>(args); if (input.Operations is null || input.Operations.Any(o => o is null || o.Cells?.Any(row => row is null || row.Any(c => c is null)) == true)) return Error("invalid", "operations are required."); result = officeProcessor.EditWorkbook(source.Bytes, input.Operations, ct); }
             }
             ct.ThrowIfCancellationRequested();
-            await agentWorkspace.CommitBinaryAsync(sessionId, path, document ? OfficeLimits.DocumentMime : OfficeLimits.SpreadsheetMime, result.Bytes, expectedHash, ct);
+            await agentWorkspace.CommitBinaryAsync(sessionId, path, document ? OfficeLimits.DocumentMime : OfficeLimits.SpreadsheetMime, result.Bytes, ct);
             return JsonSerializer.Serialize(new { path = AgentWorkspacePaths.Public(path), sha256 = Convert.ToHexStringLower(SHA256.HashData(result.Bytes)), byteSize = result.Bytes.Length, warnings = result.Warnings, published = false }, OfficeJson);
         }
         catch (OperationCanceledException) { throw; }

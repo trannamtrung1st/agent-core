@@ -1,0 +1,1698 @@
+{
+  "branch": "develop/branch-1",
+  "baselineCommit": "5e58dc81a598e52c72cff1cedf8c3b3f42cdfee6",
+  "scope": "Changed runtime, test and deployment source; documentation/design evidence is identified by the containing Git commit.",
+  "files": [
+    {
+      "path": ".env.example",
+      "state": "present",
+      "sha256": "aa15dfbe5746cc554b7d8eea2c1e15d8d08292618b0bb2a487a9013220d991de"
+    },
+    {
+      "path": "Dockerfile",
+      "state": "present",
+      "sha256": "4871b0cc7ef0fb222c83f43293b589666215e1c599b4879271cd75d96be83ee4"
+    },
+    {
+      "path": "agents/general-assistant-v32.json",
+      "state": "present",
+      "sha256": "53019fa71ff48654d6def0bde7d922de73f9e938f087a0db17ceb72262830a23"
+    },
+    {
+      "path": "deploy/sandbox/Dockerfile.workbench",
+      "state": "present",
+      "sha256": "24e7afca775a4df04fcf2c562c52f80139ec07bcdc4b7d903cfb122ad2ef2301"
+    },
+    {
+      "path": "deploy/sandbox/README.md",
+      "state": "present",
+      "sha256": "73af92b9b8e4737108a263b137e581d3b8d8728ccc3b3a5dd6d7f8c29e034dd4"
+    },
+    {
+      "path": "deploy/sandbox/server-bootstrap.py",
+      "state": "present",
+      "sha256": "c59c3e712f7c75ade64767d872e0bebd4472bfaec875034c41280178aea375dd"
+    },
+    {
+      "path": "docker-compose.app-sandbox.yml",
+      "state": "present",
+      "sha256": "13ff7642450dbd046defa95f305c54293107b19148daaf1b61cf6c180adce34a"
+    },
+    {
+      "path": "docker-compose.sandbox.yml",
+      "state": "present",
+      "sha256": "1e7316fd489a16b48dda8459be1eb969dc92b80455fafa7901a2e4b8c3de6fd8"
+    },
+    {
+      "path": "scripts/compose-sqlite-volume.sh",
+      "state": "present",
+      "sha256": "bd01d82f6c6503d72a13aa657769bbf532720734a6a55b540b533d1557707b7b"
+    },
+    {
+      "path": "scripts/opensandbox-compose.py",
+      "state": "present",
+      "sha256": "5fa5d716ae4c6f27ca27e0b433322bc632e909eebb0933a04c4a30ba97e6e961"
+    },
+    {
+      "path": "scripts/opensandbox-local.py",
+      "state": "present",
+      "sha256": "befdfc3e5c599d1cddb40def5ae06f6d38599a0f7fd27a19b81dc68662861d57"
+    },
+    {
+      "path": "scripts/reset-canonical-workspace.py",
+      "state": "present",
+      "sha256": "bbe307c2401f64d778cee7ada6c2b7436ef526b6d050e8e7ee633222d46c1aa3"
+    },
+    {
+      "path": "scripts/tests/test_canonical_reset.py",
+      "state": "present",
+      "sha256": "2edad6ceba15fa66f36fd9ccaed9ebabd02d0b966bb654c6c0ac7c7ab3e5bd53"
+    },
+    {
+      "path": "scripts/tests/test_opensandbox_config.py",
+      "state": "present",
+      "sha256": "683f54c74b65f7bc2d2ebf3a74afddcebced1f5aed612a60750277f1c504d054"
+    },
+    {
+      "path": "src/AgentCore.Api/AgentWorkspaceEndpoints.cs",
+      "state": "present",
+      "sha256": "b0e3203c0cd88853772dd88a49eb960e8d1bf25f0a3d3f00460bcf1feb74f2c1"
+    },
+    {
+      "path": "src/AgentCore.Api/Mapping/HttpMapping.cs",
+      "state": "present",
+      "sha256": "ea1a507bba0fd1c48e9d56a46c8b41babb94644fe6c484d36980deec1d29905c"
+    },
+    {
+      "path": "src/AgentCore.Api/Mapping/UserMessageMapping.cs",
+      "state": "present",
+      "sha256": "da50aaba1e32e15d68a154680e8f75b049ffa337f0db259dd2c2306a1adbd69c"
+    },
+    {
+      "path": "src/AgentCore.Api/OfficePreviewEndpoints.cs",
+      "state": "present",
+      "sha256": "35bd5337088a75f3a229ecd3cf67533262762483be5129c97abbed457d3f6f70"
+    },
+    {
+      "path": "src/AgentCore.Api/SandboxEndpoints.cs",
+      "state": "present",
+      "sha256": "90d1dd61adae06bf439d13add7de7f86ac9b3fc986cc2f40c38649b61387ddeb"
+    },
+    {
+      "path": "src/AgentCore.Api/WorkspaceEndpoints.cs",
+      "state": "present",
+      "sha256": "82bd5465184efe56e68b5f9d9dba543213e821772eaa878fa3109084af1370f1"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/AdminAgentInstanceService.cs",
+      "state": "present",
+      "sha256": "f7b85e7d254b3cce8fb609bcd40cc4513c6df408dfdf30dbf81bb53251aaf3de"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/AgentInstanceSettingsService.cs",
+      "state": "present",
+      "sha256": "ff3c941265c88ad8cc748b62b0748c29fc4558bbfdd611fd042631840e48d37d"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/SandboxPolicyEnforcement.cs",
+      "state": "present",
+      "sha256": "1299621c8e5e2c9c50881f2ca1e4256651394cb568c3e8d1db7e01b86a028e29"
+    },
+    {
+      "path": "src/AgentCore.Application/Admin/StateIsolationConfigurationService.cs",
+      "state": "present",
+      "sha256": "95e7da75829c7bbf49e76b6e98a5f918b3868631e804ead3715787102b5957b0"
+    },
+    {
+      "path": "src/AgentCore.Application/Agents/InstanceSettingsResolver.cs",
+      "state": "present",
+      "sha256": "38bc14c03696a860064fd2b1045d0df4aa4480b89c61db1d097ef5da8fc95e84"
+    },
+    {
+      "path": "src/AgentCore.Application/Agents/RolePermissions.cs",
+      "state": "present",
+      "sha256": "1266c3f4c9d02d550d4ed534cbb86ecdf13550fc4985b88d6f2f87b8e59362fd"
+    },
+    {
+      "path": "src/AgentCore.Application/Composer/ComposerReferenceService.cs",
+      "state": "present",
+      "sha256": "1c89750d093effc3bd38320c64bcaa2a187d6a8824cbf76791073264cdbfbaeb"
+    },
+    {
+      "path": "src/AgentCore.Application/Context/CoreContracts.cs",
+      "state": "present",
+      "sha256": "a5a5aae195baab22212ac4fbaad91d7c7bd0d18fbad79c44f794fa98b94ca625"
+    },
+    {
+      "path": "src/AgentCore.Application/Drive/DriveToolContracts.cs",
+      "state": "present",
+      "sha256": "88d6fc6933b336a3f55fee509708816df6b30ae579e8c81ddf9ac51c4f6181b2"
+    },
+    {
+      "path": "src/AgentCore.Application/Office/OfficeToolContracts.cs",
+      "state": "present",
+      "sha256": "972fc3245e64833a2893ef725309fcea017d021f7209ad89f11f8cd899e637ec"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/AgentInstanceWorkspace.cs",
+      "state": "present",
+      "sha256": "e3bc7b162c75c9e0dc110d3486ded8e2ad306cd6d14b8d6be63a25c817fb2b09"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/SandboxService.cs",
+      "state": "present",
+      "sha256": "defdda8a7393c856a05d7380ddab6ddc70d2e36005ff7ee7be995453032f2f30"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/Workspace.cs",
+      "state": "present",
+      "sha256": "9193a584e838df2d53649b54e0151a3b5dcb14113fdd1bbbc8fee6cd02fee106"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/WorkspaceStructure.cs",
+      "state": "present",
+      "sha256": "f02cffac51b145e708dc64b7f9503ae1b6a658a33460d89696ed2bb55732dea8"
+    },
+    {
+      "path": "src/AgentCore.Application/Ports/WorkspaceTransfer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Application/Sessions/SessionManager.cs",
+      "state": "present",
+      "sha256": "f3a96320f8dd059356b0e127148b353c013541675e9a1d5e66cc036e52916dd5"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/AgentWorkspacePaths.cs",
+      "state": "present",
+      "sha256": "d8aa6ce613c24f6392b5d3d7a99f2dbf1ebcbb79dd318e267a7936f57a4f7ea0"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SandboxCommands.cs",
+      "state": "present",
+      "sha256": "9f7c88377d56f102e312c47d1c04d4946e9f2f53c4c9ef1661a0a4ef277f8ea5"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SandboxFailureSummary.cs",
+      "state": "present",
+      "sha256": "ddb73e5a1c9f9d48b7a2a5d5364f27ba3e28acad24db2b2c6146c1b2d60af20f"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.AgentWorkspace.cs",
+      "state": "present",
+      "sha256": "0e72d9053841727c5d565ebc239c72ffc37d35d195650db7a235e0d529e68dfb"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.Cwd.cs",
+      "state": "present",
+      "sha256": "ac3930fee9692241a7c61f0c766cf156e30ed12fe801fcc00dfd22a023a94167"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.Drive.cs",
+      "state": "present",
+      "sha256": "b3f02bcfa7bde0fc4b87da103086dab2dad098fce94b362940ec1083ae9a204c"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.Office.cs",
+      "state": "present",
+      "sha256": "31f44ed9ba6cdd33233d053bf06f7eba5ec6682f5447d077ba183b29e49cf673"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.Sandbox.cs",
+      "state": "present",
+      "sha256": "b869fe5721048d36ee45f7e18d89ae45690375deb5797e394244aba6ace05e44"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.Structure.cs",
+      "state": "present",
+      "sha256": "664ec93c4a3a966a56732960982ec26c047ac2ed59ddd41074b3cb06f8fac4b7"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.WebDownload.cs",
+      "state": "present",
+      "sha256": "8f14ac3fbab2ebc4aee0b2956790b75950f473c80b5a1fb0023c656abaa7537f"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/SessionToolExecutor.cs",
+      "state": "present",
+      "sha256": "62a8e7c3768da6d2cfff947f1911d28977d88f525b1ae2f1f483d6255977b59f"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/ToolActionPreparation.cs",
+      "state": "present",
+      "sha256": "0afe1dbc958aab28c4c743b02d1f9c533df1083319bf84bb5b53d800ed9acc36"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/ToolApprovalPreview.cs",
+      "state": "present",
+      "sha256": "12b3b27acbf008347a4b8d0c4bdf69b645c9ab703f31deb91cfa24335a311602"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/ToolRegistry.cs",
+      "state": "present",
+      "sha256": "affb8830a17edfc24c9904c1975f29f2cd22c8a8973da12282606375d36f07c9"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/WorkspaceLogicalPath.cs",
+      "state": "present",
+      "sha256": "56226359700f24ee328c17d0dc35db89430a4d5e79f206d5783352514134921a"
+    },
+    {
+      "path": "src/AgentCore.Application/Tools/WorkspaceStructureArguments.cs",
+      "state": "present",
+      "sha256": "1071af474d7bfa99d1c6f8b8bd8a81194c6f7014755cf2415cbf41d7d394737c"
+    },
+    {
+      "path": "src/AgentCore.Application/Workspaces/AgentHomePath.cs",
+      "state": "present",
+      "sha256": "4c00c509141616cb86f3bf5ae0a5f5fbeb4643134a35ebb72dd4d40db0a9848a"
+    },
+    {
+      "path": "src/AgentCore.Application/Workspaces/AgentInstanceWorkspaceService.cs",
+      "state": "present",
+      "sha256": "ce293fbf1f9ce175549ef69536d778e6ac62c9481495faccdaa1652971413434"
+    },
+    {
+      "path": "src/AgentCore.Application/Workspaces/WorkspaceTransferPlan.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Application/Workspaces/WorkspaceTreePlanner.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Http/AgentWorkspaceContracts.cs",
+      "state": "present",
+      "sha256": "6e0318348559d2fbd779ffde707281dbfa52e0aa22f4be3b889f826a90ad06f0"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Http/HttpDtos.cs",
+      "state": "present",
+      "sha256": "cc876955ed5801a4abfe6f0c2e2fdf0b28bdabb252737082ac6048127cc58cb6"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Http/OfficePreviewResponse.cs",
+      "state": "present",
+      "sha256": "3caf7a293a0e5d0e6dad5278d214927d9c968df47e4de6e5ef6185f1548f67e9"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Http/SandboxDtos.cs",
+      "state": "present",
+      "sha256": "5179e21137b96a15727d7d94aeb764015213788bf7e40f0ba58a3e791065356f"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Realtime/UserMessagePartFormatters.cs",
+      "state": "present",
+      "sha256": "cea257eab9025746bb5bf03e7d730267b0f6a0d8a1abf81570ddffa40c7d25d3"
+    },
+    {
+      "path": "src/AgentCore.Contracts/Realtime/UserMessageParts.cs",
+      "state": "present",
+      "sha256": "a82e14b3d6f9ef59eb750e02c8eea47a947ea5aba0349f8901352b42b147ad3e"
+    },
+    {
+      "path": "src/AgentCore.Domain/Conversation/AgentWorkspaceItem.cs",
+      "state": "present",
+      "sha256": "72a22921ab531bef97abb21b5969bacb907901280fc6f86d104b393b6b91c88b"
+    },
+    {
+      "path": "src/AgentCore.Domain/Conversation/SandboxRecords.cs",
+      "state": "present",
+      "sha256": "e127d3ce557c0b2b63e460f74c86ead9983a7c0c4e4efddd644df1c971582f91"
+    },
+    {
+      "path": "src/AgentCore.Domain/Conversation/UserMessageContent.cs",
+      "state": "present",
+      "sha256": "c443687400dbdb84781a3919f58922f34da2ceedcd2b3b2cad6c85cd79148979"
+    },
+    {
+      "path": "src/AgentCore.Domain/Definitions/SandboxProfile.cs",
+      "state": "present",
+      "sha256": "acee16ac32a7241069dd8ac1f3e5393ffff215f8b882467d97888889151b9b31"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Admin/AdminLifecycleDeletion.cs",
+      "state": "present",
+      "sha256": "aa0eb2d387a0f2cdfe280996820a94cf181e5a45ce79e522eba63293100a26a8"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/InfrastructureServiceCollectionExtensions.cs",
+      "state": "present",
+      "sha256": "350c8bff525f838508816e8281b7dc651ee739ae44c660303fbb173f84a70a75"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/AgentCoreDbContext.cs",
+      "state": "present",
+      "sha256": "db5af04d2beeeb5a72ee5d724dd3d59581d7028c328848be489a3936f01d3438"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/AgentWorkspaceRow.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260915064647_InitialCreate.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260915064647_InitialCreate.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260916104118_SessionCatalogAndOwnerCapability.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260916104118_SessionCatalogAndOwnerCapability.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260916120000_Attachments.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260916120000_Attachments.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260916180000_ResponseEnvelope.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260916180000_ResponseEnvelope.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260916210000_Artifacts.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260917012822_ConversationEntryAttachmentRefs.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260917012822_ConversationEntryAttachmentRefs.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260917100000_LastUserActivityAt.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260917100000_LastUserActivityAt.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260917120000_PauseReasonAndActivityBackfill.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260917120000_PauseReasonAndActivityBackfill.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260917234608_SourceAdmissionFingerprint.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260917234608_SourceAdmissionFingerprint.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260918013000_EntryFinishReason.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260918013000_EntryFinishReason.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260918200644_SessionLifecycle.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260918200644_SessionLifecycle.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260919040000_SpeechLocaleOverride.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260919080000_SessionModelSelection.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260922103000_EntryInterruptReason.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923025000_SummaryMetadata.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923050000_StructuredSessionMemory.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923050000_StructuredSessionMemory.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923070000_AgentInstance.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923070000_AgentInstance.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923090000_MemoryScope.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923090000_MemoryScope.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923110000_UserMemory.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923110000_UserMemory.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923160000_TriggerContracts.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923160000_TriggerContracts.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923220000_OwnerScopedOccurrenceDedupe.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260923220000_OwnerScopedOccurrenceDedupe.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260924060915_WorkItemContracts.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260924060915_WorkItemContracts.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260924065742_OccurrenceDurableWorkLink.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260924065742_OccurrenceDurableWorkLink.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260924155535_WorkSideEffectToolCallId.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260924155535_WorkSideEffectToolCallId.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925071140_P7DefinitionLifecycle.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925071140_P7DefinitionLifecycle.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925084907_P7DefinitionResources.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925084907_P7DefinitionResources.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925101355_P7ManagedAgentInstance.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925101355_P7ManagedAgentInstance.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925101918_P7ManagedAgentInstanceRevisionToken.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925101918_P7ManagedAgentInstanceRevisionToken.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925103832_P7PinnedPersonaRevision.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925103832_P7PinnedPersonaRevision.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925150254_P7DefinitionDraftEvaluation.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925150254_P7DefinitionDraftEvaluation.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925161000_P7AdminEvents.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260925161000_P7AdminEvents.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260926083213_P7WorkPinnedPersona.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260926083213_P7WorkPinnedPersona.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260926175411_P7ConversationTurnExecution.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260926175411_P7ConversationTurnExecution.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260929121048_P7FailureReference.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260929121048_P7FailureReference.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260929125852_P7WorkFailureDiagnosticId.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260929125852_P7WorkFailureDiagnosticId.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260930065327_P8PinnedActiveSkillIds.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260930065327_P8PinnedActiveSkillIds.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260930174851_P85SkillLoadCount.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260930174851_P85SkillLoadCount.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260930181733_P85ApplicationMessageEffectKey.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20260930181733_P85ApplicationMessageEffectKey.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261002094238_P95ApplicationConnection.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261002094238_P95ApplicationConnection.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261002114349_P95WorkAttention.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261002114349_P95WorkAttention.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261003155703_P96ExecutionModelPin.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261003155703_P96ExecutionModelPin.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261003163628_P96WorkCaptures.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261003163628_P96WorkCaptures.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261003175239_P96OrderPlacedWebhook.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261003175239_P96OrderPlacedWebhook.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261004020003_P96ExternalEventSource.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261004020003_P96ExternalEventSource.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261004065312_P96ExternalEventDelivery.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261004065312_P96ExternalEventDelivery.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261004092058_P97HarnessManagement.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261004092058_P97HarnessManagement.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261005003621_P9899Experience.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261005003621_P9899Experience.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006013730_P910IdentityMaintenance.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006013730_P910IdentityMaintenance.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006042725_P910MaintenanceProvenance.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006042725_P910MaintenanceProvenance.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006095536_ConfigurableContinuityCadence.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006095536_ConfigurableContinuityCadence.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006131121_AgentInstanceWorkspace.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006131121_AgentInstanceWorkspace.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006182813_CapabilityExecutionLoads.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261006182813_CapabilityExecutionLoads.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007014134_UnifiedAgentWorkspace.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007014134_UnifiedAgentWorkspace.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007045013_SystemCredentials.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007045013_SystemCredentials.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007072939_UnifiedAutomation.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007072939_UnifiedAutomation.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007101836_AutomationTriggerRevision.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007101836_AutomationTriggerRevision.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007114116_InstanceSkillsCutover.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007114116_InstanceSkillsCutover.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007171704_InstanceSkillOwnerIdentity.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261007171704_InstanceSkillOwnerIdentity.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008013446_ActivationAgentRunFoundation.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008013446_ActivationAgentRunFoundation.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008021141_BackgroundOccurrenceAdmission.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008021141_BackgroundOccurrenceAdmission.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008021317_BackgroundOccurrenceIntegrity.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008021317_BackgroundOccurrenceIntegrity.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008030156_PendingAgentInputIntent.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008030156_PendingAgentInputIntent.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008034707_BackgroundCompletionReceipts.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008034707_BackgroundCompletionReceipts.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008061000_NativeLiveOccurrenceReceipts.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008061000_NativeLiveOccurrenceReceipts.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008063000_RetireLegacyExecution.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008063000_RetireLegacyExecution.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008115119_AutomationDestinations.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008115119_AutomationDestinations.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008134257_DurableCompletionInbox.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008134257_DurableCompletionInbox.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008161708_SharedWebhookEvents.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008161708_SharedWebhookEvents.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008171951_ArtifactAgentRunOwnership.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261008171951_ArtifactAgentRunOwnership.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261009160526_ExecutionBudgets.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261009160526_ExecutionBudgets.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261009175427_EntryCompletionTime.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261009175427_EntryCompletionTime.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261009180343_CoreEventAutomationFilters.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261009180343_CoreEventAutomationFilters.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261009190059_EventDispatchDefault.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261009190059_EventDispatchDefault.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010065035_ScopedInstanceConfiguration.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010065035_ScopedInstanceConfiguration.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071329_BrowserPrivacyAdministration.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071329_BrowserPrivacyAdministration.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071652_AutomationChildTriggers.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010071652_AutomationChildTriggers.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010072141_DefinitionResourceIdentityScope.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010072141_DefinitionResourceIdentityScope.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010082055_SessionReasoningPreference.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010082055_SessionReasoningPreference.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010143646_UntouchedSkillInheritance.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010143646_UntouchedSkillInheritance.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010172407_StructuredUserMessageParts.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261010172407_StructuredUserMessageParts.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261011182635_AccountScopedEmail.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261011182635_AccountScopedEmail.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261012082320_GmailOAuthAccounts.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261012082320_GmailOAuthAccounts.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261013035303_EmailMonitoring.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261013035303_EmailMonitoring.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261013040224_EmailMonitoringEventSource.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261013040224_EmailMonitoringEventSource.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261013171144_GoogleDriveAccountsAndOperations.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261013171144_GoogleDriveAccountsAndOperations.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261014003355_OpenSandboxOwnership.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261014003355_OpenSandboxOwnership.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261014112724_SandboxProfileVerificationObservations.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261014112724_SandboxProfileVerificationObservations.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261014123618_SandboxInstanceSetupVerification.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261014123618_SandboxInstanceSetupVerification.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261014163203_OciSandboxRegistryAuthority.Designer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261014163203_OciSandboxRegistryAuthority.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261015154322_CanonicalFilesystemBaseline.Designer.cs",
+      "state": "present",
+      "sha256": "964f5a2496537d61726339cac5b317e1d864f833fa97641a761bee01763e9ece"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/20261015154322_CanonicalFilesystemBaseline.cs",
+      "state": "present",
+      "sha256": "31e394bbe1864d29ab4925225fe1d6a416de13c557d69df14e6898dce0b3c333"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/Migrations/AgentCoreDbContextModelSnapshot.cs",
+      "state": "present",
+      "sha256": "95ea37b42b86fdf2b73a3bdf2a4c20cb71abc6404f490df19f18aac8f80a07e0"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/SandboxStateProjection.cs",
+      "state": "present",
+      "sha256": "77997adee705bc3d74efc6eb70e65b7bcecbde530a4501f79f4b3e0d160ffec1"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Persistence/SqliteMemoryStore.cs",
+      "state": "present",
+      "sha256": "e5afe8c11375d659bf02f283f462c439d6681a29abe31586401038c055251bd2"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Providers/Synthetic/AgentWorkspaceV2Script.cs",
+      "state": "present",
+      "sha256": "48b0bd1a75049b14b171bb286256bf2cbb2a0f9369bf91afcb79d4db9eeb21e1"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Providers/Synthetic/DriveTransferScript.cs",
+      "state": "present",
+      "sha256": "b01eb7ec864a6fbf0754ef1322ce88a03bdce6eb0bfbfd5e8c5205438e5ed885"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Providers/Synthetic/OfficeScript.cs",
+      "state": "present",
+      "sha256": "a12ad6e95ef2d3c2dac37a6b6c08715ab0f3caeaee08549147f973fdbb6d1eeb"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Providers/Synthetic/OpenSandboxScript.cs",
+      "state": "present",
+      "sha256": "716a7c4a4621d42d79b6a288b5a1cf8f7a8cffd23b417444cd622d738b5ce37f"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Providers/Synthetic/WorkspaceStructureScript.cs",
+      "state": "present",
+      "sha256": "c52ee498d48ca7f43d12df7c321e31c173d6ed2838b77596475c3edd28b9f201"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/CanonicalSandboxMountResolver.cs",
+      "state": "present",
+      "sha256": "1d8d8e8f679d7fc91594bb35a3cb19a0ebe8c2085170dd102fac5478dd8f76e3"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxOptions.cs",
+      "state": "present",
+      "sha256": "2b0cd1a8460282cb8d29d057a0865afd31690634d1aea88eec36cfe25965f18a"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxReadiness.cs",
+      "state": "present",
+      "sha256": "850bc65e7e4c794907e8745c23b921a6582d0b6a7252a9e58174d16ee4b1fac8"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.Files.cs",
+      "state": "present",
+      "sha256": "5eb6e8265166b99a93c2b540d532726330dbac67905b94968af08bd315165e35"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.Finalization.cs",
+      "state": "present",
+      "sha256": "636e5591d41aee527db5ffd679a8fc2d6ec72bb237d0f9644a51c5fb1e4ebcba"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.Initialization.cs",
+      "state": "present",
+      "sha256": "4b44d872920c1bf2c3b834b24a7095a5e7e2a5340741e063e65040c1022d96c4"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.MountProbe.cs",
+      "state": "present",
+      "sha256": "85858e9b249ab5e404808fda2169c4378c8f018b76ba698e61530660ed998791"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.Processes.cs",
+      "state": "present",
+      "sha256": "b2d5d04ca1b57c3934074c40224de2ef6279468a4df117d2c04188edd0b27d8d"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.Quiescence.cs",
+      "state": "present",
+      "sha256": "9b1fb347c28fdf3300d77ae22d6ccce60fc6fd1956b7ec9e0516e82a1bf39bf6"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.Recovery.cs",
+      "state": "present",
+      "sha256": "7bd1dab96d9a491fa9cb18dbfb922881899c3b72990666132379551ec77b63ac"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.Storage.cs",
+      "state": "present",
+      "sha256": "3585256126aef95d800093834b8afef2d3a58fa7c6d21f20a879fc189b1e15e7"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.Verification.cs",
+      "state": "present",
+      "sha256": "9edb10dcb756f715607aa73dbbfeeee02027605efeeb7431a5f6a28843a9b3f4"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/OpenSandboxService.cs",
+      "state": "present",
+      "sha256": "e5f94b399c93e0eed57ac204de3eede7c1408898c832abfd86f844a86a8a91fd"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/SandboxImageReadiness.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Sandbox/SandboxMountFiles.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/AgentWorkspacePhysicalPaths.cs",
+      "state": "present",
+      "sha256": "aefaec8110ea1bd02bd3b52e85364b24445704769d3db3cf2a685e14f2ecbbd5"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/CanonicalWorkspaceFilesystem.Native.cs",
+      "state": "present",
+      "sha256": "bf8870db191f0432f2ecf8d8cd009c0be4a8f6e8268d7d60b9d41caf20dad6b8"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/CanonicalWorkspaceFilesystem.Search.cs",
+      "state": "present",
+      "sha256": "94c6a406871ba1e9f45236f26734b4f73e8a15a509e2739fba94ce21bd79b00b"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/CanonicalWorkspaceFilesystem.Structure.cs",
+      "state": "present",
+      "sha256": "0bc844ab1507a89ba43532a1029832ae431d5783a08ee738992d32c82f15fea2"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/CanonicalWorkspaceFilesystem.cs",
+      "state": "present",
+      "sha256": "94179721a00e8f916ae9a83b4b2af6f7337e98a48fbca8bc2c8e962c258acabd"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.Structure.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.Transfer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/FileAgentInstanceWorkspaceStore.cs",
+      "state": "present",
+      "sha256": "8ec83799af56e7d7a16391dcca934a5ec9af598b3782e29f32c0fa58fa8647af"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/FileSessionWorkspace.Sandbox.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/FileSessionWorkspace.Structure.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/FileSessionWorkspace.Transfer.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/FileSessionWorkspace.Virtual.cs",
+      "state": "present",
+      "sha256": "32700fdfac1df7bbda15cf5aede602673467f6e065b2e445013227f744e39d93"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/FileSessionWorkspace.cs",
+      "state": "present",
+      "sha256": "3e43174fe56f1e11525447ff12424852cf8b84fec31f2c8daa3f835cff16f905"
+    },
+    {
+      "path": "src/AgentCore.Infrastructure/Workspaces/WorkspaceContentTypes.cs",
+      "state": "present",
+      "sha256": "0005a45b8bae1504780ef5f3dfc58331a07bc917bef668e513defd62c1596936"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/AdminApiTests.cs",
+      "state": "present",
+      "sha256": "dea3ea7a01c050f0f13a121a64b12accdf8efa36e70e3c38d5419b6fc8912c73"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/AgentWorkspaceJourneyTests.cs",
+      "state": "present",
+      "sha256": "663a048ad4c4376ebe3de9ba2334cd2ad5810c38aa8d5c52fac84a5b316d2f22"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/ArtifactApiTests.cs",
+      "state": "present",
+      "sha256": "6b78c9e2092ce65c63dbb58d51784f9bbdb7831986e96a953a2a5ff377b7ec60"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/ComposerReferenceTests.cs",
+      "state": "present",
+      "sha256": "1c3127e5903bc6baa7d8da27f04ceea0233d3e07f8bf402910b0fec276128b69"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/DriveJourneyTests.cs",
+      "state": "present",
+      "sha256": "a5e6909d5a8d252ed038413d21caf091e2aff96e991f7909cc9b6631ac2e4223"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/FilePreviewPolicyTests.cs",
+      "state": "present",
+      "sha256": "052942b42cde9d32d538c6e9141af2603360572a27e5bf84e25a9701f24df379"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/OfficeJourneyTests.cs",
+      "state": "present",
+      "sha256": "c8fe9834c0e8764b4aeb2f36dcc92fcf95999d4b940674afd0bda2ff67f54663"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/OfficePreviewRaceTests.cs",
+      "state": "present",
+      "sha256": "6f387ced3aaccde1e9285b0707fb78879485c1c31c0a813ba9798d0e17b96d67"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/PublicDownloadJourneyTests.cs",
+      "state": "present",
+      "sha256": "22b9285bddfb6cf3b3f80d2ee34b3ac6689cca0f1f637df1f657f128c7e6c26b"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/SandboxApiTests.cs",
+      "state": "present",
+      "sha256": "988cdda8320a1369631e6b1cb2cdc6411b7e0c5d8c5a184bdd13856f19d8aa8a"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/SessionWorkingCleanupTests.cs",
+      "state": "present",
+      "sha256": "ace012467ca1ec8783cf7732db20e881626c4218ad212c5347bc1d4984e03ab1"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/StateIsolationContextTests.cs",
+      "state": "present",
+      "sha256": "9b758ef9cd895dc9bcd4a9e4ccf349a55863ffb812189e40070c898c09ebca34"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/StateIsolationWorkspaceTests.cs",
+      "state": "present",
+      "sha256": "d434ebf6583b4ac399a4fb11754f01b95bac0960b0f860483b551eef478f83b9"
+    },
+    {
+      "path": "tests/AgentCore.Api.Tests/WorkspaceApiTests.cs",
+      "state": "present",
+      "sha256": "3164fe6b3482d7aabb40cca0a4f98dcd84d11d1f85d32833a049ab2d20c7d605"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/ArtifactMaterializeTests.cs",
+      "state": "present",
+      "sha256": "0aec5a24834c979bb53d7231a1bd45db5e5d7643ea8a36c4aa6547d115d522f9"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserSnapshotCompactionTests.cs",
+      "state": "present",
+      "sha256": "7f4b8f430d5eca30b65a158e2c47e99aabf92145a263c068c1091200f43cf496"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/BrowserToolTests.cs",
+      "state": "present",
+      "sha256": "ffe1ba29fe89c0b5eb0099b2c04547d43133bd6c6e292bbede0895582f4b410a"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/CapabilityProjectionTests.cs",
+      "state": "present",
+      "sha256": "5bba0c7132c584093ffa814261f7a6fa8c1b106e02f97467b6b51ff9f1d7e24a"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/ExecutionBudgetRuntimeTests.cs",
+      "state": "present",
+      "sha256": "a72cae19f4e5fa2ce200892440ec346abbc4c4b05b8783e50fcd309c2cf82948"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/OwnedSessions.cs",
+      "state": "present",
+      "sha256": "69b9d0a770a3ed47d77dc6651b4e8238b98f0c8fec3cd844084a21ad01dc721e"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/OwnedWorkspaces.cs",
+      "state": "present",
+      "sha256": "7f7863c30f9b70bac6c64e496233affa24f35e1cd948905d73065fb6e1b32b2e"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/PromptContextBuilderTests.cs",
+      "state": "present",
+      "sha256": "bd059f9d6e8440fb11926b00bf63002ae384f41eeb41895aa20ef6e8360e56ba"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/PublicDownloadRuntimeTests.cs",
+      "state": "present",
+      "sha256": "412a9b131dd857d36e7e1c8362a276e3c243963fc781d62e02a8c7fe8867d887"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/ResponseProgressRuntimeTests.cs",
+      "state": "present",
+      "sha256": "671912efcb0328f06313f150046ed8ae552c9307b393b38facb0bf426935d7d4"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/SandboxFailureSummaryTests.cs",
+      "state": "present",
+      "sha256": "542bbbc3e72a98211e1602e5ac87815c2d197be7abe3ccd7938272f9d32b631d"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/SessionToolExecutorTests.cs",
+      "state": "present",
+      "sha256": "f13c4298322428b0a46f6664defe2d0ac53b09f9cc40793afd06018268eb73ed"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/SessionWorkspaceLifecycleTests.cs",
+      "state": "present",
+      "sha256": "20196258314791ddcbaac75a7675f3aa074c968cc6c2bfd094cd2520d548be3e"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/SupportComplianceWorkflowTests.cs",
+      "state": "present",
+      "sha256": "97148433ecfa333e6cf9566ef52cd44a96e78681660b61fa4e3a9a38b641e24d"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/TerminalDisplayRepairTests.cs",
+      "state": "present",
+      "sha256": "6bfe1f5fad85a1721f076bd0ba31494dc53de17c3ed28aad1a8b59ad8e915a32"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/ToolWorkflowRuntimeTests.cs",
+      "state": "present",
+      "sha256": "497cd3eaae7ff6d941ae78f82ad73f38c5562dcd6a9418642e649da935685cd4"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/UserMessageProjectionTests.cs",
+      "state": "present",
+      "sha256": "ceb4d0112e217fafba2e0d5ddb6cb4dfbbf15726e13b3fd840bf728844ea6bc1"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/WorkspaceArtifactToolTests.cs",
+      "state": "present",
+      "sha256": "507af0fb2c9ee04a6d718943ca98182670fc25ba9739404808071c317c9a9a06"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/WorkspaceLogicalPathTests.cs",
+      "state": "present",
+      "sha256": "d291c5203545f1a0e4dd3039141a9f20396dc01b4c72e657c9b61b1c00c5d7b3"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/WorkspaceStructureToolContractTests.cs",
+      "state": "present",
+      "sha256": "5171c534a27e4b75f2ae888133ac96fbb025a62276feb30e6f1131348a27ea1b"
+    },
+    {
+      "path": "tests/AgentCore.Application.Tests/WorkspaceTreePlannerTests.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Domain.Tests/UserMessageContentTests.cs",
+      "state": "present",
+      "sha256": "4d052b9c3e4e098413d59509bc23bedeebad14122bc2f6ce04638e8a27009171"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/AgentRunAdmissionStoreTests.cs",
+      "state": "present",
+      "sha256": "6d260a22073656f56a1d3b3f68f787f6bef4b186a20d91c31bf04c1e456c7701"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/AgentWorkspaceDeletionTests.cs",
+      "state": "present",
+      "sha256": "a4686abcab1bb4cd122a2e8dd7baba498f8dad500eb085fd7ee88ab6685dc961"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/AgentWorkspaceStoreTests.cs",
+      "state": "present",
+      "sha256": "6534a1bb3b5de8d7e8b0c5d3a7624a04b276cec5723d1f0e3299ca75ed545bdf"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/ArtifactStoreContractTests.cs",
+      "state": "present",
+      "sha256": "5125b27108d431d58f4795325db75969bef76e8d2f33748017db326d402fb9bf"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/AutomationChildMigrationTests.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/CanonicalSandboxMountResolverTests.cs",
+      "state": "present",
+      "sha256": "7bb1fa1ae0c9a24d2e122bdef5420571aee6aba1ec36ca6ae53cea7b3fa3ae97"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/CanonicalStartupMigrationTests.cs",
+      "state": "present",
+      "sha256": "cb9dbb14427a869d5e7416e1b66c8f5a5a25ba5390adc0df5298a692028f341e"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/CanonicalWorkspaceFilesystemTests.cs",
+      "state": "present",
+      "sha256": "b14d08029d67a4cf2997e0c79f0d69edb8d78b80b3065e3836722163bcb21b3b"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/DefinitionLifecycleMigrationTests.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/DefinitionPublicationResourceWorkspaceTests.cs",
+      "state": "present",
+      "sha256": "0e8e54b6c3b45d4fb520d3ad00ed754ec02122f18acd2c07fb39021e430fa600"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/DrivePersistenceTests.cs",
+      "state": "present",
+      "sha256": "e3b1c7d07a998ed67461b55b10a68ecf25a55023f8f17538b80b4eac40d6fb8a"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/FileSessionWorkspaceTests.cs",
+      "state": "present",
+      "sha256": "bf61ea125a07c8317df411202c0d2a2e6bcea0eea4fa39de00cf3f1a558c34c8"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/GmailOAuthStorageTests.cs",
+      "state": "present",
+      "sha256": "6ec11790bb05c2effdccd6587d70c3dd2bc6440ed6f5147b1271aea4e34d7a7b"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/InstanceSkillsStartupTests.cs",
+      "state": "present",
+      "sha256": "fb3e31c6d801c7ef04ef820dc849f70ae91f57a01a099226cd3b2d151bd6364a"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/MemoryStoreContractTests.cs",
+      "state": "present",
+      "sha256": "1f3447f2ba2c91dea58e9be548e9c87d28de31363ee91c908ca4d36e3b4ead51"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/MigrationSessionSeed.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/OpenSandboxCleanupTests.cs",
+      "state": "present",
+      "sha256": "25b8259cd5966f85240040d9830eade8de605ba7816061ca6adb8e70a5c4ea42"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/OpenSandboxIntegrationTests.cs",
+      "state": "present",
+      "sha256": "a1412e8202f483972d9e20c82137b280bccdc5a9271a4378b253ababca6a6354"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/PinnedPersonaRevisionMigrationTests.cs",
+      "state": "present",
+      "sha256": "11b57cba422d65de01ac215e48e9aebef1a86ab5174f8720bd28205c3f240f8a"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/SandboxImageReadinessTests.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/SandboxMountFilesTests.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/SandboxStoreTests.cs",
+      "state": "present",
+      "sha256": "e5eb085798f7d28e62e0e8cfc22a02b9ea7bfae141b7e1a7ac50a02849f5c2fe"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/ScopedConfigurationMigrationTests.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/SharedWebhookEventMigrationTests.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/SystemCredentialTests.cs",
+      "state": "present",
+      "sha256": "969b91bcf0d24e9cb31f8c89d27635ce7ac1f033ce9f9ff7bb831b064e25dd76"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/UnifiedAutomationMigrationTests.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/UnifiedWorkspaceMigrationTests.cs",
+      "state": "deleted"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/UnifiedWorkspacePhysicalLayoutTests.cs",
+      "state": "present",
+      "sha256": "7b48e118efe211561d4dce21007f041dc00a3f0fa9c0c09e3ffe89238171027c"
+    },
+    {
+      "path": "tests/AgentCore.Infrastructure.Tests/WorkspaceStructureTests.cs",
+      "state": "present",
+      "sha256": "7601e0772f9c80b96a4afa0998f791b84154897344384909cb77c0853f0a9571"
+    },
+    {
+      "path": "tests/Shared/WorkspaceTestSessions.cs",
+      "state": "present",
+      "sha256": "60d4fdc92209930473cfe5f96d08c6e6e978e9aecd6731306adb042866f0ee77"
+    },
+    {
+      "path": "web/e2e/agent-workspace-v2.spec.ts",
+      "state": "present",
+      "sha256": "6ca46f5c7470264a0690a9589962a4911e31525c47159e4c121b50f296ddb86b"
+    },
+    {
+      "path": "web/e2e/agent-workspace.spec.ts",
+      "state": "present",
+      "sha256": "f8f66664f7564fe2a09e045a1320aacc357405f21574d942ed765ddccd0258d4"
+    },
+    {
+      "path": "web/e2e/support/canonical-host.ts",
+      "state": "present",
+      "sha256": "731ecfc9036be2db0572852e627451efeb599b06f0774553a0f9b1f8b16b3439"
+    },
+    {
+      "path": "web/e2e/unified-workspace-project.spec.ts",
+      "state": "present",
+      "sha256": "f89d1ed21011a202f87dc68440da18f93d8d3a21fe122331abcc222ff3ae6bb9"
+    },
+    {
+      "path": "web/e2e/workspace-filesystem.spec.ts",
+      "state": "present",
+      "sha256": "0a1ede311c5a56cb0d5eceace365ceb932a0eca7cacca68b2e207996cbacc9a9"
+    },
+    {
+      "path": "web/opensandbox-e2e/workbench.spec.ts",
+      "state": "present",
+      "sha256": "85cc6d7853094157f811ad328e12846241b71a936b7955238edaf5c5cb6f4dfa"
+    },
+    {
+      "path": "web/playwright.canonical.config.ts",
+      "state": "present",
+      "sha256": "c821b3b2a0bcf1fe9c5f58c84b8c72a6779e9192f5fd55cb96aee15bee351316"
+    },
+    {
+      "path": "web/src/features/admin/DefinitionSandboxPolicy.test.tsx",
+      "state": "present",
+      "sha256": "9357801eb2014a34883107c1a472ffc5216977bbc71116d766708594b9df81e0"
+    },
+    {
+      "path": "web/src/features/admin/InstanceSettingsSection.test.tsx",
+      "state": "present",
+      "sha256": "7c53895d1f55bd3fbdc91c53abf4efda4782518b5c324417059b754bb30e096c"
+    },
+    {
+      "path": "web/src/features/admin/InstanceSettingsSection.tsx",
+      "state": "present",
+      "sha256": "373e648783433b9953fdaf01cf2443b853ecc0a3dd5ec885a4492873d5dfebc0"
+    },
+    {
+      "path": "web/src/features/admin/InstanceWorkspaceSection.test.tsx",
+      "state": "present",
+      "sha256": "77540bd57d0cf3eb599fa936bba554b4b5bd28a03e6665eef5d73af3c68f7029"
+    },
+    {
+      "path": "web/src/features/admin/InstanceWorkspaceSection.tsx",
+      "state": "present",
+      "sha256": "09a2e73523d08b60d8756fce2040ce9fb44a82ef5af589564e082e3d71d56bbb"
+    },
+    {
+      "path": "web/src/features/admin/SandboxProfileDetails.tsx",
+      "state": "present",
+      "sha256": "0a1d5395f3c6ff85c4fb004e57e3e4b5b595a9347345a7edd67ed39c653282d3"
+    },
+    {
+      "path": "web/src/features/admin/SandboxProfilesSection.test.tsx",
+      "state": "present",
+      "sha256": "204a02a496f6b959c1f41a2e5bd3f4b1f43792dd2992cc04f96d6249674b9be0"
+    },
+    {
+      "path": "web/src/features/admin/SandboxProfilesSection.tsx",
+      "state": "present",
+      "sha256": "c9187b38686704192f3b4640280e2a12ea118e6c3ff959c782ba382fa8be863c"
+    },
+    {
+      "path": "web/src/features/admin/StateIsolationConfigurationSection.tsx",
+      "state": "present",
+      "sha256": "b82c0a3b3d4c8687b713c6cca64befd074dffe7725ef41df89c7333459500933"
+    },
+    {
+      "path": "web/src/features/chat/SessionSandboxDrawer.test.tsx",
+      "state": "present",
+      "sha256": "0f54c218bfc77c24192bfe5fea0e600e942c24ed34bb92661a7e9c16d048d3c6"
+    },
+    {
+      "path": "web/src/features/chat/SessionSandboxDrawer.tsx",
+      "state": "present",
+      "sha256": "b6613ebba8fcdd571636acd2a0af0447df528c14e44804181f8b4bddc093163b"
+    },
+    {
+      "path": "web/src/features/filePreview/FilePreview.tsx",
+      "state": "present",
+      "sha256": "40a3c9f083347df4e2503ae633a0f8c7542bdb3e3aa3ea2de42cb80ccf5cccfb"
+    },
+    {
+      "path": "web/src/features/filePreview/fileSource.test.ts",
+      "state": "present",
+      "sha256": "abb24e7b4513d66d5e67b1c83b4626d7c10c56a28502a071e7790b00de404513"
+    },
+    {
+      "path": "web/src/features/filePreview/fileSource.ts",
+      "state": "present",
+      "sha256": "933f574961f53d35e203ff4a09aff0542fb36360cf627fe909fc131113d88759"
+    },
+    {
+      "path": "web/src/features/filePreview/officeSource.test.ts",
+      "state": "present",
+      "sha256": "66fab89ede2d8b0ab380b13e9348f44db15b113b72394a4095875638feaf4fcf"
+    },
+    {
+      "path": "web/src/features/filePreview/officeSource.ts",
+      "state": "present",
+      "sha256": "a1d03786d9b2bc4e56b717a058959714313494ffd364971dc1d75f9d0a1a8a3e"
+    },
+    {
+      "path": "web/src/services/agentWorkspace.ts",
+      "state": "present",
+      "sha256": "8a854df53db331ab20d358918c555086a64e525e0cdd52312832c2368e5df88f"
+    },
+    {
+      "path": "web/src/services/messageParts.test.ts",
+      "state": "present",
+      "sha256": "3f435a5496ca5e61d3a90d7681acae4fd66a3b5227d694213481a7bf181d3d18"
+    },
+    {
+      "path": "web/src/services/messageParts.ts",
+      "state": "present",
+      "sha256": "6d911ffc8a2f5d513e87e2311a3eec18a801cb01facc7d39f89a0a344f4afae2"
+    },
+    {
+      "path": "web/src/services/sandboxes.ts",
+      "state": "present",
+      "sha256": "96a8d1f7e0ad363bdeecd97551196755c7a33b460c2dd3a1485c4ff1320d4d8c"
+    },
+    {
+      "path": "web/src/services/stateIsolation.ts",
+      "state": "present",
+      "sha256": "b1a87a108608e5abbd75a7f21d75530f70fe6862fec2b74384cb70a59de71ddb"
+    },
+    {
+      "path": "web/src/state/sessionStore.test.ts",
+      "state": "present",
+      "sha256": "fd77121dcec388195bcaf14534022fbf481c24c343b515e563ac80fe19d794f2"
+    }
+  ]
+}

@@ -11,13 +11,13 @@ public sealed record IsolationSectionPatch(string Section, IReadOnlyDictionary<s
 public sealed record IsolationDraft(IReadOnlyList<IsolationSectionPatch> Settings, bool ExperienceEnabled, bool AllowMaintenance);
 public sealed record IsolationChange(string Owner, string Field, JsonElement Before, JsonElement After, string Source);
 public sealed record IsolationConfigurationView(IsolationOwnerRevisions Revisions, IReadOnlyList<InstanceSettingsSection> Settings,
-    bool ExperienceEnabled, bool AllowMaintenance, string HostBrowserMode, bool BrowserEnabled);
+    bool ExperienceEnabled, bool AllowMaintenance, string HostBrowserMode, bool BrowserEnabled, string SandboxEnforcementState = "Enforced");
 public sealed record IsolationChangePlan(IsolationOwnerRevisions Expected, IsolationDraft Draft, string Fingerprint,
     IReadOnlyList<IsolationChange> Changes, IReadOnlyList<string> BlockingReasons, string Notice);
 
 public sealed class StateIsolationConfigurationService(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
     IExperienceStore experience, AgentInstanceSettingsService settings, IStateIsolationConfigurationStore store,
-    IBrowser browser, IIdGenerator ids, TimeProvider time)
+    IBrowser browser, IIdGenerator ids, TimeProvider time, SandboxPolicyEnforcement? sandboxPolicy = null)
 {
     public const string AuditSection = "stateIsolationConfiguration";
     public static IReadOnlyList<string> AuditFields => InstanceSettingsResolver.Fields("stateIsolationPolicy").Select(f => "stateIsolationPolicy." + f)
@@ -34,7 +34,7 @@ public sealed class StateIsolationConfigurationService(IAgentInstanceStore insta
         var owner = await instances.FindAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
         if (all.Any(s => s.InstanceRevision != owner.Revision)) throw AgentCoreErrors.Conflict("Instance changed while reading State & Isolation. Retry.");
         return new(new(owner.Revision, learned.Revision, maintenance.Revision), all.Where(s => Sections.Contains(s.Section)).ToArray(),
-            learned.Enabled, maintenance.AllowAgentConsolidation, browser.HostPolicy.ProfileMode.ToString(), browser.HostPolicy.Enabled);
+            learned.Enabled, maintenance.AllowAgentConsolidation, browser.HostPolicy.ProfileMode.ToString(), browser.HostPolicy.Enabled, sandboxPolicy is null ? "Enforced" : await sandboxPolicy.ObserveAsync(id, ct));
     }
 
     public async ValueTask<IsolationChangePlan> PresetAsync(Guid id, string preset, CancellationToken ct = default)
@@ -144,7 +144,7 @@ public sealed class StateIsolationConfigurationService(IAgentInstanceStore insta
             _ => ""
         };
         return new(view.Revisions, draft, fingerprint, changes, blocked,
-            "New Runs use saved configuration. Tightened access gates new effects immediately; busy or uncertain browser transitions stay pending. Request isolation requires New chat for each request. Existing profiles, home files, history and Artifacts are retained." + retention + adoption);
+            "New Runs use saved configuration. Tightened access gates new effects immediately; live sandbox generations are retired before tightened mount access is shown as enforced; uncertain browser or sandbox transitions stay pending. Request isolation requires New chat for each request. Existing profiles, home files, history and Artifacts are retained." + retention + adoption);
     }
 
     public async ValueTask<IsolationConfigurationView> ApplyAsync(Guid id, IsolationOwnerRevisions expected, IsolationDraft draft, string fingerprint, CancellationToken ct = default)
@@ -163,6 +163,7 @@ public sealed class StateIsolationConfigurationService(IAgentInstanceStore insta
                 set = plan.Changes.Where(c => c.Source == "instance").Select(c => c.Owner + "." + c.Field).ToArray(),
                 clear = plan.Changes.Where(c => c.Source == "definition").Select(c => c.Owner + "." + c.Field).ToArray() }));
         await store.ApplyAsync(new(id, expected, next, draft.ExperienceEnabled, draft.AllowMaintenance, audit), now, ct);
+        if (sandboxPolicy is not null) await sandboxPolicy.EnforceAsync(id, ct);
         return await ReadAsync(id, ct);
     }
 

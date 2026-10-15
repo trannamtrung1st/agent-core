@@ -2,27 +2,22 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record AgentWorkspacePage(IReadOnlyList<AgentWorkspaceItem> Items, long UsedBytes, int TotalItems, string? NextPath, string? TreeSha256 = null);
+public sealed record AgentWorkspacePage(IReadOnlyList<AgentWorkspaceItem> Items, long? UsedBytes, long? TotalItems,
+    string? NextPath, string UsageEnforcement = "sampled", bool Truncated = false);
 public sealed record AgentWorkspaceContent(AgentWorkspaceItem Item, byte[] Bytes);
 
-/// <summary>Dedicated managed-instance storage. Provenance never owns or cascades into these bytes.</summary>
+/// <summary>Path-addressed current filesystem observations. Ownership is checked by the use case and adapter.</summary>
 public interface IAgentInstanceWorkspaceStore
 {
-    ValueTask<AgentWorkspaceContent> InspectAsync(Guid instanceId, Guid itemId, int maxContentBytes, CancellationToken ct = default) =>
-        throw new NotSupportedException("Bounded home inspection is unavailable.");
-    ValueTask<WorkspaceTransfer> ExportAsync(Guid instanceId, string path, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException("Workspace tree export is unavailable.");
-    ValueTask ImportAsync(Guid instanceId, string destination, WorkspaceTransfer transfer, Guid? sourceSessionId = null,
-        long? expectedRevision = null, string? expectedSha256 = null, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException("Workspace tree import is unavailable.");
-
+    ValueTask<AgentWorkspaceContent> InspectAsync(Guid instanceId, string path, int maxContentBytes, CancellationToken ct = default);
+    ValueTask RequireDirectoryAsync(Guid instanceId, string path, CancellationToken ct = default);
     ValueTask<AgentWorkspacePage> ListAsync(Guid instanceId, string prefix, string? afterPath, int limit, CancellationToken cancellationToken = default);
-    ValueTask<AgentWorkspaceContent> ReadAsync(Guid instanceId, Guid? itemId, string? path, CancellationToken cancellationToken = default);
-    ValueTask<AgentWorkspaceItem> WriteFileAsync(Guid instanceId, string path, string contentType, ReadOnlyMemory<byte> bytes,
-        Guid? sourceSessionId, long? expectedRevision, string? expectedSha256, CancellationToken cancellationToken = default);
-    ValueTask DeleteAsync(Guid instanceId, Guid itemId, long expectedRevision, CancellationToken cancellationToken = default);
+    ValueTask<AgentWorkspacePage> FindFilesAsync(Guid instanceId, string query, string? afterPath, int limit, CancellationToken ct = default);
+    ValueTask<AgentWorkspaceContent> ReadAsync(Guid instanceId, string path, CancellationToken cancellationToken = default);
+    ValueTask<AgentWorkspaceItem> WriteFileAsync(Guid instanceId, string path, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default);
+    ValueTask DeleteAsync(Guid instanceId, string path, CancellationToken cancellationToken = default);
     ValueTask DeleteInstanceContentAsync(Guid instanceId, CancellationToken cancellationToken = default);
     ValueTask DeleteInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default);
     ValueTask<WorkspaceStructureResult> StructureAsync(Guid instanceId, IReadOnlyList<WorkspaceStructuralOperation> operations,
-        string expectedTreeSha256, CancellationToken cancellationToken = default) => throw new NotSupportedException("Home filesystem operations are unavailable.");
+        CancellationToken cancellationToken = default);
 }

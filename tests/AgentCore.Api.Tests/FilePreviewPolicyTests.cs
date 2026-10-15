@@ -69,9 +69,9 @@ public sealed class FilePreviewPolicyTests
         using var content = new ByteArrayContent(bytes); content.Headers.ContentType = new(OfficeLimits.SpreadsheetMime);
         var saved = await client.PutAsync($"/api/v2/sessions/{id}/workspace/content?path=%2Fhome%2Freport.xlsx", content); saved.EnsureSuccessStatusCode();
         var item = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!.Items.Single(i => i.LogicalPath.EndsWith("report.xlsx"));
-        var preview = await client.GetAsync($"/api/v2/agent-instances/{owner}/workspace/{item.ItemId}/office-preview"); Assert.Equal(HttpStatusCode.RequestEntityTooLarge, preview.StatusCode);
+        var preview = await client.GetAsync($"/api/v2/agent-instances/{owner}/workspace/office-preview?path={Uri.EscapeDataString(item.LogicalPath)}"); Assert.Equal(HttpStatusCode.RequestEntityTooLarge, preview.StatusCode);
         Assert.Contains("preview_too_large", await preview.Content.ReadAsStringAsync());
-        Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/agent-instances/{owner}/workspace/{item.ItemId}/content"));
+        Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/agent-instances/{owner}/workspace/content?path={Uri.EscapeDataString(item.LogicalPath)}"));
     }
     [Fact]
     public void Global_ceiling_clamps_all_formats_and_immutable_office_ceiling_cannot_be_raised()
@@ -99,16 +99,17 @@ public sealed class FilePreviewPolicyTests
         using var content = new ByteArrayContent(bytes); content.Headers.ContentType = new(OfficeLimits.SpreadsheetMime);
         (await client.PutAsync($"/api/v2/sessions/{id}/workspace/content?path=%2Fhome%2Fwindow.xlsx", content)).EnsureSuccessStatusCode();
         var item = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!.Items.Single(i => i.LogicalPath.EndsWith("window.xlsx"));
-        var path = $"/api/v2/agent-instances/{owner}/workspace/{item.ItemId}";
-        var response = await client.GetAsync(path + "/office-preview");
+        var path = $"/api/v2/agent-instances/{owner}/workspace";
+        var fileQuery = "path=" + Uri.EscapeDataString(item.LogicalPath);
+        var response = await client.GetAsync(path + "/office-preview?" + fileQuery);
         if (offset < 0) Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
         else {
             response.EnsureSuccessStatusCode(); var preview = (await response.Content.ReadFromJsonAsync<OfficePreviewResponse>())!;
             Assert.Equal("A1:BL2", preview.Range); Assert.Equal(2, preview.Rows!.Count); Assert.Equal("00123", preview.Rows[0][0].Value);
-            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await client.GetAsync(path + "/office-preview?range=A1:B3")).StatusCode);
-            var recovered = await client.GetFromJsonAsync<OfficePreviewResponse>(path + "/office-preview?range=A3:A3"); Assert.Equal("3", recovered!.Rows![0][0].Value);
+            Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await client.GetAsync(path + "/office-preview?" + fileQuery + "&range=A1:B3")).StatusCode);
+            var recovered = await client.GetFromJsonAsync<OfficePreviewResponse>(path + "/office-preview?" + fileQuery + "&range=A3:A3"); Assert.Equal("3", recovered!.Rows![0][0].Value);
         }
-        Assert.Equal(bytes, await client.GetByteArrayAsync(path + "/content"));
+        Assert.Equal(bytes, await client.GetByteArrayAsync(path + "/content?" + fileQuery));
     }
 
     [Fact]
@@ -140,13 +141,14 @@ public sealed class FilePreviewPolicyTests
         content.Headers.ContentType = new(OfficeLimits.SpreadsheetMime);
         (await client.PutAsync($"/api/v2/sessions/{id}/workspace/content?path=%2Fhome%2Flong.xlsx", content)).EnsureSuccessStatusCode();
         var item = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!.Items.Single(i => i.LogicalPath.EndsWith("long.xlsx"));
-        var path = $"/api/v2/agent-instances/{owner}/workspace/{item.ItemId}";
-        var response = await client.GetAsync(path + "/office-preview?range=A1:A17");
+        var path = $"/api/v2/agent-instances/{owner}/workspace";
+        var fileQuery = "path=" + Uri.EscapeDataString(item.LogicalPath);
+        var response = await client.GetAsync(path + "/office-preview?" + fileQuery + "&range=A1:A17");
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
         Assert.Contains("preview_structure_limit", await response.Content.ReadAsStringAsync());
-        var recovered = await client.GetFromJsonAsync<OfficePreviewResponse>(path + "/office-preview?range=A1:A1");
+        var recovered = await client.GetFromJsonAsync<OfficePreviewResponse>(path + "/office-preview?" + fileQuery + "&range=A1:A1");
         Assert.Equal(new string('x', 4000), recovered!.Rows![0][0].Value);
-        Assert.Equal(bytes, await client.GetByteArrayAsync(path + "/content"));
+        Assert.Equal(bytes, await client.GetByteArrayAsync(path + "/content?" + fileQuery));
     }
 
     [Theory]

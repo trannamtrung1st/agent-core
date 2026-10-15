@@ -35,13 +35,13 @@ public sealed class PublicDownloadJourneyTests
         host.Transport.Responses.Enqueue(new(200, null, "application/octet-stream", original));
         var downloaded = await Tool(host.Services, owner, session, ToolCatalog.WebDownload, new { url = sourceUrl, path = "/home/forms/application.docx" });
         Success(downloaded); Assert.Equal("completed", downloaded.GetProperty("status").GetString()); Assert.Equal(Hash(original), downloaded.GetProperty("sha256").GetString());
-        var stored = await host.Services.GetRequiredService<IAgentInstanceWorkspaceStore>().ReadAsync(owner, null, "/home/forms/application.docx");
+        var stored = await host.Services.GetRequiredService<IAgentInstanceWorkspaceStore>().ReadAsync(owner, "/home/forms/application.docx");
         Assert.Equal(original, stored.Bytes); Assert.DoesNotContain(Convert.ToBase64String(original), downloaded.ToString());
         var inspected = await Tool(host.Services, owner, session, ToolCatalog.OfficeDocumentInspect, new { path = "/home/forms/application.docx" }); Success(inspected);
         var selector = inspected.GetProperty("inspection").GetProperty("elements").EnumerateArray().Single(e => e.GetProperty("text").GetString() == "Name: ______").GetProperty("selector").GetString();
-        var edited = await Tool(host.Services, owner, session, ToolCatalog.OfficeDocumentEdit, new { path = "/home/forms/application.docx", expectedSha256 = Hash(original), operations = new[] { new { operation = "replace_paragraph", selector, text = "Name: Nguyen An" } } });
+        var edited = await Tool(host.Services, owner, session, ToolCatalog.OfficeDocumentEdit, new { path = "/home/forms/application.docx", operations = new[] { new { operation = "replace_paragraph", selector, text = "Name: Nguyen An" } } });
         Success(edited); Assert.Contains("run formatting is normalized", edited.GetProperty("warnings").ToString());
-        var filled = await host.Services.GetRequiredService<IAgentInstanceWorkspaceStore>().ReadAsync(owner, null, "/home/forms/application.docx");
+        var filled = await host.Services.GetRequiredService<IAgentInstanceWorkspaceStore>().ReadAsync(owner, "/home/forms/application.docx");
         Assert.Equal(ZipPart(original, "word/styles.xml"), ZipPart(filled.Bytes, "word/styles.xml"));
         var after = await Tool(host.Services, owner, session, ToolCatalog.OfficeDocumentInspect, new { path = "/home/forms/application.docx" });
         Assert.Contains("Name: Nguyen An", after.ToString()); Assert.Contains("Unchanged instructions", after.ToString()); Assert.Contains("2026-10-14", after.ToString());
@@ -66,7 +66,7 @@ public sealed class PublicDownloadJourneyTests
         {
             host.Transport.Responses.Enqueue(new(200, null, body.Mime, body.Bytes));
             var result = await Tool(host.Services, owner, session, ToolCatalog.WebDownload, new { url = "https://official.example/" + body.Name, path = "/home/" + body.Name }); Success(result);
-            Assert.Equal(Hash(body.Bytes), result.GetProperty("sha256").GetString()); Assert.Equal(body.Bytes, (await host.Services.GetRequiredService<IAgentInstanceWorkspaceStore>().ReadAsync(owner, null, "/home/" + body.Name)).Bytes);
+            Assert.Equal(Hash(body.Bytes), result.GetProperty("sha256").GetString()); Assert.Equal(body.Bytes, (await host.Services.GetRequiredService<IAgentInstanceWorkspaceStore>().ReadAsync(owner, "/home/" + body.Name)).Bytes);
         }
         var sheet = await Tool(host.Services, owner, session, ToolCatalog.OfficeSpreadsheetInspect, new { path = "/home/source.xlsx" }); Success(sheet); Assert.Contains("Original workbook", sheet.ToString());
         var legacy = await Tool(host.Services, owner, session, ToolCatalog.OfficeDocumentInspect, new { path = "/home/legacy.doc" }); Assert.Contains("invalid_office_package", legacy.ToString());
@@ -90,14 +90,14 @@ public sealed class PublicDownloadJourneyTests
         var result = await Tool(host.Services, owner, session, ToolCatalog.WebDownload, new { url = "https://official.example/file" }); Success(result);
         Assert.Equal("/home/downloads/report_file.bin", result.GetProperty("path").GetString()); Assert.Equal("https://cdn.example/file", result.GetProperty("finalUrl").GetString());
         Assert.Equal("application/octet-stream", result.GetProperty("contentType").GetString());
-        foreach (var args in new object[] { new { url = "https://official.example/file", path = "/home/downloads/report_file.bin" },
+        foreach (var args in new object[] {
             new { url = "https://official.example/file", path = "/home/../escape.bin" }, new { url = "https://official.example/file", path = "/agent/file.bin" },
             new { url = "https://official.example/file", path = "/home/downloads/report_file.bin", expectedSha256 = new string('0',64) },
             new { url = "https://official.example/file", path = "/home/a.bin", authorization = "secret" } })
             Assert.True((await Tool(host.Services, owner, session, ToolCatalog.WebDownload, args)).TryGetProperty("error", out _));
         Assert.Equal(2, host.Transport.Calls);
         host.Transport.Responses.Enqueue(new(200, null, "application/octet-stream", [128,0,255]));
-        var replaced = await Tool(host.Services, owner, session, ToolCatalog.WebDownload, new { url = "https://official.example/file", path = "/home/downloads/report_file.bin", expectedSha256 = result.GetProperty("sha256").GetString() }); Success(replaced);
+        var replaced = await Tool(host.Services, owner, session, ToolCatalog.WebDownload, new { url = "https://official.example/file", path = "/home/downloads/report_file.bin" }); Success(replaced);
         var old = (await host.Services.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 28))!;
         var tools = host.Services.GetRequiredService<SessionToolExecutor>();
         Assert.Equal(ToolPolicyDecision.Deny, tools.EvaluateExecutionPolicy(old, ToolCatalog.WebDownload, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: owner, OwnedSessionId: session)));
@@ -145,12 +145,12 @@ public sealed class PublicDownloadJourneyTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Tool(host.Services,owner,session,ToolCatalog.WebDownload,new { url="https://official.example/file.bin",path="/home/cancelled.bin" },cancellation.Token));
         Assert.Empty((await host.Services.GetRequiredService<IAgentInstanceWorkspaceStore>().ListAsync(owner,"/home",null,100)).Items);
         var root = host.Services.GetRequiredService<AgentCore.Infrastructure.Persistence.PersistenceOptions>().WorkspaceRoot;
-        var blobRoot = AgentCore.Infrastructure.Workspaces.AgentWorkspacePhysicalPaths.HomeBlobRoot(root,owner);
+        var blobRoot = AgentCore.Infrastructure.Workspaces.AgentWorkspacePhysicalPaths.HomeDirectory(root,owner);
         Assert.False(Directory.Exists(blobRoot) && Directory.EnumerateFiles(blobRoot).Any());
     }
 
     [Fact]
-    public async Task Download_survives_sqlite_host_restart_and_failed_metadata_commit_cleans_up_new_bytes()
+    public async Task Download_is_an_ordinary_file_and_survives_sqlite_host_restart()
     {
         var root = Path.Combine(Path.GetTempPath(),"download-sqlite-"+Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         Guid owner; Guid session; byte[] bytes = [0,255,128,13,10];
@@ -161,12 +161,9 @@ public sealed class PublicDownloadJourneyTests
                 using var client = Owner(host); (owner,session) = await Create(client);
                 host.Transport.Responses.Enqueue(new(200,null,null,bytes));
                 Success(await Tool(host.Services,owner,session,ToolCatalog.WebDownload,new {url="https://official.example/file.bin",path="/home/file.bin"}));
-                await using (var db = await host.Services.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>().CreateDbContextAsync())
-                    await db.Database.ExecuteSqlRawAsync("CREATE TRIGGER reject_download_insert BEFORE INSERT ON AgentWorkspaceItems BEGIN SELECT RAISE(ABORT, 'forced test failure'); END;");
-                host.Transport.Responses.Enqueue(new(200,null,null,bytes));
-                var failed = await Tool(host.Services,owner,session,ToolCatalog.WebDownload,new {url="https://official.example/file.bin",path="/home/failed.bin"});
-                Assert.True(failed.TryGetProperty("error",out _),failed.ToString());
-                Assert.Single(Directory.GetFiles(AgentWorkspacePhysicalPaths.HomeBlobRoot(Path.Combine(root,"workspaces"),owner)));
+                var physical = Path.Combine(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(root,"workspaces"),owner), "file.bin");
+                await File.WriteAllBytesAsync(physical, bytes);
+                Assert.Single(Directory.GetFiles(Path.GetDirectoryName(physical)!));
             }
             using (var reopened = new SqliteFactory(root))
             {
@@ -210,7 +207,7 @@ public sealed class PublicDownloadJourneyTests
                 {
                     services.RemoveAll<IAgentInstanceWorkspaceStore>();
                     services.AddSingleton<IAgentInstanceWorkspaceStore>(sp => new AgentCore.Infrastructure.Workspaces.FileAgentInstanceWorkspaceStore(
-                        sp.GetRequiredService<AgentCore.Infrastructure.Persistence.PersistenceOptions>().WorkspaceRoot, sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<IIdGenerator>(), maxFileBytes: maxFileBytes.Value));
+                        sp.GetRequiredService<AgentCore.Infrastructure.Persistence.PersistenceOptions>().WorkspaceRoot, sp.GetRequiredService<IAgentInstanceStore>(), sp.GetRequiredService<ISandboxStore>(), maxFileBytes: maxFileBytes.Value));
                 } });
         }
     }
@@ -224,9 +221,9 @@ public sealed class PublicDownloadJourneyTests
             {
                 services.RemoveAll<IPublicWebTransport>(); services.AddSingleton<IPublicWebTransport>(Transport);
                 services.RemoveAll<ISessionWorkspace>();
-                services.AddSingleton<ISessionWorkspace>(sp => new FileSessionWorkspace(Path.Combine(root,"workspaces"),Path.Combine(root,"templates"),sessions:sp.GetRequiredService<IMemoryStore>()));
+                services.AddSingleton<ISessionWorkspace>(sp => new FileSessionWorkspace(Path.Combine(root,"workspaces"),Path.Combine(root,"templates"),sessions:sp.GetRequiredService<IMemoryStore>(),instances:sp.GetRequiredService<IAgentInstanceStore>(),sandboxes:sp.GetRequiredService<ISandboxStore>()));
                 services.RemoveAll<IAgentInstanceWorkspaceStore>();
-                services.AddSingleton<IAgentInstanceWorkspaceStore>(sp => new FileAgentInstanceWorkspaceStore(Path.Combine(root,"workspaces"),sp.GetRequiredService<TimeProvider>(),sp.GetRequiredService<IIdGenerator>(),sp.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+                services.AddSingleton<IAgentInstanceWorkspaceStore>(sp => new FileAgentInstanceWorkspaceStore(Path.Combine(root,"workspaces"), sp.GetRequiredService<IAgentInstanceStore>(), sp.GetRequiredService<ISandboxStore>()));
             });
         }
     }

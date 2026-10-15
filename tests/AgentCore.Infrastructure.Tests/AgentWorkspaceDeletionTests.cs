@@ -33,7 +33,7 @@ public sealed class AgentWorkspaceDeletionTests
         fixture.Failure.FailCommit = false;
         await fixture.Deletion.DeleteInstanceAsync(fixture.Command);
         Assert.Null(await fixture.Instances.FindAsync(fixture.Owner));
-        Assert.Empty((await fixture.Home.ListAsync(fixture.Owner, "/home", null, 256)).Items);
+        await Assert.ThrowsAsync<AgentCoreException>(() => fixture.Home.ListAsync(fixture.Owner, "/home", null, 256).AsTask());
         Assert.False(Directory.Exists(fixture.OwnerDirectory));
     }
 
@@ -51,13 +51,13 @@ public sealed class AgentWorkspaceDeletionTests
         Assert.Equal(AdminEventOperationKind.InstanceDeleted,
             (await fixture.Events.TryGetByOperationIdAsync(fixture.Command.OperationId))!.Operation);
         Assert.True(Directory.Exists(fixture.OwnerDirectory));
-        if (sqlite) Assert.Empty((await fixture.Home.ListAsync(fixture.Owner, "/home", null, 256)).Items);
+        if (sqlite) await Assert.ThrowsAsync<AgentCoreException>(() => fixture.Home.ListAsync(fixture.Owner, "/home", null, 256).AsTask());
         fixture.Workspace.FailCleanup = false;
         // Reconstruct the durable deletion service/workspace adapter to exercise restart recovery.
         var deletion = sqlite ? fixture.NewSqliteDeletion() : fixture.Deletion;
         if (sweep) await deletion.RecoverWorkspaceCleanupAsync();
         else await deletion.DeleteInstanceAsync(fixture.Command);
-        Assert.Empty((await fixture.Home.ListAsync(fixture.Owner, "/home", null, 256)).Items);
+        await Assert.ThrowsAsync<AgentCoreException>(() => fixture.Home.ListAsync(fixture.Owner, "/home", null, 256).AsTask());
         Assert.False(Directory.Exists(fixture.OwnerDirectory));
         await deletion.RecoverWorkspaceCleanupAsync();
         await deletion.DeleteInstanceAsync(fixture.Command);
@@ -77,11 +77,10 @@ public sealed class AgentWorkspaceDeletionTests
     {
         await using var fixture = await Fixture.CreateAsync(sqlite);
         await fixture.Deletion.DeleteInstanceAsync(fixture.Command);
-        await fixture.Instances.InsertAsync(fixture.Instance);
-        var item = await fixture.Home.WriteFileAsync(fixture.Owner, "/home/new.bin", "application/octet-stream", BytesForNewOwner,
-            null, null, null);
+        await fixture.Instances.InsertAsync(fixture.Instance with { Lifecycle = AgentInstanceLifecycle.Active });
+        var item = await fixture.Home.WriteFileAsync(fixture.Owner, "/home/new.bin", BytesForNewOwner);
         await fixture.Deletion.RecoverWorkspaceCleanupAsync();
-        Assert.Equal(BytesForNewOwner, (await fixture.Home.ReadAsync(fixture.Owner, item.ItemId, null)).Bytes);
+        Assert.Equal(BytesForNewOwner, (await fixture.Home.ReadAsync(fixture.Owner, item.LogicalPath)).Bytes);
         await Assert.ThrowsAsync<AgentCoreException>(() => fixture.Deletion.DeleteInstanceAsync(fixture.Command).AsTask());
     }
 
@@ -156,17 +155,17 @@ public sealed class AgentWorkspaceDeletionTests
             var now = TimeProvider.System.GetUtcNow();
             f.Instance = new AgentInstance(f.Owner, "field-guide", 1, new AgentIdentity("Guide", "role", "desc", "tone"),
                 AgentInstanceLifecycle.Archived, now, now);
-            await f.Instances.InsertAsync(f.Instance);
-            f.Item = await f.Home.WriteFileAsync(f.Owner, "/home/original.bin", "application/octet-stream", Bytes,
-                Guid.NewGuid(), null, null);
+            await f.Instances.InsertAsync(f.Instance with { Lifecycle = AgentInstanceLifecycle.Active });
+            f.Item = await f.Home.WriteFileAsync(f.Owner, "/home/original.bin", Bytes);
+            f.Instance = await f.Instances.UpdateWithExpectedRevisionAsync(new(f.Owner, 1, Lifecycle: AgentInstanceLifecycle.Archived), now);
             f.Command = new(f.Owner, f.Instance.Revision, Guid.NewGuid(), now);
             return f;
         }
 
-        private FileAgentInstanceWorkspaceStore NewHome() => new(Path.Combine(Root, "home"), TimeProvider.System, Ids, Contexts);
+        private FileAgentInstanceWorkspaceStore NewHome() => new(Path.Combine(Root, "home"), Instances, new InMemorySandboxStore());
         internal IAdminLifecycleDeletion NewSqliteDeletion() => new SqliteAdminLifecycleDeletion(Contexts!, Ids, NewHome());
         internal ValueTask<AgentWorkspaceContent> ReadHomeAsync() =>
-            (Contexts is null ? Home : NewHome()).ReadAsync(Owner, Item.ItemId, null);
+            (Contexts is null ? Home : NewHome()).ReadAsync(Owner, Item.LogicalPath);
         public ValueTask DisposeAsync()
         {
             SqliteConnection.ClearAllPools(); Directory.Delete(Root, true); return ValueTask.CompletedTask;
@@ -186,9 +185,12 @@ public sealed class AgentWorkspaceDeletionTests
         public ValueTask DeleteInstanceContentAsync(Guid id, CancellationToken ct = default) =>
             FailCleanup ? ValueTask.FromException(new IOException("Injected byte cleanup failure.")) : inner.DeleteInstanceContentAsync(id, ct);
         public ValueTask<AgentWorkspacePage> ListAsync(Guid id, string prefix, string? after, int limit, CancellationToken ct = default) => inner.ListAsync(id, prefix, after, limit, ct);
-        public ValueTask<AgentWorkspaceContent> ReadAsync(Guid id, Guid? item, string? path, CancellationToken ct = default) => inner.ReadAsync(id, item, path, ct);
-        public ValueTask<AgentWorkspaceItem> WriteFileAsync(Guid id, string path, string type, ReadOnlyMemory<byte> bytes, Guid? session,
-            long? revision, string? hash, CancellationToken ct = default) => inner.WriteFileAsync(id, path, type, bytes, session, revision, hash, ct);
-        public ValueTask DeleteAsync(Guid id, Guid item, long revision, CancellationToken ct = default) => inner.DeleteAsync(id, item, revision, ct);
+        public ValueTask RequireDirectoryAsync(Guid id, string path, CancellationToken ct = default) => inner.RequireDirectoryAsync(id, path, ct);
+        public ValueTask<AgentWorkspacePage> FindFilesAsync(Guid id, string query, string? after, int limit, CancellationToken ct = default) => inner.FindFilesAsync(id, query, after, limit, ct);
+        public ValueTask<AgentWorkspaceContent> ReadAsync(Guid id, string path, CancellationToken ct = default) => inner.ReadAsync(id, path, ct);
+        public ValueTask<AgentWorkspaceContent> InspectAsync(Guid id, string path, int maxBytes, CancellationToken ct = default) => inner.InspectAsync(id, path, maxBytes, ct);
+        public ValueTask<AgentWorkspaceItem> WriteFileAsync(Guid id, string path, ReadOnlyMemory<byte> bytes, CancellationToken ct = default) => inner.WriteFileAsync(id, path, bytes, ct);
+        public ValueTask DeleteAsync(Guid id, string path, CancellationToken ct = default) => inner.DeleteAsync(id, path, ct);
+        public ValueTask<WorkspaceStructureResult> StructureAsync(Guid id, IReadOnlyList<WorkspaceStructuralOperation> operations, CancellationToken ct = default) => inner.StructureAsync(id, operations, ct);
     }
 }

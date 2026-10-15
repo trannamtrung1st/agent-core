@@ -37,7 +37,7 @@ public sealed partial class SessionToolExecutor
                 AgentCore.Application.Agents.StateIsolationAccess.RequireHome(await IsolationAsync(definition, sessionId, ct), path, true);
                 if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal)) return Error("forbidden", "Use /home or this Session's /working.");
                 var content = await driveService.ReadAsync(account, Required("fileId"), Required("expectedVersion"), ct); await driveService.RecheckAsync(account, true, ct);
-                await agentWorkspace.CommitBinaryAsync(sessionId, path, content.File.MimeType, content.Bytes, null, ct);
+                await agentWorkspace.CommitBinaryAsync(sessionId, path, content.File.MimeType, content.Bytes, ct);
                 return JsonSerializer.Serialize(new { path = AgentWorkspacePaths.Public(path), sha256 = Convert.ToHexStringLower(SHA256.HashData(content.Bytes)), byteSize = content.Bytes.Length, remoteFileId = content.File.Id }, OfficeJson);
             }
             if (!args.TryGetProperty("authEpoch", out var epoch) || !epoch.TryGetInt64(out var authEpoch) || authEpoch < 1) return Error("invalid", "authEpoch from drive.accounts is required for remote writes.");
@@ -56,7 +56,7 @@ public sealed partial class SessionToolExecutor
                 var path = AgentWorkspacePaths.Resolve(Required("path"), sessionId, admission.WorkspaceCwd ?? "/home", true);
                 if (!path.StartsWith("/home/", StringComparison.Ordinal) && !path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal)) return Error("forbidden", "Upload uses current owned /home or /working bytes.");
                 if (workspace is null) return Error("unavailable", "Workspace is unavailable."); await workspace.EnsureAsync(sessionId, definition, ct); var content = await ReadExecutionWorkspaceAsync(sessionId, definition, path, ct); bytes = content.Bytes;
-                var hash = Convert.ToHexStringLower(SHA256.HashData(bytes)); if (!string.Equals(hash, Required("expectedSha256"), StringComparison.OrdinalIgnoreCase)) return Error("drive_source_revision_conflict", "The source file changed. Read its current SHA before uploading; no remote effect was dispatched.");
+                var hash = Convert.ToHexStringLower(SHA256.HashData(bytes));
                 effect = new(Text("name") ?? Path.GetFileName(path), Text("folderId") ?? "root", hash, bytes.Length, content.ContentType);
             }
             else if (call.Name == "drive.create_folder") effect = new(Required("name"), Text("parentId") ?? "root");

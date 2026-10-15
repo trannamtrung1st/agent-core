@@ -47,11 +47,11 @@ public sealed class WorkspaceStructureToolContractTests
             new("legacy", ToolCatalog.WorkspaceDelete, arguments), json.RootElement, sessionId: Guid.NewGuid());
         Assert.Null(prepared.ErrorJson);
         Assert.Equal(arguments, prepared.Preparation!.Details!["Exact operations"]);
-        Assert.Contains("/workspace/working", prepared.Preparation.Details["Path scope"]);
+        Assert.Contains("/working", prepared.Preparation.Details["Path scope"]);
     }
     [Fact]
-    public void Home_uuid_names_do_not_select_an_owner_and_scratch_foreign_ids_remain_forbidden()
-    {var session=Guid.NewGuid();var name=Guid.NewGuid().ToString("N");Assert.True(RolePermissions.AllowsLogicalPath("/home/"+name+"/work",session));Assert.False(RolePermissions.AllowsLogicalPath("/workspace/working/"+name+"/work",session));}
+    public void Uuid_directory_names_do_not_select_an_owner_in_either_logical_root()
+    {var session=Guid.NewGuid();var name=Guid.NewGuid().ToString("N");Assert.True(RolePermissions.AllowsLogicalPath("/home/"+name+"/work",session));Assert.True(RolePermissions.AllowsLogicalPath("/working/"+name+"/work",session));}
     [Theory] [InlineData("*.txt")] [InlineData("[ab].txt")] [InlineData("../work")] [InlineData("dir/../../work")]
     public void Mutation_paths_reject_globs_and_traversal(string path)
     {Assert.Throws<AgentCoreException>(()=>WorkspaceStructuralPaths.Normalize(Guid.NewGuid(),[new("delete",Path:path)]));}

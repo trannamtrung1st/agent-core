@@ -1,6 +1,8 @@
 # Trusted local Workbench. Heavy dependencies are built once, never installed by a Session script.
 FROM node@sha256:b21fe589dfbe5cc39365d0544b9be3f1f33f55f3c86c87a76ff65a02f8f5848e AS node
 FROM python@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+ARG AGENTCORE_RUNTIME_UID=1654
+ARG AGENTCORE_RUNTIME_GID=1654
 ARG DEBIAN_SNAPSHOT=20251001T000000Z
 RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && printf 'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/%s/ trixie main\n' "$DEBIAN_SNAPSHOT" > /etc/apt/sources.list \
@@ -21,11 +23,11 @@ RUN pip install --no-cache-dir --require-hashes -r /usr/share/agent-core/require
     && groupadd --gid 1000 sandbox \
     && useradd --uid 1000 --gid 1000 --create-home sandbox \
     && mkdir -p /working /opt/opensandbox \
-    && chown sandbox:sandbox /working /opt/opensandbox
-# Core intentionally protects .git* paths. Disable pytest's optional cache
-# (which writes .pytest_cache/.gitignore), while retaining its actual tests/output.
-ENV MPLBACKEND=Agg PYTHONDONTWRITEBYTECODE=1 PYTEST_ADDOPTS="-p no:cacheprovider"
+    && chown $AGENTCORE_RUNTIME_UID:$AGENTCORE_RUNTIME_GID /working /opt/opensandbox
+ENV MPLBACKEND=Agg PYTHONDONTWRITEBYTECODE=1
 COPY --from=node /usr/local/LICENSE /usr/share/agent-core/node-LICENSE
 COPY inventory.py /usr/share/agent-core/inventory.py
-USER 1000:1000
+# Match Core's declared workspace owner; the provider drops all capabilities.
+# Images with a different default identity fail the mount readiness probe.
+USER $AGENTCORE_RUNTIME_UID:$AGENTCORE_RUNTIME_GID
 WORKDIR /working

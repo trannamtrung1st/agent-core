@@ -1,4 +1,4 @@
-import { DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { AdminErrorNotice } from './adminFailure';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -6,6 +6,7 @@ import {
   Alert,
   App,
   Button,
+  Breadcrumb,
   Empty,
   Flex,
   Spin,
@@ -40,6 +41,7 @@ export function InstanceWorkspaceSection({
 }) {
   const { token } = theme.useToken();
   const { modal } = App.useApp();
+  const [prefix, setPrefix] = useState('/home');
   const [page, setPage] = useState<AgentWorkspacePage | null>(null);
   const [error, setError] = useState<AdminFailureNotice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,11 +57,11 @@ export function InstanceWorkspaceSection({
       setLoading(true);
       setError(null);
       try {
-        const result = await listAgentWorkspace(instanceId, afterPath);
+        const result = await listAgentWorkspace(instanceId, afterPath, prefix);
         if (generation === order.current)
           setPage((previous) =>
             afterPath && previous
-              ? { ...result, items: [...previous.items, ...result.items] }
+              ? { ...result, items: [...new Map([...previous.items, ...result.items].map(item => [item.logicalPath, item])).values()] }
               : result,
           );
       } catch (reason) {
@@ -74,8 +76,9 @@ export function InstanceWorkspaceSection({
         if (generation === order.current) setLoading(false);
       }
     },
-    [instanceId],
+    [instanceId, prefix],
   );
+  useEffect(() => { setPrefix('/home'); }, [instanceId]);
   useEffect(() => {
     setPage(null);
     setBusy(null);
@@ -90,7 +93,7 @@ export function InstanceWorkspaceSection({
   async function remove(item: AgentWorkspaceItem) {
     if (busy || archived) return;
     const generation = ++order.current;
-    setBusy(item.itemId);
+    setBusy(item.logicalPath);
     setError(null);
     try {
       await deleteAgentWorkspaceItem(instanceId, item);
@@ -100,7 +103,7 @@ export function InstanceWorkspaceSection({
         setError(
           describeAdminError(
             reason,
-            'The item changed or could not be deleted. Reload before trying again.',
+            'The current path could not be deleted. Reload before trying again.',
           ),
         );
     } finally {
@@ -112,7 +115,7 @@ export function InstanceWorkspaceSection({
     const generation = order.current;
     const controller = new AbortController();
     download.current = controller;
-    setBusy(item.itemId);
+    setBusy(item.logicalPath);
     setError(null);
     try {
       await downloadAgentWorkspaceItem(instanceId, item, controller.signal);
@@ -133,7 +136,7 @@ export function InstanceWorkspaceSection({
     <AgentConfigurationPanel
       title="Agent Workspace"
       label="Agent Workspace"
-      description="/home · Durable across sessions."
+      description="/home · Live files shared by this Instance’s Sessions. Changes are visible immediately."
       bodyGap="section"
     >
       {archived ? (
@@ -147,7 +150,7 @@ export function InstanceWorkspaceSection({
       <Flex justify="space-between" align="center" wrap gap={token.paddingXS}>
         <Typography.Text type="secondary">
           {page
-            ? `${artifactSize(page.usedBytes)} of ${artifactSize(page.maxInstanceBytes)} · ${page.totalItems} ${page.totalItems === 1 ? 'item' : 'items'}`
+            ? `${page.usedBytes === null ? 'Usage unknown' : artifactSize(page.usedBytes)} · ${artifactSize(page.maxInstanceBytes)} sampled budget${page.totalItems === null ? '' : ` · ${page.totalItems} items`}`
             : ''}
         </Typography.Text>
         <Button disabled={loading || !!busy} onClick={() => void reload()}>
@@ -171,6 +174,10 @@ export function InstanceWorkspaceSection({
         />
       ) : null}
       {loading && !page ? <Spin aria-label="Loading workspace" /> : null}
+      <Breadcrumb aria-label="Workspace directory" items={prefix.split('/').filter(Boolean).map((part, index, parts) => ({
+        title: index === parts.length - 1 ? part : <Button type="text" size="small" style={{paddingInline: token.paddingXS}} onClick={() => setPrefix('/' + parts.slice(0, index + 1).join('/'))}>{part}</Button>,
+      }))} />
+      {page?.usageEnforcement === 'unknown' && <Alert type="warning" showIcon title="Storage usage could not be measured" description="Reload to recheck. Current paths remain available; storage limits use sampled observations." />}
       {page ? (
         <>
           <AdminCollectionToolbar
@@ -178,14 +185,15 @@ export function InstanceWorkspaceSection({
             onChange={setSearch}
             label="workspace items"
           />
+          <Typography.Text type="secondary">Search filters loaded paths in this folder. Reload to observe current files.</Typography.Text>
           <Table<AgentWorkspaceItem>
             className="admin-collection-table"
             size="small"
-            rowKey="itemId"
+            rowKey="logicalPath"
             loading={loading}
             dataSource={items}
             pagination={pagination}
-            scroll={{ x: 880 }}
+            scroll={{ x: 740 }}
             locale={{
               emptyText: (
                 <Empty
@@ -210,7 +218,7 @@ export function InstanceWorkspaceSection({
                 width: 100,
                 render: (value: string, item) => (
                   <span title={value}>
-                    {item.directory ? 'Folder' : artifactKind(value)}
+                    {item.directory ? 'Folder' : item.kind === 'symlink' ? 'Symbolic link' : item.kind === 'special' ? 'Special file' : artifactKind(value)}
                   </span>
                 ),
               },
@@ -232,36 +240,22 @@ export function InstanceWorkspaceSection({
                 ),
               },
               {
-                title: 'Source',
-                dataIndex: 'sourceSessionId',
-                ellipsis: true,
-                width: 140,
-                render: (value: string | null) =>
-                  value ? (
-                    <span title={`Conversation ${value}`}>
-                      Conversation {value}
-                    </span>
-                  ) : (
-                    '—'
-                  ),
-              },
-              {
                 title: 'Actions',
-                width: 208,
+                width: 152,
                 render: (_, item) => (
                   <Flex className="admin-table-actions" gap={token.paddingXS}>
-                    {!item.directory && (
+                    {item.directory && <Tooltip title="Open folder"><Button icon={<FolderOpenOutlined aria-hidden />} aria-label={`Open ${item.logicalPath}`} disabled={loading || !!busy} onClick={() => setPrefix(item.logicalPath)} /></Tooltip>}
+                    {!item.directory && item.kind !== 'special' && (
                       <FilePreviewButton
                         iconOnly
                         file={{
                           kind: 'home',
                           instanceId,
-                          itemId: item.itemId,
+                          path: item.logicalPath,
                           metadata: {
                             displayName: item.logicalPath.split('/').pop()!,
                             contentType: item.contentType,
                             byteSize: item.byteSize,
-                            sha256: item.sha256Hex,
                           },
                         }}
                       />
@@ -270,7 +264,7 @@ export function InstanceWorkspaceSection({
                       <Button
                         icon={<DownloadOutlined aria-hidden />}
                         aria-label={`Download ${item.logicalPath}`}
-                        disabled={!!busy || item.directory}
+                        disabled={!!busy || item.directory || item.kind === 'special'}
                         onClick={() => void save(item)}
                       />
                     </Tooltip>

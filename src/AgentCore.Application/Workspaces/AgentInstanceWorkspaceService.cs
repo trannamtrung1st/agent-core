@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
@@ -25,22 +24,28 @@ public sealed class AgentInstanceWorkspaceService(
             return await store.ListAsync(owner, AgentHomePath.Normalize(prefix, false), afterPath is null ? null : AgentHomePath.Normalize(afterPath), limit, ct);
         }, cancellationToken);
 
-    public ValueTask<AgentWorkspaceContent> InspectAsync(Guid owner, Guid itemId, int maxBytes = 0, CancellationToken cancellationToken = default) =>
-        lifecycle.WithInstanceAsync(owner, async ct => { await RequireAsync(owner, false, ct); return await store.InspectAsync(owner, itemId, maxBytes, ct); }, cancellationToken);
+    public ValueTask<AgentWorkspaceContent> InspectAsync(Guid owner, string path, int maxBytes = 0, CancellationToken cancellationToken = default) =>
+        lifecycle.WithInstanceAsync(owner, async ct => { await RequireAsync(owner, false, ct); return await store.InspectAsync(owner, AgentHomePath.Normalize(path), maxBytes, ct); }, cancellationToken);
 
-    public ValueTask<AgentWorkspaceContent> ReadAsync(Guid owner, Guid? itemId = null, string? path = null, CancellationToken cancellationToken = default) =>
+    public ValueTask<AgentWorkspacePage> FindFilesAsync(Guid owner, string query, string? cursor, int limit, CancellationToken cancellationToken = default) =>
         lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, false, ct);
-            return await store.ReadAsync(owner, itemId, path is null ? null : AgentHomePath.Normalize(path), ct);
+            return await store.FindFilesAsync(owner, query, cursor, limit, ct);
         }, cancellationToken);
 
-    public ValueTask DeleteAsync(Guid owner, Guid itemId, long expectedRevision, CancellationToken cancellationToken = default) =>
+    public ValueTask<AgentWorkspaceContent> ReadAsync(Guid owner, string path, CancellationToken cancellationToken = default) =>
+        lifecycle.WithInstanceAsync(owner, async ct =>
+        {
+            await RequireAsync(owner, false, ct);
+            return await store.ReadAsync(owner, AgentHomePath.Normalize(path), ct);
+        }, cancellationToken);
+
+    public ValueTask DeleteAsync(Guid owner, string path, CancellationToken cancellationToken = default) =>
         lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, true, ct);
-            if (expectedRevision < 1) throw AgentCoreErrors.Validation("expectedRevision is required.");
-            await store.DeleteAsync(owner, itemId, expectedRevision, ct);
+            await store.DeleteAsync(owner, AgentHomePath.Normalize(path), ct);
         }, cancellationToken);
 
     public async ValueTask<bool> SessionWritableAsync(Guid sessionId, CancellationToken ct)
@@ -61,137 +66,118 @@ public sealed class AgentInstanceWorkspaceService(
     }
 
     public async ValueTask<AgentWorkspaceItem> WriteAsync(Guid sessionId, string path, string contentType, ReadOnlyMemory<byte> bytes,
-        long? expectedRevision, string? expectedSha256, CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         var snapshot = await SessionAsync(sessionId, true, cancellationToken);
         var owner = snapshot.AgentInstanceId;
 
-        path = AgentHomePath.Normalize(path); ValidateExpected(expectedRevision, expectedSha256);
+        path = AgentHomePath.Normalize(path);
         return await lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
             await RequireSessionHomeAsync(sessionId, path, true, ct);
-            return await store.WriteFileAsync(owner, path, contentType, bytes, sessionId, expectedRevision, expectedSha256, ct);
+            return await store.WriteFileAsync(owner, path, bytes, ct);
         }, cancellationToken);
     }
 
     public async ValueTask CommitBinaryAsync(Guid sessionId, string path, string contentType, ReadOnlyMemory<byte> bytes,
-        string? expectedSha256, CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
         var snapshot = await SessionAsync(sessionId, true, cancellationToken);
         var owner = snapshot.AgentInstanceId;
-        path = WorkspaceLogicalPath.Resolve(path, sessionId); ValidateExpected(null, expectedSha256);
+        path = WorkspaceLogicalPath.Resolve(path, sessionId);
         if (!AgentHomePath.IsHome(path) && !path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal))
             throw AgentCoreErrors.Forbidden("Binary output requires /home or current Session /working.");
         await lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
             await RequireSessionHomeAsync(sessionId, path, true, ct);
-            if (AgentHomePath.IsHome(path)) await store.WriteFileAsync(owner, path, contentType, bytes, sessionId, null, expectedSha256, ct);
+            if (AgentHomePath.IsHome(path)) await store.WriteFileAsync(owner, path, bytes, ct);
             else
             {
                 await scratch.EnsureAsync(sessionId, snapshot.Definition, ct);
-                await scratch.ImportAsync(sessionId, path, new WorkspaceTransfer([new("", false, contentType, bytes.ToArray())]), null, expectedSha256, ct);
+                await scratch.WriteAsync(sessionId, path, bytes, ct);
             }
         }, cancellationToken);
     }
 
-    public async ValueTask<WorkspacePatchResult> PatchAsync(Guid sessionId, string path, string expectedSha256,
+    public async ValueTask<WorkspacePatchResult> PatchAsync(Guid sessionId, string path,
         IReadOnlyList<WorkspaceTextEdit> edits, CancellationToken cancellationToken = default)
     {
         var snapshot = await SessionAsync(sessionId, true, cancellationToken);
         var owner = snapshot.AgentInstanceId;
 
-        path = AgentHomePath.Normalize(path); ValidateExpected(null, expectedSha256);
+        path = AgentHomePath.Normalize(path);
         return await lifecycle.WithInstanceAsync<WorkspacePatchResult>(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
             await RequireSessionHomeAsync(sessionId, path, true, ct);
-            var original = await store.ReadAsync(owner, null, path, ct);
-            if (original.Item.Sha256Hex != expectedSha256) throw AgentCoreErrors.Conflict("Home file hash does not match expectedSha256.");
+            var original = await store.ReadAsync(owner, path, ct);
             var bytes = WorkspaceTextPatches.Apply(original.Bytes, edits);
-            var updated = await store.WriteFileAsync(owner, path, original.Item.ContentType, bytes, sessionId,
-                original.Item.Revision, expectedSha256, ct);
-            return new(path, expectedSha256, updated.Sha256Hex, updated.ByteSize, edits.Count);
+            var updated = await store.WriteFileAsync(owner, path, bytes, ct);
+            return new(path, updated.ByteSize, edits.Count);
         }, cancellationToken);
     }
 
-    public async ValueTask CopyAcrossScopesAsync(Guid sessionId, string source, string destination,
-        long? expectedRevision, string? expectedSha256, CancellationToken cancellationToken = default)
+    public async ValueTask CopyAcrossScopesAsync(Guid sessionId, string source, string destination, CancellationToken cancellationToken = default)
     {
         var snapshot = await SessionAsync(sessionId, true, cancellationToken);
         var owner = snapshot.AgentInstanceId;
 
         source = WorkspaceLogicalPath.Resolve(source, sessionId); destination = WorkspaceLogicalPath.Resolve(destination, sessionId);
         var sourceHome = AgentHomePath.IsHome(source); var destinationHome = AgentHomePath.IsHome(destination);
-        if (sourceHome == destinationHome || !(sourceHome ? destination : source).StartsWith("/workspace/working/", StringComparison.Ordinal))
+        if (sourceHome == destinationHome || !(sourceHome ? destination : source).StartsWith("/working/", StringComparison.Ordinal))
             throw AgentCoreErrors.Forbidden("Cross-scope copy requires /home and current Session /working children.");
-        ValidateExpected(expectedRevision, expectedSha256);
         await lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
             await scratch.EnsureAsync(sessionId, snapshot.Definition, ct);
             await RequireSessionHomeAsync(sessionId, source, false, ct);
             await RequireSessionHomeAsync(sessionId, destination, true, ct);
-            var transfer = sourceHome ? await store.ExportAsync(owner, source, ct) : await scratch.ExportAsync(sessionId, source, ct);
-            if (destinationHome) await store.ImportAsync(owner, destination, transfer, sessionId, expectedRevision, expectedSha256, ct);
-            else await scratch.ImportAsync(sessionId, destination, transfer, expectedRevision, expectedSha256, ct);
+            await scratch.CopyAcrossScopesAsync(sessionId, source, destination, ct);
         }, cancellationToken);
     }
 
     // Detached executions may only retrieve when Core supplies a proven managed owner. Scratch boundary actions require a session.
-    public async ValueTask<WorkspaceStructureResult> StructureAsync(Guid sessionId, IReadOnlyList<WorkspaceStructuralOperation> operations,
-        string? expectedTreeSha256, CancellationToken cancellationToken = default)
+    public async ValueTask<WorkspaceStructureResult> StructureAsync(Guid sessionId, IReadOnlyList<WorkspaceStructuralOperation> operations, CancellationToken cancellationToken = default)
     {
         var snapshot = await SessionAsync(sessionId, true, cancellationToken);
         var owner = snapshot.AgentInstanceId;
         operations = WorkspaceStructuralPaths.Normalize(sessionId, operations);
-        if (expectedTreeSha256 is null || expectedTreeSha256.Length != 64
-            || !expectedTreeSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
-            throw AgentCoreErrors.Validation("List /home and supply its current expectedTreeSha256 before restructuring durable work.");
         return await lifecycle.WithInstanceAsync(owner, async ct =>
         {
             await RequireAsync(owner, true, ct); await SessionAsync(sessionId, true, ct);
             await RequireSessionHomeAsync(sessionId, "/home", true, ct);
-            return await store.StructureAsync(owner, operations, expectedTreeSha256, ct);
+            return await store.StructureAsync(owner, operations, ct);
         }, cancellationToken);
     }
 
-    public async ValueTask<IReadOnlyList<WorkspaceNode>> ListNodesAsync(Guid owner, string prefix, CancellationToken ct) =>
-        (await ListProjectionAsync(owner, prefix, ct)).Nodes;
-
-    // Keep metadata and its whole-tree token in one lifecycle-protected projection.
-    // Read every bounded metadata page so a large first folder cannot hide later root entries.
-    public ValueTask<(IReadOnlyList<WorkspaceNode> Nodes, string? TreeSha256)> ListProjectionAsync(Guid owner, string prefix, CancellationToken cancellationToken) =>
-        lifecycle.WithInstanceAsync<(IReadOnlyList<WorkspaceNode>, string?)>(owner, async ct =>
+    public ValueTask<IReadOnlyList<WorkspaceNode>> ListNodesAsync(Guid owner, string prefix, CancellationToken cancellationToken) =>
+        lifecycle.WithInstanceAsync<IReadOnlyList<WorkspaceNode>>(owner, async ct =>
         {
             await RequireAsync(owner, false, ct);
-            prefix = AgentHomePath.Normalize(prefix, false);
-            var page = await store.ListAsync(owner, prefix, null, AgentWorkspaceLimits.MaxPageItems, ct);
-            var token = page.TreeSha256;
-            var nodes = new Dictionary<string, WorkspaceNode>(StringComparer.Ordinal);
-            var scanned = 0;
-            while (true)
-            {
-                scanned += page.Items.Count;
-                if (scanned > WorkspaceStructureLimits.MaxEntries) throw AgentCoreErrors.WorkspaceQuotaExceeded();
-                foreach (var item in page.Items)
-                {
-                    if (item.LogicalPath == prefix)
-                    {
-                        if (!item.Directory) nodes[prefix] = new(prefix, false, item.ByteSize, false);
-                        continue;
-                    }
-                    var rest = item.LogicalPath[(prefix.Length + 1)..];
-                    var slash = rest.IndexOf('/');
-                    var path = slash < 0 ? item.LogicalPath : prefix + "/" + rest[..slash];
-                    nodes[path] = new(path, slash >= 0 || item.Directory, slash >= 0 ? 0 : item.ByteSize, false);
-                }
-                if (page.NextPath is null) return (nodes.Values.OrderBy(n => n.LogicalPath, StringComparer.Ordinal).ToArray(), token);
-                page = await store.ListAsync(owner, prefix, page.NextPath, AgentWorkspaceLimits.MaxPageItems, ct);
-                if (page.TreeSha256 != token) throw AgentCoreErrors.Conflict("Home changed during listing. Reload its current tree.");
-            }
+            var page = await store.ListAsync(owner, AgentHomePath.Normalize(prefix, false), null, AgentWorkspaceLimits.MaxPageItems, ct);
+            return page.Items.Select(item => new WorkspaceNode(item.LogicalPath, item.Directory, item.ByteSize, false,
+                item.Kind, item.UpdatedAt, item.LinkTarget, item.Mode)).ToArray();
         }, cancellationToken);
+
+    public ValueTask<WorkspaceNodePage> ListNodePageAsync(Guid owner, string prefix, string? cursor, int limit, CancellationToken cancellationToken) =>
+        lifecycle.WithInstanceAsync<WorkspaceNodePage>(owner, async ct =>
+        {
+            await RequireAsync(owner, false, ct);
+            if (limit is < 1 or > AgentWorkspaceLimits.MaxPageItems) throw AgentCoreErrors.Validation("Invalid home page size.");
+            prefix = AgentHomePath.Normalize(prefix, false);
+            if (cursor is not null && !cursor.StartsWith(prefix + "/", StringComparison.Ordinal)) throw AgentCoreErrors.Validation("Cursor must belong to the listed directory.");
+            var page = await store.ListAsync(owner, prefix, cursor, limit, ct);
+            return new(page.Items.Select(item => new WorkspaceNode(item.LogicalPath, item.Directory, item.ByteSize, false,
+                item.Kind, item.UpdatedAt, item.LinkTarget, item.Mode)).ToArray(), page.NextPath, page.Truncated);
+        }, cancellationToken);
+
+    public async ValueTask RequireSessionDirectoryAsync(Guid sessionId, string path, CancellationToken ct = default)
+    {
+        await RequireSessionHomeAsync(sessionId, path, false, ct);
+        await store.RequireDirectoryAsync(await SessionOwnerAsync(sessionId, ct), path, ct);
+    }
 
     public async ValueTask RequireSessionHomeAsync(Guid sessionId, string path, bool write, CancellationToken ct = default)
     {
@@ -220,9 +206,4 @@ public sealed class AgentInstanceWorkspaceService(
         return snapshot;
     }
 
-    private static void ValidateExpected(long? revision, string? sha)
-    {
-        if (revision is < 1 || sha is not null && (sha.Length != 64 || !sha.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f')))
-            throw AgentCoreErrors.Validation("Expected revision/hash is invalid.");
-    }
 }

@@ -86,7 +86,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     await drawer.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('button', { name: 'Stop', exact: true }).click();
     await page.getByRole('button', { name: 'Session sandbox', exact: true }).click();
-    await expect(drawer).toContainText('NeedsResync');
+    await expect(drawer).toContainText('Terminated');
     await drawer.getByRole('button', { name: 'Reset sandbox', exact: true }).click();
     await page.getByRole('button', { name: 'Reset sandbox', exact: true }).last().click();
     await expect(drawer).toContainText('Terminated');
@@ -131,7 +131,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     expect((await savedProfile).ok()).toBe(true);
     await expect(page.getByRole('button', { name: 'Save profile', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Verify profile', exact: true }).click();
-    await expect(page.getByText(/Non-root Python readiness, initialization and scratch validation passed/).first()).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText(/Disposable direct mounts passed/).first()).toBeVisible({ timeout: 60000 });
     const instance = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 30 } });
     expect(instance.ok(), await instance.text()).toBe(true);
     const instanceId=(await instance.json()).instanceId;
@@ -149,7 +149,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     await expect(page.getByRole('button',{name:'Verify Instance setup',exact:true})).toBeEnabled();
     await page.getByRole('button',{name:'Verify Instance setup',exact:true}).click();
     const effectiveSandbox=page.getByRole('region',{name:'Effective sandbox configuration'});
-    await expect(effectiveSandbox.getByRole('alert')).toContainText('initialization and scratch validation passed',{timeout:60000});
+    await expect(effectiveSandbox.getByRole('alert')).toContainText('Profile and Instance initialization passed',{timeout:60000});
     await effectiveSandbox.getByRole('button',{name:'Setup verification standard output',exact:true}).click();
     await expect(effectiveSandbox).toContainText('Hello, world!');
     await effectiveSandbox.getByRole('button',{name:'Setup verification standard error',exact:true}).click();
@@ -160,7 +160,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
       await page.screenshot({path:info.outputPath(`instance-sandbox-${width}.png`),fullPage:true});
     }
     await page.reload();await expect(page.getByRole('textbox',{name:'Instance initialization script',exact:true})).toHaveValue(setupScript);
-    await expect(effectiveSandbox.getByRole('alert')).toContainText('initialization and scratch validation passed');
+    await expect(effectiveSandbox.getByRole('alert')).toContainText('Profile and Instance initialization passed');
     const session = await page.request.post('/api/v2/sessions', { headers, data: { agentInstanceId: instanceId, mode: 'text' } });
     expect(session.ok()).toBe(true); sessionId = (await session.json()).sessionId;
     await page.goto(`/c/${sessionId}`); await expect(page.getByTestId('connection')).toHaveText('Ready');
@@ -179,7 +179,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     fs.writeFileSync(stateFile, JSON.stringify({ sessionId, generation: lease.generation, artifacts }));
     await page.getByRole('button', { name: 'Session sandbox', exact: true }).click();
     const drawer = page.getByRole('dialog', { name: 'Session sandbox', exact: true });
-    await expect(drawer).toContainText('committed');
+    await expect(drawer).toContainText('writes may have occurred');
     await expect(drawer.getByText('Succeeded',{exact:true})).toBeVisible();
     await drawer.getByRole('button',{name:'Initialization standard output',exact:true}).click();
     await expect(drawer).toContainText('Hello, world!');
@@ -204,23 +204,22 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     const actual = await environment(page, sessionId, headers);
     const executionUrl = `**/api/v2/sessions/${sessionId}/sandbox/executions/*`;
     for (const scenario of [
-      { state:'Failed', status:'Indeterminate', sync:'notCommitted', title:'Environment setup failed', message:'Environment initialization failed. Correct and verify the profile script, then reset before retrying.' },
-      { state:'Terminated', status:'Completed', sync:'committed', title:'Environment ended', message:null },
-      { state:'NeedsResync', status:'Indeterminate', sync:'unknown', title:'Inspect before retrying', message:null },
-      { state:'NeedsResync', status:'Indeterminate', sync:'committed', title:'Inspect before retrying', message:null },
+      { state:'Failed', status:'Indeterminate', effects:false, title:'Inspect before retrying', message:'Environment initialization failed. Correct and verify the profile script, then reset before retrying.' },
+      { state:'Terminated', status:'Completed', effects:true, title:'Environment ended', message:null },
+      { state:'NeedsReconciliation', status:'Indeterminate', effects:true, title:'Inspect before retrying', message:null },
+      { state:'NeedsReconciliation', status:'Indeterminate', effects:true, title:'Inspect before retrying', message:null },
     ]) {
       await page.route(`**/api/v2/sessions/${sessionId}/sandbox`, route => route.fulfill({ json:{ ...actual, state:scenario.state, message:scenario.message, activeExecutionId:null } }));
-      await page.route(executionUrl, route => route.fulfill({ json:{ executionId:actual.lastExecutionId,status:scenario.status,exitCode:null,stdout:'Retained output',stderr:'',truncated:false,durationMs:1000,workspaceSyncStatus:scenario.sync,diagnosticId:null,background:false,commandText:'python analysis.py' } }));
+      await page.route(executionUrl, route => route.fulfill({ json:{ executionId:actual.lastExecutionId,status:scenario.status,exitCode:null,stdout:'Retained output',stderr:'',truncated:false,durationMs:1000,filesystemEffectsMayHaveOccurred:scenario.effects,diagnosticId:null,background:false,commandText:'python analysis.py' } }));
       for (const width of [1440,390]) {
         await page.setViewportSize({ width,height:900 });
         await page.getByRole('button', { name:'Session sandbox',exact:true }).click();
         await expect(drawer.getByText(scenario.title,{exact:true})).toBeVisible();
-        if (scenario.sync==='unknown') await expect(drawer).toContainText('Files may already have been committed');
-        if (scenario.status==='Indeterminate' && scenario.sync==='committed') await expect(drawer).toContainText('Canonical files were committed');
+        if (scenario.status==='Indeterminate') await expect(drawer).toContainText('The command outcome is uncertain');
         await expect.poll(async () => drawer.evaluate(e => Math.round(e.getBoundingClientRect().width))).toBe(width < 768 ? width : 640);
         await expect.poll(async () => drawer.evaluate(e => Math.round(e.getBoundingClientRect().x))).toBe(width < 768 ? 0 : width - 640);
         await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
-        await page.screenshot({path:info.outputPath(`recovery-${scenario.state}-${scenario.sync}-${width}.png`),fullPage:true});
+        await page.screenshot({path:info.outputPath(`recovery-${scenario.state}-${scenario.effects}-${width}.png`),fullPage:true});
         await page.keyboard.press('Escape'); await expect(drawer).toBeHidden();
         await expect(page.getByRole('button', { name:'Session sandbox',exact:true })).toBeFocused();
       }

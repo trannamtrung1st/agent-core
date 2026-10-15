@@ -25,8 +25,9 @@ public sealed class SupportComplianceWorkflowTests
         var store = new InMemoryMemoryStore();
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, attachments, sessions: store);
-        var manager = CreateManager(store, attachments, workspace, artifacts);
+        var owners = new InMemoryAgentInstanceStore();
+        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, attachments, sessions: store, instances: owners, sandboxes: new InMemorySandboxStore());
+        var manager = CreateManager(store, attachments, workspace, artifacts, owners);
         var catalog = new Dictionary<string, Guid>();
 
         foreach (var (agentId, prompt) in new[]
@@ -100,7 +101,7 @@ public sealed class SupportComplianceWorkflowTests
             Assert.False(Directory.Exists(physical));
             await Assert.ThrowsAsync<AgentCoreException>(() => manager.GetAsync(sessionId));
             await Assert.ThrowsAsync<AgentCoreException>(
-                () => workspace.WriteAsync(sessionId, "/workspace/working/late.txt", "no"u8.ToArray()).AsTask());
+                () => workspace.WriteAsync(sessionId, "/working/late.txt", "no"u8.ToArray()).AsTask());
             await Assert.ThrowsAsync<AgentCoreException>(
                 () => artifacts.CreateAsync(sessionId, "late.md", "text/markdown", "x"u8.ToArray(), null, null).AsTask());
         }
@@ -113,9 +114,10 @@ public sealed class SupportComplianceWorkflowTests
         var store = new InMemoryMemoryStore();
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
-        var inner = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: store);
+        var owners = new InMemoryAgentInstanceStore();
+        var inner = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, sessions: store, instances: owners, sandboxes: new InMemorySandboxStore());
         var workspace = new OnceFailingWorkspace(inner);
-        var manager = CreateManager(store, attachments, workspace, artifacts);
+        var manager = CreateManager(store, attachments, workspace, artifacts, owners);
         var created = await manager.CreateOwnedAsync("customer-support", 1, SessionMode.Text);
         await manager.WriteWorkspaceAsync(created.SessionId, "/working/note.txt", "keep"u8.ToArray());
         var physical = AgentWorkspacePhysicalPaths.SessionRoot(dir.WorkspaceRoot, created.AgentInstanceId, created.SessionId);
@@ -125,14 +127,14 @@ public sealed class SupportComplianceWorkflowTests
         await manager.DurablyDeleteAsync(created.SessionId);
         Assert.False(Directory.Exists(physical));
         await Assert.ThrowsAsync<AgentCoreException>(
-            () => inner.WriteAsync(created.SessionId, "/workspace/working/late.txt", "no"u8.ToArray()).AsTask());
+            () => inner.WriteAsync(created.SessionId, "/working/late.txt", "no"u8.ToArray()).AsTask());
     }
 
     private static SessionManager CreateManager(
         IMemoryStore store,
         IAttachmentStore attachments,
         ISessionWorkspace workspace,
-        IArtifactStore artifacts)
+        IArtifactStore artifacts, IAgentInstanceStore owners)
     {
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 32).Select(index => Guid.Parse($"019944af-00b1-7000-8000-{index:D12}")),
@@ -146,7 +148,7 @@ public sealed class SupportComplianceWorkflowTests
             attachments,
             knowledge: RoleKnowledgeService.FromApprovedCatalog(new FileApprovedKnowledgeCatalog(FindAgents()), TimeProvider.System),
             workspace,
-            artifacts);
+            artifacts, instanceStore: owners);
     }
 
     private static SessionRuntime CreateRuntime(
@@ -221,14 +223,16 @@ public sealed class SupportComplianceWorkflowTests
             CancellationToken cancellationToken = default) =>
             inner.WriteAsync(sessionId, logicalPath, bytes, cancellationToken);
 
+        public ValueTask CopyAcrossScopesAsync(Guid sessionId, string source, string destination, CancellationToken cancellationToken = default) =>
+            inner.CopyAcrossScopesAsync(sessionId, source, destination, cancellationToken);
+
         public ValueTask<WorkspacePatchResult> PatchTextAsync(
             Guid sessionId,
             AgentDefinition definition,
             string logicalPath,
-            string expectedSha256Hex,
             IReadOnlyList<WorkspaceTextEdit> edits,
             CancellationToken cancellationToken = default) =>
-            inner.PatchTextAsync(sessionId, definition, logicalPath, expectedSha256Hex, edits, cancellationToken);
+            inner.PatchTextAsync(sessionId, definition, logicalPath, edits, cancellationToken);
 
 
 

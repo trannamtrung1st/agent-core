@@ -258,7 +258,8 @@ public sealed record KnowledgeDocumentResponse(
     string? SourceVersion,
     string RetrievedAt);
 
-public sealed record WorkspaceNodeResponse(string LogicalPath, bool Directory, long ByteSize, bool Writable);
+public sealed record WorkspaceNodeResponse(string LogicalPath, bool Directory, long ByteSize, bool Writable, string Kind, DateTimeOffset? ModifiedAt, string? LinkTarget, uint? Mode);
+public sealed record WorkspaceNodePageResponse(IReadOnlyList<WorkspaceNodeResponse> Entries, string? NextPath, bool Truncated);
 
 public sealed record SessionAutomationResponse(
     string AutomationId,

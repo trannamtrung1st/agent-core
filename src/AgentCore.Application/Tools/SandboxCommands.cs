@@ -12,9 +12,9 @@ public static class SandboxCommands
             || request.Command is { } command && (string.IsNullOrWhiteSpace(command) || !ValidText(command) || Encoding.UTF8.GetByteCount(command) > 16384)
             || request.Argv is { } argv && (argv.Count is < 1 or > 128 || argv.Any(a => a is null || !ValidText(a)) || string.IsNullOrWhiteSpace(argv[0]) || argv.Sum(a => Encoding.UTF8.GetByteCount(a)) > 16384)
             || request.TimeoutSeconds is < 1 or > 180
-            || request.Cwd.Length > 512 || !(request.Cwd == "/working" || request.Cwd.StartsWith("/working/", StringComparison.Ordinal))
+            || request.Cwd.Length > 4095 || !(request.Cwd == "/working" || request.Cwd.StartsWith("/working/", StringComparison.Ordinal) || request.Cwd == "/home" || request.Cwd.StartsWith("/home/", StringComparison.Ordinal))
             || request.Cwd.Contains('\\') || !ValidText(request.Cwd) || request.Cwd[1..].Split('/').Any(p => p is "" or "." or ".."))
-            throw AgentCoreErrors.Validation("Use one bounded command or argv, a /working directory and a 1–180 second timeout.");
+            throw AgentCoreErrors.Validation("Use one bounded command or argv, an authorized /home or /working directory and a 1–180 second timeout.");
     }
     private static bool ValidText(string value)
     {

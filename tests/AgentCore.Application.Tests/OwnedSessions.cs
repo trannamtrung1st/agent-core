@@ -37,14 +37,15 @@ internal static class OwnedSessions
         AdminLifecycleCoordinator? lifecycleGate = null,
         IBrowserLease? browserLease = null,
         ExperienceService? experience = null,
-        AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null)
+        AgentCore.Application.Workspaces.AgentInstanceWorkspaceService? agentWorkspace = null,
+        IAgentInstanceStore? instanceStore = null)
     {
-        var instanceStore = new InMemoryAgentInstanceStore();
+        instanceStore ??= new InMemoryAgentInstanceStore();
         instances ??= new AgentInstanceService(instanceStore, definitions, new SystemIdGenerator(time), time);
         if (workspace is not null && agentWorkspace is null)
             agentWorkspace = new AgentCore.Application.Workspaces.AgentInstanceWorkspaceService(instanceStore,
                 new AgentCore.Infrastructure.Workspaces.FileAgentInstanceWorkspaceStore(
-                    Path.Combine(Path.GetTempPath(), "session-fixture-home-" + Guid.NewGuid().ToString("N")), time, new SystemIdGenerator(time)),
+                    Path.Combine(Path.GetTempPath(), "session-fixture-home-" + Guid.NewGuid().ToString("N")), instanceStore, new InMemorySandboxStore()),
                 store, workspace, lifecycleGate ?? new AdminLifecycleCoordinator());
         var manager = new SessionManager(definitions, store, ids, time, voice,
             attachments, knowledge, workspace, artifacts, models, localProfiles, structuredMemory,

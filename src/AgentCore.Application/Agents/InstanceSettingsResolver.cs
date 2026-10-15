@@ -156,7 +156,7 @@ public static class InstanceSettingsResolver
                     result["maxCommandSeconds"] = new("Cannot exceed the Global Profile command ceiling.", Minimum:1, Maximum:p.MaxCommandSeconds);
                     result["idleTtlSeconds"] = new("Idle time starts after completed work; cannot exceed the Global Profile ceiling.", Minimum:60, Maximum:p.IdleTtlSeconds);
                     result["maxLifetimeSeconds"] = new("Cannot exceed the Global Profile lifetime ceiling or be shorter than idle expiry.", Minimum:60, Maximum:p.MaxLifetimeSeconds);
-                    result["storageBytes"] = new("Canonical /working quota; cannot exceed the Global Profile ceiling.", Minimum:1, Maximum:p.StorageBytes);
+                    result["storageBytes"] = new("Sampled canonical /working budget; writes can exceed a sample and remain after termination. Cannot exceed the Global Profile ceiling.", Minimum:1, Maximum:p.StorageBytes);
                 }
                 break;
             case "behaviorPolicy":

@@ -73,9 +73,9 @@ def prepare(args):
     gateway = json.loads(run("docker", "network", "inspect", "bridge"))[0]["IPAM"][
         "Config"
     ][0]["Gateway"]
-    workspace_root = state / "workspace-mounts"
+    workspace_root = state / "canonical-workspaces"
     workspace_root.mkdir(exist_ok=True)
-    workspace_root.chmod(0o1777)  # sticky shared staging; private generation parents, never canonical data
+    workspace_root.chmod(0o700)
     write_server_config(state / "server.toml", server_config(desktop, gateway, compose=True, workspace_root=workspace_root))
     image = None
     if args.build_workbench:
@@ -86,7 +86,7 @@ def prepare(args):
             "deploy/sandbox/inventory.py",
         ]
         fingerprint = hashlib.sha256(
-            b"\0".join((ROOT / name).read_bytes() for name in inputs)
+            b"\0".join((ROOT / name).read_bytes() for name in inputs) + f"\0{os.getuid()}:{os.getgid()}".encode()
         ).hexdigest()
         # Retain every input-addressed manifest: containerd may discard an old
         # multi-platform image ID when its only mutable tag is overwritten.
@@ -105,6 +105,8 @@ def prepare(args):
                 "docker",
                 "build",
                 "--provenance=false",
+                "--build-arg", f"AGENTCORE_RUNTIME_UID={os.getuid()}",
+                "--build-arg", f"AGENTCORE_RUNTIME_GID={os.getgid()}",
                 "--label",
                 "agent-core.workbench.inputs=" + fingerprint,
                 "-t",
@@ -124,6 +126,8 @@ def prepare(args):
         "AGENTCORE_SANDBOX_CONFIG_FILE": str(state / "server.toml"),
         "AGENTCORE_SANDBOX_PORT": str(args.port),
         "AGENTCORE_SANDBOX_WORKSPACE_ROOT": str(workspace_root),
+        "AGENTCORE_SANDBOX_UID": str(os.getuid()),
+        "AGENTCORE_SANDBOX_GID": str(os.getgid()),
     }
     private_write(
         state / "compose.env", "".join(k + "=" + v + "\n" for k, v in values.items())
@@ -166,10 +170,10 @@ def readiness(endpoint, key):
 
 
 def native_handoff(state, endpoint, key, image=None, workspace_root=None):
-    workspace_root = workspace_root or state / "workspace-mounts"
+    workspace_root = workspace_root or state / "canonical-workspaces"
     private_write(
         state / "native.env",
-        f"OpenSandbox__Enabled=true\nOpenSandbox__Endpoint={endpoint}\nOpenSandbox__ApiKey={key}\nOpenSandbox__WorkspaceMountRoot={workspace_root}\n",
+        f"OpenSandbox__Enabled=true\nOpenSandbox__Endpoint={endpoint}\nOpenSandbox__ApiKey={key}\nPersistence__WorkspaceRoot={workspace_root}\nOpenSandbox__WorkspaceDockerHostRoot={workspace_root}\n",
     )
 
 
@@ -237,7 +241,7 @@ def up(args):
                 "docker", "stop", foreign[0]
             )  # Retain its container, volume, image and private files.
         else:
-            workspace_root = ROOT / "local/opensandbox-runners" / foreign[0] / "workspace-mounts"
+            workspace_root = ROOT / "local/opensandbox-runners" / foreign[0] / "canonical-workspaces"
             container = inspect(foreign[0])
             if not any(m.get("Destination") == str(workspace_root) for m in container.get("Mounts", [])):
                 raise RuntimeError("Existing local runner needs the mounted-workspace contract. Reconcile its workloads, then use --migrate-local.")

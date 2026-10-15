@@ -25,7 +25,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
 
         var candidate = SampleCandidate("resource-agent");
         var draft = await admin.CreateDraftAsync(
@@ -83,7 +83,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
 
         const string templateId = "seed-pack";
         var draft = await admin.CreateDraftAsync(
@@ -135,10 +135,10 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             CancellationToken.None);
         var session = Guid.CreateVersion7();
         await workspace.EnsureAsync(session, published.Payload);
-        var seeded = await workspace.ReadAsync(session, published.Payload, "/workspace/working/welcome.txt");
+        var seeded = await workspace.ReadAsync(session, published.Payload, "/working/welcome.txt");
         Assert.Equal("seed-me", System.Text.Encoding.UTF8.GetString(seeded.Bytes));
         var skipped = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.ReadAsync(session, published.Payload, "/workspace/working/extra.txt").AsTask());
+            workspace.ReadAsync(session, published.Payload, "/working/extra.txt").AsTask());
         Assert.Equal("NotFound", skipped.Code);
     }
 
@@ -155,7 +155,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
 
         const string templateId = "seed-pack";
         var draft = await admin.CreateDraftAsync(
@@ -191,8 +191,8 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             CancellationToken.None);
         var session = Guid.CreateVersion7();
         await workspace.EnsureAsync(session, published.Payload);
-        await workspace.WriteAsync(session, "/workspace/working/welcome.txt", "user-edited"u8.ToArray());
-        await workspace.WriteAsync(session, "/workspace/working/local-only.txt", "session-owned"u8.ToArray());
+        await workspace.WriteAsync(session, "/working/welcome.txt", "user-edited"u8.ToArray());
+        await workspace.WriteAsync(session, "/working/local-only.txt", "session-owned"u8.ToArray());
         await workspace.EnsureAsync(session, published.Payload);
 
         var publicationBindings = await resources.ListPublicationResourcesAsync("resource-agent", published.Version);
@@ -202,7 +202,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             published.Version,
             publicationBindings[0].ResourceId);
         Assert.Equal(bytes, publicationBytes);
-        var seeded = await workspace.ReadAsync(session, published.Payload, "/workspace/working/welcome.txt");
+        var seeded = await workspace.ReadAsync(session, published.Payload, "/working/welcome.txt");
         Assert.Equal("user-edited", System.Text.Encoding.UTF8.GetString(seeded.Bytes));
     }
 
@@ -224,7 +224,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
 
         var draft = await admin.CreateDraftAsync(
             new AgentDefinitionDraftCreate(
@@ -259,7 +259,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             CancellationToken.None);
         var session = Guid.CreateVersion7();
         await workspace.EnsureAsync(session, published.Payload);
-        var seeded = await workspace.ReadAsync(session, published.Payload, "/workspace/working/welcome.txt");
+        var seeded = await workspace.ReadAsync(session, published.Payload, "/working/welcome.txt");
         Assert.Equal("durable", System.Text.Encoding.UTF8.GetString(seeded.Bytes));
     }
 
@@ -276,7 +276,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
             new SystemIdGenerator(TimeProvider.System));
         admin.ResourceStore = resources;
         var reader = new DefinitionPublicationResourceReader(resources);
-        var workspace = new FileSessionWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(dir.WorkspaceRoot, dir.TemplateRoot, publicationResources: reader);
 
         var draft = await admin.CreateDraftAsync(
             new AgentDefinitionDraftCreate("resource-agent", SampleCandidate("resource-agent"), DefinitionDraftSourceKind.New, null, now),
@@ -307,7 +307,7 @@ public sealed class DefinitionPublicationResourceWorkspaceTests
         var session = Guid.CreateVersion7();
         await workspace.EnsureAsync(session, published.Payload);
         var missing = await Assert.ThrowsAsync<AgentCoreException>(() =>
-            workspace.ReadAsync(session, published.Payload, "/workspace/working/welcome.txt").AsTask());
+            workspace.ReadAsync(session, published.Payload, "/working/welcome.txt").AsTask());
         Assert.Equal("NotFound", missing.Code);
     }
 

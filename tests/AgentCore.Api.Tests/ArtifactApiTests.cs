@@ -38,7 +38,7 @@ public sealed class ArtifactApiTests : IClassFixture<AgentCoreApiFactory>
         var artifact = await materialized.Content.ReadFromJsonAsync<ArtifactResponse>();
         Assert.Equal(attachment.Sha256, artifact!.Sha256);
         Assert.Equal(attachment.AttachmentId, artifact.SourceAttachmentId);
-        Assert.Equal("/workspace/working/notes.txt", artifact.WorkspaceLogicalPath);
+        Assert.Equal("/working/notes.txt", artifact.WorkspaceLogicalPath);
 
         var metadataPath = $"/api/v2/sessions/{view.SessionId}/artifacts/{artifact.ArtifactId}";
         var canonical = await Owner().GetFromJsonAsync<ArtifactResponse>(metadataPath);

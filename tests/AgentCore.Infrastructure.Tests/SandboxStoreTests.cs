@@ -40,21 +40,20 @@ public sealed class SandboxStoreTests
     }
 
     [Fact]
-    public async Task Oci_upgrade_preserves_populated_profiles_policy_instance_pins_observations_and_live_receipts()
+    public async Task Fresh_baseline_reopen_preserves_profiles_policy_instance_pins_observations_and_receipts()
     {
         var path=Path.Combine(Path.GetTempPath(),"oci-upgrade-"+Guid.NewGuid().ToString("N")+".db");
         var factory=new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source="+path).Options);
         var profile=new SandboxProfile("existing",3,"Existing","",true,"docker.io/agent-core/tool@sha256:"+new string('a',64),InstanceRevision:9);
         var now=DateTimeOffset.UtcNow;var lease=new SandboxLease(Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),7,profile,SandboxLeaseState.Ready,"private-provider",now,now.AddMinutes(30));
-        var receipt=new SandboxExecution(Guid.NewGuid(),lease.SessionId,lease.AgentInstanceId,lease.Generation,Guid.NewGuid(),Guid.NewGuid(),"uncertain","hash",SandboxExecutionState.Indeterminate,now,WorkspaceSyncStatus:"unknown");
+        var receipt=new SandboxExecution(Guid.NewGuid(),lease.SessionId,lease.AgentInstanceId,lease.Generation,Guid.NewGuid(),Guid.NewGuid(),"uncertain","hash",SandboxExecutionState.Indeterminate,now,FilesystemEffectsMayHaveOccurred:true);
         var observation=new SandboxProfileVerification(profile.Id,profile.Revision,now,true,"Historical verification");
         var json=new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
         try
         {
             await using(var old=factory.CreateDbContext())
             {
-                var previous=old.Database.GetMigrations().Last(m=>string.CompareOrdinal(m,"20261014163203_OciSandboxRegistryAuthority")<0);
-                await old.GetService<IMigrator>().MigrateAsync(previous);
+                await old.Database.MigrateAsync();
                 old.Add(new SandboxProfileRow {Id=profile.Id,Revision=3,Json=System.Text.Json.JsonSerializer.Serialize(profile,json)});
                 old.Add(new SandboxVerificationRow {ProfileId=profile.Id,ProfileRevision=3,Json=System.Text.Json.JsonSerializer.Serialize(observation,json)});
                 old.Add(new SandboxLeaseRow {SessionId=lease.SessionId.ToString("D"),AgentInstanceId=lease.AgentInstanceId.ToString("D"),Revision=7,State=(int)lease.State,ExpiresAt=lease.ExpiresAt.ToUnixTimeMilliseconds(),Json=System.Text.Json.JsonSerializer.Serialize(lease,json)});
@@ -76,7 +75,7 @@ public sealed class SandboxStoreTests
         finally { SqliteClear();if(File.Exists(path))File.Delete(path); }
     }
     [Fact]
-    public async Task Additive_migration_preserves_existing_session_bytes_and_drive_schema_without_reset()
+    public async Task Fresh_baseline_reopen_preserves_session_bytes_and_independent_drive_schema()
     {
         var path = Path.Combine(Path.GetTempPath(), "agent-core-sandbox-upgrade-"+Guid.NewGuid().ToString("N")+".db");
         var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source="+path).Options);
@@ -84,8 +83,7 @@ public sealed class SandboxStoreTests
         {
             await using (var old = factory.CreateDbContext())
             {
-                var previous = old.Database.GetMigrations().Last(m => string.CompareOrdinal(m, "20261014003355_OpenSandboxOwnership") < 0);
-                await old.GetService<IMigrator>().MigrateAsync(previous);
+                await old.Database.MigrateAsync();
                 old.Sessions.Add(new SessionRecord { SessionId=Guid.NewGuid().ToString(),AgentInstanceId=Guid.NewGuid().ToString(),
                     AgentId="preserved",AgentVersion=1,DefinitionJson="{\"exact\":\"before sandbox\"}",Status="Paused",Mode="Text",Revision=7,Title="Retained conversation" });
                 await old.SaveChangesAsync();

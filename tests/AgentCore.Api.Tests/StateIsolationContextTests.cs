@@ -151,7 +151,7 @@ public sealed class StateIsolationContextTests
         var first = await manager.CreateForInstanceAsync(id, SessionMode.Text);
         var workspace = host.Services.GetRequiredService<ISessionWorkspace>();
         await workspace.EnsureAsync(first.SessionId, first.Definition);
-        await workspace.WriteAsync(first.SessionId, "/workspace/working/request.txt", "FIRST_REQUEST_SCRATCH"u8.ToArray());
+        await workspace.WriteAsync(first.SessionId, "/working/request.txt", "FIRST_REQUEST_SCRATCH"u8.ToArray());
         await using var a = host.Services.GetRequiredService<SessionRuntimeFactory>().Create(first, new SilentOutput());
         await a.AttachAsync(); var eventId = Guid.NewGuid();
         Assert.True(await a.SubmitPersistedUserTextAsync("FIRST_REQUEST_PRIVATE", eventId)); await a.WaitUntilIdleAsync();
@@ -169,9 +169,9 @@ public sealed class StateIsolationContextTests
         Assert.DoesNotContain("FIRST_REQUEST_SCRATCH", AllText(model.Requests.Last()));
         Assert.NotEmpty(await host.Services.GetRequiredService<IMemoryStore>().ReadHistoryAsync(first.SessionId, 0, 50));
         Assert.Equal("FIRST_REQUEST_SCRATCH"u8.ToArray(), (await workspace.ReadAsync(first.SessionId, first.Definition,
-            "/workspace/working/request.txt")).Bytes);
+            "/working/request.txt")).Bytes);
         Assert.Equal("NotFound", (await Assert.ThrowsAsync<AgentCoreException>(() => workspace.ReadAsync(second.SessionId,
-            second.Definition, "/workspace/working/request.txt").AsTask())).Code);
+            second.Definition, "/working/request.txt").AsTask())).Code);
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public sealed class StateIsolationContextTests
             new("user", [], null, now), now, now, MemoryScope.IdentityUser, id, LocalUserProfile.Id));
         var working = host.Services.GetRequiredService<ISessionWorkspace>();
         await working.EnsureAsync(a.SessionId, a.Definition); await working.EnsureAsync(b.SessionId, b.Definition);
-        await working.WriteAsync(a.SessionId, "/workspace/working/customer.txt", "SCRATCH_CUSTOMER_A"u8.ToArray());
+        await working.WriteAsync(a.SessionId, "/working/customer.txt", "SCRATCH_CUSTOMER_A"u8.ToArray());
         await using var ra = host.Services.GetRequiredService<SessionRuntimeFactory>().Create(a, new SilentOutput());
         await using var rb = host.Services.GetRequiredService<SessionRuntimeFactory>().Create(b, new SilentOutput());
         await ra.AttachAsync(); await rb.AttachAsync();
@@ -214,7 +214,7 @@ public sealed class StateIsolationContextTests
             Assert.Equal(1, facts.RootElement.GetProperty("sessions").GetProperty("open").GetInt32());
         });
         Assert.Equal("NotFound", (await Assert.ThrowsAsync<AgentCoreException>(() => working.ReadAsync(b.SessionId,
-            b.Definition, "/workspace/working/customer.txt").AsTask())).Code);
+            b.Definition, "/working/customer.txt").AsTask())).Code);
         Assert.Single(await host.Services.GetRequiredService<IStructuredMemoryStore>().ListActiveIdentityUserAsync(id, LocalUserProfile.Id));
     }
 

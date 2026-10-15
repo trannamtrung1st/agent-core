@@ -2,21 +2,23 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Domain.Conversation;
 
-public enum SandboxLeaseState { Provisioning, Ready, Executing, NeedsReconciliation, NeedsResync, Terminating, Terminated, Failed }
+public enum SandboxLeaseState { Provisioning, Ready, Executing, NeedsReconciliation, Terminating, Terminated, Failed }
 public enum SandboxExecutionState { Dispatching, Running, Completed, Canceled, Indeterminate }
+
+public sealed record SandboxMountAuthority(string WorkingIdentity, string? HomeIdentity, HomeAccess HomeAccess, int Uid, int Gid);
 
 // Provider identities are opaque server-side values; public projections omit them.
 public sealed record SandboxLease(Guid SessionId, Guid AgentInstanceId, Guid Generation, long Revision,
     SandboxProfile Profile, SandboxLeaseState State, string? ProviderId, DateTimeOffset CreatedAt,
-    DateTimeOffset ExpiresAt, DateTimeOffset? InitializedAt = null, string? ScratchFingerprint = null,
+    DateTimeOffset ExpiresAt, DateTimeOffset? InitializedAt = null, SandboxMountAuthority? MountAuthority = null,
     Guid? ActiveExecutionId = null, string? DiagnosticId = null, IReadOnlyList<string>? BaselineProcesses = null, Guid? LastExecutionId = null, string? SafeMessage = null, SandboxInitializationEvidence? Initialization = null,
-    DateTimeOffset? LastActivityAt = null, string? CleanupReason = null, int CleanupPasses = 0, DateTimeOffset? LastCleanupAttemptAt = null, int MountContractVersion = 0, string? SelectedProfileId = null, string? TransitionProfileId = null, long? TransitionProfileRevision = null, string? TransitionPhase = null, Guid? AdmissionRunId = null, string? AdmissionToolCallId = null, string? FailureCategory = null, string? FailurePhase = null);
+    DateTimeOffset? LastActivityAt = null, string? CleanupReason = null, int CleanupPasses = 0, DateTimeOffset? LastCleanupAttemptAt = null, string? SelectedProfileId = null, string? TransitionProfileId = null, long? TransitionProfileRevision = null, string? TransitionPhase = null, Guid? AdmissionRunId = null, string? AdmissionToolCallId = null, string? FailureCategory = null, string? FailurePhase = null);
 
 public sealed record SandboxExecution(Guid Id, Guid SessionId, Guid AgentInstanceId, Guid Generation,
     Guid AgentRunId, Guid ClaimGeneration, string ToolCallId, string ActionHash, SandboxExecutionState State,
     DateTimeOffset StartedAt, string? ProviderCommandId = null, DateTimeOffset? FinishedAt = null,
     int? ExitCode = null, string Stdout = "", string Stderr = "", bool Truncated = false,
-    string WorkspaceSyncStatus = "pending", string? DiagnosticId = null, bool Background = false, string CommandText = "", long? DurationMs = null, DateTimeOffset? DeadlineAt = null, string? ProfileId = null, long? ProfileRevision = null,
+    bool FilesystemEffectsMayHaveOccurred = false, string? DiagnosticId = null, bool Background = false, string CommandText = "", long? DurationMs = null, DateTimeOffset? DeadlineAt = null, string? ProfileId = null, long? ProfileRevision = null,
     string? Phase = null, string? FailureCategory = null, string? CancellationReason = null, bool TerminationConfirmed = false,
     bool GenerationRecycled = false, bool RemoteTerminationConfirmed = false);
 
@@ -24,7 +26,7 @@ public sealed record SandboxExecution(Guid Id, Guid SessionId, Guid AgentInstanc
 public sealed record SandboxProfileVerification(string ProfileId, long ProfileRevision,
     DateTimeOffset VerifiedAt, bool Passed, string Message, string? FailureCode = null, int? ExitCode = null, string Stdout = "", string Stderr = "", bool Truncated = false, long DurationMs = 0, string? DiagnosticId = null, int ContractVersion = 0, Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null)
 {
-    public const int CurrentContractVersion = 2;
+    public const int CurrentContractVersion = 3;
 }
 
 public sealed record SandboxInitializationEvidence(string State, string ProfileId, long ProfileRevision, long? InstanceRevision,

@@ -10,37 +10,6 @@ public sealed class PinnedPersonaRevisionMigrationTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-01-06T00:00:00Z");
 
-    [Fact]
-    public async Task Startup_rejects_legacy_schema_without_rewriting_pinned_persona_data()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"agent-core-pin-rev-{Guid.NewGuid():N}.db");
-        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options;
-        var factory = new ContextFactory(options);
-        var sessionId = Guid.Parse("019944af-00d2-7000-8000-0000000000cc");
-        try
-        {
-            await MigrationSessionSeed.CopyPersistedSessionAsync(
-                factory,
-                LegacySession(sessionId),
-                MigrationSessionSeed.PrePinnedPersonaRevisionMigrationId);
-
-            var error = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(() =>
-                new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync().AsTask());
-            Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
-            await using var verify = await factory.CreateDbContextAsync();
-            var json = await verify.Database.SqlQuery<string>($"SELECT DefinitionJson AS Value FROM Sessions WHERE SessionId = {sessionId.ToString("D")}").SingleAsync();
-            Assert.Contains("legacy-pin-marker", json, StringComparison.Ordinal);
-            Assert.DoesNotContain("20261008063000_RetireLegacyExecution", await verify.Database.GetAppliedMigrationsAsync());
-        }
-        finally
-        {
-            SqliteConnection.ClearAllPools();
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-    }
 
     [Fact]
     public async Task Managed_pinned_persona_revision_survives_sqlite_reopen()

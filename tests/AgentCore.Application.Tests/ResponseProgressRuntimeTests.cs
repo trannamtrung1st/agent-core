@@ -632,11 +632,13 @@ public sealed class ResponseProgressRuntimeTests
             cancellationToken.ThrowIfCancellationRequested();
         }
 
+        public ValueTask CopyAcrossScopesAsync(Guid sessionId, string source, string destination, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public ValueTask<WorkspacePatchResult> PatchTextAsync(
             Guid sessionId,
             AgentDefinition definition,
             string logicalPath,
-            string expectedSha256Hex,
             IReadOnlyList<WorkspaceTextEdit> edits,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

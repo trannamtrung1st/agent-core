@@ -7,29 +7,14 @@ namespace AgentCore.Application.Workspaces;
 public static class AgentHomePath
 {
     public static bool IsHome(string path) => path == "/home" || path.StartsWith("/home/", StringComparison.Ordinal);
-
     public static string Normalize(string path, bool file = true)
     {
-        if (string.IsNullOrWhiteSpace(path) || path.Length > AgentWorkspaceLimits.MaxPathChars || path.Contains('\\')
-            || !IsHome(path) || path != path.Normalize(NormalizationForm.FormC))
-            throw AgentCoreErrors.Validation("Use a normalized logical path under /home.");
-        if (path == "/home" && !file) return path;
-        if (path == "/home") throw AgentCoreErrors.Validation("A home file path is required.");
-        var parts = path[6..].Split('/');
-        if (parts.Length > AgentWorkspaceLimits.MaxDepth || parts.Any(p => p.Length is 0 or > 128
-            || p is "." or ".." || p.StartsWith('.') || p.EndsWith('.') || p != p.Trim()
-            || p.Any(c => char.IsControl(c) || "<>:\"|?*".Contains(c))
-            || Reserved(p)))
-            throw AgentCoreErrors.Validation("Home path contains an invalid, reserved or excessive segment.");
+        if (string.IsNullOrEmpty(path) || Encoding.UTF8.GetByteCount(path) > AgentWorkspaceLimits.MaxPathChars
+            || !IsHome(path) || path.Contains('\\') || path.Contains('\0'))
+            throw AgentCoreErrors.Validation("Use a logical path under /home.");
+        if (path == "/home") return !file ? path : throw AgentCoreErrors.Validation("A home child path is required.");
+        if (path[6..].Split('/').Any(p => p is "" or "." or ".." || Encoding.UTF8.GetByteCount(p) > 255))
+            throw AgentCoreErrors.Validation("Home path contains an invalid segment.");
         return path;
-    }
-
-    private static bool Reserved(string name)
-    {
-        var n = name.ToLowerInvariant();
-        var stem = n.Split('.')[0];
-        return stem is "con" or "prn" or "aux" or "nul" or "runtime" or "secrets" or "user-secrets"
-            || (stem.Length == 4 && (stem.StartsWith("com") || stem.StartsWith("lpt")) && char.IsAsciiDigit(stem[3]))
-            || n.StartsWith("appsettings.") || n.Contains(".env") || n.Contains(".git");
     }
 }

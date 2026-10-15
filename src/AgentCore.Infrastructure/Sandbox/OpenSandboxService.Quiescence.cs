@@ -19,7 +19,7 @@ public sealed partial class OpenSandboxService
         {
             // Main-command completion is already durable. Unavailable inspection
             // forbids reuse, but authoritative owned-container absence can still
-            // make retained staging safe to validate under the live commit fence.
+            // settle process ownership while retaining already-visible canonical writes.
             logger?.LogWarning("Sandbox process inspection unavailable; retiring the owned generation. SessionId={SessionId} Generation={Generation}",lease.SessionId,lease.Generation);
             return false;
         }
@@ -46,6 +46,6 @@ public sealed partial class OpenSandboxService
     private async Task ConfirmQuiescentAsync(SdkSandbox sdk, SandboxLease lease, CancellationToken ct)
     {
         if (!await IsQuiescentAsync(sdk, lease, ct))
-            throw new AgentCoreException("SandboxProcessesActive", "Initialization left untracked processes. No scratch was committed; make setup quiescent or use a prebuilt image before an explicit reset.", 409);
+            throw new AgentCoreException("SandboxProcessesActive", "Initialization left untracked processes. Canonical writes are retained; make setup quiescent or use a prebuilt image before an explicit reset.", 409);
     }
 }

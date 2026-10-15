@@ -59,7 +59,7 @@ class SandboxComposeTests(unittest.TestCase):
             with patch.object(helper,'state_path',return_value=state),patch.object(helper,'run',side_effect=fake_run),patch.object(helper,'inspect',return_value={'owned':True}):
                 _, image = helper.prepare(args)
                 self.assertIsNone(image)
-                self.assertEqual((state/'workspace-mounts').stat().st_mode & 0o7777, 0o1777)
+                self.assertEqual((state/'canonical-workspaces').stat().st_mode & 0o7777, 0o700)
                 self.assertFalse(any('build' in call for call in calls))
                 self.assertNotIn('WORKBENCH',(state/'compose.env').read_text())
                 helper.native_handoff(state,'http://127.0.0.1:18080','private-fixture')
@@ -86,12 +86,12 @@ class SandboxComposeTests(unittest.TestCase):
     def test_mount_root_is_explicitly_allowed_and_native_handoff_maps_the_same_root(self):
         import json
         with tempfile.TemporaryDirectory() as temp:
-            root=Path(temp).resolve()/'workspace-mounts'
+            root=Path(temp).resolve()/'canonical-workspaces'
             config=server_config(True,'172.17.0.1',True,workspace_root=root)
             self.assertIn('allowed_host_paths = '+json.dumps([str(root)]),config)
             helper.native_handoff(Path(temp),'http://127.0.0.1:18080','private-sentinel',workspace_root=root)
             handoff=(Path(temp)/'native.env').read_text()
-            self.assertIn('OpenSandbox__WorkspaceMountRoot='+str(root),handoff)
+            self.assertIn('Persistence__WorkspaceRoot='+str(root),handoff)
             self.assertNotIn('WorkbenchImage',handoff)
 
     def test_native_helper_loads_only_the_standalone_infrastructure_compose_file(self):

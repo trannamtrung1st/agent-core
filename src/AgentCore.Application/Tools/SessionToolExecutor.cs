@@ -856,32 +856,35 @@ public sealed partial class SessionToolExecutor(
             return pathError;
         }
 
-        await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
-        IReadOnlyList<WorkspaceNode> nodes;
-        string? treeSha256 = null;
+        if (args.EnumerateObject().Any(property => property.Name is not ("path" or "cursor" or "limit")))
+            return Error("invalid", "List accepts path, cursor and limit.");
+        var limit = WorkspaceLimits.MaxListEntries;
+        if (args.TryGetProperty("limit", out var limitValue) && (!limitValue.TryGetInt32(out limit) || limit is < 1 or > WorkspaceLimits.MaxListEntries))
+            return Error("invalid", "List limit must be between 1 and 256.");
+        string? cursor = null;
+        if (args.TryGetProperty("cursor", out var cursorValue))
+        {
+            if (cursorValue.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(cursorValue.GetString())) return Error("invalid", "Use the nextPath cursor returned by this directory listing.");
+            cursor = cursorValue.GetString();
+        }
+        WorkspaceNodePage page;
+        var isolation = await IsolationAsync(definition, sessionId, cancellationToken);
+        AgentCore.Application.Agents.StateIsolationAccess.RequireHome(isolation, path, false);
         if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(path) && agentWorkspace is not null)
         {
-            var projection = await agentWorkspace.ListProjectionAsync(await agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), path, cancellationToken);
-            var writable = await agentWorkspace.SessionWritableAsync(sessionId, cancellationToken);
-            nodes = writable ? projection.Nodes.Select(n => n with { Writable = true }).ToArray() : projection.Nodes;
-            treeSha256 = projection.TreeSha256;
+            await agentWorkspace.RequireSessionHomeAsync(sessionId, path, false, cancellationToken);
+            page = await agentWorkspace.ListNodePageAsync(await agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), path, cursor, limit, cancellationToken);
+            var writable = isolation.HomeAccess == HomeAccess.ReadWrite && await agentWorkspace.SessionWritableAsync(sessionId, cancellationToken);
+            page = page with { Entries = page.Entries.Select(node => node with { Writable = writable }).ToArray() };
         }
-        else nodes = await ListExecutionWorkspaceAsync(sessionId, definition, path, cancellationToken).ConfigureAwait(false);
-        var truncated = nodes.Count > WorkspaceLimits.MaxListEntries;
-        var slice = truncated ? nodes.Take(WorkspaceLimits.MaxListEntries).ToArray() : nodes;
+        else page = await workspace.ListPageAsync(sessionId, definition, path, cursor, limit, cancellationToken);
         return JsonSerializer.Serialize(new
         {
-            path,
-            truncated,
-            treeSha256,
-            entries = slice.Select(node => new
-            {
-                path = node.LogicalPath,
-                directory = node.Directory,
-                byteSize = node.ByteSize,
-                writable = node.Writable
-            })
-        });
+            path, page.Truncated, page.NextPath,
+            entries = page.Entries.Select(node => new { path = node.LogicalPath, directory = node.Directory,
+                kind = node.Directory ? "directory" : node.Kind, byteSize = node.ByteSize, modifiedAt = node.ModifiedAt,
+                linkTarget = node.LinkTarget, mode = node.Mode, writable = node.Writable })
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 
     private async Task<string> PatchWorkspaceAsync(
@@ -892,11 +895,10 @@ public sealed partial class SessionToolExecutor(
     {
         if (workspace is null
             || !TryString(args, "path", out var path)
-            || !TryString(args, "expectedSha256", out var expectedSha256)
             || !args.TryGetProperty("edits", out var editsElement)
             || editsElement.ValueKind != JsonValueKind.Array)
         {
-            return Error("invalid", "path, expectedSha256, and edits are required.");
+            return Error("invalid", "path and edits are required.");
         }
 
         if (editsElement.GetArrayLength() > WorkspaceLimits.MaxPatchEdits)
@@ -935,23 +937,19 @@ public sealed partial class SessionToolExecutor(
         if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(path))
         {
             if (agentWorkspace is null) return Error("unavailable", "Agent Workspace is unavailable.");
-            var patched = await agentWorkspace.PatchAsync(sessionId, path, expectedSha256, edits, cancellationToken);
-            return JsonSerializer.Serialize(new { path = patched.LogicalPath, previousSha256 = patched.PreviousSha256Hex,
-                newSha256 = patched.NewSha256Hex, byteSize = patched.ByteSize, editsApplied = patched.EditsApplied });
+            var patched = await agentWorkspace.PatchAsync(sessionId, path, edits, cancellationToken);
+            return JsonSerializer.Serialize(new { path = patched.LogicalPath, byteSize = patched.ByteSize, editsApplied = patched.EditsApplied });
         }
         var result = await workspace.PatchTextAsync(
                 sessionId,
                 definition,
                 path,
-                expectedSha256,
                 edits,
                 cancellationToken)
             .ConfigureAwait(false);
         return JsonSerializer.Serialize(new
         {
             path = result.LogicalPath,
-            previousSha256 = result.PreviousSha256Hex,
-            newSha256 = result.NewSha256Hex,
             byteSize = result.ByteSize,
             editsApplied = result.EditsApplied
         });
@@ -963,8 +961,8 @@ public sealed partial class SessionToolExecutor(
         JsonElement args,
         CancellationToken cancellationToken)
     {
-        if (args.EnumerateObject().Any(p => p.Name is not ("path" or "content" or "expectedRevision" or "expectedSha256")))
-            return Error("invalid", "Write accepts path, content and optional expected durable revision/hash.");
+        if (args.EnumerateObject().Any(p => p.Name is not ("path" or "content")))
+            return Error("invalid", "Write accepts path and content.");
         if (workspace is null
             || !TryString(args, "path", out var path)
             || !TryString(args, "content", out var content))
@@ -982,8 +980,7 @@ public sealed partial class SessionToolExecutor(
         if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(path))
         {
             if (agentWorkspace is null) return Error("unavailable", "Agent Workspace is unavailable.");
-            var item = await agentWorkspace.WriteAsync(sessionId, path, "text/plain; charset=utf-8", bytes,
-                ExpectedRevision(args), ExpectedHash(args), cancellationToken);
+            var item = await agentWorkspace.WriteAsync(sessionId, path, "text/plain; charset=utf-8", bytes, cancellationToken);
             return JsonSerializer.Serialize(new { path, bytes = bytes.Length, homeItem = item });
         }
         await workspace.WriteAsync(sessionId, path, bytes, cancellationToken).ConfigureAwait(false);
@@ -1067,7 +1064,7 @@ public sealed partial class SessionToolExecutor(
             return pathError;
         }
 
-        if (!path.StartsWith("/workspace/", StringComparison.Ordinal)
+        if (!(path == WorkspaceLogicalPath.WorkingDirectory || path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal))
             && !AgentCore.Application.Workspaces.AgentHomePath.IsHome(path))
         {
             return Error("path_outside_workspace", WorkspaceLogicalPath.OutsideWorkspaceMessage);

@@ -101,7 +101,7 @@ public sealed class BrowserSnapshotCompactionTests
     {
         var error = """{"error":"timeout","message":"Browser operation timed out."}""";
         var intervention = """{"error":"user_intervention_required","kind":"authentication","url":"http://127.0.0.1:5088/login","title":"Sign in","message":"Complete this step in the browser, then tell me to continue."}""";
-        var note = """{"path":"/workspace/working/note.txt","content":"keep me"}""";
+        var note = """{"path":"/working/note.txt","content":"keep me"}""";
         var messages = new List<ModelMessage>
         {
             Observation(0, "el_old"),

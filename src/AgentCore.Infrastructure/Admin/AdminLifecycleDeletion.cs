@@ -212,7 +212,6 @@ public sealed class SqliteAdminLifecycleDeletion(
             throw AgentCoreErrors.Conflict(AdminDeletionMessages.InstanceBlocked(counts));
         }
 
-        await db.AgentWorkspaceItems.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.Experiences.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.IdentityMaintenanceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);
         await db.ExperienceSettings.Where(r => r.AgentInstanceId == key).ExecuteDeleteAsync(cancellationToken);

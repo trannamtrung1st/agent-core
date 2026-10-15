@@ -8,7 +8,7 @@ vi.mock('../../services/sandboxes', async (importOriginal) => ({...await importO
 vi.mock('../../services/adminApi', async (importOriginal) => ({...await importOriginal<typeof import('../../services/adminApi')>(), listCredentials:vi.fn().mockResolvedValue([])}));
 const profile: SandboxProfile = { id:'workbench',revision:1,name:'Workbench',description:'Coding',enabled:true,availability:'Eligible',imageReference:'sha256:'+'a'.repeat(64),initializationScript:null,cpu:1,memoryMiB:1024,pids:64,maxCommandSeconds:120,idleTtlSeconds:1800,maxLifetimeSeconds:7200,storageBytes:262144000,lastVerifiedAt:null,verificationReason:null };
 const savedProfile: SandboxProfile = {...profile,revision:2,description:'Office',availability:'NeedsVerification'};
-const platform: SandboxPlatform = { state:'Ready',message:'Local server ready.',profiles:[profile],allowedImagePrefixes:[],localImageIdsAllowed:true,securityScope:'Trusted local demo.',storageScope:'Canonical scratch quota; no writable-layer quota.' };
+const platform: SandboxPlatform = { state:'Ready',message:'Local server ready.',profiles:[profile],allowedImagePrefixes:[],localImageIdsAllowed:true,securityScope:'Trusted local demo.',storageScope:'Canonical scratch quota; no writable-layer quota.', maxWorkingStorageBytes: 16 * 1024 * 1024 * 1024 };
 beforeEach(() => { vi.mocked(getSandboxPlatform).mockReset().mockResolvedValue(structuredClone(platform)); vi.mocked(saveSandboxProfile).mockReset(); vi.mocked(verifySandboxProfile).mockReset(); vi.mocked(checkSandboxImage).mockReset(); });
 const mount = () => render(<ConfigProvider theme={{ token:{ motion:false } }}><App><SandboxProfilesSection /></App></ConfigProvider>);
 async function mountReady() {
