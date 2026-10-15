@@ -6,6 +6,8 @@ Owner-authorized 2026-10-15; **implemented and locally qualified 2026-10-16** on
 
 The [cutover ledger](reports/canonical-workspace-cutover-verification-2026-10-16.md) and its source manifest record focused filesystem/persistence/API/Application/frontend tests, five conversational Synthetic browser journeys, 21 final real-container cases, native and packaged identity/mount qualification, actual packaged UI verification, reset refusal and bounded responsive polish. Earlier broader real-container rechecks and exact fixture/image identities are recorded separately; no all-suite or hosted result is inferred.
 
+The [review follow-up](reports/canonical-workspace-review-2026-10-16.md) corrects archived working-list writability, enforces the per-file bound during HTTP intake and synchronizes deployment/limit guidance. Its focused API/filesystem/Application checks are recorded separately.
+
 Current local acceptance is complete. Existing user data/application was preserved: deployment requires the explicit selected-path backup/reset, matching non-root identity/topology and contract-3 Profile reverification. Limits remain explicit: sampled budgets, deny-default remote Git egress, trusted single-user scope and unqualified other architectures/filesystems. CI, deployment and historical milestone acceptance were not requested and remain separate.
 
 ## Three-layer context cutover (owner-authorized 2026-10-15)

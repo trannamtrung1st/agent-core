@@ -1,6 +1,6 @@
 # Canonical workspace and direct-mount cutover verification
 
-Verified locally on 2026-10-16 (Asia/Ho_Chi_Minh), on `develop/branch-1` from clean baseline `5e58dc81a598e52c72cff1cedf8c3b3f42cdfee6`. This ledger closes the owner-requested 2026-10-15 canonical workspace proposal for the trusted single-user local deployment. It does not reopen historical milestones or claim production/multitenant isolation. The accompanying [source manifest](canonical-workspace-cutover-source-2026-10-16.json) identifies changed runtime, test and deployment bytes and retired files. The final Git commit containing this ledger identifies the complete candidate.
+Verified locally on 2026-10-16 (Asia/Ho_Chi_Minh), on `develop/branch-1` from clean baseline `5e58dc81a598e52c72cff1cedf8c3b3f42cdfee6`. This ledger closes the owner-requested 2026-10-15 canonical workspace proposal for the trusted single-user local deployment. It does not reopen historical milestones or claim production/multitenant isolation. The accompanying [source manifest](canonical-workspace-cutover-source-2026-10-16.json) identifies changed runtime, test and deployment bytes and retired files. Commit `5a0464e54922c6575d9d354d4e8fba8ce252c344` identifies that original candidate. The later [review follow-up](canonical-workspace-review-2026-10-16.md) records subsequent corrections and its own focused checks; this source manifest remains evidence for the original candidate.
 
 ## Delivered behavior
 

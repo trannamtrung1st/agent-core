@@ -79,7 +79,7 @@ public static class WorkspaceEndpoints
                 }
 
                 AgentWorkspaceEndpoints.Query(http, "path");
-                if (http.Request.ContentLength is > WorkspaceLimits.MaxWritableBytes)
+                if (http.Request.ContentLength is > AgentWorkspaceLimits.MaxFileBytes)
                 {
                     OperationalDiagnostics.RecordResourceLimit("workspaceContentLength");
                     throw AgentCoreErrors.WorkspaceQuotaExceeded();
@@ -97,7 +97,7 @@ public static class WorkspaceEndpoints
                     }
 
                     total += read;
-                    if (total > WorkspaceLimits.MaxWritableBytes)
+                    if (total > AgentWorkspaceLimits.MaxFileBytes)
                     {
                         OperationalDiagnostics.RecordResourceLimit("workspaceStream");
                         throw AgentCoreErrors.WorkspaceQuotaExceeded();

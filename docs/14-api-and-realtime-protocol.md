@@ -495,9 +495,11 @@ All routes use the trusted-local owner capability. Archived home remains inspect
 | DELETE | `/api/v2/agent-instances/{instanceId}/workspace/content?path=…` | Delete present file/link or empty folder; 204; nonempty folder/archived mutation conflicts |
 | GET | `/api/v2/agent-instances/{instanceId}/workspace/office-preview?path=…` | Current bounded Office projection; optional sheet/range |
 
-Metadata contains agentInstanceId, logicalPath, contentType, byteSize, updatedAt, directory, kind, linkTarget and mode. Pages add items, usedBytes/totalItems (nullable), nextPath, limits, usageEnforcement and truncated. No file ID, SHA, revision, provenance row or whole-tree token is exposed. Session nodes add writable. Home authorization does not grant Artifact access. Existing item-ID routes and expected-revision queries are removed.
+Metadata contains agentInstanceId, logicalPath, contentType, byteSize, updatedAt, directory, kind, linkTarget and mode. Pages add items, usedBytes/totalItems (nullable), nextPath, limits, usageEnforcement and truncated. No file ID, SHA, revision, provenance row or whole-tree token is exposed. Session nodes add writable, derived from the same Session/Instance lifecycle gate as mutations; archived or ended Sessions and archived Instances expose working nodes as read-only. Home authorization does not grant Artifact access. Existing item-ID routes and expected-revision queries are removed.
 
 ### Workspace filesystem contracts
+
+Session PUT content rejects announced lengths above the 50 MiB per-file bound before reading bytes, and stops unknown-length intake at that same bound. An oversized upload returns 413 without creating/replacing its destination. This is separate from aggregate home/working budgets.
 
 Native tools expose cwd/list/read/write/patch/search/mkdir/copy/move/delete/batch. List accepts path/cursor/limit and returns bounded current metadata with nextPath/truncated. Patches match each oldText exactly once against present UTF-8 bytes. Directory move is ordinary atomic no-overwrite rename within a root. Cross-root copy streams current trees, modes and safe links without merging an existing directory. Normal dotfiles, Linux names and empty directories are supported.
 
@@ -841,7 +843,7 @@ POST `/api/v2/admin/container-registry-credentials` accepts displayName, kind Pa
 
 ### OCI expiry and storage updates
 
-Registry `expiresAtUtc` is optional nullable UTC timestamp metadata. PATCH supplies the complete typed profile: null/omitted expiry clears it, a future date renews it, and an elapsed date remains inspectable but unavailable for new source authorization. Admin preserves the loaded date unless explicitly edited or cleared. Expiry edits increment credential revision and invalidate dependent verification; replacing the protected value preserves expiry. Storage remains integer `storageBytes` even though Admin edits MiB. Validation rejects zero, over 250 MiB, lifetime below idle expiry and initialization over 16,384 UTF-8 bytes without appending a profile revision. Existing stale-write 409 and historical reads remain unchanged.
+Registry `expiresAtUtc` is optional nullable UTC timestamp metadata. PATCH supplies the complete typed profile: null/omitted expiry clears it, a future date renews it, and an elapsed date remains inspectable but unavailable for new source authorization. Admin preserves the loaded date unless explicitly edited or cleared. Expiry edits increment credential revision and invalidate dependent verification; replacing the protected value preserves expiry. Storage remains integer `storageBytes` even though Admin edits MiB. Validation rejects zero, storage above the configured host ceiling (default 16 GiB), lifetime below idle expiry and initialization over 16,384 UTF-8 bytes without appending a profile revision. Existing stale-write 409 and historical reads remain unchanged.
 
 ### Ordinary-image verification behavior
 

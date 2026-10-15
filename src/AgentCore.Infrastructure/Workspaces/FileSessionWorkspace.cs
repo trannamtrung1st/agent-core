@@ -44,10 +44,12 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         var snapshot = await _sessions.LoadMetadataAsync(sessionId, ct) ?? throw AgentCoreErrors.NotFound("Session was not found.");
         if (snapshot.DurablyDeletedAt is not null) throw AgentCoreErrors.NotFound("Session was not found.");
         var instance = await _instances.FindAsync(snapshot.AgentInstanceId, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
-        if (write && (snapshot.Status == SessionStatus.Ended || snapshot.ArchivedAt is not null || instance.Lifecycle != AgentInstanceLifecycle.Active))
+        if (write && !CanWrite(snapshot, instance))
             throw AgentCoreErrors.Conflict("Ended or archived workspace is read-only.");
         return (snapshot, instance);
     }
+    private static bool CanWrite(SessionSnapshot session, AgentInstance instance) =>
+        session.Status != SessionStatus.Ended && session.ArchivedAt is null && instance.Lifecycle == AgentInstanceLifecycle.Active;
     private CanonicalWorkspaceFilesystem Working(Guid owner, Guid sessionId) =>
         new(AgentWorkspacePhysicalPaths.WorkingDirectory(_root, owner, sessionId), "/working");
 
@@ -87,17 +89,18 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
 
     public async ValueTask<IReadOnlyList<WorkspaceNode>> ListAsync(Guid sessionId, AgentDefinition definition, string prefix, CancellationToken cancellationToken = default)
     {
-        await OwnerAsync(sessionId, false, cancellationToken);
+        var owner = await OwnerAsync(sessionId, false, cancellationToken);
         var path = WorkspaceLogicalPath.Resolve(prefix, sessionId);
-        if (path == "/") return [new("/agent", true, 0, false, "directory"), new("/attachments", true, 0, false, "directory"), new("/working", true, 0, true, "directory")];
+        if (path == "/") return [new("/agent", true, 0, false, "directory"), new("/attachments", true, 0, false, "directory"), new("/working", true, 0, CanWrite(owner.Session, owner.Instance), "directory")];
         if (path == "/agent" || path.StartsWith("/agent/", StringComparison.Ordinal)) return await ListAgentAsync(definition, path, cancellationToken);
         if (path == "/attachments" || path.StartsWith("/attachments/", StringComparison.Ordinal)) return await ListAttachmentsAsync(sessionId, path, cancellationToken);
         await EnsureAsync(sessionId, definition, cancellationToken);
-        var owner = await OwnerAsync(sessionId, false, cancellationToken);
+        owner = await OwnerAsync(sessionId, false, cancellationToken);
         var files = Working(owner.Instance.InstanceId, sessionId);
         var entry = files.Stat(path);
-        if (!entry.Directory) return [Node(entry)];
-        return files.List(path, limit: WorkspaceLimits.MaxListEntries + 1).Entries.Select(Node).ToArray();
+        var writable = CanWrite(owner.Session, owner.Instance);
+        if (!entry.Directory) return [Node(entry, writable)];
+        return files.List(path, limit: WorkspaceLimits.MaxListEntries + 1).Entries.Select(node => Node(node, writable)).ToArray();
     }
 
     public async ValueTask<WorkspaceContent> ReadAsync(Guid sessionId, AgentDefinition definition, string logicalPath, CancellationToken cancellationToken = default)
@@ -124,7 +127,7 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
             await EnsureAsync(sessionId, definition, ct);
             var owner = await OwnerAsync(sessionId, false, ct);
             var page = Working(owner.Instance.InstanceId, sessionId).List(path, cursor, limit);
-            return new(page.Entries.Select(Node).ToArray(), page.NextPath, page.Truncated);
+            return new(page.Entries.Select(node => Node(node, CanWrite(owner.Session, owner.Instance))).ToArray(), page.NextPath, page.Truncated);
         }
         var nodes = (await ListAsync(sessionId, definition, path, ct)).OrderBy(node => node.LogicalPath, StringComparer.Ordinal)
             .Where(node => cursor is null || string.CompareOrdinal(node.LogicalPath, cursor) > 0).Take(limit + 1).ToArray();
@@ -248,6 +251,6 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
                 if (bytes is not null) await files.WriteAsync("/working/" + relative, bytes, AgentWorkspaceLimits.MaxFileBytes, _maxWritableBytes, ct);
             }
     }
-    private static WorkspaceNode Node(CanonicalWorkspaceFilesystem.Entry entry) =>
-        new(entry.Path, entry.Directory, entry.ByteSize, true, entry.Kind, entry.ModifiedAt, entry.LinkTarget, entry.Mode);
+    private static WorkspaceNode Node(CanonicalWorkspaceFilesystem.Entry entry, bool writable) =>
+        new(entry.Path, entry.Directory, entry.ByteSize, writable, entry.Kind, entry.ModifiedAt, entry.LinkTarget, entry.Mode);
 }
