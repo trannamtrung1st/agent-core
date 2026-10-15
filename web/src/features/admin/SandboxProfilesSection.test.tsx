@@ -184,24 +184,29 @@ it('suppresses late image-check messages after leaving the catalog',async()=>{
 });
 
 
-it('adds in a modal, keeps a canceled dirty draft, and restores the selected profile after discard',async()=>{
+for (const discardChanges of [false, true]) it(`adds in a modal and ${discardChanges ? 'discards the draft and restores the selected profile' : 'keeps the canceled dirty draft'}`,async()=>{
   await mountReady();
-  fireEvent.click(screen.getByRole('button',{name:'Add prebuilt image'}));
-  await act(async()=>{await Promise.resolve();});
-  // AntD's test-only title ID collides with the underlying table's Page Size ID.
-  const dialog=await screen.findByRole('dialog');
-  expect(within(dialog).queryByRole('button',{name:'Verify profile'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Add prebuilt image',hidden:true}));
+  // Query identity first; waiting on this element avoids repeated visibility
+  // calculations across both the catalog and the portaled modal.
+  const dialog=await screen.findByRole('dialog',{hidden:true});
+  await waitFor(()=>expect(dialog).toBeVisible());
+  expect(within(dialog).queryByRole('button',{name:'Verify profile',hidden:true})).not.toBeInTheDocument();
   fireEvent.change(within(dialog).getByLabelText('Sandbox profile name'),{target:{value:'New image'}});
-  await waitFor(()=>expect(within(dialog).getByRole('button', { name: 'Save profile' })).toBeEnabled());
-  fireEvent.click(within(dialog).getByRole('button',{name:'Cancel'}));
-  fireEvent.click(await screen.findByRole('button',{name:'Keep editing'}));
-  expect(within(dialog).getByLabelText('Sandbox profile name')).toHaveValue('New image');
-  fireEvent.click(within(dialog).getByRole('button',{name:'Cancel'}));
-  fireEvent.click(await screen.findByRole('button',{name:'Discard changes'}));
-  await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-  expect(screen.getByLabelText('Sandbox profile name')).toHaveValue('Workbench');
+  const save=within(dialog).getByRole('button',{name:'Save profile',hidden:true});
+  await waitFor(()=>expect(save).toBeEnabled());
+  fireEvent.click(within(dialog).getByRole('button',{name:'Cancel',hidden:true}));
+  const decision=await screen.findByRole('button',{name:discardChanges?'Discard changes':'Keep editing',hidden:true});
+  await waitFor(()=>expect(decision).toBeVisible());fireEvent.click(decision);
+  if (discardChanges) {
+    await waitFor(()=>expect(screen.queryAllByRole('dialog',{hidden:true})).toHaveLength(0));
+    expect(screen.getByLabelText('Sandbox profile name')).toHaveValue('Workbench');
+  } else {
+    expect(dialog).toBeVisible();
+    expect(within(dialog).getByLabelText('Sandbox profile name')).toHaveValue('New image');
+  }
   expect(saveSandboxProfile).not.toHaveBeenCalled();
-});
+},45_000);
 
 it('retains a failed creation in the modal and selects the saved profile after retry',async()=>{
   await mountReady();

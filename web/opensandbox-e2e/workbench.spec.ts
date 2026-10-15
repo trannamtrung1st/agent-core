@@ -131,7 +131,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     expect((await savedProfile).ok()).toBe(true);
     await expect(page.getByRole('button', { name: 'Save profile', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Verify profile', exact: true }).click();
-    await expect(page.getByText(/Non-root Python readiness, initialization and scratch validation passed/).first()).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText(/Shell readiness, mounted scratch, initialization and file validation passed/).first()).toBeVisible({ timeout: 60000 });
     const instance = await page.request.post('/api/v2/admin/agent-instances', { headers, data: { definitionId: 'general-assistant', version: 30 } });
     expect(instance.ok(), await instance.text()).toBe(true);
     const instanceId=(await instance.json()).instanceId;
@@ -149,7 +149,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     await expect(page.getByRole('button',{name:'Verify Instance setup',exact:true})).toBeEnabled();
     await page.getByRole('button',{name:'Verify Instance setup',exact:true}).click();
     const effectiveSandbox=page.getByRole('region',{name:'Effective sandbox configuration'});
-    await expect(effectiveSandbox.getByRole('alert')).toContainText('initialization and scratch validation passed',{timeout:60000});
+    await expect(effectiveSandbox.getByRole('alert')).toContainText('initialization and file validation passed',{timeout:60000});
     await effectiveSandbox.getByRole('button',{name:'Setup verification standard output',exact:true}).click();
     await expect(effectiveSandbox).toContainText('Hello, world!');
     await effectiveSandbox.getByRole('button',{name:'Setup verification standard error',exact:true}).click();
@@ -160,7 +160,7 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
       await page.screenshot({path:info.outputPath(`instance-sandbox-${width}.png`),fullPage:true});
     }
     await page.reload();await expect(page.getByRole('textbox',{name:'Instance initialization script',exact:true})).toHaveValue(setupScript);
-    await expect(effectiveSandbox.getByRole('alert')).toContainText('initialization and scratch validation passed');
+    await expect(effectiveSandbox.getByRole('alert')).toContainText('initialization and file validation passed');
     const session = await page.request.post('/api/v2/sessions', { headers, data: { agentInstanceId: instanceId, mode: 'text' } });
     expect(session.ok()).toBe(true); sessionId = (await session.json()).sessionId;
     await page.goto(`/c/${sessionId}`); await expect(page.getByTestId('connection')).toHaveText('Ready');

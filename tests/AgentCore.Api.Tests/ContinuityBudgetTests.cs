@@ -93,12 +93,17 @@ public sealed class ContinuityBudgetTests
     [Fact(Timeout = 60000)]
     public async Task Tool_search_preserves_complete_records_and_scope_under_reduced_durable_budget()
     {
-        await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"continuity-budget-{Guid.NewGuid():N}.db"));
+        await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"continuity-budget-{Guid.NewGuid():N}.db"),
+            configure: services => {
+                var original = services.Last(d => d.ServiceType == typeof(IAgentDefinitionStore));
+                services.Remove(original);
+                services.AddSingleton<IAgentDefinitionStore>(sp => new UserRetrievalDefinitions((IAgentDefinitionStore)(original.ImplementationInstance
+                    ?? original.ImplementationFactory?.Invoke(sp) ?? ActivatorUtilities.CreateInstance(sp, original.ImplementationType!))));
+            });
         var s = host.Services;
         var id = (await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 21)).InstanceId;
         var session = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
         var definition = session.Definition;
-        definition = definition with { MemoryPolicy = definition.MemoryPolicy! with { UserRetrieval = true } };
         var now = DateTimeOffset.UtcNow;
         foreach (var scope in new[] { MemoryScope.User, MemoryScope.IdentityUser })
             await s.GetRequiredService<IStructuredMemoryStore>().InsertAsync(new(Guid.NewGuid(), session.SessionId,

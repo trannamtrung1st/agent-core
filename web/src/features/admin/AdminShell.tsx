@@ -36,6 +36,12 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
   const [query, setQuery] = useState('');
   const main = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLElement | null>(null);
+  const menuFocusFrame = useRef<number | null>(null);
+  const cancelMenuFocus = useCallback(() => {
+    if (menuFocusFrame.current !== null) cancelAnimationFrame(menuFocusFrame.current);
+    menuFocusFrame.current = null;
+  }, []);
+  useEffect(() => cancelMenuFocus, [cancelMenuFocus]);
   const menuNavigation = useRef(false);
   const searchOpener = useRef<HTMLElement | null>(null);
   const searchNavigation = useRef(false);
@@ -87,7 +93,7 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
   return <AdminDraftStatus.Provider value={reportDirty}><Layout className="admin-layout">
     <Layout.Header className="admin-header">
       <Flex align="center" wrap gap="var(--ac-space-compact)" className="admin-header-inner">
-        {!desktop && <Button icon={<MenuOutlined aria-hidden />} aria-label="Open Admin navigation" onClick={e => { opener.current = e.currentTarget; menuNavigation.current = false; setMenuOpen(true); }} />}
+        {!desktop && <Button icon={<MenuOutlined aria-hidden />} aria-label="Open Admin navigation" onClick={e => { cancelMenuFocus(); opener.current = e.currentTarget; menuNavigation.current = false; setMenuOpen(true); }} />}
         <Flex align="center" gap="var(--ac-space-compact)" className="admin-brand"><Typography.Title level={3} className="admin-title">Agent Core</Typography.Title><Typography.Text type="secondary" className="admin-brand-area" style={{ fontSize: token.fontSizeSM }}>Admin</Typography.Text></Flex><Divider orientation="vertical" className="admin-brand-divider" />
         <Breadcrumb aria-label="Admin breadcrumb" className={`admin-breadcrumbs${scoped ? ' admin-breadcrumbs-scoped' : ''}`} items={[
           ...(scoped ? [{ title: <a href={adminHomePath(collection)} onClick={followAppLink}>{collection === 'instances' ? 'Instances' : 'Definitions'}</a> }, { title: <span className="admin-breadcrumb-owner" title={owner}>{owner}</span> }] : []),
@@ -110,11 +116,17 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
         </Flex>
       </Layout.Content>
     </div>
-    <Drawer rootClassName="admin-navigation-drawer" title="Admin navigation" styles={{ body: { padding: 0 } }} open={menuOpen && !desktop} placement="left" size={280} focusable={{ trap: true, focusTriggerAfterClose: false }} onClose={() => setMenuOpen(false)} afterOpenChange={open => { if (!open) {
-      if (menuNavigation.current && keyboardNavigation.current) {
-        if (!window.location.hash) main.current?.querySelector<HTMLElement>('[data-admin-page-heading]')?.focus({ preventScroll: true });
-      } else opener.current?.focus({ preventScroll: true });
-    } }}>{nav}</Drawer>
+    <Drawer rootClassName="admin-navigation-drawer" title="Admin navigation" styles={{ body: { padding: 0 } }} open={menuOpen && !desktop} placement="left" size={280} focusable={{ trap: true, focusTriggerAfterClose: false }} onClose={() => setMenuOpen(false)} afterOpenChange={open => {
+      cancelMenuFocus();
+      // Drawer invokes this during React's commit. Moving focus can blur a
+      // Tooltip trigger, which synchronously updates its popup state.
+      if (!open) menuFocusFrame.current = requestAnimationFrame(() => {
+        menuFocusFrame.current = null;
+        if (menuNavigation.current && keyboardNavigation.current) {
+          if (!window.location.hash) main.current?.querySelector<HTMLElement>('[data-admin-page-heading]')?.focus({ preventScroll: true });
+        } else opener.current?.focus({ preventScroll: true });
+      });
+    }}>{nav}</Drawer>
     <Modal rootClassName="admin-search-modal" title="Search Admin" afterClose={() => { if (!searchNavigation.current) searchOpener.current?.focus({ preventScroll: true }); }} open={searchOpen} footer={null} onCancel={() => setSearchOpen(false)} focusable={{ trap: true, focusTriggerAfterClose: false }} destroyOnHidden>
       <Flex vertical gap="var(--ac-space-default)">
         <Input autoFocus aria-label="Search Admin destinations" placeholder="Find a page or setting…" value={query} onChange={e => setQuery(e.target.value)} allowClear />

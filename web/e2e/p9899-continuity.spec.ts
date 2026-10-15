@@ -1,3 +1,4 @@
+import { INSTANCE_DEFINITIONS, selectInstanceIdentity } from "./support/instance-identity";
 import { navigateAdmin } from "./support/admin-navigation";
 import { expect, test, type Page } from '@playwright/test';
 
@@ -21,6 +22,7 @@ test('Experience informs Chat while unattended Skill management stays unavailabl
   page.on('console', message => { if (message.type() === 'error' && !message.text().startsWith('Warning: [antd: List]')) errors.push(message.text()); });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/');
+  await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
   await send(page, 'Hello');
   await expect(page.getByText('Hello from synthetic.', { exact: true }).last()).toBeVisible();
   await page.getByRole('link', { name: 'Open Admin' }).click();

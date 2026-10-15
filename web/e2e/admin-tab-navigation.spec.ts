@@ -132,6 +132,9 @@ test('Search Admin scopes approved labels, focuses anchors and recovers after de
 });
 
 test('Admin navigation changes at exactly 1024px', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto('/admin/instances');
   for (const width of [1024, 1023, 1000, 992, 1024]) {
     await page.setViewportSize({ width, height: 900 });
@@ -149,4 +152,5 @@ test('Admin navigation changes at exactly 1024px', async ({ page }) => {
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
   }
+  expect(errors).toEqual([]);
 });
