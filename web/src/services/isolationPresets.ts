@@ -15,7 +15,7 @@ export type IsolationRecipeContext = {
 export function isolationRecipe(preset: IsolationPreset, context: IsolationRecipeContext) {
   const persistent = preset === 'Persistent';
   return {
-    state: persistent ? { ...stateIsolationDefaults } : {
+    state: persistent ? { ...stateIsolationDefaults, agentStateVisibility: 'InstanceSummary' } : {
       conversationContextScope: preset === 'Stateless' ? 'CurrentRequest' : 'Session', homeAccess: 'Disabled',
       workingCleanup: 'OnSessionDeletion', browserIsolation: 'EphemeralSession', agentStateVisibility: context.visibility,
       experienceRecord: false, experienceRecall: false, profileEvidence: false, crossSessionContinuity: false

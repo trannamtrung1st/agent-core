@@ -86,7 +86,8 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     await drawer.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('button', { name: 'Stop', exact: true }).click();
     await page.getByRole('button', { name: 'Session sandbox', exact: true }).click();
-    await expect(drawer).toContainText('Terminated');
+    await expect(drawer.getByText('Terminated', { exact: true })).toBeVisible({ timeout: 30000 });
+    await expect(drawer.getByText('Canceled', { exact: true })).toBeVisible();
     await drawer.getByRole('button', { name: 'Reset sandbox', exact: true }).click();
     await page.getByRole('button', { name: 'Reset sandbox', exact: true }).last().click();
     await expect(drawer).toContainText('Terminated');

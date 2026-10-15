@@ -319,7 +319,7 @@ describe("AdminApp", () => {
   });
   it("keeps an exact draft read failure when the Definition catalog finishes loading", async () => {
     const draftId = "019944af-00d1-7000-8000-0000000000de";
-    vi.mocked(getAdminDefinitionDraft).mockRejectedValue(new Error("Draft not found."));
+    vi.mocked(getAdminDefinitionDraft).mockReset().mockRejectedValue(new Error("Draft not found."));
     vi.mocked(listAdminDefinitionDrafts).mockResolvedValue([]);
     vi.mocked(listAdminDefinitionPublications).mockResolvedValue([]);
     const props = { definitionId: "examiner", draftId, draftPage: "overview" as const,

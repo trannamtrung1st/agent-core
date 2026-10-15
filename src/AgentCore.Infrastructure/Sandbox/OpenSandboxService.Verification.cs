@@ -65,7 +65,7 @@ public sealed partial class OpenSandboxService
                         if (remaining <= 0) throw new TimeoutException();
                         using var scriptDeadline = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
                         scriptDeadline.CancelAfter(TimeSpan.FromSeconds(remaining));
-                        var initialized = await GuardCommandStorageAsync(lease, token => sdk.Commands.RunAsync(script,
+                        var initialized = await GuardCommandStorageAsync(lease, token => sdk.Commands.RunAsync(SandboxCommandPermissions.Shell(script),
                             CommandOptions(lease, "/working", Math.Max(1, (int)Math.Ceiling(remaining))),
                             new ExecutionHandlers { SkipAccumulation = true, OnStdout = m => { stdout.Append(m.Text); return Task.CompletedTask; },
                                 OnStderr = m => { stderr.Append(m.Text); return Task.CompletedTask; } }, token), scriptDeadline.Token, mounted);

@@ -8,7 +8,7 @@ import { describeAdminError } from './adminErrors';
 export type SettingsDraft = { set: Record<string, SettingValue>; clear: string[] };
 export const emptyDraft = (): SettingsDraft => ({ set: {}, clear: [] });
 /** Exact-owner reads and independent sparse section drafts; pages only select presentation. */
-export function useInstanceSettingsController(instanceId: string, archived: boolean, active: boolean, onUpdated: () => void) {
+export function useInstanceSettingsController(instanceId: string, archived: boolean, active: boolean, onUpdated: () => void, externalRevision?: number, deferRefresh = false) {
   const { message } = App.useApp();
   const [sections, setSections] = useState<SettingsSection[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, SettingsDraft>>({});
@@ -24,7 +24,7 @@ export function useInstanceSettingsController(instanceId: string, archived: bool
     finally { if (request === epoch.current) setLoading(false); }
   }, [instanceId]);
   // A pending save owns its refresh; re-entering the tab must not supersede that read.
-  useEffect(() => { if (active && !saving.current) void reload(); }, [reload, active]);
+  useEffect(() => { if (active && !saving.current && !deferRefresh) void reload(); }, [reload, active, externalRevision, deferRefresh]);
   useEffect(() => { let current = true; listModels().then(c => { if (current) { setModels(c.models); setDefaultModelKey(c.defaultKey); } }).catch(() => {}); return () => { current = false; }; }, []);
   function change(section: SettingsSection, field: string, value: SettingValue) {
     setDrafts(previous => {

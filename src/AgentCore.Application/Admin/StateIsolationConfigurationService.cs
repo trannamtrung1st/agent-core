@@ -54,7 +54,7 @@ public sealed class StateIsolationConfigurationService(IAgentInstanceStore insta
         }
         else if (persistent)
         {
-            patches.Add(new("stateIsolationPolicy", JsonSerializer.SerializeToElement(StateIsolationPolicy.Default, Json)
+            patches.Add(new("stateIsolationPolicy", JsonSerializer.SerializeToElement(StateIsolationPolicy.Default with { AgentStateVisibility = AgentStateVisibility.InstanceSummary }, Json)
                 .EnumerateObject().ToDictionary(p => p.Name, p => p.Value), []));
             patches.Add(new("memoryPolicy", new Dictionary<string, JsonElement>(), memory.Overrides.Keys.ToArray()));
         }

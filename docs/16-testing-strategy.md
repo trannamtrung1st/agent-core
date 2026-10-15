@@ -735,9 +735,15 @@ The generic Linux follow-up replaces SDK-recognition assertions with persistent/
 
 The [small final Sandbox follow-up](reports/sandbox-final-polish-acceptance-2026-10-15.md) injects completed-command inspection failures with denied/confirmed retirement, Run and request cancellation, and verifies independent file-recovery projection. Focused real SDK, Synthetic recovery UI and an intentionally deployed Real disposable Session provide separate evidence; prior native AMD64/Java gaps and opt-in CI policy remain unchanged.
 
+`SandboxCommandPermissionsTests` executes the real POSIX shell/argv wrapper and verifies literal arguments, exact exit status, permissive new-directory modes inside private scratch and no argument interpolation. Real OpenSandbox acceptance exercises nested Python/npm/Office output collection and staging cleanup with a different image UID.
+
 ## State and isolation verification
 
+`InstanceIsolationWorkspace.test.tsx` exercises preset changes across State/Memory/Voice, independent edits, common Discard, staged resets, mixed disjoint saves, an opt-in revision race with refresh/retry, and unavailable-read recovery. The [workspace consistency review](reports/state-isolation-workspace-review-2026-10-15.md) records the reproduced stale detailed-page state and focused verification.
+
 Definition/Instance preset parity checks exercise Definition draft → coordinated State/Memory/Voice edits → Save/reload → validation/publication → read-only publication → explicit Instance adoption. Verify cancellation and replacement, Custom after independent edits, Voice speech-alias cleanup/restoration, inheritance reset, and Persistent blocked by a restrictive Definition. `DefinitionStateIsolationPolicy.test.tsx`, `StateIsolationConfigurationSection.test.tsx` and `StateIsolationConfigurationTests` cover the recipe/owner boundaries. The [preset parity follow-up](reports/state-isolation-preset-parity-2026-10-15.md) records focused local evidence; no historical milestone or hosted acceptance is renewed.
+
+Visibility default/maximum checks cover an Off Definition default with an explicit InstanceSummary maximum, Instance override/clear, rejected Instance maximum edits, invalid default-above-maximum, legacy omitted-maximum serialization, publication/Run-pin SQLite reopen, and independent capability/admission checks. Persistent authoring chooses Summary for both fields. Custom must be selectable from a matching preset without modifying data, retain cancelled replacement edits and remain read-only in publications. See the [visibility and Custom follow-up](reports/state-visibility-custom-2026-10-15.md).
 
 The [state/isolation ledger](reports/agent-state-isolation-verification-2026-10-15.md) maps AS-01–28 to actual evidence and remaining gaps. Focused tests cover independent live/durable counts, mutually exclusive Run buckets, trusted scoped reads, provider outage/timeout redaction, atomic multi-owner apply, sparse ceilings, Home routes, strict request admission and terminal scratch cleanup. Use disposable InMemory/SQLite fixtures and preserve stored history, artifacts and receipts across restriction changes.
 

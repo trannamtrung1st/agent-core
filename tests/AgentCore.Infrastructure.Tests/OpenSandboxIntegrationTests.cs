@@ -533,7 +533,7 @@ public sealed class OpenSandboxIntegrationTests
         foreach (var arguments in new[] { """{"command":"true","timeoutSeconds":"120"}""", """{"command":"true","background":"false"}""", """{"command":123}""" })
             Assert.Contains("invalid",(await executor.ExecuteAsync(definition,f.Session.SessionId,new(Guid.NewGuid().ToString(),ToolCatalog.SandboxExec,arguments),8192,admission:admission)).Text);
         var linked = await executor.ExecuteAsync(definition,f.Session.SessionId,new("link-clipped",ToolCatalog.SandboxExec,"""{"command":"ln -s /etc/passwd link"}"""),64,admission:admission);
-        Assert.False(linked.OutcomeUnknown); Assert.InRange(Encoding.UTF8.GetByteCount(linked.Text),0,64);
+        Assert.False(linked.OutcomeUnknown); Assert.True(linked.EffectObserved); Assert.InRange(Encoding.UTF8.GetByteCount(linked.Text),0,64);
         await Assert.ThrowsAsync<AgentCoreException>(() => f.Workspace.ReadAsync(f.Session.SessionId, f.Definition, "/working/link").AsTask());
     }
 

@@ -5,27 +5,29 @@ import { StateIsolationPolicyFields, stateIsolationChoices, stateIsolationDefaul
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { IsolationPresetControl } from './IsolationPresetControl';
 import { IsolationChangePreview } from './IsolationChangePreview';
-import { applyDefinitionIsolationPreset, definitionIsolationChanges, definitionIsolationPreset, isolationRecord } from './definitionIsolationPresets';
+import { applyDefinitionIsolationPreset, definitionIsolationChanges, definitionIsolationPreset, definitionStatePolicy } from './definitionIsolationPresets';
 
 export function DefinitionStateIsolationPolicy({ candidate, savedCandidate = candidate, disabled = false, readOnly = false, active = true, id, details, onChange }: {
   candidate: DefinitionCandidate; savedCandidate?: DefinitionCandidate; disabled?: boolean; readOnly?: boolean; active?: boolean;
   id?: string; details?: ReactNode; onChange?: (next: DefinitionCandidate) => void;
 }) {
   const { token } = theme.useToken();
-  const policy = isolationRecord(candidate.stateIsolationPolicy);
+  const policy = definitionStatePolicy(candidate);
   const changes = definitionIsolationChanges(candidate, savedCandidate);
   function change(field: string, value: string | boolean) { onChange?.({ ...candidate, stateIsolationPolicy: { ...defaults, ...policy, [field]: value } }); }
   return <Flex vertical gap={token.padding}>
     <AgentConfigurationPanel id={id} title="Continuity and resource policy" label={readOnly ? 'Published State & Isolation' : 'Draft State & Isolation'} bodyGap="section"
       description={readOnly ? 'Published policy is read-only. Create a draft to change it.' : 'Presets prepare editable drafts. Save and publish a new version; existing Instances adopt it explicitly.'}>
-      <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Instances may narrow home access, sharing, learning and visibility. State visibility also requires an explicitly authorized state-inspection capability. A persistent browser profile requires host support. Current-request continuity requires a fresh ordinary Session and text input.</Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ margin: 0 }}>Instances may narrow home access, sharing and learning, and choose state visibility up to the Definition maximum. State visibility also requires an explicitly authorized state-inspection capability. A persistent browser profile requires host support. Current-request continuity requires a fresh ordinary Session and text input.</Typography.Paragraph>
       {!candidate.stateIsolationPolicy && <Typography.Text type="secondary">No explicit policy. Existing continuity and host browser behavior are preserved; agent state awareness is off.</Typography.Text>}
       <Form layout="vertical" className="admin-config-form instance-settings-form">
         <Flex vertical gap={token.padding}>
           <IsolationPresetControl value={definitionIsolationPreset(candidate, savedCandidate)} disabled={disabled || readOnly} dirty={changes.length > 0}
             active={active} scope="Definition" onSelect={preset => { if (preset !== 'DefinitionDefaults') onChange?.(applyDefinitionIsolationPreset(candidate, savedCandidate, preset)); }} />
           <StateIsolationPolicyFields value={field => (policy[field] ?? defaults[field]) as string | boolean}
-            choices={field => stateIsolationChoices[field]} disabled={() => disabled || readOnly} onChange={change} />
+            choices={field => field === 'agentStateVisibility' ? stateIsolationChoices[field].filter((_, index) => index <= stateIsolationChoices[field].indexOf(String(policy.maxAgentStateVisibility))) : stateIsolationChoices[field]}
+            definitionVisibility={{ maximum: String(policy.maxAgentStateVisibility), onChange: value => change('maxAgentStateVisibility', value) }}
+            disabled={() => disabled || readOnly} onChange={change} />
         </Flex>
       </Form>
       {!readOnly && <Button style={{ alignSelf: 'flex-start' }} disabled={disabled || !candidate.stateIsolationPolicy} onClick={() => onChange?.({ ...candidate, stateIsolationPolicy: null })}>Use compatibility defaults</Button>}

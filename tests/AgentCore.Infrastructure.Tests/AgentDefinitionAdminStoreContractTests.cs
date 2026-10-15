@@ -128,7 +128,7 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
                 new SystemIdGenerator(TimeProvider.System),
                 new InMemoryDefinitionResourceContentStore());
             var now = DateTimeOffset.Parse("2026-01-04T00:00:00Z");
-            var candidate = SampleCandidate("demo-agent");
+            var candidate = SampleCandidate("demo-agent") with { StateIsolationPolicy = new(MaxAgentStateVisibility: AgentStateVisibility.InstanceSummary) };
             var draft = await store.CreateDraftAsync(
                 new AgentDefinitionDraftCreate("demo-agent", candidate, DefinitionDraftSourceKind.New, null, now),
                 CancellationToken.None);
@@ -145,6 +145,7 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
             Assert.NotNull(loaded);
             Assert.Equal(published.Version, loaded!.Version);
             Assert.Equal("You are a demo agent.", loaded.Payload.AgentInstructions);
+            Assert.Equal(candidate.StateIsolationPolicy, loaded.Payload.StateIsolationPolicy);
         }
         finally
         {

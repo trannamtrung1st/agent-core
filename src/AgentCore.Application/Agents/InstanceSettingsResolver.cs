@@ -140,7 +140,7 @@ public static class InstanceSettingsResolver
                 result["homeAccess"] = new("Instance home access can only be narrowed.", Choices: Enum.GetValues<HomeAccess>().Where(v => v >= state.HomeAccess).Select(v => v.ToString()).ToArray());
                 result["workingCleanup"] = new("Cleanup waits for safe terminal eligibility.", Choices: ["OnSessionDeletion", "AfterTerminal"]);
                 result["browserIsolation"] = new("Browser isolation cannot broaden the Definition or host policy.", Choices: state.BrowserIsolation == BrowserIsolation.EphemeralSession ? ["EphemeralSession"] : state.BrowserIsolation == BrowserIsolation.PersistentAgent ? ["PersistentAgent", "EphemeralSession"] : ["HostDefault", "PersistentAgent", "EphemeralSession"]);
-                result["agentStateVisibility"] = new("State visibility cannot exceed Definition authorization.", Choices: Enum.GetValues<AgentStateVisibility>().Where(v => v <= state.AgentStateVisibility).Select(v => v.ToString()).ToArray());
+                result["agentStateVisibility"] = new("State visibility cannot exceed the Definition maximum.", Choices: Enum.GetValues<AgentStateVisibility>().Where(v => v <= state.VisibilityCeiling).Select(v => v.ToString()).ToArray());
                 CannotEnable("experienceRecord", "Experience recording", state.ExperienceRecord);
                 CannotEnable("experienceRecall", "Experience recall", state.ExperienceRecall);
                 CannotEnable("crossSessionContinuity", "Cross-Session continuity", state.CrossSessionContinuity);

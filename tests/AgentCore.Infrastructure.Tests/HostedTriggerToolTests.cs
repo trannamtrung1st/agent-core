@@ -102,7 +102,8 @@ public sealed class HostedTriggerToolTests
         Assert.Contains("\"kind\":\"event\"", inspected.Text);
 
         var foreign = await Execute(ToolCatalog.AutomationInspect, new { automationId = id }, admission: detached with { AgentInstanceId = Guid.NewGuid() });
-        Assert.Contains("NotFound", foreign.Text);
+        Assert.Contains("\"error\":\"forbidden\"", foreign.Text);
+        Assert.DoesNotContain("Review orders", foreign.Text);
         var update = command with { CurrentUserText = "Update this automation instructions.", AllowedActions = TriggerCommandAction.Update };
         var edited = await Execute(ToolCatalog.AutomationUpdate, new { automationId = id, expectedRevision = 1, instructions = "Review configured order details." }, update);
         Assert.Contains("Review configured order details.", edited.Text);

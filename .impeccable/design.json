@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T17:30:58.964555+00:00",
+  "generatedAt": "2026-10-15T17:55:14.915205+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -315,7 +315,7 @@
     ],
     "inspection": {
       "branch": "develop/branch-1",
-      "baseCommit": "5e58dc81a598e52c72cff1cedf8c3b3f42cdfee6",
+      "baseCommit": "702e3808c3b330c12a6880343c13942b136ec59a",
       "sourceSha256": {
         "web/src/app.css": "516332a487820c151bd94fdf100928d17eac312f306eaa8659d6ed6beef3152f",
         "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
@@ -324,25 +324,29 @@
         "web/src/app/appFeedbackPlacement.ts": "4232563daa5a53ce141c2585035b5aa65bd5ea443590c32167c52354c8c1c6e5",
         "web/src/features/admin/AddCredentialDialog.tsx": "e9e217a5e84579e386bfb8610e104e48e2955c426db4b192cc714459036b0127",
         "web/src/features/admin/AdminApp.tsx": "59d46f1a41c694953ceb2c8386ab1ec50bee97ff7c07aee035bd464b9cd84587",
+        "web/src/features/admin/AdminShell.tsx": "58aa8322bc4dc0e3e6ff137284c4e3049f04ec420e3864f6e7b66c1fab5f93e4",
         "web/src/features/admin/AgentConfigurationLayout.tsx": "b36bde3bb2f8a11cc14abb20f29df25656b9ee2ee5490b1663d724513589e73b",
         "web/src/features/admin/BrowserPrivacySection.tsx": "3b6c1aa94e2b5253330b7ff2f9c8e2a6ddb3f8077b8e6dfe13287f465539cbce",
         "web/src/features/admin/CredentialsSection.tsx": "17406d7a757110be6d783a5f98abb8c94d1495e438cf982826de7dda8bc8dba6",
         "web/src/features/admin/DefinitionSandboxPolicy.tsx": "f5346ee577bb3167c6369aee392d1fc68770b187fa6321b2ccd6c225f59d05fe",
+        "web/src/features/admin/DefinitionStateIsolationPolicy.tsx": "907a2ba65a52c90e030179102df02994bfff9261b87c8503a075f70c435d1266",
         "web/src/features/admin/DriveAccountDialog.tsx": "13376e90e4f0558c5fd27a5adc20758c262d62cec6b4f90eff795c6d34cf55c8",
         "web/src/features/admin/EmailAccountDialog.tsx": "fffecf1aaa7b163c1cab17d62984ba152fa4cb82c1928ed101230db390f2b749",
         "web/src/features/admin/InstanceAutomationsSection.tsx": "fe80f38993e493dc9e5c021ea068d9ba90e108a058dcabf62be06f885aa7a421",
         "web/src/features/admin/InstanceConfigurationActions.tsx": "1d803a8749008250e139568e6abba8b3e6a4f0c91273d8b36b0848e7d1f28cd5",
         "web/src/features/admin/InstanceSandboxSummary.tsx": "61c664c0d8ae6fa268451a86fdf1880e7da9cc8c731e003205336a6351321d30",
-        "web/src/features/admin/InstanceSettingsSection.tsx": "373e648783433b9953fdaf01cf2443b853ecc0a3dd5ec885a4492873d5dfebc0",
+        "web/src/features/admin/InstanceSettingsSection.tsx": "8ac7ed48a90e1be1e12db20b1c26fe4e7bed02269098eaaf2d9dc5d9fc11bc07",
         "web/src/features/admin/InstanceSkillsSection.tsx": "874bd6ecdaf4fadc261bc9e61954a0184b24cb590cb665fafe69f889da952868",
         "web/src/features/admin/InstanceWorkspaceSection.tsx": "09a2e73523d08b60d8756fce2040ce9fb44a82ef5af589564e082e3d71d56bbb",
+        "web/src/features/admin/IsolationPresetControl.tsx": "b195e712cbb6b8b999f80a790365ae9f52ea9004f5a132b6423102970706a20a",
         "web/src/features/admin/SandboxProfileDetails.tsx": "0a1d5395f3c6ff85c4fb004e57e3e4b5b595a9347345a7edd67ed39c653282d3",
         "web/src/features/admin/SandboxProfilesSection.tsx": "c9187b38686704192f3b4640280e2a12ea118e6c3ff959c782ba382fa8be863c",
         "web/src/features/admin/SkillDrawer.tsx": "48c5aab113b87567037d4a275c220f9d436f0751299117e2de3e5dfdf1705ce2",
-        "web/src/features/admin/StateIsolationConfigurationSection.tsx": "b82c0a3b3d4c8687b713c6cca64befd074dffe7725ef41df89c7333459500933",
+        "web/src/features/admin/StateIsolationConfigurationProvider.tsx": "d827459f760d812abc22f682de55a76507411fbd7c80164aea5402d437b1bd18",
+        "web/src/features/admin/StateIsolationConfigurationSection.tsx": "1227a93a7733a1c7701c7a63d65218072cf4ab89cbc08c92e213a309bab74e7d",
         "web/src/features/admin/adminFailure.tsx": "27edf8d0a895e3eb8d5b80245deac4eb6686138cb60967949c051008c05f62b1",
         "web/src/features/admin/adminFormFeedback.ts": "0d14ed96ba94bad96af6da12af25e1075ecce880cf8056700c49e93e17546bd5",
-        "web/src/features/admin/useInstanceSettingsController.ts": "1cfe6e009972021936371b43ce3ccadcfd5cd87f78ea534a0d048291e6020742",
+        "web/src/features/admin/useInstanceSettingsController.ts": "b0f2cfd173aee9dd9ff692a17380fd8480a45d6d896ee62bd24e01cff6dbe9a5",
         "web/src/features/chat/ChatApp.tsx": "27e9686d7d65885abc8cb4fb1f34cef0ff8ce2c3db9f918fb3ff573e7e36f6a6",
         "web/src/features/chat/DiagnosticDetails.tsx": "4ed6285461c76ef36f0416fc20ce182be43c347449f01bf0c81f02adb7f2183f",
         "web/src/features/chat/SessionSandboxDrawer.tsx": "b6613ebba8fcdd571636acd2a0af0447df528c14e44804181f8b4bddc093163b",
@@ -355,11 +359,12 @@
         "web/src/services/sandboxes.ts": "96a8d1f7e0ad363bdeecd97551196755c7a33b460c2dd3a1485c4ff1320d4d8c",
         "web/src/services/stateIsolation.ts": "b1a87a108608e5abbd75a7f21d75530f70fe6862fec2b74384cb70a59de71ddb"
       },
-      "evidence": "docs/reports/canonical-workspace-cutover-verification-2026-10-16.md",
-      "scope": "Canonical direct files/mounts: current-path Admin browsing, live previews and process/files/policy truth in the existing Session sandbox drawer. Existing Ant Design v6 system retained.",
+      "evidence": "docs/reports/canonical-workspace-main-sync-2026-10-16.md",
+      "scope": "Current main integration: retain canonical workspace UI, shared State/Memory/Voice draft ownership, visibility ceilings, Custom selection and mobile navigation focus.",
       "snapshotKind": "commit-candidate",
-      "inspectedAt": "2026-10-15T17:30:58.964555+00:00",
+      "inspectedAt": "2026-10-15T17:55:14.915205+00:00",
       "evidenceRecords": [
+        "docs/reports/canonical-workspace-main-sync-2026-10-16.md",
         "docs/reports/canonical-workspace-cutover-verification-2026-10-16.md",
         "docs/reports/sandbox-final-polish-acceptance-2026-10-15.md",
         "docs/reports/generic-linux-sandbox-runtime-verification-2026-10-15.md",
@@ -373,7 +378,7 @@
         "docs/reports/oci-sandbox-final-hardening-2026-10-15.md",
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
-      "verification": "105 focused frontend tests, 32 Admin profile/settings regressions and production build pass. Synthetic Playwright MCP exercised current folder navigation, external-write live preview reload, 503/Retry, controlled EnforcementPending/read-only/partial-effect evidence and reset confirmation at 1440/1024/768/390/320. Five conversational workspace CLI journeys passed. Packaged UI also displays actual successful direct-mount verification and bounded setup exit 7; real container and packaged filesystem evidence is recorded in the cutover ledger; controlled drawer projections do not claim actual provider failure injection."
+      "verification": "96 focused frontend cases and production build pass. Synthetic MCP creates an Instance, carries a Stateless draft across State/Memory/Voice, discards to inherited values, then saves atomically from Voice and confirms values after reload. Existing five-width canonical UI evidence remains historical; this merge makes no new visual redesign claim."
     }
   },
   "components": [

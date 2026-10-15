@@ -8,6 +8,8 @@ The [cutover ledger](reports/canonical-workspace-cutover-verification-2026-10-16
 
 The [review follow-up](reports/canonical-workspace-review-2026-10-16.md) corrects archived working-list writability, enforces the per-file bound during HTTP intake and synchronizes deployment/limit guidance. Its focused API/filesystem/Application checks are recorded separately.
 
+The [current main synchronization](reports/canonical-workspace-main-sync-2026-10-16.md) incorporates main through `702e3808`, retaining shared isolation drafts, explicit visibility ceilings and private canonical command permissions with focused integrated verification.
+
 Current local acceptance is complete. Existing user data/application was preserved: deployment requires the explicit selected-path backup/reset, matching non-root identity/topology and contract-3 Profile reverification. Limits remain explicit: sampled budgets, deny-default remote Git egress, trusted single-user scope and unqualified other architectures/filesystems. CI, deployment and historical milestone acceptance were not requested and remain separate.
 
 ## Three-layer context cutover (owner-authorized 2026-10-15)
