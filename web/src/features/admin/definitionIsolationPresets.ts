@@ -5,13 +5,19 @@ import { applyVoiceEnabled, type DefinitionCandidate } from './definitionCandida
 
 export const isolationRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const memoryOf = (candidate: DefinitionCandidate) => Object.fromEntries(memoryFields.map(field => [field, isolationRecord(candidate.memoryPolicy)[field] === true]));
+export function definitionStatePolicy(candidate: DefinitionCandidate): Record<string, unknown> {
+  const policy = isolationRecord(candidate.stateIsolationPolicy);
+  return { ...stateIsolationDefaults, ...policy,
+    maxAgentStateVisibility: policy.maxAgentStateVisibility ?? policy.agentStateVisibility ?? stateIsolationDefaults.agentStateVisibility };
+}
 function recipe(preset: IsolationPreset, saved: DefinitionCandidate) {
   const memory = memoryOf(saved);
-  return isolationRecipe(preset, { memoryDefaults: memory, sessionMemory: memory.sessionMemory, voiceEnabled: isolationRecord(saved.voice).enabled === true,
+  const result = isolationRecipe(preset, { memoryDefaults: memory, sessionMemory: memory.sessionMemory, voiceEnabled: isolationRecord(saved.voice).enabled === true,
     visibility: 'CurrentSession', experienceEnabled: false, allowMaintenance: false });
+  return { ...result, state: { ...result.state, maxAgentStateVisibility: result.state.agentStateVisibility } };
 }
 export function definitionIsolationPreset(candidate: DefinitionCandidate, saved: DefinitionCandidate): IsolationPreset | 'Custom' {
-  const state = { ...stateIsolationDefaults, ...isolationRecord(candidate.stateIsolationPolicy) };
+  const state = definitionStatePolicy(candidate);
   const memory = memoryOf(candidate);
   return isolationPresets.find(preset => {
     const next = recipe(preset, saved);
@@ -29,9 +35,11 @@ export function applyDefinitionIsolationPreset(candidate: DefinitionCandidate, s
   });
 }
 export function definitionIsolationChanges(candidate: DefinitionCandidate, saved: DefinitionCandidate): IsolationPlan['changes'] {
-  const sections = { stateIsolationPolicy: Object.keys(stateIsolationDefaults), memoryPolicy: [...memoryFields], voice: ['enabled'], providerPreferences: ['speechRecognizer', 'speechSynthesizer'] };
-  const value = (source: DefinitionCandidate, section: string, field: string): SettingValue => (isolationRecord(source[section])[field]
-    ?? (section === 'stateIsolationPolicy' ? stateIsolationDefaults[field] : section === 'memoryPolicy' || section === 'voice' ? false : null)) as SettingValue;
+  const sections = { stateIsolationPolicy: [...Object.keys(stateIsolationDefaults), 'maxAgentStateVisibility'], memoryPolicy: [...memoryFields], voice: ['enabled'], providerPreferences: ['speechRecognizer', 'speechSynthesizer'] };
+  const value = (source: DefinitionCandidate, section: string, field: string): SettingValue => {
+    if (section === 'stateIsolationPolicy') return definitionStatePolicy(source)[field] as SettingValue;
+    return (isolationRecord(source[section])[field] ?? (section === 'memoryPolicy' || section === 'voice' ? false : null)) as SettingValue;
+  };
   return Object.entries(sections).flatMap(([owner, fields]) => fields.flatMap(field => {
     const before = value(saved, owner, field), after = value(candidate, owner, field);
     return before === after ? [] : [{ owner, field, before, after, source: 'draft' }];

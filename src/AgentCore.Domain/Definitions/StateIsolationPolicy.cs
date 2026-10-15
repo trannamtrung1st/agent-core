@@ -23,15 +23,22 @@ public sealed record StateIsolationPolicy(
     bool ExperienceRecord = true,
     bool ExperienceRecall = true,
     bool ProfileEvidence = true,
-    bool CrossSessionContinuity = true)
+    bool CrossSessionContinuity = true,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    AgentStateVisibility? MaxAgentStateVisibility = null)
 {
     public static StateIsolationPolicy Default { get; } = new();
+    [JsonIgnore]
+    public AgentStateVisibility VisibilityCeiling => MaxAgentStateVisibility ?? AgentStateVisibility;
 
     public void Validate()
     {
         if (!Enum.IsDefined(ConversationContextScope) || !Enum.IsDefined(HomeAccess) || !Enum.IsDefined(WorkingCleanup)
-            || !Enum.IsDefined(BrowserIsolation) || !Enum.IsDefined(AgentStateVisibility))
+            || !Enum.IsDefined(BrowserIsolation) || !Enum.IsDefined(AgentStateVisibility)
+            || MaxAgentStateVisibility is { } maximum && !Enum.IsDefined(maximum))
             throw new ArgumentException("State and isolation policy contains an unknown value.");
+        if (AgentStateVisibility > VisibilityCeiling)
+            throw new ArgumentException("Default agent state visibility cannot exceed its Definition maximum.");
     }
 
     public static StateIsolationPolicy Restrict(StateIsolationPolicy admitted, StateIsolationPolicy current) => admitted with {

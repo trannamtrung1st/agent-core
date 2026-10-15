@@ -51,7 +51,10 @@ public sealed class StateIsolationConfigurationTests
     [Fact]
     public async Task Persistent_requests_an_explicit_recipe_and_definition_defaults_restore_inheritance()
     {
-        await using var host = new AgentCoreApiFactory();
+        await using var host = new AgentCoreApiFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(services => {
+            services.RemoveAll<IAgentDefinitionStore>();
+            services.AddSingleton<IAgentDefinitionStore>(sp => new VisibilityDefinitionStore(sp.GetRequiredService<IBuiltInAgentDefinitionStore>()));
+        }));
         using var client = TestOwnerCapability.CreateOwnerClient(host);
         var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 31);
         var settings = host.Services.GetRequiredService<AgentInstanceSettingsService>();
@@ -61,6 +64,7 @@ public sealed class StateIsolationConfigurationTests
         var persistent = await service.PresetAsync(instance.InstanceId, "Persistent");
         Assert.Empty(persistent.BlockingReasons);
         Assert.Equal("ReadWrite", persistent.Draft.Settings.Single(p => p.Section == "stateIsolationPolicy").Set["homeAccess"].GetString());
+        Assert.Equal("InstanceSummary", persistent.Draft.Settings.Single(p => p.Section == "stateIsolationPolicy").Set["agentStateVisibility"].GetString());
         var applied = await service.ApplyAsync(instance.InstanceId, persistent.Expected, persistent.Draft, persistent.Fingerprint);
         Assert.Equal("instance", applied.Settings.Single(s => s.Section == "stateIsolationPolicy").Sources["homeAccess"]);
         var reset = await service.PresetAsync(instance.InstanceId, "DefinitionDefaults");
@@ -68,6 +72,44 @@ public sealed class StateIsolationConfigurationTests
         applied = await service.ApplyAsync(instance.InstanceId, reset.Expected, reset.Draft, reset.Fingerprint);
         Assert.Empty(applied.Settings.Single(s => s.Section == "stateIsolationPolicy").Overrides);
         Assert.Equal("definition", applied.Settings.Single(s => s.Section == "stateIsolationPolicy").Sources["homeAccess"]);
+        Assert.Equal("Off", applied.Settings.Single(s => s.Section == "stateIsolationPolicy").Effective["agentStateVisibility"]);
+    }
+
+    private sealed class VisibilityDefinitionStore(IBuiltInAgentDefinitionStore inner) : IAgentDefinitionStore
+    {
+        public ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default) => inner.ListAsync(ct);
+        public async ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken ct = default)
+        {
+            var definition = await inner.GetAsync(id, version, ct);
+            return definition is null ? null : definition with { StateIsolationPolicy = new(MaxAgentStateVisibility: AgentStateVisibility.InstanceSummary) };
+        }
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Visibility_override_and_clear_use_the_explicit_maximum_and_reject_instance_ceiling_edits(bool sqlite)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "visibility-ceiling-" + Guid.NewGuid().ToString("N") + ".db");
+        await using WebApplicationFactory<Program> source = sqlite ? new ExperienceHost(path) : new AgentCoreApiFactory();
+        await using var host = source.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => {
+            services.RemoveAll<IAgentDefinitionStore>();
+            services.AddSingleton<IAgentDefinitionStore>(sp => new VisibilityDefinitionStore(sp.GetRequiredService<IBuiltInAgentDefinitionStore>()));
+        }));
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var owner = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 31);
+        var root = $"/api/v2/admin/agent-instances/{owner.InstanceId}/settings/stateIsolationPolicy";
+        var initial = (await client.GetFromJsonAsync<InstanceSettingsSection>(root))!;
+        Assert.Equal("Off", initial.Effective["agentStateVisibility"]?.ToString());
+        Assert.Equal(new[] { "Off", "CurrentSession", "InstanceSummary" }, initial.Constraints["agentStateVisibility"].Choices);
+        var saved = await client.PatchAsJsonAsync(root, new { expectedInstanceRevision = initial.InstanceRevision, set = new { agentStateVisibility = "InstanceSummary" }, clear = Array.Empty<string>() });
+        saved.EnsureSuccessStatusCode();
+        var updated = (await client.GetFromJsonAsync<InstanceSettingsSection>(root))!;
+        Assert.Equal("InstanceSummary", updated.Effective["agentStateVisibility"]?.ToString());
+        Assert.Equal("Off", updated.DefinitionDefaults["agentStateVisibility"]?.ToString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PatchAsJsonAsync(root, new { expectedInstanceRevision = updated.InstanceRevision,
+            set = new { maxAgentStateVisibility = "InstanceSummary" }, clear = Array.Empty<string>() })).StatusCode);
+        (await client.PatchAsJsonAsync(root, new { expectedInstanceRevision = updated.InstanceRevision, set = new { }, clear = new[] { "agentStateVisibility" } })).EnsureSuccessStatusCode();
+        Assert.Equal("Off", (await client.GetFromJsonAsync<InstanceSettingsSection>(root))!.Effective["agentStateVisibility"]?.ToString());
     }
 
     [Fact]

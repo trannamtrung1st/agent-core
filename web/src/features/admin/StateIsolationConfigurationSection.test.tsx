@@ -6,14 +6,14 @@ import { applyIsolation, deriveIsolationPreset, presetIsolation, previewIsolatio
 
 vi.mock('../../services/stateIsolation', async importOriginal => ({ ...await importOriginal<typeof import('../../services/stateIsolation')>(),
   applyIsolation: vi.fn(), presetIsolation: vi.fn(), previewIsolation: vi.fn(), readIsolation: vi.fn() }));
-const state = { conversationContextScope: 'Session', homeAccess: 'ReadWrite', workingCleanup: 'OnSessionDeletion', browserIsolation: 'HostDefault', agentStateVisibility: 'Off',
+const state = { conversationContextScope: 'Session', homeAccess: 'ReadWrite', workingCleanup: 'OnSessionDeletion', browserIsolation: 'HostDefault', agentStateVisibility: 'InstanceSummary',
   experienceRecord: true, experienceRecall: true, profileEvidence: true, crossSessionContinuity: true };
 const section = (name: string, effective: Record<string, string | boolean>) => ({ section: name, instanceRevision: 1, definitionId: 'definition', definitionVersion: 1,
   overrides: {}, effective, definitionDefaults: effective, configurationHash: 'hash', sources: Object.fromEntries(Object.keys(effective).map(k => [k, 'definition' as const])),
   constraints: { homeAccess: { reason: 'Narrow only', requiredBoolean: null, minimum: null, maximum: null, choices: ['ReadWrite', 'ReadOnly', 'Disabled'] } } });
 const view: IsolationView = { revisions: { instance: 1, experience: 0, maintenance: 0 }, experienceEnabled: false, allowMaintenance: false,
   hostBrowserMode: 'PersistentAgent', browserEnabled: true, settings: [section('stateIsolationPolicy', state), section('memoryPolicy', { sessionMemory: true, identityUserPromotion: false, identityUserRetrieval: false, userPromotion: false, userRetrieval: false }), section('voice', { enabled: false })] };
-const isolated: IsolationDraft = { settings: [{ section: 'stateIsolationPolicy', set: { ...state, homeAccess: 'Disabled', browserIsolation: 'EphemeralSession', experienceRecord: false, experienceRecall: false, profileEvidence: false, crossSessionContinuity: false }, clear: [] }], experienceEnabled: false, allowMaintenance: false };
+const isolated: IsolationDraft = { settings: [{ section: 'stateIsolationPolicy', set: { ...state, homeAccess: 'Disabled', browserIsolation: 'EphemeralSession', agentStateVisibility: 'Off', experienceRecord: false, experienceRecall: false, profileEvidence: false, crossSessionContinuity: false }, clear: [] }], experienceEnabled: false, allowMaintenance: false };
 const plan = (draft: IsolationDraft): IsolationPlan => ({ expected: view.revisions, draft, fingerprint: 'fingerprint', blockingReasons: [], notice: 'Existing data is retained.',
   changes: draft.settings.length ? [{ owner: 'stateIsolationPolicy', field: 'homeAccess', before: 'ReadWrite', after: draft.settings[0].set.homeAccess, source: 'instance' }] : [] });
 beforeEach(() => {

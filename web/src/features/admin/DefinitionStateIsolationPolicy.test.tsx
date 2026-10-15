@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ConfigProvider } from 'antd';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { DefinitionStateIsolationPolicy } from './DefinitionStateIsolationPolicy';
 import { applyDefinitionIsolationPreset, definitionIsolationChanges, definitionIsolationPreset } from './definitionIsolationPresets';
 import type { DefinitionCandidate } from './definitionCandidate';
@@ -24,6 +24,7 @@ test('Definition recipes coordinate all owned settings and preserve unrelated au
   expect(session.voice).toEqual(saved.voice); expect(session.providerPreferences).toEqual(saved.providerPreferences);
   const persistent = applyDefinitionIsolationPreset(session, saved, 'Persistent');
   expect(definitionIsolationPreset(persistent, saved)).toBe('Persistent'); expect(persistent.memoryPolicy).toEqual(saved.memoryPolicy);
+  expect(persistent.stateIsolationPolicy).toMatchObject({ agentStateVisibility: 'InstanceSummary', maxAgentStateVisibility: 'InstanceSummary' });
   expect(definitionIsolationPreset({ ...session, voice: { ...session.voice as object, enabled: false } }, saved)).toBe('Custom');
   expect(definitionIsolationPreset({ ...session, memoryPolicy: { ...session.memoryPolicy as object, userRetrieval: true } }, saved)).toBe('Custom');
 });
@@ -47,13 +48,26 @@ test('Definition presets remain editable drafts and replacement requires confirm
   fireEvent.mouseDown(select); fireEvent.click(await screen.findByText('Persistent assistant'));
   fireEvent.click(screen.getByRole('button', { name: 'Replace draft' }));
   await waitFor(() => expect(screen.getByRole('switch', { name: 'Allow Experience recording' })).toBeChecked());
-  expect(within(preview).getByText('No configuration changes.')).toBeVisible();
+  expect(within(preview).getByText('State & Isolation · Maximum agent state visibility')).toBeVisible();
+  expect(preview).toHaveTextContent('Off → Aggregate Instance summary');
 });
 
 test('published Definition preset and all policy controls stay read-only', () => {
   render(<DefinitionStateIsolationPolicy candidate={applyDefinitionIsolationPreset(saved, saved, 'Stateless')} readOnly />);
   expect(screen.getByRole('combobox', { name: 'Isolation preset' })).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: 'Default agent state visibility' })).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: 'Maximum agent state visibility' })).toBeDisabled();
   screen.getAllByRole('switch').forEach(control => expect(control).toBeDisabled());
   expect(screen.queryByRole('button', { name: 'Use Definition defaults' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Use compatibility defaults' })).not.toBeInTheDocument();
+});
+
+test('lowering a legacy default preserves its original Instance ceiling', async () => {
+  const onChange = vi.fn();
+  render(<DefinitionStateIsolationPolicy candidate={{ ...saved, stateIsolationPolicy: { agentStateVisibility: 'InstanceSummary' } }} onChange={onChange} />);
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Default agent state visibility' }));
+  fireEvent.click(await screen.findByText('Off'));
+  expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ stateIsolationPolicy: expect.objectContaining({
+    agentStateVisibility: 'Off', maxAgentStateVisibility: 'InstanceSummary'
+  }) }));
 });

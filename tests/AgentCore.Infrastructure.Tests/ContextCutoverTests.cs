@@ -90,7 +90,8 @@ public sealed class ContextCutoverTests
     public async Task Sealed_run_configuration_hashes_and_inert_receipts_survive_conversion_and_reopen(bool isolationPin)
     {
         var definition = isolationPin ? Definition with { StateIsolationPolicy = new(HomeAccess: HomeAccess.Disabled,
-            BrowserIsolation: BrowserIsolation.EphemeralSession, ProfileEvidence: false, ExperienceRecall: false), MemoryPolicy = MemoryPolicy.Disabled } : Definition;
+            BrowserIsolation: BrowserIsolation.EphemeralSession, ProfileEvidence: false, ExperienceRecall: false,
+            MaxAgentStateVisibility: AgentStateVisibility.InstanceSummary), MemoryPolicy = MemoryPolicy.Disabled } : Definition;
         var path = Path.Combine(Path.GetTempPath(), $"context-sealed-{Guid.NewGuid():N}.db"); var backup = path + ".backup"; var secondBackup = path + ".second";
         const string receipt = "{\"Phase\":\"model-turn\",\"Messages\":[{\"Role\":\"System\",\"Text\":\"retired instruction\"},{\"Role\":\"Tool\",\"Text\":\"historical receipt\"}]}";
         Guid runId;
