@@ -10,6 +10,8 @@ Keep this file focused on open work and maintainer ideas. [README](README.md) su
 
 ## Current status
 
+State and isolation implementation is locally complete, integrated with the reviewed schema-2 context cutover. [AS-01–28 evidence](docs/reports/agent-state-isolation-verification-2026-10-15.md) covers Synthetic/SQLite/model-context, Admin, realtime and disposable Chromium checks. Live OpenSandbox, hosted models, customer accounts, deployment and optional CI remain separate from this local scope.
+
 The owner-requested three-layer context replacement is locally verified: Core/system, Runtime/developer and Evidence use one typed assembly path, schema-2 `agentInstructions`, frozen field/task provenance and interaction-only format-2 checkpoints. Populated installations require the explicit backed-up offline conversion before startup. [Verification and remaining operator actions](docs/reports/three-layer-context-cutover-verification-2026-10-15.md) distinguish local acceptance from unperformed deployment, CI and live-provider qualification.
 
 The MVP and phases through P9.10 have closed/frozen evidence. Later bounded enhancements have their own acceptance records; an earlier freeze does not establish acceptance for a successor. Reopen closed work for a reproducible regression or an explicit new requirement.
@@ -27,8 +29,6 @@ loopback and absent writable-layer quota remain disclosed local-demo limits;
 production hardening is deferred. P11 remains unopened and requirement-triggered.
 
 ## Open work and acceptance gaps
-
-- [ ] **State and isolation:** finish the companion-context integration, authorized model-facing state tool/facts and two-customer context proof, then reconcile AS-01–28. Independent policy/resource/UI evidence is recorded in the [state/isolation ledger](docs/reports/agent-state-isolation-verification-2026-10-15.md). No hosted CI or live provider acceptance is implied.
 
 - [ ] **Office/Drive manual and Real acceptance:** implementation and all seven automated Synthetic/Compose gates passed on `a451600a`. Dedicated real Google UAT, desktop Office-client fidelity and actual native browser 200% zoom remain unverified; see the [successor ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md).
 

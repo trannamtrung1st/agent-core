@@ -1088,6 +1088,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case TimerElapsedReceived timer:
                     await HandleTimerAsync(timer, cancellationToken).ConfigureAwait(false);
                     break;
+                case RequestIsolationRecheck:
+                    _requestIsolationRecheckPending = false;
+                    await TryFinalizeRequestIsolationAsync(NewContext(), cancellationToken).ConfigureAwait(false);
+                    break;
                 case CompletionReturned completion:
                     try
                     {

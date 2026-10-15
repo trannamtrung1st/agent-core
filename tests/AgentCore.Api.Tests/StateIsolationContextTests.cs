@@ -5,9 +5,11 @@ using System.Text.Json;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Context;
 using AgentCore.Application.Events;
+using AgentCore.Application.Execution;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
+using AgentCore.Contracts.Http;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Memory;
@@ -16,11 +18,84 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Api.Tests;
 
 public sealed class StateIsolationContextTests
 {
+    [Theory(Timeout = 15000)]
+    [InlineData(true, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, false)]
+    public async Task Request_isolation_waits_for_child_and_completion_accounting_before_terminalizing(bool report, bool quiet, bool childFirst)
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var model = new RecordingModel(hold: true);
+        await using var host = new FixtureHost(model, clock: time, pauseDispatch: true);
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var id = await CreateInstance(host.Services);
+        var planner = host.Services.GetRequiredService<StateIsolationConfigurationService>();
+        var plan = await planner.PresetAsync(id, "Stateless");
+        await planner.ApplyAsync(id, plan.Expected, plan.Draft, plan.Fingerprint);
+        var session = await host.Services.GetRequiredService<SessionManager>().CreateForInstanceAsync(id, SessionMode.Text);
+        await using var runtime = host.Services.GetRequiredService<SessionRuntimeFactory>().Create(session, new SilentOutput());
+        var runs = host.Services.GetRequiredService<IAgentRunStore>();
+        var memory = host.Services.GetRequiredService<IMemoryStore>();
+        await runtime.AttachAsync();
+        Assert.True(await runtime.SubmitPersistedUserTextAsync("Complete this request and its child work", Guid.NewGuid()));
+        await model.Started.Task;
+        var owner = new AgentRunOwner(id, session.ProfileId!.Value);
+        var parent = Assert.Single(await runs.ListForSessionAsync(owner, session.SessionId));
+        var child = BackgroundSessionAdmissionFactory.ForImmediate(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            runtime.Snapshot, parent, "strict-child", "Verify the child result", "Child", report, time.GetUtcNow());
+        await runs.AdmitImmediateAsync(child.Session, child.Run, parent.Claim!.Generation);
+        var claimed = await runs.ApplyAsync(owner, child.Run.AgentRunId,
+            new AgentRunCommand.Claim(child.Run.Revision, time.GetUtcNow(), Guid.NewGuid(), time.GetUtcNow().AddMinutes(5)));
+        async Task<AgentRun> CompleteChild()
+        {
+            var snapshot = (await memory.LoadAsync(child.Session.SessionId))!;
+            var entry = new ConversationEntry(Guid.NewGuid(), 2, null, ConversationRole.Assistant, "Verified child result", claimed.ResponseId,
+                EntryStatus.Completed, SessionMode.Text, 0, 21, time.GetUtcNow());
+            return await runs.CommitOutcomeAsync(snapshot with { Revision = snapshot.Revision + 1,
+                    Entries = quiet ? snapshot.Entries : [.. snapshot.Entries, entry], LastEntrySequence = quiet ? 1 : 2 },
+                snapshot.Revision, owner, claimed.AgentRunId, new AgentRunCommand.Complete(claimed.Revision, time.GetUtcNow(), claimed.Claim!.Generation,
+                    entry.Text, quiet ? AgentRunOutcomeKind.NoAction : AgentRunOutcomeKind.Response, quiet ? null : entry.EntryId), null);
+        }
+        AgentRun? completed = childFirst ? await CompleteChild() : null;
+        model.Release.TrySetResult(); await runtime.WaitUntilIdleAsync();
+        Assert.Equal(SessionLifecycleStatus.Active, runtime.Snapshot.LifecycleStatus);
+        Assert.True(await runtime.HasAcceptedConversationWorkAsync());
+        completed ??= await CompleteChild();
+        if (report && !quiet)
+        {
+            Assert.True(await runtime.AdmitBackgroundCompletionAsync(new(completed, child.Session)));
+            var admitted = Assert.Single(await runs.ListForSessionAsync(owner, session.SessionId), r => !r.IsTerminal);
+            Assert.Equal(ActivationKind.BackgroundCompleted, admitted.Admission.Activation.Kind);
+            await runs.ApplyAsync(owner, admitted.AgentRunId, new AgentRunCommand.Claim(admitted.Revision,
+                time.GetUtcNow(), Guid.NewGuid(), time.GetUtcNow().AddMinutes(5)));
+            Assert.True(await runtime.DispatchAgentRunAsync(admitted.AgentRunId, headless: false));
+        }
+        else
+        {
+            if (report) await runs.SkipCompletionReportAsync(owner, completed.AgentRunId, "quiet-outcome", time.GetUtcNow());
+            time.Advance(TimeSpan.FromSeconds(1));
+        }
+        await runtime.WaitUntilAcceptedConversationWorkSettledAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await runtime.WaitUntilIdleAsync();
+        Assert.Equal(SessionLifecycleStatus.Completed, runtime.Snapshot.LifecycleStatus);
+        Assert.Single(model.Requests); // Existing completion reports format durable evidence without another model call.
+        var history = await memory.ReadHistoryAsync(session.SessionId, 0, 50);
+        Assert.NotEmpty(history);
+        if (report && !quiet)
+        {
+            Assert.Contains(history, entry => entry.Text.Contains("Verified child result", StringComparison.Ordinal));
+            Assert.Equal("delivered", (await runs.GetCompletionDeliveryAsync(owner, completed.AgentRunId)).Status);
+        }
+        Assert.True((await runs.GetAsync(owner, child.Run.AgentRunId))!.IsTerminal);
+    }
+
     [Fact]
     public async Task Live_profile_and_memory_restrictions_remove_the_prior_projection_before_the_next_model_call()
     {
@@ -61,8 +136,10 @@ public sealed class StateIsolationContextTests
         using var client = TestOwnerCapability.CreateOwnerClient(host);
         var id = await CreateInstance(host.Services);
         var planner = host.Services.GetRequiredService<StateIsolationConfigurationService>();
+        Assert.True(Assert.Single((await client.GetFromJsonAsync<ChatAgentInstanceListResponse>("/api/v2/agent-instances"))!.Items).VoiceAvailable);
         var plan = await planner.PresetAsync(id, "Stateless");
         await planner.ApplyAsync(id, plan.Expected, plan.Draft, plan.Fingerprint);
+        Assert.False(Assert.Single((await client.GetFromJsonAsync<ChatAgentInstanceListResponse>("/api/v2/agent-instances"))!.Items).VoiceAvailable);
         var manager = host.Services.GetRequiredService<SessionManager>();
         var first = await manager.CreateForInstanceAsync(id, SessionMode.Text);
         var workspace = host.Services.GetRequiredService<ISessionWorkspace>();
@@ -188,6 +265,12 @@ public sealed class StateIsolationContextTests
             async Task<string> Read(string args, ToolExecutionAdmission? context = null) => (await executor.ExecuteAsync(run.Admission.Configuration!.Definition,
                 session.SessionId, new(Guid.NewGuid().ToString("N"), ToolCatalog.AgentStateInspect, args), 4096, admission: context ?? admission)).Text;
             var before = host.Browser.Observations;
+            var expired = new RuntimeStateService(host.Services.GetRequiredService<IAgentInstanceStore>(), host.Services.GetRequiredService<ILocalUserProfileService>(),
+                host.Services.GetRequiredService<IMemoryStore>(), host.Services.GetRequiredService<IAgentRunStore>(), host.Services.GetRequiredService<IHostedSessionStateReader>(),
+                host.Browser, host.Services.GetRequiredService<ISandboxStore>(), host.Services.GetRequiredService<ISandboxReadiness>(),
+                new FakeTimeProvider(run.Claim!.LeaseExpiresAtUtc.AddSeconds(1)), host.Services.GetRequiredService<IAgentDefinitionStore>());
+            Assert.Equal("Forbidden", (await Assert.ThrowsAsync<AgentCoreException>(async () =>
+                await expired.ObserveForAgentAsync(session.SessionId, run.AgentRunId))).Code);
             Assert.Contains("invalid", await Read("{\"sessionId\":\"" + sibling.SessionId + "\"}"));
             Assert.Contains("invalid", await Read("{\"agentInstanceId\":\"" + Guid.NewGuid() + "\"}"));
             Assert.Contains("forbidden", await Read("{}", admission with { AgentRunId = Guid.NewGuid() }), StringComparison.OrdinalIgnoreCase);
@@ -204,10 +287,17 @@ public sealed class StateIsolationContextTests
                 Assert.Equal("instanceSummary", summary.RootElement.GetProperty("scope").GetString());
             }
             else Assert.Contains("forbidden", await Read("{\"scope\":\"instanceSummary\"}"), StringComparison.OrdinalIgnoreCase);
-            var root = $"/api/v2/admin/agent-instances/{id}/settings/stateIsolationPolicy";
-            var state = (await client.GetFromJsonAsync<InstanceSettingsSection>(root))!;
-            (await client.PatchAsJsonAsync(root, new { expectedInstanceRevision = state.InstanceRevision,
-                set = new { agentStateVisibility = "Off" }, clear = Array.Empty<string>() })).EnsureSuccessStatusCode();
+            await Task.Delay(1050);
+            var revoked = false;
+            host.Browser.BeforeObservation = async _ => {
+                if (revoked) return; revoked = true;
+                var root = $"/api/v2/admin/agent-instances/{id}/settings/stateIsolationPolicy";
+                var state = (await client.GetFromJsonAsync<InstanceSettingsSection>(root))!;
+                (await client.PatchAsJsonAsync(root, new { expectedInstanceRevision = state.InstanceRevision,
+                    set = new { agentStateVisibility = "Off" }, clear = Array.Empty<string>() })).EnsureSuccessStatusCode();
+            };
+            Assert.Contains("forbidden", await Read("{}"), StringComparison.OrdinalIgnoreCase);
+            Assert.True(revoked);
             Assert.Contains("forbidden", await Read("{}"), StringComparison.OrdinalIgnoreCase);
         }
         finally { model.Release.TrySetResult(); await runtime.WaitUntilIdleAsync(); }
@@ -223,7 +313,8 @@ public sealed class StateIsolationContextTests
         await services.GetRequiredService<IAgentInstanceStore>().InsertAsync(new(id, definition!.Id, 1, definition.Identity, AgentInstanceLifecycle.Active, now, now));
         return id;
     }
-    private sealed class FixtureHost(RecordingModel model, AgentStateVisibility visibility = AgentStateVisibility.CurrentSession) : AgentCoreApiFactory
+    private sealed class FixtureHost(RecordingModel model, AgentStateVisibility visibility = AgentStateVisibility.CurrentSession,
+        TimeProvider? clock = null, bool pauseDispatch = false) : AgentCoreApiFactory
     {
         public StateBrowser Browser { get; } = new();
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -233,6 +324,9 @@ public sealed class StateIsolationContextTests
                 services.RemoveAll<IAgentDefinitionStore>(); services.AddSingleton<IAgentDefinitionStore>(new Definitions(visibility));
                 services.RemoveAll<ILanguageModel>(); services.AddSingleton<ILanguageModel>(model);
                 services.RemoveAll<IBrowserStateReader>(); services.AddSingleton<IBrowserStateReader>(Browser);
+                if (clock is not null) { services.RemoveAll<TimeProvider>(); services.AddSingleton(clock); }
+                if (pauseDispatch)
+                    foreach (var service in services.Where(s => s.ImplementationType == typeof(AgentCore.Api.AgentRunHostedService)).ToArray()) services.Remove(service);
             });
         }
     }
@@ -240,7 +334,7 @@ public sealed class StateIsolationContextTests
     {
         private readonly AgentDefinition _definition = new(2, "state-fixture", 1, new("Fixture", "Support", "Support fixture", "Clear"), ["Support the current customer"], "Answer the current request.",
             new("answerNewTurn", true, true), new("balanced", false, "en", 512), new(false, 60000, 120000, 1, ["longSilence"]),
-            new(false, "default", 1), new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
+            new(true, "default", 1), new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
             Environment: new RoleEnvironment(ToolAllowlist: [ToolCatalog.AgentStateInspect]), MemoryPolicy: new(true, true, true, true, true),
             StateIsolationPolicy: new(AgentStateVisibility: visibility));
         public ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken ct = default) => ValueTask.FromResult<AgentDefinition?>(id == _definition.Id && (version is null or 1) ? _definition : null);

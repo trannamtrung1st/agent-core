@@ -20,6 +20,25 @@ function pcmFrame(samples = 480): Uint8Array {
 }
 
 describe("realtime race handling", () => {
+  it("drains an accepted request ack before a terminal Session closes its transport", async () => {
+    let accept: (ack: { accepted: boolean }) => void = () => undefined;
+    const invoke = vi.fn().mockImplementation(() => new Promise<{ accepted: boolean }>(resolve => { accept = resolve; }));
+    const stop = vi.fn().mockResolvedValue(undefined);
+    hooks.setConnection({ invoke, send: vi.fn(), stop, off: vi.fn() } as never);
+    useSessionStore.setState({ ...emptySession(), connection: "ready", sessionId: "s1", attachmentId: "a1",
+      status: "attached", draft: "One request", agents: [], selectedAgentId: "examiner" });
+    const sending = sendDraft();
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("SendText", expect.anything()));
+    hooks.handleEvent({ protocolVersion: 1, sessionId: "s1", attachmentId: "a1", eventId: "terminal", sequence: 1,
+      timestamp: "2026-10-15T00:00:00Z", correlationId: "c1", causationId: null, responseId: null,
+      type: "session.state.changed", payload: { status: "ended", lifecycleStatus: "completed", mode: "text" } });
+    expect(useSessionStore.getState().status).toBe("ended");
+    expect(stop).not.toHaveBeenCalled();
+    accept({ accepted: true }); await sending;
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
+    expect(useSessionStore.getState().entries[0]?.status).toBe("completed");
+  });
+
   afterEach(() => {
     capture.release();
     hooks.resetOutput();

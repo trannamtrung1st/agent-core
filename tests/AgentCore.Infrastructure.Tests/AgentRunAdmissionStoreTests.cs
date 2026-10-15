@@ -1039,6 +1039,37 @@ public sealed class AgentRunAdmissionStoreTests
     }
 
     [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Request_isolation_completion_requires_atomic_owned_child_receipt_and_survives_reopen(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var parent = await ParentTurn(f);
+        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
+        var completed = await CompleteChild(f, child, quiet: false);
+        await CompleteParent(f, parent);
+        var snapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
+        var definition = Definition with { Voice = Definition.Voice with { Enabled = false },
+            StateIsolationPolicy = new(ConversationContextScope.CurrentRequest) };
+        AgentRun Report() => NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.BackgroundCompleted, [],
+            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:strict", Now, "{}"),
+            new AgentRunConfiguration(definition, 0, 0, []));
+        var report = Report(); var proposed = snapshot with { Revision = snapshot.Revision + 1 };
+        Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitAsync(proposed, snapshot.Revision, report).AsTask())).Code);
+        var missingSource = await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitCompletionReportAsync(proposed,
+            snapshot.Revision, report, Guid.NewGuid()).AsTask());
+        Assert.Contains(missingSource.Code, new[] { "Conflict", "NotFound" });
+        Assert.Equal(snapshot.Revision, (await f.Memory.LoadAsync(parent.SessionId))!.Revision);
+        var first = await f.Runs.AdmitCompletionReportAsync(proposed, snapshot.Revision, report, completed.AgentRunId);
+        Assert.True(first.Created);
+        await f.ReopenAsync();
+        var replay = await f.Runs.AdmitCompletionReportAsync(proposed, snapshot.Revision, Report(), completed.AgentRunId);
+        Assert.False(replay.Created); Assert.Equal(first.Run.AgentRunId, replay.Run.AgentRunId);
+        Assert.Equal(2, (await f.Runs.ListForSessionAsync(Owner, parent.SessionId)).Count);
+        Assert.True(await f.Runs.HasCompletionReceiptAsync(Owner, completed.AgentRunId));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Quiet_completion_cannot_admit_parent_prose_and_skip_receipt_survives_reopen(bool sqlite)
@@ -1799,9 +1830,10 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.Empty(duplicate.Run.Admission.Activation.SourceEntryIds);
     }
 
-    private static AgentRun NewRun(Activation activation) => AgentRun.Create(Guid.NewGuid(), Owner,
+    private static AgentRun NewRun(Activation activation, AgentRunConfiguration? configuration = null) => AgentRun.Create(Guid.NewGuid(), Owner,
         new AgentRunAdmission(activation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), activation.Kind == ActivationKind.BackgroundCompleted ? AgentRunOutputContract.CompletionReport
-            : activation.SourceEntryIds.Count > 0 && activation.Kind != ActivationKind.UserTurn ? AgentRunOutputContract.BackgroundOutcome : AgentRunOutputContract.ConversationResponse),
+            : activation.SourceEntryIds.Count > 0 && activation.Kind != ActivationKind.UserTurn ? AgentRunOutputContract.BackgroundOutcome : AgentRunOutputContract.ConversationResponse,
+            configuration: configuration),
         new AgentRunModelPin("synthetic", "synthetic", "synthetic", null), 3, Now);
 
     private sealed class Diagnostics : IDiagnosticIdSource { public Guid NewId() => Guid.NewGuid(); }

@@ -85,9 +85,12 @@ public sealed class ContextCutoverTests
         finally { File.Delete(path); File.Delete(backup); }
     }
 
-    [Fact]
-    public async Task Sealed_run_configuration_hashes_and_inert_receipts_survive_conversion_and_reopen()
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public async Task Sealed_run_configuration_hashes_and_inert_receipts_survive_conversion_and_reopen(bool isolationPin)
     {
+        var definition = isolationPin ? Definition with { StateIsolationPolicy = new(HomeAccess: HomeAccess.Disabled,
+            BrowserIsolation: BrowserIsolation.EphemeralSession, ProfileEvidence: false, ExperienceRecall: false), MemoryPolicy = MemoryPolicy.Disabled } : Definition;
         var path = Path.Combine(Path.GetTempPath(), $"context-sealed-{Guid.NewGuid():N}.db"); var backup = path + ".backup"; var secondBackup = path + ".second";
         const string receipt = "{\"Phase\":\"model-turn\",\"Messages\":[{\"Role\":\"System\",\"Text\":\"retired instruction\"},{\"Role\":\"Tool\",\"Text\":\"historical receipt\"}]}";
         Guid runId;
@@ -97,16 +100,18 @@ public sealed class ContextCutoverTests
             {
                 await db.Database.MigrateAsync();
                 var now = DateTimeOffset.UtcNow;
-                var snapshot = AgentRunTestFixtures.Snapshot(new(Guid.NewGuid(), Guid.NewGuid()), Definition, now);
+                var snapshot = AgentRunTestFixtures.Snapshot(new(Guid.NewGuid(), Guid.NewGuid()), definition, now);
                 var memory = new SqliteMemoryStore(new Factory(path), TimeProvider.System);
                 await memory.SaveAsync(snapshot, 0);
-                var run = AgentRunTestFixtures.Run(snapshot, now).TakeClaim(Guid.NewGuid(), now, now.AddMinutes(1));
+                var config = new AgentRunConfiguration(definition, 0, 0, [], resolvedBrowserIsolation: isolationPin ? BrowserIsolation.EphemeralSession : null);
+                var run = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), snapshot,
+                    snapshot.Entries, now, [], configuration: config).TakeClaim(Guid.NewGuid(), now, now.AddMinutes(1));
                 run = run.SaveCheckpoint(run.Revision, run.Claim!.Generation, new(receipt, 2, 31, 1000), null, now);
                 run = run.Complete(run.Revision, run.Claim!.Generation, "Sealed original outcome", now, outcomeEntryId: Guid.NewGuid());
                 runId = run.AgentRunId;
                 var row = AgentRunStoreMapping.ToRecord(run);
                 var payload = JsonNode.Parse(row.PayloadJson)!;
-                payload["admission"]!["configuration"]!["definition"] = JsonNode.Parse(Old(JsonSerializer.Serialize(Definition, Json)));
+                payload["admission"]!["configuration"]!["definition"] = JsonNode.Parse(Old(JsonSerializer.Serialize(definition, Json)));
                 payload["admission"]!["configuration"]!["configurationHash"] = "retired-hash";
                 row.PayloadJson = payload.ToJsonString();
                 var activation = AgentRunStoreMapping.ToActivationRecord(snapshot, run); activation.AdmissionHash = "retired-admission-hash";
@@ -124,6 +129,8 @@ public sealed class ContextCutoverTests
                 Assert.Equal(receipt, run.Checkpoint.PayloadJson);
                 Assert.False(AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out _));
                 Assert.Equal(Definition.AgentInstructions, run.Admission.Configuration!.Definition.AgentInstructions);
+                Assert.Equal(definition.StateIsolationPolicy, run.Admission.Configuration.Definition.StateIsolationPolicy);
+                Assert.Equal(isolationPin ? BrowserIsolation.EphemeralSession : null, run.Admission.Configuration.ResolvedBrowserIsolation);
                 Assert.Equal(run.Admission.Configuration.ConfigurationHash, JsonNode.Parse(row.PayloadJson)!["admission"]!["configuration"]!["configurationHash"]!.GetValue<string>());
                 var session = await reopened.Sessions.Include(r => r.Snapshot).Include(r => r.Entries).SingleAsync();
                 Assert.Equal(AgentRunStoreMapping.AdmissionHash(SqliteMemoryStore.ToSnapshot(session, session.Entries), run), (await reopened.Activations.SingleAsync()).AdmissionHash);

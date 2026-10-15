@@ -7,6 +7,19 @@ namespace AgentCore.Infrastructure.Tests;
 [Collection(BrowserChromiumCollection.Name)]
 public sealed class BrowserStateIsolationTests
 {
+    [Fact]
+    public async Task Unavailable_unbound_provider_does_not_claim_the_host_sharing_mode_as_instance_state()
+    {
+        var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = false, ProfileMode = "PersistentAgent" }, null);
+        var owner = Guid.NewGuid(); var session = Guid.NewGuid();
+        browser.BindSession(session, owner); // Ownership alone does not resolve policy or allocate a context.
+        var state = await browser.ObserveAsync(owner);
+        Assert.Equal("unavailable", state.Availability); Assert.Equal("unknown", state.Sharing);
+        Assert.Null(state.LiveContexts); Assert.Null(state.OpenPages);
+        Assert.Null(await browser.BindIsolationAsync(session, owner, BrowserProfileMode.EphemeralSession));
+        Assert.Equal("isolated", (await browser.ObserveAsync(owner)).Sharing);
+    }
+
     private sealed class ChromiumIsolationFactAttribute : FactAttribute
     {
         public ChromiumIsolationFactAttribute()
@@ -65,6 +78,14 @@ public sealed class BrowserStateIsolationTests
                 var ownedPopup = aPages.Single(p => p.PageId != ownedA.PageId);
                 Assert.NotNull((await browser.ExecuteAsync(BrowserTestRequests.Tabs(b, "switch", ownedPopup.PageId))).ErrorCode);
                 Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Tabs(a, "close", ownedPopup.PageId))).ErrorCode);
+                _ = await browser.ExecuteAsync(BrowserTestRequests.Tabs(b, "list"));
+                var detachedPopup = await pa.RunAndWaitForPopupAsync(() => pa.EvaluateAsync("window.open('/browser-native.html?detached=A','_blank','noopener')"));
+                await detachedPopup.WaitForLoadStateAsync();
+                var detachedPages = (await browser.ExecuteAsync(BrowserTestRequests.Tabs(a, "list"))).Pages!;
+                Assert.Equal(2, detachedPages.Count);
+                Assert.Single((await browser.ExecuteAsync(BrowserTestRequests.Tabs(b, "list"))).Pages!);
+                var detachedOwned = detachedPages.Single(p => p.PageId != ownedA.PageId);
+                Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Tabs(a, "close", detachedOwned.PageId))).ErrorCode);
             }
             var closed = await browser.ExecuteAsync(BrowserTestRequests.Close(b));
             Assert.Null(closed.ErrorCode); Assert.False(pa.IsClosed);

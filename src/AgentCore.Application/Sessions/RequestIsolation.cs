@@ -11,8 +11,10 @@ public static class RequestIsolation
 
     public static void ValidateAdmission(AgentRun run, bool hasPriorRun)
     {
+        // These continue the existing request. Their store paths still validate the source
+        // configuration task or atomically owned child completion receipt before committing.
         if (run.Admission.Configuration is { } configuration && Required(configuration.Definition)
-            && hasPriorRun && run.Admission.Activation.Kind != ActivationKind.ConfigurationContinuation)
+            && hasPriorRun && run.Admission.Activation.Kind is not (ActivationKind.ConfigurationContinuation or ActivationKind.BackgroundCompleted))
             throw FreshSessionRequired();
     }
 }

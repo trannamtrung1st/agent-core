@@ -758,6 +758,14 @@ public sealed class SessionManager
         return PublicHistory.FromDefinition(definition, _voice.IsAvailable(definition));
     }
 
+    public async Task<PublicAgentDescriptor> GetInstanceAgentAsync(AgentInstance instance, CancellationToken ct = default)
+    {
+        var baseline = await _definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct)
+            ?? throw AgentCoreErrors.NotFound("Selected Definition was not found.");
+        var effective = InstanceSettingsResolver.Resolve(baseline, instance.SettingsOverrides);
+        return PublicHistory.FromDefinition(effective, _voice.IsAvailable(effective));
+    }
+
 
 
     public async Task<KnowledgeDocument> RetrieveKnowledgeAsync(

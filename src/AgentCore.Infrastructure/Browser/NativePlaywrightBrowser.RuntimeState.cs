@@ -10,9 +10,14 @@ public sealed partial class NativePlaywrightBrowser : IBrowserStateReader
     {
         ct.ThrowIfCancellationRequested();
         var observedAt = _time.GetUtcNow();
-        var modes = _sessionOwners.Where(p => p.Value == trustedInstanceId && (sessionId == null || p.Key == sessionId)).Select(p => SessionMode(p.Key)).ToArray();
-        var sharing = (modes.Length == 0 ? _policy.ProfileMode == BrowserProfileMode.PersistentAgent : modes.Contains(BrowserProfileMode.PersistentAgent))
-            ? "sharedCoordinated" : "isolated";
+        BrowserProfileMode? KnownMode(Guid id) => _sessions.TryGetValue(id, out var view)
+            ? view.Persistent ? BrowserProfileMode.PersistentAgent : BrowserProfileMode.EphemeralSession
+            : _sessionModes.TryGetValue(id, out var selected) ? selected : null;
+        var modes = _sessionOwners.Where(p => p.Value == trustedInstanceId && (sessionId == null || p.Key == sessionId))
+            .Select(p => KnownMode(p.Key)).Where(m => m.HasValue).Select(m => m!.Value).ToArray();
+        var sharing = modes.Length > 0 ? modes.Contains(BrowserProfileMode.PersistentAgent) ? "sharedCoordinated" : "isolated"
+            : sessionId is null && _persistent.TryGetValue(trustedInstanceId, out var root) && Volatile.Read(ref root.RuntimeClosed) == 0
+                ? "sharedCoordinated" : "unknown";
         if (!IsAvailable) return new("browser", "unavailable", sharing, observedAt, Code: "provider_unavailable");
         if (_persistent.TryGetValue(trustedInstanceId, out var retained) && retained.PendingContextMutation is { IsCompletedSuccessfully: false })
             return new("browser", "partial", sharing, observedAt, Code: "policy_transition_pending");

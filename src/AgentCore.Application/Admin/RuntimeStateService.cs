@@ -32,6 +32,7 @@ public sealed class RuntimeStateService(IAgentInstanceStore instances, ILocalUse
         var instance = await instances.FindAsync(session.AgentInstanceId, ct);
         var baseline = instance is null || definitions is null ? null : await definitions.GetAsync(instance.DefinitionId, instance.ActiveVersion, ct);
         if (run?.SessionId != trustedSessionId || run.IsTerminal || run.CancellationRequested || run.Claim is null
+            || run.Claim.LeaseExpiresAtUtc <= time.GetUtcNow()
             || run.Admission.Configuration is not { } admitted || instance?.Lifecycle != AgentInstanceLifecycle.Active || baseline is null)
             throw AgentCoreErrors.Forbidden("A trusted active Run is required for state inspection.");
         var definition = StateIsolationAccess.RestrictDefinition(admitted.Definition, InstanceSettingsResolver.Resolve(baseline, instance.SettingsOverrides));
@@ -57,7 +58,8 @@ public sealed class RuntimeStateService(IAgentInstanceStore instances, ILocalUse
         var latestRun = await runs.GetAsync(run.Owner, trustedRunId, ct);
         var latestSession = await sessions.LoadMetadataAsync(trustedSessionId, ct);
         if (latestInstance?.Lifecycle != AgentInstanceLifecycle.Active || latestRun is null || latestRun.IsTerminal
-            || latestRun.CancellationRequested || latestRun.Claim?.Generation != run.Claim.Generation
+            || latestRun.CancellationRequested || latestRun.Claim is not { } latestClaim || latestClaim.Generation != run.Claim.Generation
+            || latestClaim.LeaseExpiresAtUtc <= time.GetUtcNow()
             || latestSession is null || latestSession.ArchivedAt is not null || latestSession.DurablyDeletedAt is not null)
             throw AgentCoreErrors.Forbidden("State inspection authority changed during observation.");
         if (latestInstance.Revision != instance.Revision)

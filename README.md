@@ -1,6 +1,6 @@
 # Agent Core MVP
 
-State and isolation enhancement is in progress on `develop/branch-1`: owner State observations, inherited isolation configuration, atomic preset drafts and Session-owned browser views are locally verified. Model-facing integration depends on the companion context cutover. The [verification ledger](docs/reports/agent-state-isolation-verification-2026-10-15.md) records exact checks and remaining acceptance gaps.
+The state and isolation enhancement adds owner State observations, inherited field policies, atomic editable preset drafts, Session-owned browser views and optional scoped agent inspection through the three-layer context path. Synthetic two-customer/request-isolated journeys and disposable Chromium checks are locally verified. The [verification ledger](docs/reports/agent-state-isolation-verification-2026-10-15.md) records exact checks, preserved data and optional unrun live-provider boundaries.
 
 The owner-requested three-layer context cutover separates platform Core (`system`), effective Runtime (`developer`) and task/observation Evidence. Editable instructions use schema-2 `agentInstructions`; populated SQLite installations require the explicit backed-up [maintenance conversion](docs/17-observability-and-operations.md#three-layer-context-maintenance). [Current verification](docs/reports/three-layer-context-cutover-verification-2026-10-15.md) records focused local acceptance and deployment actions; historical acceptance below remains unchanged.
 

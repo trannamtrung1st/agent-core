@@ -1,68 +1,83 @@
 # State and isolation verification — 2026-10-15
 
-Status: implementation in progress on `develop/branch-1`, baseline `073cd2d4be6d05ad1fcd154a7f935fe98a38338c`. This ledger records local evidence; it is not milestone acceptance. The companion Three-Layer Context cutover is still being finalized in its owning checkout. Model-facing Runtime facts, profile filtering and `agent.state.inspect` integration remain dependent on its committed single assembly path. No provisional prompt path has been added.
+Status: requested implementation completed locally on `develop/branch-1`. This records focused local verification, not milestone acceptance, production deployment or a full-suite/CI run.
+
+Baseline: `073cd2d4be6d05ad1fcd154a7f935fe98a38338c`. The finalized Three-Layer Context cutover `ff875ea48cb42a72829dac51f87a9c8bd939e8b8` is integrated through merge `ce6e5b01`. B implementation commits include `edd33c7b`, `1e1162a5` and `604634ab`; the final follow-up commit contains the remaining verification fixes and this ledger. Final production-source SHA-256: `3cf53b6d1b944d8ab9155e12b694a971fc8e22d5152111a0e1aef96d83583875`. The fingerprint covers 1,334 sorted tracked paths under `src`, `web/src` and `agents`, hashing each UTF-8 path, NUL, file bytes and NUL; tests/docs are excluded.
 
 ## Scope and preservation
 
-One Session Runtime and existing Activation/AgentRun, approval, effect and cleanup owners remain. State is a disposable bounded observation. Definition policy and sparse Instance fields express isolation; preset names are only UI conveniences. No state bag, mode discriminator, fourth context layer, new orchestrator or active Environment entity is introduced.
+One Session Runtime owns mutable conversation state through its mailbox. Existing Activation/AgentRun, approval, effect, workspace and cleanup owners remain. Runtime State is a bounded disposable observation; policy and sparse Instance overrides express isolation. Preset names are UI conveniences. There is one typed ContextAssembler path: fixed Core procedures, trusted replaceable Runtime facts and provenance-preserving Evidence. No state bag, fourth context layer, new orchestrator, alternative Session/Run type or provider allocation on State reads was added.
 
-All runtime checks use task-owned Synthetic stores, workspaces, ports and local fixture pages. Real application services and user data were not restarted/reset. The owner explicitly enabled disposable Chromium isolation checks. Hosted CI, hosted models and real OpenSandbox execution were not requested/run.
+All checks used task-owned Synthetic stores, workspaces, ports and local fixture pages. Real application services and user data were not restarted/reset. The user explicitly enabled disposable Chromium checks. Hosted CI, the full local CI suite, hosted models, private external accounts, live OpenSandbox and hardware-audio qualification were not run for this change. Earlier Sandbox reports remain historical evidence, not new live-provider proof.
 
-## Recorded focused checks
+## Focused commands and results
 
-| Check | Result |
+Backend command form: `dotnet test tests/<project>/<project>.csproj --no-restore --nologo --filter '<filter>' -m:1 /nodeReuse:false`. Every filter fragment below uses `FullyQualifiedName~` and alternatives use `|`. Counts are separate overlapping invocations; they must not be summed as unique coverage.
+
+| Project / filter | Observed result |
 | --- | --- |
-| API filter `SessionWorkingCleanupTests`, `StateIsolation`, `RuntimeStateApiTests` | 6 passed; atomic preset apply/CAS, Home gates, terminal cleanup, bounded noncooperative provider and redaction. |
-| Expanded API filter above plus `ContinuityBoundaryTests`, `ContinuityEnhancementJourneyTests` | 25 passed, 0 failed/skipped (42 s). Scoped current-Session reads exclude sibling counts. |
-| Infrastructure with `AGENTCORE_CHROMIUM_ISOLATION_TESTS=1`; filters `BrowserStateIsolationTests`, `AgentBrowserProfileTests`, `BrowserEnvironmentJourneyTests`, `State_counts_runs`, `Resolved_browser_isolation`, `State_observation_redacts` | 18 passed, 0 failed/skipped (25 s). Real disposable Chromium; local pages only. |
-| Application filters `StateIsolationPolicyTests`, `InstanceSettingsResolverTests`, `Request_isolation`, `ToolPolicy` | 28 passed, 0 failed/skipped (5 s). |
-| Expanded Application filter above plus `MemoryProposalAdmission` | 60 passed, 0 failed/skipped (2 s). |
-| Infrastructure `Request_isolation`, `SandboxMount`, `SandboxStoreTests` | 26 passed, 0 failed/skipped (5 s); original second-request test snapshot was corrected before this passing run. |
-| Infrastructure `BrowserPrivacyTests`, `BrowserCredentialSinkTests`, `NativeBrowserBoundaryReviewTests`, `BrowserCleanupTests`, `OpenSandboxCleanupTests` | 62 passed, 0 failed/skipped (67 s). |
-| Infrastructure `Terminal_cleanup_scan` | 2 passed, InMemory/SQLite reopen, including background-only surfaces. |
-| API `SessionWorkingCleanupTests`, `StateIsolationConfigurationTests`, `StateIsolationContinuityTests` | 4 passed, 0 failed/skipped (5 s): uncertain Sandbox lease defers scratch cleanup until reconciliation/recovery; invalid audit rolls back all owners; disabled continuity retains historical sources. |
-| API `StateIsolationConfigurationTests`, `StateIsolationContinuityTests`, `RuntimeStateApiTests`, `SessionWorkingCleanupTests`, `StateIsolationWorkspaceTests`, `SandboxApiTests` | 23 passed, 0 failed/skipped (27 s). Exact audit-field assertions subsequently passed 2 tests after correcting an xUnit analyzer convention. |
-| Infrastructure `BrowserStateIsolationTests`, `NativeBrowserBoundaryReviewTests`, `BrowserCleanupTests` after late-view cancellation hardening | 19 passed, 0 failed/skipped (44 s). |
-| Vitest `InstanceStateSection`, `StateIsolationConfigurationSection`, `AdminInstanceNavigation`, `sessionError` | 15 passed, 0 failed (5.52 s). Existing CopyDetailsButton test emits an act warning. |
-| `pnpm --dir web exec tsc --noEmit` | Passed. |
-| `pnpm --dir web build` | Passed (9.12 s Vite phase); existing chunk-size and dependency annotation warnings. |
-| Documentation file/fence/link check and `git diff --check` | Passed for all 13 changed documentation/context files. |
+| Application: `StateIsolationPolicyTests`, `InstanceSettingsResolverTests`, `Request_isolation`, `ContextAssemblerTests`, `MemoryProposalAdmissionTests`, `SessionMemoryPromptTests`, `ResponsesCheckpointRecoveryTests`, `ToolRegistryPolicyTests` | 86 passed, 2 skipped, 0 failed (2 s). Only the two paid background prepare/resume opt-ins skipped. |
+| Application: `ToolApprovalTests`, `TriggerScheduleRuntimeTests`, `CapabilityProjectionTests`, `CapabilityDiscoveryRuntimeTests`, `CompletionInboxCapabilityTests` | 75 passed, 0 failed/skipped (767 ms). |
+| Application final settlement regression: `StateIsolationPolicyTests`, `BackgroundCompletion`, `AcceptedConversationWork`, `ContextAssemblerTests` | 33 passed, 0 failed/skipped (109 ms). |
+| API: `StateIsolation`, `RuntimeStateApiTests`, `SessionWorkingCleanupTests`, `BackgroundSessionJourneyTests`, `SandboxApiTests`, `ContinuityBoundaryTests` | 51 passed, 0 failed/skipped (37 s). |
+| API: `StateIsolationContextTests`, `SessionCatalogApiTests` | 22 passed, 0 failed/skipped (7 s), after effective Voice availability correction. |
+| API: `StateIsolationContextTests`, `RuntimeStateApiTests` | 8 passed, 0 failed/skipped (11 s), including expired claim and visibility revoked during collection. |
+| API final continuation regression: `StateIsolationContextTests`, `BackgroundSessionJourneyTests`, `SessionWorkingCleanupTests` | 16 passed, 0 failed/skipped (12 s final rerun). Four strict child cases cover both completion orders, quiet accounting and non-reporting work. |
+| Infrastructure: `ContextCutover`, `Request_isolation`, `Resolved_browser_isolation`, `State_counts` | 12 passed, 0 failed/skipped (5 s). |
+| Infrastructure: `Sealed_run_configuration_hashes`, `Request_isolation`, `Terminal_cleanup_scan` | 6 passed, 0 failed/skipped (3 s), including explicit ephemeral browser pins through conversion/reopen. |
+| Infrastructure final continuation/reopen: `Request_isolation`, `Completion_receipt_commits`, `Quiet_completion`, `Terminal_cleanup_scan`, `Resolved_browser_isolation`, `ContextCutoverTests` | 19 passed, 0 failed/skipped (6 s). |
+| Infrastructure with `AGENTCORE_CHROMIUM_ISOLATION_TESTS=1`: `BrowserStateIsolation`, `AgentBrowserProfile`, `BrowserEnvironment`, `State_observation_redacts`, `ContextCutover` | 21 passed, 0 failed/skipped (25 s). |
+| Infrastructure final Chromium `BrowserStateIsolationTests` | 4 passed, 0 failed/skipped (6 s), after unknown-mode observation correction; includes ordinary and delayed `noopener` popup ownership. |
+| Infrastructure: `BrowserPrivacyTests`, `BrowserCredentialSinkTests`, `NativeBrowserBoundaryReviewTests`, `BrowserCleanupTests`, `OpenSandboxCleanupTests` | 62 passed, 0 failed/skipped (67 s). |
+| Infrastructure: `Request_isolation`, `SandboxMount`, `SandboxStoreTests` | 26 passed, 0 failed/skipped (5 s). |
+| Infrastructure: `BrowserStateIsolationTests`, `NativeBrowserBoundaryReviewTests`, `BrowserCleanupTests`, after late-page cancellation hardening | 19 passed, 0 failed/skipped (44 s). |
+| API targeted configuration/continuity/cleanup checks | Atomic invalid-audit rollback, exact qualified audit fields, busy transition preview, live continuity gates and deferred uncertain-Sandbox cleanup passed. Separate invocations: 4 tests (5 s), 2 tests (7 s), 3 tests (6 s). |
+| Vitest: State, State & Isolation, Admin navigation, session error and Context provenance | 17 passed (10.51 s). |
+| Vitest: `realtime.race.test.ts` | 63 passed (2.92 s), including terminal acknowledgement drain. |
+| Vitest: realtime queue and protocol | 34 passed (3.63 s). |
+| Vitest: `ChatApp.test.tsx` | 27 passed (26.17 s), including ended-chat New chat action. Existing React test act warnings remain. |
+| `pnpm --dir web exec tsc --noEmit`; `pnpm --dir web build` | Passed. Final Vite build phase 5.70 s; existing chunk-size and SignalR annotation warnings. |
+| API build | Passed, 0 warnings/errors; affected integration test builds also succeeded. |
+| Documentation and data checks | 17 changed Markdown files have balanced fences and valid local file links; all 18 authored Definition JSON files parse with schema 2, captured State JSON parses, source fingerprint matches, and `git diff --check` passes. |
 
-Commands use `dotnet test <test-project> --no-restore --nologo --filter '<named filters>' -m:1 /nodeReuse:false`, with disposable test fixtures. A missing API clock-testing dependency and local compile naming conflict were corrected before the passing runs above. Earlier failed assertions are not counted as acceptance.
+The strict child fixture initially had a NoAction receipt with an outcome entry and expected an unnecessary second model call; both assertions were corrected to the existing completion contract. A missing-source rejection initially expected Conflict from both stores; SQLite correctly returned NotFound. Earlier compile/test setup errors (clock dependency, test naming and xUnit assertion conventions) were corrected before passing verification. No failed run is counted as passed evidence.
 
-## Executed UI and provider scenarios
+## Executed cross-feature journeys
 
-Task-owned SQLite Synthetic API uses port 5097, Vite 5187, Browser/OpenSandbox disabled and `/tmp/agent-state-isolation-verification` data. The managed fixture Instance is approval-demo v1. No real provider credentials are used.
+1. **Personal assistant / shared browser:** disposable real Chromium Sessions deliberately share authentication cookies/local storage only under PersistentAgent. Tabs, media/console/network/frame handles and popups stay Session-owned; foreign tab operations fail. Delayed popups, including `noopener`, stay with their opener Session while a sibling is active. Closing the sibling retains the first Session and profile bytes. Ownership-only binding does not invent a known sharing mode.
+2. **Customer support:** Session-isolated model fixtures exclude other-customer transcript, stored Profile/Experience/learned memory and scratch; within-A follow-up retains A history. Two simultaneous UI Sessions use the same Instance and retain separate conversations. A follow-up stays in A's original Session. Chromium ephemeral contexts have distinct cookie/local storage and foreign handles cannot be used. These checks do not claim separation of a deliberately shared external SaaS account.
+3. **Strict request:** the Stateless preset atomically disables Voice and requires ordinary fresh text Sessions. Three UI requests completed in distinct Sessions without old history; catalog Voice availability is false. Same-input replay remains idempotent and new input into an old request returns `fresh_session_required`. Old transcript, scratch under its retention policy and Run audit remain readable. The inline New chat action opens a fresh draft at all four widths. Fast completion drains the queued acknowledgement before closing its own transport, with no console errors in the repeated journey. Strict child tests keep the parent active until child/receipt settlement, deliver the existing receipt-based report when requested, and then terminalize; quiet and non-reporting children also converge. No extra model call is needed for the receipt-based report.
+4. **Isolation under load:** preview reports busy/unavailable resource transitions truthfully while allowing authored policy to save. Live restrictions deny unsafe new Home/browser/tool/continuity operations under an older pin. Native provisioning/cancelled late-page ownership retains pending fencing until safe replacement; tightening then creates an isolated view without purging historical profiles. Existing deterministic Sandbox receipt, mount, generation, selection, cleanup and unknown-outcome tests remain green; no live server switch is claimed here.
+5. **Offline observation:** Synthetic API 5097 and Vite 5187 use task-owned SQLite under `/tmp/agent-state-isolation-verification`, Browser and OpenSandbox disabled. State shows Partial, unavailable contributors and unknown counts. Injected 503 retains prior values marked Stale; Retry restores Partial with a new timestamp. Text chat remains functional. Malicious tool IDs, missing/expired claims, wrong Run, refresh floods and visibility revoked during observation are denied without granting new capabilities or allocating resources.
+6. **Restart:** the task-owned SQLite host was stopped, backed up and converted through the actual offline `migrate-context` CLI (2 retained records), then restarted. A/B history and saved policy survive; A sends a new turn in the same Session with its older turns visible. InMemory/SQLite reopen tests preserve immutable policy/browser pins, tool checkpoints, atomic source receipts and same-admission dedupe. Durable rows never fabricate live Browser/Sandbox resources. New Runs take current Instance restrictions; old execution pins remain immutable.
 
-- State: durable Sessions and hosted runtimes are separate; disabled Browser/Sandbox show Unknown with Partial. Refresh succeeds. An injected 503 retains prior counts as Stale; Retry recovers Partial with a fresh timestamp.
-- Preset: selecting Session-isolated prepares an exact unsaved diff. Save commits underlying values; reload retains the derived preset and source labels. Keyboard Home edit derives Custom; Discard restores saved policy. No apply occurs on selection.
-- Fit: State and State & Isolation at 320, 390, 768 and 1440px have document/main width no greater than their available viewport. Mobile and desktop screenshots were inspected in `.playwright-mcp/state-isolation-mobile.png` and `state-isolation-desktop.png`; existing Ant Design panels, tokens, wrapping and form grid remain readable. The console after these navigations has no errors/warnings. Earlier injected 503 console errors were expected failure evidence.
-- Ephemeral browser: concurrent Sessions have distinct contexts, cookie/local storage and tab references. A sibling cannot switch/close the other's handle. Closing B leaves A usable.
-- Persistent browser: authentication storage intentionally shares an Instance profile, but tab/popup ownership stays Session-specific. A delayed popup from A remains owned by A while B is active. Closing B preserves A and profile bytes.
-- Transition: tightening during provider initialization returns pending, then safely replaces the owned view with an ephemeral context. Historical profile directory remains.
-- Workspace: live ReadOnly/Disabled overrides deny old pinned Run mutation/read routes and indirect binary writes, normalize relative cwd to working, and preserve owner-readable Home bytes.
-- Cleanup: ordinary Run completion and pause retain scratch. Terminal eligibility removes A scratch while retaining B scratch, Home, Artifact, transcript and Run receipt.
-- Definition: forked a task-owned draft, changed Home by keyboard, saved and reloaded ReadOnly. Published version controls remain disabled and show compatibility defaults. Draft page and published drawer fit 320/390/768/1440px after resize settlement. The asynchronous Save was allowed to finish before verifying reload; its beforeunload guard correctly warned during the first premature reload attempt.
+During UI verification, the approval-demo fixture Instance used only temporary task data. Definition draft Home was changed by keyboard, saved and reloaded; published controls were read-only. Preset selection prepared a draft, Save committed exact fields, Home edits derived Custom and Discard restored saved settings. Conflict tests retain drafts. State and State & Isolation were exercised at 320, 390, 768 and 1440 px with document/main widths within their viewport. Screenshots inspected: `.playwright-mcp/isolation-final-mobile.png`, `.playwright-mcp/isolation-final-desktop.png`, `.playwright-mcp/strict-cta-mobile.png` (local ignored artifacts). Expected injected-503/restart disconnect diagnostics were distinguished from product failures; final clean navigation reported no console errors/warnings.
 
-## Acceptance coverage and remaining work
+## Actual observation sample
 
-| IDs | Evidence / status |
+[Redacted captured State response](agent-state-isolation-sample-2026-10-15.json), observed at `2026-10-15T11:43:36.771628Z`, has a 15-second freshness window. It reports 2 durable open Sessions, 0 paused, 3 terminal; 2 hosted runtimes and 2 attached transports; 7 terminal Runs and zero in each nonterminal bucket. Browser is unavailable with sharing unknown and all live counts null. Sandbox is unavailable and Session-isolated, with unknown active counts and a known cleanup-pending count of 0. Availability is Partial. Only the task Instance identifier was replaced with `<owned-instance>`. This is captured data, not a fabricated sample or a promise of present state after the hosts stop; it predates the final strict-child settlement follow-up.
+
+## Acceptance mapping
+
+| IDs | Implementation and local evidence |
 | --- | --- |
-| AS-01 | Static owner/DI review; no new execution or persistence owner. Final context integration audit pending. |
-| AS-02–05 | RuntimeStateApiTests, store state/reopen tests, InstanceStateSection tests and live stale/Retry journey. |
-| AS-06 | Owner HTTP denial and trusted scoped read tests pass; malicious state-tool args pending B4. |
-| AS-07–09 | Pending companion A and model-facing B4 integration. |
-| AS-10–12 | Policy/resolver, InMemory/SQLite atomic revision, audit-failure rollback and frontend draft/conflict tests pass. |
-| AS-13 | Optional policy defaults and resolved browser pin/reopen tests pass; integrated A migration compatibility still pending. |
-| AS-14 | Provider/resource separation proven; two-customer model-context and profile evidence filtering pending A. |
-| AS-15 | Synthetic ordinary Session terminal/new-request rejection and durable same-admission retry/reopen pass. Integrated two-request UI journey remains. |
-| AS-16 | Experience/Continuity current gates, maintenance Instance overrides and live Memory admission implemented; end-to-end projection proof pending A. |
-| AS-17–18 | Home access integration and Sandbox mount/transfer boundary tests pass. Sandbox mounts only private working staging. |
-| AS-19–21 | Disposable Chromium ownership/storage/transition tests pass. Broader uncertainty/cancellation regression review remains. |
-| AS-22–23 | Durable Sandbox uncertainty/redaction, mount/transfer and deterministic cleanup suites pass; selection/switch integration and real server execution remain distinct checks. |
-| AS-24–25 | Terminal/deferred cleanup, background recovery scan and live Home restriction tests pass. Integrated child/effect and model refresh coverage remains. |
-| AS-26 | Focused continuity, browser environment/profile and tool-policy regressions pass; final cross-feature set pending integration. |
-| AS-27 | New surface Vitest, Synthetic save/discard/recovery, Definition authoring/read-only, keyboard and all four widths verified. |
-| AS-28 | Architecture, ports, execution, frontend, API, persistence, testing, operations and product tooling context synchronized with independent work; final integration/closure docs pending. |
+| AS-01 | Existing owner/DI boundaries retained; one ContextAssembler, no provisional model path, state persistence or resource framework. |
+| AS-02–05 | RuntimeStateApiTests, InMemory/SQLite count/reopen tests, State UI tests and live stale/Retry journey distinguish durable/hosted/attached state, bucket Runs once, bound provider reads and preserve partial contributors. |
+| AS-06 | Owner HTTP scopes, current-Session metadata readers, forged argument denial, active nonexpired claim/owner checks, visibility revocation and authorized aggregate-only Instance summary. |
+| AS-07–09 | Typed ContextAssembler and StateIsolationContextTests prove one replaceable Runtime ExecutionFacts section, conditional fixed Core rule, actual Tool Evidence, bounded polling/output and no duplicated current user input. |
+| AS-10–12 | Finite defaults/sparse ceilings, derived presets, exact preview diff/fingerprint, multi-owner CAS transaction and audit rollback; UI draft/Custom/Discard/conflict behavior. |
+| AS-13 | Legacy absent policy defaults, immutable resolved browser pins, retained A FieldSources/hash schema and offline sealed-record conversion/reopen variants. |
+| AS-14 | Two-customer model/UI/workspace and Chromium isolation; shared external account limits remain explicit. |
+| AS-15 | Fresh ordinary request Session, durable replay, retained audit/history, terminal/new-chat UI, receipt-fenced strict continuations and child settlement. |
+| AS-16 | Memory admission/retrieval, Experience record/recall/maintenance and Continuity source/repair gates; live narrowed projection between model calls; historical records retained. |
+| AS-17–18 | All Home access routes, relative cwd and indirect writes tested; Sandbox uses only private working staging and canonical Home is never mounted. |
+| AS-19–21 | Disposable native Chromium storage, tab/popup ownership, sibling close, late cancellation, pending transition and safe isolation replacement. |
+| AS-22–23 | Deterministic Sandbox store/mount/API/selection/uncertainty/cleanup/reopen and redacted state projection; prior live SDK ledgers are historical. New live SDK execution was not opted into. |
+| AS-24–25 | Terminal-only scratch eligibility, unresolved effect/lease/child deferral, accounted completion receipts, background-surface recovery scan and live new-effect restrictions under immutable pins. |
+| AS-26 | Focused existing approval, trigger/schedule, capability, completion inbox, background, continuity, browser privacy/credentials and Sandbox suites listed above. |
+| AS-27 | Existing Ant Design 6 components/layout, keyboard save/read-only flows, four widths, stale/Retry and fresh-request UI; frontend unit/build checks. |
+| AS-28 | Canonical architecture, ports, execution, frontend, API, persistence, testing, operations, implementation plan, README/TODO and product tooling context synchronized. |
 
-Required six cross-feature journeys and all AS outcomes must be reconciled before claiming the full proposal complete. Optional unrun CI does not block local completion. Live provider/customer-account acceptance remains distinct from Synthetic and local Chromium evidence.
+Deployment still requires the documented stopped-writer backup/offline context conversion for retained legacy execution data. No Real deployment, full milestone acceptance, full CI suite, hosted CI, live-provider/customer-account or hardware-audio certification is implied by local completion.
+
+After verification, the three task browser tabs were closed and only the verified task-owned API/Vite processes on 5097/5187 were stopped. Temporary SQLite, its pre-conversion backup and local screenshots remain available for inspection. Real hosts and user stores were left running/unchanged.
