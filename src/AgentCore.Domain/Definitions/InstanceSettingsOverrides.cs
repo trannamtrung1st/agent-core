@@ -57,9 +57,11 @@ public sealed record InstanceSettingsOverrides(
     InstanceField<int>? SandboxMaxCommandSeconds = null,
     InstanceField<int>? SandboxIdleTtlSeconds = null,
     InstanceField<int>? SandboxMaxLifetimeSeconds = null,
-    InstanceField<long>? SandboxStorageBytes = null)
+    InstanceField<long>? SandboxStorageBytes = null,
+    InstanceField<string[]>? SandboxAllowedProfileIds = null)
 {
     public InstanceSettingsOverrides Copy() => this with {
+        SandboxAllowedProfileIds = SandboxAllowedProfileIds is { } profiles ? new(profiles.Value.ToArray()) : null,
         InitiativeTriggers = InitiativeTriggers is { } initiative ? new(initiative.Value.ToArray()) : null,
         SelectedCapabilities = SelectedCapabilities is { } selected ? new(selected.Value.ToArray()) : null,
         AlwaysCapabilities = AlwaysCapabilities is { } always ? new(always.Value.ToArray()) : null,

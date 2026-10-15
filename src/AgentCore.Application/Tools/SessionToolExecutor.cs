@@ -482,7 +482,7 @@ public sealed partial class SessionToolExecutor(
                     await CreateArtifactFromWorkspaceAsync(definition, sessionId, args, admission?.AgentRunId, cancellationToken).ConfigureAwait(false)),
                 ToolCatalog.ArtifactsVerify => TextResult(
                     await VerifyArtifactAsync(sessionId, args, cancellationToken).ConfigureAwait(false)),
-                ToolCatalog.SandboxExec or ToolCatalog.SandboxStatus or ToolCatalog.SandboxProcessStatus or ToolCatalog.SandboxProcessStop or ToolCatalog.SandboxReset
+                ToolCatalog.SandboxProfiles or ToolCatalog.SandboxExec or ToolCatalog.SandboxStatus or ToolCatalog.SandboxProcessStatus or ToolCatalog.SandboxProcessStop or ToolCatalog.SandboxReset
                     => await ExecuteSandboxToolAsync(definition, sessionId, call, args, admission, remainingOutputBytes, cancellationToken),
                 ToolCatalog.WebSearch => FitResult(
                     remainingOutputBytes,

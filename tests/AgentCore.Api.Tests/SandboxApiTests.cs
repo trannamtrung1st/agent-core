@@ -15,6 +15,52 @@ namespace AgentCore.Api.Tests;
 
 public sealed class SandboxApiTests
 {
+    [Fact]
+    public async Task Run_admission_pins_every_effective_authorized_profile_and_never_expands_an_admitted_snapshot()
+    {
+        await using var factory = new SandboxFactory().WithWebHostBuilder(builder => builder.ConfigureTestServices(services => {
+            services.RemoveAll<ISandboxReadiness>(); services.AddSingleton<ISandboxReadiness>(new ReadySandbox());
+        }));
+        using var owner = TestOwnerCapability.CreateOwnerClient(factory);
+        var store = factory.Services.GetRequiredService<ISandboxStore>();
+        var first = new SandboxProfile("default",1,"Unavailable default","",false,"sha256:"+new string('a',64));
+        var alternate = first with { Id="alternate",Name="Alternate",Enabled=true,Cpu=.5,MemoryMiB=512 };
+        foreach(var profile in new[]{first,alternate}) {
+            await store.SaveProfileAsync(profile,0);
+            await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Deterministic admission observation",ContractVersion:2));
+        }
+        var definitions=factory.Services.GetRequiredService<IAgentDefinitionAdminStore>();
+        var baseline=(await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant",31))!;
+        var candidate=AgentDefinitionCandidate.FromDefinition(baseline) with {DefinitionId="profile-admission",SandboxPolicy=new("default",["default","alternate"])};
+        var draft=await definitions.CreateDraftAsync(new("profile-admission",candidate,DefinitionDraftSourceKind.New,null,DateTimeOffset.UtcNow));
+        await definitions.PublishDraftAsync(new(draft.DraftId,draft.Revision,[],DateTimeOffset.UtcNow));
+        var created=await owner.PostAsJsonAsync("/api/v2/admin/agent-instances",new{definitionId="profile-admission",version=1});created.EnsureSuccessStatusCode();
+        var instance=(await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>());var id=instance.GetProperty("instanceId").GetGuid();
+        var settings=await owner.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{id}/settings/sandboxPolicy",new{expectedInstanceRevision=instance.GetProperty("revision").GetInt64(),set=new{cpu=.75,initializationScript="printf instance"},clear=Array.Empty<string>()});settings.EnsureSuccessStatusCode();
+        var resolver=factory.Services.GetRequiredService<AgentCore.Application.Execution.AgentRunConfigurationResolver>();
+        var admitted=(await resolver.ResolveAsync(id)).Configuration;
+        Assert.Null(admitted.Definition.ExecutionSandboxProfile);
+        var pins=admitted.Definition.ExecutionSandboxProfiles!;Assert.Equal(2,pins.Count);
+        Assert.False(pins.Single(p=>p.Id=="default").AdmittedForExecution);
+        var alternatePin=pins.Single(p=>p.Id=="alternate");Assert.True(alternatePin.AdmittedForExecution);Assert.Equal(.5,alternatePin.Cpu);Assert.Equal("printf instance",alternatePin.InstanceInitializationScript);
+        Assert.Equal(admitted.InstanceRevision,alternatePin.InstanceRevision);
+        await store.SaveProfileAsync(alternate with {Revision=2,Cpu=.25},1);
+        var beforeVerification=(await resolver.ResolveAsync(id)).Configuration;
+        Assert.False(beforeVerification.Definition.ExecutionSandboxProfiles!.Single(p=>p.Id=="alternate").AdmittedForExecution);
+        await store.SaveVerificationAsync(new(alternate.Id,2,DateTimeOffset.UtcNow,true,"New exact observation",ContractVersion:2));
+        Assert.Equal(1,alternatePin.Revision);Assert.True(alternatePin.AdmittedForExecution);
+        Assert.False(beforeVerification.Definition.ExecutionSandboxProfiles!.Single(p=>p.Id=="alternate").AdmittedForExecution);
+        var next=(await resolver.ResolveAsync(id)).Configuration.Definition.ExecutionSandboxProfiles!.Single(p=>p.Id=="alternate");
+        Assert.Equal(2,next.Revision);Assert.Equal(.25,next.Cpu);Assert.True(next.AdmittedForExecution);
+        var revision=(await settings.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty("instanceRevision").GetInt64();
+        var narrowed=await owner.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{id}/settings/sandboxPolicy",new{expectedInstanceRevision=revision,set=new{allowedProfileIds=new[]{"default"}},clear=Array.Empty<string>()});narrowed.EnsureSuccessStatusCode();
+        Assert.Single((await resolver.ResolveAsync(id)).Configuration.Definition.ExecutionSandboxProfiles!);
+        Assert.Equal(2,admitted.Definition.ExecutionSandboxProfiles!.Count);
+    }
+
+    private sealed class ReadySandbox : ISandboxReadiness
+    { public bool IsAvailable=>true;public string State=>"Ready";public string SafeMessage=>"Deterministic fixture"; }
+
     [Theory]
     [InlineData("[]")]
     [InlineData("null")]

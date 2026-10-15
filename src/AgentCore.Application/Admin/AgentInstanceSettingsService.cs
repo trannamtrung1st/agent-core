@@ -113,7 +113,7 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         var effective = InstanceSettingsResolver.Resolve(definition, owner.SettingsOverrides);
         return new(section, owner.Revision, definition.Id, definition.Version, overrides,
             InstanceSettingsResolver.Values(effective, section), InstanceSettingsResolver.Fields(section).ToDictionary(
-                f => f, f => overrides.ContainsKey(f) ? "instance" : section == "sandboxPolicy" && f != "profileId" ? "profile" : "definition", StringComparer.Ordinal),
+                f => f, f => overrides.ContainsKey(f) ? "instance" : section == "sandboxPolicy" && f is not ("profileId" or "allowedProfileIds") ? "profile" : "definition", StringComparer.Ordinal),
             Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { definition = effective, owner.Revision }, Json))).ToLowerInvariant(),
             InstanceSettingsResolver.Values(definition, section), InstanceSettingsResolver.Constraints(definition, section));
     }

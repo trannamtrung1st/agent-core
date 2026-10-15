@@ -9,9 +9,16 @@ const config={profile,instanceRevision:4,instanceInitializationScript:'echo Inst
 const evidence:SandboxVerification={passed:false,message:'Instance initialization failed with exit code 7.',profileId:'fixture',profileRevision:2,instanceRevision:4,verifiedAt:'2026-10-14T00:00:00Z',exitCode:7,stdout:'Hello, world!',stderr:'bounded-error',truncated:false,durationMs:1000,diagnosticId:'fixture-diag'};
 const tree=(id='one',dirty=false)=><ConfigProvider theme={{token:{motion:false}}}><App><InstanceSandboxSummary instanceId={id} revision={4} verifySetup dirty={dirty}/></App></ConfigProvider>;
 beforeEach(()=>{vi.mocked(getInstanceSandbox).mockReset().mockResolvedValue(config);vi.mocked(verifyInstanceSandbox).mockReset().mockResolvedValue(evidence);});
+it('can verify an explicit alternate when the default profile is missing from the catalog',async()=>{
+ vi.mocked(getInstanceSandbox).mockResolvedValue({...config,profile:null,profiles:[profile],policy:{defaultProfileId:'missing',allowedProfileIds:['missing','fixture']}});
+ render(tree());await screen.findByRole('combobox',{name:'Profile to verify'});
+ expect(screen.getByText('No authorized configured profile')).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Verify Instance setup'}));
+ await waitFor(()=>expect(verifyInstanceSandbox).toHaveBeenCalledWith('one',4,'fixture'));
+});
 it('verifies saved setup with exact revision and exposes collapsed failure evidence',async()=>{
  render(tree());await screen.findByText('Fixture · revision 2');fireEvent.click(screen.getByRole('button',{name:'Verify Instance setup'}));
- await waitFor(()=>expect(verifyInstanceSandbox).toHaveBeenCalledWith('one',4));
+ await waitFor(()=>expect(verifyInstanceSandbox).toHaveBeenCalledWith('one',4,expect.any(String)));
  const output=await screen.findByRole('button',{name:'Setup verification standard output'});expect(output).toHaveAttribute('aria-expanded','false');fireEvent.click(output);await screen.findByText('Hello, world!');
  expect(screen.getByText(/Exit 7/)).toBeInTheDocument();
 });

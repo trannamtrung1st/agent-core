@@ -13,11 +13,82 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using AgentCore.Application.Credentials;
+using AgentCore.Infrastructure.Credentials;
 
 namespace AgentCore.Infrastructure.Tests;
 
 public sealed class OpenSandboxCleanupTests
 {
+    [Fact]
+    public async Task Credential_rotation_retires_an_idle_generation_even_when_the_profile_revision_is_unchanged()
+    {
+        var deletes = 0;
+        await using var host = await Host.Create(context => { deletes++; context.Response.StatusCode = 204; return Task.CompletedTask; });
+        var (_, store, lease, _) = await host.Service();
+        var owners = new InMemoryAgentInstanceStore();
+        var credentials = new InMemoryCredentialStore(owners);
+        var protector = new LocalCredentialProtector(Path.Combine(host.MountRoot, "keys"));
+        var credentialService = new CredentialService(credentials, credentials, protector, owners, new SystemIdGenerator(TimeProvider.System), TimeProvider.System);
+        var credential = await credentialService.CreateContainerRegistryAsync("Fixture", "Token", new("ghcr.io", "owner", ["ghcr.io/acme"]), "fixture-token");
+        var profile = lease.Profile with { ImageReference = "ghcr.io/acme/tool@sha256:" + new string('a', 64), RegistryCredentialId = credential.CredentialId,
+            RegistryCredentialRevision = credential.Revision, RegistrySecretRevision = 0 };
+        await store.SaveProfileAsync(profile, 0);
+        var memory = new InMemoryMemoryStore(); var now = DateTimeOffset.UtcNow; var owner = new AgentRunOwner(lease.AgentInstanceId, Guid.NewGuid());
+        var definition = new AgentDefinition(1,"examiner",1,new("Alex","Examiner","Practice","Calm"),["Practice"],"Instructions",new("acknowledgeThenContinue",true,true),new("concise",true,"en",256),new(false,8000,30000,1,["longSilence"]),new(false,"default",1),new("synthetic",null,null),new Dictionary<string,string>(), SandboxPolicy: new("fixture",["fixture"]));
+        await memory.SaveAsync(new SessionSnapshot(1,lease.SessionId,1,definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId),0);
+        await store.SaveLeaseAsync(lease with { Revision = 2, Profile = profile, SelectedProfileId = profile.Id }, 1);
+        var options = new OpenSandboxOptions { Enabled = true, Endpoint = host.Endpoint, ApiKey = "private-fixture-key", WorkspaceMountRoot = host.MountRoot };
+        var authority = new SandboxImageAuthority(options, store, TimeProvider.System, credentials, protector);
+        var service = new OpenSandboxService(options, store, null!, memory, null!, TimeProvider.System, imageAuthority: authority);
+        await service.ReconcileAsync();
+        Assert.Equal(0, deletes); Assert.Equal("Ready", (await service.InspectAsync(lease.SessionId))!.State);
+        await credentialService.ReplaceAsync(credential.CredentialId, credential.Revision, "rotated-fixture-token");
+        await service.ReconcileAsync();
+        Assert.Equal(1, deletes);
+        var result = (await service.InspectAsync(lease.SessionId))!;
+        Assert.Equal("Terminated", result.State); Assert.Equal(profile.Id, result.SelectedProfileId);
+        Assert.Equal("authorityRevoked", result.CleanupReason);
+    }
+
+    [Theory]
+    [InlineData("notCommitted", SandboxLeaseState.Terminated)]
+    [InlineData("committed", SandboxLeaseState.Terminated)]
+    [InlineData("unknown", SandboxLeaseState.NeedsResync)]
+    public async Task Reconciliation_after_confirmed_cancellation_releases_only_known_file_outcomes(string sync, SandboxLeaseState expected)
+    {
+        var deletes=0;
+        await using var host=await Host.Create(context=>{deletes++;context.Response.StatusCode=404;return Task.CompletedTask;});
+        var (service,store,lease,_)=await host.Service();
+        var execution=new SandboxExecution(Guid.NewGuid(),lease.SessionId,lease.AgentInstanceId,lease.Generation,Guid.NewGuid(),Guid.NewGuid(),"once","hash",
+            SandboxExecutionState.Canceled,DateTimeOffset.UtcNow,FinishedAt:DateTimeOffset.UtcNow,Stdout:"retained-output",WorkspaceSyncStatus:sync,
+            FailureCategory:"cancellation",CancellationReason:"userStop",TerminationConfirmed:true);
+        await store.SaveExecutionAsync(execution,true);
+        await store.SaveLeaseAsync(lease with {Revision=2,State=SandboxLeaseState.NeedsResync,LastExecutionId=execution.Id,ActiveExecutionId=execution.Id},1);
+        await service.ReconcileAsync();
+        var recovered=(await store.GetLeaseAsync(lease.SessionId))!;
+        Assert.Equal(expected,recovered.State);Assert.Null(recovered.ActiveExecutionId);Assert.Equal(1,deletes);
+        var retained=await service.InspectProcessAsync(lease.SessionId,execution.Id);
+        Assert.Equal("Canceled",retained.Status);Assert.Equal(sync,retained.WorkspaceSyncStatus);Assert.Equal("userStop",retained.CancellationReason);Assert.Equal("retained-output",retained.Stdout);
+    }
+
+    [Fact]
+    public async Task Durable_inspection_during_provider_outage_never_contacts_the_provider_or_changes_evidence()
+    {
+        var contacts=0;
+        await using var host=await Host.Create(context=>{contacts++;context.Response.StatusCode=503;return Task.CompletedTask;});
+        var (service,store,lease,_)=await host.Service();
+        var execution=new SandboxExecution(Guid.NewGuid(),lease.SessionId,lease.AgentInstanceId,lease.Generation,Guid.NewGuid(),Guid.NewGuid(),"once","hash",SandboxExecutionState.Indeterminate,
+            DateTimeOffset.UtcNow,WorkspaceSyncStatus:"unknown",FailureCategory:"processInspectionFailure",Phase:"processInspection");
+        await store.SaveExecutionAsync(execution,true);
+        var before=(await store.GetLeaseAsync(lease.SessionId))!;
+        Assert.Equal("Ready",(await service.InspectAsync(lease.SessionId))!.State);
+        Assert.Equal("processInspectionFailure",(await service.InspectProcessAsync(lease.SessionId,execution.Id)).FailureCategory);
+        Assert.Equal(before,await store.GetLeaseAsync(lease.SessionId));Assert.Equal(0,contacts);
+        await Assert.ThrowsAsync<AgentCoreException>(()=>service.StopSessionAsync(lease.SessionId,default,lease.Generation,execution.Id,true).AsTask());
+        Assert.Equal(0,contacts); // stale execution confirmation fails before DELETE.
+    }
+
     [Theory]
     [InlineData(500, 204, 2, true)]
     [InlineData(503, 404, 2, true)]
@@ -187,7 +258,8 @@ public sealed class OpenSandboxCleanupTests
             if (list is not null) app.MapGet("/v1/sandboxes", list);
             app.MapMethods("/v2/{**path}",["HEAD"],() => Results.Ok());
             await app.StartAsync();
-            return new(app, app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single());
+            var host = new Host(app, app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single());
+            Directory.CreateDirectory(host.MountRoot); return host;
         }
         public async Task<(OpenSandboxService Service, InMemorySandboxStore Store, SandboxLease Lease, Logs Logs)> Service()
         {

@@ -8,7 +8,7 @@ public sealed record SandboxProfile(string Id, long Revision, string Name, strin
     string ImageReference, string? InitializationScript = null, double Cpu = 1, int MemoryMiB = 1024,
     int Pids = 64, int MaxCommandSeconds = 120, int IdleTtlSeconds = 1800,
     int MaxLifetimeSeconds = 7200, long StorageBytes = 250L * 1024 * 1024,
-    DateTimeOffset? LastVerifiedAt = null, string? VerificationReason = null, string? InstanceInitializationScript = null, long? InstanceRevision = null, Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null)
+    DateTimeOffset? LastVerifiedAt = null, string? VerificationReason = null, string? InstanceInitializationScript = null, long? InstanceRevision = null, Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null, bool? AdmittedForExecution = null)
 {
     public void Validate()
     {

@@ -44,7 +44,7 @@ export function DefinitionSandboxPolicy({ candidate, disabled, readOnly, onChang
         <Descriptions.Item label="Default sandbox profile">{policy?.defaultProfileId ? label(policy.defaultProfileId) : 'No explicit default'}</Descriptions.Item>
       </Descriptions> : <>
         <label className="admin-draft-field"><Typography.Text strong>Allowed sandbox profiles</Typography.Text>
-          <Select aria-label="Allowed sandbox profiles" mode="multiple" value={policy?.allowedProfileIds ?? []} options={options} disabled={disabled || !profiles}
+          <Select aria-label="Allowed sandbox profiles" mode="multiple" maxCount={16} value={policy?.allowedProfileIds ?? []} options={options} disabled={disabled || !profiles}
             onChange={allowedProfileIds => onChange?.({ ...candidate, sandboxPolicy: allowedProfileIds.length ? {
               allowedProfileIds, defaultProfileId: policy && allowedProfileIds.includes(policy.defaultProfileId) ? policy.defaultProfileId : allowedProfileIds[0]
             } : null })} />
@@ -62,7 +62,7 @@ export function DefinitionSandboxPolicy({ candidate, disabled, readOnly, onChang
     {platform && policy && <section className="admin-draft-form-section" aria-label="Default Global sandbox profile">
       <Typography.Title level={5}>Default Global profile</Typography.Title>
       {profile && <Typography.Text strong>{profile.name} · revision {profile.revision}</Typography.Text>}
-      <Typography.Text type="secondary">Current Global configuration for reference. This Definition stores profile IDs; Runs resolve and pin a profile revision when admitted.</Typography.Text>
+      <Typography.Text type="secondary">Current Global configuration for reference. This Definition stores profile IDs; Runs resolve and pin every effective authorized profile revision when admitted. Each Session chooses independently.</Typography.Text>
       <Flex wrap gap={token.paddingXS} align="center">
         <Tag color={profile && sandboxEligible(profile) ? 'success' : 'default'}>{profile ? sandboxStatusLabel(profile) : 'Unavailable'}</Tag>
         <Typography.Text>{profile ? profile.availabilityMessage??platform.message : 'The default profile is unavailable. Choose an available profile before publishing.'}</Typography.Text>

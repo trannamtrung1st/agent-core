@@ -2852,6 +2852,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 if (evidence.RepeatedDialogInstruction is { } repeatedDialogInstruction) prompt.Add(new ModelMessage(ModelRole.System, repeatedDialogInstruction));
                 if (budget.CleanupReserve > TimeSpan.Zero) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.BrowserLifecycleInstruction));
                 if (cleanupPhase && finalizationReason is null) prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.CleanupInstruction));
+                if (finalizationReason == "sandboxRecovery") prompt.Add(new ModelMessage(ModelRole.System, RunFinalization.SandboxRecoveryInstruction));
                 if (finalizationReason is not null) prompt.Add(new ModelMessage(ModelRole.System,
                     IsInitialBackgroundRun ? RunFinalization.BackgroundInstruction : RunFinalization.Instruction));
 
@@ -3728,7 +3729,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     }
 
                     // Safety evidence survives clipping/aggregate output exhaustion.
-                    var sandboxUnknown = executionResult.OutcomeUnknown || SandboxOutcomeUnknown(call.Name, executionResult.Text);
+                    var sandboxUnknown = executionResult.OutcomeUnknown || (!executionResult.RecoveryRequired && SandboxOutcomeUnknown(call.Name, executionResult.Text));
                     if (effectFenced)
                         await MarkRunEffectAsync(cause, request.ResponseId, call, effectHash!, sandboxUnknown ? AgentRunSideEffectDisposition.Indeterminate : RejectedEffect(executionResult.Text)
                             ? AgentRunSideEffectDisposition.DefinitelyFailed : AgentRunSideEffectDisposition.Succeeded, generateToken).ConfigureAwait(false);
@@ -3835,11 +3836,16 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (sandboxUnknown)
                     {
                         await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(ProviderErrorCode.InvalidRequest,
-                            "Sandbox execution outcome is unknown. The command was not repeated. Inspect the Session sandbox and explicitly reset before another mutation.", FailureReason: "sandboxOutcomeUnknown")), CancellationToken.None).ConfigureAwait(false);
+                            executionResult.SafeFailureSummary ?? "Sandbox execution outcome is unknown. The command was not repeated. Inspect the Session sandbox and explicitly reset before another mutation.", FailureReason: "sandboxOutcomeUnknown")), CancellationToken.None).ConfigureAwait(false);
                         return;
                     }
                     if (effectFenced && !sandboxUnknown)
                         await RequestAgentRunCommandAsync(cause, request.ResponseId, (run, now) => new AgentRunCommand.ClearSideEffect(run.Revision, now, run.Claim!.Generation, ToolCatalog.RecordsOwnerVisibleEffect(call.Name)), generateToken).ConfigureAwait(false);
+                    if (executionResult.RecoveryRequired)
+                    {
+                        await BeginFinalizationAsync("sandboxRecovery").ConfigureAwait(false);
+                        break;
+                    }
                     if (IsInitialBackgroundRun && AgentCore.Application.Email.EmailAttentionSafety.RequiresOwnerAttention(call.Name, executionResult.Text))
                     {
                         await RequestRunOutcomeAsync(cause, request.ResponseId, AgentRunOutcomeKind.NeedsAttention,

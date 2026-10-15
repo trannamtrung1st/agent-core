@@ -43,7 +43,7 @@ public sealed class InMemorySandboxStore(InMemoryAdminEventStore? events = null)
     public ValueTask<SandboxInstanceVerification?> GetInstanceVerificationAsync(Guid id, long revision, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_instanceVerifications.GetValueOrDefault((id, revision))); }
     public ValueTask SaveInstanceVerificationAsync(SandboxInstanceVerification verification, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (_gate) _instanceVerifications[(verification.InstanceId, verification.InstanceRevision)] = verification; return ValueTask.CompletedTask; }
+    { ct.ThrowIfCancellationRequested(); lock (_gate) _instanceVerifications[(verification.InstanceId, verification.InstanceRevision)] = verification.Merge(_instanceVerifications.GetValueOrDefault((verification.InstanceId, verification.InstanceRevision))); return ValueTask.CompletedTask; }
     public ValueTask<SandboxLease?> GetLeaseAsync(Guid sessionId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(_leases.GetValueOrDefault(sessionId)); }
     public ValueTask<IReadOnlyList<SandboxLease>> ListLeasesAsync(CancellationToken ct = default)

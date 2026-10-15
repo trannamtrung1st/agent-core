@@ -12,7 +12,7 @@ public static class InstanceSettingsResolver
     public static IReadOnlyList<string> Sections { get; } = ["instructions", "conversationPolicy", "behaviorPolicy", "initiativePolicy", "voice", "modelDefaults", "memoryPolicy", "capabilities", "triggerPolicy", "providerPreferences", "sandboxPolicy"];
     public static IReadOnlyList<string> Fields(string section) => section switch
     {
-        "sandboxPolicy" => ["profileId", "initializationScript", "cpu", "memoryMiB", "maxCommandSeconds", "idleTtlSeconds", "maxLifetimeSeconds", "storageBytes"],
+        "sandboxPolicy" => ["allowedProfileIds", "profileId", "initializationScript", "cpu", "memoryMiB", "maxCommandSeconds", "idleTtlSeconds", "maxLifetimeSeconds", "storageBytes"],
         "instructions" => ["systemInstructions"],
         "conversationPolicy" => ["responseLength", "askOneQuestionAtATime", "language", "maxOutputTokens"],
         "behaviorPolicy" => ["interruptionStyle", "acknowledgeInterruption", "avoidUnsupportedClaims"],
@@ -41,6 +41,7 @@ public static class InstanceSettingsResolver
                 var remove = !set.ContainsKey(field);
                 next = (section, field) switch
                 {
+                    ("sandboxPolicy", "allowedProfileIds") => next with { SandboxAllowedProfileIds = remove ? null : new(Read<string[]>(set[field])) },
                     ("sandboxPolicy", "profileId") => next with { SandboxProfileId = remove ? null : new(Read<string>(set[field])) },
                     ("sandboxPolicy", "initializationScript") => next with { SandboxInitializationScript = remove ? null : new(set[field].ValueKind == JsonValueKind.Null ? null : Read<string>(set[field])) },
                     ("sandboxPolicy", "cpu") => next with { SandboxCpu = remove ? null : new(Read<double>(set[field])) },
@@ -124,6 +125,7 @@ public static class InstanceSettingsResolver
         switch (section)
         {
             case "sandboxPolicy":
+                result["allowedProfileIds"] = new("Instance choices may only narrow the Definition allowed list. Clear to inherit.", Choices: baseline.SandboxPolicy?.AllowedProfileIds ?? []);
                 result["profileId"] = new("Choose only a profile authorized by this Definition. Live generations retain their pinned setup until expiry or reset.", Choices: baseline.SandboxPolicy?.AllowedProfileIds ?? []);
                 if (baseline.ExecutionSandboxProfile is { } p)
                 {
@@ -172,12 +174,13 @@ public static class InstanceSettingsResolver
     {
         if (overrides is null) return baseline;
         var o = overrides;
+        if (o.SandboxProfileId is { } selectedProfile && baseline.SandboxPolicy?.AllowedProfileIds.Contains(selectedProfile.Value, StringComparer.Ordinal) != true)
+            throw AgentCoreErrors.Validation(Constraints(baseline, "sandboxPolicy")["profileId"].Reason);
         SandboxSetupResolver.ValidateOverrides(o);
         var trigger = TriggerOf(baseline);
         var d = baseline with
         {
-            SandboxPolicy = o.SandboxProfileId is { } choice && baseline.SandboxPolicy is { } policy
-                && policy.AllowedProfileIds.Contains(choice.Value, StringComparer.Ordinal) ? policy with { DefaultProfileId = choice.Value } : baseline.SandboxPolicy,
+            SandboxPolicy = SandboxSetupResolver.ResolvePolicy(baseline.SandboxPolicy, o),
             ExecutionSandboxProfile = baseline.ExecutionSandboxProfile is { } sandbox ? SandboxSetupResolver.Resolve(sandbox, o, sandbox.InstanceRevision) : null,
             SystemInstructions = o.SystemInstructions is { } instructions ? instructions.Value : baseline.SystemInstructions,
             ConversationPolicy = baseline.ConversationPolicy with
@@ -295,7 +298,7 @@ public static class InstanceSettingsResolver
 
     public static IReadOnlyDictionary<string, object?> Values(AgentDefinition d, string section) => section switch
     {
-        "sandboxPolicy" => new Dictionary<string, object?> { ["profileId"] = d.SandboxPolicy?.DefaultProfileId,
+        "sandboxPolicy" => new Dictionary<string, object?> { ["profileId"] = d.SandboxPolicy?.DefaultProfileId, ["allowedProfileIds"] = d.SandboxPolicy?.AllowedProfileIds ?? [],
             ["initializationScript"] = d.ExecutionSandboxProfile?.InstanceInitializationScript,
             ["cpu"] = d.ExecutionSandboxProfile?.Cpu, ["memoryMiB"] = d.ExecutionSandboxProfile?.MemoryMiB,
             ["maxCommandSeconds"] = d.ExecutionSandboxProfile?.MaxCommandSeconds, ["idleTtlSeconds"] = d.ExecutionSandboxProfile?.IdleTtlSeconds,
@@ -374,6 +377,7 @@ public static class InstanceSettingsResolver
         {
             case "sandboxPolicy":
                 if (o.SandboxProfileId is { } profile) result["profileId"] = profile.Value;
+                if (o.SandboxAllowedProfileIds is { } allowedProfiles) result["allowedProfileIds"] = allowedProfiles.Value;
                 if (o.SandboxInitializationScript is { } initializationScript) result["initializationScript"] = initializationScript.Value;
                 if (o.SandboxCpu is { } cpu) result["cpu"] = cpu.Value;
                 if (o.SandboxMemoryMiB is { } memoryMiB) result["memoryMiB"] = memoryMiB.Value;

@@ -111,3 +111,7 @@ Command diagnostics and Initialization diagnostics are visible native icon-and-t
 ## Composer attachment tiles and binary intake (2026-10-14)
 
 Pending uploads use a compact responsive icon/filename grid inside the incumbent composer with complete hover/keyboard filenames, icon-only Remove/Retry, upload progress and local errors. Its 30vh/12rem vertical cap keeps the editor available; the parent list and each tile own separate native 8px insets. No pending thumbnails are generated. All file types are stored inertly within existing quotas; bounded Office extraction supports DOCX/XLSX. Sent previews/downloads retain their source-owned behavior. `/docs` owns upload authority and processing limits.
+
+SANDBOX SELECTION/RECOVERY (2026-10-15): Chat keeps Session profile/image evidence, human-readable lifecycle/cancellation, bounded diagnostics and safe next actions in the existing drawer. Inspect status is read-only. Reset survives an ordinary poll while changed Session/generation/execution identity stays fenced. Shared Ant Design v6 controls were exercised at 1440/1024/768/390/320. See [the successor ledger](../../docs/reports/sandbox-selection-recovery-verification-2026-10-15.md) for exact observed scenarios and hardware limits.
+
+A cleanly terminated Sandbox with a retained profile choice still offers confirmed Reset to return to the effective default; once cleared, a settled environment disables redundant Reset. Confirmation names that selection effect and keeps exact generation/execution fencing.

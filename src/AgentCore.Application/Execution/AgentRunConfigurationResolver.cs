@@ -28,14 +28,23 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
             if (current?.Revision != owner.Revision) continue;
             var effective = InstanceSettingsResolver.Resolve(baseline, owner.SettingsOverrides) with { SelfManagement = ManagementPolicyResolver.Resolve(baseline, owner) };
             if (sandboxes is not null)
+            {
+                var profiles = new List<SandboxProfile>();
+                foreach (var profileId in effective.SandboxPolicy?.AllowedProfileIds ?? [])
                 {
-                var profile = effective.SandboxPolicy is { } policy ? await sandboxes.GetProfileAsync(policy.DefaultProfileId, ct: ct) : null;
-                if (profile is not null && !inspectSandbox)
-                {
+                    var profile = await sandboxes.GetProfileAsync(profileId, ct: ct);
+                    if (profile is null) continue;
                     var availability = sandboxAuthority is null ? null : await sandboxAuthority.InspectAsync(profile, ct);
-                    profile = availability?.Eligible == true && sandboxReadiness?.State == "Ready" ? profile with { RegistryCredentialRevision = availability.CredentialRevision, RegistrySecretRevision = availability.SecretRevision } : null;
+                    // Admit exact catalog and source epochs, including unavailable entries for
+                    // truthful discovery. Execution revalidates eligibility without expanding pins.
+                    profile = profile with { RegistryCredentialRevision = availability?.CredentialRevision,
+                        RegistrySecretRevision = availability?.SecretRevision, AdmittedForExecution = availability?.Eligible == true && sandboxReadiness?.State == "Ready" };
+                    profiles.Add(SandboxSetupResolver.Resolve(profile, owner.SettingsOverrides, owner.Revision));
                 }
-                effective = effective with { ExecutionSandboxProfile = profile is null ? null : SandboxSetupResolver.Resolve(profile, owner.SettingsOverrides, owner.Revision) };
+                var selected = profiles.FirstOrDefault(p => p.Id == effective.SandboxPolicy?.DefaultProfileId);
+                effective = effective with { ExecutionSandboxProfiles = profiles.ToArray(),
+                    ExecutionSandboxProfile = inspectSandbox || selected is not null && sandboxAuthority is not null
+                        && (await sandboxAuthority.InspectAsync(selected, ct)).Eligible && sandboxReadiness?.State == "Ready" ? selected : null };
             }
             var manifest = AgentInstanceResourceService.Resolve(effective, published, resourceState, skillState);
             var environment = RoleEnvironments.Of(effective);

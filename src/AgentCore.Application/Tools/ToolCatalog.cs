@@ -40,6 +40,7 @@ public static class ToolCatalog
     public const string ArtifactsCreate = "artifacts.create";
     public const string ArtifactsCreateFromWorkspace = "artifacts.create_from_workspace";
     public const string ArtifactsVerify = "artifacts.verify";
+    public const string SandboxProfiles = "sandbox.profiles";
     public const string SandboxExec = "sandbox.exec";
     public const string SandboxStatus = "sandbox.status";
     public const string SandboxProcessStatus = "sandbox.process.status";

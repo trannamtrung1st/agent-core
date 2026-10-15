@@ -41,4 +41,26 @@ public sealed class SandboxSetupResolverTests
         Assert.Throws<AgentCoreException>(()=>SandboxSetupResolver.Resolve(changed,saved,3,rejectExpansion:true));
     }
 
+    [Fact]
+    public void Allowed_subset_is_sparse_exact_and_cannot_exclude_the_effective_default()
+    {
+        var definition = SampleDefinitions.Examiner with { SandboxPolicy = new("workbench", ["workbench", "dotnet", "minimal"]) };
+        var initial = InstanceSettingsResolver.Resolve(definition, new());
+        Assert.Equal(definition.SandboxPolicy!.AllowedProfileIds, initial.SandboxPolicy!.AllowedProfileIds);
+        var settings = InstanceSettingsResolver.Patch(new(), "sandboxPolicy", new Dictionary<string, JsonElement> {
+            ["allowedProfileIds"] = JsonSerializer.SerializeToElement(new[] { "dotnet", "minimal" }),
+            ["profileId"] = JsonSerializer.SerializeToElement("dotnet") }, []);
+        var narrowed = InstanceSettingsResolver.Resolve(definition, settings);
+        Assert.Equal(new[] { "dotnet", "minimal" }, narrowed.SandboxPolicy!.AllowedProfileIds);
+        Assert.Equal("dotnet", narrowed.SandboxPolicy.DefaultProfileId);
+        Assert.Throws<AgentCoreException>(() => InstanceSettingsResolver.Resolve(definition, settings with { SandboxProfileId = null }));
+        Assert.Throws<AgentCoreException>(() => InstanceSettingsResolver.Resolve(definition, settings with { SandboxAllowedProfileIds = new(["foreign", "dotnet"]) }));
+        Assert.Throws<AgentCoreException>(() => InstanceSettingsResolver.Resolve(definition, settings with { SandboxAllowedProfileIds = new(["dotnet", "dotnet"]) }));
+        Assert.Throws<AgentCoreException>(() => InstanceSettingsResolver.Resolve(definition, settings with { SandboxAllowedProfileIds = new([]) }));
+        var reset = InstanceSettingsResolver.Patch(settings, "sandboxPolicy", new Dictionary<string, JsonElement>(), ["allowedProfileIds", "profileId"]);
+        Assert.Equal(definition.SandboxPolicy!.AllowedProfileIds, InstanceSettingsResolver.Resolve(definition, reset).SandboxPolicy!.AllowedProfileIds);
+        var copied = settings.Copy(); settings.SandboxAllowedProfileIds!.Value[0] = "foreign";
+        Assert.Equal("dotnet", copied.SandboxAllowedProfileIds!.Value[0]);
+    }
+
 }

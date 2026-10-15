@@ -28,6 +28,7 @@ class SandboxComposeTests(unittest.TestCase):
             with patch.object(helper,'state_path',return_value=state),patch.object(helper,'run',side_effect=fake_run),patch.object(helper,'inspect',return_value={'owned':True}):
                 _, image = helper.prepare(args)
                 self.assertIsNone(image)
+                self.assertEqual((state/'workspace-mounts').stat().st_mode & 0o7777, 0o1777)
                 self.assertFalse(any('build' in call for call in calls))
                 self.assertNotIn('WORKBENCH',(state/'compose.env').read_text())
                 helper.native_handoff(state,'http://127.0.0.1:18080','private-fixture')

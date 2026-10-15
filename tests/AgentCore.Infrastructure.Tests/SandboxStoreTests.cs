@@ -97,6 +97,12 @@ public sealed class SandboxStoreTests
             Assert.Equal(observation, await store.GetVerificationAsync(profile.Id, 1));
             Assert.Equal(instanceObservation, await store.GetInstanceVerificationAsync(instanceObservation.InstanceId, 7));
             Assert.Null(await store.GetInstanceVerificationAsync(instanceObservation.InstanceId, 8));
+            var alternate = profile with { Id="alternate" };
+            await store.SaveInstanceVerificationAsync(new(instanceObservation.InstanceId, 7, observation with { ProfileId=alternate.Id, RegistryCredentialRevision=2, RegistrySecretRevision=3 }));
+            if (sqlite) store = new SqliteSandboxStore(factory);
+            Assert.Equal(instanceObservation.Result, (await store.GetInstanceVerificationAsync(instanceObservation.InstanceId, 7, profile))!.Result);
+            Assert.NotNull(await store.GetInstanceVerificationAsync(instanceObservation.InstanceId, 7, alternate with { RegistryCredentialRevision=2, RegistrySecretRevision=3 }));
+            Assert.Null(await store.GetInstanceVerificationAsync(instanceObservation.InstanceId, 7, alternate with { RegistryCredentialRevision=3, RegistrySecretRevision=3 }));
             Assert.Null(await store.GetVerificationAsync(profile.Id, 2));
             await Assert.ThrowsAsync<AgentCoreException>(async () => await store.SaveVerificationAsync(observation with { ProfileRevision = 3 }));
         }

@@ -59,7 +59,7 @@ def prepare(args):
     ][0]["Gateway"]
     workspace_root = state / "workspace-mounts"
     workspace_root.mkdir(exist_ok=True)
-    workspace_root.chmod(0o777)  # shared native/packaged Core staging; never canonical data
+    workspace_root.chmod(0o1777)  # sticky shared staging; private generation parents, never canonical data
     private_write(state / "server.toml", server_config(desktop, gateway, compose=True, workspace_root=workspace_root))
     image = None
     if args.build_workbench:
@@ -318,7 +318,7 @@ def cleanup_core(api_url):
                 core(
                     "/api/v2/sessions/" + item["sessionId"] + "/sandbox/reset",
                     "POST",
-                    json.dumps({"expectedGeneration": env["generation"]}).encode(),
+                    json.dumps({"expectedGeneration": env["generation"], "expectedExecutionId": env.get("activeExecutionId") or env.get("lastExecutionId")}).encode(),
                 )
         if not catalog.get("hasMore"):
             break

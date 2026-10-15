@@ -12,6 +12,7 @@ internal static class RunFinalization
     internal static bool CleanupTool(string name) => name is ToolCatalog.BrowserFind or ToolCatalog.BrowserSnapshot or ToolCatalog.BrowserDialog or ToolCatalog.BrowserClick or ToolCatalog.BrowserClose or ToolCatalog.BrowserTabs
         or ToolCatalog.BrowserHover or "browser.scroll" or ToolCatalog.BrowserWait
         or "browser.verify" or ToolCatalog.BrowserPressKey or ToolCatalog.BrowserScreenshot or ToolCatalog.BrowserVisionMouse or ToolCatalog.BrowserConfiguration;
+    internal const string SandboxRecoveryInstruction = "Sandbox recovery is required. Durable evidence is in the tool receipt. Explain its observed lifecycle, file synchronization and safest owner action. Do not repeat commands or switch profiles. New profile and execution evidence overrides historical Memory or Experience about installed SDKs/packages. Honor instructions not to run again. Unknown outcomes remain uncertain.";
     internal const string Marker = "Core finalization phase: ";
     internal const string BackgroundInstruction = "The work phase has ended. Call work.complete exactly once with a truthful bounded summary of verified results from existing durable tool receipts. No substantive tools or new external effects are permitted. Do not invent research, artifacts or successful effects. Use NeedsAttention for incomplete or uncertain work; NoAction is only for a verified quiet outcome. Ordinary prose does not complete a background Run.";
     internal static ProviderFailure MissingCompletion() => new(ProviderErrorCode.InvalidResponse,
@@ -26,7 +27,12 @@ internal static class RunFinalization
     }
     internal static string? Restore(IEnumerable<ModelMessage> messages) => messages
         .Where(m => m.Role == ModelRole.System && m.Text.StartsWith(Marker, StringComparison.Ordinal))
-        .Select(m => m.Text[Marker.Length..]).FirstOrDefault(r => r is "completionRequired" or "runDeadline" or "providerTimeout" or "providerCancelled" or "browserBlocked" or "stepLimit" or "checkpointCapacity" or "outputLimit" or "cleanupBlocked");
+        .Select(m => m.Text[Marker.Length..]).FirstOrDefault(r => r is "completionRequired" or "runDeadline" or "providerTimeout" or "providerCancelled" or "browserBlocked" or "stepLimit" or "checkpointCapacity" or "outputLimit" or "cleanupBlocked" or "sandboxRecovery") ?? (messages.Any(m => m.Role == ModelRole.Tool && m.Name?.StartsWith("sandbox.", StringComparison.Ordinal) == true && IsSandboxRecovery(m.Text)) ? "sandboxRecovery" : null);
+    private static bool IsSandboxRecovery(string text)
+    {
+        try { using var doc=JsonDocument.Parse(text); return doc.RootElement.TryGetProperty("error",out var error) && error.ValueKind==JsonValueKind.String && error.GetString()=="recovery_required"; }
+        catch (JsonException) { return false; }
+    }
     internal static bool HasEvidence(IEnumerable<ModelMessage> messages) => messages.Any(m =>
     {
         if (m.Role != ModelRole.Tool) return false;

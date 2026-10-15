@@ -6,6 +6,23 @@ namespace AgentCore.Application.Agents;
 /// <summary>Resolve sparse Instance values without expanding Global profile ceilings or tool authority.</summary>
 public static class SandboxSetupResolver
 {
+    public static SandboxPolicy? ResolvePolicy(SandboxPolicy? baseline, InstanceSettingsOverrides settings)
+    {
+        if (baseline is null)
+        {
+            if (settings.SandboxAllowedProfileIds is not null || settings.SandboxProfileId is not null)
+                throw AgentCoreErrors.Validation("This Definition does not authorize Sandbox profiles.");
+            return null;
+        }
+        var allowed = settings.SandboxAllowedProfileIds?.Value ?? baseline.AllowedProfileIds;
+        if (allowed.Any(id => !baseline.AllowedProfileIds.Contains(id, StringComparer.Ordinal)))
+            throw AgentCoreErrors.Validation("Instance allowed profiles must be a subset of the Definition list.");
+        var policy = new SandboxPolicy(settings.SandboxProfileId?.Value ?? baseline.DefaultProfileId, allowed.ToArray());
+        try { policy.Validate(); }
+        catch (ArgumentException) { throw AgentCoreErrors.Validation("Choose 1–16 distinct authorized profiles and a default in that allowed set."); }
+        return policy;
+    }
+
     public static void ValidateOverrides(InstanceSettingsOverrides settings)
     {
         // Host bounds and text validity still apply when an authorized Profile

@@ -634,3 +634,9 @@ The existing Registry credential dialog adds optional expiry using the native An
 - **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
 - **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
 - **Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`.
+
+## Sandbox Session selection and recovery successor
+
+Existing Ant Design v6 Sandbox owners distinguish Definition allowed IDs, sparse Instance allowed-subset inheritance and the default from per-Session selection. Reuse the shared field grid, 16px section gaps, field provenance/reset and sticky configuration action frame. The optional Instance script follows each chosen Profile script; saved-setup verification uses a separate exact-profile chooser.
+
+The Session drawer uses human-readable lifecycle/cancellation labels, exact image/profile revisions, transition stage, file-sync status and retained execution diagnostics. Inspect status is read-only; confirmed Reset checks Session/generation/execution identity. Normal polling alone does not invalidate consent. Known terminated outcomes explain the next independent authorized command and keep confirmed Reset reachable while a retained profile choice can be cleared; unresolved commits/cleanup retain owner recovery. Preserve labeled diagnostics, collapsed output and Escape/focus restoration. Drawers stay 640px and become full width below 768px; controls wrap and retain 40px mobile targets. [The successor ledger](../../docs/reports/sandbox-selection-recovery-verification-2026-10-15.md) owns actual checks and hardware limits, without renewed milestone or hosted acceptance.

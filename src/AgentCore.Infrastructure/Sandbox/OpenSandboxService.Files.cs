@@ -56,6 +56,6 @@ public sealed partial class OpenSandboxService
     {
         var current = await ProcessIdentitiesAsync(sdk, ct);
         if (current.Except(lease.BaselineProcesses ?? [], StringComparer.Ordinal).Any())
-            throw AgentCoreErrors.Conflict("Untracked child processes remain. No scratch was committed; reset the environment.");
+            throw new AgentCoreException("SandboxProcessesActive", "Untracked child processes remain. No scratch was committed; inspect the retained execution and termination evidence.", 409);
     }
 }

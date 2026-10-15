@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, App, Button, Descriptions, Flex, Spin, Tag, Typography, theme } from 'antd';
+import { Alert, App, Button, Descriptions, Flex, Select, Spin, Tag, Typography, theme } from 'antd';
 import { getInstanceSandbox, verifyInstanceSandbox, sandboxStatusLabel, sandboxEligible, type SandboxVerification } from '../../services/sandboxes';
 import { SandboxProfileDetails } from './SandboxProfileDetails';
 import { SandboxEvidence } from '../sandbox/SandboxEvidence';
@@ -10,18 +10,18 @@ export function InstanceSandboxSummary({ instanceId, revision, verifySetup, arch
   const [value,setValue]=useState<Awaited<ReturnType<typeof getInstanceSandbox>>|null>(null);
   const [error,setError]=useState<string|null>(null); const [busy,setBusy]=useState(false); const [refresh,setRefresh]=useState(0);
   const [verification,setVerification]=useState<SandboxVerification|null>(null);
-  const epoch=useRef(0);
+  const epoch=useRef(0); const [verificationProfile,setVerificationProfile]=useState<string>();
   useEffect(()=>{ epoch.current++;setBusy(false);setValue(null);setError(null);setVerification(null);const controller=new AbortController();
-    getInstanceSandbox(instanceId,controller.signal).then(next=>{if(!controller.signal.aborted){setValue(next);setVerification(next.verification?.result??null);}})
+    getInstanceSandbox(instanceId,controller.signal).then(next=>{if(!controller.signal.aborted){setValue(next);setVerificationProfile(next.profile?.id??next.profiles?.[0]?.id);setVerification(next.verification?.result??null);}})
       .catch(()=>{if(!controller.signal.aborted)setError('Sandbox configuration unavailable. Retry before verifying setup.');});return()=>{epoch.current++;controller.abort();};
   },[instanceId,revision,refresh]);
   async function verify() {
     if (!value || archived || dirty || busy) return; const current=epoch.current;setBusy(true);setError(null);
-    try { const result=await verifyInstanceSandbox(instanceId,value.instanceRevision);if(current!==epoch.current)return;setVerification(result);result.passed?message.success(result.message):message.error({key:'sandbox-verification',content:result.message,duration:6}); }
+    try { const result=await verifyInstanceSandbox(instanceId,value.instanceRevision,verificationProfile);if(current!==epoch.current)return;setVerification(result);result.passed?message.success(result.message):message.error({key:'sandbox-verification',content:result.message,duration:6}); }
     catch {if(current===epoch.current)setError('Setup verification was not confirmed. Refresh configuration and inspect retained evidence before retrying.');}
     finally{if(current===epoch.current)setBusy(false);}
   }
-  const profile=value?.profile;
+  const profile=value?.profile; const verificationTarget=value?.profiles?.find(p=>p.id===verificationProfile)??profile;
   return <section className="admin-effective-config-section admin-effective-config-wide" aria-label="Effective sandbox configuration"><Flex vertical gap={token.paddingSM}>
     <Typography.Title level={5}>Effective Sandbox environment</Typography.Title>
     {error && <Alert showIcon type="warning" title={error} action={<Button disabled={busy} onClick={()=>setRefresh(v=>v+1)}>Retry</Button>} />}
@@ -29,12 +29,15 @@ export function InstanceSandboxSummary({ instanceId, revision, verifySetup, arch
       <Flex wrap gap={token.paddingXS} align="center"><Tag color={profile&&sandboxEligible(profile)?'success':'default'}>{profile?sandboxStatusLabel(profile):'Unavailable'}</Tag><Typography.Text>{profile?.availabilityMessage??value.message}</Typography.Text></Flex>
       <a href="/admin/platform/sandboxes">Manage Global Sandbox Profiles</a>
       <Descriptions {...layout} bordered size="small" column={1}>
-        <Descriptions.Item label="Selected profile">{profile?`${profile.name} · revision ${profile.revision}`:'No authorized configured profile'}</Descriptions.Item>
+        <Descriptions.Item label="Default profile">{profile?`${profile.name} · revision ${profile.revision}`:'No authorized configured profile'}</Descriptions.Item>
         <Descriptions.Item label="Allowed profiles">{value.policy?.allowedProfileIds.join(', ')||'No explicit policy · sandbox execution unavailable'}</Descriptions.Item>
-        <Descriptions.Item label="Configuration">Saved Instance revision {value.instanceRevision}. Existing generations retain their pinned setup until expiry or explicit reset in the Session Sandbox drawer.</Descriptions.Item>
+        <Descriptions.Item label="Configuration">Saved Instance revision {value.instanceRevision}. Sessions choose independently from the allowed set. Global Profile limits cap Instance values for each choice. Reset returns a Session to its effective default.</Descriptions.Item>
       </Descriptions>
       {profile && <SandboxProfileDetails profile={profile} instanceInitializationScript={value.instanceInitializationScript} />}
-      {verifySetup && <Button style={{alignSelf:'flex-start'}} loading={busy} disabled={archived||dirty||!profile?.enabled||value.state!=='Ready'} onClick={()=>void verify()}>Verify Instance setup</Button>}
+      {verifySetup && ((value.profiles?.length??0)>1 || !profile && !!verificationTarget) && <Select aria-label="Profile to verify" value={verificationProfile} disabled={archived||dirty||busy}
+        options={value.profiles?.map(p=>({value:p.id,label:`${p.name} · revision ${p.revision}`}))}
+        onChange={id=>{setVerificationProfile(id);setVerification(null);}} />}
+      {verifySetup && <Button style={{alignSelf:'flex-start'}} loading={busy} disabled={archived||dirty||!verificationTarget?.enabled||value.state!=='Ready'} onClick={()=>void verify()}>Verify Instance setup</Button>}
       {dirty && verifySetup && <Typography.Text type="secondary">Save or discard edits before verifying the saved setup.</Typography.Text>}
       {verification && <Flex vertical gap={token.paddingXS} role="status"><Alert showIcon type={verification.passed?'success':'error'} title={verification.message} />
         <Typography.Text type="secondary">Verified Profile revision {verification.profileRevision} · Instance revision {verification.instanceRevision??value.instanceRevision} · {new Date(verification.verifiedAt).toLocaleString()} · {verification.exitCode===null?'Exit unknown':`Exit ${verification.exitCode}`} · {(verification.durationMs/1000).toFixed(1)}s</Typography.Text>

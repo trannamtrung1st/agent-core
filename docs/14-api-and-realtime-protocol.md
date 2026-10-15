@@ -786,14 +786,14 @@ All routes below use existing owner-capability authorization and safe problem de
 | `GET /api/v2/admin/sandboxes` | Safe readiness, latest profiles, image policy, local-demo/storage limits; no endpoint/key/provider IDs |
 | `GET /api/v2/admin/sandbox-profiles/{id}?revision=N` | Latest or exact immutable historical revision |
 | `PUT /api/v2/admin/sandbox-profiles/{id}` | Validate and append `expectedRevision + 1`; exact CAS, redacted history |
-| `POST /api/v2/admin/sandbox-profiles/{id}/verify` | Exact expected revision; bounded non-root image smoke and cleanup; append observation revision |
+| `POST /api/v2/admin/sandbox-profiles/{id}/verify` | Exact expected revision; bounded image-default-user readiness, initialization and cleanup; save an exact-revision observation |
 | `GET /api/v2/admin/agent-instances/{id}/sandbox` | Effective exact policy/profile plus safe readiness |
 | `GET /api/v2/sessions/{id}/sandbox` | Owned generation, profile revision, lifecycle/expiry, Core active/latest execution ID, diagnostic ID; no environment returns HTTP 200 with an empty body (clients also accept JSON `null`) |
 | `GET /api/v2/sessions/{id}/sandbox/executions/{executionId}` | Owned bounded command receipt/status/output; Core ID only |
 | `POST .../executions/{executionId}/stop` | Stop/confirm owned tracked execution and validate file synchronization |
-| `POST /api/v2/sessions/{id}/sandbox/reset` | Explicit owner request with `expectedGeneration`; changed generation returns conflict |
+| `POST /api/v2/sessions/{id}/sandbox/reset` | Explicit owner request with `expectedGeneration` and nullable `expectedExecutionId` (active ID, otherwise latest); changed generation/execution returns conflict |
 
-Profile saves use the existing validation/conflict semantics and retain immutable history. Tools are `sandbox.exec`, `sandbox.status`, `sandbox.process.status`, `sandbox.process.stop`, approval-gated `sandbox.reset`. Retired `sandbox.run` has no executable alias. Commands/stop/reset are non-replayable. Foreground streams are separate; background logs are explicitly combined. Command progress uses safe existing Run progress plus owner-scoped HTTP receipt polling, without changing the audio/MessagePack protocol or exposing upstream routes. Run budget diagnostics add `sandboxCommandSeconds`; ordinary per-tool budget remains independent.
+Profile saves use the existing validation/conflict semantics and retain immutable history. Tools are `sandbox.profiles`, `sandbox.exec`, `sandbox.status`, `sandbox.process.status`, `sandbox.process.stop`, approval-gated `sandbox.reset`. Retired `sandbox.run` has no executable alias. Commands/stop/reset are non-replayable. Foreground streams are separate; background logs are explicitly combined. Command progress uses safe existing Run progress plus owner-scoped HTTP receipt polling, without changing the audio/MessagePack protocol or exposing upstream routes. Run budget diagnostics add `sandboxCommandSeconds`; ordinary per-tool budget remains independent.
 
 ## Effective file preview options
 
@@ -822,9 +822,9 @@ POST profile `/verify` returns the existing `{passed,message,profile}` envelope 
 
 All routes below require the existing local owner capability; scripts and output never enter realtime agent conversation messages.
 
-- `POST /api/v2/admin/sandbox-profiles/{id}/check-image` with `expectedRevision`: ephemeral non-root Python readiness only, explicitly no script execution.
+- `POST /api/v2/admin/sandbox-profiles/{id}/check-image` with `expectedRevision`: ephemeral shell/mounted-workspace readiness under the image default user, explicitly no script execution.
 - `POST /api/v2/admin/sandbox-profiles/{id}/verify` with `expectedRevision`: full saved Profile initialization and scratch validation; persisted observation and unchanged Profile revision.
-- `POST /api/v2/admin/agent-instances/{id}/sandbox/verify` with `expectedInstanceRevision`: effective Profile then Instance setup in a disposable environment; persisted exact Instance/Profile observation.
+- `POST /api/v2/admin/agent-instances/{id}/sandbox/verify` with `expectedInstanceRevision` and optional authorized `profileId`: effective selected Profile then Instance setup in a disposable environment; persisted exact Instance/Profile observation.
 - `GET /api/v2/admin/agent-instances/{id}/sandbox`: effective limits, image, scripts, saved Instance revision, readiness and current exact verification observation.
 
 Verification responses include safe message, passed, exit code, bounded stdout/stderr, truncation, duration, diagnostic, verification time and configuration pins. Profile inventory includes its exact-revision verification observation. Existing Session sandbox GET adds initialization evidence plus created/activity/maximum-lifetime and cleanup reason/pending/pass/last-attempt metadata. GET execution remains read-only. Reset accepts the observed generation and can clear a retained initialization retry fence after remote cleanup; changed generations conflict. Settings PATCH retains existing sparse `set`/`clear` and Instance revision/CAS.
@@ -844,3 +844,11 @@ Registry `expiresAtUtc` is optional nullable UTC timestamp metadata. PATCH suppl
 ### Ordinary-image verification behavior
 
 Sandbox verification/check routes accept ordinary Linux images compatible with `/bin/sh`, `/proc` and upstream execd. Python and pre-created `/working` are not prerequisites; Infrastructure supplies a private platform mount and checks write-through. Safe readiness failures name the image/mount requirement without reflecting raw provider output. Image checks remain ephemeral; full verification persists contract-2 observations without changing profile revision. Earlier observations are inspectable but require reverification. Root mappings and provider mount paths never enter these DTOs.
+
+### Sandbox profile selection and failure fields
+
+`sandbox.exec` adds optional string `profileId` (exact admitted ID, maximum 64 characters). Omission uses the Session selection or effective default. Success retains explicit selection for later commands/turns. Unknown/unauthorized/unverified/disabled/unavailable choices fail without fallback; arbitrary images, host paths and source credentials remain invalid arguments. `sandbox.profiles` accepts `{}` and returns bounded `profiles` entries `{id,name,description,revision,available,availability,isDefault,selected}`, `totalCount`, `truncated`, `defaultProfileId`, `selectedProfileId` and `descriptionsAreInformational`. Descriptions are clipped informational data. Large catalogs shrink only to fit existing tool output budgets; no protected configuration is projected.
+
+Command receipts add nullable `profileId`, `profileRevision`, `generation`, `phase`, `failureCategory`, `cancellationReason` and boolean `terminationConfirmed`. Safe categories include cancellation, commandTimeout, sourceAuthorizationChanged, provisioningFailure, mountFailure, processInspectionFailure, backgroundProcessesActive, unsafeFiles, workspaceConflict, providerTransportFailure, storageLimit and uncertainCommit. Cancellation reasons distinguish `runCancellation`, `requestCancellation`, explicit `processStop`, `ownerReset` and Session lifecycle; exact `userStop` is shown only when known. A blocked call returns `error: recovery_required`, safe `environmentState`/`environmentGeneration` and recovery text; it creates no command effect. The original execution identity is kept separate from the observed environment. No raw exception/provider body enters the response.
+
+Environment reads add `selectedProfileId`, transition profile/stage and safe provisioning failure/Run correlation. After explicit reset, selectedProfileId is null until a new command selects the effective default. Platform readiness exposes workspace contract 1 and profile verification contract 2 plus actionable mount diagnostics, without private mount paths. Inspection tools/owner GET remain authorized while execution readiness is unavailable; reads never create/connect/reset a sandbox. Instance Sandbox GET also returns all effective authorized profile projections. Reset checks execution identity even if status polling is active; an omitted/null ID matches only a generation with no active/latest execution.

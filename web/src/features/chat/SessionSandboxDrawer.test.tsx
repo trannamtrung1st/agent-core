@@ -76,7 +76,7 @@ it('recovers automatically from a failed read without presenting false absence',
 it('retains evidence after a refresh failure and clears the error on recovery', async () => {
   render(tree()); await screen.findByText('test failed');
   vi.mocked(getSessionSandbox).mockRejectedValueOnce(new Error('offline'));
-  fireEvent.click(screen.getByRole('button', { name:'Refresh status' }));
+  fireEvent.click(screen.getByRole('button', { name:'Inspect status' }));
   await screen.findByText(/Sandbox status is unavailable/);
   expect(screen.getByText('test failed')).toBeInTheDocument();
   expect(screen.getByRole('button', { name:'Reset sandbox' })).toBeDisabled();
@@ -91,7 +91,7 @@ it('shares a pending manual refresh with polling and ignores late reads after Se
   vi.mocked(getSessionSandbox).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   vi.useFakeTimers();
   try {
-    fireEvent.click(screen.getByRole('button', { name:'Refresh status' }));
+    fireEvent.click(screen.getByRole('button', { name:'Inspect status' }));
     expect(screen.getByRole('button', { name:'Reset sandbox' })).toBeDisabled();
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     expect(getSessionSandbox).toHaveBeenCalledTimes(2);
@@ -113,7 +113,7 @@ it('resets only the observed owned generation and keeps foreground cancellation 
   render(tree()); await screen.findByText('test failed'); expect(screen.queryByRole('button',{name:'Stop command'})).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Reset sandbox'}));
   fireEvent.click(within(await resetDialog()).getByRole('button',{name:'Reset sandbox'}));
-  await waitFor(() => expect(resetSessionSandbox).toHaveBeenCalledWith('s1','g1'));
+  await waitFor(() => expect(resetSessionSandbox).toHaveBeenCalledWith('s1','g1',env.activeExecutionId??env.lastExecutionId));
 });
 
 it('explains a confirmed commit even when command completion is uncertain', async () => {
@@ -129,7 +129,7 @@ it('does not label an unknown commit as definitely absent', async () => {
 });
 it('explains initialization recovery without losing the diagnostic or reset action', async () => {
   vi.mocked(getSessionSandbox).mockResolvedValue({ ...env, state:'Failed', message:'Environment initialization failed. Correct and verify the profile script, then reset before retrying.' });
-  render(tree()); await screen.findByText('Environment setup failed');
+  render(tree()); await screen.findByText('Recovery guidance');
   expect(screen.getByText(/Correct and verify the profile script/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name:'Reset sandbox' })).toBeEnabled();
 });
@@ -139,10 +139,66 @@ it('explains expiry and retained files while leaving a terminated generation sto
   expect(screen.getByText(/Saved Workspace files and Artifacts are retained/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name:'Reset sandbox' })).toBeDisabled();
 });
+it('allows reset to clear a retained profile choice after clean termination', async () => {
+  vi.mocked(getSessionSandbox).mockResolvedValue({ ...env, state:'Terminated', selectedProfileId:'workbench', cleanupReason:'idleExpired' });
+  render(tree()); await screen.findByText('Environment ended');
+  fireEvent.click(screen.getByRole('button', { name:'Reset sandbox' }));
+  const modal = await resetDialog();
+  expect(modal).toHaveTextContent('Reset clears the Session profile choice');
+  fireEvent.click(within(modal).getByRole('button', { name:'Reset sandbox' }));
+  await waitFor(() => expect(resetSessionSandbox).toHaveBeenCalledWith('s1','g1','e1'));
+});
 it('retains initialization output and permits explicit reset after uncertain setup was cleaned up',async()=>{
   vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'Terminated',initialization:{state:'Failed',profileId:'workbench',profileRevision:1,instanceRevision:3,startedAt:'2026-10-14T00:00:00Z',finishedAt:'2026-10-14T00:00:01Z',exitCode:7,stdout:'Hello, world!',stderr:'setup failed',truncated:false,durationMs:1000,diagnosticId:null,phase:'Instance'}});
   render(tree());await screen.findByText(/Scripts are never repeated automatically/);
   expect(screen.getByRole('button',{name:'Reset sandbox'})).toBeEnabled();
   const output=screen.getByRole('button',{name:'Initialization standard output'});expect(output).toHaveAttribute('aria-expanded','false');
   fireEvent.click(output);await screen.findByText('Hello, world!');
+});
+
+it('accepts a confirmed recovery while a normal status poll is in flight',async()=>{
+  render(tree());await screen.findByText('test failed');
+  fireEvent.click(screen.getByRole('button',{name:'Reset sandbox'}));const modal=await resetDialog();
+  let finish!:(value:SandboxEnvironment)=>void;
+  vi.mocked(getSessionSandbox).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+  vi.useFakeTimers();
+  try {
+    await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
+    await act(async()=>{fireEvent.click(within(modal).getByRole('button',{name:'Reset sandbox'}));});
+    expect(resetSessionSandbox).toHaveBeenCalledWith('s1','g1','e1');
+    await act(async()=>finish({...env,state:'Terminated'}));
+  } finally {vi.useRealTimers();}
+});
+
+it('rejects a recovery confirmation when another execution replaces its evidence',async()=>{
+  render(tree());await screen.findByText('test failed');
+  fireEvent.click(screen.getByRole('button',{name:'Reset sandbox'}));const modal=await resetDialog();
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,lastExecutionId:'e2'});
+  fireEvent.click(screen.getByRole('button',{name:'Inspect status'}));await waitFor(()=>expect(getSandboxExecution).toHaveBeenCalledWith('s1','e2',expect.any(AbortSignal)));
+  await act(async()=>{fireEvent.click(within(modal).getByRole('button',{name:'Reset sandbox'}));});
+  expect(resetSessionSandbox).not.toHaveBeenCalled();
+});
+
+it('retains evidence after failed reset and requires a successful inspection before retrying',async()=>{
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'NeedsResync'});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,status:'Indeterminate',workspaceSyncStatus:'unknown'});
+  vi.mocked(resetSessionSandbox).mockRejectedValueOnce(new Error('cleanup pending'));
+  render(tree());await screen.findByText('test failed');
+  fireEvent.click(screen.getByRole('button',{name:'Reset sandbox'}));
+  fireEvent.click(within(await resetDialog()).getByRole('button',{name:'Reset sandbox'}));
+  await screen.findByText(/Sandbox recovery was not confirmed/);
+  expect(screen.getByText('test failed')).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Reset sandbox'})).toBeDisabled();
+  fireEvent.click(screen.getByRole('button',{name:'Inspect status'}));
+  await waitFor(()=>expect(screen.queryByText(/Sandbox recovery was not confirmed/)).not.toBeInTheDocument());
+  expect(screen.getByRole('button',{name:'Reset sandbox'})).toBeEnabled();
+});
+
+it('explains known clean cancellation with retained files and a new independent command',async()=>{
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,state:'Terminated',cleanupReason:'cancelled',profileName:'Workbench'});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,status:'Canceled',workspaceSyncStatus:'notCommitted',failureCategory:'cancellation',cancellationReason:'userStop',terminationConfirmed:true});
+  render(tree());await screen.findByText('Stopped by user');
+  expect(screen.getByText(/Review the retained execution receipt before starting a new authorized command/)).toBeInTheDocument();
+  expect(screen.getByText('Last selected profile')).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Reset sandbox'})).toBeDisabled();
 });

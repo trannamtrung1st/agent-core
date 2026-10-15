@@ -32,10 +32,10 @@ public sealed partial class OpenSandboxService
                 if (remaining <= 0) throw new TimeoutException();
                 using var scriptDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 scriptDeadline.CancelAfter(TimeSpan.FromSeconds(remaining));
-                var result = await sdk.Commands.RunAsync(script, new RunCommandOptions { WorkingDirectory = "/working", TimeoutSeconds = Math.Max(1, (int)Math.Ceiling(remaining)) },
+                var result = await GuardCommandStorageAsync(lease, token => sdk.Commands.RunAsync(script, new RunCommandOptions { WorkingDirectory = "/working", TimeoutSeconds = Math.Max(1, (int)Math.Ceiling(remaining)) },
                     new ExecutionHandlers { SkipAccumulation = true,
                         OnStdout = async m => { stdout.Append(m.Text); await SaveOutputAsync(); },
-                        OnStderr = async m => { stderr.Append(m.Text); await SaveOutputAsync(); } }, scriptDeadline.Token);
+                        OnStderr = async m => { stderr.Append(m.Text); await SaveOutputAsync(); } }, token), scriptDeadline.Token);
                 evidence = evidence with { ExitCode = result.ExitCode };
                 if (result.ExitCode != 0) throw new InvalidOperationException("Initialization failed.");
             }

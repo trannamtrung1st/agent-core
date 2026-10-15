@@ -22,6 +22,7 @@ public sealed class ToolConfigurationGate(
         toolName switch
         {
             _ when toolName.StartsWith("drive.", StringComparison.Ordinal) => driveFactory is { Enabled: true, Configured: true },
+            ToolCatalog.SandboxStatus or ToolCatalog.SandboxProcessStatus or ToolCatalog.SandboxProfiles => true,
             _ when toolName.StartsWith("sandbox.", StringComparison.Ordinal) => sandbox?.IsAvailable == true,
             ToolCatalog.WebSearch => webSearch?.IsAvailable == true,
             ToolCatalog.WebFetch => publicWebFetcher is not null,

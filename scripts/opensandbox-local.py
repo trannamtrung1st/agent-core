@@ -54,6 +54,7 @@ def prepare(args):
         gateway = json.loads(run("docker", "network", "inspect", "bridge", capture=True))[0]["IPAM"]["Config"][0]["Gateway"]
     workspace_root = state / "workspace-mounts"
     workspace_root.mkdir(exist_ok=True)
+    workspace_root.chmod(0o1777)
     config = server_config("Docker Desktop" in platform, gateway, workspace_root=workspace_root)
     (state / "server.toml").write_text(config)
     return state

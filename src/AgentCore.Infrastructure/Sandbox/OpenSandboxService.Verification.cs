@@ -60,10 +60,10 @@ public sealed partial class OpenSandboxService
                     if (remaining <= 0) throw new TimeoutException();
                     using var scriptDeadline = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
                     scriptDeadline.CancelAfter(TimeSpan.FromSeconds(remaining));
-                    var initialized = await sdk.Commands.RunAsync(script,
+                    var initialized = await GuardCommandStorageAsync(lease, token => sdk.Commands.RunAsync(script,
                         new RunCommandOptions { WorkingDirectory = "/working", TimeoutSeconds = Math.Max(1,(int)Math.Ceiling(remaining)) },
                         new ExecutionHandlers { SkipAccumulation = true, OnStdout = m => { stdout.Append(m.Text); return Task.CompletedTask; },
-                            OnStderr = m => { stderr.Append(m.Text); return Task.CompletedTask; } }, scriptDeadline.Token);
+                            OnStderr = m => { stderr.Append(m.Text); return Task.CompletedTask; } }, token), scriptDeadline.Token);
                     if (initialized.ExitCode != 0)
                     {
                         result = Observation(false, initialized.ExitCode is { } exit ? $"Initialization failed with exit code {exit} during {stage} setup. Correct the script and verify again."
@@ -82,6 +82,8 @@ public sealed partial class OpenSandboxService
         }
         catch (OperationCanceledException)
         { result = Observation(false, ct.IsCancellationRequested ? "Verification was canceled; success was not confirmed." : $"Verification timed out during {phase}. Check the profile limits and script.", "canceledOrTimeout"); }
+        catch (AgentCoreException error) when (error.Code == "WorkspaceQuotaExceeded")
+        { result = Observation(false, "Verification staging exceeded its storage safeguard. Reduce temporary files before verifying again.", "storageLimit"); }
         catch (AgentCoreException error) when (phase == "provisioning")
         { result = Observation(false, error.Message, "sourceAuthorization"); }
         catch (ImageReadinessException error)

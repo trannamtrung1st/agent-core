@@ -35,6 +35,50 @@ public sealed partial class OpenSandboxService
     }
     private async ValueTask<SandboxCommandResult> RefreshProcessLockedAsync(SandboxLease lease, SandboxExecution execution, bool stop, CancellationToken ct)
     {
+        try
+        {
+            if (lease.MountContractVersion == 1)
+            {
+                try { Mounts.CheckLiveUsage(lease.Generation, lease.Profile.StorageBytes, ct); }
+                catch (IOException) { /* Retry transient tree changes on the next supervised sample. */ }
+                catch (AgentCoreException error) when (error.Code is "ValidationError" or "Conflict") { }
+            }
+            return await RefreshProcessCoreLockedAsync(lease, execution, stop, ct);
+        }
+        catch (Exception error)
+        {
+            // The commit path may already have persisted a terminal receipt before
+            // propagating cancellation. Never replace that evidence with this
+            // wrapper's older dispatch snapshot or repeat confirmed cleanup.
+            var retained = await store.GetExecutionAsync(lease.SessionId, execution.Id, CancellationToken.None);
+            if (retained is { TerminationConfirmed: true, State: SandboxExecutionState.Completed or SandboxExecutionState.Canceled or SandboxExecutionState.Indeterminate })
+            {
+                if (error is OperationCanceledException) throw;
+                return Result(retained);
+            }
+            execution = retained ?? execution;
+            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var terminated = await TryTerminateAsync(lease, cleanup.Token);
+            var runCancelled = await RunCancellationRequestedAsync(lease.SessionId, lease.AgentInstanceId, execution.AgentRunId, CancellationToken.None);
+            var cancelled = error is OperationCanceledException || runCancelled;
+            execution = execution with { State = cancelled && terminated ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate,
+                FinishedAt = time.GetUtcNow(), FailureCategory = cancelled ? "cancellation" : ClassifyFailure(error, execution.Phase ?? "processInspection"), CancellationReason = cancelled ? runCancelled ? "runCancellation" : "requestCancellation" : null, Phase = execution.Phase ?? "processInspection",
+                DiagnosticId = Guid.CreateVersion7().ToString("D"), TerminationConfirmed = terminated,
+                WorkspaceSyncStatus = await CommitStatusAsync(execution, CancellationToken.None) };
+            try
+            {
+                await SaveReceiptAsync(execution, false, CancellationToken.None);
+                var latest = await store.GetLeaseAsync(lease.SessionId, CancellationToken.None) ?? lease;
+                if (terminated) await SettleTerminatedExecutionAsync(latest, execution, CancellationToken.None);
+                else await SaveAsync(latest with { State = SandboxLeaseState.NeedsReconciliation, DiagnosticId = execution.DiagnosticId }, CancellationToken.None);
+            }
+            catch { /* Retain original dispatch evidence if recovery persistence fails. */ }
+            if (error is OperationCanceledException) throw;
+            return Result(execution);
+        }
+    }
+    private async ValueTask<SandboxCommandResult> RefreshProcessCoreLockedAsync(SandboxLease lease, SandboxExecution execution, bool stop, CancellationToken ct)
+    {
         if (execution.ProviderCommandId is null) throw AgentCoreErrors.Conflict("Process dispatch is uncertain. Reset to recover; do not repeat the command.");
         await using var sdk = await ConnectAsync(lease, ct);
         if (stop) await sdk.Commands.InterruptAsync(execution.ProviderCommandId, ct);
@@ -56,26 +100,37 @@ public sealed partial class OpenSandboxService
             try
             {
                 await ValidateProcessCommitAsync(lease, execution, ct);
+                execution = execution with { Phase = "processInspection" };
                 await ConfirmQuiescentAsync(sdk, lease, ct);
+                execution = execution with { Phase = "fileCollection" };
                 var transfer = await CollectAsync(lease, ct);
-                execution = execution with { WorkspaceSyncStatus = "committing" };
+                execution = execution with { WorkspaceSyncStatus = "committing", Phase = "workspaceCommit" };
                 await SaveReceiptAsync(execution, false, ct);
                 await workspace.CommitScratchAsync(lease.SessionId, transfer, lease.ScratchFingerprint!, ct,
                     token => ValidateProcessCommitAsync(lease, execution, token), execution.Id);
                 scratchCommitted = true;
                 execution = execution with { State = stop ? SandboxExecutionState.Canceled : SandboxExecutionState.Completed, ExitCode = status.ExitCode,
-                    FinishedAt = time.GetUtcNow(), WorkspaceSyncStatus = "committed" };
+                    FinishedAt = time.GetUtcNow(), WorkspaceSyncStatus = "committed", Phase = "completed",
+                    FailureCategory = stop ? "cancellation" : null, CancellationReason = stop ? "processStop" : null };
                 await SaveReceiptAsync(execution, false, CancellationToken.None);
                 await SaveAsync(lease with { State = SandboxLeaseState.Ready, ActiveExecutionId = null, LastActivityAt = time.GetUtcNow(), ExpiresAt = await RenewIdleAsync(sdk, lease, ct),
                     ScratchFingerprint = (await workspace.CaptureScratchAsync(lease.SessionId, session.Definition, ct)).Fingerprint }, ct);
             }
             catch (Exception error)
             {
-                execution = execution with { State = SandboxExecutionState.Indeterminate, FinishedAt=time.GetUtcNow(), WorkspaceSyncStatus = scratchCommitted ? "committed" : await CommitStatusAsync(execution, CancellationToken.None), DiagnosticId = Guid.CreateVersion7().ToString("D") };
+                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                var terminated = await TryTerminateAsync(lease, cleanup.Token);
+                var runCancelled = await RunCancellationRequestedAsync(lease.SessionId, lease.AgentInstanceId, execution.AgentRunId, CancellationToken.None);
+                var cancelled = error is OperationCanceledException || runCancelled;
+                execution = execution with { State = cancelled && terminated ? SandboxExecutionState.Canceled : SandboxExecutionState.Indeterminate, FinishedAt=time.GetUtcNow(),
+                    WorkspaceSyncStatus = scratchCommitted ? "committed" : await CommitStatusAsync(execution, CancellationToken.None), DiagnosticId = Guid.CreateVersion7().ToString("D"),
+                    FailureCategory = cancelled ? "cancellation" : ClassifyFailure(error, execution.Phase), CancellationReason = cancelled ? runCancelled ? "runCancellation" : "requestCancellation" : null,
+                    Phase = execution.Phase ?? "fileCollection", TerminationConfirmed = terminated };
                 try
                 {
-                    await SaveAsync(lease with { State = SandboxLeaseState.NeedsResync, DiagnosticId = execution.DiagnosticId }, CancellationToken.None);
                     await SaveReceiptAsync(execution, false, CancellationToken.None);
+                    if (terminated) await SettleTerminatedExecutionAsync(lease, execution, CancellationToken.None);
+                    else await SaveAsync(lease with { State = SandboxLeaseState.NeedsReconciliation, DiagnosticId = execution.DiagnosticId }, CancellationToken.None);
                 }
                 catch { /* Preserve uncertainty even if its follow-up receipt cannot be saved. */ }
                 if (error is OperationCanceledException) throw;
@@ -92,6 +147,10 @@ public sealed partial class OpenSandboxService
             throw AgentCoreErrors.Conflict("Process deadline expired; scratch cannot be committed.");
         if (run is null || run.CancellationRequested || run.Status is AgentRunStatus.Cancelled or AgentRunStatus.Failed)
             throw AgentCoreErrors.Conflict("Process Run was canceled or revoked; scratch cannot be committed.");
+        await ValidateLiveProfileAuthorityAsync(run, lease.Profile, ct);
+        var eligibility = await Images.InspectAsync(lease.Profile, ct);
+        if (!eligibility.Eligible || eligibility.CredentialRevision != lease.Profile.RegistryCredentialRevision || eligibility.SecretRevision != lease.Profile.RegistrySecretRevision)
+            throw AgentCoreErrors.Forbidden("Background profile verification or source authority changed; scratch cannot be committed.");
         if (instances is not null && (await instances.FindAsync(lease.AgentInstanceId,ct))?.Lifecycle != AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active)
             throw AgentCoreErrors.Conflict("Process Instance is no longer active; scratch cannot be committed.");
         if ((await Images.InspectAsync(lease.Profile, ct, requireVerification:false)).Status != "SourceAuthorized" || !options.Enabled || owner?.AgentInstanceId != lease.AgentInstanceId || owner.DurablyDeletedAt is not null || owner.ArchivedAt is not null

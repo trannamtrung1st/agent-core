@@ -78,6 +78,7 @@ public sealed class SqliteSandboxStore(IDbContextFactory<AgentCoreDbContext> fac
             await using var db = await factory.CreateDbContextAsync(ct);
             var row = await db.Set<SandboxInstanceVerificationRow>().SingleOrDefaultAsync(r => r.InstanceId == verification.InstanceId.ToString("D") && r.InstanceRevision == verification.InstanceRevision, ct);
             if (row is null) { row = new() { InstanceId = verification.InstanceId.ToString("D"), InstanceRevision = verification.InstanceRevision }; db.Add(row); }
+            verification = verification.Merge(string.IsNullOrEmpty(row.Json) ? null : Read<SandboxInstanceVerification>(row.Json));
             row.Json = JsonSerializer.Serialize(verification, Json); await db.SaveChangesAsync(ct);
         }
         finally { _gate.Release(); }

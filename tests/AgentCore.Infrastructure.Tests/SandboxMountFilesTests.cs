@@ -87,6 +87,43 @@ public sealed class SandboxMountFilesTests : IDisposable
         Assert.False(Directory.Exists(_root));
     }
     public void Dispose() { if (Directory.Exists(_root)) { Files.Delete(_generation); Directory.Delete(_root, true); } }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Directory_replacement_between_metadata_open_and_descendant_read_never_follows_a_link(bool afterOpen)
+    {
+        var files = Files; files.Prepare(_generation);
+        var outside = Path.Combine(_root, "foreign"); Directory.CreateDirectory(outside);
+        await File.WriteAllTextAsync(Path.Combine(outside, "secret.txt"), "foreign-sentinel");
+        var path = Path.Combine(files.Working(_generation), "nested"); Directory.CreateDirectory(path);
+        await File.WriteAllTextAsync(Path.Combine(path, "owned.txt"), "owned");
+        var swapped = false;
+        files.CollectionFault = relative => {
+            if (swapped || relative != (afterOpen ? "nested/owned.txt" : "nested")) return;
+            swapped = true; Directory.Move(path, path + "-retained"); Directory.CreateSymbolicLink(path, outside);
+        };
+        await Assert.ThrowsAsync<AgentCoreException>(() => files.CollectAsync(_generation, Profile, default));
+        Assert.True(swapped); files.Delete(_generation);
+        Assert.Equal("foreign-sentinel", await File.ReadAllTextAsync(Path.Combine(outside, "secret.txt")));
+    }
+
+    [Fact]
+    public void Mount_root_links_are_rejected_and_live_staging_usage_is_bounded_without_reading_contents()
+    {
+        var outside = Path.Combine(_root, "foreign"); Directory.CreateDirectory(outside);
+        var link = Path.Combine(_root, "alias"); Directory.CreateSymbolicLink(link, outside);
+        var linked = new SandboxMountFiles(new() { WorkspaceMountRoot = link });
+        Assert.Throws<AgentCoreException>(() => linked.Prepare(Guid.NewGuid()));
+        var files = Files; files.Prepare(_generation);
+        File.WriteAllBytes(Path.Combine(files.Working(_generation), "data"), new byte[32]);
+        Assert.Throws<AgentCoreException>(() => files.CheckLiveUsage(_generation, 16, default));
+        files.CheckLiveUsage(_generation, 32, default);
+        if (OperatingSystem.IsWindows()) return;
+        Assert.Equal((UnixFileMode)0x3ff, File.GetUnixFileMode(_root));
+        Assert.Equal((UnixFileMode)0x1c0, File.GetUnixFileMode(Path.GetDirectoryName(files.Working(_generation))!));
+        Assert.Equal((UnixFileMode)0x1ff, File.GetUnixFileMode(files.Working(_generation)));
+    }
     [DllImport("libc", EntryPoint = "link", SetLastError = true)] private static extern int Link(string source, string target);
     [DllImport("libc", EntryPoint = "mkfifo", SetLastError = true)] private static extern int MkFifo(string path, uint mode);
 }

@@ -18,7 +18,7 @@ internal static class SandboxEndpoints
         admin.MapGet("/sandboxes", (ISandboxReadiness readiness, ISandboxStore store, OpenSandboxOptions options, ISandboxImageAuthority authority, CancellationToken ct) => Safe(async () =>
             Results.Json(new SandboxPlatformResponse(readiness.State, readiness.SafeMessage, (await Task.WhenAll((await store.ListProfilesAsync(ct)).Select(p => MapObservedAsync(p, store, authority, readiness, ct)))).ToArray(),
                 options.AllowedImagePrefixes, options.AllowLocalImageIds, "Trusted single-user local demo; own execd loopback remains reachable.",
-                "250 MiB validated canonical /working ceiling; live staging and OCI writable-layer disk quotas are not enforced by this Docker backend."))));
+                "250 MiB validated canonical /working ceiling; bounded live staging sampling terminates excess usage. Sampling and the OCI writable layer do not provide hard disk quotas."))));
         admin.MapGet("/sandbox-profiles/{id}", (string id, long? revision, ISandboxStore store, ISandboxImageAuthority authority, ISandboxReadiness readiness, CancellationToken ct) => Safe(async () =>
             Results.Json(await MapObservedAsync(await store.GetProfileAsync(id, revision, ct) ?? throw AgentCoreErrors.NotFound("Sandbox profile was not found."), store, authority, readiness, ct))));
         admin.MapPut("/sandbox-profiles/{id}", (string id, JsonElement body, ISandboxStore store, OpenSandboxOptions options, OpenSandboxReadiness readiness, ISandboxImageAuthority authority, CancellationToken ct) => Safe(async () =>
@@ -61,7 +61,9 @@ internal static class SandboxEndpoints
         {
             var resolved = (await configuration.ResolveAsync(instanceId,ct,inspectSandbox:true)).Configuration;
             if (resolved.InstanceRevision != request.ExpectedInstanceRevision) throw AgentCoreErrors.Conflict("Instance changed. Reload before verifying setup.");
-            var profile = resolved.Definition.ExecutionSandboxProfile ?? throw AgentCoreErrors.Conflict("An authorized Sandbox Profile is required.");
+            var profile = request.ProfileId is { } profileId
+                ? resolved.Definition.ExecutionSandboxProfiles?.FirstOrDefault(p => p.Id == profileId) ?? throw AgentCoreErrors.Forbidden("Profile is not authorized by this Instance.")
+                : resolved.Definition.ExecutionSandboxProfile ?? throw AgentCoreErrors.Conflict("An authorized Sandbox Profile is required.");
             var result = await service.VerifyProfileAsync(profile,ct);
             await store.SaveInstanceVerificationAsync(new(instanceId,resolved.InstanceRevision,result),ct);
             return Results.Json(MapVerification(result,resolved.InstanceRevision));
@@ -70,9 +72,10 @@ internal static class SandboxEndpoints
         {
             var config = (await configuration.ResolveAsync(instanceId,ct,allowArchived:true,inspectSandbox:true)).Configuration;
             var resolved = config.Definition;
-            var verification = await store.GetInstanceVerificationAsync(instanceId,config.InstanceRevision,ct);
-            if (verification?.Result.ProfileId != resolved.ExecutionSandboxProfile?.Id || verification?.Result.ProfileRevision != resolved.ExecutionSandboxProfile?.Revision) verification = null;
+            var verification = resolved.ExecutionSandboxProfile is { } selectedProfile
+                ? await store.GetInstanceVerificationAsync(instanceId, config.InstanceRevision, selectedProfile, ct) : null;
             return Results.Json(new { policy = resolved.SandboxPolicy, profile = resolved.ExecutionSandboxProfile is { } p ? await MapObservedAsync(p,store,authority,readiness,ct) : null,
+                profiles = await Task.WhenAll((resolved.ExecutionSandboxProfiles ?? []).Select(p => MapObservedAsync(p,store,authority,readiness,ct))),
                 instanceRevision = config.InstanceRevision, instanceInitializationScript = resolved.ExecutionSandboxProfile?.InstanceInitializationScript,
                 verification = verification is null ? null : new { instanceRevision = verification.InstanceRevision, result = MapVerification(verification.Result, verification.InstanceRevision) }, state = readiness.State, message = readiness.SafeMessage });
         }));
@@ -88,7 +91,7 @@ internal static class SandboxEndpoints
         group.MapPost("/executions/{executionId:guid}/stop", (Guid sessionId, Guid executionId, IMemoryStore memory, ILocalUserProfileService owners, ISandboxService service, CancellationToken ct) => Safe(async () =>
         { await OwnedSessionAsync(sessionId,memory,owners,ct); return Results.Json(await service.StopProcessAsync(sessionId,executionId,ct)); }));
         group.MapPost("/reset", (Guid sessionId, ResetSandboxRequest request, IMemoryStore memory, ILocalUserProfileService owners, ISandboxService service, CancellationToken ct) => Safe(async () =>
-        { await OwnedSessionAsync(sessionId,memory,owners,ct); await service.StopSessionAsync(sessionId,ct,request.ExpectedGeneration); return Results.Ok(new { reset = true }); }));
+        { await OwnedSessionAsync(sessionId,memory,owners,ct); await service.StopSessionAsync(sessionId,ct,request.ExpectedGeneration, request.ExpectedExecutionId, true); return Results.Ok(new { reset = true }); }));
     }
     private static async Task OwnedSessionAsync(Guid id, IMemoryStore memory, ILocalUserProfileService owners, CancellationToken ct)
     {

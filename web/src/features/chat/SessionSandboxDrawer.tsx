@@ -56,19 +56,26 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
     finally { if (selected.current === id && epoch.current === generation) setBusy(false); }
   }
   function confirmMutation(title: string, content: string, action: () => Promise<unknown>, executionId?: string) {
-    const generation = epoch.current; const sandboxGeneration = environment?.generation;
+    const generation = epoch.current; const sandboxGeneration = environment?.generation; const latestExecutionId = environment?.activeExecutionId ?? environment?.lastExecutionId;
     confirmAction(modal, { title, content, danger: !executionId, okText: executionId ? 'Stop command' : 'Reset sandbox', onOk: async () => {
-      if (epoch.current !== generation || selected.current !== sessionId || observed.current.error || observed.current.reading || observed.current.environment?.generation !== sandboxGeneration
+      if (epoch.current !== generation || selected.current !== sessionId || observed.current.error || observed.current.environment?.generation !== sandboxGeneration
+          || (observed.current.environment?.activeExecutionId ?? observed.current.environment?.lastExecutionId) !== latestExecutionId
           || executionId && observed.current.execution?.executionId !== executionId) { message.warning('Selection changed. Refresh before recovery.'); return; }
       await mutate(action);
     } });
   }
+  const stateLabel:Record<string,string>={NeedsResync:'File recovery required',NeedsReconciliation:'Cleanup pending',Provisioning:'Preparing environment',Executing:'Command active',Terminating:'Stopping environment',Terminated:'Terminated',Failed:'Setup failed',Ready:'Ready'};
+  const failureLabel:Record<string,string>={cancellation:'Cancelled',commandTimeout:'Command timed out',sourceAuthorizationChanged:'Source authorization changed',provisioningFailure:'Provisioning failed',mountFailure:'Workspace mount failed',backgroundProcessesActive:'Untracked child processes remained',processInspectionFailure:'Process inspection failed',unsafeFiles:'Unsafe workload files',workspaceConflict:'Canonical files changed',providerTransportFailure:'Provider connection failed',uncertainCommit:'File commit outcome uncertain',storageLimit:'Staging storage limit exceeded',ownerLost:'Run ownership ended'};
   const uncertain = environment?.state === 'NeedsResync' || environment?.state === 'NeedsReconciliation' || execution?.status === 'Indeterminate';
   const ended = environment?.state === 'Terminated' || environment?.state === 'Ready' && Date.parse(environment.expiresAt) <= Date.now();
   const initializationBlocked=environment?.initialization?.state==='Running'||environment?.initialization?.state==='Failed';
-  const cleanupLabels:Record<string,string>={reset:'Explicit reset',sessionDeleted:'Session deleted',sessionArchived:'Session archived',sessionEnded:'Session ended',sessionDeactivated:'Session deactivated',sessionLifecycle:'Session lifecycle changed',authorityRevoked:'Instance or Profile authority revoked',maximumLifetime:'Maximum lifetime reached',idleExpired:'Idle timeout reached',initializationUncertain:'Initialization outcome uncertain',initializationFailed:'Initialization failed',setupFailed:'Environment setup failed'};
+  const cleanupLabels:Record<string,string>={reset:'Explicit reset',cancelled:'Execution cancelled',executionFailed:'Execution ended with a retained diagnostic',profileSwitch:'Profile switch',sessionDeleted:'Session deleted',sessionArchived:'Session archived',sessionEnded:'Session ended',sessionDeactivated:'Session deactivated',sessionLifecycle:'Session lifecycle changed',authorityRevoked:'Instance or Profile authority revoked',maximumLifetime:'Maximum lifetime reached',idleExpired:'Idle timeout reached',initializationUncertain:'Initialization outcome uncertain',initializationFailed:'Initialization failed',setupFailed:'Environment setup failed'};
   const syncLabel: Record<string, string> = { committed: 'Files committed', notCommitted: 'Files not committed', committing: 'File commit pending recovery', unknown: 'File commit outcome unknown', pending: 'Files pending' };
-  const recoveryDescription = execution?.workspaceSyncStatus === 'committed'
+  const retainedSelection=environment?.cleanupReason!=='reset' && !!(environment?.selectedProfileId||environment?.transitionProfileId);
+  const resolvedTermination=environment?.state==='Terminated' && execution?.terminationConfirmed && ['committed','notCommitted'].includes(execution.workspaceSyncStatus);
+  const recoveryDescription = resolvedTermination
+    ? `Termination and staging cleanup are confirmed. ${execution?.workspaceSyncStatus==='committed'?'Canonical files were committed.':'Canonical files were not committed.'} Review the retained execution receipt before starting a new authorized command. The original command is never repeated automatically.`
+    : execution?.workspaceSyncStatus === 'committed'
     ? 'Canonical files were committed, but command completion was not confirmed. Inspect retained results before retrying. Reset preserves these files and Artifacts.'
     : execution?.workspaceSyncStatus === 'unknown' || execution?.workspaceSyncStatus === 'committing'
       ? 'Files may already have been committed. Inspect canonical /working before retrying. Commands are never repeated automatically. Reset preserves canonical files and Artifacts.'
@@ -80,12 +87,13 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
     }}>
       {error && <Alert type="error" showIcon title={error} action={<Button loading={reading} onClick={() => void refresh.current()}>Retry</Button>} />}
       {loading ? <Spin aria-label="Loading Session sandbox" /> : !environment ? !error && <Empty description="No sandbox environment yet. An authorized command provisions the selected verified profile for this Session." /> : <>
-        <Flex align="center" wrap gap={token.paddingXS}><Tag color={uncertain ? 'warning' : environment.state === 'Ready' && !ended ? 'success' : 'default'}>{ended && environment.state === 'Ready' ? 'Expired' : environment.state}</Tag><Typography.Text>{environment.profileId} · revision {environment.profileRevision}</Typography.Text></Flex>
-        {uncertain && <Alert type="warning" showIcon title="Inspect before retrying" description={recoveryDescription} />}
-        {environment.message && !ended && <Alert type="error" showIcon title="Environment setup failed" description={environment.message} />}
+        <Flex align="center" wrap gap={token.paddingXS}><Tag color={uncertain ? 'warning' : environment.state === 'Ready' && !ended ? 'success' : 'default'}>{ended && environment.state === 'Ready' ? 'Expired' : stateLabel[environment.state]??environment.state}</Tag><Typography.Text>{environment.profileId} · revision {environment.profileRevision}</Typography.Text></Flex>
+        {(uncertain || resolvedTermination) && <Alert type="warning" showIcon title={resolvedTermination?"Previous execution needs review":"Inspect before retrying"} description={recoveryDescription} />}
+        {environment.message && !ended && <Alert type={uncertain?'warning':'info'} showIcon title="Recovery guidance" description={environment.message} />}
+        {environment.transitionProfileId && <Alert type="info" showIcon title="Profile switch in progress" description={`Target ${environment.transitionProfileId} · ${environment.transitionPhase??'Pending'}. No other image is selected automatically. Inspect cleanup before starting another command.`} />}
         {ended && <Alert type="info" showIcon title="Environment ended" description={initializationBlocked?"Initialization failed or was not confirmed. Inspect the retained output and canonical files, then explicitly reset before retrying. Scripts are never repeated automatically.":"The next authorized command creates a fresh environment from canonical /working. Saved Workspace files and Artifacts are retained."} />}
         <Descriptions bordered size="small" column={1}>
-          {environment.profileName && <Descriptions.Item label="Pinned profile">{environment.profileName} · revision {environment.profileRevision}</Descriptions.Item>}
+          {environment.profileName && <Descriptions.Item label={ended?"Last selected profile":"Active selected profile"}>{environment.profileName} · revision {environment.profileRevision}</Descriptions.Item>}
           {environment.imageReference && <Descriptions.Item label="Pinned image"><Typography.Text code style={{overflowWrap:'anywhere'}}>{environment.imageReference}</Typography.Text></Descriptions.Item>}
           {environment.createdAt && <Descriptions.Item label="Created">{new Date(environment.createdAt).toLocaleString()}</Descriptions.Item>}
           {environment.lastActivityAt && <Descriptions.Item label="Last activity">{new Date(environment.lastActivityAt).toLocaleString()}</Descriptions.Item>}
@@ -113,6 +121,12 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
                 <DiagnosticDetails label="Command diagnostics" fields={{ diagnosticId: execution.diagnosticId ?? environment.diagnosticId,sessionId }} />
               </Flex>
             </Flex>
+            {(execution.failureCategory||execution.cancellationReason||execution.terminationConfirmed) && <Descriptions size="small" column={1}>
+              {execution.failureCategory && <Descriptions.Item label="Outcome">{failureLabel[execution.failureCategory]??'Execution requires inspection'}</Descriptions.Item>}
+              {execution.cancellationReason && <Descriptions.Item label="Cancellation">{execution.cancellationReason==='userStop'?'Stopped by user':execution.cancellationReason==='runCancellation'?'Run cancelled':execution.cancellationReason==='ownerReset'?'Owner reset':execution.cancellationReason==='sessionLifecycle'?'Session lifecycle ended':execution.cancellationReason==='processStop'?'Command explicitly stopped':'Request cancelled'}</Descriptions.Item>}
+              {execution.phase && <Descriptions.Item label="Last phase">{({dispatch:'Command dispatch',execution:'Command execution',processInspection:'Process inspection',fileCollection:'File validation',workspaceCommit:'Canonical file commit',completed:'Completed'} as Record<string,string>)[execution.phase]??'Recovery'}</Descriptions.Item>}
+              <Descriptions.Item label="Termination">{execution.terminationConfirmed?'Termination and staging cleanup confirmed':'Inspect retained evidence before retrying'}</Descriptions.Item>
+            </Descriptions>}
             <Typography.Paragraph code copyable={{ text: execution.commandText }} style={{ margin:0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{execution.commandText}</Typography.Paragraph>
             <Collapse defaultActiveKey={['stdout']} items={[
               { key: 'stdout', label: execution.background ? 'Command output (combined)' : 'Standard output', children: <section aria-label={execution.background ? "Command output (combined)" : "Standard output"}><Typography.Paragraph copyable={{ text: execution.stdout }} style={{ margin:0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{execution.stdout || 'No command output.'}</Typography.Paragraph></section> },
@@ -123,7 +137,7 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
             {!execution.background && ['Running','Dispatching'].includes(execution.status) && <Typography.Text type="secondary">Use Chat’s Stop control to cancel this active Run.</Typography.Text>}
           </Flex>
         </section>}
-        <Flex wrap gap={token.paddingXS}><Button loading={reading} onClick={() => void refresh.current()}>Refresh status</Button><Button danger disabled={busy || reading || !!error || readOnly || environment.state === 'Terminated' && !initializationBlocked} loading={busy} onClick={() => confirmMutation('Reset this Session sandbox?', 'Stop processes and discard sandbox-only packages and unsynchronized files. Canonical /working, /home and Artifacts are preserved. The next command creates a fresh generation.', () => resetSessionSandbox(sessionId, environment.generation))}>Reset sandbox</Button></Flex>
+        <Flex wrap gap={token.paddingXS}><Button loading={reading} onClick={() => void refresh.current()}>Inspect status</Button><Button danger disabled={busy || reading || !!error || readOnly || environment.state === 'Terminated' && !initializationBlocked && !retainedSelection && !(environment.cleanupReason!=='reset' && ['unknown','committing'].includes(execution?.workspaceSyncStatus??''))} loading={busy} onClick={() => confirmMutation('Reset this Session sandbox?', 'Stop processes and discard sandbox-only packages and unsynchronized files. Canonical /working, /home and Artifacts are preserved. Reset clears the Session profile choice; the next command uses the effective default unless another authorized profile is selected.', () => resetSessionSandbox(sessionId, environment.generation, environment.activeExecutionId??environment.lastExecutionId))}>Reset sandbox</Button></Flex>
       </>}
     </Flex>
   </Drawer>;

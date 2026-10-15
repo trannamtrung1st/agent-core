@@ -28,6 +28,189 @@ public sealed class OpenSandboxFactAttribute : FactAttribute
 
 public sealed class OpenSandboxIntegrationTests
 {
+    [OpenSandboxFact]
+    public async Task Background_cancellation_at_commit_does_not_replace_the_settled_receipt_with_dispatch_evidence()
+    {
+        foreach (var point in new[] { "beforeSwap", "afterSwap" })
+        {
+            await using var f = await Fixture.Create();
+            Assert.Equal(0, (await f.Exec("printf old > retained.txt")).ExitCode);
+            var background = await f.Service.ExecuteAsync(f.Access(), new("printf new > retained.txt", Background: true));
+            f.Workspace.ScratchCommitFault = current => { if (current == point) throw new OperationCanceledException("Commit-boundary fixture"); };
+            for (var attempt = 0; attempt < 100 && (await f.Service.InspectProcessAsync(f.Session.SessionId, background.ExecutionId)).Status == "Running"; attempt++)
+            {
+                await Task.Delay(100);
+                await f.Service.ReconcileAsync();
+            }
+            var receipt = await f.Service.InspectProcessAsync(f.Session.SessionId, background.ExecutionId);
+            Assert.Equal("Canceled", receipt.Status); Assert.Equal("workspaceCommit", receipt.Phase);
+            Assert.Equal("requestCancellation", receipt.CancellationReason); Assert.True(receipt.TerminationConfirmed);
+            Assert.Equal(point == "afterSwap" ? "committed" : "notCommitted", receipt.WorkspaceSyncStatus);
+            Assert.Equal(point == "afterSwap" ? "new" : "old", await f.Read("retained.txt"));
+        }
+    }
+
+    [OpenSandboxFact]
+    public async Task Background_collection_retains_the_actual_failure_phase_without_importing_unsafe_files()
+    {
+        foreach (var (command, phase, category) in new[] {
+            ("ln -s /etc/passwd unsafe", "fileCollection", "unsafeFiles"),
+            ("sleep 120 >/dev/null 2>&1 & printf child-started", "processInspection", "backgroundProcessesActive") })
+        {
+            await using var f = await Fixture.Create();
+            var background = await f.Service.ExecuteAsync(f.Access(), new(command, Background: true));
+            SandboxCommandResult receipt = background;
+            for (var attempt = 0; attempt < 100 && receipt.Status == "Running"; attempt++)
+            {
+                await Task.Delay(100);
+                await f.Service.ReconcileAsync();
+                receipt = await f.Service.InspectProcessAsync(f.Session.SessionId, background.ExecutionId);
+            }
+            Assert.Equal("Indeterminate", receipt.Status); Assert.Equal(phase, receipt.Phase); Assert.Equal(category, receipt.FailureCategory);
+            Assert.Equal("notCommitted", receipt.WorkspaceSyncStatus); Assert.True(receipt.TerminationConfirmed);
+            Assert.Single((await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Transfer.Entries);
+        }
+    }
+
+    [OpenSandboxFact(requiresOrdinaryImage: true)]
+    public async Task Interrupted_selection_termination_and_provisioning_intents_reconcile_without_replaying_commands()
+    {
+        foreach(var stage in new[]{"selection","termination","provisioning"})
+        {
+            await using var f=await Fixture.Create();
+            var target=await f.AddProfile("dotnet",Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")!);
+            Assert.Equal(0,(await f.Exec("printf once > transition.txt")).ExitCode);
+            if(stage!="selection")await f.Service.StopSessionAsync(f.Session.SessionId);
+            var original=(await f.Store.GetLeaseAsync(f.Session.SessionId))!;
+            var interrupted=original with {Revision=original.Revision+1,TransitionProfileId=target.Id,TransitionProfileRevision=target.Revision,
+                TransitionPhase=stage=="selection"?"termination":"provisioning",CleanupReason="profileSwitch",
+                State=stage=="selection"?SandboxLeaseState.Terminating:stage=="termination"?SandboxLeaseState.Terminated:SandboxLeaseState.Provisioning};
+            if(stage=="provisioning")interrupted=interrupted with {Generation=Guid.NewGuid(),Profile=target,ProviderId=null,Initialization=new("Pending",target.Id,target.Revision,null)};
+            await f.Store.SaveLeaseAsync(interrupted,original.Revision);
+            var denied=f.Access("must-not-dispatch-"+stage);
+            if(stage!="termination")Assert.Equal("recovery_required",(await f.Service.ExecuteAsync(denied,new("printf duplicate >> transition.txt",ProfileId:target.Id))).Error);
+            Assert.Null(await f.Store.GetOperationAsync(f.Session.SessionId,f.Run.AgentRunId,denied.ToolCallId));
+            f.Reopen();await f.Service.ReconcileAsync();
+            Assert.Equal("once",await f.Read("transition.txt"));
+            Assert.Equal("Terminated",(await f.Service.InspectAsync(f.Session.SessionId))!.State);
+            Assert.Equal(target.Id,(await f.Exec("cat transition.txt")).ProfileId);
+            Assert.Equal("once",await f.Read("transition.txt"));
+        }
+    }
+
+    [OpenSandboxFact]
+    public async Task Cancellation_on_either_side_of_canonical_swap_retains_the_verified_commit_outcome()
+    {
+        foreach(var point in new[]{"beforeSwap","afterSwap"})
+        {
+            await using var f=await Fixture.Create();
+            Assert.Equal(0,(await f.Exec("printf old > retained.txt")).ExitCode);
+            f.Workspace.ScratchCommitFault = current=>{if(current==point)throw new OperationCanceledException("Injected cancellation at commit boundary");};
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>f.Exec("printf new > retained.txt").AsTask());
+            var environment=(await f.Service.InspectAsync(f.Session.SessionId))!;
+            var receipt=await f.Service.InspectProcessAsync(f.Session.SessionId,environment.LastExecutionId!.Value);
+            Assert.Equal("Canceled",receipt.Status);Assert.Equal("cancellation",receipt.FailureCategory);Assert.True(receipt.TerminationConfirmed);
+            Assert.Equal(point=="beforeSwap"?"notCommitted":"committed",receipt.WorkspaceSyncStatus);
+            Assert.Equal("Terminated",environment.State);
+            f.Reopen();await f.Service.ReconcileAsync();
+            Assert.Equal(point=="beforeSwap"?"old":"new",await f.Read("retained.txt"));
+            Assert.Equal(0,(await f.Exec("cat retained.txt")).ExitCode);
+        }
+    }
+
+    [OpenSandboxFact]
+    public async Task Live_staging_guard_terminates_excessive_writes_before_a_long_command_finishes()
+    {
+        await using var f = await Fixture.Create();
+        await f.LimitStorage(32);
+        var started=DateTimeOffset.UtcNow;
+        var result=await f.Exec("dd if=/dev/zero of=oversize bs=4096 count=1 2>/dev/null; sleep 120");
+        Assert.Equal("storageLimit",result.FailureCategory);Assert.True(result.TerminationConfirmed);
+        Assert.Equal("notCommitted",result.WorkspaceSyncStatus);Assert.InRange((DateTimeOffset.UtcNow-started).TotalSeconds,0,30);
+        Assert.Empty((await f.Workspace.CaptureScratchAsync(f.Session.SessionId,f.Definition)).Transfer.Entries.Skip(1));
+        Assert.Equal("Terminated",(await f.Service.InspectAsync(f.Session.SessionId))!.State);
+    }
+
+    [OpenSandboxFact(requiresOrdinaryImage: true)]
+    public async Task Authorized_profiles_switch_once_preserve_files_and_remain_session_scoped_after_reopen()
+    {
+        await using var f = await Fixture.Create();
+        var dotnet = await f.AddProfile("dotnet", Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")!);
+        var minimal = await f.AddProfile("minimal", Environment.GetEnvironmentVariable("AGENTCORE_OSB_ALTERNATE_IMAGE")!);
+        Assert.Equal(0, (await f.Exec("printf exact > switch.txt")).ExitCode);
+        var initial = (await f.Service.InspectAsync(f.Session.SessionId))!;
+        foreach (var id in new[] { dotnet.Id, minimal.Id, f.Profile.Id })
+        {
+            var access = f.Access("switch-" + id);
+            var command = new SandboxCommandRequest("test $(cat switch.txt) = exact; printf x >> once.txt", ProfileId: id);
+            var result = await f.Service.ExecuteAsync(access, command);
+            Assert.Equal("Completed", result.Status); Assert.Equal(0, result.ExitCode);
+            Assert.Equal(id, result.ProfileId); Assert.Equal("committed", result.WorkspaceSyncStatus);
+            Assert.Equal(result, await f.Service.ExecuteAsync(access, command));
+            Assert.Equal("exact", await f.Read("switch.txt"));
+        }
+        Assert.Equal("xxx", await f.Read("once.txt"));
+        var activeCommand=f.Exec("sleep 2").AsTask();
+        for(var attempt=0;attempt<200 && (await f.Service.InspectAsync(f.Session.SessionId))?.ActiveExecutionId is null;attempt++)await Task.Delay(10);
+        var whileActive=DateTimeOffset.UtcNow;
+        var noQueue=await f.Service.ExecuteAsync(f.Access(),new("printf should-not-run",ProfileId:dotnet.Id));
+        Assert.Equal("recovery_required",noQueue.Error);Assert.True((DateTimeOffset.UtcNow-whileActive).TotalSeconds<1);
+        Assert.Equal("Completed",(await activeCommand).Status);
+        Assert.Equal(f.Profile.Id,(await f.Service.InspectAsync(f.Session.SessionId))!.ProfileId);
+        Assert.NotEqual(initial.Generation, (await f.Service.InspectAsync(f.Session.SessionId))!.Generation);
+        Assert.Equal(0, (await f.Service.ExecuteAsync(f.Access(), new("dotnet --version", ProfileId: dotnet.Id))).ExitCode);
+        f.Reopen();
+        var retained = await f.Exec("dotnet --version"); Assert.Equal(dotnet.Id, retained.ProfileId); Assert.StartsWith("10.", retained.Stdout);
+        var sibling = await f.SiblingAccess();
+        var independent = await f.Service.ExecuteAsync(sibling, new("printf sibling > independent.txt", ProfileId: minimal.Id));
+        Assert.Equal(minimal.Id, independent.ProfileId);
+        Assert.Equal(dotnet.Id, (await f.Service.InspectAsync(f.Session.SessionId))!.ProfileId);
+        Assert.Equal(minimal.Id, (await f.Service.InspectAsync(sibling.SessionId))!.ProfileId);
+        await f.Service.StopSessionAsync(sibling.SessionId);
+        var active = (await f.Service.InspectAsync(f.Session.SessionId))!;
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Service.ExecuteAsync(f.Access(), new("true", ProfileId: "forbidden")).AsTask());
+        Assert.Equal(active.Generation, (await f.Service.InspectAsync(f.Session.SessionId))!.Generation);
+        await f.Service.StopSessionAsync(f.Session.SessionId, expectedGeneration: active.Generation);
+        Assert.Equal(f.Profile.Id, (await f.Exec("cat switch.txt")).ProfileId); // Explicit reset returns to default.
+    }
+
+    [OpenSandboxFact(requiresOrdinaryImage: true)]
+    public async Task Unavailable_default_does_not_revoke_an_independently_verified_alternate_and_blocked_generation_cannot_be_bypassed()
+    {
+        await using var f = await Fixture.Create();
+        var alternate = await f.AddProfile("dotnet", Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")!);
+        await f.Store.SaveProfileAsync(f.Profile with { Revision = 2, Enabled = false }, 1);
+        Assert.Equal(0, (await f.Service.ExecuteAsync(f.Access(), new("dotnet --version", ProfileId: alternate.Id))).ExitCode);
+        var background = await f.Service.ExecuteAsync(f.Access(), new("sleep 120", Background: true));
+        var blocked = await f.Service.ExecuteAsync(f.Access(), new("true", ProfileId: f.Profile.Id));
+        Assert.Equal("recovery_required", blocked.Error); Assert.Equal(background.ExecutionId, blocked.ExecutionId);
+        Assert.Equal(alternate.Id, (await f.Service.InspectAsync(f.Session.SessionId))!.ProfileId);
+        var lease = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
+        await f.Store.SaveLeaseAsync(lease with { Revision = lease.Revision + 1, State = SandboxLeaseState.NeedsResync }, lease.Revision);
+        Assert.Equal("recovery_required", (await f.Service.ExecuteAsync(f.Access(), new("true", ProfileId: alternate.Id))).Error);
+    }
+
+    [OpenSandboxFact]
+    public async Task Confirmed_foreground_cancellation_retains_receipt_and_allows_a_new_independent_command_without_replay()
+    {
+        await using var f = await Fixture.Create();
+        Assert.Equal(0, (await f.Exec("printf safe > retained.txt")).ExitCode);
+        using var canceled = new CancellationTokenSource();
+        var access = f.Access("cancelled-once");
+        var pending = f.Service.ExecuteAsync(access, new("printf unsafe > retained.txt; sleep 120"), canceled.Token).AsTask();
+        for (var attempt=0; attempt<200 && (await f.Service.InspectAsync(f.Session.SessionId))?.ActiveExecutionId is null; attempt++) await Task.Delay(50);
+        canceled.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        var environment = (await f.Service.InspectAsync(f.Session.SessionId))!;
+        Assert.Equal("Terminated", environment.State); Assert.Null(environment.ActiveExecutionId);
+        var receipt = await f.Service.InspectProcessAsync(f.Session.SessionId, environment.LastExecutionId!.Value);
+        Assert.Equal("Canceled", receipt.Status); Assert.Equal("notCommitted", receipt.WorkspaceSyncStatus);
+        Assert.Equal("cancellation", receipt.FailureCategory); Assert.True(receipt.TerminationConfirmed);
+        f.Reopen(); await f.Service.ReconcileAsync();
+        var fresh = await f.Exec("cat retained.txt"); Assert.Equal("safe", fresh.Stdout);
+        Assert.NotEqual(environment.Generation, fresh.Generation);
+        Assert.Equal(receipt, await f.Service.ExecuteAsync(access, new("printf unsafe > retained.txt; sleep 120")));
+    }
+
     [OpenSandboxFact(requiresOrdinaryImage: true)]
     public async Task Ordinary_dotnet_image_verifies_without_python_and_commands_commit_mounted_files()
     {
@@ -47,7 +230,7 @@ public sealed class OpenSandboxIntegrationTests
         Assert.Equal(0, repeated.ExitCode); Assert.Equal("normal-image", repeated.Stdout);
         Assert.Equal("changed", await f.Read("result.txt"));
         var compiled = await f.Exec("export DOTNET_CLI_USE_MSBUILD_SERVER=0 MSBUILDDISABLENODEREUSE=1; mkdir -p offline-feed; dotnet new console -o app --no-restore && dotnet restore app --source /working/offline-feed -p:UseSharedCompilation=false -nodeReuse:false && dotnet run --project app --no-restore -p:UseSharedCompilation=false");
-        Assert.Equal("Completed", compiled.Status); Assert.Equal(0, compiled.ExitCode);
+        Assert.True(compiled.Status == "Completed", $"{compiled.Status}/{compiled.FailureCategory}/{compiled.Phase}: {compiled.Stderr}"); Assert.Equal(0, compiled.ExitCode);
         Assert.Contains("Hello, World!", compiled.Stdout); Assert.Contains("Console.WriteLine", await f.Read("app/Program.cs"));
         var workbench = await f.Service.VerifyProfileAsync(f.Profile with { ImageReference = Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_IMAGE")! }, CancellationToken.None);
         Assert.True(workbench.Passed, workbench.Message);
@@ -74,7 +257,8 @@ public sealed class OpenSandboxIntegrationTests
         var first=(await f.Service.InspectAsync(f.Session.SessionId))!;
         Assert.Equal("Succeeded",first.Initialization!.State);Assert.Equal("ProfileInstance",first.Initialization.Stdout);
         Assert.Equal("ProfileErrInstanceErr",first.Initialization.Stderr);Assert.Equal(7,first.Initialization.InstanceRevision);Assert.Equal("PI",await f.Read("setup-order.txt"));
-        f.Reopen();f.SetInstanceSetup("printf changed",8);Assert.Equal(0,(await f.Exec("true")).ExitCode);
+        var pinnedAccess = f.Access();
+        f.Reopen();f.SetInstanceSetup("printf changed",8);Assert.Equal(0,(await f.Service.ExecuteAsync(pinnedAccess,new("true"))).ExitCode);
         Assert.Equal(first.Generation,(await f.Service.InspectAsync(f.Session.SessionId))!.Generation);
         Assert.Equal(7,(await f.Service.InspectAsync(f.Session.SessionId))!.Initialization!.InstanceRevision);Assert.Equal("PI",await f.Read("setup-order.txt"));
         var verified=await f.Service.VerifyProfileAsync(f.Profile,CancellationToken.None);Assert.True(verified.Passed,verified.Message);Assert.Contains("changed",verified.Stdout);
@@ -86,7 +270,7 @@ public sealed class OpenSandboxIntegrationTests
         await Assert.ThrowsAsync<AgentCoreException>(async()=>await f.Exec("true"));
         Assert.Equal(before,(await f.Workspace.CaptureScratchAsync(f.Session.SessionId,f.Definition)).Fingerprint);
         var failed=(await f.Service.InspectAsync(f.Session.SessionId))!;Assert.Equal("Failed",failed.Initialization!.State);Assert.Equal(7,failed.Initialization.ExitCode);Assert.Contains("failed",failed.Initialization.Stderr);
-        await Assert.ThrowsAsync<AgentCoreException>(async()=>await f.Exec("true"));
+        Assert.Equal("recovery_required",(await f.Exec("true")).Error);
         Assert.Equal(failed.Generation,(await f.Service.InspectAsync(f.Session.SessionId))!.Generation);
     }
 
@@ -142,7 +326,9 @@ public sealed class OpenSandboxIntegrationTests
         await f.Workspace.WriteAsync(f.Session.SessionId, "/workspace/working/later.txt", "later"u8.ToArray());
         await f.Service.ReconcileAsync();
         var recovered = await f.Service.InspectProcessAsync(f.Session.SessionId, result.ExecutionId);
-        Assert.Equal("Indeterminate", recovered.Status);
+        // The durable pre-commit receipt already confirmed command exit. The journal
+        // now confirms the swap as well; no uncertain external effect is discarded.
+        Assert.Equal("Completed", recovered.Status);
         Assert.Equal("committed", recovered.WorkspaceSyncStatus);
         Assert.Equal(recovered, await f.Service.ExecuteAsync(access, command));
         Assert.Equal("once", await f.Read("once.txt"));
@@ -184,7 +370,7 @@ public sealed class OpenSandboxIntegrationTests
         f.Workspace.BeforeScratchCommitValidation = async _ => await f.CancelRun();
         await f.Service.ReconcileAsync();
         var receipt = await f.Service.InspectProcessAsync(f.Session.SessionId, canceled.ExecutionId);
-        Assert.Equal("Indeterminate", receipt.Status); Assert.Equal("notCommitted", receipt.WorkspaceSyncStatus);
+        Assert.Equal("Canceled", receipt.Status); Assert.Equal("cancellation",receipt.FailureCategory); Assert.Equal("notCommitted", receipt.WorkspaceSyncStatus);
         Assert.DoesNotContain((await f.Workspace.CaptureScratchAsync(f.Session.SessionId, f.Definition)).Transfer.Entries, e => e.RelativePath == "late.txt");
     }
 
@@ -288,8 +474,9 @@ public sealed class OpenSandboxIntegrationTests
         Assert.Equal(0,(await f.Exec("true")).ExitCode); Assert.Equal("I",await f.Read("init-count.txt"));
         var first = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
         f.Reopen(); Assert.Equal(0,(await f.Exec("true")).ExitCode); Assert.Equal("I",await f.Read("init-count.txt"));
+        var pinnedBeforeChange=f.Access();
         await f.ReviseScript("printf N >> init-count.txt");
-        Assert.Equal(0,(await f.Exec("true")).ExitCode); Assert.Equal("I",await f.Read("init-count.txt"));
+        Assert.Equal(0,(await f.Service.ExecuteAsync(pinnedBeforeChange,new("true"))).ExitCode); Assert.Equal("I",await f.Read("init-count.txt"));
         Assert.Equal(1,(await f.Store.GetLeaseAsync(f.Session.SessionId))!.Profile.Revision);
         await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:Guid.NewGuid()));
         await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:first.Generation);
@@ -338,7 +525,7 @@ public sealed class OpenSandboxIntegrationTests
         Assert.Equal("Running", background.Status);
         Assert.Equal("Running", (await f.Service.InspectProcessAsync(f.Session.SessionId, background.ExecutionId)).Status);
         await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Service.InspectProcessAsync(Guid.NewGuid(), background.ExecutionId));
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Exec("true"));
+        Assert.Equal("recovery_required", (await f.Exec("true")).Error);
         var stopped = await f.Service.StopProcessAsync(f.Session.SessionId, background.ExecutionId);
         Assert.Equal("Canceled", stopped.Status); Assert.Equal("committed", stopped.WorkspaceSyncStatus);
         Assert.Equal("started", await f.Read("background.txt"));
@@ -351,7 +538,7 @@ public sealed class OpenSandboxIntegrationTests
             await Task.Delay(50);
         }
         cancel.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running);
-        Assert.Equal("NeedsResync", (await f.Service.InspectAsync(f.Session.SessionId))!.State);
+        Assert.Equal("Terminated", (await f.Service.InspectAsync(f.Session.SessionId))!.State);
         await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Workspace.ReadAsync(f.Session.SessionId, f.Definition, "/workspace/working/canceled.txt"));
         await f.Service.StopSessionAsync(f.Session.SessionId);
         Assert.Equal(0, (await f.Exec("test ! -e canceled.txt && cat retained.txt")).ExitCode);
@@ -431,6 +618,28 @@ public sealed class OpenSandboxIntegrationTests
             Service = new(_options,Store,Workspace,_memory,_runs,TimeProvider.System,logger:_logs.CreateLogger<OpenSandboxService>());
         }
         public SandboxAccess Access(string? call = null) => new(Session.SessionId,Session.AgentInstanceId,Run.AgentRunId,Run.Claim!.Generation,call ?? Guid.NewGuid().ToString("N"),_profile,Definition);
+        public async Task<SandboxProfile> AddProfile(string id, string image)
+        {
+            var profile = _profile with { Id=id, Name=id, ImageReference=image, InitializationScript=null };
+            await Store.SaveProfileAsync(profile, 0);
+            var verification = await Service.VerifyProfileAsync(profile, default);
+            Assert.True(verification.Passed, verification.Message); await Store.SaveVerificationAsync(verification);
+            var all = (Definition.ExecutionSandboxProfiles ?? [_profile]).Append(profile).ToArray();
+            Definition = Definition with { SandboxPolicy = new(_profile.Id, all.Select(p=>p.Id).ToArray()), ExecutionSandboxProfiles = all, ExecutionSandboxProfile = _profile };
+            return profile;
+        }
+        public async Task<SandboxAccess> SiblingAccess()
+        {
+            var now=DateTimeOffset.UtcNow;
+            var sibling = Session with { SessionId=Guid.NewGuid(), Revision=1, CreatedAt=now, UpdatedAt=now };
+            await _memory.SaveAsync(sibling,0);
+            var owner=new AgentRunOwner(Session.AgentInstanceId,Session.ProfileId!.Value);
+            var activation=new Activation(Guid.NewGuid(),sibling.SessionId,ActivationKind.Initiative,[],Guid.NewGuid(),null,null,null,"sandbox-test",now);
+            var run=AgentRun.Create(Guid.NewGuid(),owner,new(activation,Definition.Id,1,Definition.Identity,Guid.NewGuid(),AgentRunOutputContract.ConversationResponse),new("synthetic","synthetic","synthetic",null),3,now);
+            await _runs.AdmitAsync(sibling with {Revision=2},1,run);
+            run=await _runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));
+            return new(sibling.SessionId,sibling.AgentInstanceId,run.AgentRunId,run.Claim!.Generation,Guid.NewGuid().ToString("N"),_profile,Definition);
+        }
         public async Task UseImage(string image)
         {
             var next = _profile with { ImageReference = image, Revision = _profile.Revision + 1 };

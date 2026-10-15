@@ -31,6 +31,9 @@ internal static class OpenSandboxScript
                 || !parsed.RootElement.TryGetProperty("exitCode",out var exit) || exit.ValueKind != JsonValueKind.Number || (index == 1 ? exit.GetInt32() == 0 : exit.GetInt32() != 0)))
                 return [new ModelTextDelta("Real sandbox demo stopped at an unexpected command outcome: " + result.Text),new ModelCompleted(ModelStopReason.Completed)];
         }
+        if (scenario == "repeat-blocked" && results.Length == 0 && request.Tools?.Any(t => t.Name == ToolCatalog.SandboxExec) == true)
+            return [new ModelToolCallEvent(new("blocked-first",ToolCatalog.SandboxExec,"{\"command\":\"printf should-not-dispatch\"}")),
+                new ModelToolCallEvent(new("blocked-second",ToolCatalog.SandboxExec,"{\"command\":\"printf should-not-dispatch\"}")),new ModelCompleted(ModelStopReason.ToolCalls)];
         string? name = null; object? args = null;
         if (scenario == "demo")
         {
@@ -50,6 +53,11 @@ internal static class OpenSandboxScript
         {
             name = ToolCatalog.SandboxExec;
             args = scenario switch {
+                "profiles" or "status" => new { },
+                "select-dotnet" => new { command = "dotnet --version && printf selected-dotnet > selected.txt", profileId = "dotnet", timeoutSeconds = 30 },
+                "select-general" => new { command = "cat selected.txt", profileId = "general-workbench", timeoutSeconds = 30 },
+                "selected" => new { command = "cat selected.txt", timeoutSeconds = 30 },
+                "untracked" => new { command = "sleep 120 >/dev/null 2>&1 & printf child-started", timeoutSeconds = 30 },
                 "long" => new { command = "printf 'started\n'; sleep 31; printf ' beyond-30-seconds'", timeoutSeconds = 60 },
                 "cancel" => new { command = "printf 'started\n'; sleep 120; printf should-not-finish", timeoutSeconds = 120 },
                 "retain" => new { command = "cat maths.py; test -f report.xlsx && test -f report.docx", timeoutSeconds = 30 },
@@ -58,6 +66,8 @@ internal static class OpenSandboxScript
                 _ => null
             };
         }
+        if (scenario == "profiles" && results.Length == 0) name = ToolCatalog.SandboxProfiles;
+        if (scenario == "status" && results.Length == 0) name = ToolCatalog.SandboxStatus;
         if (args is null && name is not null) return [new ModelTextDelta("Unknown Synthetic sandbox scenario."),new ModelCompleted(ModelStopReason.Completed)];
         if (name is not null && request.Tools?.Any(t => t.Name == name) == true)
             return [new ModelToolCallEvent(new("sandbox-proof-"+results.Length,name,JsonSerializer.Serialize(args))),new ModelCompleted(ModelStopReason.ToolCalls)];
