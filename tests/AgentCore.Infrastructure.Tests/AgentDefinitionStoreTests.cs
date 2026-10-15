@@ -42,7 +42,7 @@ public sealed class AgentDefinitionStoreTests
         Assert.True(latest.MemoryPolicy?.IdentityUserRetrieval);
         Assert.Null(await store.GetAsync("general-assistant", 15));
         Assert.Null(await store.GetAsync("general-assistant", 14));
-        Assert.Contains("working directory", latest.SystemInstructions, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("working directory", latest.AgentInstructions, StringComparison.OrdinalIgnoreCase);
         var environment = RoleEnvironments.Of(latest);
         Assert.Contains("automation.create", environment.ToolList);
         Assert.Contains("knowledge.retrieve", environment.ToolList);
@@ -77,16 +77,16 @@ public sealed class AgentDefinitionStoreTests
         Assert.True(ConversationLanguagePolicy.IsAuto(general.ConversationPolicy.Language));
         Assert.False(general.InitiativePolicy.Enabled);
         Assert.Equal(4096, general.ConversationPolicy.MaxOutputTokens);
-        Assert.DoesNotContain("[[speech:", general.SystemInstructions, StringComparison.Ordinal);
-        Assert.DoesNotContain("TTS", general.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[speech:", general.AgentInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("TTS", general.AgentInstructions, StringComparison.Ordinal);
         Assert.All(general.Goals, goal => Assert.DoesNotContain("[[speech:", goal, StringComparison.Ordinal));
         Assert.Equal(1, examiner.InitiativePolicy.ConsecutiveCap);
         Assert.Equal(2, support!.InitiativePolicy.ConsecutiveCap);
         Assert.Equal(2, support.InitiativePolicy.MaxPerSilencePeriod);
         Assert.Equal(0, compliance!.InitiativePolicy.ConsecutiveCap);
-        Assert.DoesNotContain("[[speech:", examiner.SystemInstructions, StringComparison.Ordinal);
-        Assert.DoesNotContain("[[speech:", support!.SystemInstructions, StringComparison.Ordinal);
-        Assert.DoesNotContain("[[speech:", compliance.SystemInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[speech:", examiner.AgentInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[speech:", support!.AgentInstructions, StringComparison.Ordinal);
+        Assert.DoesNotContain("[[speech:", compliance.AgentInstructions, StringComparison.Ordinal);
         Assert.Null(missing);
         Assert.Equal("en", examiner!.ConversationPolicy.Language);
         Assert.Equal("en", support!.ConversationPolicy.Language);
@@ -101,11 +101,11 @@ public sealed class AgentDefinitionStoreTests
         {
             var definition = await store.GetAsync(id);
             Assert.NotNull(definition);
-            Assert.DoesNotContain("Respond in", definition!.SystemInstructions, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("current language", definition.SystemInstructions, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Respond in", definition!.AgentInstructions, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("current language", definition.AgentInstructions, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(
                 ConversationLanguagePolicy.PromptInstruction(definition.ConversationPolicy.Language),
-                definition.SystemInstructions,
+                definition.AgentInstructions,
                 StringComparison.Ordinal);
         }
     }
@@ -120,12 +120,12 @@ public sealed class AgentDefinitionStoreTests
                 Path.Combine(directory.FullName, "broken.json"),
                 """
                 {
-                  "schemaVersion": 1,
+                  "schemaVersion": 2,
                   "id": "broken",
                   "version": 1,
                   "identity": {"name": "X", "role": "R", "description": "D", "tone": "T"},
                   "goals": ["g"],
-                  "systemInstructions": "s",
+                  "agentInstructions": "s",
                   "behaviorPolicy": {"interruptionStyle": "answerNewTurn", "acknowledgeInterruption": true, "avoidUnsupportedClaims": true},
                   "conversationPolicy": {"responseLength": "concise", "askOneQuestionAtATime": true, "language": "en", "maxOutputTokens": 256},
                   "initiativePolicy": {"enabled": false, "silenceThresholdMs": 8000, "cooldownMs": 30000, "maxPerSilencePeriod": 1, "triggers": ["longSilence"]},

@@ -27,7 +27,7 @@ describe("draftEnvironment", () => {
   });
 
   it("writes environment back without disturbing other candidate fields", () => {
-    const base = { systemInstructions: "Body", definitionId: "examiner" };
+    const base = { agentInstructions: "Body", definitionId: "examiner" };
     const updated = applyDraftEnvironmentToCandidate(base, {
       harness: ["label-a"],
       toolAllowlist: ["knowledge.retrieve"],
@@ -36,7 +36,7 @@ describe("draftEnvironment", () => {
       allowUnreadUnsupportedAttachmentTypes: false
     });
 
-    expect(updated.systemInstructions).toBe("Body");
+    expect(updated.agentInstructions).toBe("Body");
     expect(updated.environment).toEqual({
       harness: ["label-a"],
       knowledgeSources: [],

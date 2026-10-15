@@ -40,7 +40,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
     AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, AgentCore.Application.Workspaces.SessionWorkingCleanupService? workingCleanup = null)
+    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, AgentCore.Application.Workspaces.SessionWorkingCleanupService? workingCleanup = null, Func<RuntimeStateService?>? runtimeState = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -315,6 +315,8 @@ public sealed partial class SessionToolExecutor(
 
         try
         {
+            if (call.Name == ToolCatalog.AgentStateInspect)
+                return await ExecuteStateInspectAsync(sessionId, args, admission, remainingOutputBytes, cancellationToken);
             if (call.Name == ToolCatalog.CredentialsList)
             {
                 if (credentials is null || admission?.AgentInstanceId is not Guid owner)

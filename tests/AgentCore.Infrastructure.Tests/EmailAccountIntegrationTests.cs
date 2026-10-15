@@ -172,7 +172,7 @@ public sealed class EmailAccountIntegrationTests
         var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Custom("sender@example.test"), "protected-fixture");
         var admission = await f.Bind(f.A, account, "mail"); var session = Guid.NewGuid();
         var draft = await f.Email.CreateDraftAsync(session, admission, "mail", new(["to@example.test"], [], [], "Subject", "Body"), default);
-        var definition = new AgentDefinition(1, "general-assistant", 25, new("Test", "Assistant", "Test", "neutral"), [], "instructions",
+        var definition = new AgentDefinition(2, "general-assistant", 25, new("Test", "Assistant", "Test", "neutral"), [], "instructions",
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048), new(false, 60_000, 120_000, 1, ["longSilence"], 0),
             new(false, "default", 1), new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
             new(ToolAllowlist: [ToolCatalog.EmailSearch]));
@@ -192,7 +192,7 @@ public sealed class EmailAccountIntegrationTests
         await using var f = await Fixture.Create(sqlite);
         var account = await f.Credentials.CreateEmailAccountAsync("Mail", EmailAccountProfile.Custom("sender@example.test"), "protected-fixture");
         var admission = await f.Bind(f.A, account, "mail"); var session = Guid.NewGuid();
-        var definition = new AgentDefinition(1, "general-assistant", 25, new("Test", "Assistant", "Test", "neutral"), [], "instructions",
+        var definition = new AgentDefinition(2, "general-assistant", 25, new("Test", "Assistant", "Test", "neutral"), [], "instructions",
             new("answerNewTurn", true, true), new("balanced", false, "en", 2048), new(false, 60_000, 120_000, 1, ["longSilence"], 0),
             new(false, "default", 1), new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),
             new(ToolAllowlist: [ToolCatalog.EmailAccounts, ToolCatalog.EmailRequestAccount, ToolCatalog.EmailSearch, ToolCatalog.EmailCreateDraft, ToolCatalog.EmailSend]));

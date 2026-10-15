@@ -104,7 +104,7 @@ public sealed class HistoricalImageSyntheticContinuationTests
     }
 
     private static AgentDefinition Support() => new(
-        1,
+        2,
         "customer-support",
         1,
         new AgentIdentity("Sam", "Support", "Help.", "Warm"),

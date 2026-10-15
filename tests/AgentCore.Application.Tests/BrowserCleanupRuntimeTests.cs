@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentCore.Application.Ports;
@@ -37,7 +38,7 @@ public sealed partial class TerminalDisplayRepairTests
             var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime));
             Assert.Equal(authorized, run.LoadedCapabilityIds.Contains(ToolCatalog.BrowserDialog));
             Assert.Equal(0, run.CapabilityLoadCount); // Core recovery does not consume discovery calls.
-            Assert.Contains("Core browser cleanup phase", run.Checkpoint!.PayloadJson);
+            Assert.NotNull(AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).CleanupStartedAtMessage);
             Assert.Contains(model.Requests.Last().Messages, m => m.Text.Contains("remaining browser work budget"));
             Assert.DoesNotContain(model.Requests.Last().Tools ?? [], t => t.Name == ToolCatalog.BrowserType);
             Assert.Equal(authorized, model.SignedOutObserved);

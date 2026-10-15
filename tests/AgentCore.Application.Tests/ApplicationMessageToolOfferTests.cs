@@ -119,7 +119,7 @@ public sealed class ApplicationMessageToolOfferTests
 
     private static AgentDefinition Definition(IReadOnlyList<string> tools) =>
         new(
-            1,
+            2,
             "test",
             1,
             new AgentIdentity("T", "R", "d", "t"),

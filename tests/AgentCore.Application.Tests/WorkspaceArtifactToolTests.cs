@@ -247,7 +247,7 @@ public sealed class WorkspaceArtifactToolTests
     }
 
     private static AgentDefinition WorkspaceTools() => new(
-        1,
+        2,
         "workspace-tools",
         1,
         new AgentIdentity("W", "Workspace", "Test.", "Neutral"),

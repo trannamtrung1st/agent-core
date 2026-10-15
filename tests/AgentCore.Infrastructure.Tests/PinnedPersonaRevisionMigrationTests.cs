@@ -116,7 +116,7 @@ public sealed class PinnedPersonaRevisionMigrationTests
 
     private static AgentDefinition SampleDefinition(string marker) =>
         new(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "role", "desc", "tone"),

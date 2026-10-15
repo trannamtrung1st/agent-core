@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Runtime.CompilerServices;
 using System.Text;
 using AgentCore.Application.Memory;
@@ -11,10 +12,15 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner, bool pre
 
     public ModelCapabilities Capabilities => Inner.Capabilities;
 
+    public ModelRequest PrepareRequest(ModelRequest request) => request.ResponseContract is { } contract
+        && (!Capabilities.StructuredOutput || preferResponseFunction)
+        ? WithCompatibilityInstruction(request, contract, Capabilities.Tools) : request;
+
     public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
         ModelRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        request = PrepareRequest(request);
         if (request.ResponseContract is null)
         {
             await foreach (var item in Inner.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
@@ -292,10 +298,8 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner, bool pre
         ModelResponseContract contract,
         bool responseFunction)
     {
-        var instruction = AssistantResponseSchema.CompatibilityInstruction(contract, responseFunction);
-        var messages = request.Messages.ToList();
-        messages.Add(new ModelMessage(ModelRole.System, instruction));
-        return request with { Messages = messages };
+        return ContextAssembler.Project(request, (request.Context ?? throw new ArgumentException("Typed context is required."))
+            .Upsert(ContextSection.SemanticProtocol(contract, responseFunction)));
     }
 
     private static bool SemanticMatches(ModelSemanticResponse peeked, ModelSemanticResponse final) =>

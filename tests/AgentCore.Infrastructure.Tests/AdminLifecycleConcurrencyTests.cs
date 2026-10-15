@@ -228,7 +228,7 @@ public sealed class AdminLifecycleConcurrencyTests
         var update = fixture.Lifecycle.UpdateDraftAsync(
             reloaded.DraftId,
             reloaded.Revision,
-            candidate with { SystemInstructions = "Updated after delete started." });
+            candidate with { AgentInstructions = "Updated after delete started." });
         var sawUpdateWaiting = await WaitUntilAsync(() => fixture.Gate.Waiters > 0);
         Assert.True(sawUpdateWaiting);
         release.TrySetResult();
@@ -257,7 +257,7 @@ public sealed class AdminLifecycleConcurrencyTests
                     new AgentDefinitionDraftUpdate(
                         reloaded.DraftId,
                         reloaded.Revision,
-                        candidate with { SystemInstructions = "Updated under gate." },
+                        candidate with { AgentInstructions = "Updated under gate." },
                         now.AddMinutes(1)),
                     cancellationToken);
                 release.TrySetResult();
@@ -460,7 +460,7 @@ public sealed class AdminLifecycleConcurrencyTests
     private static SessionSnapshot Snapshot(Guid instanceId, DateTimeOffset now)
     {
         var definition = new AgentDefinition(
-            1,
+            2,
             "field-guide",
             1,
             new AgentIdentity("Guide", "role", "desc", "tone"),

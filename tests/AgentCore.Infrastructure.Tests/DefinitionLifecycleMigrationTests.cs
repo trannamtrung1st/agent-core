@@ -52,7 +52,7 @@ public sealed class DefinitionLifecycleMigrationTests
             sessionId,
             1,
             new AgentDefinition(
-                1,
+                2,
                 "examiner",
                 1,
                 new AgentIdentity("Alex", "role", "desc", "tone"),
@@ -77,7 +77,7 @@ public sealed class DefinitionLifecycleMigrationTests
 
     private static AgentDefinitionCandidate SampleCandidate(string definitionId) =>
         new(
-            1,
+            2,
             definitionId,
             new AgentIdentity("Demo", "Guide", "Helps with demos.", "Calm"),
             ["Help the user"],

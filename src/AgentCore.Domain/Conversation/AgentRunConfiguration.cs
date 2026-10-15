@@ -12,7 +12,7 @@ public sealed class AgentRunConfiguration
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public AgentRunConfiguration(AgentDefinition definition, long instanceRevision, long personaRevision,
         IReadOnlyList<EffectiveAgentResource> resources, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? credentialBindings = null,
-        BrowserIsolation? resolvedBrowserIsolation = null)
+        IReadOnlyDictionary<string, RuntimeFieldSource>? fieldSources = null, BrowserIsolation? resolvedBrowserIsolation = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(resources);
@@ -21,16 +21,18 @@ public sealed class AgentRunConfiguration
             || resources.Any(r => r.Key is null || !(r.Key.StartsWith("definition:", StringComparison.Ordinal) || r.Key.StartsWith("instance:", StringComparison.Ordinal))
                 || r.ContentSha256.Length != 64 || r.ContentSha256.Any(c => !char.IsAsciiHexDigit(c)) || r.ByteLength <= 0))
             throw new ArgumentException("Resource manifest identity/content is invalid.");
+        FieldSources = new ReadOnlyDictionary<string, RuntimeFieldSource>((fieldSources ?? new Dictionary<string, RuntimeFieldSource>()).OrderBy(p => p.Key, StringComparer.Ordinal).ToDictionary(p => p.Key, p => p.Value));
         Resources = Array.AsReadOnly(resources.ToArray());
         CredentialBindings = Array.AsReadOnly((credentialBindings ?? []).ToArray());
         InstanceRevision = instanceRevision; PersonaRevision = personaRevision;
         ResolvedBrowserIsolation = resolvedBrowserIsolation;
         Definition = Freeze(definition) with { ExecutionResources = Resources };
         var bytes = resolvedBrowserIsolation is null
-            ? JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings }, Json)
-            : JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, ResolvedBrowserIsolation }, Json);
+            ? JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, FieldSources }, Json)
+            : JsonSerializer.SerializeToUtf8Bytes(new { Definition, InstanceRevision, PersonaRevision, Resources, CredentialBindings, FieldSources, ResolvedBrowserIsolation }, Json);
         ConfigurationHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     }
+    public IReadOnlyDictionary<string, RuntimeFieldSource> FieldSources { get; }
     public AgentDefinition Definition { get; }
     public long InstanceRevision { get; }
     public long PersonaRevision { get; }
@@ -55,3 +57,5 @@ public sealed class AgentRunConfiguration
         } : null
     };
 }
+
+public sealed record RuntimeFieldSource(string Kind, string Revision);

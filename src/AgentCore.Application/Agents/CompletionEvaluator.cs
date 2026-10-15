@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Diagnostics;
 using System.Text.Json;
 using AgentCore.Application.Observability;
@@ -98,30 +99,10 @@ public static class CompletionEvaluator
             utcNow = now
         };
 
-        return new ModelRequest(
-            Guid.Empty,
-            [
-                new ModelMessage(
-                    ModelRole.System,
-                    string.Join(
-                        '\n',
-                        Marker,
-                        """
-                        You decide whether a goal-oriented session should request completion after a finished assistant turn.
-                        Reply with a single JSON object only, no markdown.
-                        continue:
-                        {"decision":"continue","reason":"..."}
-                        requestComplete:
-                        {"decision":"requestComplete","reason":"..."}
-                        Do not write user-visible response text. continue when the goal is still open.
-                        requestComplete only when the current conversation has met the stated goal.
-                        Domain-specific exam, interview, or support pass/fail rules are not yours to invent.
-                        """)),
-                new ModelMessage(ModelRole.User, JsonSerializer.Serialize(payload, Json))
-            ],
-            MaxOutputTokens: 80,
-            Temperature: 0,
-            ReasoningEffort: snapshot.ModelSelection?.ReasoningEffort);
+        return ContextAssembler.Create(Guid.Empty, new EffectiveContextSnapshot([
+            ContextSection.Core(CoreProcedure.OperatingContract), ContextSection.Core(CoreProcedure.Completion),
+            ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, JsonSerializer.Serialize(payload, Json))
+        ]), maxOutputTokens: 80, temperature: 0, reasoningEffort: snapshot.ModelSelection?.ReasoningEffort);
     }
 
     private static async Task<(string Text, bool ProviderFailed)> CollectTextAsync(

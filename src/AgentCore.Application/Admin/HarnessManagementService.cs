@@ -384,8 +384,8 @@ public sealed class HarnessManagementService(
             currentRunDefinitionVersion = currentRunDefinitionVersion, instanceRevision = instance.Revision, changesApplyToNextRun = true,
             mode = state.Policy.Mode.ToString(), scopes = state.Policy.Scopes.Select(s => s.ToString()),
             authoringEligibleTools = state.Policy.EligibleTools.Where(t => toolConfiguration.IsConfigured(t)),
-            instructions = ToolJsonResults.ClipUtf8Prefix(active.SystemInstructions, 1024),
-            instructionsTruncated = System.Text.Encoding.UTF8.GetByteCount(active.SystemInstructions) > 1024,
+            instructions = ToolJsonResults.ClipUtf8Prefix(active.AgentInstructions, 1024),
+            instructionsTruncated = System.Text.Encoding.UTF8.GetByteCount(active.AgentInstructions) > 1024,
             knowledge = RoleEnvironments.Of(active).KnowledgeList,
             skills = active.SkillList, activeDefinitionAuthorizedCapabilities = RoleEnvironments.Of(active).ToolList,
             activation = "Changes customize this Instance only and apply to the next new AgentRun, including existing Sessions. Current Runs remain unchanged. Shared Definition promotion requires separate owner review.",
@@ -458,7 +458,7 @@ public sealed class HarnessManagementService(
             {
                 case "instructions.update":
                     await localSettings.PatchAsync(instanceId, "instructions", instance.Revision,
-                        new Dictionary<string, JsonElement> { ["systemInstructions"] = JsonSerializer.SerializeToElement(operation.Content!) }, [], token, AdminEventActorKind.Agent, localState);
+                        new Dictionary<string, JsonElement> { ["agentInstructions"] = JsonSerializer.SerializeToElement(operation.Content!) }, [], token, AdminEventActorKind.Agent, localState);
                     break;
                 case "tool.select":
                     var effective = InstanceSettingsResolver.Resolve(active, instance.SettingsOverrides);
@@ -509,7 +509,7 @@ public sealed class HarnessManagementService(
             instanceId, activeVersion = instance.ActiveVersion, preparationId, draftId = draft.DraftId, draftRevision = draft.Revision,
             purpose = prep.Purpose, mode = state.Policy.Mode.ToString(), scopes = state.Policy.Scopes.Select(s => s.ToString()),
             permittedSources = state.Policy.Sources, eligibleTools = state.Policy.EligibleTools,
-            instructions = draft.Candidate.SystemInstructions, skills = draft.Candidate.SkillList,
+            instructions = draft.Candidate.AgentInstructions, skills = draft.Candidate.SkillList,
             knowledge = draft.Candidate.Environment?.KnowledgeList ?? [], selectedTools = draft.Candidate.Environment?.ToolList ?? [],
             resources = review.Resources.Select(r => new { r.ResourceId, r.LogicalPath, r.Kind, r.ByteLength }),
             evidence = prep.Evidence, approvals = prep.Approvals.Select(a => new { a.ApprovalId, a.Operation.Kind, a.Status })
@@ -584,7 +584,7 @@ public sealed class HarnessManagementService(
                     { KnowledgeSources = environment.KnowledgeList.Where(k => k.Identity != operation.Id).ToArray() } }, ct, history: DraftEvent(instance, afterRemove, operation.Kind, "CandidateCommitted"));
                 break;
             case "instructions.update":
-                await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with { SystemInstructions = operation.Content! }, ct, history: DraftEvent(instance, draft, operation.Kind, "CandidateCommitted"));
+                await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with { AgentInstructions = operation.Content! }, ct, history: DraftEvent(instance, draft, operation.Kind, "CandidateCommitted"));
                 break;
             case "tool.select":
                 await lifecycle.UpdateDraftAsync(draft.DraftId, draft.Revision, candidate with { Environment = environment with

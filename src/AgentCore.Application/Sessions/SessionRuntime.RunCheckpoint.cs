@@ -50,7 +50,7 @@ public sealed partial class SessionRuntime
     }
 
     private async Task SaveRunCheckpointAsync(EventContext cause, Guid responseId, IReadOnlyList<ModelMessage> messages,
-        int steps, int outputBytes, DateTimeOffset? deadline, CancellationToken ct, string? protocolRepairReason = null, int? activeExecutionMs = null)
+        int steps, int outputBytes, DateTimeOffset? deadline, CancellationToken ct, string? protocolRepairReason = null, int? activeExecutionMs = null, ToolLoopExecutionState? executionState = null)
     {
         var compacted = messages.ToList();
         BrowserSnapshotCompaction.Compact(compacted);
@@ -69,7 +69,8 @@ public sealed partial class SessionRuntime
             ? 0 : AgentRunToolCallCheckpoint.CompletionReserve(TriggerKind.UserTurn);
         if (!AgentRunToolCallCheckpoint.TryWriteWithReserve(messages, observationRequired,
             blockedActionHash, reserve,
-            out var payload, run.LoadedCapabilityIds, run.CapabilityLoadCount, protocolRepairReason: protocolRepairReason))
+            out var payload, run.LoadedCapabilityIds, run.CapabilityLoadCount,
+                new(run.ActiveSkillKeys, run.SkillLoadCount), protocolRepairReason: protocolRepairReason, executionState: executionState))
             throw AgentCoreErrors.Validation("AgentRun checkpoint capacity reached.");
         var remaining = deadline is null ? 0 : Math.Max(0, (int)Math.Min(int.MaxValue, (deadline.Value - _time.GetUtcNow()).TotalMilliseconds));
         await RequestAgentRunCommandAsync(cause, responseId, (current, now) => new AgentRunCommand.Checkpoint(

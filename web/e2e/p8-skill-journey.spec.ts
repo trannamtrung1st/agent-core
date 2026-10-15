@@ -58,7 +58,7 @@ test("Definition authoring publishes Always and OnDemand Skills, initializes onl
 
   const editor = draftEditorSection(page);
   await openDefinitionSettings(editor);
-  await expect(editor.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
+  await expect(editor.getByLabel("Agent instructions")).toBeVisible({ timeout: 15_000 });
   await navigateAdmin(editor, "Skills & resources");
   await expect(editor.getByText("No skills yet. A definition without skills runs with an empty skill set.")).toBeVisible();
   await expect(editor.getByText(/Required capabilities are requirements, not grants/)).toBeVisible();

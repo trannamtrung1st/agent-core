@@ -42,7 +42,7 @@ public sealed partial class TerminalDisplayRepairTests
         var corrected = new ModelToolCall("pending-corrected-close", ToolCatalog.BrowserClose, correctedPayload, "opaque-provider-continuation");
         messages.Add(new(ModelRole.Assistant, "", ToolCalls: [corrected]));
         run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Checkpoint(run.Revision, clock.GetUtcNow(), run.Claim!.Generation,
-            new(AgentRunToolCallCheckpoint.Write(messages), 5, 0, 240000), null));
+            new(AgentRunToolCallCheckpoint.Write(messages, executionState: new(TranscriptId: run.Admission.ResponseId)), 5, 0, 240000), null));
         clock.Advance(TimeSpan.FromSeconds(2));
         run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Recover(run.Revision, clock.GetUtcNow()));
         run = await runs.ApplyAsync(owner, run.AgentRunId, new AgentRunCommand.Claim(run.Revision, clock.GetUtcNow(), Guid.NewGuid(), clock.GetUtcNow().AddMinutes(5)));
@@ -118,7 +118,7 @@ public sealed partial class TerminalDisplayRepairTests
             var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime));
             Assert.Contains("invalidCallRecovery", run.Checkpoint!.PayloadJson);
             Assert.Contains("close-recovery-5", run.Checkpoint.PayloadJson);
-            if (cleanup) Assert.Contains("Core browser cleanup phase", run.Checkpoint.PayloadJson);
+            if (cleanup) Assert.NotNull(AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).CleanupStartedAtMessage);
             var effects = runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant).Envelope!.EffectReceipts!;
             Assert.Single(effects, r => r.Tool == ToolCatalog.BrowserClose && r.Status == "closed");
             Assert.Single(effects, r => r.Tool == ToolCatalog.BrowserClose && r.Status == "already_closed");

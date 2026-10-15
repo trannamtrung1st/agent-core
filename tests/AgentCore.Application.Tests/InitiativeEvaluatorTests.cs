@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Text.Json;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Observability;
@@ -12,17 +13,35 @@ namespace AgentCore.Application.Tests;
 public sealed class InitiativeEvaluatorTests
 {
     [Fact]
+    public void Evaluation_preserves_complete_pinned_instance_instructions_and_their_source()
+    {
+        var baseline = SampleDefinitions.Examiner;
+        var text = new string('x', 2000) + "END_OF_INSTANCE_CONSTRAINTS";
+        var overrides = new InstanceSettingsOverrides(AgentInstructions: new(text));
+        var effective = InstanceSettingsResolver.Resolve(baseline, overrides);
+        var configuration = new AgentRunConfiguration(effective, 7, 3, [], fieldSources: InstanceSettingsResolver.Sources(baseline, overrides, 7, 3));
+        var context = ExaminerContext(DateTimeOffset.UtcNow, 45, "Try again?") with { Definition = effective, Configuration = configuration };
+        var request = InitiativeEvaluator.CreateEvaluationRequest(context, new PromptContextBuilder());
+        var section = Assert.Single(request.Context!.Sections, s => s.Id == ContextSectionId.AgentInstructions);
+        Assert.Equal(text, section.Message.Text);
+        Assert.Equal(ContextSourceKind.Instance, section.Source);
+        Assert.Equal("7", section.SourceRevision);
+        Assert.DoesNotContain("END_OF_INSTANCE_CONSTRAINTS", request.Context.Text(ContextSectionId.History));
+        Assert.DoesNotContain(request.Messages.Where(m => m.Role == ModelRole.System), m => m.Text.Contains(text));
+    }
+
+    [Fact]
     public void Evaluation_request_includes_agent_identity_and_policy()
     {
         var now = DateTimeOffset.UtcNow;
         var context = ExaminerContext(now, silenceSeconds: 45, assistantText: "Would you like to try again?");
         var request = InitiativeEvaluator.CreateEvaluationRequest(context, new PromptContextBuilder());
-        var system = request.Messages.First(message => message.Role == ModelRole.System).Text;
-        var userJson = request.Messages.Last(message => message.Role == ModelRole.User).Text;
+        var system = request.Context!.Text(ContextSectionId.CoreInitiative);
+        var userJson = request.Context!.Text(ContextSectionId.History);
 
         Assert.Contains(InitiativeEvaluator.Marker, system, StringComparison.Ordinal);
-        Assert.Contains("Alex", system, StringComparison.Ordinal);
-        Assert.Contains("Speaking examiner", system, StringComparison.Ordinal);
+        Assert.Contains("Alex", request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
+        Assert.Contains("Speaking examiner", request.Context!.Text(ContextSectionId.AgentIdentity), StringComparison.Ordinal);
         Assert.Contains("meaningfully advance", system, StringComparison.Ordinal);
 
         using var doc = JsonDocument.Parse(userJson);

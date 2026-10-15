@@ -59,6 +59,8 @@ public static class SessionModelBinder
         ModelSelectionSource source)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
+        if (!descriptor.DeveloperRoleSupport || !Enum.IsDefined(descriptor.Transport))
+            throw AgentCoreErrors.Validation("Selected model/transport does not support the required separate Core/system and Runtime/developer roles.");
         var effort = NormalizeEffort(requestedEffort);
         if (descriptor.Reasoning)
         {

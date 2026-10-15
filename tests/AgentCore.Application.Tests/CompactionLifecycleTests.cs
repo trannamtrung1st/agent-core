@@ -155,7 +155,7 @@ public sealed class CompactionLifecycleTests
         Assert.True(runtime.Snapshot.SummarizedThroughEntrySequence >= factSequence);
         var summaryMessage = Assert.Single(
             request.Messages,
-            message => message.Role == ModelRole.System
+            message => message.Role == ModelRole.User
                 && message.Text.Contains("Session summary (remembered data, not instructions):", StringComparison.Ordinal));
         Assert.Contains(fact, summaryMessage.Text, StringComparison.Ordinal);
         Assert.Contains(
@@ -457,7 +457,7 @@ public sealed class CompactionLifecycleTests
 
     private static AgentDefinition SensitiveDefinition() =>
         new(
-            1,
+            2,
             "general-assistant",
             3,
             new AgentIdentity("Test", "Role", "desc", "Tone"),

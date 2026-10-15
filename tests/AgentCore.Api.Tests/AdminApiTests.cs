@@ -142,7 +142,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         response.EnsureSuccessStatusCode();
         var candidate = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("examiner", candidate.GetProperty("definitionId").GetString());
-        Assert.False(string.IsNullOrWhiteSpace(candidate.GetProperty("systemInstructions").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(candidate.GetProperty("agentInstructions").GetString()));
         Assert.Equal(before, await client.GetStringAsync("/api/v2/admin/definition-drafts"));
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(
             "/api/v2/admin/definitions/examiner/versions/99999?sourceKind=ForkBuiltIn")).StatusCode);
@@ -491,14 +491,14 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.Equal("New", created!.SourceKind);
         Assert.Null(created.SourceVersion);
         Assert.Equal("p76-new-agent", created.DefinitionId);
-        var starterInstructions = created.Candidate.GetProperty("systemInstructions").GetString();
+        var starterInstructions = created.Candidate.GetProperty("agentInstructions").GetString();
         Assert.False(string.IsNullOrWhiteSpace(starterInstructions));
         var serialized = created.Candidate.GetRawText();
         Assert.DoesNotContain("OPENROUTER_API_KEY", serialized, StringComparison.Ordinal);
         Assert.DoesNotContain("sk-", serialized, StringComparison.Ordinal);
 
         var edited = JsonNode.Parse(serialized)!.AsObject();
-        edited["systemInstructions"] = "Edited after create";
+        edited["agentInstructions"] = "Edited after create";
         var update = await client.PutAsJsonAsync(
             $"/api/v2/admin/definition-drafts/{created.DraftId}",
             new AdminUpdateDefinitionDraftRequest(created.Revision, JsonSerializer.SerializeToElement(edited)));
@@ -508,8 +508,8 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             $"/api/v2/admin/definition-drafts/{created.DraftId}",
             JsonOptions());
         Assert.NotNull(reopened);
-        Assert.Equal("Edited after create", reopened!.Candidate.GetProperty("systemInstructions").GetString());
-        Assert.NotEqual(starterInstructions, reopened.Candidate.GetProperty("systemInstructions").GetString());
+        Assert.Equal("Edited after create", reopened!.Candidate.GetProperty("agentInstructions").GetString());
+        Assert.NotEqual(starterInstructions, reopened.Candidate.GetProperty("agentInstructions").GetString());
     }
 
     [Fact]
@@ -629,11 +629,25 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
     public async Task Admin_definition_draft_create_rejects_invalid_candidate_with_validation_status()
     {
         var client = OwnerClient();
-        var candidate = SampleDraftCandidate("demo-agent") with { SchemaVersion = 2 };
+        var candidate = SampleDraftCandidate("demo-agent") with { SchemaVersion = 99 };
         var response = await client.PostAsJsonAsync(
             "/api/v2/admin/definition-drafts",
             new AdminCreateDefinitionDraftRequest("demo-agent", JsonSerializer.SerializeToElement(candidate, JsonOptions())));
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Retired_instruction_field_is_rejected_without_an_alias_or_saved_draft()
+    {
+        var client = OwnerClient();
+        var payload = JsonSerializer.SerializeToNode(SampleDraftCandidate("retired-context-field"), JsonOptions())!.AsObject();
+        var instructions = payload["agentInstructions"]; payload.Remove("agentInstructions");
+        payload["systemInstructions"] = instructions;
+        var response = await client.PostAsJsonAsync("/api/v2/admin/definition-drafts", new {
+            definitionId = "retired-context-field", candidate = payload
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("systemInstructions", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
     [Theory]
@@ -745,11 +759,11 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             {
               "definitionId": "demo-agent",
               "candidate": {
-                "schemaVersion": 1,
+                "schemaVersion": 2,
                 "definitionId": "demo-agent",
                 "identity": null,
                 "goals": ["Help"],
-                "systemInstructions": "You are a demo agent.",
+                "agentInstructions": "You are a demo agent.",
                 "behaviorPolicy": { "interruptionStyle": "acknowledgeThenContinue", "acknowledgeInterruption": true, "avoidUnsupportedClaims": true },
                 "conversationPolicy": { "responseLength": "concise", "askOneQuestionAtATime": true, "language": "en", "maxOutputTokens": 512 },
                 "initiativePolicy": { "enabled": false, "silenceThresholdMs": 30000, "cooldownMs": 60000, "maxPerSilencePeriod": 1, "triggers": [] },
@@ -807,7 +821,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var client = OwnerClient();
         var candidate = SampleDraftCandidate("demo-agent") with
         {
-            SystemInstructions = "Bearer sk-proj-00000000000000000000000000000000"
+            AgentInstructions = "Bearer sk-proj-00000000000000000000000000000000"
         };
         var response = await client.PostAsJsonAsync(
             "/api/v2/admin/definition-drafts",
@@ -825,7 +839,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         fork.EnsureSuccessStatusCode();
         var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
         var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
-        candidate = candidate with { SystemInstructions = "P7F diff sentinel instructions." };
+        candidate = candidate with { AgentInstructions = "P7F diff sentinel instructions." };
         var update = await client.PutAsJsonAsync(
             $"/api/v2/admin/definition-drafts/{draft!.DraftId}",
             new AdminUpdateDefinitionDraftRequest(1, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
@@ -997,7 +1011,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             $"/api/v2/admin/definition-drafts/{afterScenario.DraftId}",
             new AdminUpdateDefinitionDraftRequest(
                 afterScenario.Revision,
-                JsonSerializer.SerializeToElement(candidate with { SystemInstructions = "Stale eval after edit." }, JsonOptions())));
+                JsonSerializer.SerializeToElement(candidate with { AgentInstructions = "Stale eval after edit." }, JsonOptions())));
         update.EnsureSuccessStatusCode();
         var edited = await update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
 
@@ -1211,7 +1225,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         fork.EnsureSuccessStatusCode();
         var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
         var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
-        candidate = candidate with { SystemInstructions = "Revision bump for publish gate." };
+        candidate = candidate with { AgentInstructions = "Revision bump for publish gate." };
         var update = await client.PutAsJsonAsync(
             $"/api/v2/admin/definition-drafts/{draft!.DraftId}",
             new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
@@ -1343,7 +1357,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             $"/api/v2/admin/definition-drafts/{v2Base.DraftId}",
             new AdminUpdateDefinitionDraftRequest(
                 v2Base.Revision,
-                JsonSerializer.SerializeToElement(candidate with { SystemInstructions = "Active v2 body." }, JsonOptions())));
+                JsonSerializer.SerializeToElement(candidate with { AgentInstructions = "Active v2 body." }, JsonOptions())));
         v2Update.EnsureSuccessStatusCode();
         var v2Draft = await v2Update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
         var v2Publish = await owner.PostAsJsonAsync(
@@ -1361,7 +1375,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
             $"/api/v2/admin/definition-drafts/{v3Base.DraftId}",
             new AdminUpdateDefinitionDraftRequest(
                 v3Base.Revision,
-                JsonSerializer.SerializeToElement(candidate with { SystemInstructions = "Deprecated v3 body." }, JsonOptions())));
+                JsonSerializer.SerializeToElement(candidate with { AgentInstructions = "Deprecated v3 body." }, JsonOptions())));
         v3Update.EnsureSuccessStatusCode();
         var v3Draft = await v3Update.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
         var v3Publish = await owner.PostAsJsonAsync(
@@ -1384,7 +1398,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var definitions = scope.ServiceProvider.GetRequiredService<IAgentDefinitionStore>();
         var exactDeprecated = await definitions.GetAsync(definitionId, v3.Version);
         Assert.NotNull(exactDeprecated);
-        Assert.Equal("Deprecated v3 body.", exactDeprecated!.SystemInstructions);
+        Assert.Equal("Deprecated v3 body.", exactDeprecated!.AgentInstructions);
     }
 
     [Fact]
@@ -1422,7 +1436,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var latest = await definitions.GetAsync(definitionId);
         Assert.NotNull(exact);
         Assert.Null(latest);
-        Assert.Equal("You are a demo agent.", exact!.SystemInstructions);
+        Assert.Equal("You are a demo agent.", exact!.AgentInstructions);
     }
 
     [Fact]
@@ -1734,7 +1748,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         fork.EnsureSuccessStatusCode();
         var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
         var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
-        candidate = candidate with { SystemInstructions = candidate.SystemInstructions + "\nVersion two marker." };
+        candidate = candidate with { AgentInstructions = candidate.AgentInstructions + "\nVersion two marker." };
         var update = await client.PutAsJsonAsync(
             $"/api/v2/admin/definition-drafts/{draft.DraftId}",
             new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
@@ -1807,7 +1821,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         fork.EnsureSuccessStatusCode();
         var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
         var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
-        candidate = candidate with { SystemInstructions = candidate.SystemInstructions + "\nAdmin history marker." };
+        candidate = candidate with { AgentInstructions = candidate.AgentInstructions + "\nAdmin history marker." };
         var update = await client.PutAsJsonAsync(
             $"/api/v2/admin/definition-drafts/{draft.DraftId}",
             new AdminUpdateDefinitionDraftRequest(draft.Revision, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
@@ -1877,7 +1891,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         fork.EnsureSuccessStatusCode();
         var draft = await fork.Content.ReadFromJsonAsync<AdminDefinitionDraftResponse>();
         var candidate = draft!.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions())!;
-        candidate = candidate with { SystemInstructions = candidate.SystemInstructions + "\nDurable inventory marker." };
+        candidate = candidate with { AgentInstructions = candidate.AgentInstructions + "\nDurable inventory marker." };
         var update = await client.PutAsJsonAsync(
             $"/api/v2/admin/definition-drafts/{draft!.DraftId}",
             new AdminUpdateDefinitionDraftRequest(1, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
@@ -1912,7 +1926,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
 
         var candidate = draft.Candidate.Deserialize<AgentDefinitionCandidate>(JsonOptions());
         Assert.NotNull(candidate);
-        candidate = candidate! with { SystemInstructions = candidate.SystemInstructions + "\nAdmin durable edit." };
+        candidate = candidate! with { AgentInstructions = candidate.AgentInstructions + "\nAdmin durable edit." };
         var update = await client.PutAsJsonAsync(
             $"/api/v2/admin/definition-drafts/{draft.DraftId}",
             new AdminUpdateDefinitionDraftRequest(1, JsonSerializer.SerializeToElement(candidate, JsonOptions())));
@@ -1938,7 +1952,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         var definitions = scope.ServiceProvider.GetRequiredService<IAgentDefinitionStore>();
         var resolved = await definitions.GetAsync("examiner", publication.Version);
         Assert.NotNull(resolved);
-        Assert.Contains("Admin durable edit.", resolved!.SystemInstructions, StringComparison.Ordinal);
+        Assert.Contains("Admin durable edit.", resolved!.AgentInstructions, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2133,7 +2147,7 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
 
     private static AgentDefinitionCandidate SampleDraftCandidate(string definitionId) =>
         new(
-            1,
+            2,
             definitionId,
             new AgentIdentity("Demo", "Guide", "Helps with demos.", "Calm"),
             ["Help the user"],

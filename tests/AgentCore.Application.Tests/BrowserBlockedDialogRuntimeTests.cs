@@ -77,7 +77,7 @@ public sealed partial class TerminalDisplayRepairTests
             {
                 Assert.DoesNotContain(request.Tools ?? [], t => t.Name == ToolCatalog.BrowserFind);
                 Assert.Equal(authorized && request.Tools is not null, (request.Tools ?? []).Any(t => t.Name == ToolCatalog.BrowserDialog));
-                var environment = Assert.Single(request.Messages, m => m.Role == ModelRole.System
+                var environment = Assert.Single(request.Messages, m => m.Role == ModelRole.Developer
                     && m.Text.StartsWith(AgentCore.Application.Agents.PromptContextBuilder.ToolEnvironmentPrefix)).Text;
                 Assert.DoesNotContain("browser.find", environment);
                 Assert.DoesNotContain("browser.click", environment);

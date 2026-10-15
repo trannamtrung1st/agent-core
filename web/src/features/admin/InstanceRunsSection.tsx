@@ -43,7 +43,7 @@ export function InstanceRunsSection({ instanceId, open, wide = true, inline = fa
   const content = detailsOnly ? <Flex vertical gap={token.padding}>
     {selected?.automationId ? <Button href={`${adminInstancePath(instanceId, "automations")}?automation=${selected.automationId}`} onClick={event => followAppLink(event, onSource ? () => onSource({ kind: "automation", automationId: selected.automationId! }) : undefined)}>View Automation</Button>
       : selected?.experienceId ? <Button onClick={() => onSource?.({ kind: "experience", agentRunId: selected.agentRunId })}>View Experience</Button> : null}
-    {error ? <Alert type="error" showIcon title={error} /> : selected ? <AgentRunDetails run={selected} onChange={setSelected} /> : <Spin aria-label="Loading run details" />}
+    {error ? <Alert type="error" showIcon title={error} /> : selected ? <AgentRunDetails showContextProvenance run={selected} onChange={setSelected} /> : <Spin aria-label="Loading run details" />}
   </Flex> : <Flex vertical gap={token.padding}>
     <Typography.Text type="secondary">Individual invocations, including chat, automation and background work. Newest first.</Typography.Text>
     {scheduler ? <Typography.Text type={scheduler.status === "ready" ? "secondary" : "warning"}>

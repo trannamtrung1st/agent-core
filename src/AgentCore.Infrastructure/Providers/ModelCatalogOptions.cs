@@ -25,6 +25,7 @@ public sealed class ModelCatalogEntryOptions
     public string? CostCategory { get; set; }
     public ModelInferenceTransport Transport { get; set; }
     public bool PreferResponseFunction { get; set; }
+    public bool DeveloperRoleSupport { get; set; }
 }
 
 public sealed class ConfigurationModelCatalog : IModelCatalog

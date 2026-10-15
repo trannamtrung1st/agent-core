@@ -15,7 +15,7 @@ public sealed class ScopedConfigurationMigrationTests
         var path = Path.Combine(Path.GetTempPath(), $"scoped-migration-{Guid.NewGuid():N}.db");
         var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
         var now = DateTimeOffset.UtcNow; var owner = new AgentRunOwner(Guid.NewGuid(), Guid.NewGuid());
-        var definition = new AgentDefinition(1, "migration", 1, new("Alex", "Assistant", "Practice", "Calm"), ["Practice"], "Original instructions",
+        var definition = new AgentDefinition(2, "migration", 1, new("Alex", "Assistant", "Practice", "Calm"), ["Practice"], "Original instructions",
             new("acknowledgeThenContinue", true, true), new("concise", true, "en", 256), new(false, 8000, 30000, 1, []), new(false, "default", 1),
             new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string,string>());
         var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, definition, SessionMode.Text, null, SessionStatus.Created, [], "", 0, null,
@@ -60,7 +60,7 @@ public sealed class ScopedConfigurationMigrationTests
             Assert.False(states.Single(s => s.Revision == -1).EnabledOverride);
             Assert.False(reopened.Database.HasPendingModelChanges());
             var restored = AgentRunStoreMapping.ToDomain(await reopened.AgentRuns.SingleAsync(r => r.AgentRunId == good.AgentRunId.ToString("D")));
-            Assert.Equal("Original instructions", restored.Admission.Configuration!.Definition.SystemInstructions);
+            Assert.Equal("Original instructions", restored.Admission.Configuration!.Definition.AgentInstructions);
             Assert.Equal(AgentRunStatus.WaitingToRetry, restored.Status); Assert.Equal(7, restored.Checkpoint!.StepCount); Assert.Equal(100000, restored.Checkpoint.ActiveExecutionMs);
             Assert.Equal(1, restored.DefinitionVersion); Assert.Equal(budget, restored.Admission.ExecutionBudget); Assert.Equal(good.PinnedModel.CatalogKey, restored.PinnedModel.CatalogKey); Assert.Equal(good.PinnedModel.ProviderAlias, restored.PinnedModel.ProviderAlias); Assert.Equal(good.PinnedModel.ModelId, restored.PinnedModel.ModelId);
             var rejected = AgentRunStoreMapping.ToDomain(await reopened.AgentRuns.SingleAsync(r => r.AgentRunId == bad.AgentRunId.ToString("D")));

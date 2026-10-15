@@ -418,7 +418,7 @@ public sealed class BrowserOriginHandoffTests
             [Guid.NewGuid()]);
         var now = time.GetUtcNow();
         var definition = new AgentDefinition(
-            1,
+            2,
             "general-assistant",
             12,
             new AgentIdentity("Test", "Role", "desc", "Tone"),

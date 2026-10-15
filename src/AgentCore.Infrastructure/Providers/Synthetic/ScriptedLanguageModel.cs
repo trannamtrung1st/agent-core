@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
@@ -105,12 +106,6 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield return new ModelToolCallEvent(new("experience-result", AgentCore.Application.Experience.ExperienceService.RecordTool,
                 JsonSerializer.Serialize(content, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
-            yield break;
-        }
-        if (request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Execute the previously authorized Automation instructions", StringComparison.Ordinal)))
-        {
-            yield return new ModelTextDelta(RequestsNativeJson(request) ? ToNativeJson("Say hello", ["Hello!"], []) : "Hello!");
-            yield return new ModelCompleted(ModelStopReason.Completed);
             yield break;
         }
         if (BackgroundSessionScript.Generate(request) is { } backgroundEvents)
@@ -222,7 +217,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in workspaceV2) yield return item;
             yield break;
         }
-        var diagnosticUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        var diagnosticUser = SyntheticTaskContext.Text(request);
         if (diagnosticUser.Contains("synthetic-browser-cleanup", StringComparison.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -270,7 +265,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 yield return new ModelToolCallEvent(new("finalize-close", ToolCatalog.BrowserClose, "{}"));
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
             }
-            else if (!request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Core finalization phase: "))
+            else if (request.Context?.Sections.Any(s => s.Id is ContextSectionId.CoreFinalization or ContextSectionId.CoreBackgroundFinalization) != true
                 || diagnosticUser.Contains("synthetic-finalization-fail", StringComparison.Ordinal))
                 yield return new ModelFailed(new(ProviderErrorCode.Timeout, "Synthetic final reply timed out.", FailureReason: "totalTimeout"));
             else
@@ -396,7 +391,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield break;
         }
 
-        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        var lastUser = SyntheticTaskContext.Text(request);
         var chunks = Select(request, lastUser);
         var proposals = TakeMemoryTurn();
         if (MemorySemanticsScript.TryRespond(request, lastUser, out var memoryChunks, out var memoryProposals))
@@ -479,7 +474,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         cancellationToken.ThrowIfCancellationRequested();
         var toolRounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
         var scheduleToolRounds = ToolRoundsSinceLastUser(request.Messages);
-        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        var lastUser = SyntheticTaskContext.Text(request);
         var lastTool = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool)?.Text ?? string.Empty;
         var scheduleLastTool = LastToolTextSinceLastUser(request.Messages);
         var lastToolMessage = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool);
@@ -1010,7 +1005,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         automationId = Guid.Empty;
         foreach (var message in messages)
         {
-            if (message.Role != ModelRole.System)
+            if (message.Role is not (ModelRole.User or ModelRole.Developer))
             {
                 continue;
             }
@@ -1161,7 +1156,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     private bool ShouldScriptTools(ModelRequest request)
     {
-        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        var lastUser = SyntheticTaskContext.Text(request);
         if (_chunks.Any(c => c.Contains("[[speech:", StringComparison.Ordinal))) return false;
         return lastUser.Contains("support case", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("order 91", StringComparison.OrdinalIgnoreCase)
@@ -1174,7 +1169,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || (request.Tools?.Any(t => t.Name == ToolCatalog.AutomationList || t.Name == ToolCatalog.AutomationCreate) == true && IsScheduleTurn(request, lastUser))
             || request.Messages.Any(message => message.Role == ModelRole.Tool)
             || request.Messages.Any(message =>
-                message.Role == ModelRole.System
+                message.Role == ModelRole.Developer
                 && message.Text.StartsWith(DefinitionEvaluationHarness.SystemPrefix, StringComparison.Ordinal));
     }
 
@@ -1254,7 +1249,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         toolName = null;
         var directive = request.Messages
             .FirstOrDefault(message =>
-                message.Role == ModelRole.System
+                message.Role == ModelRole.Developer
                 && message.Text.StartsWith(DefinitionEvaluationHarness.SystemPrefix, StringComparison.Ordinal))
             ?.Text;
         if (directive is null)
@@ -1293,7 +1288,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         out IReadOnlyList<ModelGenerationEvent> events)
     {
         events = [];
-        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        var lastUser = SyntheticTaskContext.Text(request);
         if (!lastUser.Contains(MessagingSkillJourneyMarker, StringComparison.Ordinal)
             || !Offers(request, ToolCatalog.WorkspaceList))
         {
@@ -1585,7 +1580,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         out IReadOnlyList<ModelGenerationEvent> events)
     {
         events = [];
-        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        var lastUser = SyntheticTaskContext.Text(request);
         if (!lastUser.Contains(BrowserDenialMarker, StringComparison.Ordinal)
             || !Offers(request, ToolCatalog.BrowserNavigate))
         {
@@ -1614,7 +1609,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         out IReadOnlyList<ModelGenerationEvent> events)
     {
         events = [];
-        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        var lastUser = SyntheticTaskContext.Text(request);
         if (!lastUser.Contains(ProductPublishMarker, StringComparison.Ordinal))
         {
             return false;
@@ -1699,7 +1694,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         out IReadOnlyList<ModelGenerationEvent> events)
     {
         events = [];
-        var lastUser = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        var lastUser = SyntheticTaskContext.Text(request);
         if (!lastUser.Contains(BrowserRecordMarker, StringComparison.Ordinal)
             || !Offers(request, ToolCatalog.BrowserNavigate)
             || !TryReadTrustedBrowserStart(request, out var startUrl))
@@ -1859,7 +1854,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     {
         attachmentId = Guid.Empty;
         var manifest = request.Messages.FirstOrDefault(message =>
-            message.Role == ModelRole.System
+            message.Role == ModelRole.User
             && message.Text.Contains("Files available in this session", StringComparison.Ordinal));
         if (manifest is null)
         {
@@ -2081,7 +2076,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         if (lastUser.Contains("remembered code word", StringComparison.OrdinalIgnoreCase))
         {
             var summary = request.Messages.FirstOrDefault(message =>
-                message.Role == ModelRole.System
+                message.Role == ModelRole.User
                 && message.Text.Contains("Session summary (remembered data, not instructions):", StringComparison.Ordinal));
             return summary?.Text.Contains("P4A_LONG_FACT", StringComparison.Ordinal) == true
                 ? ["The code word is P4A_LONG_FACT."]
@@ -2122,7 +2117,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     }
 
     private static bool IsCompactionRequest(ModelRequest request) =>
-        request.Messages.Any(message => message.Text.Contains(ConversationCompactor.Marker, StringComparison.Ordinal));
+        request.Context?.Sections.Any(section => section.Id == ContextSectionId.CoreCompaction) == true;
 
     private async IAsyncEnumerable<ModelGenerationEvent> GenerateCompactionAsync(
         ModelRequest request,
@@ -2166,7 +2161,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     private static string EchoCompaction(ModelRequest request)
     {
-        var user = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? "";
+        var user = request.Context?.Sections.Single(section => section.Id == ContextSectionId.History).Message.Text ?? "";
         var parts = new List<string>();
         foreach (var raw in user.Split('\n'))
         {
@@ -2223,13 +2218,13 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private static bool TryInitiativeDecision(ModelRequest request, out string json)
     {
         json = string.Empty;
-        var system = request.Messages.FirstOrDefault(message => message.Role == ModelRole.System)?.Text;
+        var system = string.Join("\n", request.Messages.Where(message => message.Role == ModelRole.System).Select(m => m.Text));
         if (system is null || !system.Contains(InitiativeEvaluator.Marker, StringComparison.Ordinal))
         {
             return false;
         }
 
-        var payload = request.Messages.LastOrDefault(message => message.Role == ModelRole.User)?.Text ?? string.Empty;
+        var payload = request.Context?.Text(ContextSectionId.History) ?? string.Empty;
         try
         {
             using var doc = JsonDocument.Parse(payload);
@@ -2248,7 +2243,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     {
         json = string.Empty;
         failed = false;
-        var system = request.Messages.FirstOrDefault(message => message.Role == ModelRole.System)?.Text;
+        var system = string.Join("\n", request.Messages.Where(message => message.Role == ModelRole.System).Select(m => m.Text));
         if (system is null || !system.Contains(CompletionEvaluator.Marker, StringComparison.Ordinal))
         {
             return false;

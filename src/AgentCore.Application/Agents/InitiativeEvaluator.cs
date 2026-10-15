@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Diagnostics;
 using System.Text.Json;
 using AgentCore.Application.Observability;
@@ -106,7 +107,6 @@ public static class InitiativeEvaluator
             role = identity.Role,
             tone = identity.Tone,
             goals = context.Definition.Goals,
-            systemInstructions = Clip(context.Definition.SystemInstructions, 600),
             conversationPolicy = new
             {
                 responseLength = context.Definition.ConversationPolicy.ResponseLength,
@@ -143,38 +143,18 @@ public static class InitiativeEvaluator
             agent
         };
 
-        var agentContext = PromptContextBuilder.BuildInitiativeAgentContext(context.Definition, identity);
-        return new ModelRequest(
-            Guid.Empty,
-            [
-                new ModelMessage(
-                    ModelRole.System,
-                    string.Join(
-                        '\n',
-                        Marker,
-                        """
-                        You decide whether a proactive agent message is worthwhile right now and, when speaking, what conversational move is useful.
-                        Reply with a single JSON object only, no markdown.
-                        staySilent:
-                        {"decision":"staySilent","reason":"...","nextWaitMs":number|null}
-                        deactivate:
-                        {"decision":"deactivate","reason":"..."}
-                        speak (required fields for speak):
-                        {"decision":"speak","intent":"hint"|"rephrase"|"clarification"|"reminder"|"followUp"|"other","objective":"short internal instruction for what the proactive message should accomplish","nextWaitMs":number|null}
-                        Do not write the user-visible response text. objective is internal planning only.
-                        Speak when a proactive turn would meaningfully advance the interaction. Choose intent for the move (hint, rephrase, etc.).
-                        Stay silent when the message would mainly repeat readiness, encouragement, or previous wording without moving the interaction forward.
-                        Reject empty check-ins such as "I'm here when you're ready" unless genuinely appropriate for the role.
-                        Use deactivate only when the session should pause (rare). Deactivate pauses immediately; omit nextWaitMs, and ignore it if present because no next wait is armed.
-                        nextWaitMs is optional on staySilent and speak only: for staySilent it delays the next evaluation; for speak it delays the next idle timer after the proactive turn completes.
-                        """,
-                        "Agent context:",
-                        agentContext)),
-                new ModelMessage(ModelRole.User, JsonSerializer.Serialize(payload, Json))
-            ],
-            MaxOutputTokens: 160,
-            Temperature: 0.2,
-            ReasoningEffort: context.ReasoningEffort);
+        var definitionRevision = $"{context.Definition.Id}:{context.Definition.Version}";
+        var instructionSource = context.Configuration?.FieldSources.GetValueOrDefault("instructions.agentInstructions");
+        return ContextAssembler.Create(Guid.Empty, new EffectiveContextSnapshot([
+            ContextSection.Core(CoreProcedure.OperatingContract), ContextSection.Core(CoreProcedure.Initiative),
+            ContextSection.Runtime(ContextSectionId.AgentIdentity, context.Persona is null ? ContextSourceKind.Definition : ContextSourceKind.Instance,
+                PromptContextBuilder.BuildAgentIdentity(context.Definition, identity), context.Persona is null ? definitionRevision : context.Configuration?.PersonaRevision.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            ContextSection.Runtime(ContextSectionId.AgentInstructions, instructionSource?.Kind == "Instance" ? ContextSourceKind.Instance : ContextSourceKind.Definition,
+                context.Definition.AgentInstructions, instructionSource?.Revision ?? definitionRevision),
+            ContextSection.Runtime(ContextSectionId.Policies, ContextSourceKind.AgentRun,
+                PromptContextBuilder.BuildAgentPolicies(context.Definition) + "\nInitiative policy: " + JsonSerializer.Serialize(agent.initiativePolicy, Json), context.Configuration?.ConfigurationHash),
+            ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, JsonSerializer.Serialize(payload, Json))
+        ], fieldSources: context.Configuration?.FieldSources), maxOutputTokens: 160, temperature: 0.2, reasoningEffort: context.ReasoningEffort);
     }
 
     private static async Task<(string Text, bool ProviderFailed)> CollectTextAsync(

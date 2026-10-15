@@ -169,7 +169,7 @@ public sealed class ProductPublishWorkflowTests
 
     private static AgentDefinition Definition() =>
         new(
-            1,
+            2,
             "general-assistant",
             11,
             new AgentIdentity("Test", "Role", "desc", "Tone"),

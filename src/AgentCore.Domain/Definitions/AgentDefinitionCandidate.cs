@@ -6,12 +6,13 @@ namespace AgentCore.Domain.Definitions;
 /// Mutable definition payload for durable Admin drafts. Published versions are materialized
 /// as <see cref="AgentDefinition"/> with a server-assigned version.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record AgentDefinitionCandidate(
     int SchemaVersion,
     string DefinitionId,
     AgentIdentity Identity,
     IReadOnlyList<string> Goals,
-    string SystemInstructions,
+    string AgentInstructions,
     BehaviorPolicy BehaviorPolicy,
     ConversationPolicy ConversationPolicy,
     InitiativePolicy InitiativePolicy,
@@ -38,7 +39,7 @@ public sealed record AgentDefinitionCandidate(
             version,
             Identity,
             Goals,
-            SystemInstructions,
+            AgentInstructions,
             BehaviorPolicy,
             ConversationPolicy,
             InitiativePolicy,
@@ -57,7 +58,7 @@ public sealed record AgentDefinitionCandidate(
             definition.Id,
             definition.Identity,
             definition.Goals,
-            definition.SystemInstructions,
+            definition.AgentInstructions,
             definition.BehaviorPolicy,
             definition.ConversationPolicy,
             definition.InitiativePolicy,

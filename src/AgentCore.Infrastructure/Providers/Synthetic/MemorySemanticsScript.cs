@@ -37,7 +37,7 @@ internal static class MemorySemanticsScript
                 proposals = [Proposal(MemoryProposalOperation.Resolve, "Missing research")];
                 return true;
             case "synthetic-memory-semantics: explain-receipt":
-                var rejected = request.Messages.Any(message => message.Role == ModelRole.System
+                var rejected = request.Messages.Any(message => message.Role == ModelRole.User
                     && message.Text.Contains("Core memory admission outcomes") && message.Text.Contains("approvalRequired"));
                 chunks = [rejected ? "Core rejected a delete attempt; no memory was forgotten."
                     : "No recorded deletion outcome is available."];

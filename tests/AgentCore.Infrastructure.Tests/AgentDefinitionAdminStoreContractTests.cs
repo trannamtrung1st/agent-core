@@ -144,7 +144,7 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
             var loaded = await reopened.GetPublicationAsync("demo-agent", published.Version);
             Assert.NotNull(loaded);
             Assert.Equal(published.Version, loaded!.Version);
-            Assert.Equal("You are a demo agent.", loaded.Payload.SystemInstructions);
+            Assert.Equal("You are a demo agent.", loaded.Payload.AgentInstructions);
         }
         finally
         {
@@ -158,7 +158,7 @@ public sealed class SqliteAgentDefinitionAdminStoreContractTests : AgentDefiniti
 
     private static AgentDefinitionCandidate SampleCandidate(string definitionId) =>
         new(
-            1,
+            2,
             definitionId,
             new AgentIdentity("Demo", "Guide", "Helps with demos.", "Calm"),
             ["Help the user"],
@@ -280,7 +280,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                 new AgentDefinitionDraftUpdate(
                     created.DraftId,
                     1,
-                    candidate with { SystemInstructions = "Updated instructions for publish." },
+                    candidate with { AgentInstructions = "Updated instructions for publish." },
                     now.AddMinutes(1)),
                 CancellationToken.None);
             Assert.Equal(2, edited.Revision);
@@ -298,13 +298,13 @@ public abstract class AgentDefinitionAdminStoreContractTests
                 new AgentDefinitionDraftPublish(created.DraftId, 2, [], now.AddMinutes(3)),
                 CancellationToken.None);
             Assert.Equal(1, publication.Version);
-            Assert.Equal("Updated instructions for publish.", publication.Payload.SystemInstructions);
+            Assert.Equal("Updated instructions for publish.", publication.Payload.AgentInstructions);
 
             var editedAgain = await store.UpdateDraftAsync(
                 new AgentDefinitionDraftUpdate(
                     created.DraftId,
                     3,
-                    candidate with { SystemInstructions = "Second publication body." },
+                    candidate with { AgentInstructions = "Second publication body." },
                     now.AddMinutes(4)),
                 CancellationToken.None);
             var secondPublication = await store.PublishDraftAsync(
@@ -335,7 +335,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
 
             var publishCandidate = SampleCandidate("demo-agent") with
             {
-                SystemInstructions = "Publish body",
+                AgentInstructions = "Publish body",
                 Goals = new[] { "Initial goal" },
                 Metadata = new Dictionary<string, string> { ["tag"] = "alpha" }
             };
@@ -356,7 +356,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
             Assert.NotNull(reloaded);
             Assert.Equal("Initial goal", Assert.Single(reloaded!.Payload.Goals));
             Assert.Equal("alpha", reloaded.Payload.Metadata["tag"]);
-            Assert.Equal("Publish body", reloaded.Payload.SystemInstructions);
+            Assert.Equal("Publish body", reloaded.Payload.AgentInstructions);
 
             var draftView = await store.GetDraftAsync(created.DraftId);
             Assert.NotNull(draftView);
@@ -382,7 +382,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                 new AgentDefinitionDraftUpdate(
                     created.DraftId,
                     1,
-                    candidate with { SystemInstructions = "Ready to race" },
+                    candidate with { AgentInstructions = "Ready to race" },
                     now.AddMinutes(1)),
                 CancellationToken.None);
 
@@ -411,7 +411,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                         new AgentDefinitionDraftUpdate(
                             created.DraftId,
                             2,
-                            candidate with { SystemInstructions = "Concurrent edit" },
+                            candidate with { AgentInstructions = "Concurrent edit" },
                             now.AddMinutes(3)),
                         CancellationToken.None);
                     return true;
@@ -445,14 +445,14 @@ public abstract class AgentDefinitionAdminStoreContractTests
                 new AgentDefinitionDraftUpdate(
                     created.DraftId,
                     1,
-                    candidate with { SystemInstructions = "Rev 2" },
+                    candidate with { AgentInstructions = "Rev 2" },
                     now.AddMinutes(1)),
                 CancellationToken.None);
             await store.UpdateDraftAsync(
                 new AgentDefinitionDraftUpdate(
                     created.DraftId,
                     2,
-                    candidate with { SystemInstructions = "Rev 3" },
+                    candidate with { AgentInstructions = "Rev 3" },
                     now.AddMinutes(2)),
                 CancellationToken.None);
 
@@ -481,7 +481,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                         new AgentDefinitionDraftUpdate(
                             created.DraftId,
                             3,
-                            candidate with { SystemInstructions = "Concurrent edit" },
+                            candidate with { AgentInstructions = "Concurrent edit" },
                             now.AddMinutes(4)),
                         CancellationToken.None);
                     return true;
@@ -503,7 +503,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
             else
             {
                 Assert.NotNull(draft);
-                Assert.Equal("Concurrent edit", draft!.Candidate.SystemInstructions);
+                Assert.Equal("Concurrent edit", draft!.Candidate.AgentInstructions);
                 Assert.Equal(4, draft.Revision);
             }
         });
@@ -521,7 +521,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                 new AgentDefinitionDraftUpdate(
                     created.DraftId,
                     1,
-                    candidate with { SystemInstructions = "v1" },
+                    candidate with { AgentInstructions = "v1" },
                     now.AddMinutes(1)),
                 CancellationToken.None);
             await store.PublishDraftAsync(
@@ -552,7 +552,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                 new AgentDefinitionDraftUpdate(
                     draft.DraftId,
                     2,
-                    candidate with { SystemInstructions = "Active v2 body." },
+                    candidate with { AgentInstructions = "Active v2 body." },
                     now.AddMinutes(2)),
                 CancellationToken.None);
             var v2 = await admin.PublishDraftAsync(
@@ -563,7 +563,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                 new AgentDefinitionDraftUpdate(
                     draft.DraftId,
                     draftAfterV2!.Revision,
-                    candidate with { SystemInstructions = "Deprecated v3 body." },
+                    candidate with { AgentInstructions = "Deprecated v3 body." },
                     now.AddMinutes(4)),
                 CancellationToken.None);
             var v3 = await admin.PublishDraftAsync(
@@ -587,10 +587,10 @@ public abstract class AgentDefinitionAdminStoreContractTests
 
             var listed = inventory.Single(item => item.Id == "inventory-agent");
             Assert.Equal(v2.Version, listed.Version);
-            Assert.Equal("Active v2 body.", listed.SystemInstructions);
+            Assert.Equal("Active v2 body.", listed.AgentInstructions);
             var exactDeprecated = await composite.GetAsync("inventory-agent", v3.Version, CancellationToken.None);
             Assert.NotNull(exactDeprecated);
-            Assert.Equal("Deprecated v3 body.", exactDeprecated!.SystemInstructions);
+            Assert.Equal("Deprecated v3 body.", exactDeprecated!.AgentInstructions);
         });
 
     [Fact]
@@ -616,7 +616,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                 new AgentDefinitionDraftUpdate(
                     draft.DraftId,
                     2,
-                    candidate with { SystemInstructions = "Active v2 body." },
+                    candidate with { AgentInstructions = "Active v2 body." },
                     now.AddMinutes(3)),
                 CancellationToken.None);
             var publishedV2 = await admin.PublishDraftAsync(
@@ -627,8 +627,8 @@ public abstract class AgentDefinitionAdminStoreContractTests
             var defaultResolved = await composite.GetAsync("demo-agent");
             Assert.NotNull(exactDeprecated);
             Assert.NotNull(defaultResolved);
-            Assert.Equal("You are a demo agent.", exactDeprecated!.SystemInstructions);
-            Assert.Equal("Active v2 body.", defaultResolved!.SystemInstructions);
+            Assert.Equal("You are a demo agent.", exactDeprecated!.AgentInstructions);
+            Assert.Equal("Active v2 body.", defaultResolved!.AgentInstructions);
             Assert.Equal(publishedV2.Version, defaultResolved.Version);
         });
 
@@ -651,7 +651,7 @@ public abstract class AgentDefinitionAdminStoreContractTests
                     "examiner",
                     AgentDefinitionCandidate.FromDefinition(examiner!) with
                     {
-                        SystemInstructions = examiner!.SystemInstructions + "\nDurable overlay."
+                        AgentInstructions = examiner!.AgentInstructions + "\nDurable overlay."
                     },
                     DefinitionDraftSourceKind.ForkBuiltIn,
                     1,
@@ -671,13 +671,13 @@ public abstract class AgentDefinitionAdminStoreContractTests
             var exactDurable = await composite.GetAsync("examiner", published.Version);
             Assert.NotNull(exactBuiltin);
             Assert.NotNull(exactDurable);
-            Assert.DoesNotContain("Durable overlay.", exactBuiltin!.SystemInstructions, StringComparison.Ordinal);
-            Assert.Contains("Durable overlay.", exactDurable!.SystemInstructions, StringComparison.Ordinal);
+            Assert.DoesNotContain("Durable overlay.", exactBuiltin!.AgentInstructions, StringComparison.Ordinal);
+            Assert.Contains("Durable overlay.", exactDurable!.AgentInstructions, StringComparison.Ordinal);
         });
 
     private static AgentDefinitionCandidate SampleCandidate(string definitionId) =>
         new(
-            1,
+            2,
             definitionId,
             new AgentIdentity("Demo", "Guide", "Helps with demos.", "Calm"),
             ["Help the user"],

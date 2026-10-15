@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 using AgentCore.Application.Agents;
@@ -45,7 +46,7 @@ public sealed class SummaryBoundaryPromptTests
 
         history.Add(Entry(25, ConversationRole.User, CurrentSentinel));
         var request = Build(history, summary: "", through: 0, last: 25);
-        Assert.Contains(request.Messages, message => message.Role == ModelRole.System && message.Text.Contains("(none)", StringComparison.Ordinal));
+        Assert.Contains(request.Messages, message => message.Role == ModelRole.User && message.Text.Contains("(none)", StringComparison.Ordinal));
         Assert.Equal(1, Count(request, CurrentSentinel));
         Assert.DoesNotContain(request.Messages, message => message.Text == "older-1");
         Assert.Contains(request.Messages, message => message.Text == "older-24");
@@ -69,7 +70,7 @@ public sealed class SummaryBoundaryPromptTests
         }
 
         var request = Build(history, SummarySentinel, through: 15, last: 25);
-        Assert.Contains(request.Messages, message => message.Role == ModelRole.System && message.Text.Contains(SummarySentinel, StringComparison.Ordinal));
+        Assert.Contains(request.Messages, message => message.Role == ModelRole.User && message.Text.Contains(SummarySentinel, StringComparison.Ordinal));
         Assert.Equal(0, Count(request, BeforeBoundarySentinel));
         Assert.Equal(1, Count(request, AfterBoundarySentinel));
         Assert.Equal(1, Count(request, CurrentSentinel));
@@ -114,7 +115,7 @@ public sealed class SummaryBoundaryPromptTests
         Assert.Equal(1, Count(request, CurrentSentinel));
         Assert.DoesNotContain(
             request.Messages,
-            message => message.Role == ModelRole.System && message.Text.Contains(SummarySentinel, StringComparison.Ordinal));
+            message => message.Role == ModelRole.User && message.Text.Contains(SummarySentinel, StringComparison.Ordinal));
         Assert.Contains(SummaryBoundary.RejectedKind, kinds);
         Assert.DoesNotContain(details, value => value.Contains(BeforeBoundarySentinel, StringComparison.Ordinal));
         Assert.DoesNotContain(details, value => value.Contains(CurrentSentinel, StringComparison.Ordinal));
@@ -481,7 +482,7 @@ public sealed class SummaryBoundaryPromptTests
     }
 
     private static string UserPayload(ModelRequest request) =>
-        request.Messages.Last(message => message.Role == ModelRole.User).Text;
+        request.Context!.Text(ContextSectionId.History);
 
     private static IReadOnlyList<string> RecentTexts(JsonElement root) =>
         root.GetProperty("recentTurns")

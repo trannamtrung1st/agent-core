@@ -197,10 +197,10 @@ public sealed class SandboxApiTests
         Assert.Contains("sandbox.run", RoleEnvironments.Of(source).ToolList);
         var draft = await lifecycle.ForkDraftAsync(source.Id, source.Version, DefinitionDraftSourceKind.ForkBuiltIn);
         var rejected = await Assert.ThrowsAsync<AgentCore.Application.Sessions.AgentCoreException>(()=>lifecycle.UpdateDraftAsync(
-            draft.DraftId,draft.Revision,draft.Candidate with {SystemInstructions="Explicit owner edit."}).AsTask());
+            draft.DraftId,draft.Revision,draft.Candidate with {AgentInstructions="Explicit owner edit."}).AsTask());
         Assert.Equal(400,rejected.StatusCode);
         var repaired = await lifecycle.UpdateDraftAsync(draft.DraftId,draft.Revision,
-            HarnessLegacyFixture.WithoutRetiredSandboxTool(draft.Candidate) with {SystemInstructions="Explicit owner edit."});
+            HarnessLegacyFixture.WithoutRetiredSandboxTool(draft.Candidate) with {AgentInstructions="Explicit owner edit."});
         Assert.Equal(draft.Revision+1,repaired.Revision);
         Assert.DoesNotContain("sandbox.run",repaired.Candidate.Environment!.ToolList);
         Assert.DoesNotContain("sandbox.exec",repaired.Candidate.Environment.ToolList);
@@ -299,7 +299,7 @@ public sealed class SandboxApiTests
         current=(await reduced.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty("instanceRevision").GetInt64();
         var store=factory.Services.GetRequiredService<ISandboxStore>();var profile=(await store.GetProfileAsync("general-workbench"))!;
         await store.SaveProfileAsync(profile with {Revision=2,Cpu=.25},1);
-        var independent=await owner.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{id}/settings/instructions",new{expectedInstanceRevision=current,set=new{systemInstructions="Independent instructions remain writable after a Global ceiling change."},clear=Array.Empty<string>()});independent.EnsureSuccessStatusCode();
+        var independent=await owner.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{id}/settings/instructions",new{expectedInstanceRevision=current,set=new{agentInstructions="Independent instructions remain writable after a Global ceiling change."},clear=Array.Empty<string>()});independent.EnsureSuccessStatusCode();
         effective=await owner.GetFromJsonAsync<System.Text.Json.JsonElement>($"/api/v2/admin/agent-instances/{id}/sandbox");Assert.Equal(.25,effective.GetProperty("profile").GetProperty("cpu").GetDouble());
     }
 

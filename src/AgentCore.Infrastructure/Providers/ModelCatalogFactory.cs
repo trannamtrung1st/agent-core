@@ -40,7 +40,9 @@ internal static class ModelCatalogFactory
 
         if (configured.Models.Count > 0)
         {
-            return FromOptions(configured, languageModel);
+            return FromOptions(configured, languageModel, scripted: string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(languageModel?.Adapter, "Scripted", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(languageModel?.Adapter, "Synthetic", StringComparison.OrdinalIgnoreCase));
         }
 
         if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)
@@ -68,7 +70,7 @@ internal static class ModelCatalogFactory
                     structuredOutput: false,
                     reasoning: true,
                     ["low", "medium", "high"],
-                    "low"),
+                    "low", developerRoleSupport: true),
                 Descriptor(
                     ScriptedBetaKey,
                     "Scripted Beta",
@@ -79,7 +81,7 @@ internal static class ModelCatalogFactory
                     structuredOutput: true,
                     reasoning: false,
                     [],
-                    null),
+                    null, developerRoleSupport: true),
                 Descriptor(
                     "scripted-vision",
                     "Scripted Vision",
@@ -90,21 +92,22 @@ internal static class ModelCatalogFactory
                     structuredOutput: false,
                     reasoning: false,
                     [],
-                    null)
+                    null, developerRoleSupport: true)
             ]);
 
-    // Verified against OpenRouter /models and provider docs on 2026-10-09.
+    // Existing model capability metadata checked on 2026-10-09.
+    // Separate-role flags declare the catalog contract; they are not new live-provider verification.
     public static IModelCatalog Real() =>
         new ConfigurationModelCatalog(DeepSeekV41FlashKey,
         [
             Descriptor(DeepSeekV41FlashKey, "DeepSeek V4.1 Flash", "primary-llm", DeepSeekV41FlashModelId,
-                true, true, true, true, ["low", "medium", "high", "max"], "low", preferResponseFunction: true),
+                true, true, true, true, ["low", "medium", "high", "max"], "low", preferResponseFunction: true, developerRoleSupport: true),
             Descriptor(Gpt6LunaKey, "GPT-6 Luna", "primary-llm", Gpt6LunaModelId,
-                true, true, true, true, Gpt6LunaReasoningEfforts, "low", transport: ModelInferenceTransport.Responses),
+                true, true, true, true, Gpt6LunaReasoningEfforts, "low", transport: ModelInferenceTransport.Responses, developerRoleSupport: true),
             Descriptor(ClaudeHaiku55Key, "Claude Haiku 5.5", "primary-llm", ClaudeHaiku55ModelId,
-                true, true, true, true, ReasoningEfforts, "low"),
+                true, true, true, true, ReasoningEfforts, "low", developerRoleSupport: true),
             Descriptor(Gpt61SolKey, "GPT-6.1 Sol", "primary-llm", Gpt61SolModelId,
-                true, true, true, true, ReasoningEfforts, "low", transport: ModelInferenceTransport.Responses),
+                true, true, true, true, ReasoningEfforts, "low", transport: ModelInferenceTransport.Responses, developerRoleSupport: true),
             Descriptor(OpenRouterFreeKey, "OpenRouter Free (experimental)", "primary-llm", OpenRouterFreeModelId,
                 true, false, false, false, [], null, costCategory: "free")
         ]);
@@ -140,18 +143,18 @@ internal static class ModelCatalogFactory
                     reasoning,
                     efforts,
                     defaultEffort,
-                    transport: languageModel.Transport)
+                    transport: languageModel.Transport) with { DeveloperRoleSupport = languageModel.DeveloperRoleSupport }
             ]);
     }
 
-    private static IModelCatalog FromOptions(ModelCatalogOptions options, LanguageModelProviderOptions? languageModel)
+    private static IModelCatalog FromOptions(ModelCatalogOptions options, LanguageModelProviderOptions? languageModel, bool scripted = false)
     {
-        var models = options.Models.Select(entry => ToDescriptor(entry, languageModel)).ToArray();
+        var models = options.Models.Select(entry => ToDescriptor(entry, languageModel, scripted)).ToArray();
         var defaultKey = string.IsNullOrWhiteSpace(options.DefaultKey) ? models[0].Key : options.DefaultKey.Trim();
         return new ConfigurationModelCatalog(defaultKey, models);
     }
 
-    private static ModelDescriptor ToDescriptor(ModelCatalogEntryOptions entry, LanguageModelProviderOptions? languageModel)
+    private static ModelDescriptor ToDescriptor(ModelCatalogEntryOptions entry, LanguageModelProviderOptions? languageModel, bool scripted)
     {
         var provider = string.IsNullOrWhiteSpace(entry.ProviderAlias) ? "primary-llm" : entry.ProviderAlias.Trim();
         if (!string.Equals(provider, "primary-llm", StringComparison.Ordinal))
@@ -183,7 +186,8 @@ internal static class ModelCatalogFactory
             efforts,
             defaultEffort,
             entry.ContextCategory,
-            entry.CostCategory, entry.Transport, entry.PreferResponseFunction);
+            entry.CostCategory, entry.Transport, entry.PreferResponseFunction,
+            entry.DeveloperRoleSupport || scripted && IsBuiltInScriptedCatalogKey(entry.Key) && entry.Key == modelId);
     }
 
     private static ModelDescriptor Descriptor(
@@ -200,7 +204,7 @@ internal static class ModelCatalogFactory
         string? contextCategory = null,
         string? costCategory = null,
         ModelInferenceTransport transport = ModelInferenceTransport.ChatCompletions,
-        bool preferResponseFunction = false) =>
+        bool preferResponseFunction = false, bool developerRoleSupport = false) =>
         new(
             key,
             displayName,
@@ -213,7 +217,7 @@ internal static class ModelCatalogFactory
             efforts,
             defaultEffort,
             contextCategory,
-            costCategory, transport, preferResponseFunction);
+            costCategory, transport, preferResponseFunction, developerRoleSupport);
 
     private static IModelCatalog WithPrimaryDefault(IModelCatalog catalog, LanguageModelProviderOptions? languageModel)
     {

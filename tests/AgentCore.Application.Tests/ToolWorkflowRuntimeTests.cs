@@ -1,3 +1,4 @@
+using AgentCore.Application.Execution;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Events;
 using AgentCore.Application.Ports;
@@ -77,7 +78,7 @@ public sealed class ToolWorkflowRuntimeTests
         Assert.Equal(EntryStatus.Completed, assistant.Status);
         var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime.Runtime));
         Assert.Equal(24, run.Checkpoint!.StepCount);
-        Assert.Contains("Core finalization phase: stepLimit", run.Checkpoint.PayloadJson);
+        Assert.Equal("stepLimit", AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).FinalizationReason);
         Assert.DoesNotContain(runtime.Output.Items, item => item.Payload is ErrorOutput);
     }
 

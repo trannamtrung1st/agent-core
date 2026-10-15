@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using SkiaSharp;
 using System.Net;
 using System.Net.Http.Headers;
@@ -254,7 +255,7 @@ public sealed class HistoricalImageRereadTests
             context.Definition,
             context,
             ToolConfigurationGates.AllowAll));
-        var manifest = new PromptContextBuilder().BuildSections(context).AttachmentManifestSystem;
+        var manifest = new PromptContextBuilder().BuildContext(context).Text(ContextSectionId.Attachments);
         Assert.DoesNotContain("attachments.read", manifest, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("unavailable with the current model", manifest, StringComparison.OrdinalIgnoreCase);
     }
@@ -704,7 +705,7 @@ public sealed class HistoricalImageRereadTests
     }
 
     private static AgentDefinition Support() => new(
-        1,
+        2,
         "customer-support",
         1,
         new AgentIdentity("Sam", "Support", "Help.", "Warm"),

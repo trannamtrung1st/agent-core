@@ -97,7 +97,7 @@ public sealed class AdminDefinitionDraftDiffServiceTests
 
         var candidate = AgentDefinitionCandidate.FromDefinition(SampleDefinitions.Examiner) with
         {
-            SystemInstructions = "P7F new-draft diff sentinel."
+            AgentInstructions = "P7F new-draft diff sentinel."
         };
         var draft = await admin.CreateDraftAsync(
             new AgentDefinitionDraftCreate(

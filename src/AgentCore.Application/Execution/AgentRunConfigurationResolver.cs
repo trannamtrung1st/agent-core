@@ -58,7 +58,8 @@ public sealed class AgentRunConfigurationResolver(IAgentInstanceStore instances,
             if (isolation == BrowserIsolation.HostDefault && browser is not null)
                 isolation = browser.HostPolicy.ProfileMode == BrowserProfileMode.PersistentAgent ? BrowserIsolation.PersistentAgent : BrowserIsolation.EphemeralSession;
             return new(new(effective, owner.Revision, owner.PersonaRevision, manifest, bindings,
-                browser is null && isolation == BrowserIsolation.HostDefault ? null : isolation), owner.Persona,
+                InstanceSettingsResolver.Sources(baseline, owner.SettingsOverrides, owner.Revision, owner.PersonaRevision),
+                resolvedBrowserIsolation: browser is null && isolation == BrowserIsolation.HostDefault ? null : isolation), owner.Persona,
                 EffectiveSkillCatalogResolver.Resolve(effective, skillState), owner.ExecutionBudgets);
         }
         throw AgentCoreErrors.Conflict("Instance changed while resolving configuration. Retry admission.");

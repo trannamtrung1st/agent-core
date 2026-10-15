@@ -219,10 +219,10 @@ test("Draft actions remain visible at desktop and mobile scroll positions", asyn
   await page.goto("/admin/definitions/examiner");
   await page.getByRole("button", { name: /^Fork v\d+ \((builtIn|durable)\)$/ }).click();
   await openDefinitionSettings(page.locator('section[aria-label="Draft editor"]'));
-  await expect(page.getByLabel("System instructions", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Agent instructions", { exact: true })).toBeVisible();
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 844 });
-    await page.getByLabel("System instructions", { exact: true }).scrollIntoViewIfNeeded();
+    await page.getByLabel("Agent instructions", { exact: true }).scrollIntoViewIfNeeded();
     const rect = await page.getByRole("button", { name: "Save draft", exact: true }).boundingBox();
     expect(rect!.y).toBeGreaterThanOrEqual(0);
     expect(rect!.y + rect!.height).toBeLessThan(844);

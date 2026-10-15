@@ -9,6 +9,21 @@ namespace AgentCore.Application.Tests;
 
 public sealed class SessionModelBinderTests
 {
+    [Theory]
+    [InlineData(false, ModelInferenceTransport.ChatCompletions)]
+    [InlineData(true, (ModelInferenceTransport)99)]
+    public void Undeclared_or_unknown_hierarchy_route_is_ineligible_for_chat_and_background(bool supported, ModelInferenceTransport transport)
+    {
+        var descriptor = TestModelCatalogs.Synthetic().Models[0] with { DeveloperRoleSupport = supported, Transport = transport };
+        var catalog = new ConfigurationModelCatalog(descriptor.Key, [descriptor]);
+        var error = Assert.Throws<AgentCoreException>(() => SessionModelBinder.PinDefault(catalog));
+        Assert.Contains("system", error.Message);
+        Assert.Contains("developer", error.Message);
+        Assert.Throws<AgentCoreException>(() => ExecutionModelPolicy.RequireSelectable(catalog, descriptor.Key, null));
+        Assert.False(ExecutionModelPolicy.Matches(catalog, new(descriptor.Key, descriptor.ProviderAlias, descriptor.ModelId,
+            descriptor.DefaultReasoningEffort, AgentCore.Domain.Triggers.ExecutionModelSource.ConversationDefault), out _));
+    }
+
     [Fact]
     public void Default_refresh_preserves_explicit_reasoning_effort_but_inherits_unspecified_effort()
     {
@@ -122,7 +137,7 @@ internal static class TestModelCatalogs
                     StructuredOutput: false,
                     Reasoning: true,
                     ["low", "medium", "high"],
-                    "medium"),
+                    "medium", DeveloperRoleSupport: true),
                 new ModelDescriptor(
                     "scripted-beta",
                     "Scripted Beta",
@@ -133,7 +148,7 @@ internal static class TestModelCatalogs
                     StructuredOutput: false,
                     Reasoning: false,
                     [],
-                    null)
+                    null, DeveloperRoleSupport: true)
             ]);
 
     public static IModelCatalog WithDefault(string defaultKey) =>
@@ -153,7 +168,7 @@ internal static class TestModelCatalogs
                     StructuredOutput: false,
                     Reasoning: true,
                     ["low", "medium", "high"],
-                    "medium"),
+                    "medium", DeveloperRoleSupport: true),
                 new ModelDescriptor(
                     "gpt-4o-mini-2024-07-18",
                     "GPT-4o mini 2024-07-18",
@@ -164,6 +179,6 @@ internal static class TestModelCatalogs
                     StructuredOutput: true,
                     Reasoning: false,
                     [],
-                    null)
+                    null, DeveloperRoleSupport: true)
             ]);
 }

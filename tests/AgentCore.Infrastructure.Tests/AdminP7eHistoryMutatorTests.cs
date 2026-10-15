@@ -454,7 +454,7 @@ public abstract class AdminP7eHistoryMutatorTests
 
     private static AgentDefinition SampleExaminerDefinition() =>
         new(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "Examiner", "Practice.", "Calm"),

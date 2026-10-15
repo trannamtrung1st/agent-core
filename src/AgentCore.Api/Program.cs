@@ -14,6 +14,14 @@ using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Providers.OpenAICompatible;
 using Microsoft.AspNetCore.Http.Json;
 
+if (args.Length > 0 && args[0] == "migrate-context")
+{
+    if (args.Length != 3) throw new ArgumentException("Usage: migrate-context <database-path> <new-backup-path>");
+    var migrated = await ContextCutover.MigrateAsync(args[1], args[2]);
+    Console.WriteLine($"Context cutover validated and committed ({migrated} retained records). Backup: {Path.GetFullPath(args[2])}");
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 // Hosting request diagnostics include raw query strings. OAuth codes/state must never enter logs.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
@@ -302,14 +303,13 @@ public sealed class ModelTriggerCommandAuthorizer(
             return new(heuristicDecision);
         }
 
-        var request = new ModelRequest(
-            Guid.Empty,
-            [
-                new ModelMessage(ModelRole.System, BuildSystemPrompt(requestedAction, conversationLanguage, scheduleContext, scheduleDraft)),
-                new ModelMessage(ModelRole.User, text)
-            ],
-            MaxOutputTokens: 64,
-            Temperature: 0);
+        var request = ContextAssembler.Create(Guid.Empty, new EffectiveContextSnapshot([
+            ContextSection.Core(CoreProcedure.OperatingContract), ContextSection.Core(CoreProcedure.TriggerAuthorization),
+            ContextSection.Runtime(ContextSectionId.RunTask, ContextSourceKind.AgentRun,
+                $"Proposed action: {requestedAction}; conversation language: {conversationLanguage ?? "auto"}.", semantics: ContextSemantics.TrustedFact),
+            ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, string.Join('\n',
+                (scheduleContext?.ToPromptLines() ?? []).Concat(scheduleDraft?.ToPromptLines() ?? [])))
+        ]), [new(ModelRole.User, text)], maxOutputTokens: 64, temperature: 0);
 
         var (raw, failure) = await ReadTextAsync(languageModel, request, cancellationToken).ConfigureAwait(false);
         if (failure is { } failedDecision) return failedDecision;
@@ -323,53 +323,6 @@ public sealed class ModelTriggerCommandAuthorizer(
 
     public bool IsScheduleConfirmation(string? currentUserText, string? conversationLanguage) =>
         heuristic.IsScheduleConfirmation(currentUserText, conversationLanguage);
-
-    private static string BuildSystemPrompt(
-        TriggerCommandAction action,
-        string? conversationLanguage,
-        ScheduleConversationContext? scheduleContext,
-        ScheduleDraftContext? scheduleDraft = null)
-    {
-        var actionName = action switch
-        {
-            TriggerCommandAction.Create => "create a durable schedule or reminder",
-            TriggerCommandAction.List => "list the user's schedules or reminders",
-            TriggerCommandAction.Update => "update an existing schedule or reminder",
-            TriggerCommandAction.Cancel => "cancel an existing schedule or reminder",
-            TriggerCommandAction.Enable => "enable an existing Automation without changing its settings",
-            TriggerCommandAction.Disable => "disable an existing Automation without deleting it",
-            _ => "perform a schedule management action"
-        };
-
-        var languageHint = string.IsNullOrWhiteSpace(conversationLanguage)
-            || ConversationLanguagePolicy.IsAuto(conversationLanguage)
-            ? "Interpret the user message in its own language."
-            : $"The conversation language is {conversationLanguage}. Interpret the user message accordingly.";
-
-        var referent = scheduleContext is { IsReferentAvailable: true }
-            ? string.Join('\n', scheduleContext.ToPromptLines())
-            : "Trusted schedule referent: (none)";
-
-        var draft = scheduleDraft is { IsActive: true }
-            ? string.Join('\n', scheduleDraft.ToPromptLines())
-            : "Schedule draft (clarification only): (none)";
-
-        const string jsonHint =
-            "Reply with JSON only: {\"decision\":\"allow\"} or {\"decision\":\"deny\"} or {\"decision\":\"ambiguous\"}.";
-        return $"""
-            You classify whether the user's current message explicitly requests or authorizes {actionName}.
-            The trusted schedule referent may only resolve references such as "another", "that", "it", or "same".
-            It does not independently grant authority. The current user message must itself request or continue the action.
-            {referent}
-            {draft}
-            The schedule draft may only resolve omitted schedule details from a prior failed attempt; it does not independently grant authority.
-            {languageHint}
-            {jsonHint}
-            Use allow when the current message explicitly continues or requests the proposed action, including elliptical continuations when a referent exists.
-            Use deny when the message is unrelated, informational, a question about capability, or about past assistant behavior.
-            Use ambiguous only when the current message is schedule-related but still unclear even with the referent.
-            """;
-    }
 
     private static bool TryParseDecision(string raw, out TriggerCommandAuthorizationDecision decision, out TriggerAuthorizationFailureReason reason)
     {

@@ -68,7 +68,7 @@ public sealed partial class OpenAICompatibleLanguageModel
                     input.Add(new { type = "function_call", call_id = call.Id, name = OpenAiCompatibleToolNames.ToWireName(call.Name), arguments = call.ArgumentsJson });
                 continue;
             }
-            input.Add(new { type = "message", role = message.Role == ModelRole.System ? "system" : message.Role == ModelRole.Assistant ? "assistant" : "user", content = ResponsesContent(message) });
+            input.Add(new { type = "message", role = message.Role switch { ModelRole.System => "system", ModelRole.Developer => "developer", ModelRole.Assistant => "assistant", ModelRole.User => "user", _ => throw new ArgumentException("Unsupported model role.") }, content = ResponsesContent(message) });
         }
         var body = new Dictionary<string, object?>
         {

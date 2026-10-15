@@ -81,7 +81,7 @@ public sealed class P4ClosureTests
             Assert.Contains(durableRows, entry => entry.Text.Contains(Fact, StringComparison.Ordinal));
             var pinned = (await sessions.LoadAsync(LongSession))!;
             Assert.Equal(1, pinned.Definition.Version);
-            Assert.DoesNotContain("V2_MARKER", pinned.Definition.SystemInstructions, StringComparison.Ordinal);
+            Assert.DoesNotContain("V2_MARKER", pinned.Definition.AgentInstructions, StringComparison.Ordinal);
 
             var admission = Admission();
             var source = await service.WriteAsync(
@@ -280,7 +280,7 @@ public sealed class P4ClosureTests
         EligibleV1() with
         {
             Version = 2,
-            SystemInstructions = EligibleV1().SystemInstructions + "\nV2_MARKER",
+            AgentInstructions = EligibleV1().AgentInstructions + "\nV2_MARKER",
             Identity = EligibleV1().Identity with { Tone = "v2 tone" }
         };
 

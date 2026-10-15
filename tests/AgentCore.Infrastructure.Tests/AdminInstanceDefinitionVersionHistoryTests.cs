@@ -252,7 +252,7 @@ public abstract class AdminInstanceDefinitionVersionHistoryTests
 
     internal static AgentDefinition SampleExaminerDefinition(int version) =>
         new(
-            1,
+            2,
             "examiner",
             version,
             new AgentIdentity("Alex", "Examiner", "Practice.", "Calm"),

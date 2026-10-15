@@ -1,5 +1,15 @@
 # System Architecture
 
+## Three-layer context authority
+
+The production context path has exactly three layers: **Core**, the platform-authored operating contract; **Runtime**, authorized effective configuration and trusted execution facts; and **Evidence**, current task intent plus bounded observations. Core governs Runtime and Evidence. Provider `developer` is a wire role for Runtime, not another context layer. Tool access, scopes, approval, credentials and effect fencing remain server-enforced.
+
+`ContextAssembler` is the single projector. Only a selected platform procedure or registered Core built-in can construct Core content. Definition/Instance instructions and procedures cannot enter Core. Summary, profile, memory, Experience, references, attachments and external/tool output cannot enter Runtime. Evidence is source-framed before the native interaction transcript; actual current user content is included once. Core is first (`system`), Runtime follows (`developer`), then Evidence uses user/assistant/tool roles.
+
+New Run admission freezes effective configuration and a field-source map through the existing Definition → sparse Instance resolver. New saved values affect the next new Run, including one in an existing Session. Live revocations continue to apply. `RoleEnvironment` remains Definition-owned configuration; the optional typed Runtime environment scope is absent today. This cutover creates no active Environment entity, RBAC engine or second Session lifecycle.
+
+Each generation reconstructs applicable clauses and updates Runtime sections by typed identity. Durable format-2 checkpoints retain interaction receipts and explicit phase/repair/activation state, not instruction prefixes. Startup and resume reject incompatible active state. [Persistence](15-persistence-and-configuration.md#three-layer-context-cutover) and [Operations](17-observability-and-operations.md#three-layer-context-maintenance) own conversion and deployment; the [verification ledger](reports/three-layer-context-cutover-verification-2026-10-15.md) separates implemented behavior from observed acceptance.
+
 ## Accepted Activation and AgentRun cutover
 
 The approved execution target is `Session → Activation → AgentRun`. A Session remains the durable conversation owned by one Agent Instance and trusted profile. An immutable Activation admits one effective agent turn and freezes its ordered input batch. Exactly one AgentRun owns that Activation's attempts, claim, checkpoint, approvals, effect fence, frozen execution configuration and outcome. Retrying retains run, activation and response identity; conversational continuation creates a new Activation and run in the same Session.

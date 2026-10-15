@@ -1183,7 +1183,7 @@ public sealed class MemoryStoreContractTests
 
     private static AgentDefinition Definition() =>
         new(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "role", "desc", "tone"),

@@ -5,10 +5,13 @@ namespace AgentCore.Domain.Conversation;
 /// <summary>Frozen execution identity. Provenance carries no execution permission.</summary>
 public enum AgentRunOutputContract { ConversationResponse, BackgroundOutcome, CompletionReport }
 
+public enum AgentRunTaskSource { Automation, AgentRun }
+public sealed record AgentRunTaskIntent(string Text, AgentRunTaskSource Source, string? SourceRevision = null);
+
 public sealed class AgentRunAdmission
 {
     public AgentRunAdmission(Activation activation, string definitionId, int definitionVersion,
-        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null)
+        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null, AgentRunTaskIntent? taskIntent = null)
     {
         ArgumentNullException.ThrowIfNull(activation);
         ArgumentNullException.ThrowIfNull(pinnedPersona);
@@ -26,6 +29,10 @@ public sealed class AgentRunAdmission
         ComposerInput = composerInput is null ? null : composerInput with {
             ExplicitSkillKeys = Array.AsReadOnly(composerInput.ExplicitSkillKeys.ToArray()),
             References = Array.AsReadOnly(composerInput.References.ToArray()) };
+        if (taskIntent is not null && (!Enum.IsDefined(taskIntent.Source) || string.IsNullOrWhiteSpace(taskIntent.Text)
+            || taskIntent.Text.Length > AgentRunLimits.MaxBackgroundObjectiveCharacters || taskIntent.SourceRevision?.Length > 128))
+            throw new ArgumentException("Run task intent is invalid.");
+        TaskIntent = taskIntent;
         Configuration = configuration;
         ExecutionBudget = executionBudget;
         OutputContract = outputContract;
@@ -36,6 +43,7 @@ public sealed class AgentRunAdmission
         ResponseId = responseId;
     }
 
+    public AgentRunTaskIntent? TaskIntent { get; }
     public ComposerRunInput? ComposerInput { get; }
     public AgentRunConfiguration? Configuration { get; }
     public EffectiveExecutionBudget? ExecutionBudget { get; }

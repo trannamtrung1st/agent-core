@@ -97,7 +97,7 @@ test('Freeze blocks durable Chat learning while normal Chat still works',async({
 
 
 test('Managed instruction changes still require approval in Chat',async({page})=>{
-  const id=await create(page,'Instruction learning','Managed','Operating instructions');
+  const id=await create(page,'Instruction learning','Managed','Agent instructions');
   await send(page,'Save these operating instructions for future conversations: Use concise summaries.');
   const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toContainText('Use concise order-review summaries');
   expect((await review(page,id)).activeVersion).toBe(21);await approval.getByRole('button',{name:'Reject',exact:true}).click();

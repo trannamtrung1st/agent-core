@@ -1,5 +1,19 @@
 # Observability and Operations
 
+## Three-layer context maintenance
+
+This is an explicit offline one-way conversion. First drain/complete or deliberately cancel nonterminal old Runs using the previous application, then stop writers and back up workspace/resource/artifact/credential roots together. Do not restart or reset a user's active host as verification.
+
+```bash
+dotnet run --project src/AgentCore.Api --no-launch-profile -- migrate-context /absolute/path/agent-core.db /absolute/path/new-context-backup.db
+```
+
+The backup destination must be new and distinct. The command uses SQLite's backup API, preflights incompatible Runs, converts retained configuration transactionally, recomputes hashes with canonical application algorithms and validates before commit. A refusal rolls back conversion and preserves the backup/receipts. Normal startup fails with this command and drain/cancel guidance when conversion is needed; it never resets data or resumes retired checkpoints. Restore the previous application and complete data backup for rollback. Historical completed checkpoints remain audit-only.
+
+Custom provider/model catalog routes must explicitly declare `DeveloperRoleSupport=true` only for a verified separate system/developer contract on the selected transport. Undeclared/unsupported routes are ineligible; `openrouter/free` cannot be selected for this hierarchy because its random routes do not provide a fixed verified contract. There is no downgrade or fallback. Run normal Synthetic checks without live keys. Live models need separate opt-in verification.
+
+Context diagnostics contain only section IDs, source kinds/revisions, bounded field-source metadata, size/omission estimates and a fingerprint. Never log or export prompt bodies, learned/user content, results, arguments, keys or screenshots through this manifest. IDs belong in protected diagnostics, never high-cardinality metric labels. Token figures are UTF-8-based estimates.
+
 ## Capability projection measurements
 
 `AgentCore.Runtime` records `capability_projection` histograms by low-cardinality `kind`, configured provider and catalog model key: authorizedCapabilityCount, eligibleCapabilityCount, projectedCapabilityCount, projectedToolSchemaBytes (normalized definitions including names/descriptions/schemas), coreBootstrapCount, definitionAlwaysCount, contextProjectedCount, skillProjectedCount, loadedProjectedCount and capabilityLoadInvocationCount. `capability_loads` counts safe outcomes load_matched, load_no_match, load_already_projected, load_over_budget and load_stale. capabilityLoadMatchCount measures each invocation's matches. Raw discovery queries and schemas are not default log or metric tags. Counts from overlapping projection sources are informational and need not sum to the deduped total.

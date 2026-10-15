@@ -55,7 +55,7 @@ internal static class RunExecutionFacts
                 failureCode,
                 failureReason = failure?.FailureReason is { } reason && AgentCore.Domain.Diagnostics.DiagnosticDetailAllowlist.FailureReasons.Contains(reason) ? reason : null,
                 diagnosticId = failure?.DiagnosticId,
-                finalizationReason = RunFinalization.Restore(receipts),
+                finalizationReason = RunFinalization.ObservedRecovery(receipts),
                 interruption = interruption is "userSteer" or "userCancel" or "userStop" or "disconnect" or "disconnected" ? interruption : null,
                 loadedCapabilities = loaded.Where(c => ToolRegistry.TryGet(c, out _)).Distinct().Order(StringComparer.Ordinal).Take(64),
                 toolOutcomes = outcomes.OrderBy(o => o.Key.Tool, StringComparer.Ordinal).ThenBy(o => o.Key.Outcome, StringComparer.Ordinal).Take(64)

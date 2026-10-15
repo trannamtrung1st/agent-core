@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Execution;
 using AgentCore.Application.Memory;
 using AgentCore.Application.Ports;
@@ -10,6 +11,24 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SemanticResponseLanguageModelTests
 {
+    [Fact]
+    public async Task Prepared_manifest_matches_the_protocol_forwarded_after_tool_receipts()
+    {
+        var inner = new ScriptedInner([new ModelTextDelta("Ready"), new ModelCompleted(ModelStopReason.Completed)], structured: false, tools: false);
+        var model = new SemanticResponseLanguageModel(inner);
+        var request = ContextAssembler.Create(Guid.NewGuid(), new EffectiveContextSnapshot([
+            ContextSection.Core(CoreProcedure.OperatingContract),
+            ContextSection.Runtime(ContextSectionId.AgentInstructions, ContextSourceKind.Definition, "Be concise")
+        ]), [new(ModelRole.User, "task"), new(ModelRole.Assistant, "", ToolCalls: [new("read", "test.read", "{}")]),
+            new(ModelRole.Tool, "receipt", ToolCallId: "read")]) with { ResponseContract = new(false) };
+        var prepared = model.PrepareRequest(request);
+        Assert.Single(prepared.ContextManifest!.Sections, section => section.Id == "CoreSemanticResponse");
+        await CollectAsync(model, prepared);
+        Assert.Equal(prepared.ContextManifest.Fingerprint, inner.LastRequest!.ContextManifest!.Fingerprint);
+        Assert.DoesNotContain(inner.LastRequest.Messages.SkipWhile(m => m.Role is ModelRole.System or ModelRole.Developer),
+            message => message.Role is ModelRole.System or ModelRole.Developer);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -22,7 +41,7 @@ public sealed class SemanticResponseLanguageModelTests
         Assert.Contains("successful artifacts.create", description, StringComparison.Ordinal);
         Assert.Contains("workspace path or filename is not an artifact ID", description, StringComparison.Ordinal);
         Assert.Contains(AssistantResponseSchema.ArtifactReferenceInstruction, AssistantResponseSchema.ResponseFunction(contract).Description, StringComparison.Ordinal);
-        Assert.Contains(AssistantResponseSchema.ArtifactReferenceInstruction, AssistantResponseSchema.CompatibilityInstruction(contract), StringComparison.Ordinal);
+        Assert.Contains(AssistantResponseSchema.ArtifactReferenceInstruction, ContextSection.SemanticProtocol(contract, responseFunction: false).Message.Text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -31,8 +50,8 @@ public sealed class SemanticResponseLanguageModelTests
     public async Task Function_and_marker_protocols_have_separate_guidance_and_typed_artifact_blocks(bool direct)
     {
         var contract = new ModelResponseContract(SpeechWillBeUsed: false, RequireChatResponse: direct);
-        var function = AssistantResponseSchema.CompatibilityInstruction(contract, responseFunction: true);
-        var marker = AssistantResponseSchema.CompatibilityInstruction(contract, responseFunction: false);
+        var function = ContextSection.SemanticProtocol(contract, responseFunction: true).Message.Text;
+        var marker = ContextSection.SemanticProtocol(contract, responseFunction: false).Message.Text;
         Assert.Contains("agent_core_respond", function, StringComparison.Ordinal);
         Assert.Contains(AssistantResponseSchema.ArtifactReferenceInstruction, function, StringComparison.Ordinal);
         Assert.Contains("typed artifactReference block", function, StringComparison.Ordinal);
@@ -64,7 +83,7 @@ public sealed class SemanticResponseLanguageModelTests
     }
 
     private static readonly ModelResponseContract Contract = new(SpeechWillBeUsed: false);
-    private static readonly ModelRequest Bare = new(Guid.NewGuid(), [new ModelMessage(ModelRole.User, "Hi")]);
+    private static readonly ModelRequest Bare = ContextAssembler.Create(Guid.NewGuid(), new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)]), [new(ModelRole.User, "Hi")]);
     private static readonly ModelRequest Contracted = Bare with { ResponseContract = Contract };
 
     [Fact]
@@ -460,9 +479,9 @@ public sealed class SemanticResponseLanguageModelTests
         var voice = Contracted with { ResponseContract = new ModelResponseContract(SpeechWillBeUsed: true) };
         _ = await CollectAsync(new SemanticResponseLanguageModel(inner), voice);
         var sent = inner.LastRequest!;
-        Assert.Equal(2, sent.Messages.Count);
-        Assert.Equal("Hi", sent.Messages[0].Text);
-        var instruction = sent.Messages[1];
+        Assert.Equal("Hi", Assert.Single(sent.Interaction!).Text);
+        var instruction = Assert.Single(sent.Context!.Sections, s => s.Id == ContextSectionId.CoreSemanticResponse).Message;
+        Assert.All(sent.Messages.TakeWhile(m => m.Role != ModelRole.User), m => Assert.Equal(ModelRole.System, m.Role));
         Assert.Equal(ModelRole.System, instruction.Role);
         Assert.StartsWith(AssistantResponseSchema.CompatibilityInstructionPrefix, instruction.Text, StringComparison.Ordinal);
         Assert.Contains("[[speech:", instruction.Text, StringComparison.Ordinal);
@@ -481,8 +500,8 @@ public sealed class SemanticResponseLanguageModelTests
             [new ModelTextDelta(json), new ModelCompleted(ModelStopReason.Completed)],
             structured: true);
         _ = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
-        Assert.Single(inner.LastRequest!.Messages);
-        Assert.Equal("Hi", inner.LastRequest.Messages[0].Text);
+        Assert.Equal("Hi", Assert.Single(inner.LastRequest!.Interaction!).Text);
+        Assert.DoesNotContain(inner.LastRequest.Context!.Sections, section => section.Id == ContextSectionId.CoreSemanticResponse);
     }
 
     [Fact]
@@ -829,7 +848,7 @@ public sealed class SemanticResponseLanguageModelTests
         var step = Step(ready);
         Assert.Equal(AgentStepDisposition.Complete, step.Disposition);
         Assert.IsType<ChatRespondAction>(Assert.Single(step.Actions));
-        Assert.Contains("Complete with one chat.respond", inner.LastRequest!.Messages[^1].Text, StringComparison.Ordinal);
+        Assert.Contains("Complete with one chat.respond", inner.LastRequest!.Context!.Text(ContextSectionId.CoreSemanticResponse), StringComparison.Ordinal);
     }
 
     private static async Task<ModelSemanticResponse> ReadyAsync(string json, bool native)
@@ -855,6 +874,9 @@ public sealed class SemanticResponseLanguageModelTests
 
     private static async Task<List<ModelGenerationEvent>> CollectAsync(ILanguageModel model, ModelRequest request)
     {
+        if (request.Context is null) request = ContextAssembler.Project(request with {
+            Context = new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)]), Interaction = request.Messages
+        });
         var listed = new List<ModelGenerationEvent>();
         await foreach (var item in model.GenerateAsync(request))
         {

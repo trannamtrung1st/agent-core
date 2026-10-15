@@ -31,6 +31,7 @@ public sealed class LanguageModelProviderOptions
     public bool Vision { get; set; }
     public bool Tools { get; set; }
     public bool StructuredOutput { get; set; }
+    public bool DeveloperRoleSupport { get; set; }
     /// <summary>
     /// When true, include the provider's free-form error message in local logs after redaction.
     /// Disabled by default because that text can echo ordinary private user content.

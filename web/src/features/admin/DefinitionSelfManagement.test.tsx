@@ -5,11 +5,11 @@ import { DefinitionSelfManagement } from './DefinitionSelfManagement';
 describe('Definition self-management defaults', () => {
   it('does not materialize defaults on inspection and preserves unrelated candidate fields on customization', () => {
     const onChange = vi.fn();
-    render(<DefinitionSelfManagement candidate={{ systemInstructions: 'Retained instructions' }} disabled={false} onChange={onChange} />);
+    render(<DefinitionSelfManagement candidate={{ agentInstructions: 'Retained instructions' }} disabled={false} onChange={onChange} />);
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByRole('combobox', { name: 'Default self-management mode' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Settings' }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ systemInstructions: 'Retained instructions', selfManagement: expect.objectContaining({ mode: 'Disabled', scopes: ['Settings'], frozen: false }) }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ agentInstructions: 'Retained instructions', selfManagement: expect.objectContaining({ mode: 'Disabled', scopes: ['Settings'], frozen: false }) }));
   });
   it('keeps published defaults read-only', () => {
     const onChange = vi.fn();

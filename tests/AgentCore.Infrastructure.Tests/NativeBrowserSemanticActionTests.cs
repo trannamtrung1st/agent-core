@@ -43,7 +43,7 @@ public sealed class NativeBrowserSemanticActionTests
             foreach (var forbidden in new[] { "frame-password-93742", "frame-token-93742", "DENIED-NESTED-CONTENT" })
                 Assert.DoesNotContain(forbidden, JsonSerializer.Serialize(root));
             var executor = new SessionToolExecutor(browser: browser, configurationGate: ToolConfigurationGates.AllowAll);
-            var definition = new AgentDefinition(1, "frame-test", 1, new("Frame", "Role", "Description", "Tone"), [], "Use direct browser targets.",
+            var definition = new AgentDefinition(2, "frame-test", 1, new("Frame", "Role", "Description", "Tone"), [], "Use direct browser targets.",
                 new("answerNewTurn", true, true), new("balanced", false, "en", 2048),
                 new(false, 60_000, 120_000, 1, ["longSilence"], 0), new(false, "default", 1),
                 new("primary-llm", "primary-stt", "primary-tts"), new Dictionary<string, string>(),

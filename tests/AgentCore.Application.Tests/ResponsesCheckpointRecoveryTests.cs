@@ -26,7 +26,7 @@ public sealed class ResponsesCheckpointRecoveryTests
     private static AgentDefinition Definition => SampleDefinitions.Examiner with
     {
         Voice = new(false, "default", 1), InitiativePolicy = SampleDefinitions.Examiner.InitiativePolicy with { Enabled = false },
-        SystemInstructions = "This is a synthetic background counter fixture. Alpha and Beta must each be clicked exactly once. Existing successful tool receipts are authoritative; do not repeat them. Once both are done, call work.complete with summary 'Both counters verified once', attentionRequired false and outcome Response.",
+        AgentInstructions = "This is a synthetic background counter fixture. Alpha and Beta must each be clicked exactly once. Existing successful tool receipts are authoritative; do not repeat them. Once both are done, call work.complete with summary 'Both counters verified once', attentionRequired false and outcome Response.",
         Environment = new(ToolAllowlist: [ToolCatalog.BrowserClick])
     };
 
@@ -87,7 +87,7 @@ public sealed class ResponsesCheckpointRecoveryTests
         Assert.All(calls, call => Assert.Equal(ToolCatalog.BrowserClick, call.Name));
         ModelMessage[] batch = [new(ModelRole.Assistant, "", ToolCalls: calls)];
         run = await runs.ApplyAsync(owner, runId, new AgentRunCommand.Checkpoint(run.Revision, Now, run.Claim!.Generation,
-            new(AgentRunToolCallCheckpoint.Write(batch), 2, 0, 240000), null));
+            new(AgentRunToolCallCheckpoint.Write(batch, executionState: new(TranscriptId: run.Admission.ResponseId)), 2, 0, 240000), null));
         var first = calls[0];
         using var args = JsonDocument.Parse(first.ArgumentsJson);
         var hash = ToolActionHash.Compute(first.Name, args.RootElement);
@@ -99,7 +99,7 @@ public sealed class ResponsesCheckpointRecoveryTests
         Assert.DoesNotContain("\"error\"", result.Text);
         run = await runs.ApplyAsync(owner, runId, new AgentRunCommand.MarkSideEffect(run.Revision, Now, run.Claim!.Generation, AgentRunSideEffectDisposition.Succeeded, first.Id, hash));
         run = await runs.ApplyAsync(owner, runId, new AgentRunCommand.Checkpoint(run.Revision, Now, run.Claim!.Generation,
-            new(AgentRunToolCallCheckpoint.Write([..batch, new(ModelRole.Tool, result.Text, ToolCallId: first.Id, Name: first.Name)]), 2, 0, 240000), null));
+            new(AgentRunToolCallCheckpoint.Write([..batch, new(ModelRole.Tool, result.Text, ToolCallId: first.Id, Name: first.Name)], executionState: new(TranscriptId: run.Admission.ResponseId)), 2, 0, 240000), null));
         run = await runs.ApplyAsync(owner, runId, new AgentRunCommand.ClearSideEffect(run.Revision, Now, run.Claim!.Generation));
         await File.WriteAllTextAsync(Path.Combine(root, "identity.json"), JsonSerializer.Serialize(new Identity(owner, snapshot.SessionId, runId)));
         SqliteConnection.ClearAllPools();
@@ -166,7 +166,7 @@ public sealed class ResponsesCheckpointRecoveryTests
 
     private static OpenAICompatibleLanguageModel Model(HttpClient http, bool live) => new(http, new()
     {
-        BaseUrl = "https://openrouter.ai/api/v1/", DefaultModel = ModelId, Transport = ModelInferenceTransport.Responses,
+        BaseUrl = "https://openrouter.ai/api/v1/", DefaultModel = ModelId, Transport = ModelInferenceTransport.Responses, DeveloperRoleSupport = true,
         ApiKey = live ? Environment.GetEnvironmentVariable("OPENROUTER_API_KEY") : null, Tools = true,
         Timeouts = new() { SetupSeconds = 30, StreamIdleSeconds = 60, TotalSeconds = 120 }
     });

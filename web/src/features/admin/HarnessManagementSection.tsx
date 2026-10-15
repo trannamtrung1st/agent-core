@@ -11,7 +11,7 @@ import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 
 export const harnessScopes: { label: string; value: HarnessScope }[] = [
   { label: "Knowledge & resources", value: "KnowledgeResources" },
-  { label: "Operating instructions", value: "Instructions" }, { label: "Tool proposals", value: "ToolSelection" }
+  { label: "Agent instructions", value: "Instructions" }, { label: "Tool proposals", value: "ToolSelection" }
 ];
 const evidenceLabels: Record<string, string> = { PartiallyVerified: "Partially verified", CannotVerify: "Cannot verify", RequiresExternalEvidence: "Requires external evidence" };
 

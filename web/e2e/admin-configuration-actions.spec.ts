@@ -31,9 +31,9 @@ test('one save persists persona, sparse settings, budgets, policy and unattended
   const { instanceId, api, headers } = await fixture(page);
   await page.getByLabel('Persona name', { exact: true }).fill('Shared configuration save');
   await navigateAdmin(page, 'Instructions');
-  await expect(page.getByRole('button', { name: /Customize Operating instructions/ })).toHaveCount(0);
-  await expect(page.getByLabel('Operating instructions', { exact: true })).toBeEnabled();
-  await page.getByLabel('Operating instructions', { exact: true }).fill('Sparse retained instructions');
+  await expect(page.getByRole('button', { name: /Customize Agent instructions/ })).toHaveCount(0);
+  await expect(page.getByLabel('Agent instructions', { exact: true })).toBeEnabled();
+  await page.getByLabel('Agent instructions', { exact: true }).fill('Sparse retained instructions');
   await navigateAdmin(page, 'Conversation'); await page.getByLabel('Language', { exact: true }).fill('fr-FR');
   await navigateAdmin(page, 'Execution budgets'); await select(page, 'Standard inheritance', 'Override');
   await navigateAdmin(page, 'Self-management'); await select(page, 'Self-management mode', 'Off');
@@ -43,7 +43,7 @@ test('one save persists persona, sparse settings, budgets, policy and unattended
   const effectiveResponse = await page.request.get(`/api/v2/admin/instances/${instanceId}/effective-config`, { headers }); expect(effectiveResponse.ok()).toBe(true); const effective = await effectiveResponse.json();
   expect(effective.persona.name).toBe('Shared configuration save'); expect(effective.unattendedModelCatalogKey).toBe('scripted-beta');
   const settings = await (await page.request.get(api + '/settings', { headers })).json();
-  expect(settings.find((s: { section: string }) => s.section === 'instructions').overrides).toEqual({ systemInstructions: 'Sparse retained instructions' });
+  expect(settings.find((s: { section: string }) => s.section === 'instructions').overrides).toEqual({ agentInstructions: 'Sparse retained instructions' });
   expect(settings.find((s: { section: string }) => s.section === 'conversationPolicy').overrides).toEqual({ language: 'fr-FR' });
   expect((await (await page.request.get(api + '/execution-budgets', { headers })).json()).executionBudgets.standard.preset).toBe(0);
   expect((await (await page.request.get(api + '/self-management', { headers })).json()).effective.mode).toBe('Disabled');
@@ -54,7 +54,7 @@ test('one save persists persona, sparse settings, budgets, policy and unattended
   expect(reset.find((s: { section: string }) => s.section === 'conversationPolicy').overrides).toEqual({});
 });
 test('partial failure preserves unsaved fields, refresh repairs revisions and markers keep inputs aligned', async ({ page }) => {
-  const { api } = await fixture(page); await navigateAdmin(page, 'Instructions'); await page.getByLabel('Operating instructions', { exact: true }).fill('First committed section');
+  const { api } = await fixture(page); await navigateAdmin(page, 'Instructions'); await page.getByLabel('Agent instructions', { exact: true }).fill('First committed section');
   await navigateAdmin(page, 'Conversation'); const language = page.getByLabel('Language', { exact: true });
   const before = await language.evaluate(el => el.getBoundingClientRect().top - el.closest('form')!.getBoundingClientRect().top);
   await language.fill('fr-FR'); expect(await language.evaluate(el => el.getBoundingClientRect().top - el.closest('form')!.getBoundingClientRect().top)).toBe(before);

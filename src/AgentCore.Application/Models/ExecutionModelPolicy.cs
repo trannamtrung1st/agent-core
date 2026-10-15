@@ -30,7 +30,7 @@ public static class ExecutionModelPolicy
         }
 
         var descriptor = catalog.Get(catalogKey.Trim());
-        if (descriptor is null)
+        if (descriptor is null || !descriptor.DeveloperRoleSupport || !Enum.IsDefined(descriptor.Transport))
         {
             throw AgentCoreErrors.Validation("The selected model is not available.");
         }
@@ -119,7 +119,7 @@ public static class ExecutionModelPolicy
     public static bool Matches(IModelCatalog catalog, ExecutionModelPin pin, out ModelDescriptor? descriptor)
     {
         descriptor = catalog.Get(pin.CatalogKey);
-        if (descriptor is null
+        if (descriptor is null || !descriptor.DeveloperRoleSupport || !Enum.IsDefined(descriptor.Transport)
             || !string.Equals(descriptor.ProviderAlias, pin.ProviderAlias, StringComparison.Ordinal)
             || !string.Equals(descriptor.ModelId, pin.ModelId, StringComparison.Ordinal))
         {
@@ -144,7 +144,7 @@ public static class ExecutionModelPolicy
         Automation? registration)
     {
         var descriptor = catalog.Get(catalogKey);
-        if (descriptor is null)
+        if (descriptor is null || !descriptor.DeveloperRoleSupport || !Enum.IsDefined(descriptor.Transport))
         {
             return new ExecutionModelDecision(null, UnavailableCode);
         }
@@ -178,7 +178,7 @@ public static class ExecutionModelPolicy
         Automation? registration)
     {
         var descriptor = catalog.Get(pin.CatalogKey);
-        if (descriptor is null)
+        if (descriptor is null || !descriptor.DeveloperRoleSupport || !Enum.IsDefined(descriptor.Transport))
         {
             return new ExecutionModelDecision(pin, UnavailableCode);
         }

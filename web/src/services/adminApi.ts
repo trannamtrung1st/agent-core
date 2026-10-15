@@ -589,10 +589,10 @@ const adminDetailMessages: Record<string, string> = {
     "Add a name, role, description, and tone.",
   "identity fields are required.":
     "Add a name, role, description, and tone.",
-  "systemInstructions is required.":
-    "Add system instructions.",
-  "systemInstructions must be 1..8000 characters.":
-    "System instructions must be between 1 and 8000 characters.",
+  "agentInstructions is required.":
+    "Add agent instructions.",
+  "agentInstructions must be 1..8000 characters.":
+    "Agent instructions must be between 1 and 8000 characters.",
   "language is required.":
     "Set the conversation language to auto or a tag such as en.",
   "maxOutputTokens must be 1..4096.":

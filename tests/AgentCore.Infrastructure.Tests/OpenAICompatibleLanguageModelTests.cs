@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -113,6 +114,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",
@@ -140,6 +142,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "deepseek/deepseek-v4.1-flash",
@@ -167,6 +170,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",
@@ -285,7 +289,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
         var store = new InMemoryMemoryStore();
         var definition = new AgentDefinition(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "Speaking examiner", "desc", "tone"),
@@ -405,6 +409,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",
@@ -425,6 +430,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",
@@ -553,6 +559,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",
@@ -651,6 +658,7 @@ public sealed class OpenAICompatibleLanguageModelTests
         var compatible = LanguageModelAdapterFactory.Create(
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1:9/v1/",
                 DefaultModel = "local-model"
@@ -711,6 +719,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             "Synthetic",
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model"
@@ -725,6 +734,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             "Real",
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model"
@@ -789,7 +799,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940b842")]);
         var store = new InMemoryMemoryStore();
         var definition = new AgentDefinition(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "Speaking examiner", "desc", "tone"),
@@ -831,6 +841,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             http,
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "https://openrouter.ai/api/v1/",
                 ApiKey = key,
@@ -889,6 +900,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             http,
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "https://openrouter.ai/api/v1/",
                 ApiKey = key,
@@ -916,6 +928,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             http,
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "https://openrouter.ai/api/v1/",
                 ApiKey = key,
@@ -973,6 +986,7 @@ public sealed class OpenAICompatibleLanguageModelTests
                 http,
                 new LanguageModelProviderOptions
                 {
+                    DeveloperRoleSupport = true,
                     Adapter = "OpenAICompatible",
                     BaseUrl = "https://openrouter.ai/api/v1/",
                     ApiKey = key,
@@ -1067,6 +1081,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             http,
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "https://openrouter.ai/api/v1/",
                 ApiKey = key,
@@ -1135,6 +1150,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",
@@ -1165,6 +1181,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",
@@ -1456,6 +1473,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "openai/gpt-4o-mini-2024-07-18",
@@ -1520,6 +1538,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "openai/gpt-4o-mini-2024-07-18",
@@ -1634,6 +1653,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",
@@ -1670,6 +1690,9 @@ public sealed class OpenAICompatibleLanguageModelTests
 
     private static async Task<List<ModelGenerationEvent>> CollectAsync(ILanguageModel model, ModelRequest? request = null)
     {
+        request ??= Request();
+        if (model is SemanticResponseLanguageModel && request.Context is null)
+            request = ContextAssembler.Project(request with { Context = new EffectiveContextSnapshot([ContextSection.Core(CoreProcedure.OperatingContract)]), Interaction = request.Messages });
         var events = new List<ModelGenerationEvent>();
         await foreach (var item in model.GenerateAsync(request ?? Request()))
         {
@@ -1700,6 +1723,7 @@ public sealed class OpenAICompatibleLanguageModelTests
             new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://127.0.0.1/") },
             new LanguageModelProviderOptions
             {
+                DeveloperRoleSupport = true,
                 Adapter = "OpenAICompatible",
                 BaseUrl = "http://127.0.0.1/v1/",
                 DefaultModel = "local-model",

@@ -10,6 +10,8 @@ Keep this file focused on open work and maintainer ideas. [README](README.md) su
 
 ## Current status
 
+The owner-requested three-layer context replacement is locally verified: Core/system, Runtime/developer and Evidence use one typed assembly path, schema-2 `agentInstructions`, frozen field/task provenance and interaction-only format-2 checkpoints. Populated installations require the explicit backed-up offline conversion before startup. [Verification and remaining operator actions](docs/reports/three-layer-context-cutover-verification-2026-10-15.md) distinguish local acceptance from unperformed deployment, CI and live-provider qualification.
+
 The MVP and phases through P9.10 have closed/frozen evidence. Later bounded enhancements have their own acceptance records; an earlier freeze does not establish acceptance for a successor. Reopen closed work for a reproducible regression or an explicit new requirement.
 
 Email accounts, Gmail OAuth and monitoring have accepted non-live scopes. The contextual Admin/email integration also has exact-source hosted acceptance; see [integration verification](docs/reports/email-monitoring-main-integration-2026-10-13.md). Real mailbox acceptance remains separate.

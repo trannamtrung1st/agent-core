@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Execution;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
@@ -122,10 +123,10 @@ public sealed class ChatAutomationJourneyTests
         }
         Assert.False(run.Result?.AttentionRequired ?? false);
         var chat = Assert.Single(model.ChatRequests);
-        Assert.Contains(chat.Messages, m => m.Role == ModelRole.System && m.Text.Contains("action-oriented Instructions"));
-        Assert.Contains(chat.Messages, m => m.Role == ModelRole.System && m.Text.Contains("exact-action approvals still apply"));
+        Assert.Contains(chat.Context!.Sections, section => section.Id == ContextSectionId.CoreScheduling);
+        Assert.Contains(chat.Context!.Sections, section => section.Id == ContextSectionId.OperatingContract);
         Assert.DoesNotContain(chat.Messages, m => m.Text.Contains("not perform the action each time"));
-        Assert.Contains(model.RunRequests, r => r.Messages.Any(m => m.Role == ModelRole.User && m.Text.Contains(Instructions))
+        Assert.Contains(model.RunRequests, r => r.Context!.Sections.Any(section => section.Id == ContextSectionId.RunTask && section.Layer == ContextLayer.Runtime && section.Message.Text.Contains(Instructions))
             && r.Tools!.Any(t => t.Name == ToolCatalog.ExperienceConsolidate) == authorizedAtRun);
     }
 
@@ -206,13 +207,13 @@ public sealed class ChatAutomationJourneyTests
                 }
                 yield break;
             }
-            if (user is not null && user.Text.Contains(Instructions)
+            if (request.Context?.Text(ContextSectionId.RunTask).Contains(Instructions) == true
                 && request.Messages.Any(m => m.Role == ModelRole.System && m.Text.StartsWith("Bounded background Session task.")))
             {
                 RunRequests.Enqueue(request);
                 // Reuse the deterministic semantic consolidation fixture without storing a test marker in Instructions.
-                request = request with { Messages = request.Messages.Select(m => ReferenceEquals(m, user)
-                    ? m with { Text = m.Text + " synthetic-maintain-experience" } : m).ToArray() };
+                request = ContextAssembler.Project(request, request.Context!.Upsert(ContextSection.Runtime(ContextSectionId.RunTask,
+                    ContextSourceKind.Automation, request.Context.Text(ContextSectionId.RunTask) + " synthetic-maintain-experience")));
             }
             await foreach (var e in inner.GenerateAsync(request, cancellationToken))
             {

@@ -46,7 +46,7 @@ public sealed partial class MessagingSkillJourneyTests
         {
             Identity = new("UAT assistant", "Project assistant", "Disposable Skill content validation", "Concise"),
             Goals = ["Help the user with their project."],
-            SystemInstructions = "Answer the user's request concisely. Treat prior Skill usage as history, not a new invocation.",
+            AgentInstructions = "Answer the user's request concisely. Treat prior Skill usage as history, not a new invocation.",
             InitiativePolicy = SampleDefinitions.Examiner.InitiativePolicy with { Enabled = false },
             ConversationPolicy = SampleDefinitions.Examiner.ConversationPolicy with { MaxOutputTokens = 1200 }
         };

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Agents;
 using AgentCore.Application.Models;
@@ -26,20 +27,22 @@ public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
         var modelSelection = $"synthetic-offline/scripted/{selection.CatalogKey}";
         var context = DefinitionEvaluationHarness.ToolContext(definition, scenario.Prompt);
         var tools = ToolCatalog.For(definition, context, configurationGate);
-        var messages = new List<ModelMessage>
-        {
-            new(ModelRole.System, PromptContextBuilder.BuildIdentitySystem(definition, definition.Identity)),
-            new(ModelRole.System, DefinitionEvaluationHarness.BuildDirective(scenario)),
-            new(ModelRole.System, DefinitionEvaluationHarness.BuildResourceManifest(resources)),
-            new(ModelRole.User, scenario.Prompt)
-        };
+        var snapshot = new EffectiveContextSnapshot([
+            ContextSection.Core(CoreProcedure.OperatingContract), ContextSection.Core(CoreProcedure.DraftEvaluation),
+            ContextSection.Runtime(ContextSectionId.AgentIdentity, ContextSourceKind.Definition, PromptContextBuilder.BuildAgentIdentity(definition, definition.Identity)),
+            ContextSection.Runtime(ContextSectionId.Policies, ContextSourceKind.Definition, PromptContextBuilder.BuildAgentPolicies(definition)),
+            ContextSection.Runtime(ContextSectionId.AgentInstructions, ContextSourceKind.Definition, definition.AgentInstructions),
+            ContextSection.Runtime(ContextSectionId.ExecutionFacts, ContextSourceKind.AgentRun, DefinitionEvaluationHarness.BuildDirective(scenario), semantics: ContextSemantics.TrustedFact),
+            ContextSection.Evidence(ContextSectionId.References, ContextSourceKind.Resource, DefinitionEvaluationHarness.BuildResourceManifest(resources))
+        ]);
+        var messages = new List<ModelMessage> { new(ModelRole.User, scenario.Prompt) };
 
         var toolObservations = new List<DefinitionDraftSyntheticToolObservation>();
         string? assistantText = null;
         for (var round = 0; round < MaxToolRounds; round++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var request = new ModelRequest(Guid.NewGuid(), messages, Tools: tools);
+            var request = ContextAssembler.Create(Guid.NewGuid(), snapshot, messages) with { Tools = tools };
             ModelStopReason? stop = null;
             await foreach (var eventItem in offlineModel.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
             {
@@ -59,7 +62,7 @@ public sealed class SyntheticDefinitionDraftBehaviorEvaluator(
                         messages.Add(new ModelMessage(ModelRole.Assistant, string.Empty, ToolCalls: [toolCall.Call]));
                         messages.Add(new ModelMessage(
                             ModelRole.Tool,
-                            $"Synthetic evaluation stub result for {toolCall.Call.Name}."));
+                            $"Synthetic evaluation stub result for {toolCall.Call.Name}.", ToolCallId: toolCall.Call.Id, Name: toolCall.Call.Name));
                         break;
                     case ModelCompleted completed:
                         stop = completed.Reason;

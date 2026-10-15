@@ -64,8 +64,8 @@ test("P7.6 admin journey publishes a new definition and opens managed chat", asy
 
   const editor = draftEditorSection(page);
   await openDefinitionSettings(editor);
-  await expect(editor.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
-  await editor.getByLabel("System instructions").fill(instructions);
+  await expect(editor.getByLabel("Agent instructions")).toBeVisible({ timeout: 15_000 });
+  await editor.getByLabel("Agent instructions").fill(instructions);
   await saveDraft(page, editor);
 
   await showAdvancedJson(editor);

@@ -82,8 +82,8 @@ public static class ConfigurationTools
         if (field is "speakingRate") return new() { ["type"] = "number", ["minimum"] = 0.25, ["maximum"] = 4 };
         if (field.StartsWith("max", StringComparison.Ordinal) || field.EndsWith("Ms", StringComparison.Ordinal) || field.StartsWith("min", StringComparison.Ordinal) || field == "oneShotHorizonDays")
             return new() { ["type"] = field is "maxConsecutiveProactiveTurns" or "maxSilentEvaluations" or "maxInactivityMs" ? new JsonArray("integer", "null") : JsonValue.Create("integer") };
-        if (field is "systemInstructions" or "responseLength" or "language" or "interruptionStyle" or "voiceId" or "languageModel" or "interruptionClassifier")
-            return new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = field == "systemInstructions" ? 8000 : 80 };
+        if (field is "agentInstructions" or "responseLength" or "language" or "interruptionStyle" or "voiceId" or "languageModel" or "interruptionClassifier")
+            return new() { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = field == "agentInstructions" ? 8000 : 80 };
         if (field is "catalogKey" or "reasoningEffort" or "speechRecognizer" or "speechSynthesizer")
             return new() { ["type"] = new JsonArray("string", "null"), ["maxLength"] = 80 };
         return new() { ["type"] = "boolean" };

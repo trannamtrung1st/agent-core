@@ -69,7 +69,7 @@ internal static class AgentDefinitionCandidateValidator
 
         var definition = candidate.ToPublished(1);
         if (BrowserContractCutover.Diagnostic(definition) is { } diagnostic)
-            findings.Add(new("systemInstructions", "browser_contract_retired", diagnostic, DefinitionValidationSeverity.Blocking));
+            findings.Add(new("agentInstructions", "browser_contract_retired", diagnostic, DefinitionValidationSeverity.Blocking));
         findings.AddRange(CollectModelBindingFindings(definition, catalog));
         if (findings.Count > 0)
         {
@@ -250,7 +250,7 @@ internal static class AgentDefinitionCandidateValidator
 
     private static IEnumerable<DefinitionValidationFinding> CollectSecretFindings(AgentDefinitionCandidate candidate)
     {
-        foreach (var finding in CollectSecretFieldFindings("systemInstructions", candidate.SystemInstructions))
+        foreach (var finding in CollectSecretFieldFindings("agentInstructions", candidate.AgentInstructions))
         {
             yield return finding;
         }
@@ -489,9 +489,9 @@ internal static class AgentDefinitionCandidateValidator
             throw AgentCoreErrors.Validation("Definition candidate is missing required policy members.");
         }
 
-        if (candidate.SystemInstructions is null)
+        if (candidate.AgentInstructions is null)
         {
-            throw AgentCoreErrors.Validation("systemInstructions is required.");
+            throw AgentCoreErrors.Validation("agentInstructions is required.");
         }
     }
 

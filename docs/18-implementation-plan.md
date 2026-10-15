@@ -1,5 +1,11 @@
 # Implementation Plan
 
+## Three-layer context cutover (owner-authorized 2026-10-15)
+
+The requested clean replacement covers one typed assembler, separate Core/system and Runtime/developer roles, bounded Evidence, per-field Run provenance, versioned interaction-only checkpoints, the breaking schema-2 `agentInstructions` cutover, explicit backup/transactional maintenance and existing Admin provenance/instruction surfaces. No parallel legacy builder/alias/resume translator is retained. Existing tool/approval/session/provider boundaries and historical milestone freezes remain unchanged.
+
+AC-01–AC-17 are locally verified through focused producer/role/source/injection tests, both provider transports, durable resume/migration/hash/security regressions, Synthetic Admin journeys at 320/390/768/desktop and canonical-doc consistency. [Verification and the producer inventory](reports/three-layer-context-cutover-verification-2026-10-15.md) own exact results and the offline conversion/deployment procedure. No user database conversion or deployment was performed; CI and live-provider qualification remain opt-in. Historical milestone acceptance is unchanged.
+
 ## Verification policy for current work
 
 The 2026-10-15 owner-authorized State and Isolation enhancement follows the companion Three-Layer Context cutover. Independent observation, policy, resource ownership and Admin work can be verified before that dependency; model-facing integration and full AS acceptance require its finalized single assembly path. Current progress and exact local evidence are in the [state/isolation ledger](reports/agent-state-isolation-verification-2026-10-15.md). This request does not reopen historical milestones or opt into hosted CI.

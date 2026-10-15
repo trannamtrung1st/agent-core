@@ -93,7 +93,7 @@ public sealed class EffectReceiptJourneyTests
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940d201")]);
         var now = time.GetUtcNow();
         var definition = new AgentDefinition(
-            1,
+            2,
             "general-assistant",
             12,
             new AgentIdentity("Test", "Role", "desc", "Tone"),

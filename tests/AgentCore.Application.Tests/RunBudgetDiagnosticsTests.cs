@@ -15,8 +15,8 @@ public sealed class RunBudgetDiagnosticsTests
     {
         var run = NewRun(); var now = run.CreatedAtUtc; var generation = Guid.NewGuid();
         run = run.TakeClaim(generation, now, now.AddMinutes(1));
-        var messages = new ModelMessage[] { new(ModelRole.System, RunFinalization.Marker + reason) };
-        run = run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages), 2, 100, 290000, activeExecutionMs: 10000), null, now);
+        ModelMessage[] messages = [];
+        run = run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages, executionState: new(RunPhase.Finalization, reason)), 2, 100, 290000, activeExecutionMs: 10000), null, now);
         var diagnostic = RunBudgetDiagnosticProjection.From(run)!;
         Assert.Equal(reason, diagnostic.TerminationReason); Assert.Equal("finalization", diagnostic.Phase);
         Assert.Equal(2, diagnostic.StepsConsumed); Assert.Equal(48, diagnostic.MaxSteps); Assert.Equal(10000, diagnostic.ActiveExecutionMs);
@@ -41,8 +41,8 @@ public sealed class RunBudgetDiagnosticsTests
     public void Earlier_work_verification_cannot_establish_cleanup_success()
     {
         var run = NewRun(); var now = run.CreatedAtUtc; var generation = Guid.NewGuid(); run = run.TakeClaim(generation, now, now.AddMinutes(1));
-        ModelMessage[] messages = [new(ModelRole.Tool, "{\"applicationOutcomeVerified\":true}", Name: "browser.verify"), new(ModelRole.System, RunFinalization.CleanupMarker), new(ModelRole.Tool, "{\"status\":\"closed\"}", Name: ToolCatalog.BrowserClose)];
-        run = run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages), 2, 100, 290000), null, now);
+        ModelMessage[] messages = [new(ModelRole.Tool, "{\"applicationOutcomeVerified\":true}", Name: "browser.verify"), new(ModelRole.Tool, "{\"status\":\"closed\"}", Name: ToolCatalog.BrowserClose)];
+        run = run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages, executionState: new(RunPhase.Cleanup, CleanupStartedAtMessage: 1)), 2, 100, 290000), null, now);
         Assert.Equal("unverified", RunBudgetDiagnosticProjection.From(run)!.CleanupStatus);
         Assert.True(RunBudgetDiagnosticProjection.From(run)!.ClosureConfirmed);
     }
@@ -78,9 +78,8 @@ public sealed class RunBudgetDiagnosticsTests
     {
         var run = NewRun(); var now = run.CreatedAtUtc; var generation = Guid.NewGuid(); run = run.TakeClaim(generation, now, now.AddMinutes(1));
         var denied = new ModelMessage(ModelRole.Tool, "{\"error\":\"forbidden\"}", Name: ToolCatalog.BrowserHover);
-        var marker = new ModelMessage(ModelRole.System, RunFinalization.CleanupMarker);
-        ModelMessage[] messages = duringCleanup ? [marker, denied] : [denied, marker];
-        run = run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages), 1, 100, 290000), null, now);
+        ModelMessage[] messages = [denied];
+        run = run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages, executionState: new(RunPhase.Cleanup, CleanupStartedAtMessage: duringCleanup ? 0 : 1)), 1, 100, 290000), null, now);
         var projection = RunBudgetDiagnosticProjection.From(run)!;
         Assert.Equal(status, projection.CleanupStatus);
         Assert.Equal(duringCleanup ? "cleanupBlocked" : null, projection.TerminationReason);
@@ -93,7 +92,6 @@ public sealed class RunBudgetDiagnosticsTests
     public void Generic_verification_click_and_model_claims_do_not_prove_logout(bool logout, bool close, string expected)
     {
         var run = WithReceipts(new(logout, close), [
-            new(ModelRole.System, RunFinalization.CleanupMarker),
             new(ModelRole.Tool, "{\"status\":\"ok\",\"effectConfirmedBySdk\":true}", Name: ToolCatalog.BrowserClick),
             new(ModelRole.Tool, "{\"status\":\"ok\",\"applicationOutcomeVerified\":true}", Name: "browser.verify"),
             new(ModelRole.Assistant, "Logged out successfully. {\"logoutVerified\":true}"),
@@ -112,7 +110,6 @@ public sealed class RunBudgetDiagnosticsTests
     public void Ordered_close_recovery_clears_only_resolved_blocker(bool recovered, string expected)
     {
         var messages = new List<ModelMessage> {
-            new(ModelRole.System, RunFinalization.CleanupMarker),
             new(ModelRole.Tool, "{\"error\":\"close_uncertain\"}", Name: ToolCatalog.BrowserClose),
             new(ModelRole.Tool, "{\"status\":\"ok\",\"applicationOutcomeVerified\":true}", Name: "browser.verify") };
         if (recovered) messages.Add(new(ModelRole.Tool, "{\"status\":\"closed\"}", Name: ToolCatalog.BrowserClose));
@@ -127,8 +124,7 @@ public sealed class RunBudgetDiagnosticsTests
     [Fact]
     public void Recovered_hover_does_not_mask_an_unresolved_close()
     {
-        var run = WithReceipts(new(false, true), [new(ModelRole.System, RunFinalization.CleanupMarker),
-            new(ModelRole.Tool, "{\"error\":\"close_failed\"}", Name: ToolCatalog.BrowserClose),
+        var run = WithReceipts(new(false, true), [            new(ModelRole.Tool, "{\"error\":\"close_failed\"}", Name: ToolCatalog.BrowserClose),
             new(ModelRole.Tool, "{\"error\":\"target_denied\"}", Name: ToolCatalog.BrowserHover),
             new(ModelRole.Tool, "{\"status\":\"ok\"}", Name: ToolCatalog.BrowserHover)]);
         Assert.True(RunBudgetDiagnosticProjection.From(run)!.CleanupBlocked);
@@ -137,8 +133,7 @@ public sealed class RunBudgetDiagnosticsTests
     [Fact]
     public void Sdk_confirmed_alternate_cleanup_path_recovers_denial_without_claiming_logout()
     {
-        var run = WithReceipts(new(true, true), [new(ModelRole.System, RunFinalization.CleanupMarker),
-            new(ModelRole.Tool, "{\"error\":\"target_denied\"}", Name: ToolCatalog.BrowserHover),
+        var run = WithReceipts(new(true, true), [            new(ModelRole.Tool, "{\"error\":\"target_denied\"}", Name: ToolCatalog.BrowserHover),
             new(ModelRole.Tool, "{\"status\":\"ok\",\"effectConfirmedBySdk\":true}", Name: ToolCatalog.BrowserClick),
             new(ModelRole.Tool, "{\"status\":\"closed\"}", Name: ToolCatalog.BrowserClose)]);
         var projection = RunBudgetDiagnosticProjection.From(run)!;
@@ -155,7 +150,7 @@ public sealed class RunBudgetDiagnosticsTests
             run.Admission.ExecutionBudget! with { CleanupIntent = intent, RequestedCleanup = intent.Any }), run.PinnedModel, run.MaxAttempts, run.CreatedAtUtc);
         var generation = Guid.NewGuid(); var now = run.CreatedAtUtc;
         run = run.TakeClaim(generation, now, now.AddMinutes(1));
-        return run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages), 4, 100, 290000), null, now);
+        return run.SaveCheckpoint(run.Revision, generation, new(AgentRunToolCallCheckpoint.Write(messages, executionState: new(RunPhase.Cleanup, CleanupStartedAtMessage: 0)), 4, 100, 290000), null, now);
     }
 
     private static AgentRun NewRun()

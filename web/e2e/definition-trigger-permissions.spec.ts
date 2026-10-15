@@ -62,7 +62,7 @@ for (const kind of ["coreEvent", "applicationEvent"]) {
     await page.reload();
     await expect(page).toHaveURL(new RegExp(`/drafts/${draftId}/`));
     await openDefinitionSettings(editor);
-    await expect(editor.getByLabel("System instructions")).toBeVisible();
+    await expect(editor.getByLabel("Agent instructions")).toBeVisible();
     await view(editor, "Advanced JSON");
     expect(JSON.parse(await json.inputValue()).triggerPolicy.allowedSourceKinds).toEqual(["schedule", kind]);
   });

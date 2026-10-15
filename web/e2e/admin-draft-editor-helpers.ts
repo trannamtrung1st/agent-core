@@ -1,7 +1,7 @@
 import { navigateAdmin } from "./support/admin-navigation";
 import { expect, type Page, type Locator } from "@playwright/test";
 
-export async function openDefinitionSettings(editor: Locator, section = "Operating instructions") {
+export async function openDefinitionSettings(editor: Locator, section = "Agent instructions") {
   const page = editor.page();
   const local = editor.getByRole('tab', { name: 'Settings', exact: true });
   if (await editor.getAttribute('role') === 'dialog' || await editor.locator('xpath=ancestor::*[@role="dialog"]').count()) {
@@ -47,7 +47,7 @@ export async function forkBuiltInV1Draft(page: Page) {
   await definitionDraftsSection(page).getByRole("button", { name: /Fork v1 \(builtIn\)/ }).click();
   const editor = draftEditorSection(page);
   await openDefinitionSettings(editor);
-  await expect(editor.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
+  await expect(editor.getByLabel("Agent instructions")).toBeVisible({ timeout: 15_000 });
   return editor;
 }
 
@@ -59,6 +59,6 @@ export async function forkDurablePublicationDraft(page: Page, version: number) {
     .click();
   const editor = draftEditorSection(page);
   await openDefinitionSettings(editor);
-  await expect(editor.getByLabel("System instructions")).toBeVisible({ timeout: 15_000 });
+  await expect(editor.getByLabel("Agent instructions")).toBeVisible({ timeout: 15_000 });
   return editor;
 }

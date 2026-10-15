@@ -33,6 +33,11 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
         var providerAlias = selection.ProviderAlias;
         var modelId = selection.ModelId;
         var descriptor = _catalog.Get(selection.CatalogKey);
+        if (descriptor?.DeveloperRoleSupport != true || !Enum.IsDefined(descriptor.Transport))
+            throw new InvalidOperationException("Selected model/transport does not support the required separate system and developer roles.");
+        if (!string.Equals(descriptor.ProviderAlias, providerAlias, StringComparison.Ordinal)
+            || !string.Equals(descriptor.ModelId, modelId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Pinned model route no longer matches the catalog's declared hierarchy contract. Restore that route or select a supported model for a new Run.");
         var route = $"{selection.CatalogKey}\u001f{providerAlias}\u001f{modelId}";
         lock (_gate)
         {
@@ -59,6 +64,7 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
             options.Tools = descriptor.Tools;
             options.Vision = descriptor.Vision;
             options.StructuredOutput = descriptor.StructuredOutput;
+            options.DeveloperRoleSupport = descriptor.DeveloperRoleSupport;
         }
 
         options.ReasoningEffort = null;
@@ -112,6 +118,7 @@ public sealed class LanguageModelResolver : ILanguageModelResolver
             Vision = source.Vision,
             Tools = source.Tools,
             StructuredOutput = source.StructuredOutput,
+            DeveloperRoleSupport = source.DeveloperRoleSupport,
             LogProviderErrorMessages = source.LogProviderErrorMessages,
             AdditionalHeaders = new Dictionary<string, string>(source.AdditionalHeaders, StringComparer.Ordinal),
             Timeouts = new ProviderTimeoutOptions
@@ -128,6 +135,8 @@ internal sealed class CatalogBoundLanguageModel(ILanguageModel inner, ModelCapab
     public ILanguageModel Inner { get; } = inner;
 
     public ModelCapabilities Capabilities { get; } = capabilities;
+
+    public ModelRequest PrepareRequest(ModelRequest request) => Inner.PrepareRequest(request);
 
     public IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
         ModelRequest request,

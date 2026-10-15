@@ -182,7 +182,7 @@ internal static class AgentRunStoreMapping
             run.Owner, run.Admission.OutputContract, a.Kind, a.EvidenceJson, a.SourceEventId, a.TriggerOccurrenceId, a.SourceSessionId, a.SourceAgentRunId,
             SourceFingerprint = BackgroundSourceKey(snapshot, run) is null ? a.SourceFingerprint : null,
             run.DefinitionId, run.DefinitionVersion, run.PinnedPersona, run.PinnedModel, run.PinnedSkillCatalog,
-            run.Admission.Configuration, run.Admission.ExecutionBudget,
+            run.Admission.Configuration, run.Admission.ExecutionBudget, run.Admission.TaskIntent,
             run.ActiveSkillKeys, run.MaxAttempts, OriginKind = snapshot.Origin.Kind, snapshot.Origin.AutomationId,
             snapshot.Origin.OriginatingSessionId, snapshot.Origin.OriginatingAgentRunId,
             snapshot.Origin.ReportCompletionToOrigin, Entries = entries

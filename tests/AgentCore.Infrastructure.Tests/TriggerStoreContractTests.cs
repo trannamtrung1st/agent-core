@@ -471,7 +471,7 @@ public sealed class TriggerStoreContractTests
             sessionId,
             1,
             new AgentDefinition(
-                1,
+                2,
                 "examiner",
                 1,
                 new AgentIdentity("Alex", "role", "desc", "tone"),

@@ -231,7 +231,7 @@ public sealed class FileSessionWorkspaceTests
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
     private static AgentDefinition Examiner() => new(
-        1,
+        2,
         "examiner",
         1,
         new AgentIdentity("Alex", "Speaking examiner", "Practice a speaking examination.", "Calm, formal and patient"),

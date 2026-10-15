@@ -16,7 +16,7 @@ import {
 } from "./definitionCandidate";
 
 const sample = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   definitionId: "examiner",
   identity: { name: "Alex", role: "Examiner", description: "Practice.", tone: "Calm" },
   modelDefaults: { catalogKey: "scripted-alpha", reasoningEffort: "low" },
@@ -40,16 +40,16 @@ describe("definitionCandidate", () => {
 
   it("keeps unknown fields when a known path changes", () => {
     const withMarker = { ...sample, untouchedMarker: { nested: "preserve-me" } };
-    const updated = writePath(withMarker, ["systemInstructions"], "Edited");
+    const updated = writePath(withMarker, ["agentInstructions"], "Edited");
     expect(updated.untouchedMarker).toEqual({ nested: "preserve-me" });
     expect(updated.definitionId).toBe("examiner");
   });
 
   it("applies valid JSON and rejects invalid or non-object JSON", () => {
-    const applied = applyCandidateJson(candidateToJson({ ...sample, systemInstructions: "From JSON" }));
+    const applied = applyCandidateJson(candidateToJson({ ...sample, agentInstructions: "From JSON" }));
     expect(applied.ok).toBe(true);
     if (applied.ok) {
-      expect(applied.candidate.systemInstructions).toBe("From JSON");
+      expect(applied.candidate.agentInstructions).toBe("From JSON");
       expect(applied.candidate.metadata).toEqual({ owner: "kept" });
     }
 

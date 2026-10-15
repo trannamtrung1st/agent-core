@@ -469,7 +469,7 @@ public abstract class AdminLifecycleDeletionTests
     {
         var now = DateTimeOffset.Parse("2026-09-29T02:50:00Z");
         var definition = new AgentDefinition(
-            1,
+            2,
             "field-guide",
             1,
             new AgentIdentity("Guide", "role", "desc", "tone"),

@@ -1,3 +1,4 @@
+using AgentCore.Application.Context;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -11,8 +12,14 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Execution;
 
+public enum RunPhase { Work, Cleanup, Finalization }
+public sealed record ToolLoopExecutionState(RunPhase Phase = RunPhase.Work, string? FinalizationReason = null,
+    int? CleanupStartedAtMessage = null, IReadOnlyList<RunAttemptDiagnostic>? FailedAttempts = null,
+    ContextManifest? ContextManifest = null, Guid? TranscriptId = null);
+
 public static class AgentRunToolCallCheckpoint
 {
+    public const int FormatVersion = 2;
     public const string CompletionCallId = "work-complete";
     public const string FinishRequired = """{"error":"finish_required","reason":"checkpoint_capacity","message":"Finish from evidence already collected; do not request more tools."}""";
     public static string FinishRequiredResult(int budget) => Encoding.UTF8.GetByteCount(FinishRequired) <= budget ? FinishRequired
@@ -47,8 +54,8 @@ public static class AgentRunToolCallCheckpoint
     }
 
     public static bool TryWriteWithReserve(IReadOnlyList<ModelMessage> messages, bool observationRequired,
-        string? blockedActionHash, int reserve, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null) =>
-        TryWrite(messages, observationRequired, blockedActionHash, out payload, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason)
+        string? blockedActionHash, int reserve, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null, ToolLoopExecutionState? executionState = null) =>
+        TryWrite(messages, observationRequired, blockedActionHash, out payload, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason, executionState)
         && Encoding.UTF8.GetByteCount(payload) + RecoveryHeadroom(blockedActionHash) + reserve <= AgentRunLimits.MaxCheckpointBytes;
 
     public static IReadOnlyList<ModelToolCall> PendingCalls(IReadOnlyList<ModelMessage> messages)
@@ -112,22 +119,45 @@ public static class AgentRunToolCallCheckpoint
     public static string Write(
         IReadOnlyList<ModelMessage> messages,
         bool observationRequired = false,
-        string? blockedActionHash = null, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null) =>
+        string? blockedActionHash = null, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null, ToolLoopExecutionState? executionState = null) =>
         JsonSerializer.Serialize(new Document(
             Phase,
-            messages.Select(MessageDto.From).ToArray(),
+            InteractionMessages(messages).Select(MessageDto.From).ToArray(),
             observationRequired,
-            blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason, BrowserContractCutover.Version), CheckpointJson);
+            blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, ProtocolFailures.RepairKind(protocolRepairReason), BrowserContractCutover.Version, FormatVersion, ContextAssembler.CoreContractVersion, executionState ?? new()), CheckpointJson);
+
+    private static IReadOnlyList<ModelMessage> InteractionMessages(IReadOnlyList<ModelMessage> messages)
+    {
+        if (messages.Any(m => m.Role is ModelRole.System or ModelRole.Developer))
+            throw new ArgumentException("Checkpoint contains authoritative context; only the interaction transcript may be persisted.");
+        return messages;
+    }
+
+    public static ToolLoopExecutionState ReadExecutionState(AgentRunCheckpoint? checkpoint)
+    {
+        if (checkpoint is null) return new();
+        EnsureCurrentContextContract(checkpoint);
+        return JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson)!.ExecutionState!;
+    }
+
+    public static void EnsureCurrentContextContract(AgentRunCheckpoint? checkpoint, Guid? responseId = null)
+    {
+        if (checkpoint is null) return;
+        if (!TryReadMessages(checkpoint, out _, out _, out _)
+            || responseId is not null && JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson)?.ExecutionState?.TranscriptId != responseId)
+            throw new InvalidOperationException("This Run has an incompatible context checkpoint. Drain or explicitly cancel it with the previous application before cutover; historical receipts are retained and no tools were replayed.");
+    }
 
     public static bool TryWrite(IReadOnlyList<ModelMessage> messages, bool observationRequired,
-        string? blockedActionHash, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null)
+        string? blockedActionHash, out string payload, IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, string? protocolRepairReason = null, ToolLoopExecutionState? executionState = null)
     {
-        payload = Write(messages, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason);
+        payload = Write(messages, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, protocolRepairReason, executionState);
         return Encoding.UTF8.GetByteCount(payload) + RecoveryHeadroom(blockedActionHash) <= AgentRunLimits.MaxCheckpointBytes;
     }
 
     public static AgentRunCheckpoint AppendWaitResult(AgentRunCheckpoint checkpoint, string toolCallId, string result)
     {
+        EnsureCurrentContextContract(checkpoint);
         var document = JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson) ?? throw new ArgumentException("Wait checkpoint is invalid.");
         var messages = document.Messages.Select(m => m.ToMessage()).ToArray();
         if (!PendingCalls(messages).Any(c => c.Id == toolCallId && c.Name == "execution.wait"))
@@ -139,14 +169,14 @@ public static class AgentRunToolCallCheckpoint
 
     public static int ToolResultBudget(IReadOnlyList<ModelMessage> messages, ModelToolCall call,
         bool observationRequired, string? blockedActionHash, TriggerKind kind = TriggerKind.ScheduledOccurrence,
-        IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, int cleanupReserve = 0)
+        IReadOnlyList<string>? loadedCapabilityIds = null, int capabilityLoadCount = 0, ExecutionSkillState? skillState = null, int cleanupReserve = 0, ToolLoopExecutionState? executionState = null)
     {
         var compacted = messages.ToList();
         BrowserSnapshotCompaction.Compact(compacted);
         messages = compacted;
         var withResult = messages.Append(new ModelMessage(ModelRole.Tool, string.Empty,
             ToolCallId: call.Id, Name: call.Name)).ToArray();
-        var overhead = Encoding.UTF8.GetByteCount(Write(withResult, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState));
+        var overhead = Encoding.UTF8.GetByteCount(Write(withResult, observationRequired, blockedActionHash, loadedCapabilityIds, capabilityLoadCount, skillState, executionState: executionState));
         // A UTF-8 byte can expand to six bytes in a JSON string (for example, a control character).
         // Tool adapters receive a conservative text budget; admission still checks the exact document.
         return Math.Max(0, AgentRunLimits.MaxCheckpointBytes - overhead - RecoveryHeadroom(blockedActionHash) - CompletionReserve(kind) - FinishRequiredReserve() - cleanupReserve) / 6;
@@ -193,7 +223,12 @@ public static class AgentRunToolCallCheckpoint
         try
         {
             var document = JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson);
-            if (document is null || !string.Equals(document.Phase, Phase, StringComparison.Ordinal) || document.Messages is null)
+            if (document is null || !string.Equals(document.Phase, Phase, StringComparison.Ordinal) || document.Messages is null
+                || document.ContextFormatVersion != FormatVersion || document.CoreContractVersion != ContextAssembler.CoreContractVersion
+                || document.ExecutionState is not { } state || !Enum.IsDefined(state.Phase)
+                || state.Phase == RunPhase.Finalization && !RunFinalization.IsReason(state.FinalizationReason)
+                || document.ProtocolRepair is { } repair && !Enum.IsDefined(repair)
+                || document.Messages.Any(m => m.Role is not ("User" or "Assistant" or "Tool")))
             {
                 return false;
             }
@@ -229,6 +264,7 @@ public static class AgentRunToolCallCheckpoint
     public static (IReadOnlyList<string> Ids, int Calls) ReadCapabilityState(AgentRunCheckpoint? checkpoint)
     {
         if (checkpoint is null) return ([], 0);
+        EnsureCurrentContextContract(checkpoint);
         var document = JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson);
         var ids = document?.LoadedCapabilityIds ?? [];
         var calls = document?.CapabilityLoadCount ?? 0;
@@ -239,7 +275,8 @@ public static class AgentRunToolCallCheckpoint
 
     public static string? ReadProtocolRepairReason(AgentRunCheckpoint? checkpoint)
     {
-        var reason = checkpoint is null ? null : JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson)?.ProtocolRepairReason;
+        EnsureCurrentContextContract(checkpoint);
+        var reason = checkpoint is null ? null : ProtocolFailures.RepairReason(JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson)?.ProtocolRepair);
         if (reason is not null && ProtocolFailures.RepairInstruction(reason) is null)
             throw new InvalidOperationException("Protocol repair checkpoint is invalid.");
         return reason;
@@ -247,16 +284,17 @@ public static class AgentRunToolCallCheckpoint
 
     public static ExecutionSkillState ReadSkillState(AgentRunCheckpoint? checkpoint)
     {
+        EnsureCurrentContextContract(checkpoint);
         var state = checkpoint is null ? null : JsonSerializer.Deserialize<Document>(checkpoint.PayloadJson)?.SkillState;
         if (state is null) throw new InvalidOperationException("Pinned Skill checkpoint is missing.");
         if (state.LoadCount is < 0 or > 2 || state.ActiveKeys.Distinct(StringComparer.Ordinal).Count() != state.ActiveKeys.Count)
             throw new InvalidOperationException("Pinned Skill checkpoint load state is invalid.");
-        var catalog = SkillPolicy.FreezeCatalog(state.Catalog);
-        SkillPolicy.ValidateActive(catalog, state.ActiveKeys);
-        return state with { Catalog = catalog, ActiveKeys = Array.AsReadOnly(state.ActiveKeys.ToArray()) };
+        if (state.ActiveKeys.Any(k => !SkillKeys.IsValid(k))) throw new InvalidOperationException("Skill activation checkpoint is invalid.");
+        return state with { ActiveKeys = Array.AsReadOnly(state.ActiveKeys.ToArray()) };
     }
-    public sealed record ExecutionSkillState(IReadOnlyList<EffectiveSkill> Catalog, IReadOnlyList<string> ActiveKeys, int LoadCount);
+    public sealed record ExecutionSkillState(IReadOnlyList<string> ActiveKeys, int LoadCount);
 
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     private sealed record Document(
         string Phase,
         MessageDto[] Messages,
@@ -264,14 +302,15 @@ public static class AgentRunToolCallCheckpoint
         string? BlockedActionHash = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? LoadedCapabilityIds = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int CapabilityLoadCount = 0, ExecutionSkillState? SkillState = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProtocolRepairReason = null, int? BrowserContractVersion = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ProtocolRepairKind? ProtocolRepair = null, int? BrowserContractVersion = null, int ContextFormatVersion = 0,
+        int CoreContractVersion = 0, ToolLoopExecutionState? ExecutionState = null);
 
     private sealed record MessageDto(
         string Role,
         string Text,
         string? ToolCallId,
         string? Name,
-        ToolCallDto[]? ToolCalls)
+        ToolCallDto[]? ToolCalls, EvidenceMessageKind? EvidenceKind = null)
     {
         public static MessageDto From(ModelMessage message) =>
             new(
@@ -279,7 +318,7 @@ public static class AgentRunToolCallCheckpoint
                 message.Text,
                 message.ToolCallId,
                 message.Name,
-                message.ToolCalls?.Select(ToolCallDto.From).ToArray());
+                message.ToolCalls?.Select(ToolCallDto.From).ToArray(), message.EvidenceKind);
         // Parts stay out of the checkpoint. A browser.screenshot result keeps its artifact id in text and is reloaded through SessionCaptureRehydration and IArtifactStore.
 
         public ModelMessage ToMessage() =>
@@ -288,7 +327,7 @@ public static class AgentRunToolCallCheckpoint
                 Text,
                 ToolCallId: ToolCallId,
                 Name: Name,
-                ToolCalls: ToolCalls?.Select(call => new ModelToolCall(call.Id, call.Name, call.Completion?.ArgumentsJson() ?? call.ArgumentsJson!, call.ContinuationToken)).ToArray());
+                ToolCalls: ToolCalls?.Select(call => new ModelToolCall(call.Id, call.Name, call.Completion?.ArgumentsJson() ?? call.ArgumentsJson!, call.ContinuationToken)).ToArray(), EvidenceKind: EvidenceKind);
     }
 
     // Compact completion data avoids double JSON escaping of a

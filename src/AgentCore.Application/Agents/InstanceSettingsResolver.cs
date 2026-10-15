@@ -14,7 +14,7 @@ public static class InstanceSettingsResolver
     {
         "stateIsolationPolicy" => ["conversationContextScope", "homeAccess", "workingCleanup", "browserIsolation", "agentStateVisibility", "experienceRecord", "experienceRecall", "profileEvidence", "crossSessionContinuity"],
         "sandboxPolicy" => ["allowedProfileIds", "profileId", "initializationScript", "cpu", "memoryMiB", "maxCommandSeconds", "idleTtlSeconds", "maxLifetimeSeconds", "storageBytes"],
-        "instructions" => ["systemInstructions"],
+        "instructions" => ["agentInstructions"],
         "conversationPolicy" => ["responseLength", "askOneQuestionAtATime", "language", "maxOutputTokens"],
         "behaviorPolicy" => ["interruptionStyle", "acknowledgeInterruption", "avoidUnsupportedClaims"],
         "initiativePolicy" => ["enabled", "silenceThresholdMs", "cooldownMs", "maxPerSilencePeriod", "triggers", "maxConsecutiveProactiveTurns", "maxSilentEvaluations", "maxInactivityMs"],
@@ -61,7 +61,7 @@ public static class InstanceSettingsResolver
                     ("sandboxPolicy", "maxLifetimeSeconds") => next with { SandboxMaxLifetimeSeconds = remove ? null : new(Read<int>(set[field])) },
                     ("sandboxPolicy", "storageBytes") => next with { SandboxStorageBytes = remove ? null : new(Read<long>(set[field])) },
 
-                    ("instructions", "systemInstructions") => next with { SystemInstructions = remove ? null : new(Read<string>(set[field])) },
+                    ("instructions", "agentInstructions") => next with { AgentInstructions = remove ? null : new(Read<string>(set[field])) },
                     ("conversationPolicy", "responseLength") => next with { ResponseLength = remove ? null : new(Read<string>(set[field])) },
                     ("conversationPolicy", "askOneQuestionAtATime") => next with { AskOneQuestionAtATime = remove ? null : new(Read<bool>(set[field])) },
                     ("conversationPolicy", "language") => next with { Language = remove ? null : new(Read<string>(set[field])) },
@@ -192,6 +192,24 @@ public static class InstanceSettingsResolver
         return result;
     }
 
+    public static IReadOnlyDictionary<string, AgentCore.Domain.Conversation.RuntimeFieldSource> Sources(AgentDefinition definition,
+        InstanceSettingsOverrides? overrides, long instanceRevision, long personaRevision)
+    {
+        var sources = new Dictionary<string, AgentCore.Domain.Conversation.RuntimeFieldSource>(StringComparer.Ordinal);
+        foreach (var section in Sections)
+        {
+            var changed = overrides is null ? new Dictionary<string, object?>() : Overrides(overrides, section);
+            foreach (var field in Fields(section)) sources[section + "." + field] = changed.ContainsKey(field)
+                ? new("Instance", instanceRevision.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                : new("Definition", definition.Id + ":" + definition.Version);
+        }
+        foreach (var field in new[] { "goals", "environment.harness", "environment.knowledge", "environment.tools" })
+            sources[field] = new("Definition", definition.Id + ":" + definition.Version);
+        foreach (var field in new[] { "name", "role", "description", "tone" })
+            sources["identity." + field] = new("Instance", personaRevision.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return sources;
+    }
+
     public static AgentDefinition Resolve(AgentDefinition baseline, InstanceSettingsOverrides? overrides)
     {
         if (overrides is null) return baseline;
@@ -204,7 +222,7 @@ public static class InstanceSettingsResolver
         {
             SandboxPolicy = SandboxSetupResolver.ResolvePolicy(baseline.SandboxPolicy, o),
             ExecutionSandboxProfile = baseline.ExecutionSandboxProfile is { } sandbox ? SandboxSetupResolver.Resolve(sandbox, o, sandbox.InstanceRevision) : null,
-            SystemInstructions = o.SystemInstructions is { } instructions ? instructions.Value : baseline.SystemInstructions,
+            AgentInstructions = o.AgentInstructions is { } instructions ? instructions.Value : baseline.AgentInstructions,
             ConversationPolicy = baseline.ConversationPolicy with
             {
                 ResponseLength = o.ResponseLength is { } responseLength ? responseLength.Value : baseline.ConversationPolicy.ResponseLength,
@@ -328,7 +346,7 @@ public static class InstanceSettingsResolver
             ["maxCommandSeconds"] = d.ExecutionSandboxProfile?.MaxCommandSeconds, ["idleTtlSeconds"] = d.ExecutionSandboxProfile?.IdleTtlSeconds,
             ["maxLifetimeSeconds"] = d.ExecutionSandboxProfile?.MaxLifetimeSeconds, ["storageBytes"] = d.ExecutionSandboxProfile?.StorageBytes },
         "instructions" => new Dictionary<string, object?> {
-            ["systemInstructions"] = d.SystemInstructions,
+            ["agentInstructions"] = d.AgentInstructions,
         },
         "conversationPolicy" => new Dictionary<string, object?> {
             ["responseLength"] = d.ConversationPolicy.ResponseLength,
@@ -422,7 +440,7 @@ public static class InstanceSettingsResolver
                 if (o.SandboxStorageBytes is { } storageBytes) result["storageBytes"] = storageBytes.Value;
                 break;
             case "instructions":
-                if (o.SystemInstructions is { } systemInstructions) result["systemInstructions"] = systemInstructions.Value;
+                if (o.AgentInstructions is { } agentInstructions) result["agentInstructions"] = agentInstructions.Value;
                 break;
             case "conversationPolicy":
                 if (o.ResponseLength is { } responseLength) result["responseLength"] = responseLength.Value;

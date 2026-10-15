@@ -25,7 +25,7 @@ public sealed record ModelDescriptor(
     string? ContextCategory = null,
     string? CostCategory = null,
     ModelInferenceTransport Transport = ModelInferenceTransport.ChatCompletions,
-    bool PreferResponseFunction = false);
+    bool PreferResponseFunction = false, bool DeveloperRoleSupport = false);
 
 public interface IModelCatalog
 {

@@ -27,7 +27,7 @@ internal static class HarnessChatScript
         {
             if (results.LastOrDefault(m => m.Name == ToolCatalog.KnowledgeRetrieve) is { } recalled)
                 return Answer(recalled.Text.Contains("payment", StringComparison.OrdinalIgnoreCase) ? "The saved policy says to check payment, shipping and fraud notes." : "No saved order policy is available in this Session.");
-            return Offered(ToolCatalog.KnowledgeRetrieve) ? Call(ToolCatalog.KnowledgeRetrieve, new { identity = request.Messages.Where(m => m.Role == ModelRole.System).Select(m => m.Text).SelectMany(text => System.Text.RegularExpressions.Regex.Matches(text, @"instance:[a-f0-9-]{36}").Select(m => m.Value)).FirstOrDefault() ?? "learned-orders" }) : Answer("Knowledge retrieval is unavailable.");
+            return Offered(ToolCatalog.KnowledgeRetrieve) ? Call(ToolCatalog.KnowledgeRetrieve, new { identity = request.Messages.Where(m => m.Role is ModelRole.System or ModelRole.Developer).Select(m => m.Text).SelectMany(text => System.Text.RegularExpressions.Regex.Matches(text, @"instance:[a-f0-9-]{36}").Select(m => m.Value)).FirstOrDefault() ?? "learned-orders" }) : Answer("Knowledge retrieval is unavailable.");
         }
         var name = knowledge ? "harness.knowledge.upsert" : tool ? "harness.tool.select" : "harness.instructions.update";
         if (!Offered(name) && Offered(ToolCatalog.CapabilitiesLoad) && !results.Any(m => m.Name == ToolCatalog.CapabilitiesLoad))

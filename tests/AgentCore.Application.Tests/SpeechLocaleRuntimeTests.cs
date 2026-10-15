@@ -52,7 +52,7 @@ public sealed class SpeechLocaleRuntimeTests
             var request = model.Requests[^1];
             var mode = Assert.Single(request.Messages, m => m.Text.StartsWith("Current session mode:"));
             Assert.Contains($"Spoken response language: {locale}.", mode.Text);
-            Assert.Contains("Respond in en.", request.Messages[0].Text);
+            Assert.Contains("Respond in en.", request.Context!.Text(AgentCore.Application.Context.ContextSectionId.Policies));
             Assert.True(request.ResponseContract!.SpeechWillBeUsed);
             Assert.Equal(locale, synthesizer.Requests[^1].Language);
             Assert.Equal(spoken, synthesizer.Requests[^1].Text);

@@ -131,7 +131,7 @@ public sealed class AdminDefinitionCandidateValidatorTests
         Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", ["unregistered.name"])) }), f => f.Code == "unregistered_capability");
         Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", [ToolCatalog.EmailSearch, ToolCatalog.EmailSearch])) }), f => f.Code == "duplicate_tool");
         Assert.Contains(Publish(candidate with { Environment = new(Capabilities: new("Selected", null!)) }), f => f.Code == "domain_shape");
-        Assert.Contains(Publish(candidate with { SystemInstructions = new string('x', AgentDefinitionCandidateValidator.MaxCandidateBytes + 1) }), f => f.Code == "document_too_large");
+        Assert.Contains(Publish(candidate with { AgentInstructions = new string('x', AgentDefinitionCandidateValidator.MaxCandidateBytes + 1) }), f => f.Code == "document_too_large");
         foreach (var names in new IReadOnlyList<string>[] { [], [ToolCatalog.WorkspaceRead], ToolRegistry.AllKnownNames().Where(n => n != ToolCatalog.WorkspaceCwd).ToArray() })
         {
             var findings = Publish(candidate with { Environment = new(Capabilities: new("Selected", names)) });

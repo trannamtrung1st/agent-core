@@ -10,7 +10,7 @@ public static class AgentDefinitionStarter
     {
         var languageModel = ChooseLanguageModel(aliases);
         return new AgentDefinitionCandidate(
-            1,
+            2,
             definitionId,
             new AgentIdentity(definitionId, "Assistant", "A new agent definition.", "Clear"),
             ["Help the user"],

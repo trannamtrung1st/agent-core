@@ -26,7 +26,7 @@ public sealed class AgentDefinitionValidatorTests
     public void Rejects_non_positive_version()
     {
         var definition = new AgentDefinition(
-            1,
+            2,
             "examiner",
             0,
             new AgentIdentity("Alex", "role", "desc", "tone"),
@@ -50,7 +50,7 @@ public sealed class AgentDefinitionValidatorTests
         Assert.Equal(8, policy.SilentEvaluationCap);
         Assert.Equal(900_000, policy.InactivityLimitMs);
         var definition = new AgentDefinition(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "role", "desc", "tone"),
@@ -69,7 +69,7 @@ public sealed class AgentDefinitionValidatorTests
     public void Rejects_invalid_conversation_language()
     {
         var definition = new AgentDefinition(
-            1,
+            2,
             "broken",
             1,
             new AgentIdentity("X", "role", "desc", "tone"),
@@ -89,7 +89,7 @@ public sealed class AgentDefinitionValidatorTests
     public void Rejects_invalid_model_default_catalog_key()
     {
         var definition = new AgentDefinition(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "role", "desc", "tone"),
@@ -117,7 +117,7 @@ public sealed class AgentDefinitionValidatorTests
     {
         var tools = Enumerable.Range(0, count).Select(index => $"tool.n{index:D2}").ToArray();
         return new AgentDefinition(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "role", "desc", "tone"),
@@ -191,7 +191,7 @@ public sealed class AgentDefinitionValidatorTests
 
     private static AgentDefinition Valid(IReadOnlyList<SkillSpec>? skills) =>
         new(
-            1,
+            2,
             "examiner",
             1,
             new AgentIdentity("Alex", "role", "desc", "tone"),

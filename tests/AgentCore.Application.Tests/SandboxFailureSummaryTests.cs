@@ -40,7 +40,7 @@ public sealed class SandboxFailureSummaryTests
     {
         var receipts=new AgentCore.Application.Ports.ModelMessage[] {
             new(AgentCore.Application.Ports.ModelRole.Tool,"{\"error\":\"recovery_required\",\"environmentState\":\"NeedsResync\"}",ToolCallId:"blocked",Name:ToolCatalog.SandboxExec) };
-        Assert.Equal("sandboxRecovery",AgentCore.Application.Execution.RunFinalization.Restore(receipts));
-        Assert.Null(AgentCore.Application.Execution.RunFinalization.Restore([receipts[0] with {Name="unrelated.tool"}]));
+        Assert.Equal("sandboxRecovery",AgentCore.Application.Execution.RunFinalization.ObservedRecovery(receipts));
+        Assert.Null(AgentCore.Application.Execution.RunFinalization.ObservedRecovery([receipts[0] with {Name="unrelated.tool"}]));
     }
 }

@@ -182,7 +182,7 @@ public sealed class ToolRegistryPolicyTests
 
     private static AgentDefinition Definition(string id, int version, IReadOnlyList<string> tools) =>
         new(
-            1,
+            2,
             id,
             version,
             new AgentIdentity("Test", "Role", "desc", "Tone"),

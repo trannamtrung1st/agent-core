@@ -456,7 +456,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-02T00:00:00Z",
-      candidate: { systemInstructions: "Draft body", definitionId: "examiner" }
+      candidate: { agentInstructions: "Draft body", definitionId: "examiner" }
     });
     vi.mocked(deleteAdminDefinitionDraft).mockResolvedValue(undefined);
 
@@ -596,7 +596,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
-      candidate: { systemInstructions: "Stored body", definitionId: "examiner" }
+      candidate: { agentInstructions: "Stored body", definitionId: "examiner" }
     });
     vi.mocked(updateAdminDefinitionDraft).mockResolvedValue({
       draftId,
@@ -606,7 +606,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-02T00:00:00Z",
-      candidate: { systemInstructions: "Visible publish body", definitionId: "examiner", environment: { harness: [], knowledgeSources: [], workspace: {}, attachments: { allowUnreadUnsupportedTypes: false }, capabilities: { mode: "Selected", resolvedCapabilities: [] }, projection: { alwaysCapabilities: [] } } }
+      candidate: { agentInstructions: "Visible publish body", definitionId: "examiner", environment: { harness: [], knowledgeSources: [], workspace: {}, attachments: { allowUnreadUnsupportedTypes: false }, capabilities: { mode: "Selected", resolvedCapabilities: [] }, projection: { alwaysCapabilities: [] } } }
     });
     vi.mocked(publishAdminDefinitionDraft).mockResolvedValue({
       definitionId: "examiner",
@@ -657,9 +657,9 @@ describe("AdminApp", () => {
     const save = actions.getByRole("button", { name: "Save draft" });
     const publish = actions.getByRole("button", { name: "Publish…" });
     fireEvent.click(screen.getByRole("link", { name: "Instructions" }));
-    expandSection("Operating instructions");
-    await waitFor(() => expect(screen.getByLabelText("System instructions")).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText("System instructions"), {
+    expandSection("Agent instructions");
+    await waitFor(() => expect(screen.getByLabelText("Agent instructions")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Agent instructions"), {
       target: { value: "Visible publish body" }
     });
     fireEvent.click(save);
@@ -667,7 +667,7 @@ describe("AdminApp", () => {
       expect(updateAdminDefinitionDraft).toHaveBeenCalledWith(
         draftId,
         2,
-        expect.objectContaining({ systemInstructions: "Visible publish body" })
+        expect.objectContaining({ agentInstructions: "Visible publish body" })
       );
     });
     vi.mocked(getAdminDefinitionDraft).mockResolvedValue({
@@ -678,7 +678,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-02T00:00:00Z",
-      candidate: { systemInstructions: "Visible publish body", definitionId: "examiner", environment: { harness: [], knowledgeSources: [], workspace: {}, attachments: { allowUnreadUnsupportedTypes: false }, capabilities: { mode: "Selected", resolvedCapabilities: [] }, projection: { alwaysCapabilities: [] } } }
+      candidate: { agentInstructions: "Visible publish body", definitionId: "examiner", environment: { harness: [], knowledgeSources: [], workspace: {}, attachments: { allowUnreadUnsupportedTypes: false }, capabilities: { mode: "Selected", resolvedCapabilities: [] }, projection: { alwaysCapabilities: [] } } }
     });
     fireEvent.click(publishTab);
     await waitFor(() => {
@@ -748,7 +748,7 @@ describe("AdminApp", () => {
         sourceVersion: 1,
         createdAt: "2026-01-01T00:00:00Z",
         updatedAt: "2026-01-01T00:00:00Z",
-        candidate: { systemInstructions: "Stored body", definitionId: "examiner" }
+        candidate: { agentInstructions: "Stored body", definitionId: "examiner" }
       })
       .mockResolvedValue({
         draftId,
@@ -758,7 +758,7 @@ describe("AdminApp", () => {
         sourceVersion: 1,
         createdAt: "2026-01-01T00:00:00Z",
         updatedAt: "2026-01-02T00:00:00Z",
-        candidate: { systemInstructions: "Stored body", definitionId: "examiner" }
+        candidate: { agentInstructions: "Stored body", definitionId: "examiner" }
       });
     vi.mocked(removeAdminDraftResource).mockResolvedValue(undefined);
 
@@ -775,11 +775,11 @@ describe("AdminApp", () => {
     const identityTab = draftTabs.getByRole("link", { name: "Instructions" });
     const resourcesTab = draftTabs.getByRole("link", { name: "Skills" });
     fireEvent.click(screen.getByRole("link", { name: "Instructions" }));
-    expandSection("Operating instructions");
+    expandSection("Agent instructions");
     await waitFor(() => {
-      expect(screen.getByLabelText("System instructions")).toBeInTheDocument();
+      expect(screen.getByLabelText("Agent instructions")).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByLabelText("System instructions"), {
+    fireEvent.change(screen.getByLabelText("Agent instructions"), {
       target: { value: "Unsaved instruction edit" }
     });
     fireEvent.click(resourcesTab);
@@ -794,7 +794,7 @@ describe("AdminApp", () => {
     });
     fireEvent.click(identityTab);
     await waitFor(() => {
-      expect(screen.getByLabelText("System instructions")).toHaveValue("Unsaved instruction edit");
+      expect(screen.getByLabelText("Agent instructions")).toHaveValue("Unsaved instruction edit");
     });
   // This journey renders both editor tabs and refreshes the resource revision.
   }, 60_000);
@@ -924,7 +924,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
-      candidate: { systemInstructions: "Body", definitionId: "examiner" }
+      candidate: { agentInstructions: "Body", definitionId: "examiner" }
     });
 
     await act(async () => {
@@ -979,7 +979,7 @@ describe("AdminApp", () => {
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
       candidate: {
-        systemInstructions: "Body",
+        agentInstructions: "Body",
         definitionId: "examiner",
         environment: { harness: ["examiner-turn-taking"], toolAllowlist: [], workspace: {} }
       }
@@ -992,7 +992,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-02T00:00:00Z",
-      candidate: { systemInstructions: "Body", definitionId: "examiner" }
+      candidate: { agentInstructions: "Body", definitionId: "examiner" }
     });
 
     await act(async () => {
@@ -1073,7 +1073,7 @@ describe("AdminApp", () => {
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
       candidate: {
-        systemInstructions: "Body",
+        agentInstructions: "Body",
         definitionId: "examiner",
         environment: {
           knowledgeSources: [{ identity: "policy", title: "Policy", citation: "policy@demo" }]
@@ -1088,7 +1088,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-02T00:00:00Z",
-      candidate: { systemInstructions: "Body", definitionId: "examiner" }
+      candidate: { agentInstructions: "Body", definitionId: "examiner" }
     });
 
     await act(async () => {
@@ -1161,7 +1161,7 @@ describe("AdminApp", () => {
       sourceVersion: 1,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
-      candidate: { systemInstructions: "Body", definitionId: "examiner" }
+      candidate: { agentInstructions: "Body", definitionId: "examiner" }
     });
 
     await act(async () => {
@@ -1683,7 +1683,7 @@ describe("AdminApp", () => {
       sourceVersion: null,
       createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
-      candidate: { definitionId: "field-guide", systemInstructions: "Server starter" }
+      candidate: { definitionId: "field-guide", agentInstructions: "Server starter" }
     });
 
     await act(async () => {
@@ -1909,7 +1909,7 @@ describe("AdminApp", () => {
       updatedAt: "2026-01-01T00:00:00Z",
       candidate: {
         definitionId: "field-guide",
-        systemInstructions: "Stored starter instructions"
+        agentInstructions: "Stored starter instructions"
       }
     });
 
@@ -1919,9 +1919,9 @@ describe("AdminApp", () => {
 
     await screen.findByRole("link", { name: "Instructions" });
     fireEvent.click(screen.getByRole("link", { name: "Instructions" }));
-    expandSection("Operating instructions");
+    expandSection("Agent instructions");
     await waitFor(() => {
-      expect(screen.getByLabelText("System instructions")).toHaveValue("Stored starter instructions");
+      expect(screen.getByLabelText("Agent instructions")).toHaveValue("Stored starter instructions");
     });
     expect(getAdminDefinitionDraft).toHaveBeenCalledWith(draftId);
   });
