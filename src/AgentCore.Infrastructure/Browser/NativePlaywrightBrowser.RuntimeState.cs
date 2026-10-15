@@ -19,7 +19,8 @@ public sealed partial class NativePlaywrightBrowser : IBrowserStateReader
             : sessionId is null && _persistent.TryGetValue(trustedInstanceId, out var root) && Volatile.Read(ref root.RuntimeClosed) == 0
                 ? "sharedCoordinated" : "unknown";
         if (!IsAvailable) return new("browser", "unavailable", sharing, observedAt, Code: "provider_unavailable");
-        if (_persistent.TryGetValue(trustedInstanceId, out var retained) && retained.PendingContextMutation is { IsCompletedSuccessfully: false })
+        if ((sessionId is null || ContextTransitionBlocked(sessionId.Value))
+            && _persistent.TryGetValue(trustedInstanceId, out var retained) && retained.PendingContextMutation is { Completion.IsCompletedSuccessfully: false })
             return new("browser", "partial", sharing, observedAt, Code: "policy_transition_pending");
         // Read only existing handles. Never Ensure/launch, inspect a page or touch profile bytes.
         var contexts = _sessions.Where(p => (sessionId == null || p.Key == sessionId) && _sessionOwners.TryGetValue(p.Key, out var owner) && owner == trustedInstanceId)

@@ -176,7 +176,7 @@ public sealed partial class NativePlaywrightBrowser
             // Shared-context cancellation cannot close sibling Sessions. Fence new native effects
             // until the mutation is confirmed or the owner explicitly resets the context.
             if (session.Persistent && session.AgentInstanceId is { } owner && _persistent.TryGetValue(owner, out var root))
-                root.PendingContextMutation = mutation;
+                root.PendingContextMutation = new(session.SessionId, mutation);
             else { await CloseQuietlyAsync(session.Context); ForgetClosed(session); }
             _ = mutation.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
             throw;

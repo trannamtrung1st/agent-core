@@ -67,6 +67,13 @@ public sealed class StateIsolationContextTests
         model.Release.TrySetResult(); await runtime.WaitUntilIdleAsync();
         Assert.Equal(SessionLifecycleStatus.Active, runtime.Snapshot.LifecycleStatus);
         Assert.True(await runtime.HasAcceptedConversationWorkAsync());
+        if (!report)
+        {
+            var relaxed = await planner.PresetAsync(id, "SessionIsolated");
+            await planner.ApplyAsync(id, relaxed.Expected, relaxed.Draft, relaxed.Fingerprint);
+            Assert.Equal("fresh_session_required", (await Assert.ThrowsAsync<AgentCoreException>(() =>
+                runtime.SubmitPersistedUserTextAsync("An independent second request", Guid.NewGuid()))).Code);
+        }
         completed ??= await CompleteChild();
         if (report && !quiet)
         {

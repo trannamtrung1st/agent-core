@@ -66,6 +66,10 @@ public sealed class AgentRunAdmissionStoreTests
             [next], Now, [], configuration: configuration);
         Assert.Equal("fresh_session_required", (await Assert.ThrowsAsync<AgentCoreException>(() =>
             f.Runs.AdmitAsync(proposed with { Revision = 3, Entries = [entry, next] }, 2, second).AsTask())).Code);
+        var relaxed = AgentRunAdmissionFactory.ForAcceptedUserBatch(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), snapshot with { Entries = [entry, next] },
+            [next], Now, [], configuration: new AgentRunConfiguration(definition with { StateIsolationPolicy = StateIsolationPolicy.Default }, 0, 0, []));
+        Assert.Equal("fresh_session_required", (await Assert.ThrowsAsync<AgentCoreException>(() =>
+            f.Runs.AdmitAsync(proposed with { Revision = 3, Entries = [entry, next] }, 2, relaxed).AsTask())).Code);
         Assert.Single(await f.Runs.ListForSessionAsync(Owner, snapshot.SessionId));
         Assert.Equal(2, (await f.Memory.LoadAsync(snapshot.SessionId))!.Revision);
     }

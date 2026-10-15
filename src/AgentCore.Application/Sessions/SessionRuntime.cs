@@ -1501,7 +1501,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         try
         {
             var (_, resolved) = await ResolveNewRunAsync(cancellationToken);
-            if (RequestIsolation.Required(resolved.Configuration.Definition)
+            if ((RequestIsolation.Required(_snapshot.Definition) || RequestIsolation.Required(resolved.Configuration.Definition))
                 && (!RequestIsolation.Required(_snapshot.Definition) || _snapshot.DurableLastEntrySequence > 0
                     || (await _agentRuns.ListForSessionAsync(RunOwner, SessionId, cancellationToken)).Count > 0))
             { input.Persisted?.TrySetException(RequestIsolation.FreshSessionRequired()); return; }

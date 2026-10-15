@@ -158,7 +158,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 AgentRunStoreMapping.ObserveAdmission(snapshot, existing, false);
                 return new AgentRunAdmissionResult(false, existing);
             }
-            RequestIsolation.ValidateAdmission(run, State.Runs.Values.Any(r => r.SessionId == run.SessionId && r.Owner == run.Owner));
+            RequestIsolation.ValidateAdmission(snapshot, run, State.Runs.Values.Any(r => r.SessionId == run.SessionId && r.Owner == run.Owner));
             if (State.Runs.ContainsKey(run.AgentRunId) || State.Activations.ContainsKey(run.ActivationId))
                 throw AgentCoreErrors.Conflict("AgentRun or Activation identity already exists.");
             State.Runs.TryGetValue(run.Admission.Activation.SourceAgentRunId ?? Guid.Empty, out var source);

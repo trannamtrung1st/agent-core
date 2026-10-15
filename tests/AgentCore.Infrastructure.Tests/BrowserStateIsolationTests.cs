@@ -35,6 +35,60 @@ public sealed class BrowserStateIsolationTests
     [ChromiumIsolationFact]
     public Task Persistent_sessions_share_auth_but_cannot_control_foreign_pages_or_close_siblings() => TwoSessions(BrowserProfileMode.PersistentAgent);
 
+    [ChromiumIsolationFact]
+    public async Task Ephemeral_views_ignore_a_sibling_shared_profile_fence_and_can_bind_during_shared_work()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "browser-state-sibling-" + Guid.NewGuid().ToString("N"));
+        var browser = new NativePlaywrightBrowser(new BrowserOptions { Enabled = true, Headless = true, FixturePort = 0,
+            ProfileRoot = root, ProfileMode = "PersistentAgent" }, null);
+        await browser.StartAsync(CancellationToken.None);
+        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            var owner = Guid.NewGuid(); var shared = Guid.NewGuid(); var isolated = Guid.NewGuid(); var fresh = Guid.NewGuid();
+            Assert.Null(await browser.BindIsolationAsync(shared, owner, BrowserProfileMode.PersistentAgent));
+            Assert.Null(await browser.BindIsolationAsync(isolated, owner, BrowserProfileMode.EphemeralSession));
+            var origin = browser.HostPolicy.NavigationOrigins.Single();
+            var url = new Uri(origin + "/browser-native.html");
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(shared, url))).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(isolated, url))).ErrorCode);
+            // Inject only a delayed native acknowledgment into the real owned shared context.
+            // No public/debug hook is needed; all observed operations still use the native adapter.
+            var roots = (System.Collections.IDictionary)typeof(NativePlaywrightBrowser)
+                .GetField("_persistent", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(browser)!;
+            var retained = roots[owner]!; var unpublished = Guid.NewGuid();
+            browser.BindSession(unpublished, owner);
+            var mutation = retained.GetType().GetProperty("PendingContextMutation")!;
+            mutation.SetValue(retained, Activator.CreateInstance(mutation.PropertyType, unpublished, pending.Task));
+            Assert.Equal("policy_transition_pending", await browser.BindIsolationAsync(unpublished, owner, BrowserProfileMode.EphemeralSession));
+            Assert.Equal("policy_transition_pending", (await browser.ExecuteAsync(BrowserTestRequests.Inspect(shared))).ErrorCode);
+            Assert.Equal("partial", (await browser.ObserveAsync(owner)).Availability);
+            var own = await browser.ObserveSessionAsync(owner, isolated);
+            Assert.Equal("available", own.Availability); Assert.Equal(1, own.OpenPages); Assert.Equal("isolated", own.Sharing);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Inspect(isolated))).ErrorCode);
+            Task<BrowserResult> waiting;
+            await using (await browser.EnterUnattendedAsync(owner, [origin]))
+            {
+                browser.ExpectInteractive(owner);
+                waiting = browser.ExecuteAsync(BrowserTestRequests.Inspect(shared)).AsTask();
+                await browser.InteractiveEntered(owner).WaitAsync(TimeSpan.FromSeconds(5));
+                browser.AdoptUnattendedFlow(owner);
+                Assert.Equal("policy_transition_pending", (await browser.ExecuteAsync(BrowserTestRequests.Inspect(shared))
+                    .AsTask().WaitAsync(TimeSpan.FromSeconds(5))).ErrorCode);
+                Assert.Null(await browser.BindIsolationAsync(fresh, owner, BrowserProfileMode.EphemeralSession));
+            }
+            Assert.Equal("policy_transition_pending", (await waiting.WaitAsync(TimeSpan.FromSeconds(5))).ErrorCode);
+            Assert.Null((await browser.ExecuteAsync(BrowserTestRequests.Navigate(fresh, url))).ErrorCode);
+            Assert.NotSame(browser.ContextFor(shared), browser.ContextFor(isolated));
+            Assert.NotSame(browser.ContextFor(isolated), browser.ContextFor(fresh));
+        }
+        finally
+        {
+            pending.TrySetResult(); await browser.StopAsync(CancellationToken.None);
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
     private static async Task TwoSessions(BrowserProfileMode mode)
     {
         var root = Path.Combine(Path.GetTempPath(), "browser-state-isolation-" + Guid.NewGuid().ToString("N"));

@@ -9,6 +9,7 @@ const count = (value: number | null | undefined) => value ?? 'Unknown';
 const availability = (value: string) => ({ available: 'Available', partial: 'Partial', unavailable: 'Unavailable', unknown: 'Unknown' })[value] ?? 'Unknown';
 const sharing = (value: string) => ({ isolated: 'Session isolated', sharedCoordinated: 'Shared profile', exclusive: 'Exclusive' })[value] ?? 'Unknown';
 const issue = (code: string) => ({ provider_unavailable: 'Provider unavailable', resource_busy: 'Observation busy; retry when the current operation settles',
+  policy_transition_pending: 'Browser transition pending; waiting for shared-context work to settle',
   reconciliation_required: 'Resource reconciliation required', observation_timeout: 'Observation timed out', observation_limit: 'Observation limit reached',
   observation_unavailable: 'Observation unavailable' })[code] ?? 'Observation unavailable';
 

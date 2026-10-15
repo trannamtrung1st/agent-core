@@ -892,8 +892,11 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
         session.Frames.Clear();
     }
 
+    private sealed record SharedContextMutation(Guid SessionId, Task Completion);
+
     private sealed class SessionBrowser(IBrowserContext context, IPage page)
     {
+        public Guid SessionId { get; init; }
         public BrowserEnvironment Environment { get; init; } = new(null, "en-US", TimeZoneInfo.Local.Id, false, false, 1);
         public ConcurrentDictionary<string, OwnedFrame> Frames { get; } = new();
         public Dictionary<IPage, PageEmulateMediaOptions> Media { get; } = new();
@@ -909,7 +912,7 @@ public sealed partial class NativePlaywrightBrowser : AgentCore.Application.Port
 
         public IBrowserContext Context { get; } = context;
         public SessionBrowser? ActiveView { get; set; }
-        public Task? PendingContextMutation { get; set; }
+        public SharedContextMutation? PendingContextMutation { get; set; }
 
         public IPage Page { get; set; } = page;
 

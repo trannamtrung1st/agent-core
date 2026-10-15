@@ -17,6 +17,17 @@ const snapshot = (owner = 'owner', count = 2): RuntimeState => ({
 beforeEach(() => { read.mockReset(); });
 const view = (owner = 'owner', active = true) => <ConfigProvider><InstanceStateSection instanceId={owner} active={active} /></ConfigProvider>;
 
+test('a pending browser transition keeps unknown counts and explains the unsettled work', async () => {
+  const pending = snapshot();
+  pending.resources[0] = { ...pending.resources[0], availability: 'partial', sharing: 'sharedCoordinated', code: 'policy_transition_pending' };
+  pending.issues = [{ kind: 'browser', code: 'policy_transition_pending' }];
+  read.mockResolvedValue(pending);
+  render(view());
+  await screen.findByText('Browser transition pending; waiting for shared-context work to settle');
+  expect(screen.getAllByText('Unknown')).toHaveLength(2);
+  expect(screen.queryByText('Observation unavailable')).toBeNull();
+});
+
 test('failed refresh retains a stale observation, unknown provider counts and retry recovers', async () => {
   read.mockResolvedValueOnce(snapshot()).mockRejectedValueOnce(new Error('private provider error')).mockResolvedValue(snapshot('owner', 3));
   render(view());

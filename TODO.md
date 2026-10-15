@@ -10,7 +10,7 @@ Keep this file focused on open work and maintainer ideas. [README](README.md) su
 
 ## Current status
 
-State and isolation implementation is locally complete, integrated with the reviewed schema-2 context cutover. [AS-01–28 evidence](docs/reports/agent-state-isolation-verification-2026-10-15.md) covers Synthetic/SQLite/model-context, Admin, realtime and disposable Chromium checks. Live OpenSandbox, hosted models, customer accounts, deployment and optional CI remain separate from this local scope.
+State and isolation implementation is locally complete, integrated with the reviewed schema-2 context cutover. [AS-01–28 evidence](docs/reports/agent-state-isolation-verification-2026-10-15.md) covers Synthetic/SQLite/model-context, Admin, realtime and disposable Chromium checks. Live OpenSandbox, hosted models, customer accounts, deployment and optional CI remain separate from this local scope. The [consistency follow-up](docs/reports/agent-state-isolation-review-2026-10-15.md) covers strict admission after policy relaxation and independent ephemeral browser fencing.
 
 The owner-requested three-layer context replacement is locally verified: Core/system, Runtime/developer and Evidence use one typed assembly path, schema-2 `agentInstructions`, frozen field/task provenance and interaction-only format-2 checkpoints. Populated installations require the explicit backed-up offline conversion before startup. [Verification and remaining operator actions](docs/reports/three-layer-context-cutover-verification-2026-10-15.md) distinguish local acceptance from unperformed deployment, CI and live-provider qualification.
 

@@ -6,7 +6,9 @@ public sealed partial class NativePlaywrightBrowser : IBrowserIsolationBinding
 {
     private bool ContextTransitionBlocked(Guid sessionId) => _sessionOwners.TryGetValue(sessionId, out var owner)
         && owner is { } id && _persistent.TryGetValue(id, out var root)
-        && root.PendingContextMutation is { IsCompletedSuccessfully: false };
+        && root.PendingContextMutation is { Completion.IsCompletedSuccessfully: false } pending
+        && (pending.SessionId == sessionId || pending.SessionId == Guid.Empty
+            || (_sessions.TryGetValue(sessionId, out var view) ? view.Persistent : SessionMode(sessionId) == BrowserProfileMode.PersistentAgent));
     private BrowserProfileMode SessionMode(Guid sessionId) => _sessionModes.GetValueOrDefault(sessionId, _policy.ProfileMode);
 
     private void ActivateView(SessionBrowser view)
@@ -22,17 +24,30 @@ public sealed partial class NativePlaywrightBrowser : IBrowserIsolationBinding
         if (mode == BrowserProfileMode.PersistentAgent && _policy.ProfileMode != BrowserProfileMode.PersistentAgent) return "policy_denied";
         if (_sessionOwners.TryGetValue(sessionId, out var owner) && owner != instanceId) return "forbidden";
         BindSession(sessionId, instanceId);
-        if (ContextTransitionBlocked(sessionId)) return "policy_transition_pending";
-        _sessions.TryGetValue(sessionId, out var existing);
-        if (SessionMode(sessionId) == mode && (existing is null || existing.Persistent == (mode == BrowserProfileMode.PersistentAgent)))
-        { _sessionModes[sessionId] = mode; return null; }
-        // Metadata may tighten while native work is in flight. Never force-close that operation or reuse its context.
-        var use = _contextUse.GetOrAdd(instanceId, static _ => new SemaphoreSlim(1, 1));
-        if (!await use.WaitAsync(0, ct)) return "policy_transition_pending";
         var sessionUse = _sessionUse.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
+        if (!await sessionUse.WaitAsync(0, ct)) return "policy_transition_pending";
         try
         {
-            if (!await sessionUse.WaitAsync(0, ct)) return "policy_transition_pending";
+            // The same Session gate covers provisioning and metadata adoption. A fresh
+            // ephemeral view does not depend on a sibling's shared profile or its owner gate.
+            _sessions.TryGetValue(sessionId, out var existing);
+            if (existing is null && mode == BrowserProfileMode.EphemeralSession)
+            {
+                // Cancellation may leave this Session's native page unpublished. Its
+                // original retirement fence still applies even though no view is in the map.
+                if (_persistent.TryGetValue(instanceId, out var retained)
+                    && retained.PendingContextMutation is { Completion.IsCompletedSuccessfully: false } pending
+                    && (pending.SessionId == sessionId || pending.SessionId == Guid.Empty)) return "policy_transition_pending";
+                _sessionModes[sessionId] = mode; return null;
+            }
+            if (ContextTransitionBlocked(sessionId) || mode == BrowserProfileMode.PersistentAgent
+                && _persistent.TryGetValue(instanceId, out var root) && root.PendingContextMutation is { Completion.IsCompletedSuccessfully: false })
+                return "policy_transition_pending";
+            if (SessionMode(sessionId) == mode && (existing is null || existing.Persistent == (mode == BrowserProfileMode.PersistentAgent)))
+            { _sessionModes[sessionId] = mode; return null; }
+            // Metadata may tighten while native work is in flight. Never force-close that operation or reuse its context.
+            var use = _contextUse.GetOrAdd(instanceId, static _ => new SemaphoreSlim(1, 1));
+            if (!await use.WaitAsync(0, ct)) return "policy_transition_pending";
             try
             {
             if (existing is null) { _sessionModes[sessionId] = mode; return null; }
@@ -67,9 +82,9 @@ public sealed partial class NativePlaywrightBrowser : IBrowserIsolationBinding
             }
             finally { existing.Gate.Release(); }
             }
-            finally { sessionUse.Release(); }
+            finally { use.Release(); }
         }
-        finally { use.Release(); }
+        finally { sessionUse.Release(); }
     }
 
     private async ValueTask<BrowserCloseResult> CloseViewAsync(Guid sessionId, SessionBrowser view, CancellationToken ct)

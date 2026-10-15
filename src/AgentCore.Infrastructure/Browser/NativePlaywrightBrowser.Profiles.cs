@@ -248,30 +248,27 @@ public sealed partial class NativePlaywrightBrowser
 
     private async ValueTask<IAsyncDisposable> EnterInteractiveAsync(Guid sessionId, CancellationToken cancellationToken)
     {
-        if (SessionMode(sessionId) == BrowserProfileMode.EphemeralSession
-            && (!_sessions.TryGetValue(sessionId, out var isolated) || !isolated.Persistent))
+        var sessionGate = _sessionUse.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
+        SemaphoreSlim? ownerGate = null;
+        bool Ephemeral() => SessionMode(sessionId) == BrowserProfileMode.EphemeralSession
+            && (!_sessions.TryGetValue(sessionId, out var view) || !view.Persistent);
+        if (!Ephemeral() && _sessionOwners.TryGetValue(sessionId, out var owner) && owner is Guid agentInstanceId
+            && agentInstanceId != Guid.Empty && !(_unattendedOwner.Value is { } flow
+                && _unattendedLeases.TryGetValue(agentInstanceId, out var current) && ReferenceEquals(flow, current)))
         {
-            var sessionGate = _sessionUse.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
-            await sessionGate.WaitAsync(cancellationToken);
-            return new InteractiveHold(sessionGate);
+            ownerGate = _contextUse.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
+            if (_interactiveWaiters.TryGetValue(agentInstanceId, out var waiting)) waiting.TrySetResult();
+            // Acquire the shared owner before the Session. A waiter must not hold a
+            // Session needed by the already admitted unattended owner of this gate.
+            await ownerGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-        if (!_sessionOwners.TryGetValue(sessionId, out var owner)
-            || owner is not Guid agentInstanceId
-            || agentInstanceId == Guid.Empty
-            || _unattendedOwner.Value is { } flow && _unattendedLeases.TryGetValue(agentInstanceId, out var current)
-                && ReferenceEquals(flow, current))
+        try
         {
-            return NoopHold.Instance;
+            await sessionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (ownerGate is not null && Ephemeral()) { ownerGate.Release(); ownerGate = null; }
+            return new InteractiveHold(sessionGate, ownerGate);
         }
-
-        var gate = _contextUse.GetOrAdd(agentInstanceId, static _ => new SemaphoreSlim(1, 1));
-        if (_interactiveWaiters.TryGetValue(agentInstanceId, out var waiting))
-        {
-            waiting.TrySetResult();
-        }
-
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        return new InteractiveHold(gate);
+        catch { ownerGate?.Release(); throw; }
     }
 
     // Null inherits the host policy; an empty restriction denies every origin.
@@ -311,7 +308,7 @@ public sealed partial class NativePlaywrightBrowser
         {
             var persistent = await EnsurePersistentAsync(agentInstanceId, cancellationToken).ConfigureAwait(false);
             // Profile bytes/context are shared; page, targets, observations and foreground selection are Session-owned.
-            var view = new SessionBrowser(persistent.Context, persistent.Page) { Persistent = true, AgentInstanceId = agentInstanceId,
+            var view = new SessionBrowser(persistent.Context, persistent.Page) { SessionId = sessionId, Persistent = true, AgentInstanceId = agentInstanceId,
                 Environment = persistent.Environment, Gate = persistent.Gate, AcceptingMainPage = true };
             persistent.ActiveView = view;
             // Discard only the provider's unowned startup placeholder, never a sibling's page.
@@ -342,6 +339,7 @@ public sealed partial class NativePlaywrightBrowser
             page.SetDefaultNavigationTimeout(TimeoutMs());
             var session = new SessionBrowser(context, page)
             {
+                SessionId = sessionId,
                 Environment = DescribeEnvironment(environmentOptions),
                 AgentInstanceId = _sessionOwners.TryGetValue(sessionId, out var ownerId) ? ownerId : null
             };
@@ -382,7 +380,7 @@ public sealed partial class NativePlaywrightBrowser
                 ForgetPage(view, page);
             }
             var retirement = RetireAsync();
-            root.PendingContextMutation = retirement;
+            root.PendingContextMutation = new(view.SessionId, retirement);
             _ = retirement.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
             throw;
         }
@@ -570,18 +568,12 @@ public sealed partial class NativePlaywrightBrowser
         public string Code { get; } = code;
     }
 
-    private sealed class NoopHold : IAsyncDisposable
-    {
-        public static NoopHold Instance { get; } = new();
-
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private sealed class InteractiveHold(SemaphoreSlim gate) : IAsyncDisposable
+    private sealed class InteractiveHold(SemaphoreSlim gate, SemaphoreSlim? ownerGate = null) : IAsyncDisposable
     {
         public ValueTask DisposeAsync()
         {
             gate.Release();
+            ownerGate?.Release();
             return ValueTask.CompletedTask;
         }
     }

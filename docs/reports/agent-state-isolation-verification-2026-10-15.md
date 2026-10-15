@@ -1,8 +1,8 @@
 # State and isolation verification — 2026-10-15
 
-Status: requested implementation completed locally on `develop/branch-1`. This records focused local verification, not milestone acceptance, production deployment or a full-suite/CI run.
+Status: initial requested implementation completed locally on `develop/branch-1` through `2f65f0f9`. The subsequent [consistency review](agent-state-isolation-review-2026-10-15.md) records the current follow-up fixes and checks. This ledger records initial focused local verification, not milestone acceptance, production deployment or a full-suite/CI run.
 
-Baseline: `073cd2d4be6d05ad1fcd154a7f935fe98a38338c`. The finalized Three-Layer Context cutover `ff875ea48cb42a72829dac51f87a9c8bd939e8b8` is integrated through merge `ce6e5b01`. B implementation commits include `edd33c7b`, `1e1162a5` and `604634ab`; the final follow-up commit contains the remaining verification fixes and this ledger. Final production-source SHA-256: `3cf53b6d1b944d8ab9155e12b694a971fc8e22d5152111a0e1aef96d83583875`. The fingerprint covers 1,334 sorted tracked paths under `src`, `web/src` and `agents`, hashing each UTF-8 path, NUL, file bytes and NUL; tests/docs are excluded.
+Baseline: `073cd2d4be6d05ad1fcd154a7f935fe98a38338c`. The finalized Three-Layer Context cutover `ff875ea48cb42a72829dac51f87a9c8bd939e8b8` is integrated through merge `ce6e5b01`. B implementation commits include `edd33c7b`, `1e1162a5` and `604634ab`; the final follow-up commit contains the remaining verification fixes and this ledger. Initial completion production-source SHA-256: `3cf53b6d1b944d8ab9155e12b694a971fc8e22d5152111a0e1aef96d83583875`. The fingerprint covers 1,334 sorted tracked paths under `src`, `web/src` and `agents`, hashing each UTF-8 path, NUL, file bytes and NUL; tests/docs are excluded.
 
 ## Scope and preservation
 

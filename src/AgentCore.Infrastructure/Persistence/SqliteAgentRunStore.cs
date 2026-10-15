@@ -110,8 +110,8 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
             AgentRunStoreMapping.ObserveAdmission(snapshot, AgentRunStoreMapping.ToDomain(existing), false);
             return new AgentRunAdmissionResult(false, AgentRunStoreMapping.ToDomain(existing));
         }
-        if (run.Admission.Configuration is { } requestConfig && RequestIsolation.Required(requestConfig.Definition))
-            RequestIsolation.ValidateAdmission(run, await db.AgentRuns.AnyAsync(r => r.SessionId == activation.SessionId
+        if (RequestIsolation.Required(snapshot.Definition) || run.Admission.Configuration is { } requestConfig && RequestIsolation.Required(requestConfig.Definition))
+            RequestIsolation.ValidateAdmission(snapshot, run, await db.AgentRuns.AnyAsync(r => r.SessionId == activation.SessionId
                 && r.AgentInstanceId == activation.AgentInstanceId && r.ProfileId == activation.ProfileId, cancellationToken));
         if (run.Admission.Configuration is { InstanceRevision: > 0 } config)
         {
