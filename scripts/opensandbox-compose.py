@@ -27,12 +27,28 @@ def inspect(name):
 
 def private_write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists() and path.is_symlink():
+    if path.is_symlink():
         raise RuntimeError("Private configuration cannot be a symbolic link.")
+    if path.is_dir():
+        raise RuntimeError(f"Expected a configuration file at {path}; directory retained. Move it aside before retrying.")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w") as output:
         output.write(text)
+
+
+def write_server_config(path, text):
+    # Compose short bind syntax can leave an empty directory at a missing
+    # file source. Preserve it before repairing this known startup failure.
+    if path.is_symlink():
+        raise RuntimeError("Server configuration cannot be a symbolic link; link retained.")
+    if path.is_dir():
+        if any(path.iterdir()):
+            raise RuntimeError(f"Expected a configuration file at {path}; nonempty directory retained. Move it aside before retrying.")
+        backup = path.with_name(path.name + ".directory-backup-" + secrets.token_hex(8))
+        path.rename(backup)
+        print(f"OpenSandbox: preserved empty configuration directory at {backup}; generating server.toml.")
+    private_write(path, text)
 
 
 def state_path(args):
@@ -60,7 +76,7 @@ def prepare(args):
     workspace_root = state / "workspace-mounts"
     workspace_root.mkdir(exist_ok=True)
     workspace_root.chmod(0o1777)  # sticky shared staging; private generation parents, never canonical data
-    private_write(state / "server.toml", server_config(desktop, gateway, compose=True, workspace_root=workspace_root))
+    write_server_config(state / "server.toml", server_config(desktop, gateway, compose=True, workspace_root=workspace_root))
     image = None
     if args.build_workbench:
         inputs = [

@@ -15,6 +15,37 @@ spec.loader.exec_module(helper)
 
 
 class SandboxComposeTests(unittest.TestCase):
+    def test_server_config_recovers_empty_directory_and_preserves_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'server.toml'
+            path.mkdir()
+            helper.write_server_config(path, 'generated-config')
+            self.assertEqual(path.read_text(), 'generated-config')
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            backups = list(Path(directory).glob('server.toml.directory-backup-*'))
+            self.assertEqual(len(backups), 1)
+            self.assertTrue(backups[0].is_dir())
+            helper.write_server_config(path, 'updated-config')
+            self.assertEqual(path.read_text(), 'updated-config')
+            self.assertEqual(len(list(Path(directory).glob('*.directory-backup-*'))), 1)
+
+    def test_server_config_refuses_nonempty_directory_and_links_without_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'server.toml'
+            path.mkdir()
+            evidence = path / 'retained'
+            evidence.write_text('private-evidence')
+            with self.assertRaisesRegex(RuntimeError, 'nonempty directory retained'):
+                helper.write_server_config(path, 'replacement')
+            self.assertEqual(evidence.read_text(), 'private-evidence')
+            link = Path(directory) / 'linked.toml'
+            for target in (path, Path(directory) / 'missing'):
+                link.symlink_to(target)
+                with self.assertRaisesRegex(RuntimeError, 'symbolic link'):
+                    helper.write_server_config(link, 'replacement')
+                self.assertTrue(link.is_symlink())
+                link.unlink()
+
     def test_normal_prepare_never_builds_or_seeds_workload_and_handoff_has_no_default(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

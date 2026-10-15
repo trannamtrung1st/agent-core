@@ -91,6 +91,15 @@ class DevRealTests(unittest.TestCase):
         self.assertIn("API exited before becoming ready", result.stderr)
         self.assertFalse((self.root / "local/dev/web.pid").exists())
 
+    def test_context_migration_gate_is_reported_without_dumping_private_logs(self):
+        self.command('dotnet', "echo 'Stored Definition requires the three-layer context cutover. private-sentinel' >&2; exit 1")
+        self.command('curl', 'exit 1')
+        result = self.run_script('start', '--api-only')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Existing database requires the three-layer context migration', result.stderr)
+        self.assertNotIn('private-sentinel', result.stderr + result.stdout)
+        self.assertFalse((self.root / 'local/dev/web.pid').exists())
+
     def test_denied_process_inspection_preserves_tracking_and_fails_stop(self):
         started = self.run_script("start", "--api-only")
         self.assertEqual(started.returncode, 0, started.stderr)

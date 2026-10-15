@@ -224,6 +224,10 @@ wait_for_url() {
   for attempt in $(seq 1 120); do
     if ! process_running "$(cat "$pid_file")"; then
       echo "$label exited before becoming ready (see $api_log / $web_log)." >&2
+      # Report this known maintenance gate without dumping private API logs.
+      if [[ "$label" == API ]] && grep -q -F 'Stored Definition requires the three-layer context cutover.' "$api_log" 2>/dev/null; then
+        echo "Existing database requires the three-layer context migration. Preserve it and follow docs/17-observability-and-operations.md#three-layer-context-maintenance (backup and drain/cancel pending Runs first). No migration was performed by the launcher." >&2
+      fi
       return 1
     fi
     if curl -fsS --max-time 3 "$url" >/dev/null 2>&1; then

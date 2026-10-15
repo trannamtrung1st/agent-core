@@ -17,8 +17,18 @@ services:
       - opensandbox_api_key
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${AGENTCORE_SANDBOX_CONFIG_FILE:?Run sandbox prepare}:/etc/opensandbox/config.toml:ro
-      - ./deploy/sandbox/server-bootstrap.py:/opt/agent-core/server-bootstrap.py:ro
+      - type: bind
+        source: ${AGENTCORE_SANDBOX_CONFIG_FILE:?Run sandbox prepare}
+        target: /etc/opensandbox/config.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./deploy/sandbox/server-bootstrap.py
+        target: /opt/agent-core/server-bootstrap.py
+        read_only: true
+        bind:
+          create_host_path: false
       - ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}:${AGENTCORE_SANDBOX_WORKSPACE_ROOT}
       - opensandbox-metadata:/var/lib/opensandbox
       - opensandbox-auth:/run/agent-core-auth
