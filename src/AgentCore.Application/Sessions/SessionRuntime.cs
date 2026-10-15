@@ -2412,21 +2412,21 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var sessionAttachments = await BuildSessionAttachmentManifestAsync(evaluationToken).ConfigureAwait(false);
                 var learned = await SessionMemoryPrompt.LoadAsync(
                     _structuredMemory,
-                    _snapshot.SessionId,
+                    capturedSnapshot.SessionId,
                     executionDefinition,
                     _profile,
-                    _snapshot.Entries,
+                    capturedSnapshot.Entries,
                     evaluationToken,
-                    _snapshot.AgentInstanceId).ConfigureAwait(false);
+                    capturedSnapshot.AgentInstanceId).ConfigureAwait(false);
                 var skillCatalog = capturedRun is { } execution && execution.ResponseId == responseId
                     ? execution.PinnedSkillCatalog : resolved!.Skills;
                 var context = new AgentContext(
                     executionDefinition,
-                    _snapshot.Entries,
-                    _snapshot.Summary,
+                    capturedSnapshot.Entries,
+                    capturedSnapshot.Summary,
                     Profile: _profile,
-                    _snapshot.Mode,
-                    _snapshot.PendingTopic,
+                    capturedSnapshot.Mode,
+                    capturedSnapshot.PendingTopic,
                     HelpOfferedDuringSilence: _helpOfferedDuringSilence,
                     InterruptedHeardText: LastInterruptedHeardText(),
                     trigger,
@@ -2440,11 +2440,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     ModelSupportsTools: model.Capabilities.Tools,
                     ModelSupportsVision: model.Capabilities.Vision,
                     UtcNow: _time.GetUtcNow(),
-                    LastUserActivityAt: _snapshot.LastUserActivityAt,
+                    LastUserActivityAt: capturedSnapshot.LastUserActivityAt,
                     LanguageModel: model,
                     ReasoningEffort: selection?.ReasoningEffort,
-                    SummarizedThroughEntrySequence: _snapshot.SummarizedThroughEntrySequence,
-                    LastEntrySequence: _snapshot.DurableLastEntrySequence,
+                    SummarizedThroughEntrySequence: capturedSnapshot.SummarizedThroughEntrySequence,
+                    LastEntrySequence: capturedSnapshot.DurableLastEntrySequence,
                     LearnedMemories: learned,
                     Persona: persona,
                     ScheduleConversation: _scheduleConversationContext,
@@ -2467,7 +2467,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 {
                     EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,
                     Configuration = capturedRun?.Admission.Configuration ?? resolved?.Configuration,
-                    RunTaskIntent = capturedRun?.Admission.TaskIntent
+                    RunTaskIntent = capturedRun?.Admission.TaskIntent,
+                    CurrentUserEntryIds = trigger.Kind == TriggerKind.UserTurn ? capturedRun?.Admission.Activation.SourceEntryIds : null
                 };
                 var brainStarted = Stopwatch.GetTimestamp();
                 using var activity = RuntimeTelemetry.Activity.StartActivity("brain");

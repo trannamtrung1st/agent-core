@@ -128,8 +128,9 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             foreach (var item in automationEvents) yield return item;
             yield break;
         }
-        if (request.Messages.LastOrDefault(m => m.Role == ModelRole.User)?.Text == "Use my recent experience before acting."
-            && request.Messages.Any(m => (m.Text.StartsWith("Historical Experience", StringComparison.Ordinal) || m.Text.StartsWith("Historical Continuity", StringComparison.Ordinal) && m.Text.Contains("\"kind\":\"Experience\"", StringComparison.Ordinal))))
+        if (SyntheticTaskContext.Text(request) == "Use my recent experience before acting."
+            && (!string.IsNullOrEmpty(request.Context?.Text(ContextSectionId.Experience))
+                || request.Context?.Text(ContextSectionId.Continuity).Contains("\"kind\":\"Experience\"", StringComparison.Ordinal) == true))
         {
             yield return new ModelTextDelta("I will observe current page state before acting, based on earlier experience. Current policy still controls every action.");
             yield return new ModelCompleted(ModelStopReason.Completed);

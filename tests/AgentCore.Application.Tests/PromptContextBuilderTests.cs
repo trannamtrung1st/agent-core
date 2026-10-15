@@ -105,6 +105,14 @@ public sealed class PromptContextBuilderTests
         Assert.StartsWith("[Explicitly invoked Skill: \"Say\"; key=definition:say] Review [Referenced session: \"Proposal\"", message.Text);
         Assert.Contains("ATTACHMENT_EVIDENCE", message.Text);
         Assert.DoesNotContain("Previously invoked", message.Text);
+        var retry = new PromptContextBuilder().Build(context with {
+            History = [user, user with { EntryId = Guid.NewGuid(), Sequence = 2, Role = ConversationRole.Assistant,
+                Status = EntryStatus.Streaming, Text = "", Parts = null, Attachments = null }],
+            CurrentUserEntryIds = [user.EntryId]
+        }, Guid.NewGuid());
+        var retryTask = Assert.Single(retry.Interaction!);
+        Assert.Equal(EvidenceMessageKind.CurrentTask, retryTask.EvidenceKind);
+        Assert.Equal(message.Text, retryTask.Text);
         var assistant = user with { EntryId = Guid.NewGuid(), Sequence = 2, Role = ConversationRole.Assistant, Text = "Done", Parts = null, Attachments = null, ReceivedTextEndExclusive = 4 };
         var nextUser = user with { EntryId = Guid.NewGuid(), Sequence = 3, Text = "Continue", Parts = null, Attachments = null };
         var next = new PromptContextBuilder().Build(context with { History = [user, assistant, nextUser], AttachmentContents = null }, Guid.NewGuid());
