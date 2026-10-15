@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-15T03:07:40.741636+00:00",
+  "generatedAt": "2026-10-15T03:42:11.841477+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -315,18 +315,18 @@
     ],
     "inspection": {
       "branch": "main",
-      "baseCommit": "0c2c0f273005743fb43b526b3ccd4e02e9cfbbf1",
+      "baseCommit": "0f994232452d2258a639d87726ff528e64089991",
       "sourceSha256": {
         "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
-        "web/src/app.css": "f7a3a9fc5e3b810fc39c5019fb85dfd830445ceb89d1518d7c38b89cb6812d01",
-        "web/src/features/admin/SandboxProfilesSection.tsx": "f042b7e78217ac5f0feaf0ff6c59f78c4caf44e74bdd6fb7792e1256a3998dea",
+        "web/src/app.css": "f8f9e11ec625dbac34d631efb0e4f8eeb7f596d79816043ed80863c97660b95a",
+        "web/src/features/admin/SandboxProfilesSection.tsx": "b9994a6b4fdb643052c2460846c800379ef9e5df8badc8060e5af02074e88b5c",
         "web/src/features/admin/SandboxProfileDetails.tsx": "8c6ca0a5851648c0c700b36e1f226616a9f9b24150a4147ae88674cc2bed6d86",
         "web/src/features/admin/CredentialsSection.tsx": "17406d7a757110be6d783a5f98abb8c94d1495e438cf982826de7dda8bc8dba6",
         "web/src/features/admin/AddCredentialDialog.tsx": "e9e217a5e84579e386bfb8610e104e48e2955c426db4b192cc714459036b0127",
         "web/src/features/admin/DefinitionSandboxPolicy.tsx": "5b121400af8e6927cb9cad2b214fe4bd5f115419062c53c6e1d3cdc5dd2088be",
         "web/src/features/admin/InstanceSettingsSection.tsx": "2fd99f54fc535282c23d6c567e65bf69588caf64d10e2125f3ba35a1143ae5f8",
         "web/src/features/admin/InstanceSandboxSummary.tsx": "820341e453db5c584aa57af96b1ab02bce91329ccba51d2b371848f3d16af557",
-        "web/src/features/chat/SessionSandboxDrawer.tsx": "d1d036d2cdd6d0a486ee14d69dd8a0d041c32d21e6708f10e70d491e542ff950",
+        "web/src/features/chat/SessionSandboxDrawer.tsx": "ef11f6e60e71815377a88ba8968915602edb7ac280f00ea7b0e1bfed047962e0",
         "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66",
         "web/src/features/admin/AgentConfigurationLayout.tsx": "b36bde3bb2f8a11cc14abb20f29df25656b9ee2ee5490b1663d724513589e73b",
         "web/src/features/admin/adminFormFeedback.ts": "0d14ed96ba94bad96af6da12af25e1075ecce880cf8056700c49e93e17546bd5",
@@ -343,13 +343,17 @@
         "web/src/app/appFeedback.ts": "9fb2b3caaffb16f19a2320e0f3c241905c80420f0c417f259cd50eaf1b41bbb2",
         "web/src/features/admin/AdminApp.tsx": "59d46f1a41c694953ceb2c8386ab1ec50bee97ff7c07aee035bd464b9cd84587",
         "web/src/features/chat/ChatApp.tsx": "fc593d3a21d8b7b4810753940ade2d9867fa66f35d07e16b7fa7ba0fff0b350d",
-        "web/src/app/appFeedbackPlacement.ts": "4232563daa5a53ce141c2585035b5aa65bd5ea443590c32167c52354c8c1c6e5"
+        "web/src/app/appFeedbackPlacement.ts": "4232563daa5a53ce141c2585035b5aa65bd5ea443590c32167c52354c8c1c6e5",
+        "web/src/features/chat/DiagnosticDetails.tsx": "4ed6285461c76ef36f0416fc20ce182be43c347449f01bf0c81f02adb7f2183f",
+        "web/src/features/chat/detailPopover.tsx": "81e986114b6813c91d5ed8b31f8367cd9e71ae99e6e7487bed66da800e64db5b",
+        "web/src/features/chat/diagnosticCopy.ts": "810d4b8f13bbba9306a3c2a023827d4ff030f8c16921d84216077b0a5ad3c330"
       },
-      "evidence": "docs/reports/design-system-sync-2026-10-15.md",
-      "scope": "Documentation sync of current working-tree presentation: native Ant Design v6, shared form/modal/grid layouts, contextual 16px message edges and stronger outline. Uncommitted ordinary-image helper and image-default-user protection copy are reflected separately from the committed feedback presentation. Source hashes identify this inspection, not a release.",
-      "snapshotKind": "working-tree",
-      "inspectedAt": "2026-10-15T03:07:40.741636+00:00",
+      "evidence": "docs/reports/sandbox-diagnostics-polish-verification-2026-10-15.md",
+      "scope": "Current Ant Design v6 presentation with contextual Session sandbox diagnostics grouped with command and initialization metadata. Shared native diagnostic popovers retain existing error contexts, safe copying and focus ownership. Ordinary-image guidance and initialization copy are committed in 0ca35e86. Source hashes identify this commit candidate, not a release.",
+      "snapshotKind": "commit-candidate",
+      "inspectedAt": "2026-10-15T03:42:11.841477+00:00",
       "evidenceRecords": [
+        "docs/reports/sandbox-diagnostics-polish-verification-2026-10-15.md",
         "docs/reports/design-system-sync-2026-10-15.md",
         "docs/reports/ordinary-sandbox-images-verification-2026-10-15.md",
         "docs/reports/feedback-visibility-verification-2026-10-15.md",
@@ -358,8 +362,7 @@
         "docs/reports/oci-sandbox-final-hardening-2026-10-15.md",
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
-      "verification": "Documentation consistency only in this sync. Reuses prior feedback visibility and separate ordinary-image verification records; no new application run, CI or acceptance. Current initialization-script helper still says non-root despite image-default-user guidance; the sync record identifies this open source-copy mismatch.",
-      "presentationCommit": "0c2c0f273005743fb43b526b3ccd4e02e9cfbbf1"
+      "verification": "Focused Synthetic Playwright checks at five widths cover metadata grouping, actual copying, separate initialization IDs, command fallback, and Escape/focus ownership; a representative Admin failure retains its draft and default Error details. All 36 focused tests and production build passed. See primary evidence for controlled Sandbox response scope and remaining manual checks. No CI or milestone/provider acceptance."
     }
   },
   "components": [
@@ -559,15 +562,15 @@
       "name": "Session sandbox evidence",
       "kind": "custom",
       "refersTo": "session-sandbox",
-      "description": "Static excerpt of the current AntD drawer: wrapped status/exit/duration and copyable, collapsible command evidence. Real actions and private data are omitted. Desktop drawer is 640px; below 768px it fills the viewport. Safe pinned profile/image identity precedes unchanged process and cleanup evidence; registry auth is never shown.",
-      "html": "<section class=\"ds-sandbox\"><p>Profile: Example OCI \u00b7 revision 3</p><code>ghcr.io/example/image@sha256:illustrative-digest</code><header><strong>Latest command</strong><span class=\"ds-tag\">Completed</span><small>Exit 0 \u00b7 1.2s \u00b7 committed</small></header><code>python -m pytest -q</code><details open><summary>Standard output</summary><pre>1 passed</pre></details><details><summary>Standard error</summary><pre>No standard error.</pre></details></section>",
-      "css": ".ds-sandbox{box-sizing:border-box;max-width:640px;padding:24px;background:#1f1f1f;color:rgba(255,255,255,.85);font:14px/1.57 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.ds-sandbox header{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}.ds-sandbox .ds-tag{padding:0 7px;border:1px solid #303030;border-radius:4px}.ds-sandbox small{color:rgba(255,255,255,.65)}.ds-sandbox code{display:block;white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:12px}.ds-sandbox details{border:1px solid #424242;border-radius:8px;padding:12px}.ds-sandbox details+details{margin-top:8px}.ds-sandbox summary{cursor:pointer}.ds-sandbox pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}@media(max-width:767px){.ds-sandbox{max-width:100%}}"
+      "description": "Static excerpt of the native AntD drawer: heading/status and metadata use 8px gaps; result siblings use 12px. Command diagnostics sits with exit/duration/file status before output, and Initialization diagnostics uses its own metadata. The application omits absent IDs, opens contextual DiagnosticDetails with safe Copy and closes the popover before its owner on Escape. Runtime actions/private data are omitted here. Desktop drawer is 640px; below 768px it fills the viewport and actions have 40px minimum height. Profile/image identity precedes unchanged process and cleanup evidence; registry auth is never shown.",
+      "html": "<section class=\"ds-sandbox\"><p>Profile: Example OCI \u00b7 revision 3</p><code>ghcr.io/example/image@sha256:illustrative-digest</code><header><div class=\"ds-heading\"><strong>Latest command</strong><span class=\"ds-tag\">Completed</span></div><div class=\"ds-meta\"><small>Exit 0 \u00b7 1.2s \u00b7 Files committed</small><button type=\"button\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 11v6M12 7v2\"/></svg>Command diagnostics</button></div></header><code>python -m pytest -q</code><details open><summary>Standard output</summary><pre>1 passed</pre></details><details><summary>Standard error</summary><pre>No standard error.</pre></details></section>",
+      "css": ".ds-sandbox{box-sizing:border-box;max-width:640px;padding:24px;background:#1f1f1f;color:rgba(255,255,255,.85);font:14px/1.57 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.ds-sandbox header{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}.ds-sandbox .ds-heading,.ds-sandbox .ds-meta{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.ds-sandbox .ds-tag{padding:0 7px;border:1px solid #303030;border-radius:4px}.ds-sandbox small{color:rgba(255,255,255,.65)}.ds-sandbox button{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:4px 8px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}.ds-sandbox button:hover{background:rgba(255,255,255,.08)}.ds-sandbox button:active{background:rgba(255,255,255,.12)}.ds-sandbox button:focus-visible{outline:2px solid #3c89e8;outline-offset:2px}.ds-sandbox code{display:block;white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:12px}.ds-sandbox details{border:1px solid #424242;border-radius:8px;padding:12px}.ds-sandbox details+details{margin-top:8px}.ds-sandbox summary{cursor:pointer}.ds-sandbox pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;margin:12px 0 0}@media(max-width:767px){.ds-sandbox{max-width:100%}.ds-sandbox button{min-height:40px}}"
     },
     {
       "name": "OCI profile catalog",
       "kind": "custom",
       "refersTo": "sandbox-profile-catalog",
-      "description": "Static excerpt of the shared six-column Admin collection, with table-local 1080px scrolling and full-value titles/copy in the application. Add prebuilt image opens the guarded 800px Modal; saved-profile editing stays inline. Global/Instance forms share 16px grids and MiB/exact-byte presentation. Tags resolve to saved digests. Current working-tree Image help describes shell and /proc, platform-mounted /working and optional Python; Workload protections names the image default user. The sync record tracks the remaining initialization-helper copy mismatch. Readiness and exact-revision Verify stay distinct from Save. Runtime dialogs, notifications and private values are omitted from this static excerpt.",
+      "description": "Static excerpt of the shared six-column Admin collection, with table-local 1080px scrolling and full-value titles/copy in the application. Add prebuilt image opens the guarded 800px Modal; saved-profile editing stays inline. Global/Instance forms share 16px grids and MiB/exact-byte presentation. Tags resolve to saved digests. Image help describes shell and /proc, platform-mounted /working and optional Python; Workload protections names the image default user. Initialization help also names the image default user; this guidance is committed in 0ca35e86. Readiness and exact-revision Verify stay distinct from Save. Runtime dialogs, notifications and private values are omitted from this static excerpt.",
       "html": "<section class=\"ds-oci\"><header><input aria-label=\"Search sandbox profiles\" placeholder=\"Search sandbox profiles\"><button type=\"button\">Add prebuilt image</button></header><div class=\"ds-oci-scroll\"><table><thead><tr><th>Profile</th><th>Profile ID</th><th>Revision</th><th>Source</th><th>Image</th><th>Availability</th></tr></thead><tbody><tr><td><a href=\"#profile\">Example OCI</a></td><td>example</td><td>3</td><td>Remote OCI</td><td><code title=\"Illustrative image identity\">sha256:illustrative\u2026</code></td><td><span>Verified \u00b7 eligible</span></td></tr></tbody></table></div></section>",
       "css": ".ds-oci{background:var(--ac-color-container,#141414);color:var(--ac-color-text,rgba(255,255,255,.85));font:14px/1.57 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;padding:16px}.ds-oci header{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}.ds-oci input,.ds-oci button{min-height:32px;border:1px solid var(--ac-color-border,#303030);border-radius:6px;padding:4px 12px;font:inherit}.ds-oci input{min-width:0;flex:1;background:transparent;color:inherit}.ds-oci button{background:var(--ac-color-primary,#1668dc);color:white}.ds-oci-scroll{overflow:auto}.ds-oci table{min-width:1080px;width:100%;border-collapse:collapse}.ds-oci th,.ds-oci td{text-align:start;white-space:nowrap;padding:8px;border-bottom:1px solid var(--ac-color-border,#303030)}.ds-oci code{white-space:nowrap}.ds-oci small{color:var(--ac-color-text-secondary,rgba(255,255,255,.65))}.ds-oci a{color:var(--ac-color-primary,#1668dc)}.ds-oci span{color:var(--ac-color-success,#49aa19)}.ds-oci button{cursor:pointer}.ds-oci button:hover{filter:brightness(1.1)}.ds-oci button:active{filter:brightness(.9)}.ds-oci :is(button,input,a):focus-visible{outline:2px solid var(--ac-color-focus,#3c89e8);outline-offset:2px}@media(max-width:767px){.ds-oci input,.ds-oci button{min-height:40px}}"
     },

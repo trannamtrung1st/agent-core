@@ -17,6 +17,9 @@ related_targets:
   - web/src/features/chat/SessionRail.tsx
   - web/src/features/chat/BackgroundWorkDrawer.tsx
   - web/src/features/chat/AgentRunDetails.tsx
+  - web/src/features/chat/SessionSandboxDrawer.tsx
+  - web/src/features/chat/DiagnosticDetails.tsx
+  - web/src/features/chat/detailPopover.tsx
   - web/src/features/chat/SessionArtifacts.tsx
   - web/src/features/chat/ArtifactView.tsx
   - web/src/features/chat/AttachmentPreview.tsx
@@ -100,6 +103,10 @@ The [successor verification ledger](../../docs/reports/drive-credentials-ux-veri
 ## P10 local sandbox extension
 
 Platform profiles and the Session sandbox drawer preserve the incumbent Ant Design operate surface and shared Office/Drive file preview. Theme tokens own spacing; output uses Collapse/copyable text and existing confirmations. A bounded 1440/1024/768/390/320px runtime review found no horizontal overflow after transitions settled. Save/Discard/navigation protection, actual artifacts, cancellation/reset and Core restart were exercised. Canonical docs and the OpenSandbox verification ledger own scope/remaining acceptance; this is local evidence, not production hardening.
+
+### Session sandbox diagnostic grouping (2026-10-15)
+
+Command diagnostics and Initialization diagnostics are visible native icon-and-text actions in their owning metadata rows, before output. Keep the 8px wrapping heading/metadata rhythm and 12px command-result stack; clear command/output paragraph bottom margins so the stack owns spacing. Missing IDs omit the action. The shared DiagnosticDetails label also names its popover, allowing neutral command/setup diagnostics while error notices keep their existing Error details context. Safe IDs and Session scope retain Copy; command diagnostics preserves the environment-ID fallback. Narrow drawer actions and shared diagnostic Copy buttons use 40px minimum height. Escape closes the popup and restores the trigger before another Escape closes its owner. See [focused local verification](../../docs/reports/sandbox-diagnostics-polish-verification-2026-10-15.md) for five-width grouping, Copy, failure cases and shared Admin recovery checks; no hosted acceptance is renewed.
 
 ## Composer attachment tiles and binary intake (2026-10-14)
 

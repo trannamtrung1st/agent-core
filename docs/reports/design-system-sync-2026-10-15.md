@@ -1,5 +1,7 @@
 # Design-system source sync — 2026-10-15
 
+Historical snapshot below: the ordinary-image work was subsequently committed in `0ca35e86`, including the initialization-helper correction. The current [design guide](../../.agents/context/DESIGN.md) and preview describe the later source state.
+
 This documentation-only update inspects the working tree based on `0c2c0f27`. [DESIGN.md](../../.agents/context/DESIGN.md) owns the lightweight Ant Design v6 presentation guide; [Frontend Implementation](../13-frontend-implementation-spec.md) owns behavior. The [preview metadata](../../.impeccable/design.json), [Admin surface brief](../../.impeccable/surfaces/web-src-features-admin-adminapp-tsx.md) and [Admin composition guide](../../web/src/features/admin/README.md) are synchronized to those owners.
 
 ## Current presentation
@@ -15,9 +17,9 @@ This documentation-only update inspects the working tree based on `0c2c0f27`. [D
 
 The sidecar's working-tree source hashes identify this documentation inspection. The committed presentation baseline and inspected working-tree changes are explicitly distinguished.
 
-## Open source-copy mismatch
+## Source-copy mismatch — resolved in `0ca35e86`
 
-[SandboxProfilesSection.tsx](../../web/src/features/admin/SandboxProfilesSection.tsx) still describes initialization as running as the non-root workload user. Its current Image helper and Workload protections instead describe the image default user, matching the [ordinary-image frontend contract](../13-frontend-implementation-spec.md#ordinary-image-verification-presentation). The script helper needs a focused source-copy correction; this documentation task leaves application code unchanged.
+At this snapshot, [SandboxProfilesSection.tsx](../../web/src/features/admin/SandboxProfilesSection.tsx) described initialization as running as the non-root workload user while Image help and Workload protections named the image default user. Commit `0ca35e86` corrected the script helper to the image default user, matching the [ordinary-image frontend contract](../13-frontend-implementation-spec.md#ordinary-image-verification-presentation). The original docs-only sync did not perform that source correction.
 
 ## Documentation checks
 

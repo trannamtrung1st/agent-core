@@ -73,10 +73,10 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
     : execution?.workspaceSyncStatus === 'unknown' || execution?.workspaceSyncStatus === 'committing'
       ? 'Files may already have been committed. Inspect canonical /working before retrying. Commands are never repeated automatically. Reset preserves canonical files and Artifacts.'
       : 'The command outcome or scratch synchronization is uncertain. Commands are not repeated automatically. Reset discards sandbox-only state and retains canonical Workspace files and Artifacts.';
-  return <Drawer title="Session sandbox" open={open} onClose={onClose} size={narrow ? '100%' : 640} destroyOnHidden focusable={{ focusTriggerAfterClose: !openerRef }}
+  return <Drawer title="Session sandbox" className="session-sandbox-drawer" open={open} onClose={onClose} size={narrow ? '100%' : 640} destroyOnHidden focusable={{ focusTriggerAfterClose: !openerRef }}
     afterOpenChange={visible => { if (!visible && openerRef?.current?.isConnected) openerRef.current.focus({ preventScroll: true }); }}>
-    <Flex vertical gap={token.padding} onKeyDownCapture={event => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
+    <Flex vertical gap={token.padding} onKeyDown={event => {
+      if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); onClose(); }
     }}>
       {error && <Alert type="error" showIcon title={error} action={<Button loading={reading} onClick={() => void refresh.current()}>Retry</Button>} />}
       {loading ? <Spin aria-label="Loading Session sandbox" /> : !environment ? !error && <Empty description="No sandbox environment yet. An authorized command provisions the selected verified profile for this Session." /> : <>
@@ -97,21 +97,28 @@ export function SessionSandboxDrawer({ sessionId, open, narrow, readOnly, opener
         </Descriptions>
         {environment.initialization && <section aria-label="Sandbox initialization"><Flex vertical gap={token.paddingSM}>
           <Flex wrap gap={token.paddingXS} align="center"><Typography.Text strong>Initialization</Typography.Text><Tag color={environment.initialization.state==='Succeeded'?'success':environment.initialization.state==='Failed'?'error':'processing'}>{environment.initialization.state}</Tag></Flex>
-          <Typography.Text type="secondary">Profile revision {environment.initialization.profileRevision} · {environment.initialization.instanceRevision===null?'Inherited setup':`Instance revision ${environment.initialization.instanceRevision}`} · {environment.initialization.exitCode===null?'Exit unknown':`Exit ${environment.initialization.exitCode}`} · {(environment.initialization.durationMs/1000).toFixed(1)}s</Typography.Text>
+          <Flex wrap gap={token.paddingXS} align="center">
+            <Typography.Text type="secondary">Profile revision {environment.initialization.profileRevision} · {environment.initialization.instanceRevision===null?'Inherited setup':`Instance revision ${environment.initialization.instanceRevision}`} · {environment.initialization.exitCode===null?'Exit unknown':`Exit ${environment.initialization.exitCode}`} · {(environment.initialization.durationMs/1000).toFixed(1)}s</Typography.Text>
+            <DiagnosticDetails label="Initialization diagnostics" fields={{diagnosticId:environment.initialization.diagnosticId,sessionId}} />
+          </Flex>
           {environment.initialization.startedAt && <Typography.Text type="secondary">{new Date(environment.initialization.startedAt).toLocaleString()}{environment.initialization.finishedAt?` – ${new Date(environment.initialization.finishedAt).toLocaleString()}`:''}</Typography.Text>}
           <SandboxEvidence stdout={environment.initialization.stdout} stderr={environment.initialization.stderr} truncated={environment.initialization.truncated} />
-          <DiagnosticDetails fields={{diagnosticId:environment.initialization.diagnosticId}} />
         </Flex></section>}
         {execution && <section aria-label="Sandbox command result">
           <Flex vertical gap={token.paddingSM}>
-            <Flex wrap align="center" gap={token.paddingXS}><Typography.Text strong>Latest command</Typography.Text><Tag>{execution.status}</Tag><Typography.Text type="secondary">{execution.exitCode === null ? 'Exit unknown' : `Exit ${execution.exitCode}`} · {(execution.durationMs / 1000).toFixed(1)}s · {syncLabel[execution.workspaceSyncStatus] ?? "File synchronization unavailable"}</Typography.Text></Flex>
-            <Typography.Paragraph code copyable={{ text: execution.commandText }} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{execution.commandText}</Typography.Paragraph>
+            <Flex vertical gap={token.paddingXS}>
+              <Flex wrap align="center" gap={token.paddingXS}><Typography.Text strong>Latest command</Typography.Text><Tag>{execution.status}</Tag></Flex>
+              <Flex wrap align="center" gap={token.paddingXS}>
+                <Typography.Text type="secondary">{execution.exitCode === null ? 'Exit unknown' : `Exit ${execution.exitCode}`} · {(execution.durationMs / 1000).toFixed(1)}s · {syncLabel[execution.workspaceSyncStatus] ?? "File synchronization unavailable"}</Typography.Text>
+                <DiagnosticDetails label="Command diagnostics" fields={{ diagnosticId: execution.diagnosticId ?? environment.diagnosticId,sessionId }} />
+              </Flex>
+            </Flex>
+            <Typography.Paragraph code copyable={{ text: execution.commandText }} style={{ margin:0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{execution.commandText}</Typography.Paragraph>
             <Collapse defaultActiveKey={['stdout']} items={[
-              { key: 'stdout', label: execution.background ? 'Command output (combined)' : 'Standard output', children: <section aria-label={execution.background ? "Command output (combined)" : "Standard output"}><Typography.Paragraph copyable={{ text: execution.stdout }} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{execution.stdout || 'No command output.'}</Typography.Paragraph></section> },
-              { key: 'stderr', label: 'Standard error', children: <section aria-label="Standard error"><Typography.Paragraph copyable={{ text: execution.stderr }} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{execution.stderr || 'No standard error.'}</Typography.Paragraph></section> },
+              { key: 'stdout', label: execution.background ? 'Command output (combined)' : 'Standard output', children: <section aria-label={execution.background ? "Command output (combined)" : "Standard output"}><Typography.Paragraph copyable={{ text: execution.stdout }} style={{ margin:0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{execution.stdout || 'No command output.'}</Typography.Paragraph></section> },
+              { key: 'stderr', label: 'Standard error', children: <section aria-label="Standard error"><Typography.Paragraph copyable={{ text: execution.stderr }} style={{ margin:0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{execution.stderr || 'No standard error.'}</Typography.Paragraph></section> },
             ]} />
             {execution.truncated && <Alert type="info" showIcon title="Output was truncated at the bounded log limit." />}
-            <DiagnosticDetails fields={{ diagnosticId: execution.diagnosticId ?? environment.diagnosticId }} />
             {execution.background && execution.status === 'Running' && <Button disabled={busy || reading || !!error || readOnly} loading={busy} onClick={() => confirmMutation('Stop this background command?', 'Confirm termination, then synchronize validated scratch files.', () => stopSandboxExecution(sessionId, execution.executionId), execution.executionId)}>Stop command</Button>}
             {!execution.background && ['Running','Dispatching'].includes(execution.status) && <Typography.Text type="secondary">Use Chat’s Stop control to cancel this active Run.</Typography.Text>}
           </Flex>

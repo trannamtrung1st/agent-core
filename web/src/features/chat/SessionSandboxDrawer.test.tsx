@@ -15,8 +15,44 @@ async function resetDialog() {
 }
 it('shows failed command evidence with separate collapsed stderr and truthful truncation',async () => {
   render(tree()); await screen.findByText('test failed'); expect(screen.getByText(/Exit 7.*committed/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', {name:'Command diagnostics'})).not.toBeInTheDocument();
   expect(screen.getByText('Output was truncated at the bounded log limit.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'Standard error'})); await screen.findByText('failure details');
+});
+it('groups labeled command diagnostics with metadata and copies the owned context', async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {configurable:true,value:{writeText}});
+  vi.mocked(getSandboxExecution).mockResolvedValue({...result,exitCode:0,diagnosticId:'diag-command',truncated:false});
+  const onClose = vi.fn();
+  render(<ConfigProvider theme={{token:{motion:false}}}><App><SessionSandboxDrawer sessionId="s1" open narrow={false} onClose={onClose} /></App></ConfigProvider>);
+  const section = await screen.findByRole('region', {name:'Sandbox command result'});
+  const trigger = within(section).getByRole('button', {name:'Command diagnostics'});
+  expect(trigger).toHaveTextContent('Command diagnostics');
+  expect(trigger.closest('.ant-flex')).toHaveTextContent('Exit 0 · 1.2s · Files committed');
+  expect(trigger.compareDocumentPosition(within(section).getByRole('button', {name:'Standard output'})) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  fireEvent.click(trigger);
+  await waitFor(() => expect(screen.getByText('Command diagnostics', {selector:'.ant-popover-title'})).toBeVisible());
+  const details = screen.getByTestId('diagnostic-details');
+  expect(details).toHaveTextContent('diag-command');
+  expect(details).toHaveTextContent('Session ID');
+  fireEvent.click(within(details).getByRole('button', {name:'Copy details'}));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith('Agent Core diagnostic\nDiagnostic ID: diag-command\nSession ID: s1'));
+  fireEvent.keyDown(within(details).getByRole('button', {name:'Copy details'}), {key:'Escape'});
+  expect(onClose).not.toHaveBeenCalled(); expect(trigger).toHaveFocus();
+  await waitFor(() => expect(details).not.toBeVisible());
+  fireEvent.keyDown(trigger, {key:'Escape'}); expect(onClose).toHaveBeenCalledTimes(1);
+  expect(resetSessionSandbox).not.toHaveBeenCalled(); expect(stopSandboxExecution).not.toHaveBeenCalled();
+});
+it('keeps initialization and fallback command diagnostics in their own metadata groups', async () => {
+  vi.mocked(getSessionSandbox).mockResolvedValue({...env,diagnosticId:'diag-environment',initialization:{state:'Failed',profileId:'workbench',profileRevision:2,instanceRevision:3,startedAt:null,finishedAt:null,exitCode:7,stdout:'',stderr:'setup failed',truncated:false,durationMs:1000,diagnosticId:'diag-initialization',phase:'Instance'}});
+  render(tree());
+  const section = await screen.findByRole('region', {name:'Sandbox initialization'});
+  const trigger = within(section).getByRole('button', {name:'Initialization diagnostics'});
+  expect(trigger.closest('.ant-flex')).toHaveTextContent('Profile revision 2 · Instance revision 3 · Exit 7 · 1.0s');
+  fireEvent.click(trigger);
+  expect(await screen.findByTestId('diagnostic-id')).toHaveTextContent('diag-initialization');
+  fireEvent.click(screen.getByRole('button', {name:'Command diagnostics'}));
+  await waitFor(() => expect(screen.getAllByTestId('diagnostic-id').some(el => el.textContent==='diag-environment')).toBe(true));
 });
 it('keeps recovery disabled after a failed read until status is observed again',async () => {
   vi.mocked(getSessionSandbox).mockRejectedValueOnce(new Error('offline')); render(tree());

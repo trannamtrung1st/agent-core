@@ -1,24 +1,30 @@
 import { InfoCircleOutlined } from "@ant-design/icons";
-import { type ReactNode, useState } from "react";
-import { Button, Popover } from "antd";
+import { type ReactNode, useRef, useState } from "react";
+import { Button, Popover, theme } from "antd";
 import { DetailField, DetailFieldList, type DetailLine } from "./detailFields";
 import { DetailPopoverBody } from "./detailPopover";
 import { diagnosticCopyText, type DiagnosticFields } from "./diagnosticCopy";
 
 export function DiagnosticDetails({
   fields,
+  label,
   trigger,
   extraLines = [],
   failureDetailsTestId
 }: {
   fields: DiagnosticFields;
+  /** Visible contextual action/title when diagnostics are not an error notice. */
+  label?: string;
   trigger?: ReactNode;
   /** Additional labeled rows in the same layout, included in copy text. */
   extraLines?: DetailLine[];
   failureDetailsTestId?: string;
 }) {
+  const { token } = theme.useToken();
   const copyText = diagnosticCopyText(fields, extraLines);
   const [copyResetKey, setCopyResetKey] = useState(0);
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLSpanElement>(null);
   if (!copyText || !fields.diagnosticId?.trim()) {
     return null;
   }
@@ -26,13 +32,20 @@ export function DiagnosticDetails({
   const diagnosticId = fields.diagnosticId.trim();
 
   return (
-    <Popover
+    <span ref={triggerRef} style={{ display: "inline-flex", maxWidth: "100%" }} onKeyDownCapture={event => {
+      if (event.key !== "Escape" || !open) return;
+      event.preventDefault(); event.stopPropagation(); setOpen(false);
+      setCopyResetKey(value => value + 1);
+      triggerRef.current?.querySelector<HTMLElement>("button, a[href], [tabindex]")?.focus({ preventScroll: true });
+    }}><Popover
+      open={open}
       trigger="click"
       placement="top"
-      title="Error details"
+      title={label ?? "Error details"}
       getPopupContainer={() => document.body}
-      onOpenChange={(open) => {
-        if (!open) {
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
           setCopyResetKey((value) => value + 1);
         }
       }}
@@ -81,8 +94,9 @@ export function DiagnosticDetails({
       }
     >
       {trigger ?? (
-        <Button type="text" icon={<InfoCircleOutlined />} aria-label="Error details" title="Error details" />
+        <Button type="text" icon={<InfoCircleOutlined aria-hidden />} aria-label={label ?? "Error details"}
+          title={label ?? "Error details"} style={label ? { paddingInline: token.paddingXS } : undefined}>{label}</Button>
       )}
-    </Popover>
+    </Popover></span>
   );
 }

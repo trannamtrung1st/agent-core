@@ -1551,6 +1551,8 @@ body,
 
   .admin-run-source.ant-btn,
   .background-work-drawer .ant-btn,
+  .session-sandbox-drawer .ant-btn,
+  .diagnostic-details-pane .ant-btn,
   .background-work-actions .ant-btn,
   .background-work-attention .ant-btn,
   .background-work-read-all.ant-btn,
