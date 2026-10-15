@@ -30,6 +30,84 @@ test('preset label derives from underlying fields and an independent edit become
   expect(deriveIsolationPreset(view, { ...isolated, settings: [...isolated.settings, { section: 'memoryPolicy', set: { sessionMemory: false }, clear: [] }].map(p => p.section === 'stateIsolationPolicy' ? { ...p, set: { ...p.set, conversationContextScope: 'CurrentRequest' } } : p) })).toBe('Stateless');
 });
 
+const stateless: IsolationDraft = { ...isolated, settings: [
+  { ...isolated.settings[0], set: { ...isolated.settings[0].set, conversationContextScope: 'CurrentRequest' } },
+  { section: 'memoryPolicy', set: { sessionMemory: false }, clear: [] },
+  { section: 'voice', set: { enabled: false }, clear: [] },
+] };
+const mutate = (draft: IsolationDraft, section: string, field: string, value: string | boolean): IsolationDraft => {
+  const existing = draft.settings.find(p => p.section === section);
+  return { ...draft, settings: [...draft.settings.filter(p => p.section !== section),
+    { section, set: { ...existing?.set, [field]: value }, clear: [] }] };
+};
+const alteredState: Record<string, string | boolean> = { conversationContextScope: 'CurrentRequest', homeAccess: 'ReadOnly',
+  workingCleanup: 'AfterTerminal', browserIsolation: 'HostDefault', agentStateVisibility: 'CurrentSession',
+  experienceRecord: true, experienceRecall: true, profileEvidence: true, crossSessionContinuity: true };
+for (const [name, recipe] of [['SessionIsolated', isolated], ['Stateless', stateless]] as const) {
+  test.each(Object.entries(alteredState))(`${name}: independently editing %s derives Custom`, (field, alternate) => {
+    const value = field === 'conversationContextScope' && name === 'Stateless' ? 'Session' : alternate;
+    const edited = mutate(recipe, 'stateIsolationPolicy', field, value);
+    // Changing request scope alone matches Session-isolated only if its Memory recipe also matches.
+    expect(deriveIsolationPreset(view, edited)).toBe('Custom');
+  });
+  test.each(Object.keys(view.settings[1].effective))(`${name}: editing Memory %s derives Custom`, field => {
+    const current = field === 'sessionMemory' && name === 'SessionIsolated';
+    expect(deriveIsolationPreset(view, mutate(recipe, 'memoryPolicy', field, !current))).toBe('Custom');
+  });
+  test(`${name}: Experience, maintenance and Voice edits derive Custom`, () => {
+    expect(deriveIsolationPreset(view, { ...recipe, experienceEnabled: true })).toBe('Custom');
+    expect(deriveIsolationPreset(view, { ...recipe, allowMaintenance: true })).toBe('Custom');
+    expect(deriveIsolationPreset(view, mutate(recipe, 'voice', 'enabled', true))).toBe('Custom');
+  });
+}
+
+test('Persistent matches inherited recipes and preserves saved enablement flags', () => {
+  const initial = { settings: [], experienceEnabled: false, allowMaintenance: false };
+  for (const section of view.settings.slice(0, 2)) {
+    for (const [field, value] of Object.entries(section.effective)) {
+      expect(deriveIsolationPreset(view, mutate(initial, section.section, field,
+        typeof value === 'boolean' ? !value : field === 'conversationContextScope' ? 'CurrentRequest' : 'Changed'))).toBe('Custom');
+    }
+  }
+  expect(deriveIsolationPreset(view, { ...initial, experienceEnabled: true })).toBe('Custom');
+  expect(deriveIsolationPreset(view, { ...initial, allowMaintenance: true })).toBe('Custom');
+  expect(deriveIsolationPreset(view, mutate(initial, 'voice', 'enabled', true))).toBe('Custom');
+});
+
+test('visibility recipe follows Definition constraints and inheritance resolves the effective cleanup', () => {
+  const scoped: IsolationView = { ...view, settings: view.settings.map(s => s.section === 'stateIsolationPolicy'
+    ? { ...s, constraints: { ...s.constraints, agentStateVisibility: { ...s.constraints!.homeAccess, choices: ['Off', 'CurrentSession'] } } } : s) };
+  expect(deriveIsolationPreset(scoped, isolated)).toBe('Custom');
+  expect(deriveIsolationPreset(scoped, mutate(isolated, 'stateIsolationPolicy', 'agentStateVisibility', 'CurrentSession'))).toBe('SessionIsolated');
+  const cleanup = mutate(isolated, 'stateIsolationPolicy', 'workingCleanup', 'AfterTerminal');
+  expect(deriveIsolationPreset(view, { ...cleanup, settings: cleanup.settings.map(s => ({ ...s,
+    set: Object.fromEntries(Object.entries(s.set).filter(([key]) => key !== 'workingCleanup')), clear: ['workingCleanup'] })) })).toBe('SessionIsolated');
+});
+
+test('switching presets protects the dirty draft on cancel and replaces it only after confirmation', async () => {
+  render(<ConfigProvider theme={{ token: { motion: false } }}><StateIsolationConfigurationSection instanceId="owner" active archived={false} onUpdated={() => {}} onDirtyChange={() => {}} /></ConfigProvider>);
+  const preset = await screen.findByRole('combobox', { name: 'Isolation preset' });
+  await waitFor(() => expect(preset).not.toBeDisabled());
+  const experience = await screen.findByRole('switch', { name: 'Experience enablement' });
+  await waitFor(() => expect(experience).not.toBeDisabled());
+  fireEvent.click(experience);
+  expect(experience).toBeChecked();
+  fireEvent.mouseDown(preset);
+  fireEvent.click(await screen.findByText('Session-isolated assistant'));
+  // AntD test-mode ids collide with Select ids; browser verification checks the accessible name.
+  const dialog = (await screen.findByText('Replace unsaved isolation changes?', { selector: '.ant-modal-title' })).closest('[role="dialog"]')!;
+  expect(dialog).toHaveTextContent('Memory, Experience and maintenance');
+  expect(presetIsolation).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+  expect(screen.getByRole('switch', { name: 'Experience enablement' })).toBeChecked();
+  fireEvent.mouseDown(preset);
+  fireEvent.click(await screen.findByText('Session-isolated assistant'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Replace draft' }));
+  await waitFor(() => expect(presetIsolation).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByRole('switch', { name: 'Experience enablement' })).not.toBeChecked());
+  expect(applyIsolation).not.toHaveBeenCalled();
+});
+
 test('selecting a preset is a draft and a conflict preserves it for refresh', async () => {
   vi.mocked(applyIsolation).mockRejectedValue(new Error('Owner revision changed. Refresh the preview.'));
   render(<ConfigProvider theme={{ token: { motion: false } }}><StateIsolationConfigurationSection instanceId="owner" active archived={false} onUpdated={() => {}} onDirtyChange={() => {}} /></ConfigProvider>);

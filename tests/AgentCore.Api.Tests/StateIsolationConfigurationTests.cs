@@ -15,6 +15,24 @@ namespace AgentCore.Api.Tests;
 public sealed class StateIsolationConfigurationTests
 {
     [Fact]
+    public async Task Preview_explains_retained_scratch_and_explicit_terminal_cleanup_without_applying_either()
+    {
+        await using var host = new AgentCoreApiFactory();
+        using var client = TestOwnerCapability.CreateOwnerClient(host);
+        var instance = await host.Services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 31);
+        var service = host.Services.GetRequiredService<StateIsolationConfigurationService>();
+        var preset = await service.PresetAsync(instance.InstanceId, "Stateless");
+        Assert.Contains("Working files remain after a request completes until the Session is deleted", preset.Notice);
+        var cleanup = preset.Draft with { Settings = preset.Draft.Settings.Select(p => p.Section == "stateIsolationPolicy"
+            ? p with { Set = p.Set.ToDictionary(v => v.Key, v => v.Key == "workingCleanup"
+                ? System.Text.Json.JsonSerializer.SerializeToElement("AfterTerminal") : v.Value) } : p).ToArray() };
+        var preview = await service.PreviewAsync(instance.InstanceId, cleanup);
+        Assert.Contains("Working files are eligible for safe cleanup after terminal completion", preview.Notice);
+        Assert.Contains(preview.Changes, c => c.Field == "workingCleanup" && c.After.GetString() == "AfterTerminal");
+        Assert.Equal(instance.Revision, (await service.ReadAsync(instance.InstanceId)).Revisions.Instance);
+    }
+
+    [Fact]
     public async Task Busy_browser_preview_discloses_pending_transition_without_starting_native_work()
     {
         var browser = new BusyBrowser();

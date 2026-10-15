@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Descriptions, Flex, Form, Select, Spin, Switch, Typography, theme } from 'antd';
+import { Alert, Button, Descriptions, Flex, Form, Modal, Select, Spin, Switch, Typography, theme } from 'antd';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { applyIsolation, deriveIsolationPreset, isolationValue, presetIsolation, previewIsolation, readIsolation,
@@ -20,11 +20,12 @@ export function StateIsolationConfigurationSection({ instanceId, active, archive
   const [view, setView] = useState<IsolationView>(); const [draft, setDraft] = useState<IsolationDraft>();
   const [plan, setPlan] = useState<IsolationPlan>(); const [error, setError] = useState<string>(); const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [pendingPreset, setPendingPreset] = useState<IsolationPreset>();
   const presetRequest = useRef<AbortController | null>(null);
   const readRequest = useRef<AbortController | null>(null);
   const generation = useRef(0);
   useEffect(() => {
-    generation.current++; setView(undefined); setDraft(undefined); setPlan(undefined); setError(undefined);
+    generation.current++; setView(undefined); setDraft(undefined); setPlan(undefined); setError(undefined); setPendingPreset(undefined);
     return () => { generation.current++; presetRequest.current?.abort(); readRequest.current?.abort(); };
   }, [instanceId]);
   const changed = !!draft && !!view && (draft.settings.some(p => Object.keys(p.set).length > 0 || p.clear.length > 0)
@@ -87,6 +88,11 @@ export function StateIsolationConfigurationSection({ instanceId, active, archive
   }
   const state = view?.settings.find(s => s.section === 'stateIsolationPolicy');
   return <Flex vertical gap={token.padding}>
+    <Modal className="isolation-preset-dialog" title="Replace unsaved isolation changes?" open={active && !!pendingPreset} centered
+      okText="Replace draft" cancelText="Keep editing" onCancel={() => setPendingPreset(undefined)}
+      onOk={() => { if (pendingPreset) { void choose(pendingPreset); setPendingPreset(undefined); } }}>
+      <Typography.Paragraph>The selected preset will replace your unsaved State & Isolation draft, including Memory, Experience and maintenance changes. Review its preview before saving.</Typography.Paragraph>
+    </Modal>
     {error && <Alert type="error" showIcon title={error} action={<Button onClick={() => void refresh().catch(() => {})}>Retry isolation</Button>} />}
     {!view && busy && <Spin aria-label="Loading State & Isolation" />}
     {view && draft && state && <>
@@ -96,7 +102,7 @@ export function StateIsolationConfigurationSection({ instanceId, active, archive
           <Form.Item label="Preset" className="instance-settings-field-wide" extra="Session-isolated keeps multi-turn conversation within one Session. Stateless requires New chat for each request and supports text input.">
             <Select aria-label="Isolation preset" value={deriveIsolationPreset(view, draft)} disabled={archived || busy}
               options={[{ value: 'Persistent', label: 'Persistent assistant' }, { value: 'SessionIsolated', label: 'Session-isolated assistant' }, { value: 'Stateless', label: 'Stateless · new Session for each request' }, { value: 'Custom', label: 'Custom', disabled: true }]}
-              onChange={value => { if (value !== 'Custom') void choose(value as IsolationPreset); }} />
+              onChange={value => { if (value !== 'Custom') { if (changed) setPendingPreset(value as IsolationPreset); else void choose(value as IsolationPreset); } }} />
           </Form.Item>
           {Object.keys(state.effective).map(field => {
             const value = isolationValue(view, draft, state.section, field);

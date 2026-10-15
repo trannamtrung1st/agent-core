@@ -30,15 +30,21 @@ export function isolationValue(view: IsolationView, draft: IsolationDraft, secti
 export function deriveIsolationPreset(view: IsolationView, draft: IsolationDraft): IsolationPreset | 'Custom' {
   const state = (field: string) => isolationValue(view, draft, 'stateIsolationPolicy', field);
   const memory = view.settings.find(s => s.section === 'memoryPolicy')!;
+  const policy = view.settings.find(s => s.section === 'stateIsolationPolicy')!;
+  const visibility = policy.constraints?.agentStateVisibility?.choices?.includes('CurrentSession') ? 'CurrentSession' : 'Off';
+  const voiceUnchanged = isolationValue(view, draft, 'voice', 'enabled') === view.settings.find(s => s.section === 'voice')!.effective.enabled;
   const isolated = state('homeAccess') === 'Disabled' && state('browserIsolation') === 'EphemeralSession'
+    && state('workingCleanup') === 'OnSessionDeletion'
     && ['experienceRecord', 'experienceRecall', 'profileEvidence', 'crossSessionContinuity'].every(f => state(f) === false)
-    && state('agentStateVisibility') !== 'InstanceSummary' && !draft.experienceEnabled && !draft.allowMaintenance
+    && state('agentStateVisibility') === visibility && !draft.experienceEnabled && !draft.allowMaintenance
     && Object.keys(memory.effective).filter(f => f !== 'sessionMemory').every(f => isolationValue(view, draft, 'memoryPolicy', f) === false);
   if (isolated && state('conversationContextScope') === 'CurrentRequest'
     && Object.keys(memory.effective).every(f => isolationValue(view, draft, 'memoryPolicy', f) === false)
     && isolationValue(view, draft, 'voice', 'enabled') === false) return 'Stateless';
-  if (isolated && state('conversationContextScope') === 'Session') return 'SessionIsolated';
-  if (['stateIsolationPolicy', 'memoryPolicy'].every(section => {
+  if (isolated && state('conversationContextScope') === 'Session' && voiceUnchanged
+    && isolationValue(view, draft, 'memoryPolicy', 'sessionMemory') === memory.effective.sessionMemory) return 'SessionIsolated';
+  if (voiceUnchanged && draft.experienceEnabled === view.experienceEnabled && draft.allowMaintenance === view.allowMaintenance
+    && ['stateIsolationPolicy', 'memoryPolicy'].every(section => {
     const s = view.settings.find(s => s.section === section)!;
     return Object.keys(s.effective).every(field => JSON.stringify(isolationValue(view, draft, section, field)) === JSON.stringify(s.definitionDefaults[field]));
   })) return 'Persistent';

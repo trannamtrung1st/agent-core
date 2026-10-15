@@ -125,8 +125,14 @@ public sealed class StateIsolationConfigurationService(IAgentInstanceStore insta
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception) { adoption = " Browser transition status is unknown. Metadata can save; unsafe native reuse remains blocked."; }
         }
+        var retention = (effective is null ? (WorkingCleanup?)null : (effective.StateIsolationPolicy ?? StateIsolationPolicy.Default).WorkingCleanup) switch
+        {
+            WorkingCleanup.OnSessionDeletion => " Working files remain after a request completes until the Session is deleted. Choose After safe terminal cleanup to remove scratch after terminal completion.",
+            WorkingCleanup.AfterTerminal => " Working files are eligible for safe cleanup after terminal completion; existing history and Artifacts remain.",
+            _ => ""
+        };
         return new(view.Revisions, draft, fingerprint, changes, blocked,
-            "New Runs use saved configuration. Tightened access gates new effects immediately; busy or uncertain browser transitions stay pending. Request isolation requires New chat for each request. Existing profiles, home files, history and Artifacts are retained." + adoption);
+            "New Runs use saved configuration. Tightened access gates new effects immediately; busy or uncertain browser transitions stay pending. Request isolation requires New chat for each request. Existing profiles, home files, history and Artifacts are retained." + retention + adoption);
     }
 
     public async ValueTask<IsolationConfigurationView> ApplyAsync(Guid id, IsolationOwnerRevisions expected, IsolationDraft draft, string fingerprint, CancellationToken ct = default)

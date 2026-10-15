@@ -14,6 +14,8 @@ Complete ordinary requests within their scope using focused local checks; they d
 
 The [current main integration ledger](reports/agent-state-main-integration-2026-10-15.md) records the combined State/isolation and context-hardening checks through main `76216100`, including its admitted-user retry correction, with earlier source ledgers preserved as historical evidence.
 
+The [focused State/isolation polish follow-up](reports/agent-state-isolation-polish-2026-10-15.md) records preset detection, unsaved-edit protection, retention wording and observation measurements without changing runtime freshness or deletion defaults.
+
 CI is optional and runs only on explicit user request. This policy supersedes older mandatory hosted/exact-SHA CI language below for current work, including milestone acceptance unless the user explicitly requests CI as part of it. Preserve historical acceptance criteria, freeze SHAs and CI receipts as records of their original versions. Report local completion separately from milestone acceptance and never claim unrun checks passed.
 
 The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application

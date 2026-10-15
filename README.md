@@ -6,6 +6,8 @@ The owner-requested three-layer context cutover separates platform Core (`system
 
 The [current main integration](docs/reports/agent-state-main-integration-2026-10-15.md) verifies State/isolation together with main's context identity validation, immutable media, tool-call identity and recovery hardening.
 
+The [State/isolation review follow-up](docs/reports/agent-state-isolation-polish-2026-10-15.md) fixes complete preset detection and dirty-draft replacement, clarifies scratch retention and records a bounded Runtime observation measurement.
+
 The OpenSandbox cutover is synchronized with main snapshot `aef7ffe5` (application
 behavior through `d279abfe`, followed by its documentation review).
 General Assistant v30 preserves main's immutable v29 and combines its current
