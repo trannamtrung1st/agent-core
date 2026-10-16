@@ -1058,6 +1058,7 @@ export type ExperienceContent = {
 };
 export type ExperienceItem = {
   experienceId: string; sourceKind: "Session" | "AgentRun" | "Consolidation"; sourceId: string; throughCursor: number;
+  sourceRunOutputContract?: "ConversationResponse" | "BackgroundOutcome" | "CompletionReport" | null;
   sourceAt: string; sourceCreatedAt?: string; checkpointAt?: string | null; definitionId: string; definitionVersion: number; generationAgentRunId: string;
   modelKey: string; status: string; visibility: "Eligible" | "Suppressed" | "Superseded" | "Deleted"; revision: number;
   derivedFromExperienceIds?: string[]; maintenanceOrigin?: string | null;

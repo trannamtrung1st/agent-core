@@ -154,7 +154,7 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
         {review.items.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No experience yet. Enable experience and retrospect a completed task." /> : <>
         <AdminCollectionToolbar label="experience" value={search} onChange={setSearch} />
         <Table<ExperienceItem> key={tableVersion} aria-label="Experience table" className="admin-collection-table" size="small" rowKey="experienceId"
-          dataSource={review.items.filter(item => [experienceGoal(item), item.status, experienceContext(item), item.sourceKind === "Session" ? "Session" : "Background work",
+          dataSource={review.items.filter(item => [experienceGoal(item), item.status, experienceContext(item), experienceSource(item),
             item.sourceId, item.definitionId, item.modelKey, ...Object.values(item.content ?? {}).flat()]
             .some(value => String(value).toLowerCase().includes(search.trim().toLowerCase())))}
           scroll={{ x: 1050 }} pagination={pagination}
@@ -174,9 +174,9 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
               onFilter: (value, item) => experienceContext(item) === value,
               render: (_, item) => <Tag>{experienceContext(item)}</Tag> },
             { title: "Source", dataIndex: "sourceKind", width: 150,
-              filters: [{ text: "Session", value: "Session" }, { text: "Background work", value: "AgentRun" }, { text: "Consolidated", value: "Consolidation" }],
-              onFilter: (value, item) => item.sourceKind === value,
-              render: (kind: string) => kind === "Consolidation" ? "Consolidated" : kind === "Session" ? "Session" : "Background work" },
+              filters: ["Conversation", "Background work", "Completion report", "Run", "Consolidated"].map(value => ({ text: value, value })),
+              onFilter: (value, item) => experienceSource(item) === value,
+              render: (_, item) => experienceSource(item) },
             { title: "Checkpoint captured", key: "checkpointAt", width: 220, defaultSortOrder: "descend",
               sorter: (a, b) => Number(a.generationAgentRunId === selection?.agentRunId) - Number(b.generationAgentRunId === selection?.agentRunId) || (a.checkpointAt ?? a.sourceCreatedAt ?? a.sourceAt).localeCompare(b.checkpointAt ?? b.sourceCreatedAt ?? b.sourceAt),
               render: (_, item) => item.checkpointAt ? date(item.checkpointAt) : <Typography.Text type="secondary" title={`Source created: ${date(item.sourceCreatedAt ?? item.sourceAt)}`}>Not recorded</Typography.Text> }
@@ -185,7 +185,10 @@ export function ExperienceSection({ instanceId, onWork, selection, active = true
             expandedRowRender: item => <Flex vertical gap={token.padding} style={{ whiteSpace: "normal" }}>
               <ExperienceDetails item={item} />
               <Flex wrap align="center" justify="space-between" gap={token.padding}>
-                {item.generationAgentRunId !== "00000000-0000-0000-0000-000000000000" ? <Button onClick={() => onWork(item.generationAgentRunId)}>View generation run</Button> : null}
+                <Flex wrap gap={token.paddingXS}>
+                  {item.sourceKind === "AgentRun" && item.sourceId !== item.generationAgentRunId ? <Button onClick={() => onWork(item.sourceId)}>View source run</Button> : null}
+                  {item.generationAgentRunId !== "00000000-0000-0000-0000-000000000000" ? <Button onClick={() => onWork(item.generationAgentRunId)}>View generation run</Button> : null}
+                </Flex>
                 <Flex wrap gap={token.paddingXS}>
                   <Button disabled={busy || item.visibility === "Superseded" || item.visibility === "Deleted"} onClick={() => void mutate(`experience/${item.experienceId}`, "PUT", { expectedRevision: item.revision, visibility: item.visibility === "Suppressed" ? "Eligible" : "Suppressed" })}>
                     {item.visibility === "Suppressed" ? "Include in context" : "Suppress experience"}</Button>
@@ -204,6 +207,10 @@ const experienceGoal = (item: ExperienceItem) => item.content?.goal ?? (item.sta
   : item.status === "Cancelled" ? "Retrospection cancelled" : "Retrospection in progress");
 const experienceContext = (item: ExperienceItem) => item.eligibleForContext ? "Eligible for context"
   : item.visibility === "Superseded" ? "Superseded" : item.visibility === "Deleted" ? "Deleted" : item.visibility === "Suppressed" ? "Suppressed" : "Not in context";
+const experienceSource = (item: ExperienceItem) => item.sourceKind === "Consolidation" ? "Consolidated"
+  : item.sourceKind === "Session" || item.sourceRunOutputContract === "ConversationResponse" ? "Conversation"
+  : item.sourceRunOutputContract === "BackgroundOutcome" ? "Background work"
+  : item.sourceRunOutputContract === "CompletionReport" ? "Completion report" : "Run";
 
 function ExperienceDetails({ item }: { item: ExperienceItem }) {
   const { token } = theme.useToken();
@@ -224,7 +231,8 @@ function ExperienceDetails({ item }: { item: ExperienceItem }) {
           { key: "lineage", label: `Consolidated from ${item.derivedFromExperienceIds.length} experiences`, children: <ul style={{ margin: 0, paddingInlineStart: token.padding }}>{item.derivedFromExperienceIds.map(id => <li key={id}>{id}</li>)}</ul> },
           { key: "origin", label: "Maintenance origin", children: item.maintenanceOrigin ?? "Not recorded" }
         ] : []),
-        { key: "source", label: item.sourceKind === "Consolidation" ? "Maintenance operation" : `Source ${item.sourceKind === "Session" ? "Session" : "background work"}`, children: item.sourceId },
+        { key: "sourceType", label: "Source type", children: experienceSource(item) },
+        { key: "source", label: item.sourceKind === "Consolidation" ? "Maintenance operation" : item.sourceKind === "Session" ? "Source conversation" : "Source run", children: item.sourceId },
         { key: "checkpoint", label: "Checkpoint", children: item.throughCursor },
         { key: "definition", label: "Definition", children: `${item.definitionId} · v${item.definitionVersion}` },
         { key: "model", label: "Model", children: item.modelKey },

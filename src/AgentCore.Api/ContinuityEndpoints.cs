@@ -80,6 +80,9 @@ internal static class ContinuityEndpoints
         {
             if (r.Visibility == ExperienceVisibility.Deleted) continue;
             var w = await runs.GetAsync(new(instanceId, LocalUserProfile.Id), r.GenerationAgentRunId, ct);
+            var sourceRun = r.SourceKind == ExperienceSourceKind.AgentRun
+                ? r.SourceId == r.GenerationAgentRunId ? w : await runs.GetAsync(new(instanceId, LocalUserProfile.Id), r.SourceId, ct)
+                : null;
             rows.Add(new(r.ExperienceId.ToString("D"), r.SourceKind.ToString(), r.SourceId.ToString("D"), r.ThroughCursor,
                 HttpMapping.Format(r.SourceAtUtc), r.DefinitionId, r.DefinitionVersion, r.GenerationAgentRunId.ToString("D"), r.Model.CatalogKey,
                 r.Content is not null ? "Completed" : w?.Status.ToString() ?? "Pending", r.Visibility.ToString(), r.Revision,
@@ -87,7 +90,8 @@ internal static class ContinuityEndpoints
                 r.Content is { } c ? new(c.Goal, c.Attempts, c.Decisions, c.Outcomes, c.Corrections, c.Unresolved, c.Difficulties, c.Lessons) : null,
                 w?.Failure?.DiagnosticId?.ToString("D"), w?.Failure?.Summary, HttpMapping.Format(r.SourceAtUtc),
                 r.CheckpointAtUtc is { } checkpointAt ? HttpMapping.Format(checkpointAt) : null,
-                (r.DerivedFromExperienceIds ?? []).Select(id => id.ToString("D")).ToArray(), r.MaintenanceOrigin));
+                (r.DerivedFromExperienceIds ?? []).Select(id => id.ToString("D")).ToArray(), r.MaintenanceOrigin,
+                sourceRun?.Admission.OutputContract.ToString()));
         }
         return new(settings.Enabled, settings.Revision, ExperienceService.MaxContextCharacters, rows);
     }

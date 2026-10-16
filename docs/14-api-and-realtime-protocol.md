@@ -465,7 +465,7 @@ Maintenance routes require the trusted-local owner capability and active managed
 | `PUT /maintenance` | `{ expectedRevision, allowAgentConsolidation }`; returns saved state; stale revision 409; same audit/transaction as existing owner configuration |
 | `GET /learned-memory/{memoryId}?scope=IdentityUser` | Owned exact historical detail; Session scope also requires `sessionId`; Active/Superseded/Deleted/Resolved status; resolved content retained, deletion tombstones content-free |
 
-Learned-memory responses add `status`, `provenance.derivedFromMemoryIds` and `provenance.maintenanceOrigin`. Experience responses add `derivedFromExperienceIds` and `maintenanceOrigin`; sourceKind includes Consolidation and visibility includes Superseded. Existing enum numeric values are preserved. Deleted Experience is still omitted from normal review.
+Learned-memory responses add `status`, `provenance.derivedFromMemoryIds` and `provenance.maintenanceOrigin`. Experience responses add `derivedFromExperienceIds` and `maintenanceOrigin`; sourceKind includes Consolidation and visibility includes Superseded. The optional nullable `sourceRunOutputContract` is resolved from the retained owner-scoped source Run (ConversationResponse, BackgroundOutcome or CompletionReport), independently of `generationAgentRunId`. Non-Run, missing and foreign source metadata returns null. This read projection updates existing observations without modifying their stored source/cursor or requiring migration. Existing enum numeric values are preserved. Deleted Experience is still omitted from normal review.
 
 | Semantic tool | Required arguments |
 | --- | --- |

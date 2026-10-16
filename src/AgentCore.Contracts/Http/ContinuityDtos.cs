@@ -12,7 +12,8 @@ public sealed record ExperienceResponse(string ExperienceId, string SourceKind, 
     string SourceAt, string DefinitionId, int DefinitionVersion, string GenerationAgentRunId, string ModelKey,
     string Status, string Visibility, long Revision, bool EligibleForContext, ExperienceContentResponse? Content,
     string? DiagnosticId, string? FailureSummary, string? SourceCreatedAt = null, string? CheckpointAt = null,
-    IReadOnlyList<string>? DerivedFromExperienceIds = null, string? MaintenanceOrigin = null);
+    IReadOnlyList<string>? DerivedFromExperienceIds = null, string? MaintenanceOrigin = null,
+    string? SourceRunOutputContract = null);
 public sealed record ExperienceReviewResponse(bool Enabled, long SettingsRevision, int ContextBudgetCharacters,
     IReadOnlyList<ExperienceResponse> Items);
 public sealed record ContinuityRevisionRequest(long ExpectedRevision);

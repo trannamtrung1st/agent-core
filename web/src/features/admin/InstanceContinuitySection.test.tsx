@@ -31,6 +31,37 @@ beforeEach(() => {
 });
 
 describe('Instance continuity owner controls', () => {
+  it.each([
+    ['Session', null, 'Conversation'],
+    ['AgentRun', 'ConversationResponse', 'Conversation'],
+    ['AgentRun', 'BackgroundOutcome', 'Background work'],
+    ['AgentRun', 'CompletionReport', 'Completion report'],
+    ['AgentRun', null, 'Run'],
+    ['Consolidation', null, 'Consolidated']
+  ] as const)('labels, searches and describes %s / %s from the source execution', async (sourceKind, sourceRunOutputContract, label) => {
+    const item = { ...record(1), sourceKind, sourceRunOutputContract };
+    request.mockResolvedValue({ ...experience(), items: [item] });
+    render(view());
+    const opener = await screen.findByRole('button', { name: 'View experience: Atlas review 1' });
+    expect(within(opener.closest('tr')!).getByText(label, { exact: true })).toBeVisible();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search experience' }), { target: { value: label } });
+    fireEvent.click(screen.getByRole('button', { name: 'View experience: Atlas review 1' }));
+    const details = screen.getByRole('region', { name: 'Experience details' });
+    expect(within(details).getByText('Source type').closest('tr')).toHaveTextContent(label);
+    expect(within(details).queryByText('Source background work')).not.toBeInTheDocument();
+  });
+
+  it('keeps source-run navigation distinct from the run that recorded the experience', async () => {
+    request.mockResolvedValue({ ...experience(), items: [{ ...record(1), sourceKind: 'AgentRun', sourceRunOutputContract: 'ConversationResponse' }] });
+    const onWork = vi.fn();
+    render(<ConfigProvider><App><ExperienceSection instanceId="owner-instance" onWork={onWork} /></App></ConfigProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'View experience: Atlas review 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View source run' }));
+    expect(onWork).toHaveBeenLastCalledWith('source-1');
+    fireEvent.click(screen.getByRole('button', { name: 'View generation run' }));
+    expect(onWork).toHaveBeenLastCalledWith('work-1');
+  });
+
   it('does not claim a checkpoint disappeared when its source read fails and recovers on Reload', async () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
     const ui = (selection?: { agentRunId: string; request: number }) => <ConfigProvider><App>
@@ -78,7 +109,7 @@ describe('Instance continuity owner controls', () => {
     expect(within(details).getAllByRole('listitem').map(item => item.textContent)).toEqual([
       'Unique Atlas preparation rule', 'Check unresolved decisions before confirming the agenda.'
     ]);
-    expect(within(details).getByText('Source Session').closest('tr')).toHaveTextContent('source-1');
+    expect(within(details).getByText('Source conversation').closest('tr')).toHaveTextContent('source-1');
     fireEvent.click(screen.getByRole('button', { name: 'Suppress experience' }));
     await screen.findByRole('button', { name: 'Include in context' });
     expect(request).toHaveBeenCalledWith('owner-instance', 'experience/experience-1', 'PUT', { expectedRevision: 1, visibility: 'Suppressed' });
