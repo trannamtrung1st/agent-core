@@ -4,6 +4,8 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed record IssuedTenantInvitation(TenantInvitation Invitation, string Token);
+public sealed record ResourceAccessSnapshot(AccessScope Scope, long Revision, IReadOnlyList<RoleAssignment> Assignments,
+    int Total, int Page, int PageSize);
 
 public sealed class TenantAccessService(IIamStore store, IamAuthorizer authorizer, IdentityService identities,
     IIdentityTokens tokens, IIdGenerator ids, TimeProvider time)
@@ -27,6 +29,17 @@ public sealed class TenantAccessService(IIamStore store, IamAuthorizer authorize
     {
         await authorizer.RequireAsync(actorId, permission, AccessScope.ForTenant(tenantId), ct).ConfigureAwait(false);
         return await store.ReadTenantAsync(tenantId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+    }
+
+    public async ValueTask<ResourceAccessSnapshot> ReadResourceAccessAsync(Guid actorId, Guid tenantId,
+        string resourceType, string resourceId, CancellationToken ct = default, int page = 0, int pageSize = 30)
+    {
+        var scope = IamResourceScopes.Create(tenantId, resourceType, resourceId);
+        var state = await store.ReadTenantAsync(tenantId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        await RequireInStateAsync(state, actorId, "iam.roles.read", scope, ct).ConfigureAwait(false);
+        var assignments = state.Assignments.Where(a => a.Scope.Contains(scope)).OrderBy(a => a.CreatedAt).ThenBy(a => a.AssignmentId).ToArray();
+        var index = Math.Clamp(page, 0, 100_000); var size = Math.Clamp(pageSize, 1, 100);
+        return new(scope, state.Tenant.Revision, assignments.Skip(index * size).Take(size).ToArray(), assignments.Length, index, size);
     }
 
     public async ValueTask<IssuedTenantInvitation> InviteAsync(Guid actorId, Guid tenantId, string login,

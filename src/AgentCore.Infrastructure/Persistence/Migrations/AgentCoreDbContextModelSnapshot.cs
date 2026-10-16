@@ -41,6 +41,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("SecurityStamp")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
@@ -183,11 +184,13 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasKey("SystemIdentityId");
 
+                    b.HasIndex("AgentInstanceId")
+                        .IsUnique();
+
                     b.HasIndex("PrincipalId")
                         .IsUnique();
 
-                    b.HasIndex("TenantId", "AgentInstanceId")
-                        .IsUnique();
+                    b.HasIndex("TenantId");
 
                     b.ToTable("SystemIdentities", (string)null);
                 });

@@ -157,6 +157,71 @@ public sealed class IdentityAndTenantAccessTests
     }
 
     [Fact]
+    public async Task Exact_resource_assignments_require_owned_targets_and_revocation_applies_to_the_next_request()
+    {
+        await using var factory = new AgentCoreApiFactory();
+        using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
+        await RefreshCsrf(owner);
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsJsonAsync("/api/v2/auth/login", new { login = "owner@example.test", password = "explicit-synthetic-test-password" })).StatusCode);
+        await RefreshCsrf(owner);
+        var a = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
+        var second = await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Other organization", slug = "other-organization" });
+        Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+        var b = (await Json(second)).GetProperty("tenantId").GetGuid();
+        var roles = await Json(await owner.GetAsync($"/api/v2/tenants/{a}/roles"));
+        var initialRole = roles.GetProperty("items").EnumerateArray().Single(r => r.GetProperty("key").GetString() == "agent-operator").GetProperty("roleId").GetGuid();
+        var invitation = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/members/invite", new { login = "scoped@example.test", roleId = initialRole, expectedRevision = roles.GetProperty("revision").GetInt64() }));
+        using var member = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
+        await RefreshCsrf(member);
+        var proof = new { tenantId = a, invitationId = invitation.GetProperty("invitationId").GetGuid(), token = invitation.GetProperty("token").GetString() };
+        Assert.Equal(HttpStatusCode.Created, (await member.PostAsJsonAsync("/api/v2/auth/register", new { login = "scoped@example.test", displayName = "Scoped inspector", password = "strong-scoped-password", invitation = proof })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await member.PostAsJsonAsync("/api/v2/auth/login", new { login = "scoped@example.test", password = "strong-scoped-password" })).StatusCode);
+        await RefreshCsrf(member);
+        var members = await Json(await owner.GetAsync($"/api/v2/tenants/{a}/members"));
+        var target = members.GetProperty("items").EnumerateArray().Single(m => m.GetProperty("login").GetString() == "OWNER@EXAMPLE.TEST").GetProperty("userId").GetGuid();
+        var subject = members.GetProperty("items").EnumerateArray().Single(m => m.GetProperty("login").GetString() == "SCOPED@EXAMPLE.TEST");
+        var principal = subject.GetProperty("principalId").GetGuid();
+        var ownMemberId = subject.GetProperty("userId").GetGuid();
+        var foreign = (await Json(await owner.GetAsync($"/api/v2/tenants/{b}/members"))).GetProperty("items")[0].GetProperty("userId").GetGuid();
+        var savedRole = await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/roles", new { name = "One member inspector", permissions = new[] { "members.read", "iam.roles.read" }, expectedRevision = members.GetProperty("revision").GetInt64() });
+        Assert.Equal(HttpStatusCode.Created, savedRole.StatusCode);
+        var roleId = (await Json(savedRole)).GetProperty("roleId").GetGuid();
+        roles = await Json(await owner.GetAsync($"/api/v2/tenants/{a}/roles"));
+        var revision = roles.GetProperty("revision").GetInt64();
+        var assigned = await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/role-assignments", new { principalId = principal, roleId, expectedRevision = revision, resourceType = "member", resourceId = target.ToString("N") });
+        Assert.Equal(HttpStatusCode.Created, assigned.StatusCode);
+        var assignment = await Json(assigned);
+        Assert.Equal(target.ToString("D"), assignment.GetProperty("scope").GetProperty("resourceId").GetString());
+        var assignmentId = assignment.GetProperty("assignmentId").GetGuid();
+        var resource = $"/api/v2/tenants/{a}/access/resources/member/{target:D}";
+        var access = await Json(await member.GetAsync(resource));
+        Assert.Contains(access.GetProperty("assignments").EnumerateArray(), item => item.GetProperty("assignmentId").GetGuid() == assignmentId);
+        Assert.Contains(access.GetProperty("assignments").EnumerateArray(), item => item.GetProperty("scope").GetProperty("kind").GetInt32() == (int)AccessScopeKind.Tenant);
+        var paged = await Json(await member.GetAsync(resource + "?page=0&pageSize=1"));
+        Assert.Equal(1, paged.GetProperty("assignments").GetArrayLength());
+        Assert.True(paged.GetProperty("total").GetInt32() > 1);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/access/resources/member/{ownMemberId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/roles")).StatusCode);
+        var allowed = await member.PostAsJsonAsync($"/api/v2/tenants/{a}/access/check", new { principalId = principal, permission = "members.read", resourceType = "member", resourceId = target });
+        Assert.True((await Json(allowed)).GetProperty("allowed").GetBoolean());
+        var mismatch = await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/access/check", new { principalId = principal, permission = "members.read", resourceType = "role", resourceId = roleId });
+        Assert.Equal("resource_type_mismatch", (await Json(mismatch)).GetProperty("reasonCode").GetString());
+        revision = access.GetProperty("revision").GetInt64();
+        var auditCount = (await Json(await owner.GetAsync($"/api/v2/tenants/{a}/audit?limit=200"))).GetProperty("items").GetArrayLength();
+        foreach (var targetId in new[] { foreign, Guid.NewGuid() })
+        {
+            var denied = await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/role-assignments", new { principalId = principal, roleId, expectedRevision = revision, resourceType = "member", resourceId = targetId });
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+            Assert.Equal("resource_unavailable", (await Json(denied)).GetProperty("reasonCode").GetString());
+            Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{a}/access/resources/member/{targetId}")).StatusCode);
+        }
+        Assert.Equal(auditCount, (await Json(await owner.GetAsync($"/api/v2/tenants/{a}/audit?limit=200"))).GetProperty("items").GetArrayLength());
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync($"/api/v2/tenants/{a}/role-assignments/{assignmentId}?expectedRevision={revision}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync(resource)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await member.GetAsync("/api/v2/account/me")).StatusCode);
+    }
+
+    [Fact]
     public async Task Missing_ephemeral_bootstrap_credentials_fail_startup_without_an_implicit_owner()
     {
         await using var factory = new MissingBootstrapFactory();

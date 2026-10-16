@@ -62,6 +62,11 @@ public sealed class IamAuthorizer(IIamStore store)
                 && s.TenantId == target.TenantId && s.Kind == SystemIdentityKind.Agent && s.AgentInstanceId is not null
                 && s.Status == IdentityStatus.Active))
             return AccessDecision.Deny("identity_unavailable");
+        if (target.Kind == AccessScopeKind.Resource)
+        {
+            if (!IamResourceScopes.Exists(state, target)) return AccessDecision.Deny("resource_unavailable");
+            if (!permission.AppliesToResource(target.ResourceType)) return AccessDecision.Deny("resource_type_mismatch");
+        }
         return await EvaluateAsync(principalId, permission, target, state.Principals, state.Roles, state.Assignments, ct).ConfigureAwait(false);
     }
 

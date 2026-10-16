@@ -93,6 +93,7 @@ public sealed class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> context
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         if (!await db.Set<IamBootstrapRow>().AnyAsync(ct).ConfigureAwait(false)) return false;
         await EnsureActiveAccountOwnerAsync(db, tenant, null, ct).ConfigureAwait(false);
+        await EnsureAgentOwnershipAsync(db, tenant, ct).ConfigureAwait(false);
         db.Add(tenant.Tenant); AddTenantChildren(db, tenant); db.Add(audit);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await transaction.CommitAsync(ct).ConfigureAwait(false); return true; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }
@@ -106,6 +107,7 @@ public sealed class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> context
         var current = await db.Set<Tenant>().SingleOrDefaultAsync(t => t.TenantId == tenant.Tenant.TenantId, ct).ConfigureAwait(false);
         if (current is null || current.Revision != expectedRevision) return false;
         await EnsureActiveAccountOwnerAsync(db, tenant, null, ct).ConfigureAwait(false);
+        await EnsureAgentOwnershipAsync(db, tenant, ct).ConfigureAwait(false);
         db.Entry(current).CurrentValues.SetValues(tenant.Tenant);
         await ApplyAsync(db, db.Set<Principal>().Where(p => p.TenantId == tenant.Tenant.TenantId), tenant.Principals, p => p.PrincipalId, ct).ConfigureAwait(false);
         await ApplyAsync(db, db.Set<TenantUser>().Where(u => u.TenantId == tenant.Tenant.TenantId), tenant.Users, u => u.UserId, ct).ConfigureAwait(false);
@@ -144,6 +146,13 @@ public sealed class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> context
         var accounts = await db.Set<Account>().AsNoTracking().Where(a => accountIds.Contains(a.AccountId)).ToArrayAsync(ct).ConfigureAwait(false);
         if (!accounts.Any(a => (a.AccountId == changed?.AccountId ? changed.Status : a.Status) == IdentityStatus.Active))
             throw new SecurityConflictException("last_owner");
+    }
+    private static async Task EnsureAgentOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct)
+    {
+        var instanceIds = state.SystemIdentities.Where(i => i.AgentInstanceId is not null).Select(i => i.AgentInstanceId!.Value).ToArray();
+        if (await db.Set<SystemIdentity>().AnyAsync(i => i.TenantId != state.Tenant.TenantId
+            && i.AgentInstanceId != null && instanceIds.Contains(i.AgentInstanceId.Value), ct).ConfigureAwait(false))
+            throw new SecurityConflictException("agent_identity_exists");
     }
     private static void ValidateAudit(TenantSecurityState state, AuthorizationAudit audit)
     { if (audit.TenantId != state.Tenant.TenantId) throw new ArgumentException("Audit must belong to the changed tenant.", nameof(audit)); }

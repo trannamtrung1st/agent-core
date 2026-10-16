@@ -9,7 +9,7 @@ Owner request: implement the final proposal at `local/proposals/agent-core-multi
 | 0 | Source/route/store/effect inventory and ownership | Baseline inventoried; [boundary obligations](multitenant-iam-boundary-inventory-2026-10-16.md); no unowned boundary category |
 | 1 | Full UX contract and internal review before UI implementation | [UX specification](../19-multi-tenant-iam-ux.md) complete; internally reviewed against incumbent layouts and pinned brief; foundation UI evidence is in Phase 7; full successor browser acceptance remains pending |
 | 2 | Identity/authentication + canonical persistence + same-Account two-tenant negative tests | Identity/store/HTTP foundation implemented and focused tests passing; full resource ownership and Hub authentication integration still pending |
-| 3 | One scoped IAM engine, live authority, human-only reserve and service integration | Closed catalog, builtin/custom roles, scoped checks and access services implemented; resource/tool/background service integration pending |
+| 3 | One scoped IAM engine, live authority, human-only reserve and service integration | Closed catalog, builtin/custom roles, ownership-validated member/role/registered-agent resource grants and access services implemented; actual resource/tool/background service integration pending |
 | 4 | Every tenant resource/store/effect cut over with negative tests | Pending |
 | 5 | Trusted Run executor/requester/root lineage and inspection tools | Pending |
 | 6 | Durable approval/outbox/claim/revalidation/exact grants and bounded loops | Pending |
@@ -48,3 +48,7 @@ Final foundation rerun: **8/8 Infrastructure scenarios** and **6/6 API scenarios
 ## Owner-prioritized frontend pass
 
 The owner requested frontend/Impeccable consistency after foundation commit `baf9a3e7`. Auth/account/organization selection, member/invitation access, role authoring/inspection and audit now have real canonical UI routes, responsive/keyboard handling and focused browser evidence. [Verification](access-ui-polish-2026-10-16.md) distinguishes this delivered slice from the original proposal's unimplemented resource/agent/Hub/approval requirements. The original goal remains active; no insecure intermediate deployment or full tenant-isolation claim is authorized.
+
+## Resumed ownership enforcement
+
+After the owner-prioritized UI/review checkpoint `587806f9`, resource-scoped IAM checks, grants and access inspection now prove target ownership from current tenant security records. Fabricated/cross-tenant scopes and mismatched operation families fail closed. Registered Agent Instance IDs cannot span tenants, enforced in both stores and by a global SQLite unique index. The [resource-scope verification](tenant-resource-scope-verification-2026-10-16.md) records current evidence. This is a dependency toward the full resource cutover, not a substitute for it: actual Agent Instance create/delete/lifecycle transactions, definitions/publications and all other owning stores/HTTP/tool/Hub paths still require conversion. Unsupported resource families have no permissive fallback. The active goal remains the full proposal.

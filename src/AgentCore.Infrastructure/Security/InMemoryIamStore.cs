@@ -114,6 +114,9 @@ public sealed class InMemoryIamStore : IIamStore
         if (audit.TenantId != state.Tenant.TenantId || state.Users.Any(u => !_accounts.ContainsKey(u.AccountId)))
             throw new ArgumentException("Invalid Account or audit ownership.");
         EnsureActiveAccountOwner(state);
+        if (state.SystemIdentities.Any(i => _tenants.Values.Any(t => t.Tenant.TenantId != state.Tenant.TenantId
+            && t.SystemIdentities.Any(other => other.AgentInstanceId == i.AgentInstanceId))))
+            throw new SecurityConflictException("agent_identity_exists");
         if (state.Principals.Any(p => _tenants.Values.Any(t => t.Tenant.TenantId != state.Tenant.TenantId && t.Principals.Any(other => other.PrincipalId == p.PrincipalId))))
             throw new ArgumentException("A Principal cannot belong to two tenants.");
     }

@@ -35,7 +35,7 @@ internal static class IamPersistenceModel
         users.HasOne<Principal>().WithMany().HasForeignKey(x => x.PrincipalId).OnDelete(DeleteBehavior.Restrict);
         var identities = model.Entity<SystemIdentity>();
         identities.ToTable("SystemIdentities"); identities.HasKey(x => x.SystemIdentityId);
-        identities.HasIndex(x => new { x.TenantId, x.AgentInstanceId }).IsUnique(); identities.HasIndex(x => x.PrincipalId).IsUnique();
+        identities.HasIndex(x => x.AgentInstanceId).IsUnique(); identities.HasIndex(x => x.PrincipalId).IsUnique();
         identities.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         identities.HasOne<Principal>().WithMany().HasForeignKey(x => x.PrincipalId).OnDelete(DeleteBehavior.Restrict);
         var roles = model.Entity<IamRoleRow>();

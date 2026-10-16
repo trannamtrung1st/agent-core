@@ -10,7 +10,7 @@ public static class TenantAccessEndpoints
     public sealed record RevisionRequest(long ExpectedRevision);
     public sealed record MemberStatusRequest(IdentityStatus Status, long ExpectedRevision);
     public sealed record RoleRequest(string Name, string[] Permissions, long ExpectedRevision);
-    public sealed record AssignmentRequest(Guid PrincipalId, Guid RoleId, long ExpectedRevision);
+    public sealed record AssignmentRequest(Guid PrincipalId, Guid RoleId, long ExpectedRevision, string? ResourceType = null, string? ResourceId = null);
     public sealed record CheckRequest(Guid PrincipalId, string Permission, string? ResourceType, string? ResourceId);
 
     public static void Map(WebApplication app)
@@ -102,7 +102,7 @@ public static class TenantAccessEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             var assignment = await access.AssignRoleAsync(actor.PrincipalId, actor.TenantId, body.PrincipalId, body.RoleId,
-                AccessScope.ForTenant(actor.TenantId), body.ExpectedRevision, ct).ConfigureAwait(false);
+                IamResourceScopes.Create(actor.TenantId, body.ResourceType, body.ResourceId), body.ExpectedRevision, ct).ConfigureAwait(false);
             return Results.Json(assignment, statusCode: 201);
         }));
         group.MapDelete("/role-assignments/{assignmentId:guid}", (Guid assignmentId, long expectedRevision, HttpContext http, TenantAccessService access, CancellationToken ct) => IdentityHttp.Respond(async () =>
@@ -111,18 +111,24 @@ public static class TenantAccessEndpoints
             await access.RevokeAssignmentAsync(actor.PrincipalId, actor.TenantId, assignmentId, expectedRevision, ct).ConfigureAwait(false);
             return Results.NoContent();
         }));
+        group.MapGet("/access/resources/{resourceType}/{resourceId}", (string resourceType, string resourceId, int? page, int? pageSize,
+            HttpContext http, TenantAccessService access, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(await access.ReadResourceAccessAsync(actor.PrincipalId, actor.TenantId, resourceType, resourceId, ct, page ?? 0, pageSize ?? 30).ConfigureAwait(false));
+        }));
         group.MapPost("/access/check", (CheckRequest body, HttpContext http, TenantAccessService access, IamAuthorizer authorizer, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
+            var scope = IamResourceScopes.Create(actor.TenantId, body.ResourceType, body.ResourceId);
             if (body.PrincipalId != actor.PrincipalId)
             {
-                var state = await access.ReadAsync(actor.PrincipalId, actor.TenantId, "iam.roles.read", ct).ConfigureAwait(false);
-                if (!state.Principals.Any(p => p.PrincipalId == body.PrincipalId)) throw new AccessDeniedException("principal_unavailable");
+                if (scope.Kind == AccessScopeKind.Resource)
+                    _ = await access.ReadResourceAccessAsync(actor.PrincipalId, actor.TenantId, scope.ResourceType!, scope.ResourceId!, ct).ConfigureAwait(false);
+                else
+                    _ = await access.ReadAsync(actor.PrincipalId, actor.TenantId, "iam.roles.read", ct).ConfigureAwait(false);
             }
-            // Resource-specific inspection is added by the owning resource's Access endpoint after an
-            // ownership lookup. This endpoint cannot fabricate a tenant for an arbitrary resource ID.
-            if (body.ResourceType is not null || body.ResourceId is not null) throw new AccessDeniedException("resource_scope_required");
-            return Results.Json(await authorizer.CheckAsync(body.PrincipalId, body.Permission, AccessScope.ForTenant(actor.TenantId), ct).ConfigureAwait(false));
+            return Results.Json(await authorizer.CheckAsync(body.PrincipalId, body.Permission, scope, ct).ConfigureAwait(false));
         }));
         group.MapGet("/audit", (HttpContext http, IIamStore store, IamAuthorizer authorizer, int? limit, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

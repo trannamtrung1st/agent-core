@@ -59,23 +59,24 @@ public sealed class IamIdentityIntegrationTests
         Assert.False((await f.Authorizer.CheckAsync(member.PrincipalId, "agents.read", AccessScope.ForTenant(second.Tenant.TenantId))).Allowed);
 
         alpha = (await f.Store.ReadTenantAsync(first.TenantId))!;
-        var agent = await f.Access.RegisterAgentAsync(first.OwnerPrincipalId, first.TenantId, Guid.NewGuid(), alpha.Tenant.Revision);
+        var agentInstanceId = Guid.NewGuid();
+        var agent = await f.Access.RegisterAgentAsync(first.OwnerPrincipalId, first.TenantId, agentInstanceId, alpha.Tenant.Revision);
         Assert.False((await f.Authorizer.CheckAsync(agent.PrincipalId, "automations.delete", AccessScope.ForTenant(first.TenantId))).Allowed);
         alpha = (await f.Store.ReadTenantAsync(first.TenantId))!;
         var ownerRole = alpha.Roles.Single(r => r.Key == "owner");
         var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => f.Access.AssignRoleAsync(first.OwnerPrincipalId, first.TenantId,
             agent.PrincipalId, ownerRole.RoleId, AccessScope.ForTenant(first.TenantId), alpha.Tenant.Revision).AsTask());
         Assert.Equal("human_only", denied.ReasonCode);
-        var custom = await f.Access.SaveRoleAsync(first.OwnerPrincipalId, first.TenantId, null, "Automation maintenance", ["automations.delete"], alpha.Tenant.Revision);
+        var custom = await f.Access.SaveRoleAsync(first.OwnerPrincipalId, first.TenantId, null, "Agent maintenance", ["agents.update"], alpha.Tenant.Revision);
         alpha = (await f.Store.ReadTenantAsync(first.TenantId))!;
         var assignment = await f.Access.AssignRoleAsync(first.OwnerPrincipalId, first.TenantId, agent.PrincipalId,
-            custom.RoleId, AccessScope.ForResource(first.TenantId, "automation", "exact-target"), alpha.Tenant.Revision);
-        Assert.True((await f.Authorizer.CheckAsync(agent.PrincipalId, "automations.delete", AccessScope.ForResource(first.TenantId, "automation", "exact-target"))).Allowed);
-        Assert.False((await f.Authorizer.CheckAsync(agent.PrincipalId, "automations.delete", AccessScope.ForResource(first.TenantId, "automation", "other-target"))).Allowed);
+            custom.RoleId, AccessScope.ForResource(first.TenantId, "agent", agentInstanceId.ToString("D")), alpha.Tenant.Revision);
+        Assert.True((await f.Authorizer.CheckAsync(agent.PrincipalId, "agents.update", AccessScope.ForResource(first.TenantId, "agent", agentInstanceId.ToString("D")))).Allowed);
+        Assert.False((await f.Authorizer.CheckAsync(agent.PrincipalId, "agents.update", AccessScope.ForResource(first.TenantId, "agent", Guid.NewGuid().ToString("D")))).Allowed);
         Assert.False((await f.Authorizer.CheckAsync(agent.PrincipalId, "iam.roles.assign", AccessScope.ForTenant(first.TenantId))).Allowed);
         alpha = (await f.Store.ReadTenantAsync(first.TenantId))!;
         await f.Access.RevokeAssignmentAsync(first.OwnerPrincipalId, first.TenantId, assignment.AssignmentId, alpha.Tenant.Revision);
-        Assert.False((await f.Authorizer.CheckAsync(agent.PrincipalId, "automations.delete", AccessScope.ForResource(first.TenantId, "automation", "exact-target"))).Allowed);
+        Assert.False((await f.Authorizer.CheckAsync(agent.PrincipalId, "agents.update", AccessScope.ForResource(first.TenantId, "agent", agentInstanceId.ToString("D")))).Allowed);
 
         alpha = (await f.Store.ReadTenantAsync(first.TenantId))!;
         var lastOwner = await Assert.ThrowsAsync<SecurityConflictException>(() => f.Access.SetMemberStatusAsync(first.OwnerPrincipalId,
@@ -196,6 +197,82 @@ public sealed class IamIdentityIntegrationTests
             bootstrap.TenantId, otherMember.UserId, IdentityStatus.Removed, state.Tenant.Revision).AsTask());
         Assert.Equal("last_owner", blocked.ReasonCode);
         Assert.Equal(IdentityStatus.Active, (await f.Identity.ResolveUserAsync(other.AccountId, bootstrap.TenantId))!.Status);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Resource_grants_resolve_real_ownership_and_cannot_fabricate_or_reparent_targets(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var first = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
+        var a = (await f.Store.ReadTenantAsync(first.TenantId))!;
+        var memberId = a.Users.Single().UserId;
+        var system = (await f.Store.ReadSystemAsync()).Principals.Single();
+        var b = await f.Access.CreateTenantAsync(system.PrincipalId, first.AccountId, "Beta", "beta");
+        var instanceId = Guid.NewGuid();
+        var agent = await f.Access.RegisterAgentAsync(first.OwnerPrincipalId, first.TenantId, instanceId, a.Tenant.Revision);
+        var betaAudit = (await f.Store.ReadAuditAsync(b.Tenant.TenantId, 200)).Count;
+        var duplicate = await Assert.ThrowsAsync<SecurityConflictException>(() => f.Access.RegisterAgentAsync(b.Users.Single().PrincipalId,
+            b.Tenant.TenantId, instanceId, b.Tenant.Revision).AsTask());
+        Assert.Equal("agent_identity_exists", duplicate.ReasonCode);
+        Assert.Equal(betaAudit, (await f.Store.ReadAuditAsync(b.Tenant.TenantId, 200)).Count);
+        Assert.Empty((await f.Store.ReadTenantAsync(b.Tenant.TenantId))!.SystemIdentities);
+
+        a = (await f.Store.ReadTenantAsync(first.TenantId))!;
+        var role = await f.Access.SaveRoleAsync(first.OwnerPrincipalId, first.TenantId, null, "One member inspector",
+            ["members.read", "iam.roles.read"], a.Tenant.Revision);
+        a = (await f.Store.ReadTenantAsync(first.TenantId))!;
+        var scope = IamResourceScopes.Create(first.TenantId, "member", memberId.ToString("N"));
+        Assert.Equal(memberId.ToString("D"), scope.ResourceId);
+        var grant = await f.Access.AssignRoleAsync(first.OwnerPrincipalId, first.TenantId, agent.PrincipalId, role.RoleId, scope, a.Tenant.Revision);
+        Assert.True((await f.Authorizer.CheckAsync(agent.PrincipalId, "members.read", scope)).Allowed);
+        Assert.False((await f.Authorizer.CheckAsync(agent.PrincipalId, "members.read", AccessScope.ForTenant(first.TenantId))).Allowed);
+        var projection = await f.Access.ReadResourceAccessAsync(agent.PrincipalId, first.TenantId, "member", memberId.ToString("D"));
+        Assert.Contains(projection.Assignments, x => x.AssignmentId == grant.AssignmentId);
+        Assert.Contains(projection.Assignments, x => x.PrincipalId == first.OwnerPrincipalId && x.Scope.Kind == AccessScopeKind.Tenant);
+        var firstPage = await f.Access.ReadResourceAccessAsync(agent.PrincipalId, first.TenantId, "member", memberId.ToString("D"), pageSize: 1);
+        var secondPage = await f.Access.ReadResourceAccessAsync(agent.PrincipalId, first.TenantId, "member", memberId.ToString("D"), page: 1, pageSize: 1);
+        Assert.Equal(projection.Assignments.Count, firstPage.Total);
+        Assert.Single(firstPage.Assignments); Assert.Single(secondPage.Assignments);
+        Assert.NotEqual(firstPage.Assignments[0].AssignmentId, secondPage.Assignments[0].AssignmentId);
+        Assert.Equal("resource_type_mismatch", (await f.Authorizer.CheckAsync(first.OwnerPrincipalId, "members.read",
+            IamResourceScopes.Create(first.TenantId, "role", role.RoleId.ToString("D")))).ReasonCode);
+        Assert.Equal("resource_unavailable", (await f.Authorizer.CheckAsync(first.OwnerPrincipalId, "agents.read",
+            AccessScope.ForResource(first.TenantId, "agent", Guid.NewGuid().ToString("D")))).ReasonCode);
+        Assert.Equal("resource_unavailable", (await f.Authorizer.CheckAsync(first.OwnerPrincipalId, "automations.read",
+            AccessScope.ForResource(first.TenantId, "automation", "fabricated"))).ReasonCode);
+        var foreign = AccessScope.ForResource(first.TenantId, "member", b.Users.Single().UserId.ToString("D"));
+        Assert.Equal("resource_unavailable", (await f.Authorizer.CheckAsync(first.OwnerPrincipalId, "members.read", foreign)).ReasonCode);
+        a = (await f.Store.ReadTenantAsync(first.TenantId))!;
+        var auditCount = (await f.Store.ReadAuditAsync(first.TenantId, 200)).Count;
+        var denied = await Assert.ThrowsAsync<AccessDeniedException>(() => f.Access.AssignRoleAsync(first.OwnerPrincipalId,
+            first.TenantId, agent.PrincipalId, role.RoleId, foreign, a.Tenant.Revision).AsTask());
+        Assert.Equal("resource_unavailable", denied.ReasonCode);
+        var forged = a with { Tenant = a.Tenant with { Revision = a.Tenant.Revision + 1 },
+            Assignments = a.Assignments.Append(grant with { AssignmentId = Guid.NewGuid(), Scope = foreign }).ToArray() };
+        await Assert.ThrowsAsync<ArgumentException>(() => f.Store.TrySaveTenantAsync(forged, a.Tenant.Revision,
+            new(Guid.NewGuid(), first.TenantId, first.OwnerPrincipalId, "test.forged", "safe-test", "allowed", "test", f.Time.GetUtcNow())).AsTask());
+        Assert.Equal(auditCount, (await f.Store.ReadAuditAsync(first.TenantId, 200)).Count);
+        Assert.Equal(a.Tenant.Revision, (await f.Store.ReadTenantAsync(first.TenantId))!.Tenant.Revision);
+        await f.Access.RevokeAssignmentAsync(first.OwnerPrincipalId, first.TenantId, grant.AssignmentId, a.Tenant.Revision);
+        Assert.False((await f.Authorizer.CheckAsync(agent.PrincipalId, "members.read", scope)).Allowed);
+        if (sqlite)
+        {
+            var reopened = new SqliteIamStore(f.Contexts!);
+            Assert.False((await new IamAuthorizer(reopened).CheckAsync(agent.PrincipalId, "members.read", scope)).Allowed);
+            Assert.Single((await reopened.ReadTenantAsync(first.TenantId))!.SystemIdentities);
+            Assert.Empty((await reopened.ReadTenantAsync(b.Tenant.TenantId))!.SystemIdentities);
+            // The database also rejects a duplicate Agent Instance owner if a writer bypasses services.
+            await using var db = await f.Contexts!.CreateDbContextAsync();
+            var identityId = Guid.NewGuid(); var principalId = Guid.NewGuid();
+            db.Add(new Principal(principalId, PrincipalKind.SystemIdentity, b.Tenant.TenantId, null, null, identityId, IdentityStatus.Active));
+            db.Add(new SystemIdentity(identityId, b.Tenant.TenantId, principalId, SystemIdentityKind.Agent, instanceId, IdentityStatus.Active));
+            var collision = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+            var sql = Assert.IsType<SqliteException>(collision.InnerException);
+            Assert.Equal(19, sql.SqliteErrorCode);
+            Assert.Contains("SystemIdentities.AgentInstanceId", sql.Message, StringComparison.Ordinal);
+        }
     }
 
     private sealed class Fixture : IAsyncDisposable

@@ -3,7 +3,13 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed record PermissionDefinition(string Key, string ResourceType, bool HumanOnly = false,
-    bool Delegatable = true, bool SystemOnly = false);
+    bool Delegatable = true, bool SystemOnly = false)
+{
+    // Access inspection/assignment and exact-action decisions govern the target resource itself.
+    // Ordinary operation permissions apply only to their catalog-owned resource family.
+    public bool AppliesToResource(string? resourceType) => !SystemOnly && (ResourceType == resourceType
+        || Key is "iam.roles.read" or "iam.roles.assign" or "approvals.approve" or "approvals.grant_exception");
+}
 
 public static class PermissionCatalog
 {

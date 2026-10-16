@@ -40,6 +40,7 @@ public static class IamStateRules
         Require(state.SystemIdentities.All(i => state.Principals.Count(p => p.PrincipalId == i.PrincipalId && p.SystemIdentityId == i.SystemIdentityId) == 1));
         Require(state.Assignments.All(a => a.TenantId == tenantId && a.Scope.TenantId == tenantId && a.Scope.Kind != AccessScopeKind.System
             && IamAuthorizer.ValidScope(a.Scope) && state.Roles.Any(r => r.RoleId == a.RoleId)
+            && (a.Scope.Kind != AccessScopeKind.Resource || IamResourceScopes.Exists(state, a.Scope))
             && state.Principals.Any(p => p.PrincipalId == a.PrincipalId)
             && (state.Principals.Single(p => p.PrincipalId == a.PrincipalId).Kind == PrincipalKind.User || !state.Roles.Single(r => r.RoleId == a.RoleId).HumanOnly)
             && (state.Roles.Single(r => r.RoleId == a.RoleId).Key != BuiltinAccessRoles.Owner || a.Scope.Kind == AccessScopeKind.Tenant)));

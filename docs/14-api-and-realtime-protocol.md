@@ -31,12 +31,13 @@ All routes below start `/api/v2/tenants/{tenantId}` and derive the actor from co
 | PUT `/members/{userId}/status` | `members.update` or `members.remove`; status + expected revision; last active Owner retained |
 | GET `/roles`, `/permissions` | `iam.roles.read`; exact closed catalog, builtin/custom and human-only metadata |
 | POST `/roles`, PUT `/roles/{roleId}` | `iam.roles.manage`; name/permissions/revision; builtins immutable |
-| POST `/role-assignments` | `iam.roles.assign`; target principal/role/revision; tenant-wide assignment |
+| POST `/role-assignments` | `iam.roles.assign` at target scope; `principalId`, `roleId`, `expectedRevision`; omit both `resourceType`/`resourceId` for tenant-wide scope, or supply both for an owned resource |
 | DELETE `/role-assignments/{assignmentId}` | `iam.roles.assign` at saved scope; expectedRevision query value |
-| POST `/access/check` | Current principal self-check, or `iam.roles.read` to inspect another same-tenant principal; permission key |
+| GET `/access/resources/{resourceType}/{resourceId}` | `iam.roles.read` at that owned resource; scope/security revision/direct and inherited assignments; zero-based `page`, `pageSize` 1–100 (default 30), total |
+| POST `/access/check` | Current principal self-check, or `iam.roles.read` at target scope to inspect another principal; `principalId`, `permission`, optional paired `resourceType`/`resourceId`; safe Allow/Deny decision |
 | GET `/audit` | `security.audit.read`; bounded limit 1–200 |
 
-Resource-specific Access endpoints will resolve actual ownership before scoped assignment/effective inspection; the foundation's generic check cannot accept an arbitrary resource ID as proof of tenant ownership. Final resource/Hub contracts and removal of former owner APIs are pending in the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md). Foundation errors use safe `reasonCode`: 401 not authenticated, 403 not member/permission denied, 400 invalid request/CSRF, 409 stale revision/last owner, 429 login rate limit. No unrun full-cutover behavior is implied.
+Resource-scoped IAM currently resolves `member` (User ID), `role` (Role ID) and `agent` (registered Agent Instance ID) from the tenant security aggregate; IDs normalize to canonical GUID D form. A route/body resource ID alone proves no ownership. Unsupported families, incomplete pairs, fabricated IDs and foreign targets fail closed with `resource_unavailable`; valid targets reject incompatible operation families with `resource_type_mismatch`. Assignment/read failures return 403; access checks return a safe denied decision. Existing tenant-wide assignment bodies remain the same canonical scope choice. Actual Instance lifecycle/store integration, other resource families, final Hub contracts and removal of former owner APIs are pending in the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md). Foundation errors use safe `reasonCode`: 401 not authenticated, 403 not member/permission denied, 400 invalid request/CSRF, 409 stale revision/last owner/agent identity collision, 429 login rate limit. No unrun full-cutover behavior is implied.
 
 
 ## Agent instructions and context diagnostics
