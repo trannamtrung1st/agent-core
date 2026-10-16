@@ -9,6 +9,59 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class ResponsesTransportTests
 {
+    [Fact]
+    public async Task Explicit_text_only_output_limit_is_a_typed_length_completion_with_usage()
+    {
+        var events = await Collect(Create(new RecordingHandler(Event(new { type = "response.output_text.delta", delta = "{\"decision\":\"allow\"}" }) +
+            Event(new { type = "response.incomplete", response = new { status = "incomplete", output = Array.Empty<object>(),
+                incomplete_details = new { reason = "max_output_tokens" }, usage = new { input_tokens = 12, output_tokens = 512 } } }))), new(Guid.NewGuid(), []));
+        Assert.Empty(events.OfType<ModelFailed>());
+        var terminal = Assert.Single(events.OfType<ModelCompleted>());
+        Assert.Equal(ModelStopReason.LengthLimit, terminal.Reason);
+        Assert.Equal(512, terminal.OutputTokens);
+    }
+
+    [Theory]
+    [InlineData("max_output_tokens", true)]
+    [InlineData("content_filter", false)]
+    [InlineData("max_messages", false)]
+    [InlineData("unknown", false)]
+    [InlineData(null, false)]
+    public async Task Other_incomplete_reasons_and_tool_requests_are_not_retryable_length_completions(string? reason, bool tools)
+    {
+        var payload = Event(new { type = "response.incomplete", response = new { status = "incomplete", output = Array.Empty<object>(), incomplete_details = new { reason } } });
+        var events = await Collect(Create(new RecordingHandler(payload)), new(Guid.NewGuid(), [],
+            Tools: tools ? [new("lookup", "lookup", "{\"type\":\"object\"}")] : null));
+        Assert.Single(events.OfType<ModelFailed>());
+        Assert.Empty(events.OfType<ModelCompleted>()); Assert.Empty(events.OfType<ModelToolCallEvent>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Unsolicited_or_partial_function_output_never_becomes_a_text_length_completion(bool streamed)
+    {
+        var call = new { type = "function_call", call_id = "call1", name = "lookup", arguments = "{broken" };
+        var payload = streamed ? Event(new { type = "response.output_item.added", item = call }) : "";
+        payload += Event(new { type = "response.incomplete", response = new { status = "incomplete", output = streamed ? Array.Empty<object>() : new object[] { call }, incomplete_details = new { reason = "max_output_tokens" } } });
+        var events = await Collect(Create(new RecordingHandler(payload)), new(Guid.NewGuid(), []));
+        Assert.Single(events.OfType<ModelFailed>()); Assert.Empty(events.OfType<ModelCompleted>());
+        Assert.Empty(events.OfType<ModelToolCallEvent>());
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"message\"}")]
+    [InlineData("{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"function_call\"}]}")]
+    [InlineData("42")]
+    [InlineData("{\"type\":\"unknown\"}")]
+    public async Task Malformed_or_non_text_incomplete_output_is_not_a_length_completion(string item)
+    {
+        using var doc = JsonDocument.Parse(item);
+        var events = await Collect(Create(new RecordingHandler(Event(new { type = "response.incomplete", response = new { status = "incomplete",
+            incomplete_details = new { reason = "max_output_tokens" }, output = new[] { doc.RootElement } } }))), new(Guid.NewGuid(), []));
+        Assert.Single(events.OfType<ModelFailed>()); Assert.Empty(events.OfType<ModelCompleted>());
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -76,7 +129,7 @@ public sealed class ResponsesTransportTests
         using var cts = new CancellationTokenSource();
         if (cancel) cts.CancelAfter(TimeSpan.FromMilliseconds(100));
         var interrupted = new List<ModelGenerationEvent>();
-        await foreach (var item in model.GenerateAsync(new(Guid.NewGuid(), []), cts.Token)) interrupted.Add(item);
+        await foreach (var item in model.GenerateAsync(new(Guid.NewGuid(), [], Tools: [new("lookup", "lookup", "{\"type\":\"object\"}")]), cts.Token)) interrupted.Add(item);
         Assert.Equal(cancel ? ProviderErrorCode.Cancelled : ProviderErrorCode.Timeout, Assert.Single(interrupted.OfType<ModelFailed>()).Failure.Code);
         Assert.Empty(interrupted.OfType<ModelToolCallEvent>()); Assert.Empty(interrupted.OfType<ModelCompleted>());
         var recovered = await Collect(model, new(Guid.NewGuid(), []));

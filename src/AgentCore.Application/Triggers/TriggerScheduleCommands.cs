@@ -221,10 +221,10 @@ public static class TriggerScheduleCommands
                 RuntimeTelemetry.RecordAutomation(operation, "authorization_classifier_unavailable");
                 if (verdict.FailureReason is { } reason)
                     return new ToolExecutionResult(JsonSerializer.Serialize(new { error = "authorization_classifier_unavailable",
-                        classifierFailureReason = reason.ToString(), message = "The authorization provider reported a failure. No mutation was made; the user can retry." }));
+                        classifierFailureReason = reason.ToString(), message = "The authorization provider reported a failure. No mutation was made. Preserve the request and report this platform blocker once; do not repeat create calls, change the requested task, or ask the user to rephrase it." }));
                 return Result(
                     "authorization_classifier_unavailable",
-                    "Schedule authorization could not be completed. Preserve the request; ask the user to retry or restate it explicitly. No mutation was made.",
+                    "Schedule authorization could not be completed. Preserve the request and report the platform blocker once. No mutation was made.",
                     clearProposal: false);
             }
 
@@ -235,7 +235,9 @@ public static class TriggerScheduleCommands
                 RuntimeTelemetry.RecordAutomation(operation, "authorization_classifier_invalid_output");
                 if (verdict.FailureReason is { } reason)
                     return new ToolExecutionResult(JsonSerializer.Serialize(new { error = "authorization_classifier_invalid_output",
-                        classifierFailureReason = reason.ToString(), message = "The authorization classifier did not return a valid decision. This does not establish a provider outage. Clarify the request; no mutation was made." }));
+                        classifierFailureReason = reason.ToString(), message = reason == TriggerAuthorizationFailureReason.TruncatedOutput
+                            ? "The authorization classifier exhausted its output budget; no Automation was created. This is a platform classification failure, not unclear user intent. Preserve the request and report this blocker once; do not retry different arguments or substitute a Chat reminder."
+                            : "The authorization classifier did not return a valid decision. This is a platform classification failure, not proof of a provider outage or unclear user intent. Preserve the request and report this blocker once; no mutation was made." }));
                 return Result(
                     "authorization_classifier_invalid_output",
                     "Schedule authorization returned an invalid classification. No schedule action was authorized; preserve the request and report the classification failure.",

@@ -1,11 +1,79 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Triggers;
+using AgentCore.Domain.Triggers;
+using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Application.Tests;
 
 public sealed class ModelTriggerCommandAuthorizerTests
 {
+    [Theory]
+    [InlineData("allow", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("deny", TriggerCommandAuthorizationDecision.Deny)]
+    [InlineData("ambiguous", TriggerCommandAuthorizationDecision.Ambiguous)]
+    [InlineData("truncated", TriggerCommandAuthorizationDecision.ClassifierInvalidOutput)]
+    [InlineData("malformed", TriggerCommandAuthorizationDecision.ClassifierInvalidOutput)]
+    public async Task Only_confirmed_length_limit_retries_with_fresh_output_and_identical_context(string second, TriggerCommandAuthorizationDecision expected)
+    {
+        var model = new BudgetModel(second);
+        var result = await new ModelTriggerCommandAuthorizer(model, new(), "low")
+            .AuthorizeWithDetailsAsync("I would like daily reflection on your memory at 9am", "en", TriggerCommandAction.Create,
+                new(Guid.NewGuid(), 2, TriggerCommandAction.Update, "Original source", "Asia/Ho_Chi_Minh", TriggerScheduleKind.Daily, AutomationStatus.Cancelled, null),
+                new("Retained draft", TriggerCommandAction.Create, "daily", null, "schedule_validation_failed", DateTimeOffset.UnixEpoch, "{\"reportBack\":false}"));
+        Assert.Equal(expected, result.Decision);
+        Assert.Equal(2, model.Requests.Count);
+        var first = model.Requests[0]; var retry = model.Requests[1];
+        Assert.Equal(512, first.MaxOutputTokens);
+        Assert.Equal(1024, retry.MaxOutputTokens);
+        Assert.Equal(first, retry with { MaxOutputTokens = first.MaxOutputTokens });
+        Assert.Equal("low", retry.ReasoningEffort);
+        Assert.Null(retry.Tools);
+        if (second == "truncated") Assert.Equal(TriggerAuthorizationFailureReason.TruncatedOutput, result.FailureReason);
+    }
+
+    [Fact]
+    public async Task Cancellation_at_the_truncated_terminal_prevents_the_internal_retry()
+    {
+        using var cts = new CancellationTokenSource();
+        var model = new BudgetModel("allow", cts.Cancel);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new ModelTriggerCommandAuthorizer(model, new())
+            .AuthorizeWithDetailsAsync("another at 8:52", "en", TriggerCommandAction.Create, cancellationToken: cts.Token).AsTask());
+        Assert.Single(model.Requests);
+    }
+
+    [Theory]
+    [InlineData(31, 1)]
+    [InlineData(25, 2)]
+    public async Task Attempts_share_one_thirty_second_deadline_instead_of_renewing_it(int firstSeconds, int expectedCalls)
+    {
+        var time = new FakeTimeProvider();
+        var calls = 0;
+        var model = new BudgetModel("allow", () => time.Advance(TimeSpan.FromSeconds(++calls == 1 ? firstSeconds : 6)));
+        var verdict = await new ModelTriggerCommandAuthorizer(model, new(), timeProvider: time)
+            .AuthorizeWithDetailsAsync("another at 8:52", "en", TriggerCommandAction.Create);
+        Assert.Equal(TriggerCommandAuthorizationDecision.ClassifierUnavailable, verdict.Decision);
+        Assert.Equal(TriggerAuthorizationFailureReason.ProviderFailure, verdict.FailureReason);
+        Assert.Equal(expectedCalls, model.Requests.Count);
+    }
+
+    private sealed class BudgetModel(string second, Action? beforeTerminal = null) : ILanguageModel
+    {
+        public ModelCapabilities Capabilities { get; } = new(true, true);
+        public List<ModelRequest> Requests { get; } = [];
+        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.CompletedTask;
+            ct.ThrowIfCancellationRequested();
+            Requests.Add(request);
+            // A complete-looking Allow is still unusable on a truncated attempt.
+            yield return new ModelTextDelta(Requests.Count == 1 || second == "truncated" ? "{\"decision\":\"allow\"}"
+                : second == "malformed" ? "broken" : "{\"decision\":\"" + second + "\"}");
+            beforeTerminal?.Invoke();
+            yield return new ModelCompleted(Requests.Count == 1 || second == "truncated" ? ModelStopReason.LengthLimit : ModelStopReason.Completed, OutputTokens: request.MaxOutputTokens);
+        }
+    }
+
     [Theory]
     [InlineData("enable the 60s hello schedule", TriggerCommandAction.Enable)]
     [InlineData("enable the 60s hello schedule", TriggerCommandAction.List)]
@@ -59,10 +127,12 @@ public sealed class ModelTriggerCommandAuthorizerTests
     [InlineData("tool-channel", TriggerAuthorizationFailureReason.InvalidResponseChannel)]
     public async Task Failure_details_are_bounded_and_distinguish_provider_and_output_failures(string mode, TriggerAuthorizationFailureReason reason)
     {
-        var result = await new ModelTriggerCommandAuthorizer(new InvalidStreamModel(mode), new())
+        var model = new InvalidStreamModel(mode);
+        var result = await new ModelTriggerCommandAuthorizer(model, new())
             .AuthorizeWithDetailsAsync("maybe greet me later", "en", TriggerCommandAction.Create);
         Assert.Equal(reason, result.FailureReason);
         Assert.NotEqual(TriggerCommandAuthorizationDecision.Allow, result.Decision);
+        Assert.Equal(mode == "truncated" ? 2 : 1, model.Calls);
     }
 
     [Theory]
@@ -173,6 +243,13 @@ public sealed class ModelTriggerCommandAuthorizerTests
 
     [Theory]
     [InlineData("check the oven in 1 minute for me", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("everyday at 9am, think about how you can consolidate your memory, experience", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("every week, think about how you can improve your harness for better support", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("please every day at 09:00, think about your memory", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("every week, please think about your harness", TriggerCommandAuthorizationDecision.Allow)]
+    [InlineData("can you think about your memory every day?", TriggerCommandAuthorizationDecision.Deny)]
+    [InlineData("I used to think about your memory every day", TriggerCommandAuthorizationDecision.Deny)]
+    [InlineData("do not think about your memory every day", TriggerCommandAuthorizationDecision.Deny)]
     [InlineData("create an automation to greet me every minute", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("please configure an automation", TriggerCommandAuthorizationDecision.Allow)]
     [InlineData("enable core event review recent work", TriggerCommandAuthorizationDecision.Deny)]
@@ -228,10 +305,12 @@ public sealed class ModelTriggerCommandAuthorizerTests
 
     private sealed class InvalidStreamModel(string mode) : ILanguageModel
     {
+        public int Calls { get; private set; }
         public ModelCapabilities Capabilities { get; } = new(true, true);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
             await Task.CompletedTask;
+            Calls++;
             if (mode == "tool-channel")
             {
                 yield return new ModelToolCallEvent(new("unexpected", "automation.create", "{}"));

@@ -11,11 +11,14 @@ internal static class TimedScheduleIntent
         "schedule", "greet", "say", "tell", "send", "message", "wake", "notify", "ping", "alert", "nudge", "remind",
         "review", "capture", "consolidate", "update", "check", "run", "write", "overwrite", "refresh",
         "sync", "set", "save", "post", "fetch", "execute", "perform", "create", "modify", "edit",
-        "append", "replace", "delete", "remove"
+        "append", "replace", "delete", "remove", "think"
     };
 
     private static readonly Regex Timing = new(
-        @"\b(?<mode>in|after|every)\s+(?:(?<value>\d+)\s*(?<unit>s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|days?|weeks?)|(?<singular>second|minute|hour|day|week))\b",
+        @"\b(?:(?<daily>everyday)|(?<mode>in|after|every)\s+(?:(?<value>\d+)\s*(?<unit>s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|days?|weeks?)|(?<singular>second|minute|hour|day|week)))\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex RecurrenceClock = new(
+        @"^at\s+(?:(?:0?[1-9]|1[0-2])(?::[0-5]\d)?\s*(?:am|pm)|(?:[01]\d|2[0-3]):[0-5]\d)(?=\s|,|:|$)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex Qualification = new(
         @"\b(if|unless|maybe|perhaps|whether|hypothetically)\b|[?\r\n""“”]",
@@ -51,7 +54,15 @@ internal static class TimedScheduleIntent
 
         // Timing must be at an edge; do not authorize an action embedded in a narrative.
         string action;
-        if (timing.Index == 0) action = command[timing.Length..].TrimStart(' ', ',', ':');
+        if (timing.Index == 0)
+        {
+            action = command[timing.Length..].TrimStart(' ', ',', ':');
+            if (timing.Groups["daily"].Success || timing.Groups["mode"].Value.Equals("every", StringComparison.OrdinalIgnoreCase))
+            {
+                var clock = RecurrenceClock.Match(action);
+                if (clock.Success) action = action[clock.Length..].TrimStart(' ', ',', ':');
+            }
+        }
         else if (timing.Index + timing.Length == command.Length) action = command[..timing.Index].TrimEnd(' ', ',');
         else return false;
         if (action.StartsWith("please ", StringComparison.OrdinalIgnoreCase)) action = action[7..];

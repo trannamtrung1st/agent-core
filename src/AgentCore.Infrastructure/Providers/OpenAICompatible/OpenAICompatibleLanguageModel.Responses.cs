@@ -130,13 +130,29 @@ public sealed partial class OpenAICompatibleLanguageModel
             case "response.reasoning_summary_text.delta":
             case "response.reasoning_text.delta":
                 return [new ModelReasoningDelta(root.GetProperty("delta").GetString() ?? "")];
+            case "response.output_item.added" when root.GetProperty("item").GetProperty("type").GetString() == "function_call" && !toolsOffered:
+            case "response.output_item.done" when root.GetProperty("item").GetProperty("type").GetString() == "function_call" && !toolsOffered:
+            case "response.function_call_arguments.delta" when !toolsOffered:
+            case "response.function_call_arguments.done" when !toolsOffered:
+                return [Fail(ProviderErrorCode.InvalidResponse, "Language model returned an unsolicited tool channel.", ProviderFailureReason.ToolCallTruncated)];
             case "error":
             case "response.failed":
                 return [Fail(ProviderErrorCode.Unavailable, "Language model Responses stream failed.", ProviderFailureReason.StreamIncomplete)];
             case "response.incomplete":
                 var incomplete = root.GetProperty("response");
                 ReadResponsesUsage(incomplete, ref inputTokens, ref outputTokens);
-                return [Fail(ProviderErrorCode.InvalidResponse, "Language model response was cut off before completion.", ProviderFailureReason.ToolCallTruncated)];
+                if (!toolsOffered && drafts.Count == 0
+                    && incomplete.TryGetProperty("status", out var status) && status.GetString() == "incomplete"
+                    && incomplete.TryGetProperty("incomplete_details", out var details) && details.ValueKind == JsonValueKind.Object
+                    && details.TryGetProperty("reason", out var reason) && reason.GetString() == "max_output_tokens"
+                    && incomplete.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array
+                    && output.EnumerateArray().All(IsIncompleteTextOutput))
+                {
+                    stop = ModelStopReason.LengthLimit;
+                    return [];
+                }
+                return [Fail(ProviderErrorCode.InvalidResponse, "Language model response was cut off before completion.",
+                    toolsOffered ? ProviderFailureReason.ToolCallTruncated : ProviderFailureReason.StreamIncomplete)];
             case "response.completed":
                 var response = root.GetProperty("response");
                 if (response.GetProperty("status").GetString() != "completed") throw new JsonException("Unexpected response status.");
@@ -159,6 +175,18 @@ public sealed partial class OpenAICompatibleLanguageModel
                 return [];
             default: return [];
         }
+    }
+
+    private static bool IsIncompleteTextOutput(JsonElement item)
+    {
+        if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("type", out var type)) return false;
+        if (type.GetString() == "reasoning") return true;
+        return type.GetString() == "message"
+            && item.TryGetProperty("role", out var role) && role.GetString() == "assistant"
+            && item.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array
+            && content.EnumerateArray().All(part => part.ValueKind == JsonValueKind.Object
+                && part.TryGetProperty("type", out var kind) && kind.GetString() == "output_text"
+                && part.TryGetProperty("text", out var text) && text.ValueKind == JsonValueKind.String);
     }
 
     private static void ReadResponsesUsage(JsonElement response, ref int? inputTokens, ref int? outputTokens)

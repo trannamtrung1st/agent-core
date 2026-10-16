@@ -3,6 +3,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
+using AgentCore.Application.Observability;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace AgentCore.Application.Triggers;
 
@@ -106,7 +109,7 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     internal static bool IsExplicitlyNegated(string text) => Regex.IsMatch(text,
-        @"\b(don['’]?t|do not|never)\b.{0,60}\b(enable|activate|resume|unpause|turn on|disable|deactivate|pause|turn off|create|set|configure|update|edit|change|cancel|delete|remove|stop|greet|say|tell|send|message|check|wake|notify|ping|alert|nudge|remind|schedule)\b",
+        @"\b(don['’]?t|do not|never)\b.{0,60}\b(enable|activate|resume|unpause|turn on|disable|deactivate|pause|turn off|create|set|configure|update|edit|change|cancel|delete|remove|stop|greet|say|tell|send|message|check|wake|notify|ping|alert|nudge|remind|schedule|think)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public ValueTask<TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(
@@ -263,8 +266,16 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
 public sealed class ModelTriggerCommandAuthorizer(
     ILanguageModel languageModel,
     HeuristicTriggerCommandAuthorizer heuristic,
-    string? reasoningEffort = null) : ITriggerCommandAuthorizer
+    string? reasoningEffort = null,
+    ILogger<ModelTriggerCommandAuthorizer>? logger = null,
+    ModelDescriptor? descriptor = null,
+    TimeProvider? timeProvider = null) : ITriggerCommandAuthorizer
 {
+    private const int InitialOutputTokens = 512;
+    private const int RecoveryOutputTokens = 1024;
+    private static readonly TimeSpan ClassificationTimeout = TimeSpan.FromSeconds(30);
+    private readonly TimeProvider time = timeProvider ?? TimeProvider.System;
+
     public async ValueTask<TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(string? currentUserText, string? conversationLanguage,
         TriggerCommandAction requestedAction, ScheduleConversationContext? scheduleContext = null, ScheduleDraftContext? scheduleDraft = null,
         CancellationToken cancellationToken = default) => (await AuthorizeWithDetailsAsync(currentUserText, conversationLanguage,
@@ -310,17 +321,80 @@ public sealed class ModelTriggerCommandAuthorizer(
                 $"Proposed action: {requestedAction}; conversation language: {conversationLanguage ?? "auto"}.", semantics: ContextSemantics.TrustedFact),
             ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, string.Join('\n',
                 (scheduleContext?.ToPromptLines() ?? []).Concat(scheduleDraft?.ToPromptLines() ?? [])))
-        ], purpose: ContextPurpose.Platform), [new(ModelRole.User, text)], maxOutputTokens: 64, temperature: 0, reasoningEffort: reasoningEffort);
+        ], purpose: ContextPurpose.Platform), [new(ModelRole.User, text)], maxOutputTokens: InitialOutputTokens, temperature: 0, reasoningEffort: reasoningEffort);
 
-        var (raw, failure) = await ReadTextAsync(languageModel, request, cancellationToken).ConfigureAwait(false);
-        if (failure is { } failedDecision) return failedDecision;
-        if (!TryParseDecision(raw, out var decision, out var reason))
+        // Both attempts share one deadline, further bounded by the calling tool/turn.
+        using var timeout = new CancellationTokenSource(ClassificationTimeout, time);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        for (var attempt = 1; attempt <= 2; attempt++)
         {
-            return new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, reason);
-        }
+            cancellationToken.ThrowIfCancellationRequested();
+            var started = time.GetTimestamp();
+            using var activity = RuntimeTelemetry.Activity.StartActivity("automation.authorization.classifier");
+            ClassifierRead read;
+            TriggerCommandAuthorizationVerdict verdict;
+            var valid = false;
+            try
+            {
+                read = await ReadTextAsync(languageModel, request, deadline.Token).ConfigureAwait(false);
+                deadline.Token.ThrowIfCancellationRequested();
+                if (read.Failure is { } failure) verdict = failure;
+                else
+                {
+                    valid = TryParseDecision(read.Text, out var decision, out var reason);
+                    verdict = valid ? new(decision) : new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, reason);
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+            {
+                read = new(string.Empty, null, null);
+                verdict = new(TriggerCommandAuthorizationDecision.ClassifierUnavailable, TriggerAuthorizationFailureReason.ProviderFailure);
+            }
+            catch (OperationCanceledException)
+            {
+                RecordAttempt("Cancelled", null, false);
+                throw;
+            }
+            catch (Exception)
+            {
+                RecordAttempt("UnhandledFailure", null, false);
+                throw;
+            }
+            var terminal = deadline.IsCancellationRequested ? "DeadlineExceeded"
+                : read.ProviderCode?.ToString() ?? read.Terminal?.Reason.ToString() ?? verdict.FailureReason?.ToString() ?? verdict.Decision.ToString();
+            RecordAttempt(terminal, read.Terminal?.OutputTokens, valid);
+            if (attempt == 2 || verdict.FailureReason != TriggerAuthorizationFailureReason.TruncatedOutput || deadline.IsCancellationRequested)
+                return verdict;
+            // Never carry over partial text, tools, or a proposed decision.
+            request = request with { MaxOutputTokens = RecoveryOutputTokens };
 
-        return new(decision);
+            void RecordAttempt(string stop, int? outputTokens, bool validDecision)
+            {
+                var elapsed = time.GetElapsedTime(started).TotalMilliseconds;
+                activity?.SetTag("action", requestedAction.ToString());
+                activity?.SetTag("catalog", SafeMetadata(descriptor?.Key));
+                activity?.SetTag("provider", SafeMetadata(descriptor?.ProviderAlias));
+                activity?.SetTag("model", SafeMetadata(descriptor?.ModelId));
+                activity?.SetTag("transport", descriptor?.Transport.ToString() ?? "Unknown");
+                activity?.SetTag("reasoning_effort", SafeMetadata(reasoningEffort));
+                activity?.SetTag("attempt", attempt);
+                activity?.SetTag("max_attempts", 2);
+                activity?.SetTag("max_output_tokens", request.MaxOutputTokens);
+                activity?.SetTag("elapsed_ms", elapsed);
+                activity?.SetTag("terminal", stop);
+                activity?.SetTag("output_tokens", outputTokens);
+                activity?.SetTag("valid_decision", validDecision);
+                if (!validDecision) activity?.SetStatus(ActivityStatusCode.Error, stop);
+                logger?.LogInformation("Automation authorization classifier action={Action} catalog={CatalogKey} provider={ProviderAlias} model={ModelId} transport={Transport} effort={ReasoningEffort} maxOutputTokens={MaxOutputTokens} attempt={Attempt} maxAttempts={MaxAttempts} elapsedMs={ElapsedMs} terminal={Terminal} outputTokens={OutputTokens} validDecision={ValidDecision} traceId={TraceId}",
+                    requestedAction, SafeMetadata(descriptor?.Key), SafeMetadata(descriptor?.ProviderAlias), SafeMetadata(descriptor?.ModelId),
+                    descriptor?.Transport.ToString() ?? "Unknown", SafeMetadata(reasoningEffort), request.MaxOutputTokens, attempt, 2,
+                    elapsed, stop, outputTokens, validDecision, Activity.Current?.TraceId.ToString());
+            }
+        }
+        throw new UnreachableException();
     }
+
+    private static string SafeMetadata(string? value) => value is null ? "Unknown" : new(value.Take(128).Where(c => !char.IsControl(c)).ToArray());
 
     public bool IsScheduleConfirmation(string? currentUserText, string? conversationLanguage) =>
         heuristic.IsScheduleConfirmation(currentUserText, conversationLanguage);
@@ -364,36 +438,40 @@ public sealed class ModelTriggerCommandAuthorizer(
         }
     }
 
-    private static async Task<(string Text, TriggerCommandAuthorizationVerdict? Failure)> ReadTextAsync(
+    private sealed record ClassifierRead(string Text, TriggerCommandAuthorizationVerdict? Failure, ModelCompleted? Terminal, ProviderErrorCode? ProviderCode = null);
+
+    private static async Task<ClassifierRead> ReadTextAsync(
         ILanguageModel model,
         ModelRequest request,
         CancellationToken cancellationToken)
     {
         var builder = new System.Text.StringBuilder();
-        var completed = false;
+        ModelCompleted? completed = null;
         await foreach (var item in model.GenerateAsync(request, cancellationToken).ConfigureAwait(false))
         {
             if (item is ModelFailed failed)
-                return (string.Empty, failed.Failure.Code == ProviderErrorCode.InvalidResponse
+                return new(string.Empty, failed.Failure.Code == ProviderErrorCode.InvalidResponse
                     ? new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.ProviderInvalidResponse)
-                    : new(TriggerCommandAuthorizationDecision.ClassifierUnavailable, TriggerAuthorizationFailureReason.ProviderFailure));
+                    : new(TriggerCommandAuthorizationDecision.ClassifierUnavailable, TriggerAuthorizationFailureReason.ProviderFailure), completed, failed.Failure.Code);
             if (item is ModelToolCallEvent)
-                return (string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.InvalidResponseChannel));
+                return new(string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.InvalidResponseChannel), completed);
+            if (completed is not null)
+                return new(string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.InvalidResponseChannel), completed);
             if (item is ModelCompleted terminal)
             {
                 if (terminal.Reason != ModelStopReason.Completed)
-                    return (string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput,
-                        terminal.Reason == ModelStopReason.LengthLimit ? TriggerAuthorizationFailureReason.TruncatedOutput : TriggerAuthorizationFailureReason.InvalidResponseChannel));
-                completed = true;
+                    return new(string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput,
+                        terminal.Reason == ModelStopReason.LengthLimit ? TriggerAuthorizationFailureReason.TruncatedOutput : TriggerAuthorizationFailureReason.InvalidResponseChannel), terminal);
+                completed = terminal;
             }
             if (item is ModelTextDelta delta)
             {
                 if (builder.Length + delta.Text.Length > 4096)
-                    return (string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.OversizedOutput));
+                    return new(string.Empty, new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.OversizedOutput), completed);
                 builder.Append(delta.Text);
             }
         }
 
-        return (builder.ToString(), completed ? null : new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.IncompleteOutput));
+        return new(builder.ToString(), completed is not null ? null : new(TriggerCommandAuthorizationDecision.ClassifierInvalidOutput, TriggerAuthorizationFailureReason.IncompleteOutput), completed);
     }
 }

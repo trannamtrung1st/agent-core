@@ -379,9 +379,19 @@ public static class InfrastructureServiceCollectionExtensions
             services.TryAddSingleton<ModelTriggerCommandAuthorizer>(static provider =>
             {
                 var selection = SessionModelBinder.PinDefault(provider.GetRequiredService<IModelCatalog>());
+                var descriptor = provider.GetRequiredService<IModelCatalog>().Get(selection.CatalogKey)!;
+                // Use the least expensive declared effort for this internal purpose;
+                // keep the pinned route and ordinary conversation defaults unchanged.
+                if (descriptor.Reasoning)
+                {
+                    var effort = new[] { "none", "minimal", "low", "medium", "high", "xhigh", "max" }
+                        .FirstOrDefault(candidate => descriptor.SupportedReasoningEfforts.Contains(candidate, StringComparer.OrdinalIgnoreCase));
+                    if (effort is not null) selection = selection with { ReasoningEffort = effort };
+                }
                 return new ModelTriggerCommandAuthorizer(
                     provider.GetRequiredService<ILanguageModelResolver>().Resolve(selection, ModelPurpose.TriggerAuthorization),
-                    provider.GetRequiredService<HeuristicTriggerCommandAuthorizer>(), selection.ReasoningEffort);
+                    provider.GetRequiredService<HeuristicTriggerCommandAuthorizer>(), selection.ReasoningEffort,
+                    provider.GetService<ILogger<ModelTriggerCommandAuthorizer>>(), descriptor, provider.GetRequiredService<TimeProvider>());
             });
             services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>
                 provider.GetRequiredService<ModelTriggerCommandAuthorizer>());
