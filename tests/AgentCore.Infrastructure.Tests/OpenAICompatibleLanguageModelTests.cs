@@ -479,7 +479,9 @@ public sealed class OpenAICompatibleLanguageModelTests
         else if (name == "browser.navigate") Assert.False(schema.TryGetProperty("required", out _));
         if (name == "browser.close")
         {
-            Assert.Empty(fields.EnumerateObject());
+            Assert.Equal("operation", Assert.Single(fields.EnumerateObject()).Name);
+            Assert.Equal("close", fields.GetProperty("operation").GetProperty("enum")[0].GetString());
+            Assert.Contains("{\"operation\":\"close\"}", request.RootElement.GetProperty("tools")[0].GetProperty("function").GetProperty("description").GetString());
             Assert.False(schema.TryGetProperty("required", out _));
         }
         if (name == "browser.snapshot")
@@ -503,6 +505,7 @@ public sealed class OpenAICompatibleLanguageModelTests
 
     [Theory]
     [InlineData("{}")]
+    [InlineData("""{"operation":"close"}""")]
     [InlineData("null")]
     [InlineData("{\"arguments\":{}}")]
     [InlineData("")]

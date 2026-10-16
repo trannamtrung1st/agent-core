@@ -19,6 +19,7 @@ public sealed partial class TerminalDisplayRepairTests
 {
     [Theory]
     [InlineData(false, "{}", "{\"unexpected\":true}")]
+    [InlineData(false, """{"operation":"close"}""", "{\"unexpected\":true}")]
     [InlineData(true, "{}", "{\"unexpected\":true}")]
     [InlineData(false, " ", "")]
     public async Task Recovered_owned_run_executes_pending_corrected_close_once_after_invalid_strategy_exhaustion(bool alreadyClosed, string correctedPayload, string previousInvalidPayload)
@@ -95,6 +96,8 @@ public sealed partial class TerminalDisplayRepairTests
 
     [Theory]
     [InlineData(false, "{}")]
+    [InlineData(false, """{"operation":"close"}""")]
+    [InlineData(true, """{"operation":"close"}""")]
     [InlineData(true, "{}")]
     [InlineData(true, " ")]
     public async Task Owned_run_corrects_invalid_close_without_disabling_cleanup_or_unrelated_tools(bool cleanup, string corrected)
@@ -150,7 +153,7 @@ public sealed partial class TerminalDisplayRepairTests
             }
             var name = step == 4 ? ToolCatalog.BrowserSnapshot : ToolCatalog.BrowserClose;
             Assert.Contains(request.Tools ?? [], t => t.Name == name);
-            yield return new ModelToolCallEvent(new("close-recovery-" + step, name, step < 4 ? "{\"unexpected\":true}" : step == 5 ? corrected : "{}"));
+            yield return new ModelToolCallEvent(new("close-recovery-" + step, name, step < 4 ? "{\"request\":{}}" : step == 5 ? corrected : "{}"));
             yield return new ModelCompleted(ModelStopReason.ToolCalls);
             await Task.CompletedTask;
         }

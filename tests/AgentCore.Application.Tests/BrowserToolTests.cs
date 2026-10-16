@@ -718,7 +718,7 @@ public sealed class BrowserToolTests
         Assert.DoesNotContain(ToolCatalog.BrowserClose, offeredV11.Select(tool => tool.Name));
         Assert.Contains(ToolCatalog.BrowserClose, offeredV12.Select(tool => tool.Name));
         Assert.Contains(
-            """{"type":"object","additionalProperties":false,"properties":{},"required":[]}""",
+            """{"type":"object","additionalProperties":false,"properties":{"operation":{"type":"string","enum":["close"]}},"required":[]}""",
             offeredV12.Single(tool => tool.Name == ToolCatalog.BrowserClose).ParametersJson,
             StringComparison.Ordinal);
         Assert.Contains(ToolCatalog.BrowserClose, RoleEnvironments.Of(v12).ToolList);
@@ -746,6 +746,7 @@ public sealed class BrowserToolTests
     [Theory]
     [InlineData("{}")]
     [InlineData(" { } ")]
+    [InlineData("""{"operation":"close"}""")]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]
@@ -770,6 +771,14 @@ public sealed class BrowserToolTests
     [InlineData("""{"target":{}}""")]
     [InlineData("""{"parameters":{}}""")]
     [InlineData("""{"dummy":"x"}""")]
+    [InlineData("""{"request":{}}""")]
+    [InlineData("""{"request":{"kind":"browser.close"}}""")]
+    [InlineData("""{"operation":"reset"}""")]
+    [InlineData("""{"operation":"CLOSE"}""")]
+    [InlineData("""{"operation":null}""")]
+    [InlineData("""{"operation":"close","operation":"close"}""")]
+    [InlineData("""{"operation":"close","headless":true}""")]
+    [InlineData("""{"operation":"close","request":{}}""")]
     [InlineData("""{"mode":"openWeb"}""")]
     [InlineData("""{"headless":true}""")]
     [InlineData("""{"script":"page.evaluate(() => 1)"}""")]

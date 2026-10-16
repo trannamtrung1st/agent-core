@@ -14,6 +14,7 @@ public sealed class ResponsesTransportTests
     [InlineData("")]
     [InlineData(" \t")]
     [InlineData("{}")]
+    [InlineData("""{"operation":"close"}""")]
     [InlineData("null")]
     [InlineData("[]")]
     [InlineData("{broken")]
@@ -29,6 +30,24 @@ public sealed class ResponsesTransportTests
         Assert.Equal("browser.close", call.Name);
         Assert.Equal("close_1", call.Id);
         Assert.Equal(arguments ?? "", call.ArgumentsJson);
+    }
+
+    [Fact]
+    public async Task Close_schema_advertises_the_same_fixed_optional_operation_as_chat_completions()
+    {
+        var handler = new RecordingHandler(Event(new { type = "response.completed", response = new { status = "completed", output = Array.Empty<object>() } }));
+        await Collect(Create(handler), new(Guid.NewGuid(), [], Tools: [ToolRegistry.Get(ToolCatalog.BrowserClose).ModelDefinition]));
+        using var request = JsonDocument.Parse(handler.Bodies[0]);
+        var tool = request.RootElement.GetProperty("tools")[0];
+        Assert.Equal("browser_close", tool.GetProperty("name").GetString());
+        Assert.Contains("{\"operation\":\"close\"}", tool.GetProperty("description").GetString());
+        var schema = tool.GetProperty("parameters");
+        Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
+        Assert.False(schema.TryGetProperty("required", out _));
+        var operation = Assert.Single(schema.GetProperty("properties").EnumerateObject());
+        Assert.Equal("operation", operation.Name);
+        Assert.Equal("string", operation.Value.GetProperty("type").GetString());
+        Assert.Equal("close", operation.Value.GetProperty("enum")[0].GetString());
     }
 
     [Fact]

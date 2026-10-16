@@ -153,7 +153,7 @@ public sealed class GenerationRetryTests
         await SessionRuntimeFixture.SettleRetriesAsync(runtime);
 
         Assert.Equal(3, model.Calls);
-        Assert.Contains(model.Requests[1].Messages, message => message.Role == ModelRole.Tool && message.Text.Contains("requires exactly {}", StringComparison.Ordinal));
+        Assert.Contains(model.Requests[1].Messages, message => message.Role == ModelRole.Tool && message.Text.Contains("browser.close accepts only", StringComparison.Ordinal));
         Assert.Equal(1, browser.CloseCalls);
         Assert.Equal(
             EntryStatus.Completed,

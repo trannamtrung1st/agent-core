@@ -117,19 +117,28 @@ public static class BrowserToolArguments
         TryRequest(sessionId, tool, args, out var request, out var error) ? request
             : throw new ArgumentException(error + ": " + TargetGuidance);
 
+    internal const string CloseGuidance = "Call with {\"operation\":\"close\"} or {}. Do not add request, arguments, parameters, dummy fields or any other wrapper. Closure retains saved profile data and does not establish sign-out.";
+    private static readonly string CloseError = JsonSerializer.Serialize(new { error = "invalid", message = "browser.close accepts only {\"operation\":\"close\"} or {}. Omit every other field and wrapper." });
+
     public static bool TryValidateClose(string? json, out string errorJson)
     {
         errorJson = "";
-        if (string.IsNullOrWhiteSpace(json))
-        { errorJson = "{\"error\":\"invalid\",\"message\":\"browser.close requires exactly {}. Omit every parameter.\"}"; return false; }
-        try
+        if (!string.IsNullOrWhiteSpace(json))
         {
-            using var document = JsonDocument.Parse(json);
-            var value = document.RootElement;
-            if (value.ValueKind == JsonValueKind.Object && !value.EnumerateObject().Any()) return true;
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                var value = document.RootElement;
+                if (value.ValueKind == JsonValueKind.Object)
+                {
+                    var fields = value.EnumerateObject().ToArray();
+                    if (fields.Length == 0 || fields.Length == 1 && fields[0].Name == "operation"
+                        && fields[0].Value.ValueKind == JsonValueKind.String && fields[0].Value.GetString() == "close") return true;
+                }
+            }
+            catch (JsonException) { }
         }
-        catch (JsonException) { }
-        errorJson = "{\"error\":\"invalid\",\"message\":\"browser.close requires exactly {}. Omit every parameter.\"}";
+        errorJson = CloseError;
         return false;
     }
 
