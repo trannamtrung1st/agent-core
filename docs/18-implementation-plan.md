@@ -7,7 +7,9 @@ Implement the owner-requested complete successor in dependency order: baseline b
 No intermediate insecure production release, dual owner/IAM fallback, implicit tenant or live-data reset is permitted. Disposable tests use new roots only. Complete each phase's integrated gate before depending on it. CI remains explicit opt-in. This replacement supersedes the original authentication/multi-tenant exclusions without reopening historical milestone acceptance.
 
 
-Canonical tenant Instance Skills/resources now have focused HTTP, both-store and SQLite recovery evidence, with separate typed tenant permissions, parent ownership, atomic child/security/audit writes and legacy owned-data exclusion. [Child checkpoint](reports/tenant-instance-children-verification-2026-10-16.md) is Phase 4 progress only. Per-item child scopes/grants, tenant Sandbox/decommission, remaining owning stores/effects, execution lineage, durable approvals, complete UI and final obsolete-authority/schema removal remain required; the full goal stays active.
+Canonical tenant Instance Skills/resources now have focused HTTP, both-store and SQLite recovery evidence, with separate typed tenant permissions, parent ownership, atomic child/security/audit writes and legacy owned-data exclusion. [Child checkpoint](reports/tenant-instance-children-verification-2026-10-16.md) is Phase 4 progress only. Definition child scopes/grants, tenant Sandbox/decommission, remaining owning stores/effects, execution lineage, durable approvals, complete UI and final obsolete-authority/schema removal remain required; the full goal stays active.
+
+The Instance-child IAM successor adds current owner/source-qualified Resource scopes, exact typed reads/writes, filtered projections and atomic grant retirement on delete/adoption. [2026-10-17 verification](reports/tenant-instance-child-iam-verification-2026-10-17.md) records both-store, HTTP, shipped-source and restart evidence. This advances Phase 4 without completing other resource families, runtime/approval/UI or the final obsolete-authority/schema removal.
 
 ## Automatic Sandbox filesystem compatibility (2026-10-16)
 

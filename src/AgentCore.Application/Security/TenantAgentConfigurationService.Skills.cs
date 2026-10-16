@@ -14,22 +14,26 @@ public sealed partial class TenantAgentConfigurationService
 {
     public async ValueTask<TenantAgentSkillPage> ReadSkillsAsync(Guid actor, Guid tenant, Guid id, int page = 0, int pageSize = 30, CancellationToken ct = default)
     {
-        await ChildReadState(actor, tenant, id, "skills.read", ct).ConfigureAwait(false);
+        await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
         var (snapshot, baseline) = await BoundForRead(actor, tenant, id, ct).ConfigureAwait(false);
         var definition = EffectiveChildDefinition(snapshot, baseline);
         var policy = ManagementPolicyResolver.Resolve(definition, snapshot.Agent.Instance);
         var items = AgentInstanceSkillService.Views(definition, snapshot.Skills).Concat(AgentInstanceSkillService.BuiltIns(definition, policy, snapshot.Agent.Instance))
             .Select(s => s with { InstanceRevision = snapshot.Agent.Instance.Revision }).ToArray();
-        var state = await ChildReadState(actor, tenant, id, "skills.read", ct).ConfigureAwait(false);
+        var state = await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
+        var visible = await VisibleChildren(state, actor, tenant, id, "skills.read", items, s => s.Key, ct, true).ConfigureAwait(false);
         page = Math.Clamp(page, 0, 100_000); pageSize = Math.Clamp(pageSize, 1, 100);
-        return new(items.Skip(page * pageSize).Take(pageSize).ToArray(), items.Length, page, pageSize, snapshot.Agent.Instance.Revision, state.Tenant.Revision);
+        return new(visible.Items.Skip(page * pageSize).Take(pageSize).ToArray(), visible.Items.Length, page, pageSize, snapshot.Agent.Instance.Revision, state.Tenant.Revision);
     }
 
     public ValueTask<TenantAgentSkillSaved> WriteSkillAsync(Guid actor, Guid tenant, Guid id, string operation,
         long securityRevision, long instanceRevision, string? key = null, long? expectedSkillRevision = null,
         InstanceSkillInput? input = null, bool? enabled = null, CancellationToken ct = default) => WithChildGate<TenantAgentSkillSaved>(id, async token =>
     {
-        var state = await ChildChangeState(actor, tenant, id, "skills.manage", "skills.read", securityRevision, token).ConfigureAwait(false);
+        var state = await ChildChangeState(actor, tenant, id, "skills.manage", "skills.read", securityRevision, token,
+            operation is "create" or "customize" ? null : key ?? throw new AccessDeniedException("resource_unavailable")).ConfigureAwait(false);
+        if (operation == "customize")
+            await RequireChildPermission(state, actor, "skills.read", ChildScope(tenant, id, "skills.read", key ?? throw new AccessDeniedException("resource_unavailable")), token).ConfigureAwait(false);
         var snapshot = await Snapshot(tenant, id, token).ConfigureAwait(false); var owner = snapshot.Agent.Instance;
         RequireWritable(owner, instanceRevision);
         var (baseline, _, _) = await Definition(tenant, owner.DefinitionId, owner.ActiveVersion, token).ConfigureAwait(false);
@@ -64,24 +68,6 @@ public sealed partial class TenantAgentConfigurationService
         return new(prepared.Skill with { InstanceRevision = saved.Instance.Revision }, prepared.DefinitionSkill, saved.Instance.Revision, state.Tenant.Revision + 1, true);
     }, ct);
 
-    private async ValueTask<TenantSecurityState> ChildReadState(Guid actor, Guid tenant, Guid id, string permission, CancellationToken ct)
-    {
-        var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
-        foreach (var (key, scope) in new[] { ("agents.read", Scope(tenant, id)), (permission, AccessScope.ForTenant(tenant)) })
-        {
-            var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false);
-            if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
-        }
-        return state;
-    }
-    private async ValueTask<TenantSecurityState> ChildChangeState(Guid actor, Guid tenant, Guid id, string permission, string read, long expected, CancellationToken ct)
-    {
-        var state = await ChildReadState(actor, tenant, id, read, ct).ConfigureAwait(false);
-        var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(permission), AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
-        if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
-        if (state.Tenant.Revision != expected) throw new SecurityConflictException("stale_revision");
-        return state;
-    }
     private ValueTask<T> WithChildGate<T>(Guid id, Func<CancellationToken, ValueTask<T>> action, CancellationToken ct) =>
         lifecycleGate is null ? action(ct) : lifecycleGate.WithInstanceAsync(id, action, ct);
 }

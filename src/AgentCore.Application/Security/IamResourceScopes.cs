@@ -3,17 +3,27 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 // Member/role/agent ownership is in security state; definition ownership resolves through its
-// actual store. Other families fail closed. An arbitrary resource string is never an owner.
+// actual store, including owner-qualified Instance children. An arbitrary string is never an owner.
 public static class IamResourceScopes
 {
     public static AccessScope Create(Guid tenantId, string? resourceType, string? resourceId)
     {
         if (resourceType is null && resourceId is null) return AccessScope.ForTenant(tenantId);
+        if (resourceType is "skill" or "resource")
+        {
+            var child = AccessScope.ForResource(tenantId, resourceType, resourceId ?? "");
+            if (!TenantAgentChildScopes.TryParse(child, out _, out _)) throw new AccessDeniedException("resource_unavailable");
+            return child;
+        }
         if (tenantId == Guid.Empty || resourceType is not ("member" or "role" or "agent" or "definition")
             || !Guid.TryParse(resourceId, out var id) || id == Guid.Empty)
             throw new AccessDeniedException("resource_unavailable");
         return AccessScope.ForResource(tenantId, resourceType, id.ToString("D"));
     }
+
+    public static bool ExternalShape(AccessScope scope) => scope.ResourceType == "definition"
+        ? Guid.TryParseExact(scope.ResourceId, "D", out var id) && id != Guid.Empty && scope.ResourceId == id.ToString("D")
+        : TenantAgentChildScopes.TryParse(scope, out _, out _);
 
     public static bool Exists(TenantSecurityState state, AccessScope scope)
     {

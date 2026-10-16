@@ -27,10 +27,16 @@ public sealed partial class InMemoryIamStore
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAgent?>(null);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
-            ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit);
+            ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
             var current = FindTenantAgentAsync(next.Tenant.TenantId, change.InstanceId, ct).Result;
             if (current is null || current.Instance.Revision != change.ExpectedInstanceRevision) return ValueTask.FromResult<TenantAgent?>(null);
             _ = TenantAgentConfigurationRules.Apply(current.Instance, change, at);
+            if (next.Assignments.Any(a => TenantAgentChildScopes.BelongsTo(a.Scope, change.InstanceId)))
+            {
+                var available = ChildCatalog(next.Tenant.TenantId, change.InstanceId, change, ct);
+                if (next.Assignments.Any(a => TenantAgentChildScopes.BelongsTo(a.Scope, change.InstanceId) && !available.Contains(a.Scope)))
+                    throw new ArgumentException("Retire grants for removed children in the same Instance transaction.");
+            }
             if (change.ActiveVersion is { } version && Guid.TryParse(current.Instance.DefinitionId, out var definitionId))
             {
                 var publication = definitions.TenantPublication(next.Tenant.TenantId, definitionId, version);

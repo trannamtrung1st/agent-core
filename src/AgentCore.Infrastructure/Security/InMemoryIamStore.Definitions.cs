@@ -9,8 +9,10 @@ public sealed partial class InMemoryIamStore
 {
     public ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); lock (_gate) lock (definitions.TenantGate)
-            return ValueTask.FromResult(scope.Kind == AccessScopeKind.Resource && scope.ResourceType == "definition"
+        ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
+            return ValueTask.FromResult(TenantAgentChildScopes.TryParse(scope, out var instance, out _)
+                ? ChildCatalog(scope.TenantId!.Value, instance, null, ct).Contains(scope)
+                : scope.Kind == AccessScopeKind.Resource && scope.ResourceType == "definition"
                 && scope.TenantId is { } tenant && tenant != Guid.Empty && Guid.TryParseExact(scope.ResourceId, "D", out var id) && scope.ResourceId == id.ToString("D")
                 && definitions.OwnsActiveDefinition(tenant, id));
     }
@@ -57,7 +59,7 @@ public sealed partial class InMemoryIamStore
         lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expected) return null;
-            IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit);
+            IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
             var result = change(); if (result is null) return null;
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit); return result;
         }

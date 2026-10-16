@@ -5,6 +5,22 @@ namespace AgentCore.Application.Security;
 
 public static class IamStateRules
 {
+    public static IReadOnlyList<(TenantSecurityState State, Guid Principal)> SecurityWriteActors(
+        TenantSecurityState before, TenantSecurityState next, AuthorizationAudit audit)
+    {
+        if (before.Principals.Any(p => p.PrincipalId == audit.ActorPrincipalId)) return [(before, audit.ActorPrincipalId)];
+        // Invitation acceptance is the one security write attributed to a not-yet-member.
+        // Its proof is checked by the service; commit must still fence both Accounts/statuses.
+        if (audit.Action != "members.accept_invitation" || !Guid.TryParse(audit.Target, out var id))
+            throw new AccessDeniedException("principal_unavailable");
+        var principal = next.Principals.SingleOrDefault(p => p.PrincipalId == audit.ActorPrincipalId && p.Kind == PrincipalKind.User);
+        var invitation = before.Invitations.SingleOrDefault(i => i.InvitationId == id && !i.Revoked && i.AcceptedAt is null && i.ExpiresAt > audit.At);
+        if (principal is null || invitation is null || before.Users.Any(u => u.AccountId == principal.AccountId)
+            || !next.Invitations.Any(i => i.InvitationId == id && i.AcceptedAt is not null))
+            throw new AccessDeniedException("invitation_unavailable");
+        return [(next, audit.ActorPrincipalId), (before, invitation.InvitedByPrincipalId)];
+    }
+
     public static void ValidateAgentWrite(TenantSecurityState next, long expected, Guid instanceId, AgentInstanceLifecycle lifecycle, AuthorizationAudit audit)
     {
         if (audit.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expected + 1) || !Enum.IsDefined(lifecycle))
@@ -59,7 +75,7 @@ public static class IamStateRules
         Require(state.Assignments.All(a => a.TenantId == tenantId && a.Scope.TenantId == tenantId && a.Scope.Kind != AccessScopeKind.System
             && IamAuthorizer.ValidScope(a.Scope) && state.Roles.Any(r => r.RoleId == a.RoleId)
             && (a.Scope.Kind != AccessScopeKind.Resource || IamResourceScopes.Exists(state, a.Scope)
-                || a.Scope.ResourceType == "definition" && Guid.TryParseExact(a.Scope.ResourceId, "D", out var definitionId) && definitionId != Guid.Empty && a.Scope.ResourceId == definitionId.ToString("D"))
+                || IamResourceScopes.ExternalShape(a.Scope))
             && state.Principals.Any(p => p.PrincipalId == a.PrincipalId)
             && (state.Principals.Single(p => p.PrincipalId == a.PrincipalId).Kind == PrincipalKind.User || !state.Roles.Single(r => r.RoleId == a.RoleId).HumanOnly)
             && (state.Roles.Single(r => r.RoleId == a.RoleId).Key != BuiltinAccessRoles.Owner || a.Scope.Kind == AccessScopeKind.Tenant)));

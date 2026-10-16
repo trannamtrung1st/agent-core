@@ -1,5 +1,6 @@
 using AgentCore.Application.Ports;
 using AgentCore.Infrastructure;
+using AgentCore.Infrastructure.Security;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Infrastructure.Tests;
@@ -11,6 +12,7 @@ public sealed class DefinitionResourceInfrastructureDiTests
     {
         var services = new ServiceCollection();
         services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic");
+        services.AddAgentCoreIdentity();
         using var provider = services.BuildServiceProvider();
         var definitions = provider.GetRequiredService<IAgentDefinitionStore>();
         var resources = provider.GetRequiredService<IAgentDefinitionResourceAdminStore>();
@@ -18,6 +20,7 @@ public sealed class DefinitionResourceInfrastructureDiTests
         Assert.NotNull(definitions);
         Assert.NotNull(resources);
         Assert.NotNull(content);
+        Assert.NotNull(provider.GetRequiredService<IIamStore>());
     }
 
     private static string FindAgents()

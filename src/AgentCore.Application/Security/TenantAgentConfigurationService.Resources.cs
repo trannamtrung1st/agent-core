@@ -17,12 +17,14 @@ public sealed partial class TenantAgentConfigurationService
 {
     public async ValueTask<TenantAgentResources> ReadResourcesAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
     {
-        await ChildReadState(actor, tenant, id, "resources.read", ct).ConfigureAwait(false);
+        await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
         var (snapshot, baseline) = await BoundForRead(actor, tenant, id, ct).ConfigureAwait(false);
         var definition = EffectiveChildDefinition(snapshot, baseline);
         var views = AgentInstanceResourceService.Views(definition, await Resources(tenant, baseline, ct).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
-        var state = await ChildReadState(actor, tenant, id, "resources.read", ct).ConfigureAwait(false);
-        return new(new(snapshot.Agent.Instance.Revision, baseline.Id, baseline.Version, views), state.Tenant.Revision);
+        var state = await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
+        var visible = await VisibleChildren(state, actor, tenant, id, "resources.read", views, r => r.Key, ct, true).ConfigureAwait(false);
+        return new(new(snapshot.Agent.Instance.Revision, baseline.Id, baseline.Version,
+            await SafeResourceViews(state, actor, tenant, id, visible.Items, ct).ConfigureAwait(false)), state.Tenant.Revision);
     }
 
     public async ValueTask<TenantAgentResourceContent> ReadResourceContentAsync(Guid actor, Guid tenant, Guid id, string key, CancellationToken ct = default)
@@ -30,7 +32,7 @@ public sealed partial class TenantAgentConfigurationService
         var catalog = await ReadResourcesAsync(actor, tenant, id, ct).ConfigureAwait(false);
         var view = catalog.Catalog.Resources.SingleOrDefault(r => r.Key == key) ?? throw new AccessDeniedException("resource_unavailable");
         var bytes = await Content(view, ct).ConfigureAwait(false);
-        await ChildReadState(actor, tenant, id, "resources.read", ct).ConfigureAwait(false);
+        await ChildReadState(actor, tenant, id, "resources.read", ct, key).ConfigureAwait(false);
         var current = await Snapshot(tenant, id, ct).ConfigureAwait(false);
         if (current.Agent.Instance.Revision != catalog.Catalog.InstanceRevision) throw new SecurityConflictException("resource_changed");
         return new(view, bytes);
@@ -39,7 +41,9 @@ public sealed partial class TenantAgentConfigurationService
     public ValueTask<TenantAgentResourceSaved> UpsertResourceAsync(Guid actor, Guid tenant, Guid id, long securityRevision,
         long instanceRevision, TenantAgentResourceInput input, CancellationToken ct = default) => WithChildGate<TenantAgentResourceSaved>(id, async token =>
     {
-        var state = await ChildChangeState(actor, tenant, id, "resources.manage", "resources.read", securityRevision, token).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(input);
+        var state = await ChildChangeState(actor, tenant, id, "resources.manage", "resources.read", securityRevision, token,
+            input.ResourceId is { } resourceId ? "instance:" + resourceId.ToString("D") : null).ConfigureAwait(false);
         var (snapshot, baseline) = await ResourceWritable(actor, tenant, id, instanceRevision, state, token).ConfigureAwait(false);
         return await SaveResource(actor, tenant, state, snapshot, baseline, input, null, token).ConfigureAwait(false);
     }, ct);
@@ -48,6 +52,7 @@ public sealed partial class TenantAgentConfigurationService
         long securityRevision, long instanceRevision, CancellationToken ct = default) => WithChildGate<TenantAgentResourceSaved>(id, async token =>
     {
         var state = await ChildChangeState(actor, tenant, id, "resources.manage", "resources.read", securityRevision, token).ConfigureAwait(false);
+        await RequireChildPermission(state, actor, "resources.read", ChildScope(tenant, id, "resources.read", key), token).ConfigureAwait(false);
         var (snapshot, baseline) = await ResourceWritable(actor, tenant, id, instanceRevision, state, token).ConfigureAwait(false);
         var parsed = AgentInstanceResourceService.ParseKey(key);
         if (parsed.Origin != "definition") throw AgentCoreErrors.Validation("Copy requires a Definition resource.");
@@ -61,7 +66,7 @@ public sealed partial class TenantAgentConfigurationService
     public ValueTask<TenantAgentResourceSaved> ChangeResourceAsync(Guid actor, Guid tenant, Guid id, string key, bool delete, bool? enabled,
         long securityRevision, long instanceRevision, long expectedResourceRevision, CancellationToken ct = default) => WithChildGate<TenantAgentResourceSaved>(id, async token =>
     {
-        var state = await ChildChangeState(actor, tenant, id, delete ? "resources.delete" : "resources.manage", "resources.read", securityRevision, token).ConfigureAwait(false);
+        var state = await ChildChangeState(actor, tenant, id, delete ? "resources.delete" : "resources.manage", "resources.read", securityRevision, token, key).ConfigureAwait(false);
         var (snapshot, baseline) = await ResourceWritable(actor, tenant, id, instanceRevision, state, token).ConfigureAwait(false);
         var published = await Resources(tenant, baseline, token).ConfigureAwait(false); var definition = EffectiveChildDefinition(snapshot, baseline);
         var view = AgentInstanceResourceService.Views(definition, published, snapshot.Resources, snapshot.Skills).SingleOrDefault(r => r.Key == key)
@@ -87,7 +92,8 @@ public sealed partial class TenantAgentConfigurationService
         var next = ResourceAfter(snapshot.Resources, mutation);
         _ = AgentInstanceResourceService.Resolve(definition, published, next, snapshot.Skills);
         var saved = await Commit(actor, tenant, state, new(id, instanceRevision, Resource: mutation), delete ? "resources.delete" : "resources.choice.update", token).ConfigureAwait(false);
-        var result = delete ? null : AgentInstanceResourceService.Views(definition, published, next, snapshot.Skills).Single(r => r.Key == key);
+        var result = delete ? null : (await SafeResourceViews(state, actor, tenant, id,
+            [AgentInstanceResourceService.Views(definition, published, next, snapshot.Skills).Single(r => r.Key == key)], token).ConfigureAwait(false)).Single();
         return new(result, saved.Instance.Revision, state.Tenant.Revision + 1);
     }, ct);
 

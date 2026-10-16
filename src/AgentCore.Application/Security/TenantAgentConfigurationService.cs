@@ -10,7 +10,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public sealed record TenantAgentChildAccess(bool Skills, bool Resources);
+public sealed record TenantAgentChildAccess(bool Skills, bool Resources, bool AllSkills, bool AllResources);
 public sealed record TenantAgentEffectiveConfiguration(TenantAgent Agent, AgentDefinition Definition,
     AdminEffectiveConfiguration Effective, IReadOnlyList<EffectiveSkill> Skills,
     IReadOnlyList<EffectiveAgentResource> Resources, long SecurityRevision, TenantAgentChildAccess ChildAccess);
@@ -33,20 +33,19 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         var parent = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agents.read"), Scope(tenant, id), ct).ConfigureAwait(false);
         if (!parent.Allowed) throw new AccessDeniedException(parent.ReasonCode);
-        async ValueTask<bool> Child(string permission)
-        {
-            var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(permission), AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
-            if (!decision.Allowed && decision.ReasonCode != "permission_denied") throw new AccessDeniedException(decision.ReasonCode);
-            return decision.Allowed;
-        }
-        var canReadSkills = await Child("skills.read").ConfigureAwait(false); var canReadResources = await Child("resources.read").ConfigureAwait(false);
-        var skillView = canReadSkills ? EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills) : [];
-        var visible = effective with { Skills = canReadSkills ? effective.Skills : [],
-            Environment = canReadResources ? effective.Environment : RoleEnvironments.Of(effective) with { KnowledgeSources = [] } };
+        var skillKeys = effective.SkillList.Select(s => "definition:" + s.Id).Concat(snapshot.Skills.InstanceSkills.Select(s => "instance:" + s.SkillId))
+            .Concat(ManagementBuiltInSkills.Catalog.Select(s => s.Key)).ToArray();
+        var readableSkills = await VisibleChildren(state, actor, tenant, id, "skills.read", skillKeys, key => key, ct).ConfigureAwait(false);
+        var readableResources = await VisibleChildren(state, actor, tenant, id, "resources.read", manifest, r => r.Key, ct).ConfigureAwait(false);
+        var allowedSkills = readableSkills.Items.ToHashSet(StringComparer.Ordinal);
+        var skillView = EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills).Where(s => allowedSkills.Contains(s.Key)).ToArray();
+        var visible = effective with { Skills = effective.SkillList.Where(s => allowedSkills.Contains("definition:" + s.Id)).ToArray(),
+            Environment = readableResources.All ? effective.Environment : RoleEnvironments.Of(effective) with { KnowledgeSources = [] } };
         var overview = AdminEffectiveConfigurationResolver.Resolve(snapshot.Agent.Instance, baseline, models, tools,
             Guid.TryParse(baseline.Id, out _) ? "TenantPublication" : "BuiltIn", status);
-        if (!canReadResources) overview = overview with { KnowledgeSources = [] };
-        return new(snapshot.Agent, visible, overview, skillView, canReadResources ? manifest : [], state.Tenant.Revision, new(canReadSkills, canReadResources));
+        if (!readableResources.All) overview = overview with { KnowledgeSources = [] };
+        return new(snapshot.Agent, visible, overview, skillView, readableResources.Items, state.Tenant.Revision,
+            new(readableSkills.All || readableSkills.Items.Length > 0, readableResources.All || readableResources.Items.Length > 0, readableSkills.All, readableResources.All));
 
     }
 
@@ -84,6 +83,13 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
     private async ValueTask<TenantAgent> Commit(Guid actor, Guid tenant, TenantSecurityState state, TenantAgentConfigurationChange change, string action, CancellationToken ct)
     {
         var now = time.GetUtcNow(); var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
+        if (state.Assignments.Any(a => TenantAgentChildScopes.BelongsTo(a.Scope, change.InstanceId)))
+        {
+            var snapshot = TenantAgentChildScopes.After(await Snapshot(tenant, change.InstanceId, ct).ConfigureAwait(false), change);
+            var (definition, _, _) = await Definition(tenant, snapshot.Agent.Instance.DefinitionId, snapshot.Agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
+            next = TenantAgentChildScopes.RetainAvailable(next, change.InstanceId,
+                TenantAgentChildScopes.Catalog(tenant, snapshot, definition, await Resources(tenant, definition, ct).ConfigureAwait(false)));
+        }
         return await agents.TryChangeTenantAgentConfigurationAsync(next, state.Tenant.Revision, change, now,
             new(ids.NewId(), tenant, actor, action, change.InstanceId.ToString("D"), "allowed", "authorized", now), ct).ConfigureAwait(false)
             ?? throw new SecurityConflictException("stale_revision");

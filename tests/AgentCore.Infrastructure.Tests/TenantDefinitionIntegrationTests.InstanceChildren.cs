@@ -120,7 +120,10 @@ public sealed partial class TenantDefinitionIntegrationTests
         var saved = await configuration.UpsertResourceAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), 1,
             new(null, null, "protected.txt", AgentDefinitionResourceKind.Reference, "text/plain", Encoding.UTF8.GetBytes("Protected bytes.")));
         var state = (await f.Iam.ReadTenantAsync(owner.TenantId))!;
-        var grant = await f.Access.AssignRoleAsync(owner.OwnerPrincipalId, owner.TenantId, agent.PrincipalId, state.Roles.Single(r => r.Key == "contributor").RoleId, AccessScope.ForTenant(owner.TenantId), state.Tenant.Revision);
+        await f.Access.AssignRoleAsync(owner.OwnerPrincipalId, owner.TenantId, agent.PrincipalId, state.Roles.Single(r => r.Key == "reader").RoleId,
+            AccessScope.ForResource(owner.TenantId, "agent", id.ToString("D")), state.Tenant.Revision);
+        var grant = await f.Access.AssignRoleAsync(owner.OwnerPrincipalId, owner.TenantId, agent.PrincipalId, state.Roles.Single(r => r.Key == "contributor").RoleId,
+            TenantAgentChildScopes.Scope(owner.TenantId, id, "resource", saved.Resource!.Key), await Revision());
         var content = new GatedInstanceContent(f.Content);
         var reader = ConfigurationServices(f, content: content).Configuration;
         var pending = reader.ReadResourceContentAsync(agent.PrincipalId, owner.TenantId, id, saved.Resource!.Key).AsTask();

@@ -45,7 +45,7 @@ public sealed partial class InMemoryIamStore
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult(false);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
             ValidateAgentActor(before, audit.ActorPrincipalId);
-            EnsureReferences(next, audit, instance.InstanceId);
+            EnsureReferences(next, audit, instance.InstanceId, ct);
             if (instances.FindTenantBackingAsync(instance.InstanceId, ct).Result is not null) return ValueTask.FromResult(false);
             instances.InsertAsync(instance, ct, skills).GetAwaiter().GetResult();
             _tenants[next.Tenant.TenantId] = next; MarkOwnedAgents(next); _audit.Add(audit);
@@ -62,7 +62,7 @@ public sealed partial class InMemoryIamStore
         {
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAgent?>(null);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
-            ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit);
+            ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit, ct: ct);
             var current = instances.FindTenantBackingAsync(instanceId, ct).Result;
             if (!before.SystemIdentities.Any(i => i.AgentInstanceId == instanceId) || current is null || current.Revision != expectedInstanceRevision) return ValueTask.FromResult<TenantAgent?>(null);
             var updated = instances.SetTenantLifecycleAsync(instanceId, expectedInstanceRevision, lifecycle, at, ct).Result;

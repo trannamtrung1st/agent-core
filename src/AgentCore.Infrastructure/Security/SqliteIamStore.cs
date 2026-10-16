@@ -7,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Security;
 
-public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore
+public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null,
+    IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore
 {
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await db.Set<Account>().AsNoTracking().SingleOrDefaultAsync(a => a.LoginKey == loginKey, ct).ConfigureAwait(false); }
@@ -108,8 +109,10 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var current = await db.Set<Tenant>().SingleOrDefaultAsync(t => t.TenantId == tenant.Tenant.TenantId, ct).ConfigureAwait(false);
         if (current is null || current.Revision != expectedRevision) return false;
-        var previousIdentities = (await db.Set<IamSystemIdentityRow>().AsNoTracking().Where(i => i.TenantId == tenant.Tenant.TenantId).ToArrayAsync(ct).ConfigureAwait(false)).Select(IamPersistenceModel.Domain).ToArray();
-        IamStateRules.ValidateAgentContinuity(previousIdentities, tenant);
+        var before = (await ReadTenantAsync(db, tenant.Tenant.TenantId, ct).ConfigureAwait(false))!;
+        IamStateRules.ValidateAgentContinuity(before.SystemIdentities, tenant);
+        foreach (var actor in IamStateRules.SecurityWriteActors(before, tenant, audit))
+            await ValidateTenantActorAsync(db, actor.State, actor.Principal, ct).ConfigureAwait(false);
         await EnsureActiveAccountOwnerAsync(db, tenant, null, ct).ConfigureAwait(false);
         await EnsureResourceOwnershipAsync(db, tenant, ct).ConfigureAwait(false);
         db.Entry(current).CurrentValues.SetValues(tenant.Tenant);
@@ -155,11 +158,17 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         if (!accounts.Any(a => (a.AccountId == changed?.AccountId ? changed.Status : a.Status) == IdentityStatus.Active))
             throw new SecurityConflictException("last_owner");
     }
-    private static async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
+    private async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
         foreach (var assignment in state.Assignments.Where(a => a.Scope.Kind == AccessScopeKind.Resource && a.Scope.ResourceType == "definition"))
             if (!await db.Set<TenantDefinitionRecord>().AnyAsync(d => d.TenantId == state.Tenant.TenantId && d.DeletedAt == null && d.DefinitionId == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
                 throw new ArgumentException("A definition assignment requires an owned definition.");
+        foreach (var group in state.Assignments.Where(a => TenantAgentChildScopes.TryParse(a.Scope, out _, out _))
+            .GroupBy(a => { TenantAgentChildScopes.TryParse(a.Scope, out var id, out _); return id; }))
+        {
+            var catalog = await ChildCatalogAsync(db, state.Tenant.TenantId, group.Key, null, ct).ConfigureAwait(false);
+            if (group.Any(a => !catalog.Contains(a.Scope))) throw new ArgumentException("A child assignment requires a current child of the owned Instance.");
+        }
         var instanceIds = state.SystemIdentities.Where(i => i.AgentInstanceId is not null).Select(i => i.AgentInstanceId!.Value.ToString("D")).ToArray();
         if (await db.Set<IamSystemIdentityRow>().AnyAsync(i => i.TenantId != state.Tenant.TenantId
             && i.AgentInstanceId != null && instanceIds.Contains(i.AgentInstanceId), ct).ConfigureAwait(false))

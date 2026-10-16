@@ -9,10 +9,18 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
-    public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default) =>
-        scope.Kind == AccessScopeKind.Resource && scope.ResourceType == "definition" && scope.TenantId is { } tenant
-        && Guid.TryParseExact(scope.ResourceId, "D", out var id) && scope.ResourceId == id.ToString("D")
-        && await FindDefinitionAsync(tenant, id, ct).ConfigureAwait(false) is not null;
+    public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
+    {
+        if (TenantAgentChildScopes.TryParse(scope, out var instance, out _))
+        {
+            await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+            await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            return (await ChildCatalogAsync(db, scope.TenantId!.Value, instance, null, ct).ConfigureAwait(false)).Contains(scope);
+        }
+        return scope.Kind == AccessScopeKind.Resource && scope.ResourceType == "definition" && scope.TenantId is { } tenant
+            && Guid.TryParseExact(scope.ResourceId, "D", out var id) && scope.ResourceId == id.ToString("D")
+            && await FindDefinitionAsync(tenant, id, ct).ConfigureAwait(false) is not null;
+    }
 
     public async ValueTask<TenantDefinition?> FindDefinitionAsync(Guid tenantId, Guid definitionId, CancellationToken ct = default)
     {

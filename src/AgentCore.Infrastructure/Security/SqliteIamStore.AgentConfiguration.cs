@@ -41,6 +41,12 @@ public sealed partial class SqliteIamStore
         if (row is null || row.Revision != change.ExpectedInstanceRevision) return null;
         var current = SqliteAgentInstanceStore.Map(row);
         var updated = TenantAgentConfigurationRules.Apply(current, change, at);
+        if (next.Assignments.Any(a => TenantAgentChildScopes.BelongsTo(a.Scope, change.InstanceId)))
+        {
+            var available = await ChildCatalogAsync(db, next.Tenant.TenantId, change.InstanceId, change, ct).ConfigureAwait(false);
+            if (next.Assignments.Any(a => TenantAgentChildScopes.BelongsTo(a.Scope, change.InstanceId) && !available.Contains(a.Scope)))
+                throw new ArgumentException("Retire grants for removed children in the same Instance transaction.");
+        }
         if (change.ActiveVersion is { } version && Guid.TryParse(current.DefinitionId, out var definitionId))
         {
             var id = definitionId.ToString("D");

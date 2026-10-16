@@ -98,7 +98,14 @@ public sealed class IdentitySqliteRestartTests
         builder.Services.AddSingleton<IIdGenerator, SystemIdGenerator>();
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
-        builder.Services.AddSingleton<IBuiltInAgentDefinitionStore>(new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default));
+        var agentRoot = Path.Combine(directory!.FullName, "agents");
+        var builtIns = new FileAgentDefinitionStore(agentRoot, SyntheticProviderAliases.Default);
+        builder.Services.AddSingleton<IBuiltInAgentDefinitionStore>(builtIns);
+        var content = new FileDefinitionResourceContentStore(Path.Combine(root, "resources"));
+        builder.Services.AddSingleton<IDefinitionResourceContentStore>(content);
+        builder.Services.AddSingleton(new AgentCore.Application.Agents.InheritedDefinitionResourceCatalog(
+            new SqliteAgentDefinitionResourceAdminStore(contexts, content, new SystemIdGenerator(TimeProvider.System)),
+            builtIns, new FileApprovedKnowledgeCatalog(agentRoot), content));
         builder.Services.AddAgentCoreIdentity();
         builder.Services.AddIdentityHttp(builder.Configuration);
         var app = builder.Build();
