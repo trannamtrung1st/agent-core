@@ -13,7 +13,7 @@ public sealed record TenantAgentConfigurationChange(Guid InstanceId, long Expect
     bool SetSettingsOverrides = false, InstanceSettingsOverrides? SettingsOverrides = null,
     bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
     bool SetUnattendedModel = false, string? UnattendedModelCatalogKey = null, string? UnattendedReasoningEffort = null,
-    HarnessManagementState? HarnessManagement = null);
+    HarnessManagementState? HarnessManagement = null, SkillMutation? Skill = null, InstanceResourceMutation? Resource = null);
 
 // Specialized transaction boundary: the existing Instance, its identity, security revision and audit
 // are committed together. Reads filter authoritative identity ownership before ordering/pagination.

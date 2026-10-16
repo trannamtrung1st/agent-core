@@ -52,6 +52,13 @@ public sealed partial class SqliteIamStore
             change = change with { DefinitionSkills = source.Payload.SkillList };
         }
         row.PersonaJson = JsonSerializer.Serialize(updated.Persona, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        if (change.Resource?.Resource is { } binding)
+        {
+            if (definitionContent is null) throw new AccessDeniedException("resource_content_unavailable");
+            _ = await AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(definitionContent, binding.ContentSha256, binding.ByteLength, binding.MediaType, ct).ConfigureAwait(false);
+        }
+        if (change.Skill is { } skill) await SqliteAgentInstanceStore.StageSkillsAsync(db, skill, null, ct).ConfigureAwait(false);
+        if (change.Resource is { } resource) await SqliteAgentInstanceStore.StageResourcesAsync(db, resource, null, ct).ConfigureAwait(false);
         row.PersonaRevision = updated.PersonaRevision; row.ActiveVersion = updated.ActiveVersion;
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         row.SettingsOverridesJson = updated.SettingsOverrides is null ? null : JsonSerializer.Serialize(updated.SettingsOverrides, json);

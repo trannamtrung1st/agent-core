@@ -122,7 +122,7 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
         if (state.Assignments.Any(a => a.Scope.Kind == AccessScopeKind.Resource && a.Scope.ResourceType == "definition"
             && (!Guid.TryParseExact(a.Scope.ResourceId, "D", out var id) || !definitions.OwnsActiveDefinition(state.Tenant.TenantId, id))))
             throw new ArgumentException("A definition assignment requires an owned definition.");
-        if (state.SystemIdentities.Any(i => i.AgentInstanceId != creatingInstance && instances.FindAsync(i.AgentInstanceId!.Value).Result is null))
+        if (state.SystemIdentities.Any(i => i.AgentInstanceId != creatingInstance && instances.FindTenantBackingAsync(i.AgentInstanceId!.Value).Result is null))
             throw new ArgumentException("An agent identity requires a backing Instance.");
         if (state.SystemIdentities.Any(i => _tenants.Values.Any(t => t.Tenant.TenantId != state.Tenant.TenantId
             && t.SystemIdentities.Any(other => other.AgentInstanceId == i.AgentInstanceId))))

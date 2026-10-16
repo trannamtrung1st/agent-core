@@ -876,6 +876,7 @@ internal sealed class GatedUserTurnSqliteFactory(string dbPath) : WebApplication
             }
 
             services.AddSingleton(persistence);
+            TestSqliteIdentity.Configure(services, persistence.ConnectionString, dbPath + ".identity-keys");
             if (services.All(item => item.ServiceType != typeof(IDbContextFactory<AgentCoreDbContext>)))
             {
                 services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite(persistence.ConnectionString));
@@ -1011,6 +1012,7 @@ internal sealed class GatedEndSqliteFactory : WebApplicationFactory<Program>
             }
 
             services.AddSingleton(persistence);
+            TestSqliteIdentity.Configure(services, persistence.ConnectionString, _db + ".identity-keys");
             if (services.All(item => item.ServiceType != typeof(IDbContextFactory<AgentCoreDbContext>)))
             {
                 services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite(persistence.ConnectionString));
@@ -1166,6 +1168,7 @@ internal sealed class PauseAfterEndSqliteFactory : WebApplicationFactory<Program
             }
 
             services.AddSingleton(persistence);
+            TestSqliteIdentity.Configure(services, persistence.ConnectionString, _db + ".identity-keys");
             if (services.All(item => item.ServiceType != typeof(IDbContextFactory<AgentCoreDbContext>)))
             {
                 services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite(persistence.ConnectionString));
@@ -1322,6 +1325,7 @@ internal sealed class FailingEndSqliteFactory : WebApplicationFactory<Program>
             }
 
             services.AddSingleton(persistence);
+            TestSqliteIdentity.Configure(services, persistence.ConnectionString, _db + ".identity-keys");
             if (services.All(item => item.ServiceType != typeof(IDbContextFactory<AgentCoreDbContext>)))
             {
                 services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite(persistence.ConnectionString));
@@ -1458,6 +1462,7 @@ internal sealed class FailingUserTurnSqliteFactory : WebApplicationFactory<Progr
             }
 
             services.AddSingleton(persistence);
+            TestSqliteIdentity.Configure(services, persistence.ConnectionString, _db + ".identity-keys");
             if (services.All(item => item.ServiceType != typeof(IDbContextFactory<AgentCoreDbContext>)))
             {
                 services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite(persistence.ConnectionString));

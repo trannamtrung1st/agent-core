@@ -22,6 +22,8 @@ public sealed partial class SqliteAgentInstanceStore
     public async ValueTask<InstanceSkillSnapshot> ReadSkillsAsync(Guid instanceId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
+        if (await db.Set<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().AnyAsync(i => i.AgentInstanceId == instanceId.ToString("D"), ct))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         return await ReadSkillsAsync(db, instanceId, ct);
     }
     internal static async ValueTask<InstanceSkillSnapshot> ReadSkillsAsync(AgentCoreDbContext db, Guid instanceId, CancellationToken ct)
@@ -39,6 +41,15 @@ public sealed partial class SqliteAgentInstanceStore
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+        if (await db.Set<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().AnyAsync(i => i.AgentInstanceId == m.InstanceId.ToString("D"), ct))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
+        await StageSkillsAsync(db, m, ids, ct);
+        try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
+        catch (DbUpdateConcurrencyException) { throw AgentCoreErrors.Conflict("Skill revision is stale."); }
+        catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Skill mutation conflicted with another write."); }
+    }
+    internal static async ValueTask StageSkillsAsync(AgentCoreDbContext db, SkillMutation m, IIdGenerator? ids, CancellationToken ct)
+    {
         var ownerId = m.InstanceId.ToString("D");
         var owner = await db.AgentInstances.SingleOrDefaultAsync(s => s.InstanceId == ownerId, ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
         if (owner.Lifecycle != "Active") throw AgentCoreErrors.Validation("Archived instances cannot change Skills.");
@@ -69,9 +80,7 @@ public sealed partial class SqliteAgentInstanceStore
             }
         }
         owner.Revision++;
-        if (m.History is not null) AdminEventPersistence.StageAppend(db, m.History, ids.NewId());
-        try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
-        catch (DbUpdateConcurrencyException) { throw AgentCoreErrors.Conflict("Skill revision is stale."); }
-        catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Skill mutation conflicted with another write."); }
+        if (m.History is not null) AdminEventPersistence.StageAppend(db, m.History, (ids ?? throw AgentCoreErrors.Persistence("History identity is unavailable.")).NewId());
     }
+
 }

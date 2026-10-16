@@ -48,6 +48,17 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
     {
         var owner = await WritableAsync(id, expectedInstanceRevision, ct);
         var snapshot = await instances.ReadResourcesAsync(id, ct);
+        var resource = PrepareUpsert(owner, snapshot, resourceId, expectedResourceRevision, path, kind, mediaType, bytes, enabled, actor, ids.NewId(), time.GetUtcNow(), source);
+        await content.StoreVerifiedAsync(resource.ContentSha256, bytes.ToArray(), ct);
+        await instances.MutateResourcesAsync(new(id, owner.Revision, Resource: resource, ExpectedResourceRevision: resourceId is null ? null : expectedResourceRevision,
+            History: History(owner, resource.ResourceId, "upsert", actor), HarnessManagement: harnessManagement), ct);
+        return await ListAsync(id, ct);
+    }
+    internal static AgentInstanceResource PrepareUpsert(AgentInstance owner, InstanceResourceSnapshot snapshot, Guid? resourceId,
+        long? expectedResourceRevision, string path, AgentDefinitionResourceKind kind, string mediaType, byte[] bytes,
+        bool enabled, SkillAuthor actor, Guid newResourceId, DateTimeOffset now, AgentDefinitionPublicationResource? source = null)
+    {
+        var id = owner.InstanceId;
         var old = resourceId is Guid existing ? snapshot.InstanceResources.SingleOrDefault(r => r.ResourceId == existing)
             ?? throw AgentCoreErrors.NotFound("Instance resource was not found.") : null;
         if (old?.Revision != expectedResourceRevision) throw AgentCoreErrors.Conflict("Resource revision is stale.");
@@ -60,14 +71,10 @@ public sealed class AgentInstanceResourceService(IAgentInstanceStore instances, 
         if (kind == AgentDefinitionResourceKind.Knowledge && !DefinitionResourcePolicies.IsTextualKnowledgeMediaType(mediaType))
             throw AgentCoreErrors.Validation("Knowledge resources require supported text content; use Reference or StaticAsset for binary files.");
         var hash = DefinitionResourceContentHasher.ComputeSha256Hex(bytes);
-        var now = time.GetUtcNow();
-        var resource = old is null ? new AgentInstanceResource(id, ids.NewId(), path, kind, mediaType, hash, bytes.LongLength,
+        var resource = old is null ? new AgentInstanceResource(id, newResourceId, path, kind, mediaType, hash, bytes.LongLength,
             enabled, 1, now, now, actor, source?.DefinitionId, source?.Version, source?.ResourceId) : old with { LogicalPath = path, Kind = kind, MediaType = mediaType,
                 ContentSha256 = hash, ByteLength = bytes.LongLength, Enabled = enabled, Revision = old.Revision + 1, UpdatedAt = now };
-        await content.StoreVerifiedAsync(hash, bytes.ToArray(), ct);
-        await instances.MutateResourcesAsync(new(id, owner.Revision, Resource: resource, ExpectedResourceRevision: old?.Revision,
-            History: History(owner, resource.ResourceId, "upsert", actor), HarnessManagement: harnessManagement), ct);
-        return await ListAsync(id, ct);
+        return resource;
     }
     public async ValueTask<InstanceResourceCatalog> CopyAsync(Guid id, string key, long expectedInstanceRevision,
         string logicalPath, CancellationToken ct = default, SkillAuthor actor = SkillAuthor.Admin)

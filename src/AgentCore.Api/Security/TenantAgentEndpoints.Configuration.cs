@@ -11,6 +11,7 @@ public static partial class TenantAgentEndpoints
     private static void MapConfiguration(RouteGroupBuilder group)
     {
         MapSettings(group);
+        MapChildren(group);
         group.MapGet("/agents/{instanceId:guid}/effective-config", (Guid instanceId, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
@@ -20,7 +21,7 @@ public static partial class TenantAgentEndpoints
             return Results.Json(new { agent = Safe(value.Agent), value.Definition,
                 effective = new { value.Effective.DefinitionSource, value.Effective.DefinitionStatus, value.Effective.EffectiveModel,
                     value.Effective.ProviderPreferences, value.Effective.EffectiveToolAllowlist, value.Effective.MemoryPolicy,
-                    value.Effective.TriggerPolicy, value.Effective.KnowledgeSources }, value.Skills, value.Resources, value.SecurityRevision });
+                    value.Effective.TriggerPolicy, value.Effective.KnowledgeSources }, value.Skills, value.Resources, value.SecurityRevision, value.ChildAccess });
         }));
         group.MapPut("/agents/{instanceId:guid}/persona", (Guid instanceId, PersonaRequest body, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

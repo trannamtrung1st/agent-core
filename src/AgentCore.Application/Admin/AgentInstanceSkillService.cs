@@ -16,6 +16,9 @@ public sealed record InstanceSkillView(string Key, SkillOrigin Origin, string Na
 public sealed record DefinitionSkillMutationState(string Key, bool Enabled, long Revision);
 public sealed record InstanceSkillCustomization(InstanceSkillView InstanceSkill, DefinitionSkillMutationState DefinitionSkill);
 
+internal sealed record PreparedInstanceSkill(SkillMutation? Mutation, InstanceSkillSnapshot Next,
+    InstanceSkillView Skill, DefinitionSkillMutationState? DefinitionSkill);
+
 public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAgentDefinitionStore definitions, IIdGenerator ids, TimeProvider time,
     IAgentDefinitionResourceAdminStore? publications = null, InheritedDefinitionResourceCatalog? inheritedResources = null)
 {
@@ -62,6 +65,28 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         }
         var snapshot = await instances.ReadSkillsAsync(id, ct);
         var now = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
+        var prepared = Prepare(owner, definition, snapshot, operation, key, expectedRevision, input, enabled, actor, now);
+        if (prepared.Mutation is null) return (prepared.Skill, prepared.DefinitionSkill);
+        var next = prepared.Next;
+        var local = prepared.Mutation.InstanceSkill;
+        // Writes affect future executions: validate against the owner's current version,
+        // while the trusted execution context continues to govern authorization/copy content.
+        var futureDefinition = definition.Version == owner.ActiveVersion ? definition : await DefinitionAsync(owner, ct);
+        _ = EffectiveSkillCatalogResolver.Resolve(futureDefinition, next);
+        if (inheritedResources is not null || publications is not null)
+            _ = AgentInstanceResourceService.Resolve(futureDefinition, inheritedResources is not null ? await inheritedResources.ListAsync(futureDefinition, ct) : await publications!.ListPublicationResourcesAsync(futureDefinition.Id, futureDefinition.Version, ct),
+                await instances.ReadResourcesAsync(id, ct), next);
+        var history = new AdminEventAppend(ids.NewId(), now, actor == SkillAuthor.Admin ? AdminEventActorKind.LocalOwner : AdminEventActorKind.Agent,
+            AdminEventOperationKind.InstanceSkillsChanged, "agent.instance", id.ToString("D"), owner.Revision + 1,
+            definition.Version, JsonSerializer.Serialize(new { instanceId = id.ToString("D"), operation, skillKey = key ?? "instance:" + local!.SkillId }));
+        ct.ThrowIfCancellationRequested();
+        await instances.MutateSkillsAsync(prepared.Mutation with { History = history }, ct);
+        return (prepared.Skill, prepared.DefinitionSkill);
+    }
+    internal static PreparedInstanceSkill Prepare(AgentInstance owner, AgentDefinition definition, InstanceSkillSnapshot snapshot,
+        string operation, string? key, long? expectedRevision, InstanceSkillInput? input, bool? enabled, SkillAuthor actor, DateTimeOffset now)
+    {
+        var id = owner.InstanceId;
         AgentInstanceSkill? local = null;
         AgentDefinitionSkillState? state = null;
         string? delete = null;
@@ -113,7 +138,7 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
             case "reset_enabled":
                 if (current!.Origin != SkillOrigin.Definition) throw AgentCoreErrors.Validation("Reset requires a Definition Skill.");
                 var inherited = snapshot.DefinitionStates.Single(s => "definition:" + s.DefinitionSkillId == key);
-                if (inherited.EnabledOverride is null) return (current, null);
+                if (inherited.EnabledOverride is null) return new(null, snapshot, current, null);
                 oldStateRevision = inherited.Revision;
                 state = inherited with { EnabledOverride = null, Revision = inherited.Revision + 1, UpdatedAt = now };
                 break;
@@ -132,23 +157,12 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
         }
         var next = new InstanceSkillSnapshot(snapshot.DefinitionStates.Select(s => state?.DefinitionSkillId == s.DefinitionSkillId ? state : s).ToArray(),
             snapshot.InstanceSkills.Where(s => s.SkillId != delete && s.SkillId != local?.SkillId).Concat(local is null ? [] : new[] { local }).ToArray());
-        // Writes affect future executions: validate against the owner's current version,
-        // while the trusted execution context continues to govern authorization/copy content.
-        var futureDefinition = definition.Version == owner.ActiveVersion ? definition : await DefinitionAsync(owner, ct);
-        _ = EffectiveSkillCatalogResolver.Resolve(futureDefinition, next);
-        if (inheritedResources is not null || publications is not null)
-            _ = AgentInstanceResourceService.Resolve(futureDefinition, inheritedResources is not null ? await inheritedResources.ListAsync(futureDefinition, ct) : await publications!.ListPublicationResourcesAsync(futureDefinition.Id, futureDefinition.Version, ct),
-                await instances.ReadResourcesAsync(id, ct), next);
-        var history = new AdminEventAppend(ids.NewId(), now, actor == SkillAuthor.Admin ? AdminEventActorKind.LocalOwner : AdminEventActorKind.Agent,
-            AdminEventOperationKind.InstanceSkillsChanged, "agent.instance", id.ToString("D"), owner.Revision + 1,
-            definition.Version, JsonSerializer.Serialize(new { instanceId = id.ToString("D"), operation, skillKey = key ?? "instance:" + local!.SkillId }));
-        ct.ThrowIfCancellationRequested();
-        await instances.MutateSkillsAsync(new(id, owner.Revision, state, local, delete, oldSkillRevision, oldStateRevision, history), ct);
-        if (delete is not null) return (current!, null);
-        var written = Views(definition, next).Single(s => s.Key == (local is not null ? "instance:" + local.SkillId : key));
-        return (written, operation == "customize" ? new("definition:" + state!.DefinitionSkillId, state.EnabledOverride!.Value, state.Revision) : null);
+        var written = delete is not null ? current! : Views(definition, next).Single(s => s.Key == (local is not null ? "instance:" + local.SkillId : key));
+        return new(new(id, owner.Revision, state, local, delete, oldSkillRevision, oldStateRevision), next, written,
+            operation == "customize" ? new("definition:" + state!.DefinitionSkillId, state.EnabledOverride!.Value, state.Revision) : null);
     }
-    private static IReadOnlyList<InstanceSkillView> BuiltIns(AgentDefinition definition, HarnessManagementPolicy policy, AgentInstance owner)
+
+    internal static IReadOnlyList<InstanceSkillView> BuiltIns(AgentDefinition definition, HarnessManagementPolicy policy, AgentInstance owner)
     {
         var templates = ManagementBuiltInSkills.Catalog;
         return templates.Select(s => new InstanceSkillView(s.Key, SkillOrigin.BuiltIn, s.Name, s.Description, s.Procedure, s.Projection,
@@ -168,7 +182,7 @@ public sealed class AgentInstanceSkillService(IAgentInstanceStore instances, IAg
             if (c != SkillCapabilities.ChatRespond && (!ToolRegistry.TryGet(c, out var descriptor) || !descriptor.DefinitionAuthorizable || !RolePermissions.AllowsTool(definition, c)))
                 throw AgentCoreErrors.Validation($"Required capability '{c}' is not authorized by this Definition.");
     }
-    private static IReadOnlyList<InstanceSkillView> Views(AgentDefinition d, InstanceSkillSnapshot snapshot)
+    internal static IReadOnlyList<InstanceSkillView> Views(AgentDefinition d, InstanceSkillSnapshot snapshot)
     {
         IReadOnlyList<string> Missing(IReadOnlyList<string> required) => required.Where(c => c != SkillCapabilities.ChatRespond && !RolePermissions.AllowsTool(d, c)).ToArray();
         return d.SkillList.Select(s => {

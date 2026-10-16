@@ -10,15 +10,16 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
+public sealed record TenantAgentChildAccess(bool Skills, bool Resources);
 public sealed record TenantAgentEffectiveConfiguration(TenantAgent Agent, AgentDefinition Definition,
     AdminEffectiveConfiguration Effective, IReadOnlyList<EffectiveSkill> Skills,
-    IReadOnlyList<EffectiveAgentResource> Resources, long SecurityRevision);
+    IReadOnlyList<EffectiveAgentResource> Resources, long SecurityRevision, TenantAgentChildAccess ChildAccess);
 
 public sealed partial class TenantAgentConfigurationService(IIamStore security, ITenantAgentStore agents, ITenantDefinitionStore definitions,
     IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, IamAuthorizer authorizer,
     IModelCatalog models, IToolConfigurationGate tools, InstanceAutomationPolicy automationPolicy,
     IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null, SandboxPolicyEnforcement? sandbox = null,
-    ProviderAliasSet? aliases = null, IBrowser? browser = null)
+    ProviderAliasSet? aliases = null, IBrowser? browser = null, IDefinitionResourceContentStore? content = null)
 {
     public async ValueTask<TenantAgentEffectiveConfiguration> ReadAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
     {
@@ -29,11 +30,24 @@ public sealed partial class TenantAgentConfigurationService(IIamStore security, 
         var effective = InstanceSettingsResolver.Resolve(baseline, snapshot.Agent.Instance.SettingsOverrides) with
             { SelfManagement = ManagementPolicyResolver.Resolve(baseline, snapshot.Agent.Instance) };
         var manifest = AgentInstanceResourceService.Resolve(effective, resources, snapshot.Resources, snapshot.Skills);
-        await authorizer.RequireAsync(actor, "agents.read", Scope(tenant, id), ct).ConfigureAwait(false);
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
-        return new(snapshot.Agent, effective, AdminEffectiveConfigurationResolver.Resolve(snapshot.Agent.Instance, baseline, models, tools,
-            Guid.TryParse(baseline.Id, out _) ? "TenantPublication" : "BuiltIn", status),
-            EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills), manifest, state.Tenant.Revision);
+        var parent = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agents.read"), Scope(tenant, id), ct).ConfigureAwait(false);
+        if (!parent.Allowed) throw new AccessDeniedException(parent.ReasonCode);
+        async ValueTask<bool> Child(string permission)
+        {
+            var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(permission), AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
+            if (!decision.Allowed && decision.ReasonCode != "permission_denied") throw new AccessDeniedException(decision.ReasonCode);
+            return decision.Allowed;
+        }
+        var canReadSkills = await Child("skills.read").ConfigureAwait(false); var canReadResources = await Child("resources.read").ConfigureAwait(false);
+        var skillView = canReadSkills ? EffectiveSkillCatalogResolver.Resolve(effective, snapshot.Skills) : [];
+        var visible = effective with { Skills = canReadSkills ? effective.Skills : [],
+            Environment = canReadResources ? effective.Environment : RoleEnvironments.Of(effective) with { KnowledgeSources = [] } };
+        var overview = AdminEffectiveConfigurationResolver.Resolve(snapshot.Agent.Instance, baseline, models, tools,
+            Guid.TryParse(baseline.Id, out _) ? "TenantPublication" : "BuiltIn", status);
+        if (!canReadResources) overview = overview with { KnowledgeSources = [] };
+        return new(snapshot.Agent, visible, overview, skillView, canReadResources ? manifest : [], state.Tenant.Revision, new(canReadSkills, canReadResources));
+
     }
 
     public ValueTask<TenantAgent> UpdatePersonaAsync(Guid actor, Guid tenant, Guid id, AgentIdentity persona,

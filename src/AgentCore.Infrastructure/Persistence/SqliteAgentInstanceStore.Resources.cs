@@ -18,6 +18,8 @@ public sealed partial class SqliteAgentInstanceStore
     public async ValueTask<InstanceResourceSnapshot> ReadResourcesAsync(Guid id, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
+        if (await db.Set<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().AnyAsync(i => i.AgentInstanceId == id.ToString("D"), ct))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         return await ReadResourcesAsync(db, id, ct);
     }
     internal static async ValueTask<InstanceResourceSnapshot> ReadResourcesAsync(AgentCoreDbContext db, Guid id, CancellationToken ct)
@@ -31,6 +33,14 @@ public sealed partial class SqliteAgentInstanceStore
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+        if (await db.Set<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().AnyAsync(i => i.AgentInstanceId == m.InstanceId.ToString("D"), ct))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
+        await StageResourcesAsync(db, m, ids, ct);
+        try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
+        catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Resource mutation conflicted with another write."); }
+    }
+    internal static async ValueTask StageResourcesAsync(AgentCoreDbContext db, InstanceResourceMutation m, IIdGenerator? ids, CancellationToken ct)
+    {
         var id = m.InstanceId.ToString("D");
         var owner = await db.AgentInstances.SingleOrDefaultAsync(r => r.InstanceId == id, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
         if (owner.Lifecycle != "Active") throw AgentCoreErrors.Validation("Archived instances are read-only.");
@@ -63,8 +73,7 @@ public sealed partial class SqliteAgentInstanceStore
         owner.Revision++;
         if (m.History is not null) owner.UpdatedAtUtc = m.History.OccurredAt.ToUnixTimeMilliseconds();
         if (m.HarnessManagement is not null) owner.HarnessManagementJson = JsonSerializer.Serialize(m.HarnessManagement, Json);
-        if (m.History is not null) AdminEventPersistence.StageAppend(db, m.History, ids.NewId());
-        try { await db.SaveChangesAsync(ct); await tx.CommitAsync(ct); }
-        catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Resource mutation conflicted with another write."); }
+        if (m.History is not null) AdminEventPersistence.StageAppend(db, m.History, (ids ?? throw AgentCoreErrors.Persistence("History identity is unavailable.")).NewId());
     }
+
 }

@@ -17,6 +17,9 @@ public sealed partial class SqliteAgentInstanceStore(
         PropertyNameCaseInsensitive = true
     };
 
+    private static IQueryable<AgentInstanceRecord> Unowned(AgentCoreDbContext db) => db.AgentInstances.Where(a =>
+        !db.Set<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().Any(i => i.AgentInstanceId == a.InstanceId));
+
     public async ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default)
     {
         if (limit <= 0)
@@ -25,7 +28,7 @@ public sealed partial class SqliteAgentInstanceStore(
         }
 
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await db.AgentInstances.AsNoTracking()
+        var rows = await Unowned(db).AsNoTracking()
             .OrderBy(item => item.DefinitionId)
             .ThenBy(item => item.InstanceId)
             .Take(limit)
@@ -38,7 +41,7 @@ public sealed partial class SqliteAgentInstanceStore(
     {
         if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        var query = db.AgentInstances.AsNoTracking();
+        var query = Unowned(db).AsNoTracking();
         if (afterId is Guid id) { var cursor = id.ToString("D"); query = query.Where(r => string.Compare(r.InstanceId, cursor) > 0); }
         return (await query.OrderBy(r => r.InstanceId).Take(limit).ToArrayAsync(cancellationToken)).Select(Map).ToArray();
     }
@@ -46,7 +49,7 @@ public sealed partial class SqliteAgentInstanceStore(
     public async ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var row = await db.AgentInstances.AsNoTracking()
+        var row = await Unowned(db).AsNoTracking()
             .SingleOrDefaultAsync(item => item.InstanceId == instanceId.ToString("D"), cancellationToken)
             .ConfigureAwait(false);
         return row is null ? null : Map(row);

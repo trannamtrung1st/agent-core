@@ -154,7 +154,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.Equal(auditBefore, (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count);
         Assert.Equal(5, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         Assert.NotNull(await f.Definitions.FindDefinitionPublicationAsync(owner.TenantId, id, 1));
-        Assert.NotNull(await f.Instances.FindAsync(instance.Instance.InstanceId));
+        Assert.NotNull(await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, instance.Instance.InstanceId));
 
         // A retained activation must protect history even if no Instance remains in a damaged graph.
         var historical = await f.Service.CreateAsync(owner.OwnerPrincipalId, owner.TenantId, "History", 5);
@@ -243,12 +243,12 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.Equal(4, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         if (await create)
         {
-            Assert.NotNull(await f.Instances.FindAsync(instance.InstanceId));
+            Assert.NotNull(await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, instance.InstanceId));
             Assert.NotNull(await f.Definitions.FindDefinitionPublicationAsync(owner.TenantId, id, 1));
         }
         else
         {
-            Assert.Null(await f.Instances.FindAsync(instance.InstanceId));
+            Assert.Null(await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, instance.InstanceId));
             Assert.DoesNotContain((await f.Iam.ReadTenantAsync(owner.TenantId))!.SystemIdentities, i => i.SystemIdentityId == systemId);
             Assert.Null(await f.Definitions.FindDefinitionAsync(owner.TenantId, id));
         }

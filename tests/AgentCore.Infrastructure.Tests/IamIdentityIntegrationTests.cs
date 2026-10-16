@@ -290,12 +290,13 @@ public sealed class IamIdentityIntegrationTests
         var first = await service.CreateAsync(a.OwnerPrincipalId, a.TenantId, "examiner", 1, 1);
         var state = (await f.Store.ReadTenantAsync(a.TenantId))!;
         Assert.DoesNotContain(state.Assignments, x => x.PrincipalId == first.PrincipalId);
-        Assert.NotNull(await f.Instances.FindAsync(first.Instance.InstanceId));
+        Assert.NotNull(await ((ITenantAgentStore)f.Store).FindTenantAgentAsync(a.TenantId, first.Instance.InstanceId));
+        Assert.Null(await f.Instances.FindAsync(first.Instance.InstanceId));
         Assert.Null(await ((ITenantAgentStore)f.Store).FindTenantAgentAsync(b.Tenant.TenantId, first.Instance.InstanceId));
         Assert.Equal(0, (await service.ListAsync(b.Users.Single().PrincipalId, b.Tenant.TenantId)).Total);
         Assert.Equal(0, (await service.ListAsync(first.PrincipalId, a.TenantId)).Total);
         var second = await service.CreateAsync(a.OwnerPrincipalId, a.TenantId, "general-assistant", 32, state.Tenant.Revision);
-        Assert.Equal("browser.record.lookup", Assert.Single((await f.Instances.ReadSkillsAsync(second.Instance.InstanceId)).DefinitionStates).DefinitionSkillId);
+        Assert.Equal("browser.record.lookup", Assert.Single((await ((ITenantAgentStore)f.Store).ReadTenantAgentConfigurationAsync(a.TenantId, second.Instance.InstanceId))!.Skills.DefinitionStates).DefinitionSkillId);
         var page0 = await service.ListAsync(a.OwnerPrincipalId, a.TenantId, pageSize: 1);
         var page1 = await service.ListAsync(a.OwnerPrincipalId, a.TenantId, page: 1, pageSize: 1);
         Assert.Equal(2, page0.Total); Assert.Single(page0.Items); Assert.Single(page1.Items);
@@ -311,7 +312,7 @@ public sealed class IamIdentityIntegrationTests
         state = (await f.Store.ReadTenantAsync(a.TenantId))!;
         var archived = await service.SetLifecycleAsync(a.OwnerPrincipalId, a.TenantId, first.Instance.InstanceId,
             AgentInstanceLifecycle.Archived, state.Tenant.Revision, first.Instance.Revision);
-        Assert.Equal(AgentInstanceLifecycle.Archived, (await f.Instances.FindAsync(first.Instance.InstanceId))!.Lifecycle);
+        Assert.Equal(AgentInstanceLifecycle.Archived, (await ((ITenantAgentStore)f.Store).FindTenantAgentAsync(a.TenantId, first.Instance.InstanceId))!.Instance.Lifecycle);
         Assert.False((await f.Authorizer.CheckAsync(first.PrincipalId, "agents.read", AccessScope.ForResource(a.TenantId, "agent", first.Instance.InstanceId.ToString("D")))).Allowed);
         var auditCount = (await f.Store.ReadAuditAsync(a.TenantId, 200)).Count;
         await Assert.ThrowsAsync<SecurityConflictException>(() => service.SetLifecycleAsync(a.OwnerPrincipalId, a.TenantId,
@@ -393,7 +394,7 @@ public sealed class IamIdentityIntegrationTests
             store.TryCreateTenantAgentAsync(second.Next, state.Tenant.Revision, second.Instance, [], second.Audit).AsTask());
         Assert.Single(outcomes, x => x);
         Assert.Equal(1, (await store.ListTenantAgentsAsync(a.TenantId, null, 0, 100)).Total);
-        Assert.Single(await f.Instances.ListAsync(100));
+        Assert.Empty(await f.Instances.ListAsync(100));
         var current = (await f.Store.ReadTenantAsync(a.TenantId))!;
         var stale = Prepare(current);
         var roleAssignment = current.Assignments.Single(x => x.PrincipalId == user.PrincipalId);

@@ -13,7 +13,7 @@ public sealed partial class InMemoryIamStore
         lock (_gate) lock (instances.CredentialGate)
         {
             var identity = _tenants.GetValueOrDefault(tenantId)?.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == instanceId);
-            var instance = identity is null ? null : instances.FindAsync(instanceId, ct).Result;
+            var instance = identity is null ? null : instances.FindTenantBackingAsync(instanceId, ct).Result;
             return ValueTask.FromResult(instance is null || identity is null ? null : new TenantAgent(tenantId, identity.SystemIdentityId, identity.PrincipalId, instance));
         }
     }
@@ -27,7 +27,7 @@ public sealed partial class InMemoryIamStore
             var allowed = allowedInstanceIds?.ToHashSet();
             var rows = (_tenants.GetValueOrDefault(tenantId)?.SystemIdentities ?? []).Where(i => i.Kind == SystemIdentityKind.Agent
                 && i.AgentInstanceId is { } id && (allowed is null || allowed.Contains(id)))
-                .Select(i => new TenantAgent(tenantId, i.SystemIdentityId, i.PrincipalId, instances.FindAsync(i.AgentInstanceId!.Value, ct).Result
+                .Select(i => new TenantAgent(tenantId, i.SystemIdentityId, i.PrincipalId, instances.FindTenantBackingAsync(i.AgentInstanceId!.Value, ct).Result
                     ?? throw new InvalidOperationException("An owned agent lost its backing Instance.")))
                 .OrderBy(i => i.Instance.InstanceId.ToString("D"), StringComparer.Ordinal).ToArray();
             return ValueTask.FromResult(new TenantAgentPage(rows.Skip(page * pageSize).Take(pageSize).ToArray(), rows.Length, page, pageSize));
@@ -46,7 +46,7 @@ public sealed partial class InMemoryIamStore
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
             ValidateAgentActor(before, audit.ActorPrincipalId);
             EnsureReferences(next, audit, instance.InstanceId);
-            if (instances.FindAsync(instance.InstanceId, ct).Result is not null) return ValueTask.FromResult(false);
+            if (instances.FindTenantBackingAsync(instance.InstanceId, ct).Result is not null) return ValueTask.FromResult(false);
             instances.InsertAsync(instance, ct, skills).GetAwaiter().GetResult();
             _tenants[next.Tenant.TenantId] = next; MarkOwnedAgents(next); _audit.Add(audit);
             return ValueTask.FromResult(true);
@@ -63,7 +63,7 @@ public sealed partial class InMemoryIamStore
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantAgent?>(null);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
             ValidateAgentActor(before, audit.ActorPrincipalId); EnsureReferences(next, audit);
-            var current = instances.FindAsync(instanceId, ct).Result;
+            var current = instances.FindTenantBackingAsync(instanceId, ct).Result;
             if (!before.SystemIdentities.Any(i => i.AgentInstanceId == instanceId) || current is null || current.Revision != expectedInstanceRevision) return ValueTask.FromResult<TenantAgent?>(null);
             var updated = instances.SetTenantLifecycleAsync(instanceId, expectedInstanceRevision, lifecycle, at, ct).Result;
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);

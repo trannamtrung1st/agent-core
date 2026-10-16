@@ -88,7 +88,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 
         lock (_gate)
         {
-            var items = _instances.Values
+            var items = _instances.Values.Where(i => !_tenantOwnedInstances.Contains(i.InstanceId))
                 .OrderBy(item => item.DefinitionId, StringComparer.Ordinal)
                 .ThenBy(item => item.InstanceId)
                 .Take(limit)
@@ -102,11 +102,18 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
         cancellationToken.ThrowIfCancellationRequested();
         if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
         lock (_gate) return ValueTask.FromResult<IReadOnlyList<AgentInstance>>(_instances.Values
+            .Where(r => !_tenantOwnedInstances.Contains(r.InstanceId))
             .Where(r => afterId is null || string.CompareOrdinal(r.InstanceId.ToString("D"), afterId.Value.ToString("D")) > 0)
             .OrderBy(r => r.InstanceId.ToString("D"), StringComparer.Ordinal).Take(limit).Select(CopyInstance).ToArray());
     }
 
     public ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate) return _tenantOwnedInstances.Contains(instanceId) ? ValueTask.FromResult<AgentInstance?>(null) : FindTenantBackingAsync(instanceId, cancellationToken);
+    }
+
+    internal ValueTask<AgentInstance?> FindTenantBackingAsync(Guid instanceId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)

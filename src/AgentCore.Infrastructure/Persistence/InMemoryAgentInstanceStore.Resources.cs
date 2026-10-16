@@ -12,14 +12,26 @@ public sealed partial class InMemoryAgentInstanceStore
     public ValueTask<InstanceResourceSnapshot> ReadResourcesAsync(Guid id, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
+        lock (_gate)
+        {
+            if (_tenantOwnedInstances.Contains(id)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
+            return ReadTenantResourcesAsync(id, ct);
+        }
+    }
+    internal ValueTask<InstanceResourceSnapshot> ReadTenantResourcesAsync(Guid id, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
         lock (_gate) return ValueTask.FromResult(new InstanceResourceSnapshot(
             _resourceStates.GetValueOrDefault(id)?.Values.ToArray() ?? [], _resources.GetValueOrDefault(id)?.Values.ToArray() ?? []));
     }
-    public ValueTask MutateResourcesAsync(InstanceResourceMutation m, CancellationToken ct = default)
+    public ValueTask MutateResourcesAsync(InstanceResourceMutation m, CancellationToken ct = default) => MutateResourcesCore(m, false, null, ct);
+    internal ValueTask MutateTenantResourcesAsync(InstanceResourceMutation m, DateTimeOffset at, CancellationToken ct) => MutateResourcesCore(m, true, at, ct);
+    private ValueTask MutateResourcesCore(InstanceResourceMutation m, bool tenant, DateTimeOffset? at, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         lock (_gate)
         {
+            if (!tenant && _tenantOwnedInstances.Contains(m.InstanceId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
             var owner = _instances.GetValueOrDefault(m.InstanceId) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
             if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Validation("Archived instances are read-only.");
             if (owner.Revision != m.ExpectedInstanceRevision) throw AgentCoreErrors.Conflict("Instance revision is stale.");
@@ -43,7 +55,7 @@ public sealed partial class InMemoryAgentInstanceStore
             }
             if (m.History is not null) { if (EventStore is null) throw AgentCoreErrors.Persistence("Admin history is unavailable."); EventStore.AppendWithinLock(m.History); }
             _resources[m.InstanceId] = resources; _resourceStates[m.InstanceId] = states;
-            _instances[m.InstanceId] = owner with { Revision = owner.Revision + 1, UpdatedAt = m.History?.OccurredAt ?? owner.UpdatedAt, HarnessManagement = m.HarnessManagement ?? owner.HarnessManagement };
+            _instances[m.InstanceId] = owner with { Revision = owner.Revision + 1, UpdatedAt = at ?? m.History?.OccurredAt ?? owner.UpdatedAt, HarnessManagement = CopyManagement(m.HarnessManagement ?? owner.HarnessManagement) };
         }
         return ValueTask.CompletedTask;
     }

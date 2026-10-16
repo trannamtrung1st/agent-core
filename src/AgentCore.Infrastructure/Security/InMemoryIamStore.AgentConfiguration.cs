@@ -14,7 +14,7 @@ public sealed partial class InMemoryIamStore
         {
             var agent = FindTenantAgentAsync(tenantId, instanceId, ct).Result;
             return ValueTask.FromResult(agent is null ? null : new TenantAgentConfigurationSnapshot(agent,
-                instances.ReadSkillsAsync(instanceId, ct).Result, instances.ReadResourcesAsync(instanceId, ct).Result));
+                instances.ReadTenantSkillsAsync(instanceId, ct).Result, instances.ReadTenantResourcesAsync(instanceId, ct).Result));
         }
     }
 
@@ -39,6 +39,18 @@ public sealed partial class InMemoryIamStore
                 change = change with { DefinitionSkills = publication.Payload.SkillList };
             }
             ct.ThrowIfCancellationRequested();
+            if (change.Resource?.Resource is { } binding)
+            {
+                var content = definitions.ResourceStore?.TenantContent ?? throw new AccessDeniedException("resource_content_unavailable");
+                _ = AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(content, binding.ContentSha256, binding.ByteLength, binding.MediaType, ct).GetAwaiter().GetResult();
+            }
+            if (change.Skill is not null || change.Resource is not null)
+            {
+                if (change.Skill is { } skill) instances.MutateTenantSkillsAsync(skill, at, ct).GetAwaiter().GetResult();
+                else instances.MutateTenantResourcesAsync(change.Resource!, at, ct).GetAwaiter().GetResult();
+                _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);
+                return ValueTask.FromResult<TenantAgent?>(current with { Instance = instances.FindTenantBackingAsync(change.InstanceId, ct).Result! });
+            }
             var updated = instances.ChangeTenantConfigurationAsync(new(change.InstanceId, change.ExpectedInstanceRevision,
                 ActiveVersion: change.ActiveVersion, Persona: change.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
                 DefinitionSkills: change.DefinitionSkills, AutomationPolicyChanges: change.AutomationPolicyChanges,
