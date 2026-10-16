@@ -2400,8 +2400,9 @@ body,
 .admin-memory-scope { flex: 0 1 12rem; min-width: 0; max-width: 100%; }
 .admin-memory-scope .ant-select { width: 100%; }
 .self-management-fields .ant-form-item { margin-block-end: 0; }
-.self-management-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+.self-management-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; width: 100%; }
 .self-management-options .ant-checkbox-wrapper { margin-inline: 0; min-width: 0; }
+.self-management-options .ant-checkbox { align-self: flex-start; margin-block-start: var(--self-management-checkbox-offset); }
 .harness-procedure { white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-approval .ant-modal-container,
 :is(.admin-credential-dialog, .sandbox-profile-dialog, .isolation-preset-dialog) .ant-modal-container {

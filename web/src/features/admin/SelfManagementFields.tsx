@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Button, Checkbox, Flex, Form, Select, Switch, Typography, theme } from 'antd';
 import type { HarnessMode, HarnessScope, ManagementAutoApply, SelfManagementPolicy } from '../../services/adminApi';
 
@@ -29,6 +30,10 @@ export function SelfManagementFields({ value, defaults, disabled, definition = f
   onChange: (value: SelfManagementDraft) => void;
 }) {
   const { token } = theme.useToken();
+  const optionStyle = {
+    gap: token.paddingXS,
+    '--self-management-checkbox-offset': `${(token.fontSize * token.lineHeight - token.controlInteractiveSize) / 2}px`
+  } as CSSProperties;
   const update = (change: Partial<SelfManagementDraft>) => onChange({ ...value, ...change });
   const mode = value.mode ?? defaults.mode;
   const modeLabel = definition ? 'Default self-management mode' : 'Self-management mode';
@@ -45,14 +50,14 @@ export function SelfManagementFields({ value, defaults, disabled, definition = f
       <Flex vertical gap={token.paddingXS}>
         {!definition && <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => update({ scopes: null })}>Inherit areas</Button>}
         <Checkbox.Group aria-label={definition ? 'Default self-management areas' : areasLabel} className="self-management-options"
-          style={{ gap: token.paddingXS }} options={managementAreas} disabled={disabled} value={value.scopes ?? defaults.scopes}
+          style={optionStyle} options={managementAreas} disabled={disabled} value={value.scopes ?? defaults.scopes}
           onChange={scopes => update({ scopes: scopes as HarnessScope[] })} />
       </Flex>
     </Form.Item>
     {mode === 'Managed' && <Form.Item label={automaticLabel} extra="Capabilities, privacy, triggers, credentials and management widening always require exact approval. Skill deletion and customization also require exact approval.">
       <Flex vertical gap={token.paddingXS}>
         {!definition && <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => update({ managedAutoApply: null })}>Inherit automatic changes</Button>}
-        <Checkbox.Group aria-label={automaticLabel} className="self-management-options" style={{ gap: token.paddingXS }}
+        <Checkbox.Group aria-label={automaticLabel} className="self-management-options" style={optionStyle}
           disabled={disabled} value={value.managedAutoApply ?? defaults.managedAutoApply ?? []} options={automaticChanges}
           onChange={values => update({ managedAutoApply: values as ManagementAutoApply[] })} />
       </Flex>

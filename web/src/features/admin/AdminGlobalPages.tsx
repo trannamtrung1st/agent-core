@@ -192,6 +192,7 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
       <Button type="primary" disabled={loading} onClick={openModal}>New instance</Button>
       <Modal
         title="New instance"
+        width="48rem"
         open={open}
         okText={createdInstance ? "Retry self-management" : "Create instance"}
         cancelText={createdInstance ? "Open instance" : "Cancel"}
