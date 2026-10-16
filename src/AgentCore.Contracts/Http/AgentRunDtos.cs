@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Contracts.Http;
 
 public sealed record ArtifactPageResponse(IReadOnlyList<ArtifactResponse> Items, string? NextCursor, bool HasMore);
@@ -37,9 +39,12 @@ public sealed record AutomationTriggerOriginResponse(string? TriggerId, string K
 public sealed record ComposerRunInputResponse(IReadOnlyList<string> ExplicitSkillKeys, string Provenance, string AdmittedAt, string? Error, IReadOnlyList<ComposerReferenceResponse> References);
 public sealed record ComposerReferenceResponse(string Kind, string Locator, string Label, string Status, long? Revision, string? Sha256, bool Truncated);
 
-public sealed record RunAttemptDiagnosticResponse(int Attempt, string Code, string? Reason, string? Channel);
+public sealed record RunAttemptDiagnosticResponse(int Attempt, string Code, string? Reason, string? Channel,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? MaxOutputTokens = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Transport = null);
+public sealed record RunProtocolRecoveryResponse(string Reason, string? Channel, string Eligibility, string? Strategy, string? Outcome);
 public sealed record RunExecutionDiagnosticResponse(int RemainingBudgetMs, string? LastTool, int RecordedToolResults,
-    IReadOnlyList<RunAttemptDiagnosticResponse> FailedAttempts);
+    IReadOnlyList<RunAttemptDiagnosticResponse> FailedAttempts, RunProtocolRecoveryResponse? ProtocolRecovery = null);
 
 public sealed record ContextManifestResponse(int ContextFormatVersion, int CoreContractVersion,
     IReadOnlyList<ContextManifestSectionResponse> Sections, string Fingerprint, IReadOnlyDictionary<string, ContextFieldSourceResponse>? FieldSources = null);

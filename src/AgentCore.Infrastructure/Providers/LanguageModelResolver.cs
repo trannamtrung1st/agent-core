@@ -135,6 +135,7 @@ internal sealed class CatalogBoundLanguageModel(ILanguageModel inner, ModelCapab
     public ILanguageModel Inner { get; } = inner;
 
     public ModelCapabilities Capabilities { get; } = capabilities;
+    public ModelInferenceTransport? InferenceTransport => Inner.InferenceTransport;
 
     public ModelRequest PrepareRequest(ModelRequest request) => Inner.PrepareRequest(request);
 

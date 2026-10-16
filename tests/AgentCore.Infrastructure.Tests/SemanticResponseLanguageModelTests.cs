@@ -11,6 +11,19 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class SemanticResponseLanguageModelTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Policy_stop_is_terminal_even_when_response_json_is_incomplete(bool native)
+    {
+        var inner = new ScriptedInner([new ModelTextDelta("{\"displayText\":"), new ModelCompleted(ModelStopReason.ContentFiltered)], structured: native, tools: !native);
+        var events = await CollectAsync(new SemanticResponseLanguageModel(inner), Contracted);
+        var failure = Assert.Single(events.OfType<ModelFailed>());
+        Assert.Equal(ProviderFailureReason.ContentFiltered, failure.Failure.FailureReason);
+        Assert.Equal(native ? ProviderResponseChannel.StructuredOutput : ProviderResponseChannel.ResponseFunction, failure.Failure.ResponseChannel);
+        Assert.Equal(ProtocolFailureDisposition.Terminal, ProtocolFailures.Disposition(failure.Failure.FailureReason));
+    }
+
     [Fact]
     public async Task Prepared_manifest_matches_the_protocol_forwarded_after_tool_receipts()
     {

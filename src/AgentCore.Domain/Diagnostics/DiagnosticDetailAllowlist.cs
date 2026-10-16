@@ -11,6 +11,7 @@ public static class DiagnosticDetailAllowlist
         "backgroundCompletionRequired",
         "backgroundCompletionInvalid",
         "invalidJson",
+        "contentFiltered",
         "responseTooLarge",
         "missingDisplayText",
         "invalidSpeech",

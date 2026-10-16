@@ -7,6 +7,7 @@ public static class ProviderFailureReason
 {
     public const string BackgroundCompletionRequired = "backgroundCompletionRequired";
     public const string BackgroundCompletionInvalid = "backgroundCompletionInvalid";
+    public const string ContentFiltered = "contentFiltered";
     public const string InvalidJson = "invalidJson";
     public const string ResponseTooLarge = "responseTooLarge";
     public const string MissingDisplayText = "missingDisplayText";

@@ -67,7 +67,8 @@ export type SessionResponse = {
 
 export type AgentRun = {
   contextManifest?: { contextFormatVersion: number; coreContractVersion: number; fingerprint: string; fieldSources?: Record<string, { kind: string; revision: string }> | null; sections: { id: string; layer: "Core" | "Runtime" | "Evidence"; source: string; semantics: string; sourceRevision: string | null; characters: number; utf8Bytes: number; estimatedTokens: number; omitted?: boolean; originalCharacters?: number | null }[] } | null;
-  executionDiagnostic?: { remainingBudgetMs: number; lastTool: string | null; recordedToolResults: number; failedAttempts: { attempt: number; code: string; reason: string | null; channel: string | null }[] } | null;
+  executionDiagnostic?: { remainingBudgetMs: number; lastTool: string | null; recordedToolResults: number; failedAttempts: { attempt: number; code: string; reason: string | null; channel: string | null; maxOutputTokens?: number | null; transport?: string | null }[];
+    protocolRecovery?: { reason: string; channel: string | null; eligibility: string; strategy: string | null; outcome: string | null } | null } | null;
   composerInput?: {explicitSkillKeys:string[];provenance:string;admittedAt:string;error:string|null;references:{kind:string;locator:string;label:string;status:string;revision:number|null;sha256:string|null;truncated:boolean}[]} | null;
   configuration?: { definitionId: string; definitionVersion: number; instanceRevision: number; personaRevision: number; configurationHash: string; resources: { key: string; logicalPath: string; virtualPath: string; contentSha256: string; byteLength: number }[] } | null;
   triggerOrigin?: { triggerRevision?: number | null; triggerId: string | null; kind: string; source: { kind: string; key?: string | null; eventId?: string | null } | null; summary: string } | null;

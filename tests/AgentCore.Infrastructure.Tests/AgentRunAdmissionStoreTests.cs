@@ -153,6 +153,39 @@ public sealed class AgentRunAdmissionStoreTests
 
     [Theory]
     [InlineData(false)] [InlineData(true)]
+    public async Task Protocol_recovery_allowance_and_read_receipt_survive_reopen_and_retry(bool sqlite)
+    {
+        await using var f = await Fixture.CreateAsync(sqlite);
+        var snapshot = Snapshot(Guid.NewGuid(), []);
+        await f.Memory.SaveAsync(snapshot, 0);
+        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "repair-pin", Now);
+        var run = AgentRun.Create(Guid.NewGuid(), Owner, new(activation, Definition.Id, Definition.Version, Definition.Identity,
+            Guid.NewGuid(), AgentRunOutputContract.ConversationResponse), new("synthetic", "synthetic", "synthetic", null), 3, Now);
+        await f.Runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
+        var claimed = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(1, Now, Guid.NewGuid(), Now.AddMinutes(1)));
+        var recovery = new RunProtocolRecovery(ProviderFailureReason.InvalidJson, ProviderResponseChannel.StructuredOutput, "eligible", "terminalText", "started");
+        ModelMessage[] messages = [new(ModelRole.Assistant, "", ToolCalls: [new("read", "web.fetch", "{}")]),
+            new(ModelRole.Tool, "{\"status\":\"ok\"}", ToolCallId: "read", Name: "web.fetch")];
+        var payload = AgentRunToolCallCheckpoint.Write(messages, protocolRepairReason: recovery.Reason,
+            executionState: new(TranscriptId: run.ResponseId, ProtocolRecovery: recovery));
+        var saved = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Checkpoint(claimed.Revision, Now, claimed.Claim!.Generation,
+            new(payload, 1, 15, 60000), null));
+        var retry = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Fail(saved.Revision, Now, saved.Claim!.Generation,
+            "provider-unavailable", "Temporary provider failure", true, Now.AddSeconds(1)));
+        await f.ReopenAsync();
+        var restored = (await f.Runs.GetAsync(Owner, run.AgentRunId))!;
+        Assert.Equal(run.ResponseId, restored.ResponseId);
+        Assert.Equal(recovery, AgentRunToolCallCheckpoint.ReadExecutionState(restored.Checkpoint).ProtocolRecovery);
+        Assert.Equal(recovery.Reason, AgentRunToolCallCheckpoint.ReadProtocolRepairReason(restored.Checkpoint));
+        Assert.True(AgentRunToolCallCheckpoint.TryRead(restored.Checkpoint, out var receipts));
+        Assert.Single(receipts!, m => m.Name == "web.fetch");
+        var second = await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Claim(retry.Revision, Now.AddSeconds(1), Guid.NewGuid(), Now.AddMinutes(1)));
+        Assert.Equal(2, second.AttemptCount);
+        Assert.Equal(payload, second.Checkpoint!.PayloadJson);
+    }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
     public async Task Effective_budget_and_accounting_survive_reopen_retry_and_reclaim(bool sqlite)
     {
         await using var f = await Fixture.CreateAsync(sqlite);

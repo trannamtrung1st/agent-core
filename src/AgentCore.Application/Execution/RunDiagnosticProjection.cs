@@ -5,9 +5,12 @@ using AgentCore.Domain.Diagnostics;
 
 namespace AgentCore.Application.Execution;
 
-public sealed record RunAttemptDiagnostic(int Attempt, string Code, string? Reason, string? Channel);
+public sealed record RunAttemptDiagnostic(int Attempt, string Code, string? Reason, string? Channel,
+    int? MaxOutputTokens = null, string? Transport = null);
+public sealed record RunProtocolRecovery(string Reason, string? Channel, string Eligibility,
+    string? Strategy = null, string? Outcome = null);
 public sealed record RunExecutionDiagnostic(int RemainingBudgetMs, string? LastTool, int RecordedToolResults,
-    IReadOnlyList<RunAttemptDiagnostic> FailedAttempts);
+    IReadOnlyList<RunAttemptDiagnostic> FailedAttempts, RunProtocolRecovery? ProtocolRecovery = null);
 
 public static class RunDiagnosticProjection
 {
@@ -20,7 +23,11 @@ public static class RunDiagnosticProjection
         if (run.Checkpoint is not { } checkpoint || !AgentRunToolCallCheckpoint.TryRead(checkpoint, out var messages)) return null;
         var attempts = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint).FailedAttempts ?? [];
         var tools = messages!.Where(m => m.Role == ModelRole.Tool).ToArray();
+        var recovery = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint).ProtocolRecovery;
+        if (run.IsTerminal && recovery is { Strategy: not null, Outcome: "started" or "retryPending" })
+            recovery = recovery with { Outcome = run.Status == AgentRunStatus.Cancelled ? "cancelled" : "failed" };
         return new(checkpoint.RemainingOverallBudgetMs, tools.LastOrDefault()?.Name, tools.Length,
-            attempts.TakeLast(AgentRunLimits.DefaultMaxAttempts).ToArray());
+            attempts.TakeLast(AgentRunLimits.DefaultMaxAttempts).ToArray(),
+            recovery);
     }
 }

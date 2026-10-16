@@ -172,3 +172,34 @@ for (const scenario of ["correct", "invalid"] as const) {
     expect(errors).toEqual([]);
   });
 }
+
+for (const exhausted of [false, true]) {
+  test(`background semantic response ${exhausted ? "exhausts one correction" : "recovers through completion only"}`, async ({ page }) => {
+    const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+    await page.goto("/");
+    await selectInstanceIdentity(page, { id: "general-assistant", version: 24 });
+    await expect(page.getByTestId("connection")).toHaveText("Ready");
+    await page.getByLabel("Message", { exact: true }).fill(`[test:background-start] [test:background-semantic-${exhausted ? "exhausted" : "recovery"}] Verify the bounded background outcome.`);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(page.locator(".conversation-scroll")).toContainText(exhausted ? "Background work failed." : "Research is incomplete", { timeout: 30_000 });
+    await waitForResponseSettled(page);
+    await page.getByRole("button", { name: /Background work/ }).click();
+    await page.getByRole("dialog", { name: "Background work", exact: true }).getByRole("button", { name: "View original result", exact: true }).click();
+    const details = page.getByRole("dialog", { name: "Background progress check", exact: true });
+    const recovery = details.getByRole("region", { name: "Response recovery" });
+    await expect(recovery).toContainText("Invalid response blocks · Response function");
+    await expect(recovery).toContainText("Eligible for one correction · Completion only");
+    await expect(recovery).toContainText(exhausted ? "Correction failed" : "Correction completed");
+    await expect(details).toContainText("Attempt 1: InvalidResponse · invalidBlocks");
+    await expect(details).toContainText("1 of 3");
+    for (const width of [1440, 768, 767, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect.poll(() => details.evaluate(d => d.scrollWidth <= d.clientWidth)).toBe(true);
+      await expect(recovery).toBeVisible();
+      expect(await recovery.evaluate(r => r.scrollWidth <= r.clientWidth)).toBe(true);
+      expect(await recovery.locator(':scope > div').evaluate(r => getComputedStyle(r).gap)).toBe("8px");
+    }
+    await page.keyboard.press("Escape"); await expect(details).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+}

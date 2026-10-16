@@ -30,6 +30,16 @@ internal static class BackgroundSessionScript
             return [new ModelTextDelta("Fixture prose without an explicit completion."), new ModelCompleted(ModelStopReason.Completed)];
         var task = SyntheticTaskContext.Text(request);
         if (request.Context?.Sections.Any(section => section.Id == ContextSectionId.CoreBackground) == true
+            && task.Contains("synthetic-background-semantic-", StringComparison.Ordinal))
+        {
+            if (request.Context.Sections.All(section => section.Id != ContextSectionId.CoreBackgroundFinalization)
+                || task.Contains("synthetic-background-semantic-exhausted", StringComparison.Ordinal))
+                return [new ModelFailed(new(ProviderErrorCode.InvalidResponse, "Synthetic invalid response blocks.",
+                    FailureReason: ProviderFailureReason.InvalidBlocks, ResponseChannel: ProviderResponseChannel.ResponseFunction))];
+            return Call(ToolCatalog.WorkComplete, new { outcome = "NeedsAttention", attentionRequired = true,
+                summary = "Response format recovery completed. Research is incomplete; no new tools or external actions were performed." });
+        }
+        if (request.Context?.Sections.Any(section => section.Id == ContextSectionId.CoreBackground) == true
             && task.Contains("synthetic-background-completion-", StringComparison.Ordinal))
         {
             if (request.Context.Sections.All(section => section.Id != ContextSectionId.CoreBackgroundFinalization))
@@ -68,7 +78,9 @@ internal static class BackgroundSessionScript
                 return Call(ToolCatalog.CapabilitiesLoad, new { query = "start an immediate background task", limit = 1 });
             return [new ModelTextDelta("This Agent is not authorized to start background tasks."), new ModelCompleted(ModelStopReason.Completed)];
         }
-        var objective = prompt.Contains("[test:background-completion-correct]", StringComparison.Ordinal) ? "synthetic-background-completion-correct: verify bounded summary correction"
+        var objective = prompt.Contains("[test:background-semantic-recovery]", StringComparison.Ordinal) ? "synthetic-background-semantic-recovery: verify completion-only recovery"
+            : prompt.Contains("[test:background-semantic-exhausted]", StringComparison.Ordinal) ? "synthetic-background-semantic-exhausted: verify bounded failure"
+            : prompt.Contains("[test:background-completion-correct]", StringComparison.Ordinal) ? "synthetic-background-completion-correct: verify bounded summary correction"
             : prompt.Contains("[test:background-completion-invalid]", StringComparison.Ordinal) ? "synthetic-background-completion-invalid: verify truthful validation failure"
             : prompt.Contains("[test:opensandbox-background]", StringComparison.Ordinal) ? "synthetic-sandbox:demo"
             : prompt.Contains("[test:background-prose]", StringComparison.Ordinal) ? "synthetic-background-prose: verify bounded failure reporting"

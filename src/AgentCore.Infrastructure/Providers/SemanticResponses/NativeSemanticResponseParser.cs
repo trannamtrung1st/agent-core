@@ -27,6 +27,12 @@ internal static class NativeSemanticResponseParser
             return false;
         }
 
+        // Removing one complete, unambiguous JSON code fence changes no payload
+        // semantics. The ordinary authority/action validation still sees the whole object.
+        var trimmed = json.Trim();
+        if (trimmed.StartsWith("```json\n", StringComparison.Ordinal) && trimmed.EndsWith("\n```", StringComparison.Ordinal))
+            json = trimmed[8..^4];
+
         JsonDocument document;
         try
         {

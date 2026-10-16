@@ -158,6 +158,7 @@ public sealed record ModelFailed(ProviderFailure Failure, Guid? DiagnosticId = n
 public interface ILanguageModel
 {
     ModelCapabilities Capabilities { get; }
+    ModelInferenceTransport? InferenceTransport => null;
 
     /// <summary>Expose selected platform output context before recording its redacted manifest.</summary>
     ModelRequest PrepareRequest(ModelRequest request) => request;

@@ -11,6 +11,7 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner, bool pre
     public ILanguageModel Inner { get; } = inner;
 
     public ModelCapabilities Capabilities => Inner.Capabilities;
+    public ModelInferenceTransport? InferenceTransport => Inner.InferenceTransport;
 
     public ModelRequest PrepareRequest(ModelRequest request) => request.ResponseContract is { } contract
         && (!Capabilities.StructuredOutput || preferResponseFunction)
@@ -69,6 +70,9 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner, bool pre
         {
             switch (item)
             {
+                case ModelFailed failed when failed.Failure.FailureReason == ProviderFailureReason.ContentFiltered:
+                    yield return failed with { Failure = failed.Failure with { ResponseChannel = ProviderResponseChannel.ResponseFunction } };
+                    yield break;
                 case ModelToolCallEvent call when call.Call.Name == AssistantResponseSchema.ResponseFunctionName:
                     responseCalls.Add(call.Call);
                     continue;
@@ -150,6 +154,9 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner, bool pre
                 case ModelFailed:
                     yield return item;
                     yield break;
+                case ModelCompleted { Reason: ModelStopReason.ContentFiltered }:
+                    yield return Fail(ProviderFailureReason.ContentFiltered, ProviderResponseChannel.StructuredOutput);
+                    yield break;
                 case ModelCompleted completed:
                     if (completed.Reason == ModelStopReason.ToolCalls)
                     {
@@ -227,6 +234,9 @@ public sealed class SemanticResponseLanguageModel(ILanguageModel inner, bool pre
                     continue;
                 case ModelFailed:
                     yield return item;
+                    yield break;
+                case ModelCompleted { Reason: ModelStopReason.ContentFiltered }:
+                    yield return Fail(ProviderFailureReason.ContentFiltered, ProviderResponseChannel.MarkerCompatibility);
                     yield break;
                 case ModelCompleted completed:
                     if (completed.Reason == ModelStopReason.ToolCalls)

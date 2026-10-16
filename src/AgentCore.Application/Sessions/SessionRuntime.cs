@@ -1944,7 +1944,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             _committedEffects.AddRange(recoveredEffects);
         _protocolRepair = null;
         _protocolRepairOutcome = null;
-        _usesResponseContract = true;
+        _usesResponseContract = !IsInitialBackgroundRun;
         _semanticReady = false;
         _chatAcceptedTimestamp = 0;
         _stagedMemoryProposals = null;
@@ -1981,7 +1981,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         {
             ResponseId = input.ResponseId,
             ReasoningEffort = ReasoningEffortFor(input.Trigger.Kind),
-            ResponseContract = new ModelResponseContract(
+            ResponseContract = IsInitialBackgroundRun ? null : new ModelResponseContract(
                 SpeechWillBeUsed: _snapshot.Mode == SessionMode.Voice,
                 RequireChatResponse: _boundAgentRun?.Admission.OutputContract is AgentRunOutputContract.ConversationResponse or AgentRunOutputContract.CompletionReport)
         };
@@ -2714,8 +2714,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var harnessSources = new List<HarnessSourceReceipt>();
         var outputBytes = checked((int)(checkpoint?.OutputBytes ?? 0));
         var repairReason = restored ? AgentRunToolCallCheckpoint.ReadProtocolRepairReason(checkpoint) : null;
-        var repairingTerminal = !IsInitialBackgroundRun && repairReason is not null;
-        var protocolRepairAttempted = repairingTerminal;
+        var protocolRecovery = executionState.ProtocolRecovery;
+        var repairingTerminal = !IsInitialBackgroundRun && repairReason is not null && protocolRecovery?.Outcome == "retryPending";
+        var protocolRepairAttempted = repairReason is not null;
         var repairPhase = steps == 0 ? "initial" : "follow-up";
         var repairOpen = repairingTerminal;
         if (repairingTerminal) _protocolRepair = "attempted";
@@ -2759,7 +2760,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var cleanupPhase = executionState.Phase == RunPhase.Cleanup || executionState.CleanupStartedAtMessage is not null;
         var cleanupStartedAtMessage = executionState.CleanupStartedAtMessage;
         ToolLoopExecutionState State() => new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
-            finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted);
+            finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted, protocolRecovery);
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
         var cleanupSteps = cleanupRequested ? budget.CleanupStepReserve : 0;
@@ -2796,12 +2797,25 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
         async Task RecordFailureAsync(ProviderFailure failure)
         {
+            if (protocolRecovery?.Strategy is not null) protocolRecovery = protocolRecovery with { Outcome = "failed" };
             failedAttempts.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, failure));
             await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                 overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
         }
         try
         {
+            if (repairReason is not null && protocolRecovery?.Outcome != "retryPending"
+                && !(IsInitialBackgroundRun && resumePending.Count > 0 && resumePending.All(call => call.Name == ToolCatalog.WorkComplete)))
+            {
+                protocolRecovery = (protocolRecovery ?? new(repairReason, null, "eligible", IsInitialBackgroundRun ? "completionOnly" : "terminalText"))
+                    with { Outcome = "interrupted" };
+                await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                    overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
+                await MailboxModelAsync(cause, request.ResponseId, new ModelFailed(new ProviderFailure(
+                    ProviderErrorCode.InvalidResponse, "Protocol recovery allowance was already consumed before restart.",
+                    FailureReason: repairReason, ResponseChannel: protocolRecovery.Channel)), generateToken).ConfigureAwait(false);
+                return;
+            }
             await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                 overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
             while (!generateToken.IsCancellationRequested)
@@ -2826,10 +2840,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 var repairDisplay = new StringBuilder();
                 var repairDisplayOverflow = false;
                 repairingTerminal = false;
-                if (!inRepair)
-                {
-                    protocolRepairAttempted = false;
-                }
 
                 BrowserSnapshotCompaction.Compact(messages);
                 var restrictedDefinition = await _tools.RestrictExecutionDefinitionAsync(ExecutionDefinition, _snapshot.AgentInstanceId, generateToken);
@@ -2889,6 +2899,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             model),
                         pageBlocked,
                         terminalBrowserContinuation, evidence.DialogPending);
+                if (IsInitialBackgroundRun) working = working with { ResponseContract = null };
                 if (checkpointCapacityReached) working = working with { Tools = IsInitialBackgroundRun ? [AgentCore.Application.Work.WorkCompletionRequest.Contract] : null };
                 if (trigger.Kind == TriggerKind.BackgroundCompleted) working = working with { Tools = null };
                 if (cleanupPhase && finalizationReason is null && working.Tools is { } cleanupTools)
@@ -2933,6 +2944,14 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 CapabilityProjectionTelemetry.Record(ExecutionDefinition, projectionContext, _tools.ConfigurationGate, working.Tools, projectionModel, CapabilityLoadCountFor(request.ResponseId));
                 try
                 {
+                if (protocolRecovery is { Strategy: not null, Outcome: "retryPending" })
+                {
+                    protocolRecovery = protocolRecovery with { Outcome = "started" };
+                    repairOpen = true;
+                    RuntimeTelemetry.RecordResponseRepair(repairReason!, "started", repairPhase);
+                    await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                        overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
+                }
                 if (!resumingBatch)
                     await RequireProviderRunAuthorityAsync(cause, request.ResponseId, generateToken).ConfigureAwait(false);
                 if (!resumingBatch)
@@ -3012,10 +3031,13 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     if (inRepair && evt is ModelCompleted { Reason: not ModelStopReason.ToolCalls })
                     {
                         var repaired = repairDisplay.ToString().Trim();
-                        if (repairDisplayOverflow || repaired.Length == 0 || IsJsonDocument(repaired))
+                        if (evt is not ModelCompleted { Reason: ModelStopReason.Completed } || repairDisplayOverflow || repaired.Length == 0 || IsJsonDocument(repaired))
                         {
                             repairOutcome = cancellationToken.IsCancellationRequested ? "cancelled" : "failed";
                             _protocolRepairOutcome = repairOutcome;
+                            protocolRecovery = protocolRecovery! with { Outcome = repairOutcome };
+                            await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                                overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
                             await MailboxModelAsync(
                                     cause,
                                     request.ResponseId,
@@ -3060,17 +3082,26 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         continue;
                     }
 
-                    if (!IsInitialBackgroundRun && !inRepair
-                        && evt is ModelFailed repairable
-                        && !protocolRepairAttempted
-                        && TryProtocolRepair(repairable, pending, publishedVisible, generateToken, overallDeadline))
+                    if (evt is ModelFailed formatFailure && !inRepair && protocolRecovery?.Strategy is null)
+                    {
+                        var eligibility = finalizationReason is not null ? "finalizing"
+                            : ProtocolRepairEligibility(formatFailure, pending, publishedVisible, generateToken, overallDeadline);
+                        var detail = RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, formatFailure.Failure);
+                        protocolRecovery = new(detail.Reason ?? "unknown", detail.Channel, eligibility);
+                    }
+                    if (!inRepair && evt is ModelFailed repairable && !protocolRepairAttempted
+                        && finalizationReason is null && protocolRecovery?.Eligibility == "eligible")
                     {
                         protocolRepairAttempted = true;
-                        repairingTerminal = true;
+                        repairingTerminal = !IsInitialBackgroundRun;
                         repairReason = repairable.Failure.FailureReason;
                         repairPhase = steps == 0 ? "initial" : "follow-up";
                         repairOpen = true;
+                        protocolRecovery = protocolRecovery! with { Strategy = IsInitialBackgroundRun ? "completionOnly" : "terminalText", Outcome = "started" };
+                        failedAttempts.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, repairable.Failure)
+                            with { MaxOutputTokens = working.MaxOutputTokens, Transport = model.InferenceTransport?.ToString() });
                         _protocolRepair = "attempted";
+                        if (IsInitialBackgroundRun) await BeginFinalizationAsync("protocolRepair").ConfigureAwait(false);
                         RuntimeTelemetry.RecordResponseRepair(repairReason!, "started", repairPhase);
                         await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                             overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
@@ -3084,7 +3115,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         _protocolRepairOutcome = "failed";
                     }
 
-                    if (!IsInitialBackgroundRun && evt is ModelFailed finalFailure && finalizationReason is null && workTimer is not null
+                    if (!IsInitialBackgroundRun && !inRepair && evt is ModelFailed finalFailure && finalizationReason is null && workTimer is not null
                         && !publishedVisible && pending.Count == 0 && !cancellationToken.IsCancellationRequested
                         && RunFinalization.HasEvidence(messages.ToArray()) && RunFinalization.RecoveryReason(finalFailure.Failure) is { } reason)
                     {
@@ -3093,7 +3124,22 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         break;
                     }
                     if (evt is ModelFailed observedFailure)
-                        failedAttempts.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, observedFailure.Failure));
+                    {
+                        failedAttempts.Add(RunDiagnosticProjection.Failure(executionRun?.AttemptCount ?? 1, observedFailure.Failure)
+                            with { MaxOutputTokens = working.MaxOutputTokens, Transport = model.InferenceTransport?.ToString() });
+                        if (protocolRecovery?.Strategy is not null)
+                        {
+                            protocolRecovery = protocolRecovery with { Outcome = IsTransientRunFailure(observedFailure.Failure) ? "retryPending" : "failed" };
+                            if (IsInitialBackgroundRun && repairOpen)
+                            {
+                                _protocolRepairOutcome = "failed";
+                                RuntimeTelemetry.RecordResponseRepair(repairReason!, "failed", repairPhase);
+                                repairOpen = false;
+                            }
+                        }
+                    }
+                    if (inRepair && repairAnswerAccepted && evt is ModelCompleted)
+                        protocolRecovery = protocolRecovery! with { Outcome = "succeeded" };
                     if (evt is ModelFailed or ModelCompleted)
                         await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
                             overallDeadline, generateToken, protocolRepairReason: repairReason, activeExecutionMs: ActiveExecutionMs(), executionState: State()).ConfigureAwait(false);
@@ -3477,6 +3523,17 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 {
                                     var kind = attention ? AgentRunOutcomeKind.NeedsAttention
                                         : AgentCore.Application.Work.WorkCompletionRequest.Outcome(result) == "NoAction" ? AgentRunOutcomeKind.NoAction : AgentRunOutcomeKind.Response;
+                                    if (protocolRecovery?.Strategy == "completionOnly")
+                                    {
+                                        // Format recovery reports only a partial outcome, never an inferred success.
+                                        kind = AgentRunOutcomeKind.NeedsAttention;
+                                        protocolRecovery = protocolRecovery with { Outcome = "succeeded" };
+                                        await SaveRunCheckpointAsync(cause, request.ResponseId, messages.ToArray(), steps, outputBytes,
+                                            overallDeadline, generateToken, repairReason, ActiveExecutionMs(), State()).ConfigureAwait(false);
+                                        _protocolRepairOutcome = "succeeded";
+                                        RuntimeTelemetry.RecordResponseRepair(repairReason!, "succeeded", repairPhase);
+                                        repairOpen = false;
+                                    }
                                     if (await RequestRunOutcomeAsync(cause, request.ResponseId, kind,
                                         AgentCore.Application.Work.WorkCompletionRequest.Summary(result), overallCts.Token).ConfigureAwait(false)) return;
                                     return;
@@ -3486,7 +3543,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     var correction = JsonSerializer.Serialize(new { error = "invalid", reason = "completion_validation",
                                         message = rejection, summaryMaxLength = AgentCore.Application.Work.WorkCompletionRequest.MaxSummaryCharacters,
                                         messageForNextCall = "Correct only work.complete. This is the last validation correction; do not repeat substantive tools." });
-                                    if (completionCorrectionAttempted || steps >= budget.MaxSteps || Encoding.UTF8.GetByteCount(correction) > resultBudget)
+                                    if (completionCorrectionAttempted || protocolRecovery?.Strategy == "completionOnly"
+                                        || steps >= budget.MaxSteps || Encoding.UTF8.GetByteCount(correction) > resultBudget)
                                     {
                                         await RecordFailureAsync(RunFinalization.InvalidCompletion()).ConfigureAwait(false);
                                         await MailboxModelAsync(cause, request.ResponseId,
@@ -3928,8 +3986,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         && ExecutionDefinition.Environment?.Capabilities is not null)
                     {
                         var recoveryContext = await CapabilityProjectionContextAsync(trigger, model, pinnedCatalog, pinnedSkills, loadedCapabilities, generateToken).ConfigureAwait(false);
-                        var recovery = await RequestCapabilityLoadAsync(cause, request.ResponseId, "{}", recoveryContext, generateToken, dialogRecovery: true).ConfigureAwait(false);
-                        if (recovery.LoadedIds is { } recoveredIds) loadedCapabilities = recoveredIds;
+                        var dialogRecovery = await RequestCapabilityLoadAsync(cause, request.ResponseId, "{}", recoveryContext, generateToken, dialogRecovery: true).ConfigureAwait(false);
+                        if (dialogRecovery.LoadedIds is { } recoveredIds) loadedCapabilities = recoveredIds;
                     }
                     if (finalizationReason is null && evidence.DialogRecoveryExhausted)
                     {
@@ -6914,19 +6972,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         };
     }
 
-    private bool TryProtocolRepair(
-        ModelFailed failed,
-        List<ModelToolCall> pending,
-        bool publishedVisible,
-        CancellationToken cancellationToken,
-        DateTimeOffset? overallDeadline) =>
-        !publishedVisible
-        && pending.Count == 0
-        && !cancellationToken.IsCancellationRequested
-        && (overallDeadline is null || _time.GetUtcNow() < overallDeadline)
-        && failed.Failure.Code == ProviderErrorCode.InvalidResponse
-        && ProtocolFailures.Disposition(failed.Failure.FailureReason) == ProtocolFailureDisposition.Repairable
-        && ProtocolFailures.RepairInstruction(failed.Failure.FailureReason) is not null;
+    private string ProtocolRepairEligibility(ModelFailed failed, List<ModelToolCall> pending,
+        bool publishedVisible, CancellationToken cancellationToken, DateTimeOffset? overallDeadline)
+    {
+        if (cancellationToken.IsCancellationRequested || _boundAgentRun?.CancellationRequested == true) return "cancelled";
+        if (overallDeadline is { } deadline && _time.GetUtcNow() >= deadline) return "deadline";
+        if (_boundAgentRun?.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate) return "uncertainEffect";
+        if (publishedVisible) return "visibleOutput";
+        if (pending.Count != 0) return "pendingCalls";
+        return failed.Failure.Code == ProviderErrorCode.InvalidResponse
+            && (failed.Failure.ResponseChannel is ProviderResponseChannel.StructuredOutput or ProviderResponseChannel.ResponseFunction or ProviderResponseChannel.MarkerCompatibility
+                || failed.Failure.ResponseChannel is null && failed.Failure.FailureReason is ProviderFailureReason.MissingDisplayText or ProviderFailureReason.InvalidBlocks)
+            && ProtocolFailures.Disposition(failed.Failure.FailureReason) == ProtocolFailureDisposition.Repairable
+            ? "eligible" : "terminal";
+    }
 
     private static bool IsMeaningfulVisible(ModelGenerationEvent evt) =>
         evt switch

@@ -175,7 +175,8 @@ public static class BackgroundSessionEndpoints
 
     private static RunExecutionDiagnosticResponse? ToExecutionDiagnostic(AgentRun run) => RunDiagnosticProjection.From(run) is { } diagnostic
         ? new(diagnostic.RemainingBudgetMs, diagnostic.LastTool, diagnostic.RecordedToolResults,
-            diagnostic.FailedAttempts.Select(a => new RunAttemptDiagnosticResponse(a.Attempt, a.Code, a.Reason, a.Channel)).ToArray()) : null;
+            diagnostic.FailedAttempts.Select(a => new RunAttemptDiagnosticResponse(a.Attempt, a.Code, a.Reason, a.Channel, a.MaxOutputTokens, a.Transport)).ToArray(),
+            diagnostic.ProtocolRecovery is { } recovery ? new(recovery.Reason, recovery.Channel, recovery.Eligibility, recovery.Strategy, recovery.Outcome) : null) : null;
 
     private static async Task<AgentRunResponse> WithTriggerOriginAsync(AgentRunResponse response, AgentRun run, ITriggerStore triggers, CancellationToken ct)
     {

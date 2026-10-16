@@ -6,7 +6,7 @@ import { cancelAgentRun, decideAgentRunApproval, listAgentRuns, type AgentRun } 
 import { useCursorPages } from "./useCursorPages";
 import { DrawerListFooter } from "./DrawerListFooter";
 import { DiagnosticDetails } from "./DiagnosticDetails";
-import { runActivationLabel, runBudgetLabel, runOutcomeLabel, runStatusLabel } from "./runPresentation";
+import { runActivationLabel, runBudgetLabel, runOutcomeLabel, runStatusLabel, runRecoveryLabel } from "./runPresentation";
 import { confirmAction } from "../../app/confirmAction";
 import { formatChatTime } from "./chatTime";
 
@@ -76,6 +76,15 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false }
     </Flex>
     {run.sourceBackgroundSessionId ? <Typography.Text type="secondary">Background result from <ConversationDestination sessionId={run.sourceBackgroundSessionId} /></Typography.Text> : null}
     {run.progress ? <Typography.Paragraph className="background-work-progress" style={{ marginBottom: 0 }}>{run.progress}</Typography.Paragraph> : null}
+    {run.executionDiagnostic?.protocolRecovery ? <section aria-label="Response recovery" className="background-work-detail-section">
+      <Flex vertical gap={token.paddingXS}>
+        <Typography.Text strong>Response recovery</Typography.Text>
+        <Typography.Text style={{ overflowWrap: "anywhere" }}>{runRecoveryLabel(run.executionDiagnostic.protocolRecovery.reason)}{run.executionDiagnostic.protocolRecovery.channel ? ` · ${runRecoveryLabel(run.executionDiagnostic.protocolRecovery.channel)}` : ""}</Typography.Text>
+        <Typography.Text>{runRecoveryLabel(run.executionDiagnostic.protocolRecovery.eligibility)}{run.executionDiagnostic.protocolRecovery.strategy ? ` · ${runRecoveryLabel(run.executionDiagnostic.protocolRecovery.strategy)}` : ""}</Typography.Text>
+        {run.executionDiagnostic.protocolRecovery.outcome ? <Typography.Text>{runRecoveryLabel(run.executionDiagnostic.protocolRecovery.outcome)}</Typography.Text> : null}
+        {run.executionDiagnostic.protocolRecovery.strategy ? <Typography.Text type="secondary">Recorded tool results were retained. The correction cannot run substantive tools.</Typography.Text> : null}
+      </Flex>
+    </section> : null}
     <Descriptions size="small" column={1} items={[
       { key: "model", label: "Model", children: <Typography.Text className="background-work-progress">{run.modelCatalogKey}</Typography.Text> },
       ...(run.configuration ? [
@@ -100,7 +109,7 @@ export function AgentRunDetails({ run, onChange, showContextProvenance = false }
         { key: "remaining", label: "Remaining time", children: `${(run.executionDiagnostic.remainingBudgetMs / 1000).toFixed(1)}s at last checkpoint` },
         { key: "providerAttempts", label: "Recorded provider failures", children: run.executionDiagnostic.failedAttempts.length
           ? <Flex vertical gap={token.paddingXS}>{run.executionDiagnostic.failedAttempts.map((attempt, index) => <Typography.Text key={index} style={{ overflowWrap: "anywhere" }}>
-            Attempt {attempt.attempt}: {attempt.code}{attempt.reason ? ` · ${attempt.reason}` : ""}{attempt.channel ? ` · ${attempt.channel}` : ""}
+            Attempt {attempt.attempt}: {attempt.code}{attempt.reason ? ` · ${attempt.reason}` : ""}{attempt.channel ? ` · ${runRecoveryLabel(attempt.channel)}` : ""}{attempt.maxOutputTokens ? ` · ${attempt.maxOutputTokens.toLocaleString()} token ceiling` : ""}{attempt.transport ? ` · ${attempt.transport}` : ""}
           </Typography.Text>)}</Flex> : "None recorded" }
       ] : []),
       { key: "attempt", label: "Attempt", children: `${run.attemptCount} of ${run.maxAttempts}` },

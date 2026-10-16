@@ -357,3 +357,16 @@ describe("Completion accounting and wait presentation", () => {
     expect(screen.queryByText("Background work result")).not.toBeInTheDocument();
   });
 });
+
+it("explains the precise response failure, bounded correction and preserved receipts", () => {
+  const run = { ...fixtureRun, executionDiagnostic: { remainingBudgetMs: 693634, lastTool: "web.fetch", recordedToolResults: 8,
+    failedAttempts: [{ attempt: 1, code: "InvalidResponse", reason: "invalidBlocks", channel: "responseFunction", maxOutputTokens: 8192, transport: "ChatCompletions" }],
+    protocolRecovery: { reason: "invalidBlocks", channel: "responseFunction", eligibility: "eligible", strategy: "completionOnly", outcome: "succeeded" } } };
+  render(<App><AgentRunDetails run={run} onChange={vi.fn()} /></App>);
+  const region = screen.getByRole("region", { name: "Response recovery" });
+  expect(within(region).getByText("Invalid response blocks · Response function")).toBeVisible();
+  expect(within(region).getByText("Eligible for one correction · Completion only")).toBeVisible();
+  expect(within(region).getByText("Correction completed")).toBeVisible();
+  expect(screen.getByText("web.fetch · 8 recorded receipts")).toBeVisible();
+  expect(screen.getByText(/8,192 token ceiling · ChatCompletions/)).toBeVisible();
+});

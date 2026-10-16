@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Semantic response recovery now keeps initial background Work/Cleanup on the work.complete contract, reserves one durable correction, and exposes precise bounded recovery diagnostics. [Incident evidence and focused verification](docs/reports/semantic-response-reliability-verification-2026-10-16.md).
+
 Automation mutations now use independent semantic verification of the current user request and exact structured action, without language-specific Core matching. Verifier failures retain that action for explicit owner UI approval. Ownership, revisions, policy, schedule validity and future-effect permissions remain enforced. [Local verification and deployment limits](docs/reports/semantic-automation-authorization-verification-2026-10-16.md).
 
 The canonical filesystem cutover supports local/offline Git; sandbox remote clone/fetch/push remain blocked by deny-all egress. It replaces file rows/blobs and synchronized sandbox copies with direct owner-directory mounts. General Assistant v32 carries current-file guidance; v31 and prior publications remain immutable. Existing data requires an explicit reviewed backup/reset, never startup conversion. Implementation and qualification details are recorded in the canonical specifications, the [current cutover report](docs/reports/canonical-workspace-cutover-verification-2026-10-16.md), and the [review feedback follow-up](docs/reports/canonical-workspace-feedback-fixes-2026-10-16.md).

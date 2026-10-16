@@ -94,6 +94,10 @@ public sealed partial class TerminalDisplayRepairTests
     [Theory]
     [InlineData(ProviderFailureReason.MissingDisplayText)]
     [InlineData(ProviderFailureReason.InvalidBlocks)]
+    [InlineData(ProviderFailureReason.InvalidJson)]
+    [InlineData(ProviderFailureReason.ResponseFunctionArgumentsInvalid)]
+    [InlineData(ProviderFailureReason.InvalidMarkerEnvelope)]
+    [InlineData(ProviderFailureReason.OutputLimit)]
     public async Task Terminal_presentation_failure_repairs_once_without_offering_browser_tools(string reason)
     {
         var browser = new CountingBrowser();
@@ -483,13 +487,13 @@ public sealed partial class TerminalDisplayRepairTests
         new(new ProviderFailure(
             ProviderErrorCode.InvalidResponse,
             "Malformed assistant envelope.",
-            FailureReason: reason));
+            FailureReason: reason, ResponseChannel: ProviderResponseChannel.ResponseFunction));
 
     private static ModelFailed Unavailable(string reason) =>
         new(new ProviderFailure(
             ProviderErrorCode.Unavailable,
             "Language model is unavailable.",
-            FailureReason: reason));
+            FailureReason: reason, ResponseChannel: ProviderResponseChannel.ResponseFunction));
 
     private static void AssertTerminalChannelOnly(ModelRequest request)
     {

@@ -6,6 +6,18 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class NativeSemanticResponseParserTests
 {
+    [Fact]
+    public void Complete_json_fence_is_normalized_without_weakening_destination_validation()
+    {
+        const string payload = "{\"displayText\":\"Verified\",\"speech\":{\"mode\":\"same\"},\"blocks\":[],\"memory\":[]}";
+        Assert.True(NativeSemanticResponseParser.TryParse("```json\n" + payload + "\n```", out var response, out _));
+        Assert.Equal("Verified", response!.DisplayText);
+        var unsafePayload = payload[..^1] + ",\"destination\":\"other-session\"}";
+        Assert.False(NativeSemanticResponseParser.TryParse("```json\n" + unsafePayload + "\n```", out _, out var reason));
+        Assert.Equal(ProviderFailureReason.ModelSuppliedDestination, reason);
+        Assert.False(NativeSemanticResponseParser.TryParse("```json\n" + payload, out _, out _));
+    }
+
     [Theory]
     [InlineData("resolve", MemoryProposalOperation.Resolve)]
     [InlineData("delete", MemoryProposalOperation.Delete)]

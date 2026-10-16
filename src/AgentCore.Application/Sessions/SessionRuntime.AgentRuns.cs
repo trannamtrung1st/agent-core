@@ -346,9 +346,31 @@ public sealed partial class SessionRuntime
         "completion-required" => "Background work did not provide work.complete after bounded completion recovery. Verified work remains available.",
         "completion-invalid" => "Background work returned an invalid work.complete outcome after bounded validation recovery. Verified work remains available.",
         "tool-call-invalid" => "The provider returned an incomplete tool call; no incomplete action was dispatched.",
-        "semantic-response-invalid" => "The provider response violated the semantic response contract.",
+        "semantic-response-invalid" => SemanticFailureSummary(failure),
         _ => "The model response failed."
     };
+
+    private static string SemanticFailureSummary(ProviderFailure? failure)
+    {
+        var reason = failure?.FailureReason switch
+        {
+            ProviderFailureReason.InvalidJson => "malformed JSON",
+            ProviderFailureReason.InvalidBlocks => "invalid response blocks",
+            ProviderFailureReason.MissingDisplayText => "missing reply text",
+            ProviderFailureReason.ResponseFunctionArgumentsInvalid => "invalid response arguments",
+            ProviderFailureReason.OutputLimit => "an incomplete response at the generation output limit",
+            ProviderFailureReason.ContentFiltered => "a policy stop",
+            ProviderFailureReason.ModelSuppliedDestination => "an unauthorized response destination",
+            ProviderFailureReason.UnknownAction => "an unauthorized response action",
+            _ => "an invalid semantic response"
+        };
+        var channel = failure?.ResponseChannel == ProviderResponseChannel.ResponseFunction ? "response function" : "native structured output";
+        return $"The provider returned {reason} through {channel}. See Response recovery for the bounded correction result.";
+    }
+
+    private static bool IsTransientRunFailure(ProviderFailure failure) =>
+        failure.Code is ProviderErrorCode.Unavailable or ProviderErrorCode.RateLimited
+        || failure.Code == ProviderErrorCode.Timeout && failure.FailureReason is ProviderFailureReason.SetupTimeout or ProviderFailureReason.StreamIdle;
 
     private bool ScheduleAgentRunRetry(EventContext context, Guid responseId, ProviderFailure failure)
     {
@@ -356,8 +378,7 @@ public sealed partial class SessionRuntime
             || run.ResponseId != responseId || run.CancellationRequested || _publishedDisplayLength != 0
             || run.AttemptCount >= run.MaxAttempts
             || run.SideEffect.Disposition is AgentRunSideEffectDisposition.InFlight or AgentRunSideEffectDisposition.Indeterminate
-            || !(failure.Code is ProviderErrorCode.Unavailable or ProviderErrorCode.RateLimited
-                || failure.Code == ProviderErrorCode.Timeout && failure.FailureReason is ProviderFailureReason.SetupTimeout or ProviderFailureReason.StreamIdle)) return false;
+            || !IsTransientRunFailure(failure)) return false;
         // Keep the same durable placeholder and checkpoint. A crash before releasing the claim
         // follows ordinary lease recovery; a later attempt reuses the response identity.
         UpdateAssistant(EntryStatus.Streaming);

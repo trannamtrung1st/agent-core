@@ -58,6 +58,7 @@ public sealed partial class OpenAICompatibleLanguageModel : ILanguageModel
     }
 
     public ModelCapabilities Capabilities { get; }
+    public ModelInferenceTransport? InferenceTransport => _options.Transport;
 
     public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(
         ModelRequest request,
