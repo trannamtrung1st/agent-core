@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Security;
 
-public sealed record TenantDefinitionRecord(string DefinitionId, Guid TenantId, DateTimeOffset CreatedAt)
+public sealed record TenantDefinitionRecord(string DefinitionId, Guid TenantId, DateTimeOffset CreatedAt, DateTimeOffset? DeletedAt = null)
 {
     internal static void Configure(ModelBuilder model)
     {
@@ -13,6 +13,6 @@ public sealed record TenantDefinitionRecord(string DefinitionId, Guid TenantId, 
         entity.HasIndex(d => new { d.TenantId, d.DefinitionId }).IsUnique();
         entity.HasOne<Tenant>().WithMany().HasForeignKey(d => d.TenantId).OnDelete(DeleteBehavior.Restrict);
     }
-    internal static TenantDefinitionRecord Row(TenantDefinition definition) => new(definition.DefinitionId.ToString("D"), definition.TenantId, definition.CreatedAt);
-    internal TenantDefinition Domain() => new(TenantId, Guid.Parse(DefinitionId), CreatedAt);
+    internal static TenantDefinitionRecord Row(TenantDefinition definition) => new(definition.DefinitionId.ToString("D"), definition.TenantId, definition.CreatedAt, definition.DeletedAt);
+    internal TenantDefinition Domain() => new(TenantId, Guid.Parse(DefinitionId), CreatedAt, DeletedAt);
 }

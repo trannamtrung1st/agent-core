@@ -10,6 +10,8 @@ Tenant-owned definition draft/publication APIs now preserve immutable versions a
 
 Canonical tenant definition resources and offline evaluation workflows now support owned byte uploads, atomic batches, protected downloads and revision-bound publication evidence. [Child workflow verification](docs/reports/tenant-definition-children-verification-2026-10-16.md) records isolation, race, cancellation and recovery checks; the full resource/runtime/UI cutover remains in progress.
 
+Canonical tenant Definition deletion now checks current authority, complete revisions and actual references, removes grants/children atomically, and retains ownership markers that prevent ID reuse. [Deletion verification](docs/reports/tenant-definition-deletion-verification-2026-10-16.md) records local evidence and the remaining template/UI/runtime cutover.
+
 Automatic Sandbox filesystem compatibility now prepares private owned roots and selects non-root execution in the trusted server without rebuilding the chosen image. Verification contract 4 attests exact mounts and real filesystem/Git behavior, accepting proven Docker Desktop metadata translation while retaining strict Linux ownership. [Root cause, local evidence and platform limits](docs/reports/automatic-sandbox-filesystem-compatibility-2026-10-16.md).
 
 Semantic response recovery now keeps initial background Work/Cleanup on the work.complete contract, reserves one durable correction, and exposes precise bounded recovery diagnostics. [Incident evidence and focused verification](docs/reports/semantic-response-reliability-verification-2026-10-16.md).

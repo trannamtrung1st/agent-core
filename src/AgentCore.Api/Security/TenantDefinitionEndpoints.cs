@@ -14,6 +14,7 @@ public static partial class TenantDefinitionEndpoints
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}").RequireAuthorization();
         MapChildren(group);
+        MapDeletion(group);
         group.MapGet("/agent-definitions", (int? page, int? pageSize, HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http); return Results.Json(await service.ListAsync(a.PrincipalId, a.TenantId, page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false));

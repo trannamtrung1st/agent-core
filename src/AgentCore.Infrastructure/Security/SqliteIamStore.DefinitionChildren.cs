@@ -21,7 +21,7 @@ public sealed partial class SqliteIamStore
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); var id = definitionId.ToString("D");
         var rows = await db.AgentDefinitionPublicationResources.IgnoreQueryFilters().AsNoTracking().Where(r => r.DefinitionId == id && r.Version == version
-            && db.Set<TenantDefinitionRecord>().Any(d => d.TenantId == tenantId && d.DefinitionId == r.DefinitionId)).OrderBy(r => r.LogicalPath).ToArrayAsync(ct).ConfigureAwait(false);
+            && db.Set<TenantDefinitionRecord>().Any(d => d.TenantId == tenantId && d.DeletedAt == null && d.DefinitionId == r.DefinitionId)).OrderBy(r => r.LogicalPath).ToArrayAsync(ct).ConfigureAwait(false);
         return rows.Select(DefinitionResourcePersistence.MapPublicationResource).ToArray();
     }
     public ValueTask<AgentDefinitionDraftResourceBatchBound?> TryBindDefinitionResourcesAsync(TenantSecurityState next, long expectedSecurityRevision,

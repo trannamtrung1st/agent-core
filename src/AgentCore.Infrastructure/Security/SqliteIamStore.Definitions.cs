@@ -23,7 +23,7 @@ public sealed partial class SqliteIamStore
     {
         if (tenantId == Guid.Empty || page < 0 || page > 100_000 || pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(page));
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var query = db.Set<TenantDefinitionRecord>().AsNoTracking().Where(d => d.TenantId == tenantId);
+        var query = db.Set<TenantDefinitionRecord>().AsNoTracking().Where(d => d.TenantId == tenantId && d.DeletedAt == null);
         if (allowedIds is not null) { var allowed = allowedIds.Select(id => id.ToString("D")).ToArray(); query = query.Where(d => allowed.Contains(d.DefinitionId)); }
         var count = await query.CountAsync(ct).ConfigureAwait(false);
         var roots = await query.OrderBy(d => d.DefinitionId).Skip(page * pageSize).Take(pageSize).ToArrayAsync(ct).ConfigureAwait(false);
@@ -43,7 +43,7 @@ public sealed partial class SqliteIamStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var id = definitionId.ToString("D");
         var rows = await db.AgentDefinitionDrafts.IgnoreQueryFilters().AsNoTracking().Where(d => d.DefinitionId == id
-            && db.Set<TenantDefinitionRecord>().Any(r => r.DefinitionId == d.DefinitionId && r.TenantId == tenantId)).OrderBy(d => d.DraftId).ToArrayAsync(ct).ConfigureAwait(false);
+            && db.Set<TenantDefinitionRecord>().Any(r => r.DefinitionId == d.DefinitionId && r.TenantId == tenantId && r.DeletedAt == null)).OrderBy(d => d.DraftId).ToArrayAsync(ct).ConfigureAwait(false);
         return rows.Select(AgentDefinitionAdminMapping.MapDraft).ToArray();
     }
     public async ValueTask<AgentDefinitionDraft?> FindDefinitionDraftAsync(Guid tenantId, Guid draftId, CancellationToken ct = default)
@@ -63,14 +63,14 @@ public sealed partial class SqliteIamStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var id = definitionId.ToString("D");
         var rows = await db.AgentDefinitionPublications.IgnoreQueryFilters().AsNoTracking().Where(p => p.DefinitionId == id
-            && db.Set<TenantDefinitionRecord>().Any(r => r.DefinitionId == p.DefinitionId && r.TenantId == tenantId)).OrderBy(p => p.Version).ToArrayAsync(ct).ConfigureAwait(false);
+            && db.Set<TenantDefinitionRecord>().Any(r => r.DefinitionId == p.DefinitionId && r.TenantId == tenantId && r.DeletedAt == null)).OrderBy(p => p.Version).ToArrayAsync(ct).ConfigureAwait(false);
         return rows.Select(AgentDefinitionAdminMapping.MapPublication).Select(Summary).ToArray();
     }
     public async ValueTask<bool> TryCreateDefinitionAsync(TenantSecurityState next, long expectedSecurityRevision, TenantDefinition definition,
         AgentDefinitionDraft draft, AuthorizationAudit audit, CancellationToken ct = default) =>
         await WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
-            if (definition.TenantId != next.Tenant.TenantId || definition.DefinitionId == Guid.Empty || draft.DefinitionId != definition.DefinitionId.ToString("D") || draft.Candidate.DefinitionId != draft.DefinitionId || draft.Revision != 1)
+            if (definition.DeletedAt is not null || definition.TenantId != next.Tenant.TenantId || definition.DefinitionId == Guid.Empty || draft.DefinitionId != definition.DefinitionId.ToString("D") || draft.Candidate.DefinitionId != draft.DefinitionId || draft.Revision != 1)
                 throw new ArgumentException("Invalid definition ownership.");
             if (await db.Set<TenantDefinitionRecord>().AnyAsync(d => d.DefinitionId == draft.DefinitionId, ct).ConfigureAwait(false)
                 || await db.AgentDefinitionDrafts.IgnoreQueryFilters().AnyAsync(d => d.DefinitionId == draft.DefinitionId, ct).ConfigureAwait(false)
@@ -167,11 +167,11 @@ public sealed partial class SqliteIamStore
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }
     }
     private static IQueryable<TenantDefinitionRecord> Root(AgentCoreDbContext db, Guid tenant, Guid id) =>
-        db.Set<TenantDefinitionRecord>().Where(d => d.TenantId == tenant && d.DefinitionId == id.ToString("D"));
+        db.Set<TenantDefinitionRecord>().Where(d => d.TenantId == tenant && d.DeletedAt == null && d.DefinitionId == id.ToString("D"));
     private static IQueryable<AgentDefinitionDraftRecord> Draft(AgentCoreDbContext db, Guid tenant, Guid draft) =>
-        db.AgentDefinitionDrafts.IgnoreQueryFilters().Where(d => d.DraftId == draft.ToString("D") && db.Set<TenantDefinitionRecord>().Any(r => r.TenantId == tenant && r.DefinitionId == d.DefinitionId));
+        db.AgentDefinitionDrafts.IgnoreQueryFilters().Where(d => d.DraftId == draft.ToString("D") && db.Set<TenantDefinitionRecord>().Any(r => r.TenantId == tenant && r.DeletedAt == null && r.DefinitionId == d.DefinitionId));
     private static IQueryable<AgentDefinitionPublicationRecord> Publication(AgentCoreDbContext db, Guid tenant, Guid id, int version) =>
-        db.AgentDefinitionPublications.IgnoreQueryFilters().Where(p => p.DefinitionId == id.ToString("D") && p.Version == version && db.Set<TenantDefinitionRecord>().Any(r => r.TenantId == tenant && r.DefinitionId == p.DefinitionId));
+        db.AgentDefinitionPublications.IgnoreQueryFilters().Where(p => p.DefinitionId == id.ToString("D") && p.Version == version && db.Set<TenantDefinitionRecord>().Any(r => r.TenantId == tenant && r.DeletedAt == null && r.DefinitionId == p.DefinitionId));
     private static AgentDefinitionPublicationSummary Summary(AgentDefinitionPublication p) => new(p.DefinitionId, p.Version, p.Status, p.MetadataRevision, p.PublishedAt,
         p.Payload.SkillList.Select(s => new PublishedSkillReference(s.Id, s.Name, s.RequiredCapabilities)).ToArray());
 }

@@ -11,17 +11,18 @@ public sealed partial class InMemoryAgentDefinitionAdminStore
     internal ConcurrentDictionary<Guid, TenantDefinition> TenantDefinitions { get; } = new();
     internal bool IsTenantDefinition(string id) => Guid.TryParse(id, out var parsed) && TenantDefinitions.ContainsKey(parsed);
     internal bool IsTenantDraft(Guid id) => _drafts.TryGetValue(id, out var draft) && IsTenantDefinition(draft.DefinitionId);
+    internal bool OwnsActiveDefinition(Guid tenant, Guid id) => TenantDefinitions.GetValueOrDefault(id) is { DeletedAt: null } root && root.TenantId == tenant;
     internal AgentDefinitionDraft? TenantDraft(Guid tenant, Guid id) => _drafts.TryGetValue(id, out var draft)
-        && Guid.TryParseExact(draft.DefinitionId, "D", out var definition) && TenantDefinitions.GetValueOrDefault(definition)?.TenantId == tenant ? AgentDefinitionAdminSnapshots.Freeze(draft) : null;
-    internal AgentDefinitionPublication? TenantPublication(Guid tenant, Guid id, int version) => TenantDefinitions.GetValueOrDefault(id)?.TenantId == tenant
+        && Guid.TryParseExact(draft.DefinitionId, "D", out var definition) && OwnsActiveDefinition(tenant, definition) ? AgentDefinitionAdminSnapshots.Freeze(draft) : null;
+    internal AgentDefinitionPublication? TenantPublication(Guid tenant, Guid id, int version) => OwnsActiveDefinition(tenant, id)
         && _publications.TryGetValue((id.ToString("D"), version), out var p) ? AgentDefinitionAdminSnapshots.Freeze(p) : null;
-    internal IReadOnlyList<AgentDefinitionDraft> TenantDrafts(Guid tenant, Guid id) => TenantDefinitions.GetValueOrDefault(id)?.TenantId != tenant ? []
+    internal IReadOnlyList<AgentDefinitionDraft> TenantDrafts(Guid tenant, Guid id) => !OwnsActiveDefinition(tenant, id) ? []
         : _drafts.Values.Where(d => d.DefinitionId == id.ToString("D")).OrderBy(d => d.DraftId).Select(AgentDefinitionAdminSnapshots.Freeze).ToArray();
-    internal IReadOnlyList<AgentDefinitionPublication> TenantPublications(Guid tenant, Guid id) => TenantDefinitions.GetValueOrDefault(id)?.TenantId != tenant ? []
+    internal IReadOnlyList<AgentDefinitionPublication> TenantPublications(Guid tenant, Guid id) => !OwnsActiveDefinition(tenant, id) ? []
         : _publications.Values.Where(p => p.DefinitionId == id.ToString("D")).OrderBy(p => p.Version).Select(AgentDefinitionAdminSnapshots.Freeze).ToArray();
     internal bool CreateTenantDefinition(TenantDefinition root, AgentDefinitionDraft draft)
     {
-        if (root.DefinitionId == Guid.Empty || draft.DefinitionId != root.DefinitionId.ToString("D") || draft.Candidate.DefinitionId != draft.DefinitionId || draft.Revision != 1) throw new ArgumentException("Invalid definition ownership.");
+        if (root.DeletedAt is not null || root.DefinitionId == Guid.Empty || draft.DefinitionId != root.DefinitionId.ToString("D") || draft.Candidate.DefinitionId != draft.DefinitionId || draft.Revision != 1) throw new ArgumentException("Invalid definition ownership.");
         var frozen = AgentDefinitionAdminSnapshots.Freeze(draft); AgentDefinitionValidator.ValidateCandidate(frozen.Candidate);
         if (TenantDefinitions.ContainsKey(root.DefinitionId) || _drafts.Values.Any(d => d.DefinitionId == draft.DefinitionId)
             || _publications.Keys.Any(k => k.DefinitionId == draft.DefinitionId) || _drafts.ContainsKey(draft.DraftId)) return false;
@@ -31,7 +32,7 @@ public sealed partial class InMemoryAgentDefinitionAdminStore
     {
         var frozen = AgentDefinitionAdminSnapshots.Freeze(draft); AgentDefinitionValidator.ValidateCandidate(frozen.Candidate);
         if (frozen.Candidate.DefinitionId != draft.DefinitionId || !Guid.TryParseExact(draft.DefinitionId, "D", out var id)
-            || TenantDefinitions.GetValueOrDefault(id)?.TenantId != tenant) throw new AccessDeniedException("resource_unavailable");
+            || !OwnsActiveDefinition(tenant, id)) throw new AccessDeniedException("resource_unavailable");
         if (expected is null)
         {
             if (_drafts.ContainsKey(draft.DraftId) || draft.Revision != 1 || draft.SourceKind != DefinitionDraftSourceKind.ForkDurable

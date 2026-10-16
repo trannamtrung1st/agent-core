@@ -151,6 +151,8 @@ public sealed partial class TenantDefinitionIntegrationTests
         public IIamStore Iam { get; private set; } = null!;
         public ITenantDefinitionStore Definitions => (ITenantDefinitionStore)Iam;
         public IAgentDefinitionAdminStore Admin { get; private set; } = null!;
+        public IAgentInstanceStore Instances { get; private set; } = null!;
+        public IMemoryStore SessionStore { get; private set; } = null!;
         public IAgentDefinitionResourceAdminStore Resources { get; private set; } = null!;
         public IDefinitionDraftEvaluationStore Evaluation { get; private set; } = null!;
         public IDefinitionResourceContentStore Content { get; private set; } = new InMemoryDefinitionResourceContentStore();
@@ -174,13 +176,15 @@ public sealed partial class TenantDefinitionIntegrationTests
                 f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f._path};Foreign Keys=True;Default Timeout=10").Options);
                 await using (var db = f.Contexts.CreateDbContext()) await db.Database.MigrateAsync();
                 f.Iam = new SqliteIamStore(f.Contexts, f.Content); f.Admin = new SqliteAgentDefinitionAdminStore(f.Contexts, f.Ids, f.Content);
+                f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids); f.SessionStore = new SqliteMemoryStore(f.Contexts, TimeProvider.System);
                 f.Resources = new SqliteAgentDefinitionResourceAdminStore(f.Contexts, f.Content, f.Ids); f.Evaluation = new SqliteDefinitionDraftEvaluationStore(f.Contexts, f.Ids);
             }
             else
             {
                 var admin = new InMemoryAgentDefinitionAdminStore(f.Ids); var resources = new InMemoryAgentDefinitionResourceAdminStore(admin, f.Content, f.Ids);
                 admin.ResourceStore = resources; f.Admin = admin; f.Resources = resources; f.Evaluation = new InMemoryDefinitionDraftEvaluationStore(admin);
-                f.Iam = new InMemoryIamStore(new InMemoryAgentInstanceStore(), admin);
+                var instances = new InMemoryAgentInstanceStore(); var sessions = new InMemoryMemoryStore();
+                f.Instances = instances; f.SessionStore = sessions; f.Iam = new InMemoryIamStore(instances, admin, sessions);
             }
             return f;
         }

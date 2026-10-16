@@ -71,7 +71,9 @@ public sealed partial class TenantDefinitionIntegrationTests
     [InlineData(true, 1)]
     [InlineData(false, 2)]
     [InlineData(true, 2)]
-    public async Task Evaluation_completion_loses_changed_draft_suspension_or_cancellation_without_evidence(bool sqlite, int mode)
+    [InlineData(false, 3)]
+    [InlineData(true, 3)]
+    public async Task Evaluation_completion_loses_changed_draft_suspension_cancellation_or_retirement_without_evidence(bool sqlite, int mode)
     {
         await using var f = await Fixture.Create(sqlite);
         var owner = await f.Identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
@@ -98,12 +100,18 @@ public sealed partial class TenantDefinitionIntegrationTests
             var system = (await f.Iam.ReadSystemAsync()).Principals.Single(p => p.AccountId == owner.AccountId);
             await new AccountAdministrationService(f.Iam, f.Authorizer, f.Tokens, f.Ids, TimeProvider.System).SetStatusAsync(system.PrincipalId, accountId!.Value, IdentityStatus.Suspended);
         }
-        else cancellation.Cancel();
+        else if (mode == 2) cancellation.Cancel();
+        else await f.Service.DeleteDraftAsync(actor, owner.TenantId, draft.DraftId, await Revision(), saved.Revision);
         paused.Release.TrySetResult(true);
-        if (mode == 0) await Assert.ThrowsAsync<SecurityConflictException>(() => evaluation);
+        if (mode is 0 or 3) await Assert.ThrowsAsync<SecurityConflictException>(() => evaluation);
         else if (mode == 1) Assert.Equal("account_unavailable", (await Assert.ThrowsAsync<AccessDeniedException>(() => evaluation)).ReasonCode);
         else await Assert.ThrowsAnyAsync<OperationCanceledException>(() => evaluation);
-        Assert.Empty((await f.Service.ReadDraftStateAsync(owner.OwnerPrincipalId, owner.TenantId, draft.DraftId)).Results);
+        if (mode == 3)
+        {
+            Assert.Null(await f.Definitions.ReadDefinitionDraftSnapshotAsync(owner.TenantId, draft.DraftId));
+            await AssertPurged(f, draft.DefinitionId, [draft.DraftId]);
+        }
+        else Assert.Empty((await f.Service.ReadDraftStateAsync(owner.OwnerPrincipalId, owner.TenantId, draft.DraftId)).Results);
         Assert.DoesNotContain(await f.Iam.ReadAuditAsync(owner.TenantId, 200), a => a.Action == "agent-definitions.evaluations.run");
     }
 

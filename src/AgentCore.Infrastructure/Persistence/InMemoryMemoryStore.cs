@@ -75,6 +75,16 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         }
     }
 
+    internal bool HasDefinitionHistory(string definitionId)
+    {
+        lock (_gate)
+        {
+            var sessionIds = _sessions.Values.Where(s => s.Definition.Id == definitionId).Select(s => s.SessionId.ToString("D")).ToHashSet();
+            return CountLiveByDefinition(definitionId) > 0 || AgentRuns.Runs.Values.Any(r => r.DefinitionId == definitionId)
+                || AgentRuns.Activations.Values.Any(a => sessionIds.Contains(a.SessionId));
+        }
+    }
+
     public ValueTask<SessionSnapshot?> LoadAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

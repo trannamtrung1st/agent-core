@@ -158,7 +158,7 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     private static async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
         foreach (var assignment in state.Assignments.Where(a => a.Scope.Kind == AccessScopeKind.Resource && a.Scope.ResourceType == "definition"))
-            if (!await db.Set<TenantDefinitionRecord>().AnyAsync(d => d.TenantId == state.Tenant.TenantId && d.DefinitionId == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
+            if (!await db.Set<TenantDefinitionRecord>().AnyAsync(d => d.TenantId == state.Tenant.TenantId && d.DeletedAt == null && d.DefinitionId == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
                 throw new ArgumentException("A definition assignment requires an owned definition.");
         var instanceIds = state.SystemIdentities.Where(i => i.AgentInstanceId is not null).Select(i => i.AgentInstanceId!.Value.ToString("D")).ToArray();
         if (await db.Set<IamSystemIdentityRow>().AnyAsync(i => i.TenantId != state.Tenant.TenantId

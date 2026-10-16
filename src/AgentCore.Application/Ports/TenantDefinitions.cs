@@ -4,7 +4,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record TenantDefinition(Guid TenantId, Guid DefinitionId, DateTimeOffset CreatedAt);
+public sealed record TenantDefinition(Guid TenantId, Guid DefinitionId, DateTimeOffset CreatedAt, DateTimeOffset? DeletedAt = null);
 public sealed record TenantDefinitionSummary(TenantDefinition Definition, int DraftCount, int? LatestVersion, string DisplayName);
 public sealed record TenantDefinitionPage(IReadOnlyList<TenantDefinitionSummary> Items, int Total, int Page, int PageSize);
 
@@ -14,11 +14,16 @@ public sealed record TenantDefinitionResourceUpload(Guid? ResourceId, string Log
 public sealed record TenantDefinitionResourceContent(string LogicalPath, string MediaType, byte[] Content);
 public sealed record TenantDefinitionScenarioSaved(DefinitionEvaluationScenario Scenario, long Revision);
 public sealed record TenantDefinitionDraftRevision(long Revision);
+public sealed record TenantDefinitionDeleted(bool DefinitionRetired);
 
 // Ownership belongs to the definition aggregate. Drafts, publications and resource/evaluation
 // children remain in their existing stores; canonical mutations commit with security CAS and audit.
 public interface ITenantDefinitionStore
 {
+    ValueTask<TenantDefinitionDeleted?> TryDeleteDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision,
+        Guid draftId, long expectedDraftRevision, bool retireDefinition, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default);
+    ValueTask<TenantDefinitionDeleted?> TryDeleteDefinitionAsync(TenantSecurityState next, long expectedSecurityRevision,
+        Guid definitionId, AdminDefinitionDeleteWitness witness, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<TenantDefinitionDraftSnapshot?> ReadDefinitionDraftSnapshotAsync(Guid tenantId, Guid draftId, CancellationToken ct = default);
     ValueTask<IReadOnlyList<AgentDefinitionPublicationResource>> ListOwnedPublicationResourcesAsync(Guid tenantId, Guid definitionId, int version, CancellationToken ct = default);
     ValueTask<AgentDefinitionDraftResourceBatchBound?> TryBindDefinitionResourcesAsync(TenantSecurityState next, long expectedSecurityRevision,

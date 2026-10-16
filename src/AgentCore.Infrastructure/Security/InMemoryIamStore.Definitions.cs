@@ -12,19 +12,19 @@ public sealed partial class InMemoryIamStore
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (definitions.TenantGate)
             return ValueTask.FromResult(scope.Kind == AccessScopeKind.Resource && scope.ResourceType == "definition"
                 && scope.TenantId is { } tenant && tenant != Guid.Empty && Guid.TryParseExact(scope.ResourceId, "D", out var id) && scope.ResourceId == id.ToString("D")
-                && definitions.TenantDefinitions.GetValueOrDefault(id)?.TenantId == tenant);
+                && definitions.OwnsActiveDefinition(tenant, id));
     }
     public ValueTask<TenantDefinition?> FindDefinitionAsync(Guid tenantId, Guid definitionId, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (definitions.TenantGate)
-        { var root = definitions.TenantDefinitions.GetValueOrDefault(definitionId); return ValueTask.FromResult(root?.TenantId == tenantId ? root : null); }
+        { var root = definitions.TenantDefinitions.GetValueOrDefault(definitionId); return ValueTask.FromResult(root is { DeletedAt: null } && root.TenantId == tenantId ? root : null); }
     }
     public ValueTask<TenantDefinitionPage> ListDefinitionsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedIds, int page, int pageSize, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); if (tenantId == Guid.Empty || page < 0 || page > 100_000 || pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(page));
         lock (_gate) lock (definitions.TenantGate)
         {
-            var allowed = allowedIds?.ToHashSet(); var all = definitions.TenantDefinitions.Values.Where(d => d.TenantId == tenantId && (allowed is null || allowed.Contains(d.DefinitionId))).OrderBy(d => d.DefinitionId.ToString("D"), StringComparer.Ordinal).ToArray();
+            var allowed = allowedIds?.ToHashSet(); var all = definitions.TenantDefinitions.Values.Where(d => d.TenantId == tenantId && d.DeletedAt == null && (allowed is null || allowed.Contains(d.DefinitionId))).OrderBy(d => d.DefinitionId.ToString("D"), StringComparer.Ordinal).ToArray();
             var items = all.Skip(page * pageSize).Take(pageSize).Select(root =>
             {
                 var drafts = definitions.TenantDrafts(tenantId, root.DefinitionId); var latest = definitions.TenantPublications(tenantId, root.DefinitionId).LastOrDefault();

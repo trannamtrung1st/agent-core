@@ -50,6 +50,8 @@ All routes below start `/api/v2/tenants/{tenantId}` and derive the actor from co
 | POST `/agent-definitions/{definitionId}/drafts` | `agent-definitions.update` plus read on that definition; exact source `version`, security `expectedRevision`; 201 fork of owned publication with resource bindings |
 | GET `/agent-definitions/{definitionId}/publications`, GET `/agent-definitions/{definitionId}/publications/{version}` | `agent-definitions.read` on that owned definition; version metadata / exact immutable payload |
 | POST `/agent-definitions/{definitionId}/publications/{version}/deprecate` | `agent-definitions.publish` plus read; security `expectedRevision`, `expectedMetadataRevision`; retains payload and advances metadata revision |
+| DELETE `/definition-drafts/{draftId}` | `agent-definitions.delete` plus read; security `expectedRevision` and `expectedDraftRevision` query values; 204. Removes draft resources/evidence; retires the root if this is its last unpublished draft |
+| DELETE `/agent-definitions/{definitionId}` | Definition delete plus read; JSON body `{ "expectedRevision": 1, "witness": { "drafts": [{ "draftId": "<guid>", "revision": 1 }], "publications": [{ "version": 1, "metadataRevision": 1 }] }`; witness must match every current draft/publication; 204. At least one child is required; arrays may be empty individually. Changed child/security witness returns 409 `stale_revision`; existing Instance/live Session/retained Run/Activation returns 409 `definition_in_use`; no partial deletion |
 
 Definition child routes below also start at `/api/v2/tenants/{tenantId}`. They inherit the owned Definition scope and current cookie/membership; they have no global hash or owner-header fallback.
 

@@ -353,7 +353,7 @@ public sealed class SqliteAdminLifecycleDeletion(
         db.Automations.Where(r => r.AgentInstanceId == instanceId
             && r.Status == (int)AutomationStatus.Cancelled);
 
-    private static async Task<AdminDeletionReferenceCounts> CountDefinitionAsync(
+    internal static async Task<AdminDeletionReferenceCounts> CountDefinitionAsync(
         AgentCoreDbContext db,
         string definitionId,
         CancellationToken cancellationToken)

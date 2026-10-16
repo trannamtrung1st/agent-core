@@ -47,6 +47,6 @@ public static class IdentityRegistration
     {
         var definitions = (AgentCore.Infrastructure.Definitions.InMemoryAgentDefinitionAdminStore)provider.GetRequiredService<IAgentDefinitionAdminStore>();
         _ = provider.GetRequiredService<IDefinitionDraftEvaluationStore>();
-        return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions);
+        return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>());
     }
 }

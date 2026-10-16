@@ -6,7 +6,7 @@ using AgentCore.Infrastructure.Definitions;
 
 namespace AgentCore.Infrastructure.Security;
 
-public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions) : IIamStore, ITenantAgentStore, ITenantDefinitionStore
+public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions, InMemoryMemoryStore definitionReferences) : IIamStore, ITenantAgentStore, ITenantDefinitionStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Account> _accounts = [];
@@ -120,7 +120,7 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
             throw new ArgumentException("Invalid Account or audit ownership.");
         EnsureActiveAccountOwner(state);
         if (state.Assignments.Any(a => a.Scope.Kind == AccessScopeKind.Resource && a.Scope.ResourceType == "definition"
-            && (!Guid.TryParseExact(a.Scope.ResourceId, "D", out var id) || definitions.TenantDefinitions.GetValueOrDefault(id)?.TenantId != state.Tenant.TenantId)))
+            && (!Guid.TryParseExact(a.Scope.ResourceId, "D", out var id) || !definitions.OwnsActiveDefinition(state.Tenant.TenantId, id))))
             throw new ArgumentException("A definition assignment requires an owned definition.");
         if (state.SystemIdentities.Any(i => i.AgentInstanceId != creatingInstance && instances.FindAsync(i.AgentInstanceId!.Value).Result is null))
             throw new ArgumentException("An agent identity requires a backing Instance.");
