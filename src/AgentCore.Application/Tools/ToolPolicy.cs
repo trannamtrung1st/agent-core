@@ -28,6 +28,9 @@ public static class ToolPolicy
         if (ToolCatalog.IsCompletionTool(toolName) && admission?.OwnedSessionId is null) return ToolPolicyDecision.Deny;
         if (toolName == ToolCatalog.BackgroundStart && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
             return ToolPolicyDecision.Deny;
+        if (ToolResources.IsTriggerWrite(toolName) && admission is not null
+            && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn, OwnedSessionId: not null })
+            return ToolPolicyDecision.Deny;
         if (ManagementTools.IsManagement(toolName) && (admission is not { AgentInstanceId: not null, SupportsTools: true }
             || !ManagementTools.Allows(toolName, definition, admission.Harness)
             || !HarnessChatTools.IsHarness(toolName) && admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }))

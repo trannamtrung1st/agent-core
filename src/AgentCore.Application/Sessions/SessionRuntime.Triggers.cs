@@ -26,13 +26,10 @@ public sealed partial class SessionRuntime
             _scheduleConversationContext, resultText, action);
     }
 
-    private void RefreshScheduleDraftForUserTurn(string? text, string? language)
+    private void RefreshScheduleDraftForUserTurn()
     {
         _scheduleDraftContext = ScheduleDraftAdmission.PrepareDraftForUserTurn(
             _scheduleDraftContext,
-            ref _scheduleDraftEligibleForNextUserTurn,
-            text,
-            language,
-            _scheduleConversationContext);
+            ref _scheduleDraftEligibleForNextUserTurn);
     }
 }

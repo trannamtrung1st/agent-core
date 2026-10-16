@@ -50,9 +50,6 @@ public sealed class HostedTriggerToolTests
             "Remind me tomorrow at 9 AM to call John.",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.Create,
-            false,
-            null,
             null,
             DateTimeOffset.UtcNow);
 
@@ -72,6 +69,8 @@ public sealed class HostedTriggerToolTests
     {
         var services = new ServiceCollection();
         services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic");
+        var fixture = new DecisionFixture();
+        services.AddSingleton<ITriggerCommandAuthorizer>(fixture);
         await using var provider = services.BuildServiceProvider();
         var definition = (await provider.GetRequiredService<IAgentDefinitionStore>().GetAsync("secretary", 8))!;
         var tools = provider.GetRequiredService<SessionToolExecutor>();
@@ -86,7 +85,7 @@ public sealed class HostedTriggerToolTests
             WebhookEventKind.Webhook, "order.placed", "synthetic-hash", WebhookEventStatus.Active, 1, now, now));
         var command = new TriggerCommandContext(new TriggerOwner(instanceId, LocalUserProfile.Id), sessionId, "UTC",
             "Create an automation to review incoming orders.", "en", TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.Create, false, null, null, now);
+            null, now);
         async Task<ToolExecutionResult> Execute(string tool, object args, TriggerCommandContext? context = null, ToolExecutionAdmission? admission = null) =>
             await tools.ExecuteAsync(definition, sessionId, new ModelToolCall(Guid.NewGuid().ToString(), tool, JsonSerializer.Serialize(args)),
                 ToolLimits.MaxOutputBytes, triggerCommand: context, admission: admission);
@@ -104,7 +103,7 @@ public sealed class HostedTriggerToolTests
         var foreign = await Execute(ToolCatalog.AutomationInspect, new { automationId = id }, admission: detached with { AgentInstanceId = Guid.NewGuid() });
         Assert.Contains("\"error\":\"forbidden\"", foreign.Text);
         Assert.DoesNotContain("Review orders", foreign.Text);
-        var update = command with { CurrentUserText = "Update this automation instructions.", AllowedActions = TriggerCommandAction.Update };
+        var update = command with { CurrentUserText = "Update this automation instructions." };
         var edited = await Execute(ToolCatalog.AutomationUpdate, new { automationId = id, expectedRevision = 1, instructions = "Review configured order details." }, update);
         Assert.Contains("Review configured order details.", edited.Text);
         var owner = new TriggerOwner(instanceId, LocalUserProfile.Id);
@@ -112,15 +111,30 @@ public sealed class HostedTriggerToolTests
         Assert.Equal(2, stored.Revision); Assert.Equal(sessionId, stored.Provenance.SourceSessionId);
         var denied = await Execute(ToolCatalog.AutomationUpdate, new { automationId = id, expectedRevision = 2, instructions = "Injected behavior" }, update with { Classification = TriggerAuthorizationClassification.Occurrence });
         Assert.Contains("forbidden", denied.Text);
-        var negated = await Execute(ToolCatalog.AutomationDelete, new { automationId = id, expectedRevision = 2 }, command with { CurrentUserText = "Do not delete this automation.", AllowedActions = TriggerCommandAction.Cancel });
+        fixture.Decision = TriggerCommandAuthorizationDecision.Deny;
+        var negated = await Execute(ToolCatalog.AutomationDelete, new { automationId = id, expectedRevision = 2 }, command with { CurrentUserText = "Do not delete this automation." });
         Assert.Contains("authorization_denied", negated.Text);
-        var live = detached with { Detached = false, TriggerKind = TriggerKind.UserTurn, OwnerTurnText = "Run this automation now." };
+        fixture.Decision = TriggerCommandAuthorizationDecision.Allow;
+        var live = detached with { Detached = false, OwnedSessionId = sessionId, TriggerKind = TriggerKind.UserTurn, OwnerTurnText = "Run this automation now." };
         var run = await Execute(ToolCatalog.AutomationRun, new { automationId = id, expectedRevision = 2 }, command, live);
         Assert.Contains("occurrenceId", run.Text);
         var disabled = await Execute(ToolCatalog.AutomationDisable, new { automationId = id, expectedRevision = 2 }, command, live with { OwnerTurnText = "Disable this automation." });
         Assert.Contains("Disabled", disabled.Text);
-        var deleted = await Execute(ToolCatalog.AutomationDelete, new { automationId = id, expectedRevision = 3 }, command with { CurrentUserText = "Delete this automation.", AllowedActions = TriggerCommandAction.Cancel });
+        var deleted = await Execute(ToolCatalog.AutomationDelete, new { automationId = id, expectedRevision = 3 }, command with { CurrentUserText = "Delete this automation." });
         Assert.Contains("Cancelled", deleted.Text);
+        var disabledCreate = await Execute(ToolCatalog.AutomationCreate,
+            new { executionTarget = "backgroundSession", enabled = false, instructions = "Review orders later", eventId = sourceId }, command);
+        using var disabledJson = JsonDocument.Parse(disabledCreate.Text);
+        Assert.Equal("Disabled", disabledJson.RootElement.GetProperty("status").GetString());
+        var disabledRecord = await provider.GetRequiredService<IAutomationService>().GetAsync(owner,
+            disabledJson.RootElement.GetProperty("automationId").GetGuid());
+        Assert.Equal(AutomationStatus.Disabled, disabledRecord!.Status);
+    }
+
+    private sealed class DecisionFixture : ITriggerCommandAuthorizer
+    {
+        public TriggerCommandAuthorizationDecision Decision { get; set; } = TriggerCommandAuthorizationDecision.Allow;
+        public ValueTask<TriggerCommandAuthorizationVerdict> AuthorizeAsync(AutomationAuthorizationRequest proposed, CancellationToken ct = default) => ValueTask.FromResult(new TriggerCommandAuthorizationVerdict(Decision));
     }
 
     private static string FindAgents()

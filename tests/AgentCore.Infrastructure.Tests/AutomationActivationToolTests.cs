@@ -17,9 +17,9 @@ public sealed class AutomationActivationToolTests
     [InlineData("enable", null)]
     [InlineData("update", null)]
     [InlineData("disable", null)]
-    [InlineData("missing", "not_found")]
-    [InlineData("ambiguous", "ambiguous_target")]
-    [InlineData("wrong-id", "target_mismatch")]
+    [InlineData("missing", "authorization_denied")]
+    [InlineData("ambiguous", "authorization_ambiguous")]
+    [InlineData("wrong-id", "authorization_denied")]
     [InlineData("foreign", "not_found")]
     [InlineData("stale", "conflict")]
     [InlineData("cancelled", "validation")]
@@ -33,10 +33,10 @@ public sealed class AutomationActivationToolTests
     [InlineData("detached", "forbidden")]
     public async Task Activation_preserves_settings_and_checks_authority_target_revision_and_terminal_state(string scenario, string? error)
     {
-        var classifier = new UnavailableModel();
+        var classifier = new VerdictFixture(scenario);
         var services = new ServiceCollection();
         services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic");
-        services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(classifier, new()));
+        services.AddSingleton<ITriggerCommandAuthorizer>(classifier);
         await using var provider = services.BuildServiceProvider();
         var definitions = provider.GetRequiredService<IAgentDefinitionStore>();
         var original = (await definitions.GetAsync("general-assistant", 25))!;
@@ -103,9 +103,9 @@ public sealed class AutomationActivationToolTests
             : scenario == "foreign" ? $"enable automation {selected.AutomationId}"
             : scenario is "disable" or "disable-cancelled" ? "disable the 60s hello schedule" : "enable the 60s hello schedule";
         var context = new TriggerCommandContext(current.Owner, sessionId, "UTC", text, "en",
-            TriggerAuthorizationClassification.CurrentUserTurn, TriggerCommandAction.None, false, null, null, now);
+            TriggerAuthorizationClassification.CurrentUserTurn, null, now);
         var admission = new ToolExecutionAdmission(scenario == "detached", TriggerKind.UserTurn,
-            AgentInstanceId: instanceId, OwnerTurnText: text);
+            AgentInstanceId: instanceId, OwnerTurnText: text, OwnedSessionId: sessionId);
         var tools = provider.GetRequiredService<SessionToolExecutor>();
         var listed = await tools.ExecuteAsync(definition, sessionId, new("list", ToolCatalog.AutomationList, "{}"),
             ToolLimits.MaxOutputBytes, triggerCommand: context, admission: admission);
@@ -118,7 +118,7 @@ public sealed class AutomationActivationToolTests
         if (scenario == "mixed-update") args["instructions"] = "Injected content";
         var result = await tools.ExecuteAsync(definition, sessionId, new("activate", tool, JsonSerializer.Serialize(args)),
             ToolLimits.MaxOutputBytes, triggerCommand: context, admission: admission);
-        Assert.Equal(0, classifier.Calls);
+        if (classifier.Request is { } request) Assert.Equal(tool, request.ToolName);
         var retained = (await provider.GetRequiredService<IAutomationService>().GetAsync(current.Owner, current.AutomationId))!;
         if (error is not null)
         {
@@ -145,93 +145,15 @@ public sealed class AutomationActivationToolTests
         Assert.Equal(current.Triggers.Single().Revision, retained.Triggers.Single().Revision);
     }
 
-    [Theory]
-    [InlineData("instructions", null)]
-    [InlineData("duplicate-description", "ambiguous_target")]
-    [InlineData("cadence-disambiguates", null)]
-    [InlineData("wrong-cadence", "not_found")]
-    [InlineData("selected-wrong", "target_mismatch")]
-    [InlineData("explicit-id", null)]
-    [InlineData("id-wrong-cadence", "target_mismatch")]
-    [InlineData("referent-wrong-cadence", "target_mismatch")]
-    [InlineData("unresolved-reference", "ambiguous_target")]
-    [InlineData("cadence-only", "ambiguous_target")]
-    [InlineData("partial-word", "not_found")]
-    [InlineData("missing-word", "not_found")]
-    [InlineData("negated-instructions", "not_found")]
-    [InlineData("cross-clause", "not_found")]
-    [InlineData("cross-field", "not_found")]
-    [InlineData("conflicting-cadences", "ambiguous_target")]
-    [InlineData("equivalent-cadences", null)]
-    [InlineData("overflow", "validation")]
-    public async Task Descriptive_resolution_requires_all_literal_words_and_explicit_cadence(string scenario, string? error)
+    private sealed class VerdictFixture(string scenario) : ITriggerCommandAuthorizer
     {
-        var classifier = new UnavailableModel();
-        var services = new ServiceCollection();
-        services.AddAgentCoreInfrastructure(FindAgents(), "Synthetic");
-        services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(classifier, new()));
-        await using var provider = services.BuildServiceProvider();
-        var definition = (await provider.GetRequiredService<IAgentDefinitionStore>().GetAsync("general-assistant", 25))!;
-        var now = provider.GetRequiredService<TimeProvider>().GetUtcNow();
-        var instanceId = Guid.NewGuid();
-        await provider.GetRequiredService<IAgentInstanceStore>().InsertAsync(new AgentInstance(instanceId,
-            definition.Id, definition.Version, definition.Identity, AgentInstanceLifecycle.Active, now, now));
-        var authoring = provider.GetRequiredService<AdminAutomationAuthoringService>();
-        var primary = await authoring.SaveAsync(instanceId, null, 0, false, "Say hello every 60s",
-            "Send my morning greeting. Never say goodbye. Check the calendar.", new ScheduleTrigger(new FixedIntervalSchedule(60, now)), "scripted-alpha", null);
-        var other = await authoring.SaveAsync(instanceId, null, 0, false, "Think", scenario is "duplicate-description" or "cadence-disambiguates"
-            ? "Send my morning greeting." : "Review the notes.",
-            new ScheduleTrigger(new FixedIntervalSchedule(scenario == "cadence-disambiguates" ? 120 : 60, now)), "scripted-alpha", null);
-        var text = scenario switch
+        public AutomationAuthorizationRequest? Request { get; private set; }
+        public ValueTask<TriggerCommandAuthorizationVerdict> AuthorizeAsync(AutomationAuthorizationRequest proposed, CancellationToken ct = default)
         {
-            "instructions" or "duplicate-description" or "cadence-disambiguates" => "enable my morning greeting 60s automation job again",
-            "wrong-cadence" => "enable the hello 120s schedule again",
-            "explicit-id" => $"enable automation {primary.AutomationId} every 60s again",
-            "id-wrong-cadence" => $"enable automation {primary.AutomationId} every 120s again",
-            "referent-wrong-cadence" => "enable this automation every 120s again",
-            "unresolved-reference" => "enable this automation again",
-            "cadence-only" => "enable the 60s automation job again",
-            "partial-word" => "enable the hell 60s schedule",
-            "missing-word" => "enable the urgent hello 60s schedule",
-            "negated-instructions" => "enable the say goodbye 60s automation",
-            "cross-clause" => "enable the greeting calendar 60s automation",
-            "cross-field" => "enable the hello greeting 60s automation",
-            "conflicting-cadences" => "enable the hello 60s 120s automation",
-            "equivalent-cadences" => "enable the hello 60s every 1 minute automation",
-            "overflow" => "enable the hello 2147483647 hours automation",
-            _ => "enable the hello 60s automation"
-        };
-        var sessionId = Guid.NewGuid();
-        var context = new TriggerCommandContext(primary.Owner, sessionId, "UTC", text, "en",
-            TriggerAuthorizationClassification.CurrentUserTurn, TriggerCommandAction.None, false, null, null, now,
-            scenario == "referent-wrong-cadence" ? ScheduleConversationContext.FromRegistration(primary, TriggerCommandAction.List) : null);
-        var selected = scenario == "selected-wrong" ? other : primary;
-        var result = await provider.GetRequiredService<SessionToolExecutor>().ExecuteAsync(definition, sessionId,
-            new("update", ToolCatalog.AutomationUpdate, JsonSerializer.Serialize(new { automationId = selected.AutomationId,
-                expectedRevision = selected.Revision, enabled = true })), ToolLimits.MaxOutputBytes,
-            triggerCommand: context, admission: new(false, TriggerKind.UserTurn, AgentInstanceId: instanceId, OwnerTurnText: text));
-        var rows = await provider.GetRequiredService<ITriggerStore>().ListAsync(primary.Owner, null);
-        Assert.Equal(2, rows.Count);
-        Assert.Equal(0, classifier.Calls);
-        if (error is not null)
-        {
-            Assert.Contains(error, result.Text);
-            Assert.All(rows, a => { Assert.Equal(AutomationStatus.Disabled, a.Status); Assert.Equal(1, a.Revision); });
+            ct.ThrowIfCancellationRequested(); Request = proposed;
+            return ValueTask.FromResult(new TriggerCommandAuthorizationVerdict(scenario == "ambiguous" ? TriggerCommandAuthorizationDecision.Ambiguous
+                : scenario is "missing" or "wrong-id" or "mixed-update" ? TriggerCommandAuthorizationDecision.Deny : TriggerCommandAuthorizationDecision.Allow));
         }
-        else
-        {
-            Assert.DoesNotContain("\"error\"", result.Text);
-            Assert.Equal(AutomationStatus.Active, rows.Single(a => a.AutomationId == primary.AutomationId).Status);
-            Assert.Equal(AutomationStatus.Disabled, rows.Single(a => a.AutomationId == other.AutomationId).Status);
-        }
-    }
-
-    private sealed class UnavailableModel : ILanguageModel
-    {
-        internal int Calls;
-        public ModelCapabilities Capabilities => new(true, true);
-        public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
-        { Calls++; await Task.CompletedTask; yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Fixture unavailable")); }
     }
 
     private static string FindAgents()

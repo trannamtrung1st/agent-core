@@ -19,6 +19,49 @@ const approval: PendingApproval = {
 };
 
 describe('ApprovalModal', () => {
+  it.each(['automation.create', 'automation.run'])(
+    'reviews the complete %s action as inert text before an explicit owner decision',
+    (toolName) => {
+      const approve = vi.fn();
+      const instructions =
+        'Review experience safely. '.repeat(30) + '<script>untrusted</script>';
+      const exact = JSON.stringify(
+        {
+          instructions,
+          localTime: '09:00',
+          timeZone: 'Asia/Ho_Chi_Minh',
+          executionTarget: 'backgroundSession',
+          reportBack: false,
+        },
+        null,
+        2,
+      );
+      render(
+        <ApprovalModal
+          approval={{
+            ...approval,
+            toolName,
+            summary: 'Review exact Automation change',
+            details: {
+              Reason: 'Semantic verification could not complete.',
+              'Exact action': exact,
+            },
+          }}
+          onApprove={approve}
+          onReject={vi.fn()}
+        />,
+      );
+      const dialog = screen.getByRole('dialog', {
+        name: 'Approve Automation change?',
+      });
+      expect(dialog.textContent).toContain(instructions);
+      expect(dialog.textContent).toContain('Asia/Ho_Chi_Minh');
+      expect(dialog.querySelector('script')).toBeNull();
+      expect(approve).not.toHaveBeenCalled();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+      expect(approve).toHaveBeenCalledOnce();
+    },
+  );
   it('shows an unconfirmed decision inside the dialog and keeps rejection retryable', () => {
     const reject = vi.fn();
     render(

@@ -4,10 +4,7 @@ public static class ScheduleDraftAdmission
 {
     public static ScheduleDraftContext? PrepareDraftForUserTurn(
         ScheduleDraftContext? draft,
-        ref bool eligibleForNextUserTurn,
-        string? text,
-        string? language,
-        ScheduleConversationContext? scheduleContext)
+        ref bool eligibleForNextUserTurn)
     {
         if (draft is null)
         {
@@ -21,13 +18,8 @@ public static class ScheduleDraftAdmission
 
         eligibleForNextUserTurn = false;
 
-        var turn = text ?? string.Empty;
-        if (ScheduleIntervalLanguage.IsIntervalOnlyCorrection(turn, language))
-        {
-            return draft;
-        }
-
-        // Only an interval-only next turn can carry omitted task details forward.
-        return null;
+        // The next turn receives the retained draft as untrusted context only.
+        // It never supplies omitted arguments or grants authority.
+        return draft;
     }
 }

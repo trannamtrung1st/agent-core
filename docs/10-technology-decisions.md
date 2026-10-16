@@ -1,5 +1,11 @@
 # Technology Decisions
 
+## Language-independent Automation authorization (2026-10-16)
+
+**Decision:** The agent interprets intent and constructs complete structured Automation proposals. An independent semantic verifier checks each exact action against the current user request. Core validates trusted current-user provenance, ownership, revisions, permissions and structural schedule validity without natural-language patterns. Retire heuristic command authorization, timed-intent/continuation/interval/activation matching and text-confirmation bypasses. Historical referents/drafts remain Evidence only.
+
+Verifier failure retains the exact action for owner UI approval bound to its fingerprint and response through the existing durable Run workflow. Deny/Ambiguous require clarification. Revalidation after approval preserves current policy and revision fencing. Semantic verification and approval authorize only the proposed mutation, not future effects. No Automation service, scheduler, store or approval subsystem is replaced. Synthetic tests inject typed decisions rather than production language rules. [Architecture](03-system-architecture.md#semantic-automation-authorization-cutover-2026-10-16) and [verification](reports/semantic-automation-authorization-verification-2026-10-16.md).
+
 The Activation/AgentRun cutover supersedes earlier execution-owner and recovery decisions below. Historical P5–P9 freeze decisions remain evidence of their original milestones; current execution uses one SessionRuntime/SessionHost path and strict fresh/current-schema startup.
 
 ## Decision: unified Activation, AgentRun and background Sessions

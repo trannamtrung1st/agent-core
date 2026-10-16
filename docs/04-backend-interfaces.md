@@ -1,5 +1,9 @@
 # Backend Interfaces
 
+## Automation semantic authorization boundary
+
+`ITriggerCommandAuthorizer.AuthorizeAsync(AutomationAuthorizationRequest, CancellationToken)` returns a typed `TriggerCommandAuthorizationVerdict`: Allow, Deny, Ambiguous, ClassifierUnavailable or ClassifierInvalidOutput with an optional safe failure reason. The request carries current trusted-user text, operation, tool, the exact prepared JSON/fingerprint and optional historical referent/draft and bounded conversation evidence. Implementations interpret semantics; Core gates runtime provenance and deterministic structure/policy. A tool call alone never grants mutation authority. The fail-closed default is unavailable, and Synthetic uses typed decision fixtures. Exact UI recovery reuses existing durable AgentRun approvals; no new persistence or provider DTO crosses the boundary. [Backend behavior](12-backend-implementation-spec.md#timeouts-and-retry-policy).
+
 ## Typed context projection
 
 Application owns `ContextLayer`, `ContextSectionId`, `ContextSourceKind`, `ContextSemantics`, immutable `ContextSection`/`EffectiveContextSnapshot`, `ContextAssembler` and redacted `ContextManifest`. Core factories accept platform procedure identities, never arbitrary authored strings. Runtime factories reject Evidence sources/section identities. Evidence cannot acquire an authoritative provider role. The optional `RuntimeEnvironmentScope` is a future binding slot, absent from current execution.

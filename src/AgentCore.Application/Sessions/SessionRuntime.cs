@@ -86,7 +86,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     private SessionSnapshot _durableSnapshot;
 
     private UserProfile? _profile;
-    private PendingTriggerProposal? _pendingTriggerProposal;
     private ScheduleConversationContext? _scheduleConversationContext;
     private ScheduleDraftContext? _scheduleDraftContext;
     private bool _scheduleDraftEligibleForNextUserTurn;
@@ -1627,7 +1626,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (!queued && _activeResponseId is null)
             await CancelUnstartedBoundAgentRunAsync(cancellationToken).ConfigureAwait(false);
 
-        RetainProposalOnlyForConfirmingTurn([text]);
 
         try
         {
@@ -2378,7 +2376,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
     {
         if (trigger.Kind == TriggerKind.UserTurn)
         {
-            RefreshScheduleDraftForUserTurn(trigger.Text, ExecutionDefinition.ConversationPolicy.Language);
+            RefreshScheduleDraftForUserTurn();
         }
 
         var proactive = trigger.Kind != TriggerKind.UserTurn;
@@ -3533,13 +3531,47 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             }
                             else
                             {
+                                var automationCommand = TriggerCommand(trigger) with { ResponseId = request.ResponseId };
+                                AutomationCommandPreparation? automationPrepared = null;
+                                if (ToolResources.IsTriggerWrite(call.Name))
+                                {
+                                    automationPrepared = await _tools.PrepareAutomationAsync(ExecutionDefinition, call, args, automationCommand, false, overallCts.Token);
+                                    if (automationPrepared.Request is { } proposed)
+                                    {
+                                        var retained = _boundAgentRun?.Approval;
+                                        if (retained?.ToolName == call.Name && retained.ActionHash == proposed.ActionHash && retained.PreparedActionJson == args.GetRawText())
+                                            policy = ToolPolicyDecision.RequireApproval;
+                                        else
+                                        {
+                                            automationPrepared = await _tools.PrepareAutomationAsync(ExecutionDefinition, call, args, automationCommand, true, overallCts.Token);
+                                            if (automationPrepared.RequiresApproval) policy = ToolPolicyDecision.RequireApproval;
+                                        }
+                                        automationCommand = automationCommand with { Verification = automationPrepared };
+                                    }
+                                }
                                 string actionHash;
                                 string? approvalSummaryOverride = null;
                                 IReadOnlyDictionary<string, string>? approvalDetailsOverride = null;
                                 var preparedFailed = false;
-                                if (policy == ToolPolicyDecision.RequireApproval)
+                                if (automationPrepared?.ErrorJson is { } automationError)
                                 {
-                                    var prepared = await ToolActionPreparation.PrepareApprovalAsync(
+                                    executionResult = ToolExecutionResult.FromText(automationError);
+                                    preparedFailed = true;
+                                    actionHash = string.Empty;
+                                }
+                                else if (automationPrepared?.Verdict is { Decision: TriggerCommandAuthorizationDecision.Deny or TriggerCommandAuthorizationDecision.Ambiguous } deniedAutomation)
+                                {
+                                    executionResult = TriggerScheduleCommands.AuthorizationFailure(deniedAutomation);
+                                    preparedFailed = true;
+                                    actionHash = string.Empty;
+                                }
+                                else if (policy == ToolPolicyDecision.RequireApproval)
+                                {
+                                    var prepared = automationPrepared?.Request is { } exactAutomation
+                                        ? (Preparation: (ToolApprovalPreparation?)new ToolApprovalPreparation(exactAutomation.ActionHash,
+                                            TriggerScheduleCommands.ApprovalSummary, call.ArgumentsJson,
+                                            TriggerScheduleCommands.ApprovalDetails(exactAutomation)), ErrorJson: (string?)null)
+                                        : await ToolActionPreparation.PrepareApprovalAsync(
                                             _tools,
                                             call,
                                             args,
@@ -3563,7 +3595,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 }
                                 else
                                 {
-                                    actionHash = ToolActionHash.Compute(call.Name, args);
+                                    actionHash = automationPrepared?.Request?.ActionHash ?? ToolActionHash.Compute(call.Name, args);
                                 }
 
                                 AgentRunToolCallCheckpoint.TryReadState(_boundAgentRun?.Checkpoint, out _, out _, out var blockedActionHash);
@@ -3701,7 +3733,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                             resultBudget,
                                             toolCts.Token,
                                             approvalGrant,
-                                            TriggerCommand(trigger),
+                                            automationCommand,
                                             new ToolExecutionAdmission(
                                                 Detached: IsInitialBackgroundRun,
                                                 trigger.Kind,
@@ -3721,11 +3753,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                         workspaceCwd = await RequestWorkspaceCwdAsync(cause, request.ResponseId, nextCwd, toolCts.Token).ConfigureAwait(false);
                                         if (workspaceCwd is null) return;
                                     }
-                                    if (executionResult.ReplaceTriggerProposal)
-                                    {
-                                        _pendingTriggerProposal = executionResult.TriggerProposal;
-                                    }
-
                                     ApplyScheduleConversationFromTool(call.Name, executionResult.Text);
                                     if (policy != ToolPolicyDecision.Deny
                                         && !preparedFailed
@@ -4287,32 +4314,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
     }
 
-    private void RetainProposalOnlyForConfirmingTurn(IReadOnlyList<string?> texts)
-    {
-        if (_pendingTriggerProposal is null)
-        {
-            return;
-        }
-
-        var authorizer = _tools.TriggerCommandAuthorizer;
-        var language = ExecutionDefinition.ConversationPolicy.Language;
-        var singleConfirmation = texts.Count == 1
-            && TriggerAuthorization.IsConfirmationTurn(texts[0], hasPendingProposal: true, authorizer, language);
-        if (!singleConfirmation)
-        {
-            _pendingTriggerProposal = null;
-        }
-    }
-
     private TriggerCommandContext TriggerCommand(AgentTrigger trigger)
     {
-        var authorizer = _tools.TriggerCommandAuthorizer;
         var language = ExecutionDefinition.ConversationPolicy.Language;
-        var confirming = TriggerAuthorization.IsConfirmationTurn(
-            trigger.Text,
-            _pendingTriggerProposal is not null,
-            authorizer,
-            language);
         TriggerOwner? owner = _snapshot.AgentInstanceId is Guid instance && _snapshot.ProfileId is Guid profile
             ? new TriggerOwner(instance, profile)
             : null;
@@ -4322,27 +4326,34 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             timeZone = zone.Value;
         }
 
-        var authorization = TriggerAuthorization.Classify(
-            trigger.Kind,
-            trigger.Text,
-            _pendingTriggerProposal,
-            authorizer,
-            language,
-            _scheduleConversationContext);
         return new TriggerCommandContext(
             owner,
             SessionId,
             timeZone,
             trigger.Text,
             language,
-            authorization.Classification,
-            authorization.AllowedActions,
-            confirming,
-            _pendingTriggerProposal,
+            TriggerAuthorization.Classify(trigger.Kind),
             trigger.EventId,
-            _time.GetUtcNow(),
+            _boundAgentRun?.CreatedAtUtc ?? _time.GetUtcNow(),
             _scheduleConversationContext,
-            _scheduleDraftContext);
+            _scheduleDraftContext) { ConversationEvidenceJson = AutomationConversationEvidence(trigger) };
+    }
+
+    private string AutomationConversationEvidence(AgentTrigger trigger)
+    {
+        // Prior turns can resolve a current clarification, but remain data rather than authority.
+        var entries = _snapshot.Entries.TakeWhile(entry => entry.SourceEventId != trigger.EventId && entry.EntryId != trigger.EventId)
+            .Where(entry => entry.IsPromptTurn && entry.Status != EntryStatus.Streaming).TakeLast(8)
+            .Select(entry => new { role = entry.Role.ToString(), text = entry.Role == ConversationRole.Assistant
+                ? PromptContextBuilder.EligibleAssistantText(entry) : entry.Text })
+            .Where(entry => entry.text.Length > 0).ToList();
+        var json = JsonSerializer.Serialize(entries);
+        while (entries.Count > 0 && json.Length > 12_000)
+        {
+            entries.RemoveAt(0);
+            json = JsonSerializer.Serialize(entries);
+        }
+        return json;
     }
 
     private async Task SupersedeAsync(
@@ -4351,7 +4362,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         CancellationToken cancellationToken,
         string reason = "newText")
     {
-        _pendingTriggerProposal = null;
         if (reason is "userStop")
         {
             _allowQueuedSuffixAutoDispatch = false;
@@ -4387,7 +4397,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             SessionId,
             responseId,
             reason);
-        _pendingTriggerProposal = null;
         _responseCts?.Cancel();
         _ttsCts?.Cancel();
         ClearPendingApproval();
@@ -5895,7 +5904,6 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         }
 
         Interlocked.Increment(ref _terminalFence);
-        _pendingTriggerProposal = null;
         _deadlineTimerGeneration++;
         ClearDeferredUserTurn();
         CancelCompletionEvaluation();

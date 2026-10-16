@@ -78,13 +78,10 @@ public sealed class TriggerDurablePolicyTests
             "remind me tomorrow at 9",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.Create,
-            false,
-            null,
             Guid.Parse("019944af-00d1-7000-8000-0000000000d1"),
             Now);
 
-        using var args = JsonDocument.Parse("""{"instructions":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
+        using var args = JsonDocument.Parse("""{"executionTarget":"backgroundSession","instructions":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
         var denied = await TriggerScheduleCommands.ExecuteAsync(
             v9,
             registrations,
@@ -92,7 +89,7 @@ public sealed class TriggerDurablePolicyTests
             args.RootElement,
             context,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer(),
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer(),
             instances,
             definitions,
             memory);
@@ -133,6 +130,7 @@ public sealed class TriggerDurablePolicyTests
         var due = Now.AddMinutes(1);
         var tools = new SessionToolExecutor(
             triggerRegistrations: registrations,
+            triggerAuthorizer: new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer(),
             agentInstances: instances,
             agentDefinitions: definitions);
         var snapshot = new SessionSnapshot(
@@ -225,12 +223,9 @@ public sealed class TriggerDurablePolicyTests
             "remind me tomorrow at 9",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.Create,
-            false,
-            null,
             Guid.NewGuid(),
             Now);
-        using var args = JsonDocument.Parse("""{"instructions":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
+        using var args = JsonDocument.Parse("""{"executionTarget":"backgroundSession","instructions":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
         var denied = await TriggerScheduleCommands.ExecuteAsync(
             v9,
             registrations,
@@ -238,7 +233,7 @@ public sealed class TriggerDurablePolicyTests
             args.RootElement,
             context,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer(),
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer(),
             instances,
             definitions,
             memory);
@@ -283,13 +278,10 @@ public sealed class TriggerDurablePolicyTests
             "remind me tomorrow at 9",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.Create,
-            false,
-            null,
             Guid.NewGuid(),
             Now);
 
-        using var args = JsonDocument.Parse("""{"instructions":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
+        using var args = JsonDocument.Parse("""{"executionTarget":"backgroundSession","instructions":"Hello","relativeDayOffset":1,"localTime":"09:00"}""");
         var denied = await TriggerScheduleCommands.ExecuteAsync(
             v9,
             registrations,
@@ -297,7 +289,7 @@ public sealed class TriggerDurablePolicyTests
             args.RootElement,
             context,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer(),
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer(),
             instances,
             definitions,
             memory);

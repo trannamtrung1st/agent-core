@@ -97,6 +97,7 @@ public sealed record ScheduleDraftContext(
         $"intent=\"{Instructions}\"",
         $"recurrenceKind={RecurrenceKind}",
         IntervalSeconds is int seconds ? $"intervalSeconds={seconds}" : "intervalSeconds=(none)",
-        $"lastFailure={FailureCode}"
+        $"lastFailure={FailureCode}",
+        ArgumentsJson is null ? "previousArguments=(unavailable)" : $"previousArguments={ArgumentsJson}"
     ];
 }

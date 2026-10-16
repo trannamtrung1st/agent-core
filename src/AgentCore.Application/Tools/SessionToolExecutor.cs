@@ -53,9 +53,15 @@ public sealed partial class SessionToolExecutor(
         BrowserNavigateOffer.Apply(ToolCatalog.For(definition, context, _configurationGate), browser);
 
     private readonly ITriggerCommandAuthorizer _triggerAuthorizer =
-        triggerAuthorizer ?? new HeuristicTriggerCommandAuthorizer();
+        triggerAuthorizer ?? new UnavailableTriggerCommandAuthorizer();
 
-    public ITriggerCommandAuthorizer TriggerCommandAuthorizer => _triggerAuthorizer;
+    public async ValueTask<AutomationCommandPreparation> PrepareAutomationAsync(AgentDefinition definition, ModelToolCall call,
+        JsonElement args, TriggerCommandContext command, bool verify, CancellationToken ct)
+    {
+        var prepared = await TriggerScheduleCommands.PrepareAsync(definition, triggerRegistrations, call.Name, args, command, ct);
+        return prepared.Request is null || !verify ? prepared
+            : prepared with { Verdict = await _triggerAuthorizer.AuthorizeAsync(prepared.Request, ct) };
+    }
 
     public async ValueTask<bool> CredentialMetadataAvailableAsync(Guid? id, CancellationToken ct) =>
         id is Guid owner && credentials is not null && (await credentials.SafeMetadataPageAsync(owner, null, 1, ct)).Count > 0;
@@ -299,7 +305,8 @@ public sealed partial class SessionToolExecutor(
 
         if (approvalGrant is not null
             && !string.Equals(call.Name, ToolCatalog.EmailSend, StringComparison.Ordinal)
-            && !string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal))
+            && !string.Equals(call.Name, ToolCatalog.HttpRequest, StringComparison.Ordinal)
+            && !ToolResources.IsTriggerWrite(call.Name))
         {
             var boundHash = ToolActionHash.Compute(call.Name, args);
             if (!string.Equals(boundHash, approvalGrant.ActionHash, StringComparison.Ordinal)
@@ -400,21 +407,6 @@ public sealed partial class SessionToolExecutor(
                     || admission.AgentInstanceId != activationOwner.AgentInstanceId)
                     return TextResult(Error("forbidden", "Automation activation requires the current owned user turn."));
                 triggerCommand = triggerCommand with { CurrentUserText = admission.OwnerTurnText ?? triggerCommand.CurrentUserText };
-            }
-            if (call.Name == ToolCatalog.AutomationRun)
-            {
-                if (automationAuthoring is null || triggerRegistrations is null || admission is not { Detached: false, TriggerKind: TriggerKind.UserTurn }
-                    || triggerCommand?.Owner is not AgentCore.Domain.Triggers.TriggerOwner owner || admission.AgentInstanceId != owner.AgentInstanceId)
-                    return TextResult(Error("forbidden", "Automation management requires the current owned user turn."));
-                var text = admission.OwnerTurnText ?? triggerCommand.CurrentUserText ?? "";
-                var authorized = System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(run|execute|start)\b.{0,40}\b(automation|schedule|reminder|this|that|it)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (System.Text.RegularExpressions.Regex.IsMatch(text, @"\b(don'?t|do not|never)\b.{0,30}\b(disable|stop|pause|run|execute|start)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) authorized = false;
-                if (!authorized) return TextResult(Error("forbidden", "The current user message does not authorize this Automation action."));
-                var automationId = Guid.Parse(args.GetProperty("automationId").GetString() ?? "");
-                var current = await triggerRegistrations.GetAsync(owner, automationId, cancellationToken)
-                    ?? throw AgentCoreErrors.NotFound("Automation was not found.");
-                var revision = args.GetProperty("expectedRevision").GetInt64();
-                return TextResult(JsonSerializer.Serialize(new { occurrenceId = (await automationAuthoring.RunNowAsync(owner.AgentInstanceId, automationId, revision, cancellationToken)).OccurrenceId }));
             }
             if (call.Name == AgentCore.Application.Experience.ExperienceService.RecordTool)
             {
@@ -527,7 +519,7 @@ public sealed partial class SessionToolExecutor(
                 ToolCatalog.EmailSend => TextResult(
                     await SendEmailDraftAsync(args, approvalGrant, cancellationToken, admission, sessionId).ConfigureAwait(false)),
                 ToolCatalog.AutomationCreate or ToolCatalog.AutomationList
-                    or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationDelete or ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable => await TriggerScheduleCommands.ExecuteAsync(
+                    or ToolCatalog.AutomationUpdate or ToolCatalog.AutomationDelete or ToolCatalog.AutomationRun or ToolCatalog.AutomationEnable or ToolCatalog.AutomationDisable => await TriggerScheduleCommands.ExecuteAsync(
                         definition,
                         triggerRegistrations,
                         call.Name,
@@ -537,7 +529,7 @@ public sealed partial class SessionToolExecutor(
                         _triggerAuthorizer,
                         _agentInstances,
                         _agentDefinitions,
-                        _profiles, automationAuthoring).ConfigureAwait(false),
+                        _profiles, automationAuthoring, approvalGrant).ConfigureAwait(false),
                 _ => TextResult(Error("forbidden", "Tool is not permitted for this role."))
             };
             return (call.Name.StartsWith("workspace.", StringComparison.Ordinal) || call.Name is ToolCatalog.ArtifactsCreateFromWorkspace)

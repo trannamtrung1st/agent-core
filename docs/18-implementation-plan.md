@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Semantic Automation authorization successor (2026-10-16)
+
+The explicitly requested bounded cutover replaces language-specific authorization and preflight/confirmation logic while retaining Automation services, policy, durable records and the existing Run approval workflow. Gates are exact-action semantic verification, deterministic trusted provenance/structure, failure-only owner UI recovery, changed-action/revision/Session/response fencing, focused runtime/provider/SQLite tests, Synthetic browser approval/rejection and canonical docs. It does not reopen milestone acceptance or require optional CI/live-provider execution. [Verification ledger](reports/semantic-automation-authorization-verification-2026-10-16.md) records observed scope and remaining boundaries.
+
 The [2026-10-16 review feedback follow-up](reports/canonical-workspace-feedback-fixes-2026-10-16.md) records the fresh-baseline fixture repair, atomic attachment publication, typed policy retirement, bounded paginated search and explicit offline Git scope. Its local evidence is separate from the unconfirmed historical hosted sandbox failure and does not reopen milestone acceptance.
 
 ## Canonical filesystem and direct mount cutover

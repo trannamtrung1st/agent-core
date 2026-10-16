@@ -368,11 +368,16 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton(interaction ?? new InteractionPolicy());
         services.TryAddSingleton<ILocalUserProfileService, LocalUserProfileService>();
         services.TryAddSingleton<IStructuredMemoryService, StructuredMemoryService>();
-        services.TryAddSingleton<HeuristicTriggerCommandAuthorizer>();
         if (string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase))
         {
             services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>
-                provider.GetRequiredService<HeuristicTriggerCommandAuthorizer>());
+            {
+                var configured = provider.GetService<IConfiguration>()?["Synthetic:AutomationAuthorizationDecision"];
+                if (configured is null) return new SyntheticTriggerCommandAuthorizer();
+                if (!Enum.TryParse<TriggerCommandAuthorizationDecision>(configured, out var verdict) || !Enum.IsDefined(verdict))
+                    throw new ArgumentException("Synthetic Automation authorization fixture decision is invalid.");
+                return new SyntheticTriggerCommandAuthorizer(verdict);
+            });
         }
         else
         {
@@ -390,7 +395,7 @@ public static class InfrastructureServiceCollectionExtensions
                 }
                 return new ModelTriggerCommandAuthorizer(
                     provider.GetRequiredService<ILanguageModelResolver>().Resolve(selection, ModelPurpose.TriggerAuthorization),
-                    provider.GetRequiredService<HeuristicTriggerCommandAuthorizer>(), selection.ReasoningEffort,
+                    selection.ReasoningEffort,
                     provider.GetService<ILogger<ModelTriggerCommandAuthorizer>>(), descriptor, provider.GetRequiredService<TimeProvider>());
             });
             services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>

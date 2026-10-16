@@ -60,11 +60,20 @@ export function ApprovalModal({
   const filesystem = ['workspace.delete', 'workspace.batch'].includes(
     approval?.toolName ?? '',
   );
+  const automation = [
+    'automation.create',
+    'automation.update',
+    'automation.delete',
+    'automation.enable',
+    'automation.disable',
+    'automation.run',
+  ].includes(approval?.toolName ?? '');
   const management =
     /^(configuration|management|settings|resources|skills|credentials\.binding|automation\.preferences)\./.test(
       approval?.toolName ?? '',
     );
   const semantic =
+    automation ||
     management ||
     filesystem ||
     approval?.toolName.startsWith('harness.') ||
@@ -144,21 +153,23 @@ export function ApprovalModal({
       centered
       width={semantic ? 720 : drive ? 880 : 520}
       title={
-        drive
-          ? driveTitle
-          : management
-            ? approval?.toolName === 'management.freeze'
-              ? 'Freeze self-management?'
-              : 'Apply configuration to this Instance?'
-            : filesystem
-              ? 'Approve workspace changes?'
-              : approval?.toolName.startsWith('harness.')
-                ? 'Save this harness change?'
-                : approval?.toolName === 'memory.forget'
-                  ? 'Forget this learned-memory item?'
-                  : semantic
-                    ? 'Approve identity consolidation'
-                    : 'Approve sensitive action'
+        automation
+          ? 'Approve Automation change?'
+          : drive
+            ? driveTitle
+            : management
+              ? approval?.toolName === 'management.freeze'
+                ? 'Freeze self-management?'
+                : 'Apply configuration to this Instance?'
+              : filesystem
+                ? 'Approve workspace changes?'
+                : approval?.toolName.startsWith('harness.')
+                  ? 'Save this harness change?'
+                  : approval?.toolName === 'memory.forget'
+                    ? 'Forget this learned-memory item?'
+                    : semantic
+                      ? 'Approve identity consolidation'
+                      : 'Approve sensitive action'
       }
       okText={
         drive
@@ -335,7 +346,7 @@ export function ApprovalModal({
                         {key}
                         {': '}
                       </Typography.Text>
-                      {key === 'Change' ? (
+                      {key === 'Change' || (automation && key === 'Exact action') ? (
                         <ProposalText value={value} />
                       ) : (
                         <Typography.Text className="chat-approval-value">

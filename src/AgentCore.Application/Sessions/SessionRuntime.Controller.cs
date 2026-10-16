@@ -159,7 +159,6 @@ public sealed partial class SessionRuntime
 
     private async Task HandleDetachAsync(DetachReceived input, CancellationToken cancellationToken)
     {
-        _pendingTriggerProposal = null;
         if (_snapshot.Status is SessionStatus.Ended or SessionStatus.Ending)
         {
             OperationalDiagnostics.RecordDetach(
@@ -895,7 +894,6 @@ public sealed partial class SessionRuntime
                         .ConfigureAwait(false);
                 }
 
-                RetainProposalOnlyForConfirmingTurn([text]);
                 var responseId = _ids.NewId();
                 var trigger = new AgentTrigger(cause.EventId, TriggerKind.UserTurn, text);
                 _outputActivity = OutputActivity.WaitingForAgent;

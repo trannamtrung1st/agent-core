@@ -22,7 +22,7 @@ public sealed class TriggerScheduleTimeResolutionTests
     public async Task Relative_delay_seconds_ignores_a_zero_day_offset_default()
     {
         var created = await CreateOnceAsync(
-            """{"instructions":"Hello","relativeDelaySeconds":60,"relativeDayOffset":0,"localDate":"","localTime":"","atUtc":""}""");
+            """{"executionTarget":"backgroundSession","instructions":"Hello","relativeDelaySeconds":60,"relativeDayOffset":0,"localDate":"","localTime":"","atUtc":""}""");
         var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
         Assert.Equal(Now.AddSeconds(60), schedule.AtUtc);
     }
@@ -31,7 +31,7 @@ public sealed class TriggerScheduleTimeResolutionTests
     public async Task Relative_delay_seconds_ignores_blank_time_strings()
     {
         var created = await CreateOnceAsync(
-            """{"instructions":"Hello","relativeDelaySeconds":"60","relativeDayOffset":null,"localDate":"","localTime":"","atUtc":"","timeZone":null}""");
+            """{"executionTarget":"backgroundSession","instructions":"Hello","relativeDelaySeconds":"60","relativeDayOffset":null,"localDate":"","localTime":"","atUtc":"","timeZone":null}""");
         var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
         Assert.Equal(Now.AddSeconds(60), schedule.AtUtc);
     }
@@ -40,7 +40,7 @@ public sealed class TriggerScheduleTimeResolutionTests
     public async Task Relative_delay_seconds_ignores_null_time_fields()
     {
         var created = await CreateOnceAsync(
-            """{"instructions":"Hello","relativeDelaySeconds":60,"relativeDayOffset":null,"localDate":null,"localTime":null,"atUtc":null,"timeZone":null}""");
+            """{"executionTarget":"backgroundSession","instructions":"Hello","relativeDelaySeconds":60,"relativeDayOffset":null,"localDate":null,"localTime":null,"atUtc":null,"timeZone":null}""");
         var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
         Assert.Equal(Now.AddSeconds(60), schedule.AtUtc);
     }
@@ -48,7 +48,7 @@ public sealed class TriggerScheduleTimeResolutionTests
     [Fact]
     public async Task Relative_delay_seconds_schedules_from_trusted_now()
     {
-        var created = await CreateOnceAsync("""{"instructions":"Hello","relativeDelaySeconds":120}""");
+        var created = await CreateOnceAsync("""{"executionTarget":"backgroundSession","instructions":"Hello","relativeDelaySeconds":120}""");
         var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
         Assert.Equal(Now.AddMinutes(2), schedule.AtUtc);
     }
@@ -57,7 +57,7 @@ public sealed class TriggerScheduleTimeResolutionTests
     public async Task Relative_delay_seconds_does_not_require_profile_timezone()
     {
         var created = await CreateOnceAsync(
-            """{"instructions":"Hello","relativeDelaySeconds":60}""",
+            """{"executionTarget":"backgroundSession","instructions":"Hello","relativeDelaySeconds":60}""",
             profileTimeZoneId: null);
         var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
         Assert.Equal(Now.AddSeconds(60), schedule.AtUtc);
@@ -68,7 +68,7 @@ public sealed class TriggerScheduleTimeResolutionTests
     public async Task At_utc_does_not_require_profile_timezone()
     {
         var created = await CreateOnceAsync(
-            """{"instructions":"Hello","atUtc":"2026-09-24T08:30:00Z"}""",
+            """{"executionTarget":"backgroundSession","instructions":"Hello","atUtc":"2026-09-24T08:30:00Z"}""",
             profileTimeZoneId: null);
         var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
         Assert.Equal(new DateTimeOffset(2026, 9, 24, 8, 30, 0, TimeSpan.Zero), schedule.AtUtc);
@@ -79,7 +79,7 @@ public sealed class TriggerScheduleTimeResolutionTests
     public async Task Vietnam_time_label_resolves_wall_clock_at_0019()
     {
         var created = await CreateOnceAsync(
-            """{"instructions":"Hello","localDate":"2026-09-24","localTime":"00:19","timeZone":"viet nam time"}""");
+            """{"executionTarget":"backgroundSession","instructions":"Hello","localDate":"2026-09-24","localTime":"00:19","timeZone":"viet nam time"}""");
         var schedule = Assert.IsType<OneShotSchedule>(created.Schedule);
         Assert.Equal("Asia/Ho_Chi_Minh", schedule.TimeZoneId);
         Assert.Equal(new DateTimeOffset(2026, 9, 23, 17, 19, 0, TimeSpan.Zero), schedule.AtUtc);
@@ -110,19 +110,10 @@ public sealed class TriggerScheduleTimeResolutionTests
         var rules = Assert.Single(request.Context.Sections, section => section.Id == AgentCore.Application.Context.ContextSectionId.CoreScheduling);
         Assert.Equal(ModelRole.System, rules.Message.Role);
         Assert.Contains("relativeDelaySeconds", rules.Message.Text);
-        Assert.Contains("confirmation_required", rules.Message.Text);
+        Assert.Contains("owner UI decision", rules.Message.Text);
         Assert.Contains("never pre-authorize future actions", rules.Message.Text);
         Assert.DoesNotContain("relativeDelaySeconds", text);
 
-    }
-
-    [Fact]
-    public async Task Bare_yes_does_not_authorize_create_without_a_schedule_related_turn()
-    {
-        var authorizer = new HeuristicTriggerCommandAuthorizer();
-        var decision = await authorizer.AuthorizeCurrentTurnAsync("yes", "en", TriggerCommandAction.Create);
-        Assert.Equal(TriggerCommandAuthorizationDecision.Deny, decision);
-        Assert.False(TriggerScheduleTurnPreflight.IsScheduleRelatedTurn("yes", "en"));
     }
 
     private static async Task<Automation> CreateOnceAsync(
@@ -135,7 +126,7 @@ public sealed class TriggerScheduleTimeResolutionTests
             [Guid.Parse("019944af-00d2-7000-8000-000000000001")],
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf20")]);
         var service = new AutomationService(store, ids, time);
-        var tools = new SessionToolExecutor(triggerRegistrations: service);
+        var tools = new SessionToolExecutor(triggerRegistrations: service, triggerAuthorizer: new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         var definition = await LoadAsync();
         var owner = new TriggerOwner(InstanceId, ProfileId);
         var context = new TriggerCommandContext(
@@ -145,9 +136,6 @@ public sealed class TriggerScheduleTimeResolutionTests
             "say hello to me after 1 minute",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.None,
-            false,
-            null,
             Guid.NewGuid(),
             Now);
         var result = await tools.ExecuteAsync(

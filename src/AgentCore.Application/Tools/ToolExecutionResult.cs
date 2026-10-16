@@ -10,8 +10,6 @@ namespace AgentCore.Application.Tools;
 public sealed record ToolExecutionResult(
     string Text,
     IReadOnlyList<ModelContentPart>? Parts = null,
-    bool ReplaceTriggerProposal = false,
-    PendingTriggerProposal? TriggerProposal = null,
     string? WorkspaceCwd = null,
     bool OutcomeUnknown = false, bool RecoveryRequired = false, string? SafeFailureSummary = null, bool EffectObserved = false)
 {

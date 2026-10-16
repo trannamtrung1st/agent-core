@@ -26,18 +26,18 @@ public sealed class AutomationActivationJourneyTests
     [InlineData(true, "enable the say hello to me 60s automation job again")]
     [InlineData(false, "enable my hello say 60s automation job again")]
     [InlineData(false, "please enable the automation job to say hello to me every 60 seconds again, please")]
-    public async Task Exact_enable_request_lists_inspects_and_enables_without_classifier_or_duplicate(bool duplicate, string requestText)
+    public async Task Exact_enable_request_lists_inspects_and_enables_with_exact_semantic_verification_without_duplicate(bool duplicate, string requestText)
     {
         var clock = new Clock(new DateTimeOffset(2026, 10, 12, 8, 0, 0, TimeSpan.Zero));
         var model = new WorkflowModel(requestText);
-        var classifier = new UnavailableClassifier();
+        var classifier = new AlignmentClassifier(duplicate);
         await using var host = new ExperienceHost(Path.Combine(Path.GetTempPath(), $"enable-chat-{Guid.NewGuid():N}.db"), model, clock,
             configure: services =>
             {
                 services.RemoveAll<ILanguageModelResolver>();
                 services.AddSingleton<ILanguageModelResolver>(new StaticLanguageModelResolver(model));
                 services.RemoveAll<ITriggerCommandAuthorizer>();
-                services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(classifier, new()));
+                services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(classifier));
             });
         var services = host.Services;
         var instance = await services.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 25);
@@ -72,7 +72,7 @@ public sealed class AutomationActivationJourneyTests
         Assert.True((await hub.InvokeAsync<CommandAck>("SendText", Command("user.text", 1,
             new UserTextPayload { Text = requestText }, await ready.Task.WaitAsync(TimeSpan.FromSeconds(20))))).Accepted);
         await completed.Task.WaitAsync(TimeSpan.FromSeconds(20));
-        Assert.Equal(0, classifier.Calls);
+        Assert.Equal(1, classifier.Calls);
         Assert.Equal(new[] { ToolCatalog.AutomationList, ToolCatalog.AutomationInspect, ToolCatalog.AutomationUpdate }, model.Calls);
         var rows = await services.GetRequiredService<ITriggerStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), null);
         Assert.Equal(duplicate ? 2 : 1, rows.Count);
@@ -88,7 +88,7 @@ public sealed class AutomationActivationJourneyTests
         if (duplicate)
         {
             Assert.All(rows, a => Assert.Equal(AutomationStatus.Disabled, a.Status));
-            Assert.Contains("ambiguous_target", model.LastResult);
+            Assert.Contains("authorization_ambiguous", model.LastResult);
         }
         else
         {
@@ -103,7 +103,7 @@ public sealed class AutomationActivationJourneyTests
             Assert.Equal(1, await services.ExecuteRunsAsync(100));
             var run = Assert.Single(await services.AutomationRunsAsync(new(instance.InstanceId, LocalUserProfile.Id), current.AutomationId));
             Assert.Equal(AgentRunStatus.Completed, run.Status);
-            Assert.Equal(0, classifier.Calls);
+            Assert.Equal(1, classifier.Calls);
             Assert.Single(await services.GetRequiredService<ITriggerStore>().ListAsync(current.Owner, null));
         }
     }
@@ -115,7 +115,7 @@ public sealed class AutomationActivationJourneyTests
         internal void Advance(TimeSpan elapsed) => now += elapsed;
     }
 
-    private sealed class UnavailableClassifier : ILanguageModel
+    private sealed class AlignmentClassifier(bool ambiguous) : ILanguageModel
     {
         internal int Calls;
         public ModelCapabilities Capabilities => new(true, true);
@@ -123,7 +123,8 @@ public sealed class AutomationActivationJourneyTests
         {
             Calls++;
             await Task.CompletedTask;
-            yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Classifier deliberately unavailable."));
+            yield return new ModelTextDelta(ambiguous ? "{\"decision\":\"ambiguous\"}" : "{\"decision\":\"allow\"}");
+            yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
 

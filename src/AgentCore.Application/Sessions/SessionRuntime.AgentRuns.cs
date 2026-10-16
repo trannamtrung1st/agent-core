@@ -225,7 +225,6 @@ public sealed partial class SessionRuntime
 
     private async Task LaunchUserBatchAsync(EventContext cause, IReadOnlyList<ConversationEntry> users, Guid responseId)
     {
-        RetainProposalOnlyForConfirmingTurn(users.Select(entry => entry.Text).ToArray());
         var last = users[^1];
         var eventId = last.SourceEventId ?? last.EntryId;
         var context = new EventContext(eventId, SessionId, _epoch, _time.GetUtcNow(),

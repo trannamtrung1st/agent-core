@@ -190,7 +190,7 @@ public sealed class ReliabilityJourneyTests
         await using var host = new ExperienceHost(path, new SchedulingModel(), new AutomationClock(Now), configure: services =>
         {
             services.RemoveAll<ITriggerCommandAuthorizer>();
-            services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(new UnavailableClassifier(), new()));
+            services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(new DenyingClassifier()));
         });
         var s = host.Services;
         var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24);
@@ -220,12 +220,12 @@ public sealed class ReliabilityJourneyTests
         var path = Path.Combine(Path.GetTempPath(), $"reliability-schedule-{Guid.NewGuid():N}.db");
         var clock = new AutomationClock(Now);
         var model = new SchedulingModel();
-        var classifier = new ForbiddenClassifier();
+        var classifier = new AllowingClassifier();
         Guid instanceId, sessionId;
         await using (var host = new ExperienceHost(path, model, clock, configure: services =>
         {
             services.RemoveAll<ITriggerCommandAuthorizer>();
-            services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(classifier, new()));
+            services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(classifier));
         }))
         {
             var s = host.Services;
@@ -262,7 +262,7 @@ public sealed class ReliabilityJourneyTests
         Assert.Equal(AgentRunStatus.Completed, occurrence.Status);
         var history = (await services.GetRequiredService<IMemoryStore>().LoadAsync(sessionId))!.Entries;
         Assert.Single(history, e => e.Role == ConversationRole.Assistant && e.Text == "Hello!");
-        Assert.Equal(0, classifier.Calls);
+        Assert.Equal(1, classifier.Calls);
         if (request.Contains("greet") || request.Contains("every 60s") && request.Contains("hello"))
         {
             clock.Advance(TimeSpan.FromSeconds(seconds));
@@ -301,17 +301,19 @@ public sealed class ReliabilityJourneyTests
         await using var host = new ExperienceHost(path, model, new AutomationClock(Now), configure: services =>
         {
             services.RemoveAll<ITriggerCommandAuthorizer>();
-            services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(new ClassifierModel(mode), new()));
+            services.AddSingleton<ITriggerCommandAuthorizer>(new ModelTriggerCommandAuthorizer(new ClassifierModel(mode)));
         });
         var s = host.Services;
         var instance = await s.GetRequiredService<AdminAgentInstanceService>().CreateManagedAsync("general-assistant", 24);
         var snapshot = await s.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
-        await using var runtime = s.GetRequiredService<SessionRuntimeFactory>().Create(snapshot, new QuietOutput());
+        var output = new RejectAutomationApprovalOutput();
+        await using var runtime = s.GetRequiredService<SessionRuntimeFactory>().Create(snapshot, output);
+        output.Runtime = runtime;
         await runtime.AttachAsync();
         Assert.True(await runtime.SubmitUserTextAsync(request));
         await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
         Assert.Empty(await s.GetRequiredService<ITriggerStore>().ListAsync(new(instance.InstanceId, LocalUserProfile.Id), null));
-        Assert.Contains(model.ScheduleResults, text => text.Contains("\"error\":\"" + expected + "\"", StringComparison.Ordinal));
+        Assert.Contains(model.ScheduleResults, text => text.Contains("\"error\":\"" + (mode is "invalid" or "conflicting" or "unavailable" ? "rejected" : expected) + "\"", StringComparison.Ordinal));
     }
 
     private sealed class ClassifierModel(string mode) : ILanguageModel
@@ -462,7 +464,7 @@ public sealed class ReliabilityJourneyTests
         }
     }
 
-    private sealed class ForbiddenClassifier : ILanguageModel
+    private sealed class AllowingClassifier : ILanguageModel
     {
         public int Calls { get; private set; }
         public ModelCapabilities Capabilities { get; } = new(true, true);
@@ -470,20 +472,19 @@ public sealed class ReliabilityJourneyTests
         {
             await Task.CompletedTask;
             Calls++;
-            throw new InvalidOperationException("Clear scheduling must not call the classifier.");
-#pragma warning disable CS0162
-            yield break;
-#pragma warning restore CS0162
+            yield return new ModelTextDelta("{\"decision\":\"allow\"}");
+            yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
 
-    private sealed class UnavailableClassifier : ILanguageModel
+    private sealed class DenyingClassifier : ILanguageModel
     {
         public ModelCapabilities Capabilities { get; } = new(true, true);
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request, [EnumeratorCancellation] CancellationToken ct = default)
         {
             await Task.CompletedTask;
-            yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Classifier unavailable."));
+            yield return new ModelTextDelta("{\"decision\":\"deny\"}");
+            yield return new ModelCompleted(ModelStopReason.Completed);
         }
     }
 
@@ -515,8 +516,8 @@ public sealed class ReliabilityJourneyTests
                 else if (user.StartsWith("every"))
                     yield return Call(ToolCatalog.AutomationCreate, new { executionTarget = "currentSession", instructions = "Wake me up", kind = "fixed_interval", intervalSeconds = user.Contains("30") ? 30 : 60 });
                 else
-                    // Deliberately wrong omitted-details reconstruction: Core must preserve the saved destination and instructions.
-                    yield return Call(ToolCatalog.AutomationCreate, new { executionTarget = "backgroundSession", instructions = "Wrong replacement", kind = "fixed_interval", intervalSeconds = 999 });
+                    // Interpretation belongs to the agent fixture; Core never merges natural-language corrections.
+                    yield return Call(ToolCatalog.AutomationCreate, new { executionTarget = "currentSession", instructions = "Wake me up", kind = "fixed_interval", intervalSeconds = 60 });
                 yield return new ModelCompleted(ModelStopReason.ToolCalls);
                 yield break;
             }

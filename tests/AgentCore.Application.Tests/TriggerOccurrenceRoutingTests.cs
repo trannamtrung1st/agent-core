@@ -228,12 +228,7 @@ public sealed class TriggerOccurrenceRoutingTests
             message => message.Role is ModelRole.System or ModelRole.Developer && message.Text.Contains(evidence, StringComparison.Ordinal));
         Assert.Equal(
             TriggerAuthorizationClassification.Occurrence,
-            TriggerAuthorization.Classify(
-                TriggerKind.ApplicationEvent,
-                "remind me tomorrow",
-                null,
-                new HeuristicTriggerCommandAuthorizer(),
-                "en").Classification);
+            TriggerAuthorization.Classify(TriggerKind.ApplicationEvent));
         var assistant = await LoadAsync("general-assistant", 8);
         Assert.Equal(
             ToolPolicyDecision.RequireApproval,

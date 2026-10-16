@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Semantic Automation verification configuration and recovery
+
+Real uses the selected catalog verifier route and unchanged bounded platform budget. Synthetic registers `SyntheticTriggerCommandAuthorizer`, a typed deterministic fixture; optional `Synthetic:AutomationAuthorizationDecision` chooses its enum verdict for offline scenarios (default Allow). This option is validated and read only in Synthetic; it is not a Real authorization bypass.
+
+Semantic failure proposals use the existing AgentRun approval record, exact action hash, prepared argument JSON, complete bounded preview, revisions and expiry. Automation mutations retain complete previews up to 131,072 characters and prepared argument JSON up to 65,536 UTF-8 bytes; generic/Drive bounds remain unchanged. Preparation also bounds exact verification JSON to 64,000 characters and refuses an oversized serialized preview before classification or approval persistence. No new table or schema migration is introduced. Reconnect restores the pending proposal and retained matching approval avoids another model call; changed target revision or action facts invalidate it. User cancellation, expiry and supersession remain existing Run transitions. Automation records, occurrence dedupe, policy and execution retain their existing owners.
+
 The canonical filesystem cutover uses only the fresh `CanonicalFilesystemBaseline`. Earlier migration names and upgrade narratives below are historical design context; none remains an executable migration chain. Existing pre-cutover or untracked databases and populated unmarked workspace roots require the explicit backed-up reset described under [Canonical workspace baseline](#canonical-workspace-baseline). They are never adopted, stamped or converted by startup. The former three-layer context conversion cannot make an old database eligible for this baseline.
 
 ## Canonical workspace baseline

@@ -189,11 +189,8 @@ public sealed class MultiTriggerAutomationJourneyTests
 
     private sealed class ExplicitUserAuthorizer : AgentCore.Application.Triggers.ITriggerCommandAuthorizer
     {
-        public ValueTask<AgentCore.Application.Triggers.TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(string? text, string? language,
-            AgentCore.Application.Triggers.TriggerCommandAction action, AgentCore.Application.Triggers.ScheduleConversationContext? context = null,
-            AgentCore.Application.Triggers.ScheduleDraftContext? draft = null, CancellationToken ct = default)
-            => ValueTask.FromResult(AgentCore.Application.Triggers.TriggerCommandAuthorizationDecision.Allow);
-        public bool IsScheduleConfirmation(string? text, string? language) => false;
+        public ValueTask<AgentCore.Application.Triggers.TriggerCommandAuthorizationVerdict> AuthorizeAsync(AgentCore.Application.Triggers.AutomationAuthorizationRequest proposed, CancellationToken ct = default)
+            => ValueTask.FromResult(new AgentCore.Application.Triggers.TriggerCommandAuthorizationVerdict(AgentCore.Application.Triggers.TriggerCommandAuthorizationDecision.Allow));
     }
 
     [Fact(Timeout = 60000)]
@@ -208,7 +205,7 @@ public sealed class MultiTriggerAutomationJourneyTests
         var definition = (await definitions.GetAsync("general-assistant", 21))!;
         var now = DateTimeOffset.UtcNow;
         var context = new AgentCore.Application.Triggers.TriggerCommandContext(owner, Guid.NewGuid(), "UTC", "Create this disabled automation", "en",
-            AgentCore.Application.Triggers.TriggerAuthorizationClassification.CurrentUserTurn, AgentCore.Application.Triggers.TriggerCommandAction.Create, false, null, Guid.NewGuid(), now);
+            AgentCore.Application.Triggers.TriggerAuthorizationClassification.CurrentUserTurn, Guid.NewGuid(), now);
         var first = Guid.NewGuid(); var second = Guid.NewGuid();
         async Task<AgentCore.Application.Tools.ToolExecutionResult> Execute(string tool, object args, AgentCore.Application.Triggers.TriggerCommandContext command) =>
             await AgentCore.Application.Triggers.TriggerScheduleCommands.ExecuteAsync(definition, s.GetRequiredService<IAutomationService>(), tool,
@@ -221,7 +218,7 @@ public sealed class MultiTriggerAutomationJourneyTests
         var store = s.GetRequiredService<ITriggerStore>(); var saved = Assert.Single(await store.ListAsync(owner, null));
         Assert.Equal(AutomationStatus.Disabled, saved.Status); Assert.Equal(2, saved.Triggers.Count);
         var updated = await Execute(AgentCore.Application.Tools.ToolCatalog.AutomationUpdate, new { automationId = saved.AutomationId, expectedRevision = saved.Revision, name = "Renamed task" },
-            context with { AllowedActions = AgentCore.Application.Triggers.TriggerCommandAction.Update });
+            context);
         Assert.DoesNotContain("\"error\"", updated.Text);
         saved = (await store.GetAsync(owner, saved.AutomationId))!;
         Assert.Equal(new[] { first, second }.Order(), saved.Triggers.Select(t => t.TriggerId).Order()); Assert.All(saved.Triggers, t => Assert.Equal(1, t.Revision));

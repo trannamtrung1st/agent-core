@@ -56,13 +56,10 @@ public sealed class TriggerScheduleSemanticsTests
             "every 30s say hello to me",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.Create,
-            false,
-            null,
             Guid.NewGuid(),
             Now);
         using var args = JsonDocument.Parse(
-            """{"instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
+            """{"executionTarget":"backgroundSession","instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
@@ -70,14 +67,14 @@ public sealed class TriggerScheduleSemanticsTests
             args.RootElement,
             context,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.Contains("\"error\":\"recurrence_below_minimum\"", result.Text, StringComparison.Ordinal);
         Assert.Contains("\"scheduleDraft\"", result.Text, StringComparison.Ordinal);
         Assert.Empty(await store.ListAsync(owner, null));
     }
 
     [Fact]
-    public async Task Every_minute_correction_uses_draft_intent_and_creates_fixed_interval()
+    public async Task Model_supplies_complete_corrected_arguments_from_untrusted_draft()
     {
         var definition = await LoadAsync(10);
         var store = new InMemoryTriggerStore();
@@ -95,13 +92,10 @@ public sealed class TriggerScheduleSemanticsTests
             "every minute",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.Create,
-            false,
-            null,
             Guid.NewGuid(),
             Now,
             ScheduleDraft: draft);
-        using var args = JsonDocument.Parse("""{"kind":"fixed_interval","intervalSeconds":60}""");
+        using var args = JsonDocument.Parse("""{"executionTarget":"backgroundSession","instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":60}""");
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
@@ -109,24 +103,12 @@ public sealed class TriggerScheduleSemanticsTests
             args.RootElement,
             context,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.DoesNotContain("\"error\"", result.Text, StringComparison.Ordinal);
         var created = Assert.Single(await store.ListAsync(owner, null));
         var schedule = Assert.IsType<FixedIntervalSchedule>(created.Schedule);
         Assert.Equal(60, schedule.IntervalSeconds);
         Assert.Equal("Say hello to me", created.Instructions);
-    }
-
-    [Fact]
-    public async Task Heuristic_authorizer_allows_every_minute_with_active_draft()
-    {
-        var draft = ScheduleDraftContext.ForFixedIntervalRejection("Say hello to me", 30, "recurrence_below_minimum", Now);
-        var decision = await new HeuristicTriggerCommandAuthorizer().AuthorizeCurrentTurnAsync(
-            "every minute",
-            "en",
-            TriggerCommandAction.Create,
-            scheduleDraft: draft);
-        Assert.Equal(TriggerCommandAuthorizationDecision.Allow, decision);
     }
 
     [Fact]
@@ -137,21 +119,17 @@ public sealed class TriggerScheduleSemanticsTests
         var registrations = new AutomationService(store, Ids(), new FakeTimeProvider(Now));
         var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
         using var createArgs = JsonDocument.Parse(
-            """{"instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":60}""");
+            """{"executionTarget":"backgroundSession","instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":60}""");
         await TriggerScheduleCommands.ExecuteAsync(definition, registrations, ToolCatalog.AutomationCreate,
             createArgs.RootElement, AuthorizedContext(owner, "every minute say hello to me", TriggerCommandAction.Create),
-            CancellationToken.None, new HeuristicTriggerCommandAuthorizer());
+            CancellationToken.None, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         var current = Assert.Single(await store.ListAsync(owner, null));
         var payload = JsonSerializer.Serialize(new { automationId = current.AutomationId, expectedRevision = current.Revision,
             enabled = false, instructions = "Changed instructions" });
-        var context = AuthorizedContext(owner, "yes", TriggerCommandAction.Update) with
-        {
-            ExecutePendingProposal = true,
-            PendingProposal = new(ToolCatalog.AutomationUpdate, payload)
-        };
+        var context = AuthorizedContext(owner, "Update the exact owned automation", TriggerCommandAction.Update);
         using var args = JsonDocument.Parse(payload);
         var result = await TriggerScheduleCommands.ExecuteAsync(definition, registrations, ToolCatalog.AutomationUpdate,
-            args.RootElement, context, CancellationToken.None, new HeuristicTriggerCommandAuthorizer());
+            args.RootElement, context, CancellationToken.None, new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.Contains("\"error\":\"unavailable\"", result.Text);
         var retained = Assert.Single(await store.ListAsync(owner, null));
         Assert.Equal(current.Instructions, retained.Instructions);
@@ -168,7 +146,7 @@ public sealed class TriggerScheduleSemanticsTests
         var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
         var createContext = AuthorizedContext(owner, "every minute say hello to me", TriggerCommandAction.Create);
         using var createArgs = JsonDocument.Parse(
-            """{"instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":60}""");
+            """{"executionTarget":"backgroundSession","instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":60}""");
         var createdJson = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
@@ -176,7 +154,7 @@ public sealed class TriggerScheduleSemanticsTests
             createArgs.RootElement,
             createContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.DoesNotContain("\"error\"", createdJson.Text, StringComparison.Ordinal);
         using var createdDoc = JsonDocument.Parse(createdJson.Text);
         var automationId = createdDoc.RootElement.GetProperty("automationId").GetString();
@@ -200,7 +178,7 @@ public sealed class TriggerScheduleSemanticsTests
             updateArgs.RootElement,
             updateContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.DoesNotContain("\"error\"", updatedJson.Text, StringComparison.Ordinal);
         schedule = Assert.IsType<FixedIntervalSchedule>((await store.ListAsync(owner, null)).Single().Schedule);
         Assert.Equal(120, schedule.IntervalSeconds);
@@ -222,7 +200,7 @@ public sealed class TriggerScheduleSemanticsTests
             capArgs.RootElement,
             capContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.DoesNotContain("\"error\"", cappedJson.Text, StringComparison.Ordinal);
         schedule = Assert.IsType<FixedIntervalSchedule>((await store.ListAsync(owner, null)).Single().Schedule);
         Assert.Equal(10, schedule.MaxOccurrences);
@@ -244,7 +222,7 @@ public sealed class TriggerScheduleSemanticsTests
             cancelArgs.RootElement,
             cancelContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.DoesNotContain("\"error\"", cancelledJson.Text, StringComparison.Ordinal);
         Assert.Equal(AutomationStatus.Cancelled, (await store.ListAsync(owner, null)).Single().Status);
     }
@@ -258,7 +236,7 @@ public sealed class TriggerScheduleSemanticsTests
         var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
         var context = AuthorizedContext(owner, "every minute say hello to me", TriggerCommandAction.Create);
         using var args = JsonDocument.Parse(
-            """{"instructions":"Say hello","kind":"fixed_interval","intervalSeconds":60,"endAtUtc":"not-a-date"}""");
+            """{"executionTarget":"backgroundSession","instructions":"Say hello","kind":"fixed_interval","intervalSeconds":60,"endAtUtc":"not-a-date"}""");
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
@@ -266,7 +244,7 @@ public sealed class TriggerScheduleSemanticsTests
             args.RootElement,
             context,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.Contains("\"error\":\"schedule_validation_failed\"", result.Text, StringComparison.Ordinal);
         Assert.Empty(await store.ListAsync(owner, null));
     }
@@ -280,7 +258,7 @@ public sealed class TriggerScheduleSemanticsTests
         var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
         var rejectedContext = AuthorizedContext(owner, "every 30s say hello to me", TriggerCommandAction.Create);
         using var rejectedArgs = JsonDocument.Parse(
-            """{"instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
+            """{"executionTarget":"backgroundSession","instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
         var rejected = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
@@ -288,7 +266,7 @@ public sealed class TriggerScheduleSemanticsTests
             rejectedArgs.RootElement,
             rejectedContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.Contains("\"scheduleDraft\"", rejected.Text, StringComparison.Ordinal);
 
         var draft = ScheduleDraftContext.ForFixedIntervalRejection(
@@ -297,12 +275,7 @@ public sealed class TriggerScheduleSemanticsTests
             "recurrence_below_minimum",
             Now);
         var eligible = true;
-        Assert.Null(ScheduleDraftAdmission.PrepareDraftForUserTurn(
-            draft,
-            ref eligible,
-            "every minute remind me to check the oven",
-            "en",
-            null));
+        Assert.NotNull(ScheduleDraftAdmission.PrepareDraftForUserTurn(draft, ref eligible));
 
         using var intervalOnlyArgs = JsonDocument.Parse("""{"kind":"fixed_interval","intervalSeconds":60}""");
         var staleDraftContext = new TriggerCommandContext(
@@ -312,9 +285,6 @@ public sealed class TriggerScheduleSemanticsTests
             "every minute remind me to check the oven",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.Create,
-            false,
-            null,
             Guid.NewGuid(),
             Now,
             ScheduleDraft: draft);
@@ -325,15 +295,9 @@ public sealed class TriggerScheduleSemanticsTests
             intervalOnlyArgs.RootElement,
             staleDraftContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
-        Assert.DoesNotContain("\"error\"", inherited.Text, StringComparison.Ordinal);
-        Assert.Equal("Say hello to me", (await store.ListAsync(owner, null)).Single().Instructions);
-
-        await registrations.CancelAsync(
-            owner,
-            (await store.ListAsync(owner, null)).Single().AutomationId,
-            (await store.ListAsync(owner, null)).Single().Revision,
-            CancellationToken.None);
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
+        Assert.Contains("schedule_validation_failed", inherited.Text);
+        Assert.Empty(await store.ListAsync(owner, null));
 
         var clearedContext = AuthorizedContext(
             owner,
@@ -346,11 +310,11 @@ public sealed class TriggerScheduleSemanticsTests
             intervalOnlyArgs.RootElement,
             clearedContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.Contains("\"error\":\"schedule_validation_failed\"", withoutDraft.Text, StringComparison.Ordinal);
 
         using var explicitIntentArgs = JsonDocument.Parse(
-            """{"instructions":"check the oven","kind":"fixed_interval","intervalSeconds":60}""");
+            """{"executionTarget":"backgroundSession","instructions":"check the oven","kind":"fixed_interval","intervalSeconds":60}""");
         var created = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
@@ -358,7 +322,7 @@ public sealed class TriggerScheduleSemanticsTests
             explicitIntentArgs.RootElement,
             clearedContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.DoesNotContain("\"error\"", created.Text, StringComparison.Ordinal);
         Assert.Equal("check the oven", (await store.ListAsync(owner, null)).Single(r => r.Status == AutomationStatus.Active).Instructions);
     }
@@ -372,7 +336,7 @@ public sealed class TriggerScheduleSemanticsTests
         var owner = new TriggerOwner(Guid.NewGuid(), Guid.NewGuid());
         var rejectedContext = AuthorizedContext(owner, "every 30s say hello to me", TriggerCommandAction.Create);
         using var rejectedArgs = JsonDocument.Parse(
-            """{"instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
+            """{"executionTarget":"backgroundSession","instructions":"Say hello to me","kind":"fixed_interval","intervalSeconds":30}""");
         var rejected = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
@@ -380,7 +344,7 @@ public sealed class TriggerScheduleSemanticsTests
             rejectedArgs.RootElement,
             rejectedContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.Contains("\"scheduleDraft\"", rejected.Text, StringComparison.Ordinal);
 
         var draft = ScheduleDraftContext.ForFixedIntervalRejection(
@@ -389,16 +353,11 @@ public sealed class TriggerScheduleSemanticsTests
             "recurrence_below_minimum",
             Now);
         var eligible = true;
-        Assert.Null(ScheduleDraftAdmission.PrepareDraftForUserTurn(
-            draft,
-            ref eligible,
-            "what is 2 + 2?",
-            "en",
-            null));
+        Assert.NotNull(ScheduleDraftAdmission.PrepareDraftForUserTurn(draft, ref eligible));
 
         var createContext = AuthorizedContext(owner, "every minute say hello to me", TriggerCommandAction.Create);
         using var createArgs = JsonDocument.Parse(
-            """{"instructions":"Ping","kind":"fixed_interval","intervalSeconds":60}""");
+            """{"executionTarget":"backgroundSession","instructions":"Ping","kind":"fixed_interval","intervalSeconds":60}""");
         var result = await TriggerScheduleCommands.ExecuteAsync(
             definition,
             registrations,
@@ -406,7 +365,7 @@ public sealed class TriggerScheduleSemanticsTests
             createArgs.RootElement,
             createContext,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.DoesNotContain("\"error\"", result.Text, StringComparison.Ordinal);
         var created = Assert.Single(await store.ListAsync(owner, null));
         Assert.Equal("Ping", created.Instructions);
@@ -439,9 +398,6 @@ public sealed class TriggerScheduleSemanticsTests
             text,
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            action,
-            false,
-            null,
             Guid.NewGuid(),
             Now,
             scheduleContext);

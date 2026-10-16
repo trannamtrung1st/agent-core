@@ -62,7 +62,7 @@ public sealed class AutomationAuthorizationJourneyTests
             Assert.True(Assert.Single(model.Results).TryGetProperty("error", out _));
             Assert.Contains(clockOnly ? "weekday" : "localTime", model.Results[0].GetProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
         }
-        Assert.Equal(classifier ? 2 : 0, handler.Payloads.Count);
+        Assert.Equal(complete ? 2 : 0, handler.Payloads.Count);
         Assert.Single(model.Results); // no different schedule or reminder retry
     }
 
@@ -98,7 +98,9 @@ public sealed class AutomationAuthorizationJourneyTests
                 .CreateManagedAsync("general-assistant", 24)).InstanceId;
             var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instanceId, SessionMode.Text);
             sessionId = session.SessionId;
-            await using var runtime = services.GetRequiredService<SessionRuntimeFactory>().Create(session, new QuietOutput());
+            var output = new RejectAutomationApprovalOutput();
+            await using var runtime = services.GetRequiredService<SessionRuntimeFactory>().Create(session, output);
+            output.Runtime = runtime;
             await runtime.AttachAsync();
             Assert.True(await runtime.SubmitUserTextAsync(outcome == "explicit" ? Request : "I would like daily reflection on how you can consolidate your memory, experience at 9am"));
             await runtime.WaitUntilIdleAsync().WaitAsync(TimeSpan.FromSeconds(20));
@@ -107,14 +109,12 @@ public sealed class AutomationAuthorizationJourneyTests
             {
                 Assert.Empty(await triggers.ListAsync(new(instanceId, LocalUserProfile.Id), null));
                 Assert.Equal(0, model.WorkRuns);
-                Assert.Contains(model.Results, result => result.GetProperty("error").GetString() == error);
+                Assert.Contains(model.Results, result => result.GetProperty("error").GetString() == (error == "authorization_denied" ? error : "rejected"));
                 Assert.Equal(outcome == "truncated" ? 2 : 1, handler.Payloads.Count);
-                if (outcome == "truncated")
+                if (outcome is "truncated" or "invalid" or "unavailable")
                 {
-                    var result = Assert.Single(model.Results);
-                    Assert.Equal("TruncatedOutput", result.GetProperty("classifierFailureReason").GetString());
-                    Assert.Contains("exhausted its output budget", result.GetProperty("message").GetString());
-                    Assert.DoesNotContain("Clarify the request", result.GetProperty("message").GetString());
+                    var pending = Assert.Single(output.Requests);
+                    Assert.Contains("Reflect on learned Memory", pending.Details["Exact action"]);
                 }
                 return;
             }
@@ -132,7 +132,7 @@ public sealed class AutomationAuthorizationJourneyTests
             Assert.Equal("Asia/Ho_Chi_Minh", schedule.TimeZoneId);
             Assert.Equal(new TimeOnly(9, 0), schedule.LocalTime);
             Assert.Equal(Now.AddHours(2), updated.NextOccurrenceAtUtc);
-            Assert.Equal(outcome == "explicit" ? 1 : outcome == "recover" ? 3 : 2, handler.Payloads.Count);
+            Assert.Equal(outcome == "recover" ? 3 : 2, handler.Payloads.Count);
             using var followup = JsonDocument.Parse(handler.Payloads[^1]);
             Assert.Contains("Reflect on learned Memory", followup.RootElement.GetRawText());
             Assert.Contains(TimezoneReply, followup.RootElement.GetRawText());

@@ -89,13 +89,13 @@ public sealed class TriggerScheduleRuntimeTests
             Enumerable.Range(1, 4).Select(index => Guid.Parse($"019944af-00b6-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf16")]);
         var service = new AutomationService(store, ids, time);
-        var tools = new SessionToolExecutor(triggerRegistrations: service);
+        var tools = new SessionToolExecutor(triggerRegistrations: service, triggerAuthorizer: new VerdictSequence());
         var enabled = await LoadAsync(8);
         var owner = new TriggerOwner(InstanceId, ProfileId);
         var created = await tools.ExecuteAsync(
             enabled,
             Guid.Parse("019944af-00b1-7000-8000-0000000000c1"),
-            new ModelToolCall("create", ToolCatalog.AutomationCreate, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("create", ToolCatalog.AutomationCreate, """{"executionTarget":"backgroundSession","instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: Context(owner, TriggerAuthorizationClassification.CurrentUserTurn, false, null, TriggerCommandAction.Create));
         Assert.Contains("\"status\":\"Active\"", created.Text, StringComparison.Ordinal);
@@ -112,7 +112,7 @@ public sealed class TriggerScheduleRuntimeTests
             var rejected = await tools.ExecuteAsync(
                 enabled,
                 list.SessionId,
-                new ModelToolCall("mistaken", name, """{"instructions":"Nope","relativeDayOffset":1,"localTime":"09:00","automationId":"019944af-00b6-7000-8000-000000000001","expectedRevision":1}"""),
+                new ModelToolCall("mistaken", name, """{"executionTarget":"backgroundSession","instructions":"Nope","relativeDayOffset":1,"localTime":"09:00","automationId":"019944af-00b6-7000-8000-000000000001","expectedRevision":1}"""),
                 ToolLimits.MaxOutputBytes,
                 triggerCommand: list);
             Assert.Contains("authorization_denied", rejected.Text, StringComparison.Ordinal);
@@ -149,7 +149,7 @@ public sealed class TriggerScheduleRuntimeTests
     [Fact]
     public async Task Old_history_cannot_authorize_another_schedule()
     {
-        var harness = await StartAsync();
+        var harness = await StartAsync(verifier: new VerdictSequence());
         await using var runtime = harness.Runtime;
         Assert.True(await runtime.SubmitUserTextAsync("Remind me tomorrow at 9 AM to call John."));
         await runtime.WaitUntilIdleAsync();
@@ -173,7 +173,7 @@ public sealed class TriggerScheduleRuntimeTests
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00b2-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf11")]);
         var service = new AutomationService(store, ids, time);
-        var tools = new SessionToolExecutor(triggerRegistrations: service);
+        var tools = new SessionToolExecutor(triggerRegistrations: service, triggerAuthorizer: new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         var enabled = await LoadAsync(8);
         var owner = new TriggerOwner(InstanceId, ProfileId);
         var context = Context(
@@ -185,7 +185,7 @@ public sealed class TriggerScheduleRuntimeTests
         var created = await tools.ExecuteAsync(
             enabled,
             context.SessionId,
-            new ModelToolCall("create", ToolCatalog.AutomationCreate, """{"instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("create", ToolCatalog.AutomationCreate, """{"executionTarget":"backgroundSession","instructions":"Call John","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: context);
         Assert.Contains("\"status\":\"Active\"", created.Text, StringComparison.Ordinal);
@@ -193,34 +193,19 @@ public sealed class TriggerScheduleRuntimeTests
         var initiative = await tools.ExecuteAsync(
             enabled,
             context.SessionId,
-            new ModelToolCall("initiative", ToolCatalog.AutomationCreate, """{"instructions":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("initiative", ToolCatalog.AutomationCreate, """{"executionTarget":"backgroundSession","instructions":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: Context(owner, TriggerAuthorizationClassification.Initiative, false, null));
-        Assert.Contains("confirmation_required", initiative.Text, StringComparison.Ordinal);
-        Assert.NotNull(initiative.TriggerProposal);
+        Assert.Contains("forbidden", initiative.Text, StringComparison.Ordinal);
         Assert.Equal(1, await store.CountActiveAsync(owner));
         var environment = await tools.ExecuteAsync(
             enabled,
             context.SessionId,
-            new ModelToolCall("environment", ToolCatalog.AutomationCreate, """{"instructions":"Environment","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("environment", ToolCatalog.AutomationCreate, """{"executionTarget":"backgroundSession","instructions":"Environment","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: Context(owner, TriggerAuthorizationClassification.Environment, false, null));
-        Assert.Contains("confirmation_required", environment.Text, StringComparison.Ordinal);
+        Assert.Contains("forbidden", environment.Text, StringComparison.Ordinal);
         Assert.Equal(1, await store.CountActiveAsync(owner));
-
-        var confirmed = await tools.ExecuteAsync(
-            enabled,
-            context.SessionId,
-            new ModelToolCall("confirm", ToolCatalog.AutomationCreate, """{"instructions":"Different","relativeDayOffset":2,"localTime":"15:00"}"""),
-            ToolLimits.MaxOutputBytes,
-            triggerCommand: Context(
-                owner,
-                TriggerAuthorizationClassification.CurrentUserTurn,
-                true,
-                initiative.TriggerProposal,
-                TriggerCommandAction.Create));
-        Assert.Contains("Sneaky", confirmed.Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("Different", confirmed.Text, StringComparison.Ordinal);
 
         foreach (var classification in new[]
         {
@@ -233,22 +218,19 @@ public sealed class TriggerScheduleRuntimeTests
             var rejected = await tools.ExecuteAsync(
                 enabled,
                 context.SessionId,
-                new ModelToolCall("reject", ToolCatalog.AutomationCreate, """{"instructions":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
+                new ModelToolCall("reject", ToolCatalog.AutomationCreate, """{"executionTarget":"backgroundSession","instructions":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
                 ToolLimits.MaxOutputBytes,
                 triggerCommand: Context(owner, classification, false, null, currentUserText: "thanks"));
             Assert.Contains(
-                classification == TriggerAuthorizationClassification.UnrelatedUserTurn
-                    ? "authorization_denied"
-                    : "forbidden",
+                "forbidden",
                 rejected.Text,
                 StringComparison.Ordinal);
-            Assert.Null(rejected.TriggerProposal);
         }
 
         var disabled = await tools.ExecuteAsync(
             enabled with { TriggerPolicy = null },
             context.SessionId,
-            new ModelToolCall("disabled", ToolCatalog.AutomationCreate, """{"instructions":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
+            new ModelToolCall("disabled", ToolCatalog.AutomationCreate, """{"executionTarget":"backgroundSession","instructions":"Nope","relativeDayOffset":1,"localTime":"09:00"}"""),
             ToolLimits.MaxOutputBytes,
             triggerCommand: context);
         Assert.Contains("Scheduling is disabled", disabled.Text, StringComparison.Ordinal);
@@ -265,7 +247,7 @@ public sealed class TriggerScheduleRuntimeTests
                 pending: null,
                 TriggerCommandAction.Update,
                 currentUserText: "Move that reminder to 10."));
-        Assert.Contains("stale", stale.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("conflict", stale.Text, StringComparison.OrdinalIgnoreCase);
 
         var otherOwner = await tools.ExecuteAsync(
             enabled,
@@ -280,7 +262,7 @@ public sealed class TriggerScheduleRuntimeTests
                 TriggerCommandAction.Cancel,
                 currentUserText: "Cancel that reminder."));
         Assert.Contains("not_found", otherOwner.Text, StringComparison.Ordinal);
-        Assert.Equal(2, await store.CountActiveAsync(owner));
+        Assert.Equal(1, await store.CountActiveAsync(owner));
         Assert.Equal("Call John", (await store.GetAsync(owner, Guid.Parse("019944af-00b2-7000-8000-000000000001")))!.Instructions);
     }
 
@@ -298,173 +280,6 @@ public sealed class TriggerScheduleRuntimeTests
                 ToolLimits.MaxOutputBytes);
             Assert.Contains("not permitted", result.Text, StringComparison.OrdinalIgnoreCase);
         }
-    }
-
-    [Fact]
-    public async Task Unrelated_user_turn_drops_a_pending_schedule_proposal()
-    {
-        var harness = await StartAsync(environmentScheduling: true);
-        await using var runtime = harness.Runtime;
-        var owner = new TriggerOwner(InstanceId, ProfileId);
-        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
-            Guid.Parse("019944af-00b5-7000-8000-000000000001"),
-            ScriptedLanguageModel.ScheduleForceMarker));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-        Assert.Contains("confirm", runtime.Snapshot.Entries[^1].Text, StringComparison.OrdinalIgnoreCase);
-
-        Assert.True(await runtime.SubmitUserTextAsync("What is the weather?"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-
-        Assert.True(await runtime.SubmitUserTextAsync("yes"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-        var declined = runtime.Snapshot.Entries[^1].Text;
-        Assert.True(
-            declined.Contains("I did not save a schedule.", StringComparison.Ordinal)
-            || declined.Contains("did not understand that schedule request", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task Confirmation_persists_the_stored_proposal_not_the_model_replacement()
-    {
-        var harness = await StartAsync(environmentScheduling: true);
-        await using var runtime = harness.Runtime;
-        var owner = new TriggerOwner(InstanceId, ProfileId);
-        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
-            Guid.Parse("019944af-00b5-7000-8000-000000000002"),
-            ScriptedLanguageModel.ScheduleForceMarker));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-
-        Assert.True(await runtime.SubmitUserTextAsync("yes"));
-        await runtime.WaitUntilIdleAsync();
-
-        var rows = await harness.Store.ListAsync(owner, null);
-        Assert.True(rows.Count == 1, string.Join("\n", runtime.Snapshot.Entries.Select(e => e.Text)));
-        var saved = Assert.Single(rows);
-        Assert.Equal(AutomationStatus.Active, saved.Status);
-        Assert.Equal("Sneaky", saved.Instructions);
-        var schedule = Assert.IsType<OneShotSchedule>(saved.Schedule);
-        Assert.Equal(new DateTimeOffset(2026, 9, 24, 9, 0, 0, TimeSpan.Zero), schedule.AtUtc);
-    }
-
-    [Fact]
-    public async Task Queued_unrelated_turn_during_proposal_creation_drops_the_proposal()
-    {
-        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var harness = await StartAsync(new HoldBeforeEnvironmentScheduleModel(started, release), environmentScheduling: true);
-        await using var runtime = harness.Runtime;
-        var owner = new TriggerOwner(InstanceId, ProfileId);
-        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
-            Guid.Parse("019944af-00b5-7000-8000-000000000004"),
-            ScriptedLanguageModel.ScheduleForceMarker));
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal(
-            true,
-            await runtime.SubmitPersistedUserTextAsync(
-                "What is the weather?",
-                Guid.Parse("019944af-00b5-7000-8000-000000000021"),
-                behavior: UserTextBehavior.Queue));
-        Assert.Contains(
-            runtime.Snapshot.Entries,
-            entry => entry.Role == ConversationRole.User && entry.Text == "What is the weather?");
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-
-        release.TrySetResult();
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-
-        Assert.True(await runtime.SubmitUserTextAsync("yes"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-    }
-
-    [Fact]
-    public async Task Idle_speech_final_drops_a_pending_schedule_proposal()
-    {
-        var harness = await StartAsync(environmentScheduling: true);
-        await using var runtime = harness.Runtime;
-        var owner = new TriggerOwner(InstanceId, ProfileId);
-        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
-            Guid.Parse("019944af-00b5-7000-8000-000000000005"),
-            ScriptedLanguageModel.ScheduleForceMarker));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-
-        await runtime.SetModeAsync(SessionMode.Voice);
-        await runtime.WaitUntilIdleAsync();
-        Assert.Equal(SessionMode.Voice, runtime.Snapshot.Mode);
-
-        var utterance = Guid.Parse("019944af-00b5-7000-8000-000000000011");
-        await runtime.SubmitSpeechAsync(new SpeechStarted(utterance), 0.9);
-        await runtime.SubmitSpeechAsync(new SpeechFinal(utterance, "What is the weather?", 0.9), 0.9);
-        await runtime.SubmitSpeechAsync(new SpeechEnded(utterance), 0.2);
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-
-        Assert.True(await runtime.SubmitUserTextAsync("yes"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-    }
-
-    [Fact]
-    public async Task User_steer_drops_a_pending_schedule_proposal()
-    {
-        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var harness = await StartAsync(new HoldAfterEnvironmentScheduleModel(started), environmentScheduling: true);
-        await using var runtime = harness.Runtime;
-        var owner = new TriggerOwner(InstanceId, ProfileId);
-        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
-            Guid.Parse("019944af-00b5-7000-8000-000000000003"),
-            ScriptedLanguageModel.ScheduleForceMarker));
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-
-        Assert.True(await runtime.SubmitUserTextAsync("yes"));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-    }
-
-    [Fact]
-    public async Task Memory_and_old_wording_do_not_count_as_the_current_request()
-    {
-        const string remembered = "Remind me tomorrow at 9 to call John.";
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Allow,
-            await Authorizer.AuthorizeCurrentTurnAsync(remembered, "en", TriggerCommandAction.Create));
-        Assert.Equal(
-            TriggerAuthorizationClassification.UnrelatedUserTurn,
-            TriggerAuthorization.Classify(TriggerKind.UserTurn, "thanks", null, Authorizer, "en").Classification);
-        var confirmation = TriggerAuthorization.Classify(
-            TriggerKind.UserTurn,
-            "yes",
-            new PendingTriggerProposal(ToolCatalog.AutomationCreate, "{}"),
-            Authorizer,
-            "en");
-        Assert.Equal(TriggerAuthorizationClassification.CurrentUserTurn, confirmation.Classification);
-        Assert.Equal(TriggerCommandAction.Create, confirmation.AllowedActions);
-        Assert.True(Authorizer.IsScheduleConfirmation("I approve", "en"));
-        Assert.Equal(
-            TriggerAuthorizationClassification.Initiative,
-            TriggerAuthorization.Classify(TriggerKind.LongSilence, remembered, null, Authorizer, "en").Classification);
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Allow,
-            await Authorizer.AuthorizeCurrentTurnAsync("What reminders do I have?", "en", TriggerCommandAction.List));
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Allow,
-            await Authorizer.AuthorizeCurrentTurnAsync("Move that reminder to 10.", "en", TriggerCommandAction.Update));
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Allow,
-            await Authorizer.AuthorizeCurrentTurnAsync("Cancel that reminder.", "en", TriggerCommandAction.Cancel));
-        Assert.Equal(
-            TriggerCommandAction.None,
-            TriggerAuthorization.Classify(TriggerKind.UserTurn, "What reminders do I have?", null, Authorizer, "en").AllowedActions);
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Deny,
-            await Authorizer.AuthorizeCurrentTurnAsync("don't create a reminder", "en", TriggerCommandAction.Create));
     }
 
     [Fact]
@@ -536,34 +351,20 @@ public sealed class TriggerScheduleRuntimeTests
             && entry.Text.Contains("confirm", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
-    public async Task Initiative_proposal_persists_after_I_approve()
+    private sealed class VerdictSequence : ITriggerCommandAuthorizer
     {
-        var harness = await StartAsync(environmentScheduling: true);
-        await using var runtime = harness.Runtime;
-        var owner = new TriggerOwner(InstanceId, ProfileId);
-        await runtime.SubmitEnvironmentAsync(SyntheticEnvironmentDriver.OrderShipped(
-            Guid.Parse("019944af-00b5-7000-8000-000000000006"),
-            ScriptedLanguageModel.ScheduleForceMarker));
-        await runtime.WaitUntilIdleAsync();
-        Assert.Empty(await harness.Store.ListAsync(owner, null));
-
-        Assert.True(await runtime.SubmitUserTextAsync("I approve"));
-        await runtime.WaitUntilIdleAsync();
-
-        var rows = await harness.Store.ListAsync(owner, null);
-        Assert.True(rows.Count == 1, string.Join("\n", runtime.Snapshot.Entries.Select(e => e.Text)));
-        var saved = Assert.Single(rows);
-        Assert.Equal("Sneaky", saved.Instructions);
+        private int calls;
+        public ValueTask<TriggerCommandAuthorizationVerdict> AuthorizeAsync(AutomationAuthorizationRequest proposed, CancellationToken ct = default) =>
+            ValueTask.FromResult(new TriggerCommandAuthorizationVerdict(++calls == 1 ? TriggerCommandAuthorizationDecision.Allow : TriggerCommandAuthorizationDecision.Deny));
     }
 
-    private static readonly ITriggerCommandAuthorizer Authorizer = new HeuristicTriggerCommandAuthorizer();
+    private static readonly ITriggerCommandAuthorizer Authorizer = new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer();
 
     private static TriggerCommandContext Context(
         TriggerOwner owner,
         TriggerAuthorizationClassification classification,
         bool executePending,
-        PendingTriggerProposal? pending,
+        object? pending,
         TriggerCommandAction actions = TriggerCommandAction.None,
         string? currentUserText = "Remind me tomorrow at 9 AM to call John.") =>
         new(
@@ -573,9 +374,6 @@ public sealed class TriggerScheduleRuntimeTests
             currentUserText,
             "en",
             classification,
-            actions,
-            executePending,
-            pending,
             Guid.Parse("019944af-00b1-7000-8000-0000000000d1"),
             Now);
 
@@ -583,7 +381,8 @@ public sealed class TriggerScheduleRuntimeTests
         ILanguageModel? model = null,
         bool environmentScheduling = false,
         TimeProvider? time = null,
-        bool applyProfileTimeZone = true)
+        bool applyProfileTimeZone = true,
+        ITriggerCommandAuthorizer? verifier = null)
     {
         var definition = await LoadAsync(8);
         if (environmentScheduling)
@@ -606,7 +405,7 @@ public sealed class TriggerScheduleRuntimeTests
             Enumerable.Range(1, 8).Select(index => Guid.Parse($"019944af-00b4-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf13")]);
         var registrations = new AutomationService(store, triggerIds, time);
-        var tools = new SessionToolExecutor(triggerRegistrations: registrations);
+        var tools = new SessionToolExecutor(triggerRegistrations: registrations, triggerAuthorizer: verifier ?? new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         var snapshot = new SessionSnapshot(
             1,
             sessionIds.NewSessionId(),

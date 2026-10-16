@@ -35,8 +35,7 @@ public sealed class AutomationAuthorizationProviderTests
             DefaultReasoningEffort = "high", SupportedReasoningEfforts = ["high", "low"] };
         services.AddSingleton<IModelCatalog>(new ConfigurationModelCatalog("custom", [descriptor]));
         await using var provider = services.BuildServiceProvider();
-        var verdict = await provider.GetRequiredService<ITriggerCommandAuthorizer>().AuthorizeWithDetailsAsync(
-            "I would like daily reflection on private-user-content at 9am", "en", TriggerCommandAction.Create);
+        var verdict = await provider.GetRequiredService<ITriggerCommandAuthorizer>().AuthorizeAsync(Proposed("I would like daily reflection on private-user-content at 9am"));
         Assert.Equal(expected, verdict.Decision);
         if (outcome == "truncated") Assert.Equal(TriggerAuthorizationFailureReason.TruncatedOutput, verdict.FailureReason);
         Assert.Equal(2, handler.Payloads.Count);
@@ -80,8 +79,8 @@ public sealed class AutomationAuthorizationProviderTests
         services.AddAgentCoreInfrastructure(FindAgents(), "Real", primary);
         services.AddSingleton<IModelCatalog>(new ConfigurationModelCatalog("custom", [descriptor]));
         await using var provider = services.BuildServiceProvider();
-        Assert.Equal(TriggerCommandAuthorizationDecision.Allow, await provider.GetRequiredService<ITriggerCommandAuthorizer>()
-            .AuthorizeCurrentTurnAsync("I would like daily reflection on your memory at 9am", "en", TriggerCommandAction.Create));
+        Assert.Equal(TriggerCommandAuthorizationDecision.Allow, (await provider.GetRequiredService<ITriggerCommandAuthorizer>()
+            .AuthorizeAsync(Proposed("I would like daily reflection on your memory at 9am"))).Decision);
         using var body = JsonDocument.Parse(Assert.Single(handler.Payloads));
         Assert.Equal("catalog-model", body.RootElement.GetProperty("model").GetString());
         Assert.EndsWith(transport == ModelInferenceTransport.Responses ? "/responses" : "/chat/completions", Assert.Single(handler.Paths));
@@ -123,8 +122,7 @@ public sealed class AutomationAuthorizationProviderTests
             // Hierarchy/transport capabilities belong to the catalog, as in normal Real setup.
         });
         await using var provider = services.BuildServiceProvider();
-        var verdict = await provider.GetRequiredService<ITriggerCommandAuthorizer>().AuthorizeWithDetailsAsync(
-            "I would like daily reflection on how you can consolidate your memory, experience at 9am", "en", TriggerCommandAction.Create);
+        var verdict = await provider.GetRequiredService<ITriggerCommandAuthorizer>().AuthorizeAsync(Proposed("I would like daily reflection on how you can consolidate your memory, experience at 9am"));
 
         Assert.Equal(expected, verdict.Decision);
         using var body = JsonDocument.Parse(Assert.Single(handler.Payloads));
@@ -132,10 +130,16 @@ public sealed class AutomationAuthorizationProviderTests
         var messages = body.RootElement.GetProperty("messages").EnumerateArray().ToArray();
         Assert.Contains(messages, message => message.GetProperty("role").GetString() == "system");
         Assert.Contains(messages, message => message.GetProperty("role").GetString() == "developer"
-            && message.GetProperty("content").GetString()!.Contains("Proposed action: Create"));
+            && message.GetProperty("content").GetString()!.Contains("Proposed operation: Create"));
         Assert.DoesNotContain(messages, message => message.GetProperty("content").GetString()!.Contains("offline-fixture"));
         Assert.Equal("I would like daily reflection on how you can consolidate your memory, experience at 9am",
             messages[^1].GetProperty("content").GetString());
+    }
+
+    private static AutomationAuthorizationRequest Proposed(string text)
+    {
+        var action = JsonSerializer.SerializeToElement(new { tool = "automation.create", arguments = new { instructions = "Reflect on experience", kind = "daily", localTime = "09:00", timeZone = "Asia/Ho_Chi_Minh", executionTarget = "backgroundSession", reportBack = false } });
+        return new(text, TriggerCommandAction.Create, "automation.create", action, AgentCore.Application.Tools.ToolActionHash.Compute("automation.create", action));
     }
 
     private sealed class HttpFactory(HttpClient client) : IHttpClientFactory

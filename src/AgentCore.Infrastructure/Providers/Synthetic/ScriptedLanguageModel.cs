@@ -37,7 +37,6 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly TaskCompletionSource? _compactionStarted;
     private readonly Queue<IReadOnlyList<MemoryProposal>> _memoryTurns;
     private readonly ConcurrentDictionary<Guid, ScheduleScratch> _scheduleScratchByKey = new();
-    private static readonly ITriggerCommandAuthorizer ScheduleAuthorizer = new HeuristicTriggerCommandAuthorizer();
     private const string DiagnosticFailureMarker = "synthetic-fail-turn";
 
     private sealed class ScheduleScratch
@@ -781,6 +780,13 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             return true;
         }
 
+        if (lastUser.Contains(AutomationApprovalMarker, StringComparison.Ordinal))
+        {
+            toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationCreate,
+                """{"instructions":"Review learned experience","kind":"daily","localTime":"09:00","timeZone":"Asia/Ho_Chi_Minh","executionTarget":"backgroundSession","reportBack":false}""");
+            return true;
+        }
+
         if (lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase))
         {
             toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationCreate, """{"instructions":"Sneaky","relativeDayOffset":1,"localTime":"09:00"}""");
@@ -825,7 +831,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             toolEvent = ScheduleCall(
                 toolRounds,
                 ToolCatalog.AutomationCreate,
-                """{"kind":"fixed_interval","intervalSeconds":60}""");
+                CorrectedSyntheticIntervalArguments(request));
             return true;
         }
 
@@ -867,12 +873,6 @@ public sealed class ScriptedLanguageModel : ILanguageModel
                 toolRounds,
                 ToolCatalog.AutomationCreate,
                 """{"instructions":"Hello","localDate":"2026-09-24","localTime":"08:52","timeZone":"viet nam time"}""");
-            return true;
-        }
-
-        if (ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null))
-        {
-            toolEvent = ScheduleCall(toolRounds, ToolCatalog.AutomationCreate, """{"instructions":"Different","relativeDayOffset":2,"localTime":"15:00"}""");
             return true;
         }
 
@@ -920,27 +920,28 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     private bool IsScheduleTurn(ModelRequest request, string lastUser) =>
         lastUser.Contains(ScheduleForceMarker, StringComparison.OrdinalIgnoreCase)
-        || TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(lastUser, null, SyntheticScheduleContext(request))
-        || ScheduleAuthorizer.IsScheduleConfirmation(lastUser, null);
+        || lastUser.Contains(AutomationApprovalMarker, StringComparison.Ordinal)
+        // These choose offline agent scripts, never a Core/verifier authority decision.
+        || lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("hello", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("every monday", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("schedule", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("another at", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("move that", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("cancel that", StringComparison.OrdinalIgnoreCase)
+        || request.Context?.Sections.Any(section => section.Id == AgentCore.Application.Context.ContextSectionId.SchedulingEvidence) == true;
 
-    private ScheduleConversationContext? SyntheticScheduleContext(ModelRequest request)
+    // Offline agent interpretation fixture: reconstruct a complete proposal from retained Evidence.
+    private static string CorrectedSyntheticIntervalArguments(ModelRequest request)
     {
-        if (!TryGetScheduleScratch(request, out var scratch)
-            || scratch.AutomationId is null
-            || !Guid.TryParse(scratch.AutomationId, out var automationId))
-        {
-            return null;
-        }
-
-        return new ScheduleConversationContext(
-            automationId,
-            scratch.Revision,
-            TriggerCommandAction.Create,
-            scratch.Intent ?? "Call John",
-            scratch.TimeZone ?? "UTC",
-            TriggerScheduleKind.OneShot,
-            AutomationStatus.Active,
-            null);
+        var prior = request.Context?.Sections.Where(section => section.Id == AgentCore.Application.Context.ContextSectionId.SchedulingEvidence)
+            .SelectMany(section => section.Message.Text.Split('\n'))
+            .FirstOrDefault(line => line.StartsWith("previousArguments={", StringComparison.Ordinal));
+        var args = prior is null ? new System.Text.Json.Nodes.JsonObject { ["instructions"] = "Say hello to me" }
+            : System.Text.Json.Nodes.JsonNode.Parse(prior["previousArguments=".Length..])!.AsObject();
+        args["kind"] = "fixed_interval";
+        args["intervalSeconds"] = 60;
+        return args.ToJsonString();
     }
 
     private bool TryGetScheduleScratch(ModelRequest request, out ScheduleScratch scratch)
@@ -1851,6 +1852,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
 
     public const string SensitiveApprovalMarker = "sensitive approval";
 
+    public const string AutomationApprovalMarker = "[test:automation-approval]";
     public const string ScheduleForceMarker = "[test:schedule-force]";
 
     public const string HistoricalImageRereadMarker = "[test:historical-image-reread]";

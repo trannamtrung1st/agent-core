@@ -1,5 +1,11 @@
 # System Architecture
 
+## Semantic Automation authorization cutover (2026-10-16)
+
+Automation natural-language interpretation belongs to the agent and an independent semantic verifier. Core never recognizes command vocabulary, language, referents or confirmation words to grant Automation authority. For a trusted current user turn, the verifier compares that request plus explicitly marked historical context with the exact structured mutation and the owned current target. Owner, revision, capability, schedule completeness and execution policy remain deterministic gates. Reads do not grant mutation authority. Historical, Memory, initiative, environment and occurrence inputs cannot independently authorize a mutation.
+
+Semantic Allow applies only to the proposed action fingerprint in its current execution. Deny and Ambiguous cause clarification without effects. A verifier infrastructure/output failure may use the existing durable Run approval flow: the owner inspects the exact action and explicitly approves through UI. The approval is bound to tool, arguments, Session/Run and action hash; rejection, expiry, supersession, changed arguments or changed target revision cannot authorize execution. Resume/reconnect uses the existing retained approval rather than a natural-language yes/no matcher. This adds no second approval store or execution service. Future Automation effects remain independently authorized at execution.
+
 ## Three-layer context authority
 
 The production context path has exactly three layers: **Core**, the platform-authored operating contract; **Runtime**, authorized effective configuration and trusted execution facts; and **Evidence**, current task intent plus bounded observations. Core governs Runtime and Evidence. Provider `developer` is a wire role for Runtime, not another context layer. Tool access, scopes, approval, credentials and effect fencing remain server-enforced.

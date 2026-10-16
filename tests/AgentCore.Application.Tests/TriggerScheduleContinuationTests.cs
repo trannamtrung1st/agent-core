@@ -37,25 +37,6 @@ public sealed class TriggerScheduleContinuationTests
         NextOccurrenceAtUtc = new DateTimeOffset(2026, 9, 23, 1, 52, 0, TimeSpan.Zero)
     };
 
-    [Fact]
-    public async Task Another_at_time_authorizes_only_with_trusted_referent()
-    {
-        var authorizer = new HeuristicTriggerCommandAuthorizer();
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Allow,
-            await authorizer.AuthorizeCurrentTurnAsync(
-                "another at 8:52",
-                "en",
-                TriggerCommandAction.Create,
-                HelloVietnam));
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Deny,
-            await authorizer.AuthorizeCurrentTurnAsync(
-                "another at 8:52",
-                "en",
-                TriggerCommandAction.Create));
-    }
-
     [Theory]
     [InlineData("null")]
     [InlineData("\"Event\"")]
@@ -114,47 +95,6 @@ public sealed class TriggerScheduleContinuationTests
     }
 
     [Fact]
-    public async Task Referent_update_and_cancel_authorize_with_context()
-    {
-        var authorizer = new HeuristicTriggerCommandAuthorizer();
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Allow,
-            await authorizer.AuthorizeCurrentTurnAsync(
-                "move that to 8:53",
-                "en",
-                TriggerCommandAction.Update,
-                HelloLatest));
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Allow,
-            await authorizer.AuthorizeCurrentTurnAsync(
-                "cancel that",
-                "en",
-                TriggerCommandAction.Cancel,
-                HelloLatest));
-    }
-
-    [Fact]
-    public async Task Informational_future_does_not_authorize_create_even_with_referent()
-    {
-        var authorizer = new HeuristicTriggerCommandAuthorizer();
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Deny,
-            await authorizer.AuthorizeCurrentTurnAsync(
-                "I'll be back at 9",
-                "en",
-                TriggerCommandAction.Create,
-                HelloVietnam));
-    }
-
-    [Fact]
-    public void Schedule_hello_at_849_vietnam_is_schedule_related_turn()
-    {
-        Assert.True(TriggerScheduleTurnPreflight.IsScheduleRelatedTurn(
-            "schedule Hello at 8:49 Vietnam time",
-            "en"));
-    }
-
-    [Fact]
     public async Task Multi_turn_create_another_move_cancel_targets_latest_registration()
     {
         var harness = await TriggerScheduleRuntimeTests.StartHarnessForContinuationAsync();
@@ -187,31 +127,6 @@ public sealed class TriggerScheduleContinuationTests
         await runtime.WaitUntilIdleAsync();
         Assert.Equal(AutomationStatus.Cancelled, (await harness.Store.GetAsync(owner, second.AutomationId))!.Status);
         Assert.Equal(AutomationStatus.Active, (await harness.Store.GetAsync(owner, first.AutomationId))!.Status);
-    }
-
-    [Fact]
-    public async Task Reattached_runtime_reconstructs_schedule_referent_from_trigger_store()
-    {
-        var harness = await TriggerScheduleRuntimeTests.StartHarnessForContinuationAsync();
-        await using (var runtime = harness.Runtime)
-        {
-            Assert.True(await runtime.SubmitUserTextAsync("schedule Hello at 8:49 Vietnam time"));
-            await runtime.WaitUntilIdleAsync();
-        }
-
-        var reconstructed = await harness.Tools.TryReconstructScheduleConversationContextAsync(InstanceId, ProfileId);
-        Assert.NotNull(reconstructed);
-        var authorizer = new HeuristicTriggerCommandAuthorizer();
-        Assert.Equal(
-            TriggerCommandAuthorizationDecision.Allow,
-            await authorizer.AuthorizeCurrentTurnAsync(
-                "another at 8:55",
-                "en",
-                TriggerCommandAction.Create,
-                reconstructed));
-
-        await using var reattached = await harness.ReattachRuntimeAsync();
-        Assert.NotNull(await harness.Tools.TryReconstructScheduleConversationContextAsync(InstanceId, ProfileId));
     }
 
     [Theory]
@@ -255,7 +170,7 @@ public sealed class TriggerScheduleContinuationTests
     }
 
     [Fact]
-    public async Task Update_with_stale_referent_revision_uses_current_registration_revision()
+    public async Task Stale_referent_cannot_override_the_explicit_expected_revision()
     {
         var harness = await TriggerScheduleRuntimeTests.StartHarnessForContinuationAsync();
         await using (var runtime = harness.Runtime)
@@ -298,9 +213,6 @@ public sealed class TriggerScheduleContinuationTests
             "move that to 8:50",
             "en",
             TriggerAuthorizationClassification.CurrentUserTurn,
-            TriggerCommandAction.Update,
-            false,
-            null,
             Guid.NewGuid(),
             harness.Time.GetUtcNow(),
             staleContext);
@@ -313,9 +225,8 @@ public sealed class TriggerScheduleContinuationTests
             args.RootElement,
             context,
             CancellationToken.None,
-            new HeuristicTriggerCommandAuthorizer());
-        Assert.DoesNotContain("\"error\"", result.Text, StringComparison.Ordinal);
-        var moved = (await store.GetAsync(owner, registration.AutomationId))!;
-        Assert.Equal(new TimeOnly(8, 50), Assert.IsType<OneShotSchedule>(moved.Schedule).LocalTime);
+            new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
+        Assert.Contains("conflict", result.Text);
+        Assert.Equal(advanced.Revision, (await store.GetAsync(owner, registration.AutomationId))!.Revision);
     }
 }
