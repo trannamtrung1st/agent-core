@@ -1,3 +1,4 @@
+import { KnowledgeResourceBinding } from "./DefinitionKnowledgeBinding";
 import { DeleteOutlined, InboxOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Empty, Flex, Input, Select, Spin, Table, Tag, Tooltip, Typography, Upload, theme } from "antd";
 import { useCallback, useEffect, useRef, useState, type Ref } from "react";
@@ -30,55 +31,6 @@ import { formatAdminTimestamp, formatDraftSource } from './adminPresentation';
 import { FilePreviewButton } from "../filePreview/FilePreview";
 
 const RESOURCE_KINDS = ["Knowledge", "Reference", "Template", "StaticAsset", "EvalFixture"] as const;
-
-function knowledgeBackingLabel(identity: string, resourcePath: string) {
-  const selected = resourcePath.trim();
-  if (selected.length > 0) {
-    return `Backing resource: ${selected}`;
-  }
-  const legacyIdentity = identity.trim() || "{identity}";
-  return `Legacy fallback: knowledge/${legacyIdentity}`;
-}
-
-function KnowledgeResourceBinding({
-  index,
-  source,
-  resources,
-  disabled,
-  onChange
-}: {
-  index: number;
-  source: DraftKnowledgeSource;
-  resources: AdminDefinitionDraftResource[];
-  disabled: boolean;
-  onChange: (resourcePath: string) => void;
-}) {
-  const knowledgePaths = resources
-    .filter((item) => item.kind === "Knowledge")
-    .map((item) => item.logicalPath);
-  const selected = source.resourcePath.trim();
-  const options = [
-    { value: "", label: knowledgeBackingLabel(source.identity, "") },
-    ...knowledgePaths.map((path) => ({ value: path, label: path })),
-    ...(selected.length > 0 && !knowledgePaths.includes(selected)
-      ? [{ value: selected, label: `${selected} (not in this draft)` }]
-      : [])
-  ];
-
-  return (
-    <label className="admin-draft-field">
-      <Typography.Text>Backing resource</Typography.Text>
-      <Select
-        aria-label={`Knowledge resource ${index + 1}`}
-        value={selected}
-        options={options}
-        onChange={onChange}
-        disabled={disabled}
-      />
-      <Typography.Text type="secondary">{knowledgeBackingLabel(source.identity, selected)}</Typography.Text>
-    </label>
-  );
-}
 
 export function DefinitionDraftWorkspace({
   activeDraft,

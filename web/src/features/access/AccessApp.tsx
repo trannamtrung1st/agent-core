@@ -1,9 +1,13 @@
+import { appMessageConfig } from '../../app/appFeedback';
+import { TenantDefinitions } from './TenantDefinitions';
+import { TenantDefinitionDetail } from './TenantDefinitionDetail';
+import { TenantDefinitionEditor } from './TenantDefinitionEditor';
 import { useEffect, useState } from 'react';
-import { Alert, Button, Collapse, Empty, Flex, Table, Tag, Typography } from 'antd';
+import { App as AntdApp, Alert, Button, Collapse, Empty, Flex, Table, Tag, Typography } from 'antd';
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import { approveAppNavigation, navigateToAppPath } from '../../app/appRoute';
 import { AdminShell, type AdminShellContext } from '../admin/AdminShell';
-import type { NavigationPage } from '../admin/adminNavigation';
+import { draftPages, type NavigationPage } from '../admin/adminNavigation';
 import { identityRequest, resetIdentityCsrf, tenantApi, type AccountContext, type TenantContext } from '../../services/identity';
 import { AccessError, AccessLoading, AccessUnavailable } from './AccessFeedback';
 import { AccountProfile, SignIn } from './AccountForms';
@@ -11,15 +15,16 @@ import { OrganizationsList, CreateOrganization, TenantSwitcher } from './Organiz
 import { Members } from './Members';
 import { Roles, permissionFamily, permissionLabel } from './Roles';
 import { InvitationAcceptance } from './InvitationAcceptance';
-import { tenantAccessPath, type AccessRoute } from './accessRoute';
+import { tenantAccessPath, tenantDraftPath, type AccessPage, type AccessRoute } from './accessRoute';
 import { useIdentityQuery } from './useIdentityQuery';
 
 const page = (id: string, label: string, description: string, group = 'Account'): NavigationPage => ({ id, path: id, label, description, group, aliases: [] });
 const accountPages = [page('organizations', 'My organizations', 'Choose an organization. Membership and access are separate in each one.'), page('profile', 'Your account', 'Your global account connects your organization memberships.')];
-const tenantPages = [page('access', 'Your access', 'Inspect your current organization roles and permissions.', 'Access & Security'), page('members', 'Members', 'Invite people and manage their access to this organization.', 'Access & Security'), page('roles', 'Roles & permissions', 'Define authority separately from agent instructions and capabilities.', 'Access & Security'), page('audit', 'Audit', 'Inspect recorded changes to organization access.', 'Access & Security')];
+const tenantPages = [page('definitions', 'Definitions', 'Create and publish Definitions owned by this organization.', 'Agents'), page('access', 'Your access', 'Inspect your current organization roles and permissions.', 'Access & Security'), page('members', 'Members', 'Invite people and manage their access to this organization.', 'Access & Security'), page('roles', 'Roles & permissions', 'Define authority separately from agent instructions and capabilities.', 'Access & Security'), page('audit', 'Audit', 'Inspect recorded changes to organization access.', 'Access & Security')];
 const pagePermission: Record<string, string> = { members: 'members.read', roles: 'iam.roles.read', audit: 'security.audit.read' };
 
-export function AccessApp({ route }: { route: AccessRoute }) {
+export function AccessApp({ route }: { route: AccessRoute }) { return <AntdApp component={false} message={appMessageConfig}><AccessContent route={route} /></AntdApp>; }
+function AccessContent({ route }: { route: AccessRoute }) {
   const needsAccount = route.view !== 'sign-in' && route.view !== 'invitation';
   const account = useIdentityQuery<AccountContext>(needsAccount ? '/api/v2/account/me' : null);
   const tenant = useIdentityQuery<TenantContext>(route.view === 'tenant' ? tenantApi(route.tenantId, '/access/me') : null, route.view === 'tenant' ? route.page : '');
@@ -37,15 +42,15 @@ export function AccessApp({ route }: { route: AccessRoute }) {
   const signOut = async () => { if (!await approveAppNavigation('/sign-in')) return; setSigningOut(true); setLogoutError(undefined); try { await identityRequest('/api/v2/auth/logout', { method: 'POST' }); resetIdentityCsrf(); window.location.replace('/sign-in'); } catch (error) { setLogoutError(error); setSigningOut(false); } };
   const tenantContext = route.view === 'tenant' ? tenant.data : undefined;
   const visibleTenantPages = tenantPages.filter(item => !pagePermission[item.id] || tenantContext?.permissions.includes(pagePermission[item.id]));
-  const active = route.view === 'tenant' ? tenantPages.find(item => item.id === route.page)! : route.view === 'account' ? accountPages.find(item => item.id === route.page)! : page('not-found', 'Page not found', 'Choose a destination from the navigation.');
-  const navigation = [...(route.view === 'tenant' ? visibleTenantPages.map(item => ({ ...item, href: tenantAccessPath(route.tenantId, item.id as 'access' | 'members' | 'roles' | 'audit') })) : []), ...accountPages.map(item => ({ ...item, href: `/account/${item.id}` }))];
-  const context: AdminShellContext = { key: window.location.pathname, name: route.view === 'tenant' ? tenantContext?.tenant.name ?? 'Organization' : account.data.account.displayName, areaLabel: route.view === 'tenant' ? 'Access' : 'Account', page: active, navigation,
+  const active = route.view === 'tenant' ? route.draftId ? draftPages.find(item => item.id === route.draftPage)! : tenantPages.find(item => item.id === route.page)! : route.view === 'account' ? accountPages.find(item => item.id === route.page)! : page('not-found', 'Page not found', 'Choose a destination from the navigation.');
+  const navigation = [...(route.view === 'tenant' && route.draftId && route.definitionId ? draftPages.map(item => ({ ...item, href: tenantDraftPath(route.tenantId, route.definitionId!, route.draftId!, item.id) })) : []), ...(route.view === 'tenant' ? visibleTenantPages.map(item => ({ ...item, href: tenantAccessPath(route.tenantId, item.id as AccessPage) })) : []), ...accountPages.map(item => ({ ...item, href: `/account/${item.id}` }))];
+  const context: AdminShellContext = { key: window.location.pathname, name: route.view === 'tenant' ? tenantContext?.tenant.name ?? 'Organization' : account.data.account.displayName, areaLabel: route.view === 'tenant' ? 'Organization' : 'Account', page: active, navigation,
     scopeAction: tenantContext ? <TenantSwitcher tenantId={tenantContext.tenant.tenantId} name={tenantContext.tenant.name} /> : undefined,
     headerActions: <><Button icon={<UserOutlined aria-hidden />} aria-label="Your account" title="Your account" onClick={() => navigateToAppPath('/account/profile')} /><Button icon={<LogoutOutlined aria-hidden />} aria-label="Sign out" title="Sign out" loading={signingOut} onClick={() => void signOut()} /></> };
   const allowed = route.view !== 'tenant' || !pagePermission[route.page] || tenantContext?.permissions.includes(pagePermission[route.page]);
   return <AdminShell route={{ area: 'admin', view: 'home' }} context={context} headingActions={route.view === 'account' && route.page === 'organizations' && account.data.systemPermissions.includes('system.tenants.create') ? <CreateOrganization onCreated={() => setOrganizationsVersion(value => value + 1)} /> : undefined}>
     {logoutError !== undefined && <AccessError error={logoutError} />}
-    {route.view === 'tenant' ? tenant.loading ? <AccessLoading /> : tenant.error ? <AccessError error={tenant.error} retry={tenant.reload} /> : !tenantContext || !allowed ? <AccessUnavailable /> : route.page === 'members' ? <Members context={tenantContext} /> : route.page === 'roles' ? <Roles context={tenantContext} /> : route.page === 'audit' ? <Audit context={tenantContext} /> : <OwnAccess context={tenantContext} /> : route.view === 'account' ? route.page === 'profile' ? <AccountProfile context={account.data} /> : <OrganizationsList key={organizationsVersion} /> : <AccessUnavailable />}
+    {route.view === 'tenant' ? tenant.loading ? <AccessLoading /> : tenant.error ? <AccessError error={tenant.error} retry={tenant.reload} /> : !tenantContext || !allowed ? <AccessUnavailable /> : route.page === 'definitions' ? route.draftId && route.definitionId ? <TenantDefinitionEditor key={`${route.tenantId}:${route.draftId}`} context={tenantContext} id={route.definitionId} draftId={route.draftId} page={route.draftPage ?? 'overview'} /> : route.definitionId ? <TenantDefinitionDetail key={`${route.tenantId}:${route.definitionId}`} context={tenantContext} id={route.definitionId} /> : <TenantDefinitions key={route.tenantId} context={tenantContext} /> : route.page === 'members' ? <Members context={tenantContext} /> : route.page === 'roles' ? <Roles context={tenantContext} /> : route.page === 'audit' ? <Audit context={tenantContext} /> : <OwnAccess context={tenantContext} /> : route.view === 'account' ? route.page === 'profile' ? <AccountProfile context={account.data} /> : <OrganizationsList key={organizationsVersion} /> : <AccessUnavailable />}
   </AdminShell>;
 }
 function OwnAccess({ context }: { context: TenantContext }) {

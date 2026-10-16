@@ -27,3 +27,8 @@ export function ExecutionBudgetLimitsProvider({ children }: { children: ReactNod
   const value = useExecutionBudgetLimits();
   return <LimitsContext.Provider value={value}>{children}</LimitsContext.Provider>;
 }
+
+/** A scoped owner supplies already-authorized host metadata; no global request is issued. */
+export function ScopedExecutionBudgetLimits({ children, value }: { children: ReactNode; value: LimitsState }) {
+  return <LimitsContext.Provider value={value}>{children}</LimitsContext.Provider>;
+}

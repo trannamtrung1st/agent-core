@@ -25,11 +25,21 @@ const reasons: Record<string, string> = {
   human_only: 'This role includes permissions reserved for people. It cannot be assigned to an agent.',
   account_exists: 'An account already uses this email. Sign in to accept the invitation.',
   invalid_request: 'Some values could not be saved. Check the fields and try again.',
+  resource_unavailable: 'This item is unavailable or you no longer have access. Return to the list or contact an organization owner.',
+  definition_unavailable: 'This definition version is unavailable. Reload the available versions before choosing again.',
+  definition_in_use: 'This definition is used by an Instance or retained conversation history. Keep it and deprecate an unused publication instead.',
+  evaluation_required: 'Run each required evaluation before publishing.',
+  evaluation_stale: 'The draft changed. Run required evaluations again before publishing.',
+  evaluation_failed: 'Resolve the failed required evaluations before publishing.',
+  definition_resources_invalid: 'Bind the missing knowledge, Skill or workspace resources before publishing.',
 };
 export class IdentityError extends Error {
-  constructor(public status: number, public reasonCode: string) {
-    super(reasons[reasonCode] ?? (status === 429 ? 'Too many attempts. Wait a minute before trying again.' : status === 404 ? 'This item is no longer available. Return to the list.' : status >= 500 ? 'The service is temporarily unavailable. Check the latest information before retrying.' : 'This action could not be completed. Reload the latest information and try again.'));
+  constructor(public status: number, public reasonCode: string, detail?: string) {
+    super(reasons[reasonCode] ?? (status === 400 && detail ? detail.slice(0, 500) : status === 429 ? 'Too many attempts. Wait a minute before trying again.' : status === 404 ? 'This item is no longer available. Return to the list.' : status >= 500 ? 'The service is temporarily unavailable. Check the latest information before retrying.' : 'This action could not be completed. Reload the latest information and try again.'));
   }
+}
+export class IdentityCompletionError extends Error {
+  constructor() { super('The change was saved, but this view could not finish updating. Reload the page before making another change.'); }
 }
 let csrf: string | null = null;
 let pendingCsrf: Promise<string> | null = null;
@@ -48,13 +58,20 @@ export async function identityRequest<T>(path: string, options: { method?: strin
   if (method !== 'GET') headers['X-AgentCore-CSRF'] = await csrfToken();
   options.signal?.throwIfAborted();
   const response = await fetch(path, { method, headers, credentials: 'same-origin', cache: 'no-store', signal: options.signal, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
+  await requireIdentityResponse(response, path);
+  return response.status === 204 ? undefined as T : await response.json() as T;
+}
+async function requireIdentityResponse(response: Response, path: string) {
   if (!response.ok) {
-    const problem = await response.json().catch(() => ({})) as { reasonCode?: string };
+    const problem = await response.json().catch(() => ({})) as { reasonCode?: string; title?: string };
     if (problem.reasonCode === 'invalid_csrf') resetIdentityCsrf();
     if (response.status === 401 && !path.startsWith('/api/v2/auth/')) window.dispatchEvent(new Event('agentcore:authentication-expired'));
-    throw new IdentityError(response.status, problem.reasonCode ?? 'request_failed');
+    throw new IdentityError(response.status, problem.reasonCode ?? 'request_failed', problem.title);
   }
-  return response.status === 204 ? undefined as T : await response.json() as T;
+}
+export async function identityBlob(path: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal });
+  await requireIdentityResponse(response, path); return response.blob();
 }
 export const tenantApi = (tenantId: string, suffix: string) => `/api/v2/tenants/${encodeURIComponent(tenantId)}${suffix}`;
 export const membershipsApi = (page: number, q = '') => `/api/v2/account/tenants?page=${page}&pageSize=10&q=${encodeURIComponent(q)}`;

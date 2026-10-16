@@ -20,6 +20,9 @@ public sealed partial class TenantDefinitionAccessTests
         await Csrf(author);
         Assert.Equal(HttpStatusCode.Created, (await author.PostAsJsonAsync("/api/v2/auth/register", new { login = "template-author@example.test", displayName = "Author", password = "strong-template-password", invitation = new { tenantId = tenant, invitationId = invitation.GetProperty("invitationId").GetGuid(), token = invitation.GetProperty("token").GetString() } })).StatusCode);
         await Login(author, "template-author@example.test", "strong-template-password");
+        var authoring = await Json(await author.GetAsync($"{prefix}/definition-authoring-options"));
+        Assert.NotEmpty(authoring.GetProperty("authoring").GetProperty("models").EnumerateArray());
+        Assert.NotEmpty(authoring.GetProperty("capabilities").EnumerateArray());
         var templates = await Json(await author.GetAsync($"{prefix}/definition-templates"));
         Assert.Contains(templates.GetProperty("items").EnumerateArray(), d => d.GetProperty("id").GetString() == "customer-support" && d.GetProperty("version").GetInt32() == 3);
         Assert.Equal(HttpStatusCode.Forbidden, (await author.GetAsync($"{prefix}/agent-templates")).StatusCode);

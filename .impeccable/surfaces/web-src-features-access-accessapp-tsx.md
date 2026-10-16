@@ -2,7 +2,7 @@
 version: 1
 slug: "web-src-features-access-accessapp-tsx"
 primary_target: "web/src/features/access/AccessApp.tsx"
-related_targets: ["web/src/features/access/AccountForms.tsx","web/src/features/access/Organizations.tsx","web/src/features/access/Members.tsx","web/src/features/access/Roles.tsx","web/src/features/access/InvitationAcceptance.tsx","web/src/features/access/useAccessDraftGuard.tsx","web/src/services/identity.ts","web/src/features/admin/AdminShell.tsx","web/src/features/admin/AdminCollectionToolbar.tsx","web/src/app.css"]
+related_targets: ["web/src/features/access/TenantDefinitions.tsx","web/src/features/access/TenantDefinitionDetail.tsx","web/src/features/access/TenantDefinitionEditor.tsx","web/src/features/access/TenantDefinitionResources.tsx","web/src/features/access/TenantDefinitionEvaluations.tsx","web/src/features/access/TenantDefinitionCapabilities.tsx","web/src/features/access/AccountForms.tsx","web/src/features/access/Organizations.tsx","web/src/features/access/Members.tsx","web/src/features/access/Roles.tsx","web/src/features/access/InvitationAcceptance.tsx","web/src/features/access/useAccessDraftGuard.tsx","web/src/services/identity.ts","web/src/features/admin/AdminShell.tsx","web/src/features/admin/AdminCollectionToolbar.tsx","web/src/app.css"]
 ---
 
 # Account and organization access
@@ -24,3 +24,6 @@ RECOVERY: An unmatched permission search shows native Empty with Clear search; c
 SWITCHING: Unmount/abort previous scoped reads before rendering a new context. Full document switching closes previous browser connection/audio resources. Fetch current effective tenant permissions on each destination. Cookie/CSRF material stays in browser-managed cookies or transient service memory, never durable client storage.
 
 VERIFICATION: The dated access UI report owns the bounded audit/correction/confirmation, real Synthetic browser interactions, widths 320/390/768/1024/1440 and exact checks. No durable Approval, agent access, tenant-aware Chat, full resource isolation or production acceptance is established by this foundation slice.
+
+
+DEFINITION EXTENSION: The canonical owned Definition collection, owner/draft headings, shared configuration sections, resource/scenario drawers and sticky Save/Publish actions reuse incumbent compositions and spacing owners. Same-owner section navigation preserves the candidate; departing unsaved edits confirms discard. Read-only resource grants, stale saves, revoked access, retired requests and acknowledged-write recovery have explicit states. Sandbox catalog, rich previews, assignment panels and complete runtime integration remain pending. The dated tenant Definition UI report owns the two captured Test & Publish widths and actual browser evidence; no new palette, tokens or component recipes were introduced.

@@ -137,7 +137,7 @@ export function DefinitionCandidateEditor({
   );
 }
 
-function DefinitionCandidateForm({
+export function DefinitionCandidateForm({
   candidate,
   busy,
   readOnly,

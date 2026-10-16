@@ -6,6 +6,8 @@ The owner-prioritized foundation UI now implements sign-in, Account/organization
 
 ## Purpose and audience
 
+The subsequent [tenant Definition UI slice](reports/tenant-definition-ui-verification-2026-10-16.md) implements canonical owned inventories, drafts, resources/evaluations and publication lifecycle. Exact-resource access controls its actions and supports resource-only readers. This adds observed authoring evidence to the foundation above; complete resource/Agent Access panels, Sandbox catalog, tenant-aware Chat/runtime and durable approval journeys remain pending.
+
 Operate mode, extending the existing dark Ant Design v6 application. Chat stays primary. A global Account authenticates a person; an organization is a Tenant and a Member is its User. One Account may have different roles in several organizations. An agent executes as its own SystemIdentity Principal. Capability configuration remains separate from IAM.
 
 | Audience | Job | Primary destination |

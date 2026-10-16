@@ -2929,3 +2929,5 @@ body,
 @media (max-width: 767px) {
   .access-bounded-form .ant-btn, .access-layout .admin-collection-table .ant-btn { min-height: 40px; }
 }
+
+.tenant-definition-json { white-space: pre-wrap; overflow-wrap: anywhere; max-inline-size: 100%; }

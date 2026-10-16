@@ -75,6 +75,13 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.Equal(HttpStatusCode.Created, grantResponse.StatusCode);
         var grant = await Json(grantResponse);
         Assert.Equal(1, (await Json(await reader.GetAsync($"/api/v2/tenants/{tenant}/agent-definitions?pageSize=1"))).GetProperty("total").GetInt32());
+        var scopedAccess = await Json(await reader.GetAsync($"/api/v2/tenants/{tenant}/agent-definitions/{id}/access"));
+        Assert.Equal(new[] { "agent-definitions.read", "iam.roles.read" }, scopedAccess.GetProperty("permissions").EnumerateArray().Select(p => p.GetString()).ToArray());
+        Assert.Equal(HttpStatusCode.OK, (await reader.GetAsync($"/api/v2/tenants/{tenant}/definition-authoring-options?definitionId={id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync($"/api/v2/tenants/{tenant}/definition-authoring-options")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync($"/api/v2/tenants/{other}/agent-definitions/{id}/access")).StatusCode);
+        Assert.Equal(id.ToString("D"), (await Json(await reader.GetAsync($"/api/v2/tenants/{tenant}/agent-definitions/{id}"))).GetProperty("definition").GetProperty("definitionId").GetString());
+
         Assert.Equal(HttpStatusCode.OK, (await reader.GetAsync($"/api/v2/tenants/{tenant}/agent-definitions/{id}/publications/1")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await reader.GetAsync($"/api/v2/tenants/{tenant}/definition-drafts/{secondDraftId}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await reader.PostAsJsonAsync($"/api/v2/tenants/{tenant}/agent-definitions", new { name = "Denied", expectedRevision = await Revision(owner, tenant) })).StatusCode);

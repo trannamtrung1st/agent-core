@@ -1120,7 +1120,7 @@ describe("AdminApp", () => {
     fireEvent.click(await screen.findByRole("link", { name: "Drafts" }));
     fireEvent.click(await screen.findByRole("link", { name: /Draft rev 1/ }));
     fireEvent.click(await screen.findByRole("link", { name: "Capabilities" }));
-    expect((await screen.findAllByText("Legacy fallback: knowledge/policy")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Default binding: knowledge/policy")).length).toBeGreaterThan(0);
     fireEvent.mouseDown(screen.getByLabelText("Knowledge resource 1"));
     const option = await waitFor(() => {
       const match = document.querySelector(

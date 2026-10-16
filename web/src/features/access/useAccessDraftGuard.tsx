@@ -3,9 +3,11 @@ import { Modal } from 'antd';
 import { registerNavigationGuard } from '../../app/appRoute';
 import { confirmAction } from '../../app/confirmAction';
 
-export function useAccessDraftGuard(dirty: boolean, busy: boolean, onClose: () => void) {
+export function useAccessDraftGuard(dirty: boolean, busy: boolean, onClose: () => void, keepWithin?: string) {
   const [modal, holder] = Modal.useModal();
   const pending = useRef<Promise<boolean> | null>(null);
+  const released = useRef(false);
+  useEffect(() => { if (dirty && !busy) released.current = false; }, [dirty, busy]);
   const ask = () => {
     if (pending.current) return pending.current;
     let decide!: (discard: boolean) => void;
@@ -19,8 +21,8 @@ export function useAccessDraftGuard(dirty: boolean, busy: boolean, onClose: () =
   };
   useEffect(() => {
     if (!dirty && !busy) return;
-    return registerNavigationGuard(() => busy ? false : ask());
-  }, [dirty, busy, modal]);
+    return registerNavigationGuard(path => released.current || !busy && !!keepWithin && path.startsWith(keepWithin) ? true : busy ? false : ask());
+  }, [dirty, busy, modal, keepWithin]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
@@ -33,5 +35,5 @@ export function useAccessDraftGuard(dirty: boolean, busy: boolean, onClose: () =
     if (!dirty) { onClose(); return; }
     void ask().then(discard => { if (discard) onClose(); });
   };
-  return { close, holder };
+  return { close, holder, release: () => { released.current = true; } };
 }
