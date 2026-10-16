@@ -9,7 +9,11 @@ public sealed record TenantAgentConfigurationSnapshot(TenantAgent Agent, Instanc
 public sealed record TenantAgentConfigurationChange(Guid InstanceId, long ExpectedInstanceRevision,
     AgentIdentity? Persona = null, long? ExpectedPersonaRevision = null, int? ActiveVersion = null,
     long? ExpectedPublicationRevision = null, IReadOnlyList<SkillSpec>? DefinitionSkills = null,
-    IReadOnlyList<Triggers.InstanceAutomationPolicyChange>? AutomationPolicyChanges = null);
+    IReadOnlyList<Triggers.InstanceAutomationPolicyChange>? AutomationPolicyChanges = null,
+    bool SetSettingsOverrides = false, InstanceSettingsOverrides? SettingsOverrides = null,
+    bool SetExecutionBudgets = false, ExecutionBudgetPolicy? ExecutionBudgets = null,
+    bool SetUnattendedModel = false, string? UnattendedModelCatalogKey = null, string? UnattendedReasoningEffort = null,
+    HarnessManagementState? HarnessManagement = null);
 
 // Specialized transaction boundary: the existing Instance, its identity, security revision and audit
 // are committed together. Reads filter authoritative identity ownership before ordering/pagination.

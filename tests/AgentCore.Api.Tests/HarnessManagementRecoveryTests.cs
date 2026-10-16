@@ -182,6 +182,7 @@ internal sealed class HarnessSqliteFactory(string root) : AgentCoreApiFactory
         builder.ConfigureTestServices(services =>
         {
             services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite($"Data Source={Path.Combine(root, "synthetic.db")}"));
+            TestSqliteIdentity.Configure(services, $"Data Source={Path.Combine(root, "synthetic.db")}", Path.Combine(root, "identity-keys"));
             services.RemoveAll<IAgentInstanceStore>();
             services.AddSingleton<IAgentInstanceStore>(provider =>
             {

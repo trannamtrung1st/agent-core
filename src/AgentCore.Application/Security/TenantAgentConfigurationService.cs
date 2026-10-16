@@ -14,10 +14,11 @@ public sealed record TenantAgentEffectiveConfiguration(TenantAgent Agent, AgentD
     AdminEffectiveConfiguration Effective, IReadOnlyList<EffectiveSkill> Skills,
     IReadOnlyList<EffectiveAgentResource> Resources, long SecurityRevision);
 
-public sealed class TenantAgentConfigurationService(IIamStore security, ITenantAgentStore agents, ITenantDefinitionStore definitions,
+public sealed partial class TenantAgentConfigurationService(IIamStore security, ITenantAgentStore agents, ITenantDefinitionStore definitions,
     IBuiltInAgentDefinitionStore builtIns, InheritedDefinitionResourceCatalog inheritedResources, IamAuthorizer authorizer,
     IModelCatalog models, IToolConfigurationGate tools, InstanceAutomationPolicy automationPolicy,
-    IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null, SandboxPolicyEnforcement? sandbox = null)
+    IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null, SandboxPolicyEnforcement? sandbox = null,
+    ProviderAliasSet? aliases = null, IBrowser? browser = null)
 {
     public async ValueTask<TenantAgentEffectiveConfiguration> ReadAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
     {
@@ -25,7 +26,8 @@ public sealed class TenantAgentConfigurationService(IIamStore security, ITenantA
         var snapshot = await Snapshot(tenant, id, ct).ConfigureAwait(false);
         var (baseline, _, status) = await Definition(tenant, snapshot.Agent.Instance.DefinitionId, snapshot.Agent.Instance.ActiveVersion, ct).ConfigureAwait(false);
         var resources = await Resources(tenant, baseline, ct).ConfigureAwait(false);
-        var effective = InstanceSettingsResolver.Resolve(baseline, snapshot.Agent.Instance.SettingsOverrides);
+        var effective = InstanceSettingsResolver.Resolve(baseline, snapshot.Agent.Instance.SettingsOverrides) with
+            { SelfManagement = ManagementPolicyResolver.Resolve(baseline, snapshot.Agent.Instance) };
         var manifest = AgentInstanceResourceService.Resolve(effective, resources, snapshot.Resources, snapshot.Skills);
         await authorizer.RequireAsync(actor, "agents.read", Scope(tenant, id), ct).ConfigureAwait(false);
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");

@@ -9,7 +9,10 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
 {
-    private static AgentInstance CopyInstance(AgentInstance instance) => instance with { SettingsOverrides = instance.SettingsOverrides?.Copy() };
+    private static readonly System.Text.Json.JsonSerializerOptions SnapshotJson = new(System.Text.Json.JsonSerializerDefaults.Web);
+    private static HarnessManagementState? CopyManagement(HarnessManagementState? state) => state is null ? null
+        : System.Text.Json.JsonSerializer.Deserialize<HarnessManagementState>(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(state, SnapshotJson), SnapshotJson);
+    private static AgentInstance CopyInstance(AgentInstance instance) => instance with { SettingsOverrides = instance.SettingsOverrides?.Copy(), HarnessManagement = CopyManagement(instance.HarnessManagement) };
     public InMemoryCoreEventStore CoreEvents { get; set; } = new();
 
     private readonly object _gate = new();
@@ -624,7 +627,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
                 UpdatedAt = updatedAt,
                 Revision = instance.Revision + 1,
                 PersonaRevision = personaRevision,
-                HarnessManagement = update.HarnessManagement ?? instance.HarnessManagement,
+                HarnessManagement = CopyManagement(update.HarnessManagement ?? instance.HarnessManagement),
                 ExecutionBudgets = update.SetExecutionBudgets ? update.ExecutionBudgets : instance.ExecutionBudgets,
                 SettingsOverrides = (update.SetSettingsOverrides ? update.SettingsOverrides : instance.SettingsOverrides)?.Copy(),
                 UnattendedModelCatalogKey = update.SetUnattendedModel

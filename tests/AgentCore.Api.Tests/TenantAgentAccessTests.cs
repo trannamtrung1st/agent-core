@@ -48,6 +48,15 @@ public sealed class TenantAgentAccessTests
         Assert.Equal(HttpStatusCode.Created, assigned.StatusCode);
         var assignmentId = (await Json(assigned)).GetProperty("assignmentId").GetGuid();
         Assert.Equal(HttpStatusCode.OK, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/effective-config")).StatusCode);
+        foreach (var suffix in new[] { "settings", "execution-budgets", "self-management" })
+        {
+            Assert.Equal(HttpStatusCode.OK, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/{suffix}")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{secondId}/{suffix}")).StatusCode);
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PatchAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/settings/instructions", new { set = new { agentInstructions = "Denied Reader edit" }, clear = Array.Empty<string>(), expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/execution-budgets", new { budgets = (object?)null, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/unattended-model", new { catalogKey = (string?)null, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/self-management", new { overrides = new { }, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1 })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{secondId}/effective-config")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await member.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/persona", new { persona = new { name = "Denied", role = "Guide", description = "Denied", tone = "Clear" }, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1, expectedPersonaRevision = 1 })).StatusCode);
         var scoped = await Json(await member.GetAsync($"/api/v2/tenants/{a}/agents?pageSize=1"));
@@ -69,6 +78,8 @@ public sealed class TenantAgentAccessTests
         Assert.Equal(0, (await Json(await member.GetAsync($"/api/v2/tenants/{a}/agents"))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/effective-config")).StatusCode);
+        foreach (var suffix in new[] { "settings", "execution-budgets", "self-management" })
+            Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/{suffix}")).StatusCode);
     }
 
     private static async Task Login(HttpClient client, string login, string password)

@@ -18,10 +18,31 @@ public sealed class SelfManagementService(IAgentInstanceStore instances, IAgentD
     {
         var owner = await OwnerAsync(id, ct);
         var definition = await DefinitionAsync(owner, ct);
-        return new(owner.Revision, owner.HarnessManagement?.PolicyRevision ?? 1,
+        return View(owner, definition);
+    }
+
+    internal static ManagementPolicyView View(AgentInstance owner, AgentDefinition definition) =>
+        new(owner.Revision, owner.HarnessManagement?.PolicyRevision ?? 1,
             owner.HarnessManagement is null || owner.HarnessManagement.Overrides is { Mode: null, Scopes: null, AutoApply: null, ConfigurationAssistance: null, HarnessAuthoring: null } ? "definition" : owner.HarnessManagement.Overrides is null ? "instance" : "per-field",
             ManagementPolicyResolver.Resolve(definition, owner), definition.SelfManagement ?? HarnessManagementPolicy.Disabled,
             owner.HarnessManagement?.Overrides);
+
+    internal static HarnessManagementState Prepare(AgentInstance owner, AgentDefinition definition, ManagementPolicyOverrides overrides, bool? frozen, bool agent)
+    {
+        var effective = ManagementPolicyResolver.Resolve(definition, owner);
+        if (agent && (!ManagementTools.Enabled(effective) || !effective.Allows(HarnessManagementScope.ManagementPolicy) || frozen == false))
+            throw AgentCoreErrors.Forbidden("Only an authorized person can enable or unfreeze self-management.");
+        Validate(overrides);
+        var old = owner.HarnessManagement ?? new(effective);
+        // This catalog is configuration eligibility; IAM and execution policy still authorize each operation.
+        var policy = effective with { Frozen = frozen ?? effective.Frozen,
+            EligibleTools = effective.EligibleTools.Concat(RoleEnvironments.Of(definition).ToolList.Append(ToolCatalog.AttachmentsRead))
+                .Where(t => ToolRegistry.TryGet(t, out var descriptor) && descriptor.DefinitionAuthorizable
+                    && RolePermissions.AllowsTool(definition, t)).Distinct().ToArray() };
+        return old with { Policy = policy, Overrides = overrides, PolicyRevision = checked(old.PolicyRevision + 1),
+            Preparation = old.Preparation is { Status: not HarnessPreparationStatus.Published } prep ? prep with {
+                Status = HarnessPreparationStatus.Cancelled,
+                Approvals = prep.Approvals.Select(a => a.Status == "Pending" ? a with { Status = "Cancelled" } : a).ToArray() } : old.Preparation };
     }
 
     public async ValueTask<ManagementPolicyView> UpdateAsync(Guid id, long revision, ManagementPolicyOverrides overrides,
@@ -32,19 +53,9 @@ public sealed class SelfManagementService(IAgentInstanceStore instances, IAgentD
         if (owner.Revision != revision) throw AgentCoreErrors.Conflict("Instance revision is stale. Inspect again.");
         var definition = await DefinitionAsync(owner, ct);
         var effective = ManagementPolicyResolver.Resolve(definition, owner);
-        if (agent && (!Tools.ManagementTools.Enabled(effective) || !effective.Allows(HarnessManagementScope.ManagementPolicy) || frozen == false))
-            throw AgentCoreErrors.Forbidden("Only Admin can enable or unfreeze self-management.");
-        Validate(overrides);
         var old = owner.HarnessManagement ?? new(effective);
-        var policy = effective with { Frozen = frozen ?? effective.Frozen,
-            // This is an eligibility ceiling, never a grant. Harness operations still require current role authority.
-            EligibleTools = effective.EligibleTools.Concat(RoleEnvironments.Of(definition).ToolList.Append(ToolCatalog.AttachmentsRead))
-                .Where(t => ToolRegistry.TryGet(t, out var descriptor) && descriptor.DefinitionAuthorizable
-                    && RolePermissions.AllowsTool(definition, t)).Distinct().ToArray() };
-        var next = old with { Policy = policy, Overrides = overrides, PolicyRevision = old.PolicyRevision + 1,
-            Preparation = old.Preparation is { Status: not HarnessPreparationStatus.Published } prep ? prep with {
-                Status = HarnessPreparationStatus.Cancelled,
-                Approvals = prep.Approvals.Select(a => a.Status == "Pending" ? a with { Status = "Cancelled" } : a).ToArray() } : old.Preparation };
+        var next = Prepare(owner, definition, overrides, frozen, agent);
+        var policy = next.Policy;
         var previous = old.Overrides;
         var fields = new List<string>();
         void Changed(string field, object? before, object? after) { if (JsonSerializer.Serialize(before) != JsonSerializer.Serialize(after)) fields.Add(field); }
@@ -82,17 +93,13 @@ public sealed class SelfManagementService(IAgentInstanceStore instances, IAgentD
     public async ValueTask<ManagementPolicyView> FreezeAsync(Guid id, long revision, CancellationToken ct = default)
     {
         var owner = await OwnerAsync(id, ct);
-        var effective = ManagementPolicyResolver.Resolve(await DefinitionAsync(owner, ct), owner);
+        var definition = await DefinitionAsync(owner, ct);
+        var effective = ManagementPolicyResolver.Resolve(definition, owner);
         if (!Tools.ManagementTools.Enabled(effective)) throw AgentCoreErrors.Forbidden("Self-management is disabled or frozen.");
         // Shutdown is authorized independently of policy-widening scope. CAS defeats concurrent Admin changes.
         if (owner.Revision != revision) throw AgentCoreErrors.Conflict("Instance revision is stale. Inspect again.");
         if (owner.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Forbidden("Archived Instances are read-only.");
-        var old = owner.HarnessManagement ?? new(effective);
-        var next = old with { Policy = effective with { Frozen = true }, PolicyRevision = old.PolicyRevision + 1,
-            Overrides = owner.HarnessManagement is null ? new() : old.Overrides,
-            Preparation = old.Preparation is { Status: not HarnessPreparationStatus.Published } prep ? prep with {
-                Status = HarnessPreparationStatus.Cancelled,
-                Approvals = prep.Approvals.Select(a => a.Status == "Pending" ? a with { Status = "Cancelled" } : a).ToArray() } : old.Preparation };
+        var next = PrepareFreeze(owner, definition);
         var now = time.GetUtcNow();
         await instances.UpdateWithExpectedRevisionAsync(new(id, revision, HarnessManagement: next, History: new(ids.NewId(), now,
             AdminEventActorKind.Agent, AdminEventOperationKind.HarnessPolicyChanged, "agent.instance", id.ToString("D"), revision + 1,
@@ -100,8 +107,21 @@ public sealed class SelfManagementService(IAgentInstanceStore instances, IAgentD
         return await ReadAsync(id, ct);
     }
 
+    internal static HarnessManagementState PrepareFreeze(AgentInstance owner, AgentDefinition definition)
+    {
+        var effective = ManagementPolicyResolver.Resolve(definition, owner);
+        if (!ManagementTools.Enabled(effective)) throw AgentCoreErrors.Forbidden("Self-management is disabled or frozen.");
+        var old = owner.HarnessManagement ?? new(effective);
+        return old with { Policy = effective with { Frozen = true }, PolicyRevision = checked(old.PolicyRevision + 1),
+            Overrides = owner.HarnessManagement is null ? new() : old.Overrides,
+            Preparation = old.Preparation is { Status: not HarnessPreparationStatus.Published } prep ? prep with {
+                Status = HarnessPreparationStatus.Cancelled,
+                Approvals = prep.Approvals.Select(a => a.Status == "Pending" ? a with { Status = "Cancelled" } : a).ToArray() } : old.Preparation };
+    }
+
     public static void Validate(ManagementPolicyOverrides overrides)
     {
+        ArgumentNullException.ThrowIfNull(overrides);
         if (overrides.Mode is { } mode && !Enum.IsDefined(mode.Value)
             || overrides.Scopes is { } scopes && (scopes.Value is null || scopes.Value.Length > 9 || scopes.Value.Distinct().Count() != scopes.Value.Length || scopes.Value.Any(s => !Enum.IsDefined(s)))
             || overrides.AutoApply is { } auto && (auto.Value is null || auto.Value.Length > 3 || auto.Value.Distinct().Count() != auto.Value.Length || auto.Value.Any(s => !Enum.IsDefined(s))))

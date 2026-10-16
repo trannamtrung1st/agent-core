@@ -41,7 +41,11 @@ public sealed partial class InMemoryIamStore
             ct.ThrowIfCancellationRequested();
             var updated = instances.ChangeTenantConfigurationAsync(new(change.InstanceId, change.ExpectedInstanceRevision,
                 ActiveVersion: change.ActiveVersion, Persona: change.Persona, ExpectedPersonaRevision: change.ExpectedPersonaRevision,
-                DefinitionSkills: change.DefinitionSkills, AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct).Result;
+                DefinitionSkills: change.DefinitionSkills, AutomationPolicyChanges: change.AutomationPolicyChanges,
+                SetSettingsOverrides: change.SetSettingsOverrides, SettingsOverrides: change.SettingsOverrides,
+                SetExecutionBudgets: change.SetExecutionBudgets, ExecutionBudgets: change.ExecutionBudgets,
+                SetUnattendedModel: change.SetUnattendedModel, UnattendedModelCatalogKey: change.UnattendedModelCatalogKey,
+                UnattendedReasoningEffort: change.UnattendedReasoningEffort, HarnessManagement: change.HarnessManagement), at, ct).Result;
             _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);
             return ValueTask.FromResult<TenantAgent?>(current with { Instance = updated });
         }

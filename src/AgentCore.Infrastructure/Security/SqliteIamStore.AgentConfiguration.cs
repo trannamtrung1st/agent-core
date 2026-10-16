@@ -53,6 +53,11 @@ public sealed partial class SqliteIamStore
         }
         row.PersonaJson = JsonSerializer.Serialize(updated.Persona, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         row.PersonaRevision = updated.PersonaRevision; row.ActiveVersion = updated.ActiveVersion;
+        var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        row.SettingsOverridesJson = updated.SettingsOverrides is null ? null : JsonSerializer.Serialize(updated.SettingsOverrides, json);
+        row.ExecutionBudgetsJson = updated.ExecutionBudgets is null ? null : JsonSerializer.Serialize(updated.ExecutionBudgets, json);
+        row.HarnessManagementJson = updated.HarnessManagement is null ? null : JsonSerializer.Serialize(updated.HarnessManagement, json);
+        row.UnattendedModelCatalogKey = updated.UnattendedModelCatalogKey; row.UnattendedReasoningEffort = updated.UnattendedReasoningEffort;
         row.Revision = updated.Revision; row.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
         await SqliteAgentInstanceStore.InitializeSkillsAsync(db, change.InstanceId, change.DefinitionSkills, at, ct).ConfigureAwait(false);
         await SqliteAgentInstanceStore.StageAutomationPolicyAsync(db, new(change.InstanceId, change.ExpectedInstanceRevision,

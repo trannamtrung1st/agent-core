@@ -10,6 +10,7 @@ public static partial class TenantAgentEndpoints
     public sealed record VersionRequest(int Version, long ExpectedRevision, long ExpectedInstanceRevision);
     private static void MapConfiguration(RouteGroupBuilder group)
     {
+        MapSettings(group);
         group.MapGet("/agents/{instanceId:guid}/effective-config", (Guid instanceId, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);

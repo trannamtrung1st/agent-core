@@ -727,6 +727,7 @@ internal class DurableSqliteHostFactory(string dbPath, bool runScheduler = true,
             }
 
             services.AddSingleton(persistence);
+            TestSqliteIdentity.Configure(services, persistence.ConnectionString, dbPath + ".identity-keys");
             if (services.All(item => item.ServiceType != typeof(IDbContextFactory<AgentCoreDbContext>)))
             {
                 services.AddDbContextFactory<AgentCoreDbContext>(options => options.UseSqlite(persistence.ConnectionString));
