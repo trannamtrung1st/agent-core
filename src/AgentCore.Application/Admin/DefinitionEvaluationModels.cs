@@ -45,4 +45,5 @@ public sealed record DefinitionEvaluationResult(
     string RuntimeKind,
     bool Passed,
     IReadOnlyList<string> Findings,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    long? CommitRevision = null);

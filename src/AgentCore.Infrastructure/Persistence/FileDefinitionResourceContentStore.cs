@@ -21,10 +21,21 @@ public sealed class FileDefinitionResourceContentStore(string root) : IDefinitio
             return;
         }
 
-        var temp = path + ".partial";
-        await File.WriteAllBytesAsync(temp, content, cancellationToken).ConfigureAwait(false);
-        DefinitionResourceContentHasher.EnsureMatches(contentSha256, await File.ReadAllBytesAsync(temp, cancellationToken).ConfigureAwait(false));
-        File.Move(temp, path, overwrite: false);
+        var temp = path + ".partial-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await File.WriteAllBytesAsync(temp, content, cancellationToken).ConfigureAwait(false);
+            DefinitionResourceContentHasher.EnsureMatches(contentSha256, await File.ReadAllBytesAsync(temp, cancellationToken).ConfigureAwait(false));
+            try { File.Move(temp, path, overwrite: false); }
+            catch (IOException) when (File.Exists(path))
+            {
+                // Another authorized upload of identical bytes won the immutable put.
+                var existing = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+                DefinitionResourceContentHasher.EnsureMatches(contentSha256, existing);
+                DefinitionResourceStoredContent.EnsureIdempotentMatch(existing, content);
+            }
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 
     public async ValueTask<byte[]?> ReadAsync(string contentSha256, CancellationToken cancellationToken = default)

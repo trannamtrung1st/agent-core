@@ -447,6 +447,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasMaxLength(36)
                         .HasColumnType("TEXT");
 
+                    b.Property<long?>("CommitRevision")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ConfigurationFingerprint")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -484,6 +487,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("ResultId");
+
+                    b.HasIndex("DraftId", "ScenarioId", "CommitRevision");
 
                     b.HasIndex("DraftId", "ScenarioId", "RecordedAtUtc");
 

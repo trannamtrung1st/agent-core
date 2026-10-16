@@ -114,7 +114,7 @@ public sealed partial class SqliteIamStore
             var draft = AgentDefinitionAdminMapping.MapDraft(row); var key = draftId.ToString("D");
             var resources = await db.AgentDefinitionDraftResources.IgnoreQueryFilters().AsNoTracking().Where(r => r.DraftId == key).ToArrayAsync(ct).ConfigureAwait(false);
             var scenarios = await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().AsNoTracking().Where(s => s.DraftId == key).ToArrayAsync(ct).ConfigureAwait(false);
-            var results = await db.AgentDefinitionDraftEvaluationResults.IgnoreQueryFilters().AsNoTracking().Where(r => r.DraftId == key).OrderByDescending(r => r.RecordedAtUtc).ThenByDescending(r => r.ResultId).ToArrayAsync(ct).ConfigureAwait(false);
+            var results = await LatestDefinitionResults(db, key, ct).ConfigureAwait(false);
             TenantDefinitionPublicationRules.RequireReady(draft, new(resources.Select(DefinitionResourcePersistence.MapDraftResource).ToArray(), scenarios.Select(DefinitionDraftEvaluationPersistence.MapScenario).ToArray(), results.Select(DefinitionDraftEvaluationPersistence.MapResult).ToArray()));
             if (resources.Length > 0)
             {
@@ -157,9 +157,12 @@ public sealed partial class SqliteIamStore
         await ValidateTenantActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
         await EnsureActiveAccountOwnerAsync(db, next, null, ct).ConfigureAwait(false);
         await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
-        var result = await change(db).ConfigureAwait(false); if (result is null) return null;
-        db.Entry(current).CurrentValues.SetValues(next.Tenant); await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
-        try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return result; }
+        try
+        {
+            var result = await change(db).ConfigureAwait(false); if (result is null) return null;
+            db.Entry(current).CurrentValues.SetValues(next.Tenant); await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return result;
+        }
         catch (DbUpdateConcurrencyException) { return null; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }
     }

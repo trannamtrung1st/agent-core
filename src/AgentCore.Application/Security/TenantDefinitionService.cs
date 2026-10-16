@@ -6,8 +6,8 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public sealed class TenantDefinitionService(IIamStore security, ITenantDefinitionStore definitions, IamAuthorizer authorizer,
-    ProviderAliasSet aliases, IModelCatalog models, IToolConfigurationGate configuration, IIdGenerator ids, TimeProvider time)
+public sealed partial class TenantDefinitionService(IIamStore security, ITenantDefinitionStore definitions, IamAuthorizer authorizer,
+    ProviderAliasSet aliases, IModelCatalog models, IToolConfigurationGate configuration, IIdGenerator ids, TimeProvider time, IDefinitionResourceContentStore content, AgentDefinitionDraftSyntheticEvaluationRunner evaluation)
 {
     public async ValueTask<TenantDefinitionPage> ListAsync(Guid actor, Guid tenant, int page = 0, int pageSize = 30, CancellationToken ct = default)
     {
@@ -117,6 +117,11 @@ public sealed class TenantDefinitionService(IIamStore security, ITenantDefinitio
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         var check = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agent-definitions." + action), scope, ct).ConfigureAwait(false);
         if (!check.Allowed) throw new AccessDeniedException(check.ReasonCode);
+        if (scope.Kind == AccessScopeKind.Resource)
+        {
+            var read = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agent-definitions.read"), scope, ct).ConfigureAwait(false);
+            if (!read.Allowed) throw new AccessDeniedException(read.ReasonCode);
+        }
         if (state.Tenant.Revision != revision) throw new SecurityConflictException("stale_revision");
         return state;
     }

@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
 
-public sealed class TenantDefinitionAccessTests
+public sealed partial class TenantDefinitionAccessTests
 {
     [Fact]
     public async Task Author_publish_and_instantiate_use_owned_publications_with_live_scoped_access()
@@ -26,6 +26,10 @@ public sealed class TenantDefinitionAccessTests
         var other = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Second organization", slug = "definition-second" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(0, (await Json(await owner.GetAsync($"/api/v2/tenants/{other}/agent-definitions"))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{other}/definition-drafts/{draftId}")).StatusCode);
+        var invalidCandidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
+        invalidCandidate["providerPreferences"]!["languageModel"] = "unconfigured-provider";
+        var invalid = await owner.PutAsJsonAsync($"/api/v2/tenants/{tenant}/definition-drafts/{draftId}", new { candidate = invalidCandidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode); Assert.Equal("unknown_provider_alias", (await Json(invalid)).GetProperty("reasonCode").GetString());
         var candidate = JsonNode.Parse(draft.GetProperty("candidate").GetRawText())!;
         candidate["agentInstructions"] = "Private version one instructions.";
         var updated = await owner.PutAsJsonAsync($"/api/v2/tenants/{tenant}/definition-drafts/{draftId}", new { candidate, expectedRevision = await Revision(owner, tenant), expectedDraftRevision = 1 });

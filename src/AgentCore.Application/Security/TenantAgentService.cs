@@ -108,6 +108,11 @@ public sealed class TenantAgentService(IIamStore security, ITenantAgentStore age
         var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
         var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(permission), scope, ct).ConfigureAwait(false);
         if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
+        if (scope.Kind == AccessScopeKind.Resource)
+        {
+            var read = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("agents.read"), scope, ct).ConfigureAwait(false);
+            if (!read.Allowed) throw new AccessDeniedException(read.ReasonCode);
+        }
         if (state.Tenant.Revision != expected) throw new SecurityConflictException("stale_revision");
         return state;
     }

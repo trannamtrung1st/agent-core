@@ -11,6 +11,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
     IDefinitionResourceContentStore content,
     IIdGenerator ids) : IAgentDefinitionResourceAdminStore
 {
+    internal IDefinitionResourceContentStore TenantContent => content;
     private readonly ConcurrentDictionary<Guid, List<AgentDefinitionDraftResource>> _draftResources = new();
     private readonly ConcurrentDictionary<(string DefinitionId, int Version), List<AgentDefinitionPublicationResource>> _publicationResources = new();
 

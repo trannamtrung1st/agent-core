@@ -46,7 +46,7 @@ internal static class DefinitionDraftEvaluationPersistence
             row.RuntimeKind,
             row.Passed,
             DeserializeFindings(row.FindingsJson),
-            DateTimeOffset.FromUnixTimeMilliseconds(row.RecordedAtUtc));
+            DateTimeOffset.FromUnixTimeMilliseconds(row.RecordedAtUtc), row.CommitRevision);
 
     internal static AgentDefinitionDraftEvaluationResultRecord MapResult(DefinitionEvaluationResult result, Guid resultId)
     {
@@ -61,7 +61,8 @@ internal static class DefinitionDraftEvaluationPersistence
             RuntimeKind = result.RuntimeKind,
             Passed = result.Passed,
             FindingsJson = SerializeFindings(result.Findings),
-            RecordedAtUtc = result.RecordedAt.ToUnixTimeMilliseconds()
+            RecordedAtUtc = result.RecordedAt.ToUnixTimeMilliseconds(),
+            CommitRevision = result.CommitRevision
         };
     }
 

@@ -162,6 +162,7 @@ public sealed class AgentDefinitionDraftEvaluationResultRecord
     public bool Passed { get; set; }
     public string FindingsJson { get; set; } = "[]";
     public long RecordedAtUtc { get; set; }
+    public long? CommitRevision { get; set; }
 }
 
 public sealed class AgentDefinitionDraftResourceRecord
@@ -631,6 +632,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.RuntimeKind).HasMaxLength(64).IsRequired();
             entity.Property(row => row.FindingsJson).IsRequired();
             entity.HasIndex(row => new { row.DraftId, row.ScenarioId, row.RecordedAtUtc });
+            entity.HasIndex(row => new { row.DraftId, row.ScenarioId, row.CommitRevision });
         });
         modelBuilder.Entity<AgentDefinitionDraftResourceRecord>(entity =>
         {

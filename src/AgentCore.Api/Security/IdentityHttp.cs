@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace AgentCore.Api.Security;
 
@@ -90,6 +92,13 @@ public static class IdentityHttp
             { await FailureAsync(http.Response, 400, "https_required").ConfigureAwait(false); return; }
             if (!http.Request.Path.StartsWithSegments("/api/v2/auth") && AccountId(http.User) is null)
             { await FailureAsync(http.Response, 401, "not_authenticated").ConfigureAwait(false); return; }
+            if (http.GetEndpoint()?.Metadata.GetMetadata<IRequestSizeLimitMetadata>()?.MaxRequestBodySize is { } bodyLimit)
+            {
+                if (http.Request.ContentLength > bodyLimit)
+                { await FailureAsync(http.Response, 413, "request_too_large").ConfigureAwait(false); return; }
+                var feature = http.Features.Get<IHttpMaxRequestBodySizeFeature>();
+                if (feature is { IsReadOnly: false }) feature.MaxRequestBodySize = bodyLimit;
+            }
             if (!HttpMethods.IsGet(http.Request.Method) && !HttpMethods.IsHead(http.Request.Method) && !HttpMethods.IsOptions(http.Request.Method))
             {
                 try { await http.RequestServices.GetRequiredService<IAntiforgery>().ValidateRequestAsync(http).ConfigureAwait(false); }
@@ -126,6 +135,12 @@ public static class IdentityHttp
         try { return await action().ConfigureAwait(false); }
         catch (AccessDeniedException ex) { return Results.Json(new { reasonCode = ex.ReasonCode, title = "This operation is not authorized." }, statusCode: 403); }
         catch (SecurityConflictException ex) { return Results.Json(new { reasonCode = ex.ReasonCode, title = ex.Message }, statusCode: 409); }
+        catch (DefinitionPublicationNotReadyException ex) { return Results.Json(new { reasonCode = ex.ReasonCode, title = ex.Message }, statusCode: 400); }
+        catch (AgentCore.Application.Sessions.AgentCoreException ex)
+        {
+            var reason = ex.ValidationCode ?? (ex.Code switch { "ValidationError" => "invalid_request", "Conflict" => "resource_conflict", "NotFound" => "resource_unavailable", _ => ex.Code });
+            return Http.ProblemResults.From(ex, reason);
+        }
         catch (ArgumentException) { return Results.Json(new { reasonCode = "invalid_request", title = "Check the submitted values." }, statusCode: 400); }
     }
 }

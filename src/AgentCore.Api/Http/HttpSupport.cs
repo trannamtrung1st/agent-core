@@ -8,20 +8,21 @@ namespace AgentCore.Api.Http;
 
 public static class ProblemResults
 {
-    public static IResult From(AgentCoreException exception) => new ClassifiedProblemResult(exception);
+    public static IResult From(AgentCoreException exception, string? reasonCode = null) => new ClassifiedProblemResult(exception, reasonCode);
 
-    private sealed class ClassifiedProblemResult(AgentCoreException exception) : IResult
+    private sealed class ClassifiedProblemResult(AgentCoreException exception, string? reasonCode) : IResult
     {
         public async Task ExecuteAsync(HttpContext httpContext)
         {
             var problem = new ProblemDetails
             {
                 Type = "about:blank",
-                Title = exception.Code,
+                Title = reasonCode is null ? exception.Code : exception.Message,
                 Status = exception.StatusCode,
                 Detail = exception.Message
             };
             problem.Extensions["code"] = exception.Code;
+            if (reasonCode is not null) problem.Extensions["reasonCode"] = reasonCode;
             if (exception.ValidationField is { } field) problem.Extensions["field"] = field;
             if (exception.ValidationCode is { } code) problem.Extensions["validationCode"] = code;
             if (exception.Code == "SessionPersistenceUnavailable")

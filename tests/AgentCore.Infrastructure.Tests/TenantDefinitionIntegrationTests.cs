@@ -14,7 +14,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Tests;
 
-public sealed class TenantDefinitionIntegrationTests
+public sealed partial class TenantDefinitionIntegrationTests
 {
     [Theory]
     [InlineData(false)]
@@ -85,7 +85,7 @@ public sealed class TenantDefinitionIntegrationTests
         var scenario = new DefinitionEvaluationScenario(draft.DraftId, "required", 1, "Required", "Check", DefinitionEvaluationRequirementLevel.Required, DefinitionEvaluationCheckType.ExternalActionDenied, null, DateTimeOffset.UtcNow);
         await f.SeedEvidence(draft, resource, scenario, null);
         var auditBefore = (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count;
-        await Assert.ThrowsAsync<ArgumentException>(() => f.Service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, draft.DraftId, 2, 1).AsTask());
+        await Assert.ThrowsAsync<DefinitionPublicationNotReadyException>(() => f.Service.PublishAsync(owner.OwnerPrincipalId, owner.TenantId, draft.DraftId, 2, 1).AsTask());
         Assert.NotNull(await f.Definitions.FindDefinitionDraftAsync(owner.TenantId, draft.DraftId));
         Assert.Equal(auditBefore, (await f.Iam.ReadAuditAsync(owner.TenantId, 200)).Count);
         var fingerprint = DefinitionDraftConfigurationFingerprint.Compute(draft.Candidate, [resource]);
@@ -153,13 +153,15 @@ public sealed class TenantDefinitionIntegrationTests
         public IAgentDefinitionAdminStore Admin { get; private set; } = null!;
         public IAgentDefinitionResourceAdminStore Resources { get; private set; } = null!;
         public IDefinitionDraftEvaluationStore Evaluation { get; private set; } = null!;
-        public IDefinitionResourceContentStore Content { get; } = new InMemoryDefinitionResourceContentStore();
+        public IDefinitionResourceContentStore Content { get; private set; } = new InMemoryDefinitionResourceContentStore();
         public IIdGenerator Ids { get; } = new SystemIdGenerator(TimeProvider.System);
         public IIdentityTokens Tokens { get; } = new IdentityTokens();
         public IamAuthorizer Authorizer => new(Iam);
         public IdentityService Identity => new(Iam, new AccountPasswordHasher(), Tokens, Ids, TimeProvider.System);
         public TenantAccessService Access => new(Iam, Authorizer, Identity, Tokens, Ids, TimeProvider.System);
-        public TenantDefinitionService Service => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System);
+        public IDefinitionDraftSyntheticBehaviorEvaluator Evaluator => new AgentCore.Infrastructure.Admin.SyntheticDefinitionDraftBehaviorEvaluator(new AgentCore.Infrastructure.Admin.DefinitionDraftSyntheticOfflineLanguageModel(), ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll);
+        public TenantDefinitionService Service => WithEvaluator(Evaluator);
+        public TenantDefinitionService WithEvaluator(IDefinitionDraftSyntheticBehaviorEvaluator evaluator) => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System, Content, new(evaluator, ToolConfigurationGates.AllowAll));
         public IDbContextFactory<AgentCoreDbContext>? Contexts { get; private set; }
         private string? _path;
         public static async Task<Fixture> Create(bool sqlite)
@@ -168,6 +170,7 @@ public sealed class TenantDefinitionIntegrationTests
             if (sqlite)
             {
                 f._path = Path.Combine(Path.GetTempPath(), $"tenant-definition-{Guid.NewGuid():N}.db");
+                f.Content = new FileDefinitionResourceContentStore(f._path + ".resources");
                 f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f._path};Foreign Keys=True;Default Timeout=10").Options);
                 await using (var db = f.Contexts.CreateDbContext()) await db.Database.MigrateAsync();
                 f.Iam = new SqliteIamStore(f.Contexts, f.Content); f.Admin = new SqliteAgentDefinitionAdminStore(f.Contexts, f.Ids, f.Content);
@@ -203,7 +206,7 @@ public sealed class TenantDefinitionIntegrationTests
             }
         }
         public ValueTask DisposeAsync()
-        { if (_path is not null) { SqliteConnection.ClearAllPools(); File.Delete(_path); File.Delete(_path + "-shm"); File.Delete(_path + "-wal"); } return ValueTask.CompletedTask; }
+        { if (_path is not null) { SqliteConnection.ClearAllPools(); File.Delete(_path); File.Delete(_path + "-shm"); File.Delete(_path + "-wal"); if (Directory.Exists(_path + ".resources")) Directory.Delete(_path + ".resources", recursive: true); } return ValueTask.CompletedTask; }
     }
     private sealed class ContextFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(options); }
