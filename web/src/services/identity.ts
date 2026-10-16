@@ -32,6 +32,13 @@ const reasons: Record<string, string> = {
   evaluation_stale: 'The draft changed. Run required evaluations again before publishing.',
   evaluation_failed: 'Resolve the failed required evaluations before publishing.',
   definition_resources_invalid: 'Bind the missing knowledge, Skill or workspace resources before publishing.',
+  credential_in_use: 'Remove this credential’s agent bindings before deleting it.',
+  oauth_not_configured: 'Ask the operator to configure shared Google OAuth, then reload the credential.',
+  oauth_host_disabled: 'Google Drive is disabled on this host. Ask the operator to enable it before connecting.',
+  oauth_initiator_unavailable: 'Your original sign-in or organization access is no longer available. Sign in again before connecting.',
+  oauth_client_changed: 'Google setup changed. Reload the credential and start a new connection.',
+  oauth_callback_unavailable: 'This connection attempt is expired, superseded or unavailable. Return to the saved credential and connect again.',
+  oauth_proof_unavailable: 'The connection proof is unavailable. Start a new connection from the saved credential.',
 };
 export class IdentityError extends Error {
   constructor(public status: number, public reasonCode: string, detail?: string) {
@@ -59,7 +66,9 @@ export async function identityRequest<T>(path: string, options: { method?: strin
   options.signal?.throwIfAborted();
   const response = await fetch(path, { method, headers, credentials: 'same-origin', cache: 'no-store', signal: options.signal, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
   await requireIdentityResponse(response, path);
-  return response.status === 204 ? undefined as T : await response.json() as T;
+  if (response.status === 204) return undefined as T;
+  try { return await response.json() as T; }
+  catch (error) { if (method !== 'GET' && !options.signal?.aborted) throw new IdentityCompletionError(); throw error; }
 }
 async function requireIdentityResponse(response: Response, path: string) {
   if (!response.ok) {

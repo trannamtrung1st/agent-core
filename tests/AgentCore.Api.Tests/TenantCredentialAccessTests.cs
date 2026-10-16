@@ -20,6 +20,8 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode); Assert.True(response.Headers.CacheControl?.NoStore);
         var created = await Json(response); var credential = created.GetProperty("credential"); var id = credential.GetProperty("credentialId").GetGuid();
         Safe(created); Assert.Equal(1, credential.GetProperty("revision").GetInt64());
+        var itemAccess = await Json(await owner.GetAsync(path + $"/{id}/access"));
+        Assert.Contains(itemAccess.GetProperty("permissions").EnumerateArray(), p => p.GetString() == "credentials.manage"); Safe(itemAccess);
         using var anonymous = Client(factory);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(path)).StatusCode);
         using var legacy = TestOwnerCapability.CreateOwnerClient(factory);
@@ -30,6 +32,7 @@ public sealed partial class TenantCredentialAccessTests
         var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Beta", slug = "beta" }))).GetProperty("tenantId").GetGuid();
         Assert.Equal(0, (await Json(await owner.GetAsync($"/api/v2/tenants/{beta}/credentials"))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/credentials/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.GetAsync($"/api/v2/tenants/{beta}/credentials/{id}/access")).StatusCode);
         var replaced = await owner.PutAsJsonAsync(path + $"/{id}/value", new TenantCredentialReplaceRequest("http-replacement-sentinel", await Revision(owner, tenant), 1));
         Assert.Equal(HttpStatusCode.OK, replaced.StatusCode); Safe(await Json(replaced));
         var stale = await owner.PutAsJsonAsync(path + $"/{id}/value", new TenantCredentialReplaceRequest("http-stale-sentinel", await Revision(owner, tenant), 1));
@@ -68,6 +71,9 @@ public sealed partial class TenantCredentialAccessTests
         var role = await Json(await owner.PostAsJsonAsync(path + "/roles", new { name = "One credential", permissions = new[] { "credentials.read", "credentials.manage" }, expectedRevision = await Revision(owner, tenant) }));
         var assignmentResponse = await owner.PostAsJsonAsync(path + "/role-assignments", new { principalId = user.GetProperty("principalId").GetGuid(), roleId = role.GetProperty("roleId").GetGuid(), resourceType = "credential", resourceId = first, expectedRevision = await Revision(owner, tenant) });
         Assert.Equal(HttpStatusCode.Created, assignmentResponse.StatusCode); var assignment = await Json(assignmentResponse);
+        var ownAccess = await Json(await member.GetAsync(path + $"/credentials/{first}/access"));
+        Assert.Contains(ownAccess.GetProperty("permissions").EnumerateArray(), p => p.GetString() == "credentials.manage");
+        Assert.DoesNotContain(ownAccess.GetProperty("permissions").EnumerateArray(), p => p.GetString() == "credentials.use");
         var items = await Json(await member.GetAsync(path + "/credentials?pageSize=1"));
         Assert.Equal(1, items.GetProperty("total").GetInt32());
         Assert.Equal(first, items.GetProperty("items")[0].GetProperty("credential").GetProperty("credentialId").GetGuid());
@@ -77,6 +83,7 @@ public sealed partial class TenantCredentialAccessTests
         Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync(path + $"/role-assignments/{assignment.GetProperty("assignmentId").GetGuid()}?expectedRevision={await Revision(owner, tenant)}")).StatusCode);
         var denied = await member.PutAsJsonAsync(path + $"/credentials/{first}/value", new TenantCredentialReplaceRequest("http-stale-sentinel", 1, 1));
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync(path + $"/credentials/{first}/access")).StatusCode);
         Assert.Equal(0, (await Json(await member.GetAsync(path + "/credentials"))).GetProperty("total").GetInt32());
     }
     [Fact]

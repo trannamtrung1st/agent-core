@@ -463,9 +463,6 @@ export function EmailAccountFields({
               </Form.Item>
               <Form.Item
                 name={['profile', `${protocol}Endpoint`, 'port']}
-                initialValue={
-                  account ? undefined : custom[`${protocol}Endpoint`]?.port
-                }
                 label={`${protocol.toUpperCase()} port`}
                 rules={[{ required: true }]}
               >
@@ -473,9 +470,6 @@ export function EmailAccountFields({
               </Form.Item>
               <Form.Item
                 name={['profile', `${protocol}Endpoint`, 'tlsMode']}
-                initialValue={
-                  account ? undefined : custom[`${protocol}Endpoint`]?.tlsMode
-                }
                 label={`${protocol.toUpperCase()} TLS`}
                 rules={[{ required: true }]}
               >

@@ -2,7 +2,7 @@
 version: 1
 slug: "web-src-features-access-accessapp-tsx"
 primary_target: "web/src/features/access/AccessApp.tsx"
-related_targets: ["web/src/features/access/TenantDefinitions.tsx","web/src/features/access/TenantDefinitionDetail.tsx","web/src/features/access/TenantDefinitionEditor.tsx","web/src/features/access/TenantDefinitionResources.tsx","web/src/features/access/TenantDefinitionEvaluations.tsx","web/src/features/access/TenantDefinitionCapabilities.tsx","web/src/features/access/AccountForms.tsx","web/src/features/access/Organizations.tsx","web/src/features/access/Members.tsx","web/src/features/access/Roles.tsx","web/src/features/access/InvitationAcceptance.tsx","web/src/features/access/useAccessDraftGuard.tsx","web/src/services/identity.ts","web/src/features/admin/AdminShell.tsx","web/src/features/admin/AdminCollectionToolbar.tsx","web/src/app.css"]
+related_targets: ["web/src/features/access/TenantDefinitions.tsx","web/src/features/access/TenantDefinitionDetail.tsx","web/src/features/access/TenantDefinitionEditor.tsx","web/src/features/access/TenantDefinitionResources.tsx","web/src/features/access/TenantDefinitionEvaluations.tsx","web/src/features/access/TenantDefinitionCapabilities.tsx","web/src/features/access/TenantCredentials.tsx","web/src/features/access/TenantCredentialEditor.tsx","web/src/features/admin/CredentialConnectionTag.tsx","web/src/features/admin/EmailAccountDialog.tsx","web/src/features/access/AccountForms.tsx","web/src/features/access/Organizations.tsx","web/src/features/access/Members.tsx","web/src/features/access/Roles.tsx","web/src/features/access/InvitationAcceptance.tsx","web/src/features/access/useAccessDraftGuard.tsx","web/src/services/identity.ts","web/src/features/admin/AdminShell.tsx","web/src/features/admin/AdminCollectionToolbar.tsx","web/src/app.css"]
 ---
 
 # Account and organization access
@@ -27,3 +27,17 @@ VERIFICATION: The dated access UI report owns the bounded audit/correction/confi
 
 
 DEFINITION EXTENSION: The canonical owned Definition collection, owner/draft headings, shared configuration sections, resource/scenario drawers and sticky Save/Publish actions reuse incumbent compositions and spacing owners. Same-owner section navigation preserves the candidate; departing unsaved edits confirms discard. Read-only resource grants, stale saves, revoked access, retired requests and acknowledged-write recovery have explicit states. Sandbox catalog, rich previews, assignment panels and complete runtime integration remain pending. The dated tenant Definition UI report owns the two captured Test & Publish widths and actual browser evidence; no new palette, tokens or component recipes were introduced.
+
+## Credential extension direction contract
+
+THESIS: Make an organization's protected accounts understandable and manageable through the incumbent collection and exact-owner inspector. Connection, configuration, binding and use remain separate facts.
+
+OWN-WORLD: Preserve the current dark Ant Design v6 palette, typography, native controls, 8/12/16 spacing and existing AdminShell. Reuse credential fields, connection tags, collection toolbar and responsive detail alignment.
+
+STORY: Find readable credentials, inspect a saved account, edit safe configuration or replace a transient secret, then connect/disconnect Google explicitly. Show current scoped authority, retained drafts and recoverable failures without implying runtime use is delivered.
+
+FIRST VIEWPORT: One searchable paged collection, Reload and permitted Add credential action. A bounded native inspector holds full metadata and connection controls; focused creation/edit dialogs protect unsaved input.
+
+FORM: Existing organization access composition extension; code-led, no concept seed or new visual world. Canonical OAuth return opens the exact saved credential and displays a verified connection outcome.
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

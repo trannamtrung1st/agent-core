@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { identityRequest, IdentityError, resetIdentityCsrf } from './identity';
+import { identityRequest, IdentityError, IdentityCompletionError, resetIdentityCsrf } from './identity';
 const response = (status: number, body?: unknown) => new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 describe('canonical identity requests', () => {
   const fetchMock = vi.fn<typeof fetch>();
   beforeEach(() => { resetIdentityCsrf(); vi.stubGlobal('fetch', fetchMock); fetchMock.mockReset(); });
   afterEach(() => vi.unstubAllGlobals());
+  it('distinguishes an acknowledged write with unreadable readback from an unsaved request', async () => {
+    fetchMock.mockResolvedValueOnce(response(200, { token: 'one' })).mockResolvedValueOnce(new Response('{', { status: 201 }));
+    await expect(identityRequest('/api/v2/tenants/t/credentials', { method: 'POST', body: {} })).rejects.toBeInstanceOf(IdentityCompletionError);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
   it('uses same-origin cookies and fresh in-memory CSRF after identity changes', async () => {
     fetchMock.mockResolvedValueOnce(response(200, { token: 'first' })).mockResolvedValueOnce(response(204));
     await identityRequest('/api/v2/auth/logout', { method: 'POST' });

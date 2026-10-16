@@ -14,10 +14,22 @@ public sealed record TenantCredentialUpdate(string DisplayName, CredentialStatus
     EmailAccountProfile? EmailAccount = null, ContainerRegistryProfile? ContainerRegistry = null);
 public sealed record TenantCredentialView(Guid TenantId, CredentialView Credential);
 public sealed record TenantCredentialViewPage(IReadOnlyList<TenantCredentialView> Items, int Total, int Page, int PageSize);
+public sealed record TenantCredentialAccess(IReadOnlyList<string> Permissions, long Revision);
 
 public sealed class TenantCredentialService(IIamStore security, ITenantCredentialStore credentials,
     IamAuthorizer authorizer, ICredentialProtector protector, IIdGenerator ids, TimeProvider time)
 {
+    public async ValueTask<TenantCredentialAccess> AccessAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
+    {
+        await Owned(tenant, id, ct).ConfigureAwait(false);
+        var state = await State(tenant, ct).ConfigureAwait(false); var scope = TenantCredentialRules.Scope(tenant, id);
+        var read = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false);
+        if (!read.Allowed) throw new AccessDeniedException(read.ReasonCode);
+        var permissions = new List<string> { "credentials.read" };
+        foreach (var key in new[] { "credentials.manage", "credentials.bind", "credentials.use", "iam.roles.read", "iam.roles.manage" })
+            if ((await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) permissions.Add(key);
+        return new(permissions.AsReadOnly(), state.Tenant.Revision);
+    }
     public async ValueTask<TenantCredentialViewPage> ListAsync(Guid actor, Guid tenant, int page = 0, int pageSize = 30, CancellationToken ct = default)
     {
         var state = await State(tenant, ct).ConfigureAwait(false);

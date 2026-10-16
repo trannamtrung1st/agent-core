@@ -2,6 +2,13 @@ import { act, renderHook } from '@testing-library/react';
 import { IdentityCompletionError } from '../../services/identity';
 import { useTenantCommand } from './useTenantCommand';
 describe('tenant commands', () => {
+  it('requires reload after a write was acknowledged but its response could not be read', async () => {
+    const { result } = renderHook(useTenantCommand); const action = vi.fn().mockRejectedValue(new IdentityCompletionError());
+    await act(async () => { await result.current.run(action, () => {}); });
+    act(() => result.current.clearError());
+    await act(async () => { await result.current.run(action, () => {}); });
+    expect(action).toHaveBeenCalledTimes(1); expect(result.current.error).toBeInstanceOf(IdentityCompletionError);
+  });
   it('never replays a committed action when local completion fails', async () => {
     const { result } = renderHook(useTenantCommand); const action = vi.fn().mockResolvedValue({ id: 'saved' });
     await act(async () => { await result.current.run(action, () => { throw new Error('display failed'); }); });

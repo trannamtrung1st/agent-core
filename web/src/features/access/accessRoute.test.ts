@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalAppUrl, parseAppRoute } from '../../app/appRoute';
-import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath } from './accessRoute';
+import { parseAccessRoute, tenantDefinitionPath, tenantDraftPath, tenantCredentialPath } from './accessRoute';
 const tenant = '11111111-1111-4111-8111-111111111111';
 describe('canonical access navigation', () => {
+  it('opens the OAuth return destination as a tenant Credential page and preserves its exact item query', () => {
+    const path = tenantCredentialPath(tenant, tenant);
+    expect(parseAppRoute(path.split('?')[0])).toMatchObject({ area: 'access', view: 'tenant', tenantId: tenant, page: 'credentials' });
+    expect(canonicalAppUrl(path + '&connection=connected')).toBe(path + '&connection=connected');
+    expect(parseAccessRoute(`/t/${tenant}/integrations/credentials/foreign`)).toMatchObject({ view: 'not-found' });
+  });
   it('keeps valid identity and tenant access routes out of Chat', () => {
     expect(parseAppRoute('/sign-in')).toEqual({ area: 'access', view: 'sign-in' });
     expect(parseAppRoute(`/t/${tenant}/admin/members`)).toEqual({ area: 'access', view: 'tenant', tenantId: tenant, page: 'members' });

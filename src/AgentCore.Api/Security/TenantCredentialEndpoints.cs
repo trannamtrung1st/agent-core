@@ -10,6 +10,11 @@ public static class TenantCredentialEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/credentials").RequireAuthorization();
+        group.MapGet("/{credentialId:guid}/access", (Guid credentialId, HttpContext http, TenantCredentialService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(await service.AccessAsync(actor.PrincipalId, actor.TenantId, credentialId, ct).ConfigureAwait(false));
+        }));
         group.MapGet("", (int? page, int? pageSize, HttpContext http, TenantCredentialService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);

@@ -20,8 +20,8 @@ export function useTenantCommand() {
         catch { acknowledgedFailure.current = true; setError(new IdentityCompletionError()); }
       }
     }
-    catch (failure) { if (!signal.aborted) setError(failure); }
+    catch (failure) { if (!signal.aborted) { if (failure instanceof IdentityCompletionError) acknowledgedFailure.current = true; setError(failure); } }
     finally { pending.current = false; if (!signal.aborted) setBusy(false); }
   }
-  return { busy, error, run, clearError: () => { if (!acknowledgedFailure.current) setError(undefined); } };
+  return { busy, error, run, requiresReload: acknowledgedFailure.current, clearError: () => { if (!acknowledgedFailure.current) setError(undefined); } };
 }
