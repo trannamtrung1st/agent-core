@@ -24,19 +24,21 @@ public sealed partial class SessionToolExecutor
         return new(path, content.Item.ContentType, content.Bytes);
     }
 
-    private async ValueTask<IReadOnlyList<WorkspaceNode>> ListExecutionWorkspaceAsync(Guid sessionId, AgentDefinition definition, string path, CancellationToken ct)
+    private async ValueTask<WorkspaceNodePage> ListExecutionWorkspacePageAsync(Guid sessionId, AgentDefinition definition,
+        string path, string? cursor, CancellationToken ct)
     {
         var isolation = await IsolationAsync(definition, sessionId, ct);
         AgentCore.Application.Agents.StateIsolationAccess.RequireHome(isolation, path, false);
         if (AgentHomePath.IsHome(path))
         {
             if (agentWorkspace is null) throw AgentCoreErrors.Validation("Durable home is unavailable for this execution.");
-            return await agentWorkspace.ListNodesAsync(await agentWorkspace.SessionOwnerAsync(sessionId, ct), AgentHomePath.Normalize(path, false), ct);
+            return await agentWorkspace.ListNodePageAsync(await agentWorkspace.SessionOwnerAsync(sessionId, ct),
+                AgentHomePath.Normalize(path, false), cursor, AgentCore.Domain.Conversation.WorkspaceLimits.MaxListEntries, ct);
         }
-        var nodes = await workspace!.ListAsync(sessionId, definition, path, ct);
-        if (path != "/" || agentWorkspace is null || isolation.HomeAccess == HomeAccess.Disabled) return nodes;
+        var page = await workspace!.ListPageAsync(sessionId, definition, path, cursor, AgentCore.Domain.Conversation.WorkspaceLimits.MaxListEntries, ct);
+        if (path != "/" || agentWorkspace is null || isolation.HomeAccess == HomeAccess.Disabled) return page;
         try { await agentWorkspace.SessionOwnerAsync(sessionId, ct); }
-        catch (AgentCoreException ex) when (ex.Code == "ValidationError") { return nodes; }
-        return [..nodes, new("/home", true, 0, false)];
+        catch (AgentCoreException ex) when (ex.Code == "ValidationError") { return page; }
+        return page with { Entries = [..page.Entries, new("/home", true, 0, false)] };
     }
 }

@@ -360,6 +360,8 @@ Archive preserves home inspection. Session cleanup removes only its private work
 
 ## Native workspace filesystem tools
 
+Attachment materialization stages complete bytes under the trusted parent descriptor, then uses Linux `renameat2(RENAME_NOREPLACE)` or macOS `renameatx_np(RENAME_EXCL)` to publish without replacing an existing leaf. It resolves only parent links, retries occupied sanitized names up to 128 times, and preserves ordinary workspace.write replacement behavior. Search follows lexical directory pages with at most 200 files, 4096 entries, depth 8 and 50 results; default result limit remains 20. Budget exhaustion or observed list/read failure reports `truncated=true`, including concurrent deletions.
+
 List/read/write/patch/search/mkdir/copy/move/delete/batch operate on present paths. Normal dotfiles, Git trees, deep directories, modes, safe symlinks and within-root hardlinks are supported. Linked ancestor/root substitutions, escaping links and cross-root inode aliases fail closed. Special entries can be listed; bounded file reads/exports reject unsupported kinds without deleting them.
 
 Copy streams addressed trees with partial failure semantics and no global snapshot. Move uses atomic no-overwrite rename within one scope. Delete unlinks links and requires explicit recursive intent for nonempty directories. Batches contain at most 16 structural operations/16 KiB, validate syntax/scopes/protected roots before effects, execute in order and stop after failure. Exact approval binds the arguments; changed files under a path are not frozen by approval. Inspect current files before retrying.

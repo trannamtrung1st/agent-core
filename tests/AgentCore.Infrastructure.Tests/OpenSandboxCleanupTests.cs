@@ -22,6 +22,38 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class OpenSandboxCleanupTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Policy_generation_retirement_preserves_selection_and_only_explicit_reset_clears_it(bool pendingCleanup)
+    {
+        var allowed = !pendingCleanup;
+        await using var host = await Host.Create(context => { context.Response.StatusCode = allowed ? 404 : 403; return Task.CompletedTask; });
+        var (service, store, lease, _) = await host.Service();
+        var execution = new SandboxExecution(Guid.NewGuid(), lease.SessionId, lease.AgentInstanceId, lease.Generation,
+            Guid.NewGuid(), Guid.NewGuid(), "once", "hash", SandboxExecutionState.Running, DateTimeOffset.UtcNow, Background:true);
+        await store.SaveExecutionAsync(execution, true);
+        await store.SaveLeaseAsync(lease with { Revision=2, SelectedProfileId="alternate", ActiveExecutionId=execution.Id, LastExecutionId=execution.Id }, 1);
+        var enforcement = new AgentCore.Application.Admin.SandboxPolicyEnforcement(store, service);
+        Assert.Equal(!pendingCleanup, await enforcement.EnforceAsync(lease.AgentInstanceId));
+        allowed = true;
+        if (pendingCleanup) await service.ReconcileAsync();
+        var retired = (await store.GetLeaseAsync(lease.SessionId))!;
+        Assert.Equal(SandboxLeaseState.Terminated, retired.State);
+        Assert.Equal("alternate", retired.SelectedProfileId);
+        Assert.Equal("policyChanged", retired.CleanupReason);
+        var receipt = (await store.GetExecutionAsync(lease.SessionId, execution.Id))!;
+        Assert.Equal(SandboxExecutionState.Canceled, receipt.State);
+        Assert.Equal("policyChanged", receipt.CancellationReason);
+        await service.StopSessionAsync(lease.SessionId, expectedGeneration:lease.Generation); // CAS alone is lifecycle intent.
+        Assert.Equal("alternate", (await store.GetLeaseAsync(lease.SessionId))!.SelectedProfileId);
+        await service.StopSessionAsync(lease.SessionId, expectedGeneration:lease.Generation,
+            intent:AgentCore.Application.Ports.SandboxStopIntent.OwnerReset);
+        Assert.Null((await store.GetLeaseAsync(lease.SessionId))!.SelectedProfileId);
+        Assert.Equal("reset", (await store.GetLeaseAsync(lease.SessionId))!.CleanupReason);
+        Assert.Equal(receipt, await store.GetExecutionAsync(lease.SessionId, execution.Id));
+    }
+
+    [Theory]
     [InlineData(SandboxExecutionState.Completed, 7)]
     [InlineData(SandboxExecutionState.Canceled, null)]
     [InlineData(SandboxExecutionState.Indeterminate, null)]
@@ -36,7 +68,7 @@ public sealed class OpenSandboxCleanupTests
             DateTimeOffset.UtcNow, ExitCode: exit, Stdout: "original-output", FilesystemEffectsMayHaveOccurred:true, Phase:"processInspection");
         await store.SaveExecutionAsync(execution, true);
         await store.SaveLeaseAsync(lease with { Revision=2, State=SandboxLeaseState.NeedsReconciliation, LastExecutionId=execution.Id, ActiveExecutionId=execution.Id }, 1);
-        await Assert.ThrowsAsync<AgentCoreException>(() => service.StopSessionAsync(lease.SessionId, expectedGeneration:lease.Generation).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => service.StopSessionAsync(lease.SessionId, expectedGeneration:lease.Generation, intent: AgentCore.Application.Ports.SandboxStopIntent.OwnerReset).AsTask());
         Assert.Equal("partial-and-visible", await File.ReadAllTextAsync(canonicalFile));
         allowed = true;
         await service.ReconcileAsync();
@@ -84,7 +116,7 @@ public sealed class OpenSandboxCleanupTests
             if (code != 204) await context.Response.WriteAsJsonAsync(new { code = "fixture", message = "private-upstream-body" });
         });
         var (service, store, lease, logs) = await host.Service();
-        if (terminated) await service.StopSessionAsync(lease.SessionId, expectedGeneration: lease.Generation);
+        if (terminated) await service.StopSessionAsync(lease.SessionId, expectedGeneration: lease.Generation, intent: AgentCore.Application.Ports.SandboxStopIntent.OwnerReset);
         else await Assert.ThrowsAsync<AgentCoreException>(() => service.StopSessionAsync(lease.SessionId).AsTask());
         Assert.Equal(expectedRequests, requests); Assert.True(authorized); Assert.True(exactIdentity);
         Assert.Equal(terminated ? SandboxLeaseState.Terminated : SandboxLeaseState.Terminating,
@@ -181,6 +213,9 @@ public sealed class OpenSandboxCleanupTests
         generation = lease.Generation.ToString("N");
         var warning = Assert.Single(logs.Warnings);
         Assert.Contains("Failure=http", warning); Assert.Contains("StatusCode=500", warning); Assert.Contains("ProviderLinked=False", warning);
+        Assert.Contains("DiagnosticId=" + lease.DiagnosticId, warning);
+        Assert.Contains("Generation=" + lease.Generation, warning);
+        Assert.Contains("ProfileId=fixture", warning); Assert.Contains("Phase=provisioning", warning);
         Assert.DoesNotContain("private-upstream-body", warning); Assert.DoesNotContain("private-fixture-key", warning);
         Assert.Empty(logs.Exceptions);
         await service.ReconcileAsync();
@@ -197,8 +232,8 @@ public sealed class OpenSandboxCleanupTests
         lease=lease with { Revision=2,State=SandboxLeaseState.Terminated,CleanupReason="initializationUncertain",
             Initialization=new("Running",lease.Profile.Id,lease.Profile.Revision,null) };
         await store.SaveLeaseAsync(lease,1);
-        await Assert.ThrowsAsync<AgentCoreException>(()=>service.StopSessionAsync(lease.SessionId,expectedGeneration:Guid.NewGuid()).AsTask());
-        await service.StopSessionAsync(lease.SessionId,expectedGeneration:lease.Generation);
+        await Assert.ThrowsAsync<AgentCoreException>(()=>service.StopSessionAsync(lease.SessionId,expectedGeneration:Guid.NewGuid(), intent: AgentCore.Application.Ports.SandboxStopIntent.OwnerReset).AsTask());
+        await service.StopSessionAsync(lease.SessionId,expectedGeneration:lease.Generation, intent: AgentCore.Application.Ports.SandboxStopIntent.OwnerReset);
         Assert.Equal("reset",(await store.GetLeaseAsync(lease.SessionId))!.CleanupReason);
         Assert.Equal(0,deletes);Assert.Equal("Running",(await store.GetLeaseAsync(lease.SessionId))!.Initialization!.State);
     }

@@ -4,6 +4,8 @@ The canonical filesystem cutover uses only the fresh `CanonicalFilesystemBaselin
 
 ## Canonical workspace baseline
 
+Direct SQLite fixtures must populate every required baseline column. In particular, `StructuredMemories.DerivedFromMemoryIdsJson` is non-null and uses `[]` when the fixture has no derivation; the production constraint remains mandatory.
+
 Only `20261015154322_CanonicalFilesystemBaseline` and its model snapshot ship. Fresh SQLite initialization and reopening that exact tracked schema are supported. A preexisting untracked, historical, incomplete or unknown schema fails with `data_reset_required` before schema DDL or data changes. Do not stamp a migration history row onto an existing database. Independent configuration/Profile revisions, admitted Run snapshots, durable effect receipts and Artifact checksums remain part of the current baseline.
 
 `Persistence:WorkspaceRoot` contains `.canonical-layout`, Instance `agent-{id}/home`, and private Session `agent-{id}/sessions/session-{id}/working`. These ordinary files are the sole current workspace state; SQLite has no file inventory, blob/revision table or tree token. `.provisioned` is a private one-time Session marker outside workload binds. Marking a root never adopts a populated unmarked legacy layout. The precise operator procedure and backup-by-rename tool are owned by [Operations](17-observability-and-operations.md#canonical-workspace-backup-and-reset).

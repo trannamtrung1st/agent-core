@@ -25,6 +25,7 @@ public static class WorkspaceSearchLimits
     public const int MaxFileBytesToScan = 256 * 1024;
     public const int MaxFilesScanned = 200;
     public const int MaxDepth = 8;
+    public const int MaxEntriesScanned = 4096;
 }
 
 public sealed partial class SessionToolExecutor
@@ -175,6 +176,7 @@ public sealed partial class SessionToolExecutor
         await store.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
         var matches = new List<object>();
         var scanned = 0;
+        var visited = 0;
         var truncated = false;
         await WalkAsync(root, 0).ConfigureAwait(false);
         return JsonSerializer.Serialize(new
@@ -194,46 +196,54 @@ public sealed partial class SessionToolExecutor
                 return;
             }
 
-            IReadOnlyList<WorkspaceNode> nodes;
-            try
+            string? cursor = null;
+            do
             {
-                nodes = await ListExecutionWorkspaceAsync(sessionId, definition, logicalPath, cancellationToken).ConfigureAwait(false);
-            }
-            catch (AgentCoreException)
-            {
-                return;
-            }
-
-            if (nodes.Count == 1 && !nodes[0].Directory && string.Equals(nodes[0].LogicalPath, logicalPath, StringComparison.Ordinal))
-            {
-                await ConsiderFileAsync(nodes[0]).ConfigureAwait(false);
-                return;
-            }
-
-            foreach (var node in nodes)
-            {
-                if (matches.Count >= maxResults || scanned >= WorkspaceSearchLimits.MaxFilesScanned)
+                WorkspaceNodePage page;
+                try
+                {
+                    page = await ListExecutionWorkspacePageAsync(sessionId, definition, logicalPath, cursor, cancellationToken).ConfigureAwait(false);
+                }
+                catch (AgentCoreException)
+                {
+                    truncated = true; // Includes concurrent removal: this is an observation, not a snapshot.
+                    return;
+                }
+                foreach (var node in page.Entries)
+                {
+                    if (matches.Count >= maxResults || scanned >= WorkspaceSearchLimits.MaxFilesScanned
+                        || visited >= WorkspaceSearchLimits.MaxEntriesScanned)
+                    {
+                        truncated = true;
+                        return;
+                    }
+                    visited++;
+                    if (node.Directory)
+                    {
+                        if (depth < WorkspaceSearchLimits.MaxDepth)
+                            await WalkAsync(node.LogicalPath, depth + 1).ConfigureAwait(false);
+                        else truncated = true;
+                    }
+                    else await ConsiderFileAsync(node).ConfigureAwait(false);
+                }
+                if (page.NextPath is null)
+                {
+                    truncated |= page.Truncated;
+                    return;
+                }
+                if (cursor is not null && string.CompareOrdinal(page.NextPath, cursor) <= 0)
+                {
+                    truncated = true; // A faulty/churning cursor must not loop forever.
+                    return;
+                }
+                cursor = page.NextPath;
+                if (matches.Count >= maxResults || scanned >= WorkspaceSearchLimits.MaxFilesScanned
+                    || visited >= WorkspaceSearchLimits.MaxEntriesScanned)
                 {
                     truncated = true;
                     return;
                 }
-
-                if (node.Directory)
-                {
-                    if (depth < WorkspaceSearchLimits.MaxDepth)
-                    {
-                        await WalkAsync(node.LogicalPath, depth + 1).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        truncated = true;
-                    }
-
-                    continue;
-                }
-
-                await ConsiderFileAsync(node).ConfigureAwait(false);
-            }
+            } while (cursor is not null);
         }
 
         async Task ConsiderFileAsync(WorkspaceNode node)
@@ -264,7 +274,8 @@ public sealed partial class SessionToolExecutor
                 }
                 catch (AgentCoreException)
                 {
-                    // Filename matches can still be returned when a file cannot be decoded.
+                    // Filename evidence survives a read failure, but content coverage is incomplete.
+                    truncated = true;
                 }
             }
 

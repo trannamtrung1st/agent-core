@@ -126,7 +126,10 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         {
             await EnsureAsync(sessionId, definition, ct);
             var owner = await OwnerAsync(sessionId, false, ct);
-            var page = Working(owner.Instance.InstanceId, sessionId).List(path, cursor, limit);
+            var files = Working(owner.Instance.InstanceId, sessionId);
+            var entry = files.Stat(path);
+            if (!entry.Directory) return new([Node(entry, CanWrite(owner.Session, owner.Instance))], null, false);
+            var page = files.List(path, cursor, limit);
             return new(page.Entries.Select(node => Node(node, CanWrite(owner.Session, owner.Instance))).ToArray(), page.NextPath, page.Truncated);
         }
         var nodes = (await ListAsync(sessionId, definition, path, ct)).OrderBy(node => node.LogicalPath, StringComparer.Ordinal)
@@ -139,6 +142,14 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
         await EnsureAsync(sessionId, definition, ct);
         var owner = await OwnerAsync(sessionId, false, ct);
         Working(owner.Instance.InstanceId, sessionId).RequireDirectory(path);
+    }
+
+    public async ValueTask<bool> TryWriteNewAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
+    {
+        var owner = await OwnerAsync(sessionId, true, cancellationToken);
+        await EnsureAsync(sessionId, owner.Session.Definition, cancellationToken);
+        return await WithIoAsync(sessionId, true, token => Working(owner.Instance.InstanceId, sessionId)
+            .TryWriteNewAsync(logicalPath, bytes, AgentWorkspaceLimits.MaxFileBytes, _maxWritableBytes, token), cancellationToken);
     }
 
     public async ValueTask WriteAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)

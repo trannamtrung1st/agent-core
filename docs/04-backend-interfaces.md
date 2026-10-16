@@ -55,6 +55,10 @@ Native live receipts pin their target Session and settle quiet evaluation withou
 
 ## Managed workspace refinement ports
 
+`ISessionWorkspace.TryWriteNewAsync` exclusively publishes a complete new file and returns false for any occupied name, including a directory or symlink. Attachment materialization uses sanitized names with at most 128 atomic attempts, independent of directory pagination. Ordinary `WriteAsync` retains intentional replacement semantics.
+
+Search consumes `ListPageAsync` / `ListNodePageAsync` lexical cursors within its result, file, entry and depth budgets. Missing/unreadable paths, exhausted budgets and incomplete pages set `truncated`; concurrent filesystem changes do not imply snapshot coverage.
+
 `WorkspaceTemplatePolicy` contains only an optional TemplateId. `ToolExecutionAdmission.WorkspaceCwd` carries the mailbox snapshot; `ToolExecutionResult.WorkspaceCwd` proposes a typed metadata effect applied only by the fenced Session mailbox. `workspace.cwd` validates a directory directly rather than searching a clipped parent listing.
 
 `AgentInstanceWorkspaceService` derives ownership from persisted Session metadata and rechecks lifecycle and effective current/admitted HomeAccess. Write and exact-once UTF-8 patch operate on present bytes. `CopyAcrossScopesAsync` streams directly between the two trusted scopes, retaining partial copies after an execution error. No file revision, hash, transfer DTO, tree planner or snapshot journal authorizes these operations. Providers and physical paths remain Infrastructure-private.
@@ -792,6 +796,8 @@ Eleven tools: `drive.accounts`, `list`, `search`, `get`, `create_folder`, `uploa
 `web.download` is an exact-authorized, configuration-gated Session `Write`, with normal non-replayable Run effect fencing and no separate sensitive-action approval. Execution checks active Session/Instance ownership, validates explicit logical destinations before dispatch, and replaces the present file atomically through `AgentInstanceWorkspaceService.CommitBinaryAsync` in durable `/home` or owned `/working`. File revision/hash preconditions are rejected; normal Run effect fencing and exact transferred-byte receipts remain. Every result/file is untrusted. Tool JSON contains metadata only; file bytes never enter model messages or Run checkpoints. Discovery and publication grant no implicit authority; General Assistant v29 explicitly authorizes the tool, while earlier versions retain their original grants.
 
 ## OpenSandbox ports
+
+`StopSessionAsync` carries a typed `SandboxStopIntent` independently of optional generation/execution identity fences. `SessionLifecycle` and `PolicyChanged` preserve retained selection; only `OwnerReset` clears it. Policy enforcement supplies `PolicyChanged`, including cancellation receipts and reconciliation after pending remote cleanup. A retained revoked Profile remains unavailable until explicitly reselected or reset.
 
 `ISandboxService` accepts trusted `SandboxAccess` (Session/Instance, live Run claim, tool-call ID, immutable profile/Definition) and normalized `SandboxCommandRequest`. Execute, inspect/stop an owned execution, inspect/stop a Session generation and reconciliation stay behind this port. `SandboxCommandResult` returns a Core execution ID, status, separate bounded foreground streams, exit/duration, truncation, possible filesystem effects, process/container cleanup evidence and diagnostic ID. Background upstream logs are explicitly combined. Raw provider IDs, endpoint/key, SDK objects and host paths remain Infrastructure-only.
 

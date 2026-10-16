@@ -276,7 +276,6 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             if (!OciImageReference.Parse(lease.Profile.ImageReference).IsLocal) await RegistryAuthorizationProbe.CheckAsync(options, OciImageReference.Parse(lease.Profile.ImageReference), imageAuth, ct);
             await ValidateAccessAsync(access, ct);
             imageAuth = await Images.ResolveAuthAsync(access.Profile,ct,requireVerification:true);
-            phase = "mountPreparation";
             phase = "provisioning";
             sdk = await SdkSandbox.CreateAsync(new SandboxCreateOptions {
                 ConnectionConfig = Connection(), Image = lease.Profile.ImageReference, ImageAuth = imageAuth, TimeoutSeconds = initialTtl, ReadyTimeoutSeconds = 45,
@@ -289,6 +288,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             lease = await SaveAsync(lease with { ProviderId = sdk.Id }, ct);
             phase = "mountValidation";
             await CheckMountedReadinessAsync(sdk, mounted, ct);
+            phase = "processBaseline";
             lease = await SaveAsync(lease with { BaselineProcesses = await ProcessIdentitiesAsync(sdk, ct) }, ct);
             if (!string.IsNullOrWhiteSpace(lease.Profile.InitializationScript) || !string.IsNullOrWhiteSpace(lease.Profile.InstanceInitializationScript))
             {
@@ -306,12 +306,13 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             // SDK messages/bodies, provider IDs and credentials are never logged.
             var failure = error is SandboxApiException ? "http" : error is OperationCanceledException ? "canceled"
                 : error is HttpRequestException ? "transport" : "setup";
-            logger?.LogWarning("Sandbox provisioning failed. SessionId={SessionId} Generation={Generation} Failure={Failure} StatusCode={StatusCode} ProviderLinked={ProviderLinked}",
-                lease.SessionId, lease.Generation, failure, (error as SandboxApiException)?.StatusCode, lease.ProviderId is not null);
+            var diagnosticId = Guid.CreateVersion7().ToString("D");
+            logger?.LogWarning("Sandbox provisioning failed. DiagnosticId={DiagnosticId} SessionId={SessionId} Generation={Generation} ProfileId={ProfileId} Phase={Phase} Failure={Failure} ErrorType={ErrorType} StatusCode={StatusCode} ProviderLinked={ProviderLinked}",
+                diagnosticId, lease.SessionId, lease.Generation, lease.Profile.Id, phase, failure, error.GetType().Name, (error as SandboxApiException)?.StatusCode, lease.ProviderId is not null);
             lease = await store.GetLeaseAsync(access.SessionId, CancellationToken.None) ?? lease;
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             var terminated = lease.ProviderId is not null && await TryTerminateAsync(lease, cleanup.Token);
-            await SaveAsync(lease with { State = terminated ? SandboxLeaseState.Failed : SandboxLeaseState.NeedsReconciliation, DiagnosticId = Guid.CreateVersion7().ToString("D"),
+            await SaveAsync(lease with { State = terminated ? SandboxLeaseState.Failed : SandboxLeaseState.NeedsReconciliation, DiagnosticId = diagnosticId,
                 CleanupReason = phase == "initialization" ? "initializationFailed" : "setupFailed", FailurePhase = phase,
                 FailureCategory = error is AgentCoreException { Code: "WorkspaceQuotaExceeded" } ? "storageLimit" : error is OperationCanceledException ? "cancellation" : error is AgentCoreException { Code: "Forbidden" } ? "sourceAuthorizationChanged"
                     : phase.StartsWith("mount", StringComparison.Ordinal) ? "mountFailure" : "provisioningFailure",
@@ -418,9 +419,9 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             lease.CleanupReason, state == "EnforcementPending" || lease.State is SandboxLeaseState.Terminating or SandboxLeaseState.NeedsReconciliation, lease.CleanupPasses,
             lease.LastCleanupAttemptAt, lease.Initialization, lease.Profile.Name, lease.Profile.ImageReference, lease.CleanupReason == "reset" ? null : lease.SelectedProfileId ?? lease.Profile.Id, lease.TransitionProfileId, lease.TransitionPhase, lease.FailureCategory, lease.FailurePhase, lease.AdmissionRunId, lease.MountAuthority?.HomeAccess.ToString(), "sampled");
     }
-    public ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct = default, Guid? expectedGeneration = null)
-        => StopSessionAsync(trustedSessionId, ct, expectedGeneration, null, false);
-    public async ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct, Guid? expectedGeneration, Guid? expectedExecutionId, bool checkExecutionIdentity)
+    public ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct = default, Guid? expectedGeneration = null, SandboxStopIntent intent = SandboxStopIntent.SessionLifecycle)
+        => StopSessionAsync(trustedSessionId, ct, expectedGeneration, null, false, intent);
+    public async ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct, Guid? expectedGeneration, Guid? expectedExecutionId, bool checkExecutionIdentity, SandboxStopIntent intent = SandboxStopIntent.SessionLifecycle)
     {
         var gate = Gate(trustedSessionId); await gate.WaitAsync(ct);
         try
@@ -432,12 +433,12 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 throw AgentCoreErrors.Conflict("Sandbox execution changed. Inspect the latest evidence before resetting.");
             if (lease.State == SandboxLeaseState.Terminated)
             {
-                if (expectedGeneration is not null && lease.CleanupReason != "reset")
+                if (intent == SandboxStopIntent.OwnerReset && lease.CleanupReason != "reset")
                     await SaveAsync(lease with { CleanupReason = "reset", SelectedProfileId = null, TransitionProfileId = null, TransitionProfileRevision = null, TransitionPhase = null }, ct);
                 return;
             }
             var metadata = await sessions.LoadMetadataAsync(trustedSessionId, ct);
-            var reason = expectedGeneration is not null ? "reset" : metadata is null || metadata.DurablyDeletedAt is not null ? "sessionDeleted"
+            var reason = intent == SandboxStopIntent.OwnerReset ? "reset" : intent == SandboxStopIntent.PolicyChanged ? "policyChanged" : metadata is null || metadata.DurablyDeletedAt is not null ? "sessionDeleted"
                 : metadata.ArchivedAt is not null ? "sessionArchived" : metadata.Status is SessionStatus.Ending or SessionStatus.Ended ? "sessionEnded"
                 : metadata.LifecycleStatus != SessionLifecycleStatus.Active ? "sessionDeactivated" : "sessionLifecycle";
             lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminating, CleanupReason = reason, SelectedProfileId = reason == "reset" ? null : lease.SelectedProfileId,
@@ -451,7 +452,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             {
                 // Persist termination intent before touching the remote generation.
                 pending = pending with { FailureCategory = pending.FailureCategory ?? "cancellation",
-                    CancellationReason = reason == "reset" ? "ownerReset" : "sessionLifecycle" };
+                    CancellationReason = reason == "reset" ? "ownerReset" : reason == "policyChanged" ? "policyChanged" : "sessionLifecycle" };
                 await SaveReceiptAsync(pending, false, ct);
             }
             if (!await TryTerminateRemoteAsync(lease, ct)) throw AgentCoreErrors.Persistence("Sandbox cleanup is pending; its durable receipt will be reconciled.");
@@ -492,8 +493,14 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                     || lease.State is SandboxLeaseState.Provisioning or SandboxLeaseState.Terminating or SandboxLeaseState.NeedsReconciliation or SandboxLeaseState.Failed;
                 if (!retire)
                 {
-                    try { await CheckMountedAuthorityAsync(lease, ct); CanonicalSandboxMountResolver.CheckUsage(ResolveMounts(lease), lease.Profile.StorageBytes, ct); }
-                    catch (Exception) when (!ct.IsCancellationRequested) { retire = true; }
+                    try { await CheckMountedAuthorityAsync(lease, ct); }
+                    catch (Exception) when (!ct.IsCancellationRequested)
+                    { retire = true; lease = lease with { CleanupReason = "policyChanged" }; }
+                    if (!retire)
+                    {
+                        try { CanonicalSandboxMountResolver.CheckUsage(ResolveMounts(lease), lease.Profile.StorageBytes, ct); }
+                        catch (Exception) when (!ct.IsCancellationRequested) { retire = true; }
+                    }
                 }
                 if (!retire && execution is { State: SandboxExecutionState.Running or SandboxExecutionState.Dispatching })
                 {
@@ -524,8 +531,8 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         var id = lease.ActiveExecutionId ?? lease.LastExecutionId;
         if (id is { } executionId && await store.GetExecutionAsync(lease.SessionId, executionId, ct) is { } execution)
         {
-            if (execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running && lease.CleanupReason is "reset" or "cancelled" or "sessionLifecycle" or "sessionDeleted" or "sessionArchived" or "sessionEnded")
-                execution = execution with { State = SandboxExecutionState.Canceled, FailureCategory = "cancellation", CancellationReason = lease.CleanupReason == "reset" ? "ownerReset" : "sessionLifecycle" };
+            if (execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running && lease.CleanupReason is "reset" or "cancelled" or "sessionLifecycle" or "sessionDeleted" or "sessionArchived" or "sessionEnded" or "policyChanged")
+                execution = execution with { State = SandboxExecutionState.Canceled, FailureCategory = "cancellation", CancellationReason = lease.CleanupReason == "reset" ? "ownerReset" : lease.CleanupReason == "policyChanged" ? "policyChanged" : "sessionLifecycle" };
             await SettleTerminatedExecutionAsync(lease, execution, ct);
             return;
         }

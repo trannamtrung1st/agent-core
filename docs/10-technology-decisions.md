@@ -50,7 +50,7 @@ Mounted storage limits must identify verified kernel enforcement versus sampled
 observations or unknown usage. Unsupported topology, Unix identity or mount access
 fails visibly as `MountIncompatible`; never use hidden staging or world-writable
 permissions. Native and packaged Core must share proven daemon-visible backing
-storage. Remote Git still requires Profile-authorized egress.
+storage. This release supports local/offline Git only: sandbox generations use deny-all egress with no approved remote-Git opt-in. Remote clone/fetch/push requires a separately specified and verified narrow host/Profile authorization; it is outside this release. Existing Core web/Drive download capabilities retain their independent authority.
 
 Implementation and scoped local acceptance completed on 2026-10-16; the
 [verification ledger](reports/canonical-workspace-cutover-verification-2026-10-16.md) records exact source, native/packaged/runtime evidence and deployment limits.

@@ -16,6 +16,32 @@ public sealed class CanonicalWorkspaceFilesystemTests : IDisposable
     private static async Task<string> Read(CanonicalWorkspaceFilesystem fs, string path) =>
         Encoding.UTF8.GetString(await fs.ReadAsync(path, 1024 * 1024));
 
+    [Theory]
+    [InlineData("file")]
+    [InlineData("directory")]
+    [InlineData("symlink")]
+    public async Task Exclusive_publication_preserves_a_concurrent_external_destination(string kind)
+    {
+        var working = Working(); working.Ensure();
+        var target = Path.Combine(working.PhysicalRoot, "attachment.txt");
+        await Write(working, "/working/original", "original");
+        working.BeforeOpen = _ =>
+        {
+            if (kind == "file") File.WriteAllText(target, "external");
+            else if (kind == "directory") Directory.CreateDirectory(target);
+            else File.CreateSymbolicLink(target, "original");
+        };
+        Assert.False(await working.TryWriteNewAsync("/working/attachment.txt", "attachment"u8.ToArray(), 1024, 4096));
+        working.BeforeOpen = null;
+        Assert.Equal("original", await Read(working, "/working/original"));
+        if (kind == "file") Assert.Equal("external", await File.ReadAllTextAsync(target));
+        else Assert.Equal(kind, working.Stat("/working/attachment.txt").Kind);
+        Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(working.PhysicalRoot), p => p.EndsWith(".write", StringComparison.Ordinal));
+        working.BeforeOpen = null;
+        Assert.True(await working.TryWriteNewAsync("/working/attachment-2.txt", "attachment"u8.ToArray(), 1024, 4096));
+        Assert.Equal("attachment", await Read(working, "/working/attachment-2.txt"));
+    }
+
     [Fact]
     public async Task Present_bytes_are_shared_immediately_and_reopen_keeps_normal_names_and_empty_directories()
     {

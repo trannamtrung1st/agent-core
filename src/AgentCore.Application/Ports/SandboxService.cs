@@ -18,15 +18,17 @@ public sealed record SandboxEnvironmentInfo(Guid SessionId, Guid Generation, str
     string? CleanupReason = null, bool CleanupPending = false, int CleanupPasses = 0, DateTimeOffset? LastCleanupAttemptAt = null,
     SandboxInitializationEvidence? Initialization = null, string? ProfileName = null, string? ImageReference = null, string? SelectedProfileId = null, string? TransitionProfileId = null, string? TransitionPhase = null, string? FailureCategory = null, string? FailurePhase = null, Guid? AgentRunId = null, string? HomeAccess = null, string StorageEnforcement = "sampled");
 
+public enum SandboxStopIntent { SessionLifecycle, OwnerReset, PolicyChanged }
+
 public interface ISandboxService
 {
     ValueTask<SandboxCommandResult> ExecuteAsync(SandboxAccess access, SandboxCommandRequest command, CancellationToken ct = default);
     ValueTask<SandboxCommandResult> InspectProcessAsync(Guid trustedSessionId, Guid processId, CancellationToken ct = default);
     ValueTask<SandboxCommandResult> StopProcessAsync(Guid trustedSessionId, Guid processId, CancellationToken ct = default);
     ValueTask<SandboxEnvironmentInfo?> InspectAsync(Guid trustedSessionId, CancellationToken ct = default);
-    ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct = default, Guid? expectedGeneration = null);
-    ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct, Guid? expectedGeneration, Guid? expectedExecutionId, bool checkExecutionIdentity)
-        => StopSessionAsync(trustedSessionId, ct, expectedGeneration);
+    ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct = default, Guid? expectedGeneration = null, SandboxStopIntent intent = SandboxStopIntent.SessionLifecycle);
+    ValueTask StopSessionAsync(Guid trustedSessionId, CancellationToken ct, Guid? expectedGeneration, Guid? expectedExecutionId, bool checkExecutionIdentity, SandboxStopIntent intent = SandboxStopIntent.SessionLifecycle)
+        => StopSessionAsync(trustedSessionId, ct, expectedGeneration, intent);
     ValueTask ReconcileAsync(CancellationToken ct = default);
 }
 

@@ -23,7 +23,7 @@ public sealed class SandboxPolicyEnforcement(ISandboxStore store, ISandboxServic
             foreach (var lease in await store.ListLeasesAsync(timeout.Token))
                 if (lease.AgentInstanceId == instanceId && lease.State != SandboxLeaseState.Terminated
                     && (await sandbox.InspectAsync(lease.SessionId, timeout.Token))?.State == "EnforcementPending")
-                    await sandbox.StopSessionAsync(lease.SessionId, timeout.Token, lease.Generation);
+                    await sandbox.StopSessionAsync(lease.SessionId, timeout.Token, lease.Generation, SandboxStopIntent.PolicyChanged);
             return await ObserveAsync(instanceId, timeout.Token) == "Enforced";
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }

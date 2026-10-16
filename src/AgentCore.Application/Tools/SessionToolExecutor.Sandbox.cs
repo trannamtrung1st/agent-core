@@ -64,7 +64,7 @@ public sealed partial class SessionToolExecutor
         if (call.Name == ToolCatalog.SandboxReset)
         {
             var observed = await sandboxService.InspectAsync(sessionId, ct);
-            await sandboxService.StopSessionAsync(sessionId, ct, observed?.Generation, observed?.ActiveExecutionId ?? observed?.LastExecutionId, true);
+            await sandboxService.StopSessionAsync(sessionId, ct, observed?.Generation, observed?.ActiveExecutionId ?? observed?.LastExecutionId, true, SandboxStopIntent.OwnerReset);
             return TextResult("""{"ok":true,"status":"terminated","message":"Sandbox-only state was discarded. Canonical /working, /home and Artifacts are preserved; the next command provisions a new generation."}""");
         }
         SandboxCommandResult result;

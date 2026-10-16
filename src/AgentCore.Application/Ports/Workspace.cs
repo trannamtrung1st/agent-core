@@ -42,6 +42,10 @@ public interface ISessionWorkspace
         string logicalPath,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Atomically publishes a new file; false means the name is already occupied (including links/directories).</summary>
+    ValueTask<bool> TryWriteNewAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException("Exclusive workspace creation is unavailable.");
+
     ValueTask WriteAsync(
         Guid sessionId,
         string logicalPath,

@@ -26,7 +26,9 @@ public sealed class FileAgentInstanceWorkspaceStore(string workspaceRoot, IAgent
         if (limit is < 1 or > AgentWorkspaceLimits.MaxPageItems) throw AgentCoreErrors.Validation("Invalid home page size.");
         prefix = AgentHomePath.Normalize(prefix, false);
         var files = await FilesAsync(instanceId, false, cancellationToken);
-        var page = files.List(prefix, afterPath, limit);
+        var entry = files.Stat(prefix);
+        var page = entry.Directory ? files.List(prefix, afterPath, limit)
+            : new CanonicalWorkspaceFilesystem.Page([entry], null, false);
         CanonicalWorkspaceFilesystem.Usage? usage = null;
         try { usage = files.Measure(cancellationToken); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or AgentCoreException) { /* Report unknown, never a passing quota. */ }

@@ -26,6 +26,57 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(_factory.Services)); return client;
     }
 
+    [Theory]
+    [InlineData("/home")]
+    [InlineData("/working")]
+    public async Task Search_pages_late_nested_directories_and_reports_file_budget_cutoff(string scope)
+    {
+        using var client = Owner(); var owner = await CreateInstance(client, 21); var session = await CreateSession(client, owner);
+        var scratch = (FileSessionWorkspace)_factory.Services.GetRequiredService<ISessionWorkspace>();
+        var snapshot = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(session))!;
+        await scratch.EnsureAsync(session, snapshot.Definition);
+        string physical;
+        if (scope == "/working") physical = await scratch.PhysicalWorkingDirectoryAsync(session);
+        else
+        {
+            await _factory.Services.GetRequiredService<IAgentInstanceWorkspaceStore>().WriteFileAsync(owner, "/home/origin", "x"u8.ToArray());
+            physical = Path.Combine(Directory.GetParent(Directory.GetParent(await scratch.PhysicalWorkingDirectoryAsync(session))!.FullName)!.Parent!.FullName, "home");
+        }
+        for (var n = 0; n < 300; n++) Directory.CreateDirectory(Path.Combine(physical, $"a-{n:D3}"));
+        var nested = Path.Combine(physical, "z-last", "nested"); Directory.CreateDirectory(nested);
+        await File.WriteAllTextAsync(Path.Combine(nested, "needle.txt"), "late-target");
+        var executor = _factory.Services.GetRequiredService<SessionToolExecutor>();
+        async Task<System.Text.Json.JsonElement> Search(string path, string query)
+        {
+            var result = await executor.ExecuteAsync(snapshot.Definition, session,
+                new(Guid.NewGuid().ToString(), ToolCatalog.WorkspaceSearch, System.Text.Json.JsonSerializer.Serialize(new { path, query })), 8192);
+            return System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(result.Text!);
+        }
+        var found = await Search(scope, "late-target");
+        Assert.False(found.GetProperty("truncated").GetBoolean());
+        Assert.Contains(scope + "/z-last/nested/needle.txt", found.GetRawText());
+        Assert.Single((await Search(scope + "/z-last/nested/needle.txt", "late-target")).GetProperty("matches").EnumerateArray());
+        var crowded = Path.Combine(physical, "crowded"); Directory.CreateDirectory(crowded);
+        for (var n = 0; n < 300; n++) await File.WriteAllTextAsync(Path.Combine(crowded, $"a-{n:D3}"), "no-match");
+        await File.WriteAllTextAsync(Path.Combine(crowded, "z-needle"), "late-target");
+        var cutoff = await Search(scope + "/crowded", "late-target");
+        Assert.True(cutoff.GetProperty("truncated").GetBoolean());
+        Assert.Empty(cutoff.GetProperty("matches").EnumerateArray());
+        if (scope == "/working")
+        {
+            var racy = Path.Combine(physical, "racy"); Directory.CreateDirectory(racy);
+            var gone = Path.Combine(racy, "gone.txt"); await File.WriteAllTextAsync(gone, "late-target");
+            scratch.BeforeFilesystemRead = _ => { File.Delete(gone); return ValueTask.CompletedTask; };
+            try
+            {
+                var churn = await Search(scope + "/racy", "late-target");
+                Assert.True(churn.GetProperty("truncated").GetBoolean());
+                Assert.Empty(churn.GetProperty("matches").EnumerateArray());
+            }
+            finally { scratch.BeforeFilesystemRead = null; }
+        }
+    }
+
     [Fact]
     public async Task Owner_filter_path_reads_and_current_path_deletion_are_enforced()
     {

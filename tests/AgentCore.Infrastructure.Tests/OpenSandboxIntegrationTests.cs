@@ -28,12 +28,19 @@ public sealed class OpenSandboxFactAttribute : FactAttribute
     }
 }
 
-public sealed class OpenSandboxIntegrationTests
+public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+    private async Task<Fixture> CreateFixture(string? initializationScript = null, int idleTtl = 300, int maxCommand = 120, int maxLifetime = 900)
+    {
+        var fixture = await Fixture.Create(initializationScript, idleTtl, maxCommand, maxLifetime);
+        fixture.Report = output.WriteLine;
+        return fixture;
+    }
+
     [OpenSandboxFact]
     public async Task Canonical_workspace_and_shell_share_cwd_and_explicit_shell_cwd_is_one_call_only()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         await f.Home.StructureAsync(f.Session.AgentInstanceId, [new("mkdir", Path:"/home/project")]);
         var definition = f.Definition with { Environment = new(ToolAllowlist:[ToolCatalog.WorkspaceCwd, ToolCatalog.WorkspaceWrite, ToolCatalog.SandboxExec]),
             ExecutionSandboxProfile = f.Profile, ExecutionSandboxProfiles = [f.Profile] };
@@ -60,12 +67,12 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Canonical_home_is_shared_live_while_session_working_and_git_remain_private()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         await f.Home.WriteFileAsync(f.Session.AgentInstanceId, "/home/shared.txt", "core"u8.ToArray());
         var sibling = await f.SiblingAccess();
         try
         {
-            var first = await f.Exec("set -eu; test \"$(cat /home/shared.txt)\" = core; printf shell > /home/shared.txt; printf private > private.txt; mkdir project; cd project; git init -q; printf project > README.md; git -c user.name=Fixture -c user.email=fixture@example.invalid add README.md; git -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm initial; git checkout -qb next; git clone -q . clone; test -f clone/README.md; cd /working; git init -q; git -c user.name=Fixture -c user.email=fixture@example.invalid add private.txt; git -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm root; git checkout -qb root-proof; git clone -q . root-clone; test -f root-clone/private.txt");
+            var first = await f.Exec("set -eu; id; ls -ldn /working; test \"$(cat /home/shared.txt)\" = core; printf shell > /home/shared.txt; printf private > private.txt; mkdir project; cd project; git init -q; printf project > README.md; git -c user.name=Fixture -c user.email=fixture@example.invalid add README.md; git -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm initial; git checkout -qb next; git clone -q . clone; test -f clone/README.md; cd /working; git init -q; git -c user.name=Fixture -c user.email=fixture@example.invalid add private.txt; git -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm root; git checkout -qb root-proof; git clone -q . root-clone; test -f root-clone/private.txt");
             Assert.True(first.ExitCode == 0, first.Stdout + first.Stderr);
             Assert.Equal("shell", Encoding.UTF8.GetString((await f.Home.ReadAsync(f.Session.AgentInstanceId, "/home/shared.txt")).Bytes));
             var observed = await f.Service.ExecuteAsync(sibling, new("test ! -e /working/private.txt && cat /home/shared.txt; printf sibling > /home/from-sibling.txt"));
@@ -80,9 +87,39 @@ public sealed class OpenSandboxIntegrationTests
     }
 
     [OpenSandboxFact]
+    public async Task Admin_policy_retirement_keeps_alternate_selection_and_revocation_requires_explicit_reselection_or_reset()
+    {
+        await using var f = await CreateFixture();
+        var alternate = await f.AddProfile("alternate", f.Profile.ImageReference);
+        var background = await f.Service.ExecuteAsync(f.Access(), new("sleep 120", Background:true, ProfileId:alternate.Id));
+        Assert.Equal("Running", background.Status);
+        var enforcement = new AgentCore.Application.Admin.SandboxPolicyEnforcement(f.Store, f.Service);
+        await f.ChangeHome(HomeAccess.ReadOnly);
+        Assert.True(await enforcement.EnforceAsync(f.Session.AgentInstanceId));
+        Assert.Equal("alternate", (await f.Store.GetLeaseAsync(f.Session.SessionId))!.SelectedProfileId);
+        Assert.Equal("policyChanged", (await f.Store.GetExecutionAsync(f.Session.SessionId, background.ExecutionId))!.CancellationReason);
+        var readOnly = await f.Exec("if printf denied > /home/denied 2>/dev/null; then exit 70; fi; printf retained > /working/retained");
+        Assert.Equal(0, readOnly.ExitCode); Assert.Equal("alternate", readOnly.ProfileId); Assert.NotEqual(background.Generation, readOnly.Generation);
+        await f.ChangeHome(HomeAccess.Disabled);
+        Assert.True(await enforcement.EnforceAsync(f.Session.AgentInstanceId));
+        var disabled = await f.Exec("test \"$HOME\" = /working; test ! -e /home/denied; cat /working/retained");
+        Assert.Equal(0, disabled.ExitCode); Assert.Equal("alternate", disabled.ProfileId); Assert.Equal("retained", disabled.Stdout);
+        Assert.NotEqual(readOnly.Generation, disabled.Generation);
+        await f.RevokeAlternate();
+        Assert.True(await enforcement.EnforceAsync(f.Session.AgentInstanceId));
+        Assert.Equal("alternate", (await f.Store.GetLeaseAsync(f.Session.SessionId))!.SelectedProfileId);
+        await Assert.ThrowsAsync<AgentCoreException>(() => f.Exec("true").AsTask());
+        var revoked = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
+        Assert.Equal(SandboxLeaseState.Terminated, revoked.State);
+        await f.Service.StopSessionAsync(f.Session.SessionId, expectedGeneration:revoked.Generation, intent:SandboxStopIntent.OwnerReset);
+        var reset = await f.Exec("cat retained");
+        Assert.Equal(0, reset.ExitCode); Assert.Equal(f.Profile.Id, reset.ProfileId);
+    }
+
+    [OpenSandboxFact]
     public async Task Canonical_live_policy_reduction_retires_rw_processes_before_ro_or_disabled_reuse()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         await f.Home.WriteFileAsync(f.Session.AgentInstanceId, "/home/retained.txt", "private-home"u8.ToArray());
         var background = await f.Service.ExecuteAsync(f.Access(), new("while :; do printf writer > /home/heartbeat; sleep 1; done", Background:true));
         Assert.Equal("Running", background.Status);
@@ -99,9 +136,24 @@ public sealed class OpenSandboxIntegrationTests
     }
 
     [OpenSandboxFact]
+    public async Task Attachment_exclusive_publication_preserves_a_sandbox_creation_between_staging_and_publish()
+    {
+        await using var f = await CreateFixture();
+        Assert.Equal(0, (await f.Exec("true")).ExitCode);
+        var files = new CanonicalWorkspaceFilesystem(await f.Workspace.PhysicalWorkingDirectoryAsync(f.Session.SessionId), "/working");
+        files.BeforeOpen = _ => Assert.Equal(0, Task.Run(async () => await f.Exec("printf sandbox-original > /working/attachment.txt")).GetAwaiter().GetResult().ExitCode);
+        Assert.False(await files.TryWriteNewAsync("/working/attachment.txt", "attachment"u8.ToArray(), 1024, 4096));
+        files.BeforeOpen = null;
+        Assert.Equal("sandbox-original", await f.Read("attachment.txt"));
+        Assert.True(await f.Workspace.TryWriteNewAsync(f.Session.SessionId, "/working/attachment-2.txt", "attachment"u8.ToArray()));
+        Assert.Equal("attachment", (await f.Exec("cat attachment-2.txt")).Stdout);
+        Assert.Equal("sandbox-original", await f.Read("attachment.txt"));
+    }
+
+    [OpenSandboxFact]
     public async Task Canonical_background_writes_are_visible_before_exit_and_failed_writes_survive_reset()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         var background = await f.Service.ExecuteAsync(f.Access(),new("printf started > /working/live.txt; sleep 120", Background:true));
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         while (true)
@@ -122,7 +174,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Completed_inspection_failure_retires_owned_generation_and_retains_exact_visible_files()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         f.Service.CompletedProcessInspection = _ => throw new IOException("Injected process inspection transport failure");
         var result = await f.Exec("printf recovered-exact > inspection.txt; exit 7");
         Assert.Equal("Completed",result.Status);Assert.Equal(7,result.ExitCode);Assert.True(result.FilesystemEffectsMayHaveOccurred);
@@ -136,7 +188,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Opaque_python_and_node_children_retire_generically_without_affecting_a_sibling_session()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         var sibling = await f.SiblingAccess();
         try
         {
@@ -161,7 +213,7 @@ public sealed class OpenSandboxIntegrationTests
     {
         foreach (var point in new[] { "commandCompleted", "retirementRequested", "remoteTerminated" })
         {
-            await using var f = await Fixture.Create();
+            await using var f = await CreateFixture();
             var access = f.Access("crash-" + point);
             var command = new SandboxCommandRequest("printf x >> once.txt; sleep 120 >/dev/null 2>&1 &");
             f.Service.FinalizationCheckpoint = stage => { if (stage == point) throw new OpenSandboxService.FinalizationCrash(); };
@@ -180,7 +232,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Generic_residual_processes_recycle_only_the_owned_generation_and_preserve_completed_files()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         var normal = await f.Exec("printf initial > ordinary.txt");
         Assert.Equal("Completed", normal.Status); Assert.False(normal.GenerationRecycled);
         var reused = await f.Exec("cat ordinary.txt"); Assert.Equal(normal.Generation, reused.Generation);
@@ -206,7 +258,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Tool_timeout_defaults_to_the_explicit_or_retained_profile_and_explicit_limits_still_clamp()
     {
-        await using var f = await Fixture.Create(maxCommand: 1);
+        await using var f = await CreateFixture(maxCommand: 1);
         var alternate = await f.AddProfile("longer", f.Profile.ImageReference, maxCommandSeconds: 4);
         var definition = f.Definition with { Environment = new(ToolAllowlist: [ToolCatalog.SandboxExec]) };
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:f.Session.AgentInstanceId, AgentRunId:f.Run.AgentRunId, OwnedSessionId:f.Session.SessionId);
@@ -232,7 +284,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task A_new_blocked_tool_call_reports_prior_evidence_without_claiming_an_effect()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         var definition = f.Definition with { Environment = new(ToolAllowlist: [ToolCatalog.SandboxExec]), ExecutionSandboxProfile=f.Profile, ExecutionSandboxProfiles=[f.Profile] };
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:f.Session.AgentInstanceId, AgentRunId:f.Run.AgentRunId, OwnedSessionId:f.Session.SessionId);
         var access = f.Access("background-once");
@@ -247,7 +299,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact(requiresOrdinaryImage: true)]
     public async Task Ordinary_dotnet_build_and_run_without_server_flags_retain_each_command()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         await f.UseImage(Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")!);
         var setup = await f.Exec("printf '<configuration><packageSources><clear /></packageSources></configuration>' > NuGet.Config; dotnet new console -o app --no-restore");
         Assert.True(setup.Status == "Completed", setup.Status + ": " + setup.Stderr);
@@ -266,7 +318,7 @@ public sealed class OpenSandboxIntegrationTests
     {
         foreach(var stage in new[]{"selection","termination","provisioning"})
         {
-            await using var f=await Fixture.Create();
+            await using var f=await CreateFixture();
             var target=await f.AddProfile("dotnet",Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")!);
             Assert.Equal(0,(await f.Exec("printf once > transition.txt")).ExitCode);
             if(stage!="selection")await f.Service.StopSessionAsync(f.Session.SessionId);
@@ -290,7 +342,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Sampled_canonical_storage_guard_terminates_excessive_writes_before_a_long_command_finishes()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         await f.LimitStorage(32);
         var started=DateTimeOffset.UtcNow;
         var result=await f.Exec("dd if=/dev/zero of=oversize bs=4096 count=1 2>/dev/null; sleep 120");
@@ -303,7 +355,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact(requiresOrdinaryImage: true, requiresAlternateImage:true)]
     public async Task Authorized_profiles_switch_once_preserve_files_and_remain_session_scoped_after_reopen()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         var dotnet = await f.AddProfile("dotnet", Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")!);
         var minimal = await f.AddProfile("minimal", Environment.GetEnvironmentVariable("AGENTCORE_OSB_ALTERNATE_IMAGE")!);
         Assert.Equal(0, (await f.Exec("printf exact > switch.txt")).ExitCode);
@@ -339,14 +391,14 @@ public sealed class OpenSandboxIntegrationTests
         var active = (await f.Service.InspectAsync(f.Session.SessionId))!;
         await Assert.ThrowsAsync<AgentCoreException>(() => f.Service.ExecuteAsync(f.Access(), new("true", ProfileId: "forbidden")).AsTask());
         Assert.Equal(active.Generation, (await f.Service.InspectAsync(f.Session.SessionId))!.Generation);
-        await f.Service.StopSessionAsync(f.Session.SessionId, expectedGeneration: active.Generation);
+        await f.Service.StopSessionAsync(f.Session.SessionId, expectedGeneration: active.Generation, intent: AgentCore.Application.Ports.SandboxStopIntent.OwnerReset);
         Assert.Equal(f.Profile.Id, (await f.Exec("cat switch.txt")).ProfileId); // Explicit reset returns to default.
     }
 
     [OpenSandboxFact(requiresOrdinaryImage: true)]
     public async Task Unavailable_default_does_not_revoke_an_independently_verified_alternate_and_blocked_generation_cannot_be_bypassed()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         var alternate = await f.AddProfile("dotnet", Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")!);
         await f.Store.SaveProfileAsync(f.Profile with { Revision = 2, Enabled = false }, 1);
         Assert.Equal(0, (await f.Service.ExecuteAsync(f.Access(), new("dotnet --version", ProfileId: alternate.Id))).ExitCode);
@@ -362,7 +414,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Confirmed_foreground_cancellation_retains_receipt_and_allows_a_new_independent_command_without_replay()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         Assert.Equal(0, (await f.Exec("printf safe > retained.txt")).ExitCode);
         using var canceled = new CancellationTokenSource();
         var access = f.Access("cancelled-once");
@@ -384,7 +436,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact(requiresOrdinaryImage: true)]
     public async Task Ordinary_dotnet_image_verifies_without_python_and_commands_modify_canonical_files()
     {
-        await using var f = await Fixture.Create("printf compatible");
+        await using var f = await CreateFixture("printf compatible");
         var ordinary = f.Profile with { ImageReference = Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")! };
         foreach (var imageOnly in new[] { true, false })
         {
@@ -409,7 +461,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task One_second_combined_setup_budget_can_execute_short_scripts_and_verify_without_rounding_it_to_zero()
     {
-        await using var f=await Fixture.Create("printf Profile",maxCommand:1);
+        await using var f=await CreateFixture("printf Profile",maxCommand:1);
         f.SetInstanceSetup("printf Instance",1);
         var result=await f.Service.ExecuteAsync(f.Access(),new("true",TimeoutSeconds:1));
         Assert.Equal(0,result.ExitCode);
@@ -421,7 +473,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Instance_setup_runs_after_profile_once_with_observable_bounded_output_and_visible_partial_writes_on_failure()
     {
-        await using var f = await Fixture.Create("printf Profile; printf ProfileErr >&2; printf P > setup-order.txt");
+        await using var f = await CreateFixture("printf Profile; printf ProfileErr >&2; printf P > setup-order.txt");
         f.SetInstanceSetup("test $(cat setup-order.txt) = P; printf Instance; printf InstanceErr >&2; printf I >> setup-order.txt",7);
         Assert.Equal(0,(await f.Exec("cat setup-order.txt")).ExitCode);
         var first=(await f.Service.InspectAsync(f.Session.SessionId))!;
@@ -434,7 +486,7 @@ public sealed class OpenSandboxIntegrationTests
         var verified=await f.Service.VerifyProfileAsync(f.Profile,CancellationToken.None);Assert.True(verified.Passed,verified.Message);Assert.Contains("changed",verified.Stdout);
         var image=await f.Service.VerifyProfileAsync(f.Profile with {InstanceInitializationScript="exit 7"},CancellationToken.None,imageOnly:true);
         Assert.True(image.Passed);Assert.Empty(image.Stdout);
-        await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:first.Generation);
+        await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:first.Generation, intent: AgentCore.Application.Ports.SandboxStopIntent.OwnerReset);
         f.SetInstanceSetup("printf broken > partial.txt; echo failed >&2; exit 7",9);
 
         Assert.Equal("recovery_required",(await f.Exec("true")).Error);
@@ -449,7 +501,7 @@ public sealed class OpenSandboxIntegrationTests
     {
         async Task Exercise(bool background, bool initialization)
         {
-            await using var f = await Fixture.Create(initialization ? "sleep 65; printf initialized > initialized.txt" : null, idleTtl: 60, maxCommand: 90);
+            await using var f = await CreateFixture(initialization ? "sleep 65; printf initialized > initialized.txt" : null, idleTtl: 60, maxCommand: 90);
             var access = f.Access();
             var result = await f.Service.ExecuteAsync(access, new(initialization ? "cat initialized.txt" : "sleep 65; printf completed > result.txt", TimeoutSeconds: 90, Background: background));
             if (background)
@@ -473,7 +525,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Hard_maximum_lifetime_rejects_dispatch_without_replay_or_canonical_changes()
     {
-        await using var f = await Fixture.Create(idleTtl: 60, maxLifetime: 60);
+        await using var f = await CreateFixture(idleTtl: 60, maxLifetime: 60);
         var access = f.Access("too-long");
         await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Service.ExecuteAsync(access, new("printf forbidden > forbidden.txt", TimeoutSeconds: 120)));
         Assert.Null(await f.Store.GetOperationAsync(f.Session.SessionId, f.Run.AgentRunId, access.ToolCallId));
@@ -483,7 +535,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Verification_executes_initialization_rejects_broken_scripts_and_does_not_change_profile_configuration()
     {
-        await using var f = await Fixture.Create("printf harmless > initialization.txt; exit 7");
+        await using var f = await CreateFixture("printf harmless > initialization.txt; exit 7");
         var broken = await f.Service.VerifyProfileAsync(f.Profile, CancellationToken.None);
         Assert.False(broken.Passed); Assert.Equal("initialization", broken.FailureCode); Assert.Equal(7, broken.ExitCode);
         await f.Store.SaveVerificationAsync(broken);
@@ -500,7 +552,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Real_sdk_deadline_quarantines_the_generation_while_retaining_partial_files()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         Assert.Equal(0,(await f.Exec("printf safe > retained.txt")).ExitCode);
 
         var result=await f.Service.ExecuteAsync(f.Access(),new("printf partial > retained.txt; sleep 5",TimeoutSeconds:1));
@@ -510,7 +562,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Provisioning_orphan_reconciliation_kills_only_its_durable_generation_without_adopting_it()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         Assert.Equal(0,(await f.Exec("printf retained > orphan.txt")).ExitCode);
         var lease = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
         await f.Store.SaveLeaseAsync(lease with { Revision=lease.Revision+1,State=SandboxLeaseState.Provisioning,ProviderId=null },lease.Revision);
@@ -523,7 +575,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Retired_tool_never_dispatches_and_modern_arguments_remain_strict()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         var executor = f.Executor();
         var definition = f.Definition with { Environment = new(ToolAllowlist:["sandbox.run",ToolCatalog.SandboxExec]), ExecutionSandboxProfile=f.Profile };
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId:f.Session.AgentInstanceId, AgentRunId:f.Run.AgentRunId, OwnedSessionId:f.Session.SessionId);
@@ -540,7 +592,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Idle_transport_pause_preserves_generation_but_explicit_deactivation_terminates_it()
     {
-        await using var f = await Fixture.Create("printf I >> init-count.txt");
+        await using var f = await CreateFixture("printf I >> init-count.txt");
         Assert.Equal(0, (await f.Exec("true")).ExitCode);
         var generation = (await f.Service.InspectAsync(f.Session.SessionId))!.Generation;
         await f.Pause("disconnected"); f.Reopen(); await f.Service.ReconcileAsync();
@@ -554,7 +606,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Real_initialization_is_generation_pinned_and_expiration_reuses_canonical_files_without_replaying_commands()
     {
-        await using var f = await Fixture.Create("printf I >> init-count.txt");
+        await using var f = await CreateFixture("printf I >> init-count.txt");
         Assert.Equal(0,(await f.Exec("true")).ExitCode); Assert.Equal("I",await f.Read("init-count.txt"));
         var first = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
         f.Reopen(); Assert.Equal(0,(await f.Exec("true")).ExitCode); Assert.Equal("I",await f.Read("init-count.txt"));
@@ -562,8 +614,8 @@ public sealed class OpenSandboxIntegrationTests
         await f.ReviseScript("printf N >> init-count.txt");
         Assert.Equal(0,(await f.Service.ExecuteAsync(pinnedBeforeChange,new("true"))).ExitCode); Assert.Equal("I",await f.Read("init-count.txt"));
         Assert.Equal(1,(await f.Store.GetLeaseAsync(f.Session.SessionId))!.Profile.Revision);
-        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:Guid.NewGuid()));
-        await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:first.Generation);
+        await Assert.ThrowsAsync<AgentCoreException>(async () => await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:Guid.NewGuid(), intent: AgentCore.Application.Ports.SandboxStopIntent.OwnerReset));
+        await f.Service.StopSessionAsync(f.Session.SessionId,expectedGeneration:first.Generation, intent: AgentCore.Application.Ports.SandboxStopIntent.OwnerReset);
         Assert.Equal(0,(await f.Exec("true")).ExitCode); Assert.Equal("IN",await f.Read("init-count.txt"));
         var second = (await f.Store.GetLeaseAsync(f.Session.SessionId))!; Assert.NotEqual(first.Generation,second.Generation); Assert.Equal(2,second.Profile.Revision);
         var uri = new Uri(Environment.GetEnvironmentVariable("AGENTCORE_OSB_PROOF_URL") ?? "http://127.0.0.1:18080");
@@ -577,7 +629,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Reset_preserves_terminal_receipts_and_profile_disable_cleans_owned_generations()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         var background = await f.Service.ExecuteAsync(f.Access(),new("sleep 120",Background:true));
         var stopped = await f.Service.StopProcessAsync(f.Session.SessionId,background.ExecutionId);
         await f.Service.StopSessionAsync(f.Session.SessionId);
@@ -592,7 +644,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Real_sdk_persists_exact_scratch_reconnects_fences_replay_and_stops_owned_processes()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         var failed = await f.Exec("printf stdout; printf stderr >&2; printf durable > retained.txt; exit 7");
         Assert.Equal("Completed", failed.Status); Assert.Equal(7, failed.ExitCode); Assert.Equal("stdout",failed.Stdout); Assert.Equal("stderr",failed.Stderr);
         Assert.True(failed.FilesystemEffectsMayHaveOccurred); Assert.Equal("durable", await f.Read("retained.txt"));
@@ -633,7 +685,7 @@ public sealed class OpenSandboxIntegrationTests
     [OpenSandboxFact]
     public async Task Real_workbench_fixes_python_tests_runs_node_and_creates_office_bytes()
     {
-        await using var f = await Fixture.Create();
+        await using var f = await CreateFixture();
         Assert.Equal(0, (await f.Exec("python --version && node --version && tsc --version && libreoffice --version")).ExitCode);
         var failure = await f.Exec("printf 'def add(a,b): return a-b\n' > maths.py; printf 'from maths import add\ndef test_add(): assert add(2,3)==5\n' > test_maths.py; python -m pytest -q");
         Assert.True(failure.Status == "Completed", failure.Status + ": " + failure.Stderr);
@@ -652,6 +704,7 @@ public sealed class OpenSandboxIntegrationTests
 
     private sealed class Fixture : IAsyncDisposable
     {
+        public Action<string>? Report { get; set; }
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "agent-core-osb-" + Guid.NewGuid().ToString("N"));
         public AgentDefinition Definition { get; private set; } = null!; public SessionSnapshot Session { get; private set; } = null!;
         public AgentRun Run { get; private set; } = null!; public OpenSandboxService Service { get; private set; } = null!;
@@ -701,6 +754,8 @@ public sealed class OpenSandboxIntegrationTests
             var profile = _profile with { Id=id, Name=id, ImageReference=image, InitializationScript=null, MaxCommandSeconds=maxCommandSeconds??_profile.MaxCommandSeconds };
             await Store.SaveProfileAsync(profile, 0);
             var verification = await Service.VerifyProfileAsync(profile, default);
+            Report?.Invoke(System.Text.Json.JsonSerializer.Serialize(new { verification.ProfileId, verification.ProfileRevision,
+                verification.Passed, verification.FailureCode, verification.DiagnosticId, verification.Message }));
             Assert.True(verification.Passed, verification.Message); await Store.SaveVerificationAsync(verification);
             var all = (Definition.ExecutionSandboxProfiles ?? [_profile]).Append(profile).ToArray();
             Definition = Definition with { SandboxPolicy = new(_profile.Id, all.Select(p=>p.Id).ToArray()), ExecutionSandboxProfiles = all, ExecutionSandboxProfile = _profile };
@@ -734,6 +789,12 @@ public sealed class OpenSandboxIntegrationTests
             var current = (await _runs.GetAsync(owner, Run.AgentRunId))!;
             Run = await _runs.ApplyAsync(owner, Run.AgentRunId, new AgentRunCommand.RequestCancellation(current.Revision, DateTimeOffset.UtcNow, null));
         }
+        public async Task RevokeAlternate()
+        {
+            var instance = (await Instances.FindAsync(Session.AgentInstanceId))!;
+            await Instances.UpdateWithExpectedRevisionAsync(new(instance.InstanceId, instance.Revision, SetSettingsOverrides:true,
+                SettingsOverrides:(instance.SettingsOverrides ?? new()) with { SandboxAllowedProfileIds = new(new[] { _profile.Id }) }), DateTimeOffset.UtcNow);
+        }
         public async Task ChangeHome(HomeAccess access)
         {
             var owner = (await Instances.FindAsync(Session.AgentInstanceId))!;
@@ -763,6 +824,19 @@ public sealed class OpenSandboxIntegrationTests
         public async ValueTask DisposeAsync()
         {
             var cleaned = false;
+            var lease = await Store.GetLeaseAsync(Session.SessionId);
+            var receipt = lease?.LastExecutionId is { } id ? await Store.GetExecutionAsync(Session.SessionId, id) : null;
+            Report?.Invoke(System.Text.Json.JsonSerializer.Serialize(new {
+                Session.SessionId, DiagnosticId=lease?.DiagnosticId, State=lease?.State.ToString(), lease?.Generation,
+                ProfileId=lease?.Profile.Id, ProfileRevision=lease?.Profile.Revision, Image=lease?.Profile.ImageReference,
+                Cpu=lease?.Profile.Cpu, MemoryMiB=lease?.Profile.MemoryMiB, MaxLifetimeSeconds=lease?.Profile.MaxLifetimeSeconds,
+                lease?.SelectedProfileId,
+                lease?.FailurePhase, lease?.FailureCategory, lease?.SafeMessage, lease?.CleanupReason, lease?.TransitionPhase,
+                lease?.CreatedAt, lease?.ExpiresAt, lease?.CleanupPasses, lease?.MountAuthority, BaselineProcessCount=lease?.BaselineProcesses?.Count,
+                ExecutionId=receipt?.Id, ExecutionDiagnosticId=receipt?.DiagnosticId, ExecutionFailureCategory=receipt?.FailureCategory,
+                ExecutionState=receipt?.State.ToString(), receipt?.Phase, receipt?.CancellationReason, receipt?.FilesystemEffectsMayHaveOccurred,
+                receipt?.ExitCode, receipt?.TerminationConfirmed, receipt?.RemoteTerminationConfirmed, receipt?.GenerationRecycled
+            }));
             try
             {
                 // Create may fail before returning an ID. Use the production

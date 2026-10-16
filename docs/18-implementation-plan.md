@@ -1,5 +1,7 @@
 # Implementation Plan
 
+The [2026-10-16 review feedback follow-up](reports/canonical-workspace-feedback-fixes-2026-10-16.md) records the fresh-baseline fixture repair, atomic attachment publication, typed policy retirement, bounded paginated search and explicit offline Git scope. Its local evidence is separate from the unconfirmed historical hosted sandbox failure and does not reopen milestone acceptance.
+
 ## Canonical filesystem and direct mount cutover
 
 Owner-authorized 2026-10-15; **implemented and locally qualified 2026-10-16** on `develop/branch-1` from baseline `5e58dc81`. Ordinary canonical Instance `/home` and Session `/working`, exact RW/RO/disabled mounts, shared mailbox cwd, current-file APIs/tools/previews, process-only recovery and the fresh database baseline replace file rows/blobs, file/tree CAS and staged synchronization together. Run/configuration/lease fences, approvals, cleanup, State & Isolation presets and immutable source protections remain.

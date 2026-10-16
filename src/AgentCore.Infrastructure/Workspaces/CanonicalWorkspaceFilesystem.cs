@@ -166,6 +166,39 @@ internal sealed partial class CanonicalWorkspaceFilesystem
         finally { UnlinkAt(Fd(parent), temporary, 0); }
     }
 
+    internal async ValueTask<bool> TryWriteNewAsync(string path, ReadOnlyMemory<byte> bytes, long maxFileBytes,
+        long maxRootBytes, CancellationToken ct = default)
+    {
+        if (bytes.Length > maxFileBytes) throw AgentCoreErrors.WorkspaceQuotaExceeded();
+        using var root = OpenRoot(create: true);
+        // Resolve only the parent. An occupied leaf, including a symlink, must never be followed.
+        var relative = Relative(path);
+        if (relative.Length == 0) throw AgentCoreErrors.Forbidden("Workspace roots cannot be replaced.");
+        var parts = Parts(relative);
+        var resolvedParent = Resolve(root, string.Join('/', parts.SkipLast(1)), allowMissing: true);
+        using var parent = Descend(root, Parts(resolvedParent), create: true);
+        var name = Leaf(relative);
+        if (LStat(parent, name) is not null) return false;
+        if (Measure(root, ct).Bytes + bytes.Length > maxRootBytes) throw AgentCoreErrors.WorkspaceQuotaExceeded();
+        var temporary = "." + Guid.NewGuid().ToString("N") + ".write";
+        try
+        {
+            using (var handle = OpenChild(parent, temporary, write: true))
+            {
+                using var stream = new FileStream(handle, FileAccess.Write);
+                await stream.WriteAsync(bytes, ct);
+                await stream.FlushAsync(ct);
+            }
+            ct.ThrowIfCancellationRequested();
+            BeforeOpen?.Invoke(path); // Deterministic external-writer race coverage.
+            if (RenameNoReplace(parent, temporary, parent, name) == 0) return true;
+            if (Marshal.GetLastPInvokeError() == 17) return false; // EEXIST, for any occupied name.
+            ThrowIo("Workspace exclusive creation failed.");
+            return false;
+        }
+        finally { UnlinkAt(Fd(parent), temporary, 0); }
+    }
+
     internal void Mkdir(string path)
     {
         using var root = OpenRoot(create: true);

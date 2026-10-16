@@ -887,16 +887,19 @@ public sealed class SessionManager
         }
 
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
-        var existing = await workspace.ListAsync(sessionId, snapshot.Definition, "/working", cancellationToken)
-            .ConfigureAwait(false);
-        var taken = existing
-            .Where(node => !node.Directory)
-            .Select(node => Path.GetFileName(node.LogicalPath).ToLowerInvariant())
-            .ToHashSet(StringComparer.Ordinal);
-        var fileName = WorkspaceFileNames.Deduplicate(WorkspaceFileNames.Sanitize(source.DisplayName), taken);
+        var sanitized = WorkspaceFileNames.Sanitize(source.DisplayName);
+        var collisions = new HashSet<string>(StringComparer.Ordinal);
+        var fileName = sanitized;
         var logical = "/working/" + fileName;
         var started = Stopwatch.GetTimestamp();
-        await workspace.WriteAsync(sessionId, logical, bytes, cancellationToken).ConfigureAwait(false);
+        for (var attempt = 0; ; attempt++)
+        {
+            if (await workspace.TryWriteNewAsync(sessionId, logical, bytes, cancellationToken).ConfigureAwait(false)) break;
+            if (attempt >= 127) throw AgentCoreErrors.Conflict("Attachment filename is occupied. Rename the attachment and retry.");
+            collisions.Add(fileName.ToLowerInvariant());
+            fileName = WorkspaceFileNames.Deduplicate(sanitized, collisions);
+            logical = "/working/" + fileName;
+        }
         RuntimeTelemetry.Record("workspace", RuntimeTelemetry.ElapsedMs(started));
         var artifact = await artifacts.CreateAsync(
                 sessionId,

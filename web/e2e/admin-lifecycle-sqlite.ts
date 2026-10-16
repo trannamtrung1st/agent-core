@@ -35,12 +35,12 @@ subject_key = subject.lower().replace(" ", "-")
 con.execute(
     """INSERT INTO StructuredMemories (
         MemoryId, SessionId, Scope, Kind, Status, Subject, SubjectKey, Content,
-        Source, SourceEntryIdsJson, OwnerInstanceId, OwnerProfileId,
+        Source, SourceEntryIdsJson, DerivedFromMemoryIdsJson, OwnerInstanceId, OwnerProfileId,
         CreatedAtUtc, UpdatedAtUtc, ProvenanceRecordedAtUtc
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
     (
         memory_id, "00000000-0000-0000-0000-000000000000", 1, 0, 0,
-        subject, subject_key, content, "admin-lifecycle-seed", "[]",
+        subject, subject_key, content, "admin-lifecycle-seed", "[]", "[]",
         instance_id, profile_id, now, now, now,
     ),
 )
