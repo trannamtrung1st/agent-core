@@ -25,4 +25,11 @@ describe('canonical identity requests', () => {
     await expect(identityRequest('/api/v2/auth/login', { method: 'POST', signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+  it('does not label a successful mutation unsaved when its following read fails', async () => {
+    fetchMock.mockResolvedValueOnce(response(200, { token: 'one' })).mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(503, { reasonCode: 'service_unavailable' }));
+    await identityRequest('/api/v2/tenants/t/role-assignments', { method: 'POST', body: {} });
+    await expect(identityRequest('/api/v2/tenants/t/members')).rejects.toMatchObject({ status: 503, message: 'The service is temporarily unavailable. Check the latest information before retrying.' });
+    expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
+  });
 });

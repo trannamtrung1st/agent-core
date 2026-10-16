@@ -7,7 +7,7 @@ Owner request: implement the final proposal at `local/proposals/agent-core-multi
 | Phase | Deliverable / gate | Current status |
 | --- | --- | --- |
 | 0 | Source/route/store/effect inventory and ownership | Baseline inventoried; [boundary obligations](multitenant-iam-boundary-inventory-2026-10-16.md); no unowned boundary category |
-| 1 | Full UX contract and internal review before UI implementation | [UX specification](../19-multi-tenant-iam-ux.md) complete; internally reviewed against incumbent layouts and pinned brief; browser acceptance pending implementation |
+| 1 | Full UX contract and internal review before UI implementation | [UX specification](../19-multi-tenant-iam-ux.md) complete; internally reviewed against incumbent layouts and pinned brief; foundation UI evidence is in Phase 7; full successor browser acceptance remains pending |
 | 2 | Identity/authentication + canonical persistence + same-Account two-tenant negative tests | Identity/store/HTTP foundation implemented and focused tests passing; full resource ownership and Hub authentication integration still pending |
 | 3 | One scoped IAM engine, live authority, human-only reserve and service integration | Closed catalog, builtin/custom roles, scoped checks and access services implemented; resource/tool/background service integration pending |
 | 4 | Every tenant resource/store/effect cut over with negative tests | Pending |
@@ -41,7 +41,7 @@ Next required work is the tenant ownership/resource integration needed to finish
 
 Foundation code lives in Domain/Security, Application/Security + Ports/Iam, Infrastructure/Security, Api/Security. New identity services have no ASP.NET/EF dependencies in Application/Domain; human authentication and endpoint mapping are API concerns. Main DbContext adds the normalized identity model and an intermediate migration; all test databases are new temporary paths. Cookie key ring is isolated under configured credential roots. Do not use the Real application's populated database for tests or a reset.
 
-Working native check uses `--disable-build-servers -p:UseSharedCompilation=false -m:1` because an initial default shared-compiler build stalled. VSTest loopback needs approved local execution under the sandbox. There is no frontend execution claim and no CI request. Final source still needs canonical baseline consolidation, obsolete authority removal, bootstrap/launcher/test fixture updates across supported profiles and bounded Impeccable/browser acceptance.
+Working native check uses `--disable-build-servers -p:UseSharedCompilation=false -m:1` because an initial default shared-compiler build stalled. VSTest loopback needs approved local execution under the sandbox. That initial foundation checkpoint made no frontend execution claim; the later owner-prioritized pass below owns browser evidence. CI remains unrequested. Final source still needs canonical baseline consolidation, obsolete authority removal, bootstrap/launcher/test fixture updates across supported profiles and bounded Impeccable/browser acceptance.
 
 Final foundation rerun: **8/8 Infrastructure scenarios** and **6/6 API scenarios**, zero skips. `git diff --check` and relative-file-link/fence validation across fourteen changed Markdown documents pass. This is a verified local checkpoint, not full proposal completion or milestone acceptance.
 

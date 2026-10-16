@@ -21,6 +21,7 @@ export function Members({ context }: { context: TenantContext }) {
   const canAssign = context.permissions.includes('iam.roles.assign');
   const canInvite = context.permissions.includes('members.invite') && canAssign;
   const activeMember = state.data?.items.find(member => member.userId === selected);
+  const closeMember = () => { if (!busy) { setSelected(null); setAssignRole(undefined); setError(undefined); } };
   const roleName = (id: string) => roles.data?.items.find(role => role.roleId === id)?.name ?? 'Assigned role';
   const change = async (path: string, method: string, body?: unknown) => {
     setBusy(true); setError(undefined);
@@ -36,11 +37,11 @@ export function Members({ context }: { context: TenantContext }) {
     {error !== undefined && !selected && <AccessError error={error} retry={state.reload} />}
     {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : <Table<Member> className="admin-collection-table" rowKey="userId" dataSource={state.data?.items} pagination={{ current: page + 1, pageSize: 10, total: state.data?.total, showSizeChanger: false, responsive: true, onChange: value => { setPage(value - 1); setSelected(null); }, showTotal: total => `${total} ${total === 1 ? 'member' : 'members'}` }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No members to show." /> }} columns={[
       { title: 'Member', render: (_, member) => <Flex vertical gap="var(--ac-space-tight)"><Typography.Text strong>{member.displayName}</Typography.Text><Typography.Text type="secondary">{member.login.toLowerCase()}</Typography.Text><Flex wrap gap="var(--ac-space-tight)"><Tag>{memberStatus(member.status)}</Tag>{member.roles.map(role => <Typography.Text key={role.assignmentId} type="secondary">{roleName(role.roleId)}</Typography.Text>)}</Flex></Flex> },
-      { title: 'Actions', width: 110, render: (_, member) => <Button icon={<SettingOutlined aria-hidden />} onClick={() => { setError(undefined); setSelected(member.userId); }} aria-label={`Manage ${member.displayName}`}>Access</Button> }
+      { title: 'Actions', width: 110, render: (_, member) => <Button icon={<SettingOutlined aria-hidden />} onClick={() => { setError(undefined); setAssignRole(undefined); setSelected(member.userId); }} aria-label={`Manage ${member.displayName}`}>Access</Button> }
     ]} />}
-    <Drawer className="access-editor-drawer" title="Member access" open={!!selected} onClose={() => { if (!busy) { setSelected(null); setError(undefined); } }} size="large" styles={{ wrapper: { maxWidth: '100vw' } }}>
+    <Drawer className="access-editor-drawer" title="Member access" open={!!selected} onClose={closeMember} size="large" styles={{ wrapper: { maxWidth: '100vw' } }}>
       {error !== undefined && <div className="access-form-error"><AccessError error={error} retry={() => { state.reload(); roles.reload(); }} /></div>}
-      {state.loading ? <AccessLoading /> : activeMember ? <Flex vertical gap="var(--ac-space-section)">
+      {state.loading ? <AccessLoading /> : state.error ? <AccessError error={state.error} retry={state.reload} /> : activeMember ? <Flex vertical gap="var(--ac-space-section)">
         <Flex vertical gap="var(--ac-space-tight)"><Typography.Title level={4}>{activeMember.displayName}</Typography.Title><Typography.Text type="secondary">{activeMember.login.toLowerCase()}</Typography.Text><Typography.Text>{context.tenant.name} · {memberStatus(activeMember.status)}</Typography.Text></Flex>
         <Typography.Paragraph type="secondary">Organization-wide roles are inherited by its resources. Changing this membership does not change the person's access to other organizations.</Typography.Paragraph>
         <Typography.Title level={5}>Assigned roles</Typography.Title>
@@ -54,7 +55,7 @@ export function Members({ context }: { context: TenantContext }) {
           {context.permissions.includes('members.remove') && activeMember.status !== 2 && <Button danger disabled={busy} onClick={() => decision('Remove member', `Remove ${activeMember.displayName} from this organization? Their account and other memberships remain available.`, () => change(`/members/${activeMember.userId}/status`, 'PUT', { status: 2, expectedRevision: revision }), true)}>Remove member</Button>}
         </Flex>
         <Typography.Text type="secondary">At least one active owner must remain.</Typography.Text>
-      </Flex> : <Empty description="This member is no longer on the current page."><Button onClick={() => setSelected(null)}>Back to members</Button></Empty>}
+      </Flex> : <Empty description="This member is no longer on the current page."><Button onClick={closeMember}>Back to members</Button></Empty>}
     </Drawer>
     {invite && <InviteMember context={context} roles={roles.data?.items ?? []} rolesError={roles.error} rolesRetry={roles.reload} revision={revision} onClose={() => setInvite(false)} onCreated={() => { state.reload(); roles.reload(); }} />}
   </Flex>;

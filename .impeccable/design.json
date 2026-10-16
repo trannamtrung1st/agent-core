@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-16T11:51:19.942322+00:00",
+  "generatedAt": "2026-10-16T11:58:42.112716+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -315,9 +315,9 @@
     ],
     "inspection": {
       "branch": "main",
-      "baseCommit": "cca9050db44c6ee0cc77adf321420ca3c214caa8",
+      "baseCommit": "04c9c9537278d70ba50d8d43a7257466022f1ec8",
       "sourceSha256": {
-        ".agents/context/DESIGN.md": "3c740e72032091ae0aaac7993ede9dbc2728199d3a4585a0eda13c38941003c1",
+        ".agents/context/DESIGN.md": "4002b76912eaf27e79c60271df0b610d995cab98ebb28cce57c04554ecbb5c6a",
         ".agents/context/PRODUCT.md": "e2bdbdf0696ebfe2c07d82670c0ad6d33b475cf246f930a8123f5cc19a804eaa",
         "web/src/app.css": "dc468ad01500703521a4f484455e71531646aa453e21c5379d5f7051c9e111bd",
         "web/src/app/AppRouter.tsx": "5abd9590770a9535810e5cbb2aaca49052975a7f131a54f576151a4e4286e339",
@@ -330,7 +330,7 @@
         "web/src/features/access/AccessFeedback.tsx": "fdc04b0d6ddbbd367f5d6ae95d1b7e698397ad2a2cc97b2cbb8ab8c4d1a9c81d",
         "web/src/features/access/AccountForms.tsx": "62a822bd844235509266b14782391eebe07b180ed7e4f83fd79aaae74e0d2ad0",
         "web/src/features/access/InvitationAcceptance.tsx": "1470f5c3689f3fea9c2f69c9f38c8980e3b1e76f5c32b0f8265a8792e903cbb2",
-        "web/src/features/access/Members.tsx": "06f6326baffe1ea46cabaac9e015f26365daef2f0f1f6696694da5bfc617b52d",
+        "web/src/features/access/Members.tsx": "e82f2effca36ec0d28bf97e5f520f0febc2cdddd2c433f9f026aaa1b286381c4",
         "web/src/features/access/Organizations.tsx": "0eda7c1cd4a00e0aad5bf773fe94c92fe587f7d0954d7e12f7fc494a8017face",
         "web/src/features/access/Roles.tsx": "5b06a54e2aa5ce20d166e28ca480b5bd6f18f36c72d00e652ea9829395193d16",
         "web/src/features/access/accessRoute.ts": "0f40109d0c402e7ffab428b2247925b781e414081464fa4570d8373d3d8bb5f8",
@@ -374,15 +374,16 @@
         "web/src/features/filePreview/fileSource.ts": "933f574961f53d35e203ff4a09aff0542fb36360cf627fe909fc131113d88759",
         "web/src/features/filePreview/officeSource.ts": "a1d03786d9b2bc4e56b717a058959714313494ffd364971dc1d75f9d0a1a8a3e",
         "web/src/services/agentWorkspace.ts": "8a854df53db331ab20d358918c555086a64e525e0cdd52312832c2368e5df88f",
-        "web/src/services/identity.ts": "3998cd3ce1e305a30f73e5542ddad8ec2b0a508dec18071e4bed4c16e9d7b7dc",
+        "web/src/services/identity.ts": "2eb379e944e8abd1d073c7caadfc1a87f5e99255cb65f661f95d04269ed548d1",
         "web/src/services/sandboxes.ts": "96a8d1f7e0ad363bdeecd97551196755c7a33b460c2dd3a1485c4ff1320d4d8c",
         "web/src/services/stateIsolation.ts": "b1a87a108608e5abbd75a7f21d75530f70fe6862fec2b74384cb70a59de71ddb"
       },
-      "evidence": "docs/reports/design-system-access-sync-2026-10-16.md",
-      "scope": "Documentation-only design-system refresh through cca9050d: resolved Ant Design tokens, shared shell ownership and verified account/access patterns. Prior reports retain their own executed runtime and acceptance scope.",
+      "evidence": "docs/reports/access-foundation-review-2026-10-16.md",
+      "scope": "Focused identity/access consistency review and member inspector recovery candidate. Historical design and runtime reports retain their own acceptance scope; full resource/Hub/approval cutover remains pending.",
       "snapshotKind": "commit-candidate",
-      "inspectedAt": "2026-10-16T11:51:19.942322+00:00",
+      "inspectedAt": "2026-10-16T11:58:42.112716+00:00",
       "evidenceRecords": [
+        "docs/reports/access-foundation-review-2026-10-16.md",
         "docs/reports/design-system-access-sync-2026-10-16.md",
         "docs/reports/access-ui-polish-2026-10-16.md",
         "docs/reports/design-system-sync-2026-10-16.md",
@@ -400,8 +401,8 @@
         "docs/reports/oci-sandbox-final-hardening-2026-10-15.md",
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
-      "verification": "Resolved dark theme compared with YAML; canonical eight-section order, component references, exact narrative mapping, source fingerprints, Markdown links/fences and whitespace checked. No application tests or hosts started for this documentation-only refresh. Access runtime evidence remains in access-ui-polish-2026-10-16.md.",
-      "verificationReport": "docs/reports/design-system-access-sync-2026-10-16.md"
+      "verification": "Eight InMemory/SQLite IAM scenarios, six canonical API/restart scenarios, 37 focused frontend tests and production build pass. MCP reproduced/corrected member switching and refresh errors at desktop/mobile widths; final isolated browser fallback covers truthful recovery and no mutation replay. See report for final result and MCP transport limitation.",
+      "verificationReport": "docs/reports/access-foundation-review-2026-10-16.md"
     }
   },
   "components": [

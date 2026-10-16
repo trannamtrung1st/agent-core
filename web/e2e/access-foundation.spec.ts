@@ -1,6 +1,13 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 test('owner and invited Reader use scoped access UI, with safe mobile drawers and denial recovery', async ({ page, browser }) => {
+  const pageErrors: string[] = [];
+  const failedRequests: string[] = [];
+  const observe = (target: Page) => {
+    target.on('pageerror', error => pageErrors.push(error.message));
+    target.on('requestfailed', request => { if (request.failure()?.errorText !== 'net::ERR_ABORTED') failedRequests.push(`${request.method()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText}`); });
+  };
+  observe(page);
   await page.goto('/sign-in');
   await page.getByRole('textbox', { name: 'Email' }).fill('access-owner@example.test');
   await page.getByRole('textbox', { name: 'Password' }).fill('incorrect-password');
@@ -87,6 +94,7 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await page.getByRole('tab', { name: 'Members', exact: true }).click();
   const reader = await browser.newContext();
   const member = await reader.newPage();
+  observe(member);
   await member.goto(invitationLink);
   await member.getByRole('textbox', { name: 'Your name' }).fill('Taylor Nguyen — external research reviewer');
   await member.getByRole('textbox', { name: 'Password' }).fill('synthetic-reader-test-password');
@@ -99,6 +107,34 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await member.keyboard.press('Escape');
   await page.getByRole('textbox', { name: 'Search members' }).fill('reviewer');
   await page.getByRole('button', { name: 'Manage Taylor Nguyen — external research reviewer' }).click();
+  const memberAccess = page.getByRole('dialog', { name: 'Member access' });
+  await memberAccess.getByRole('combobox', { name: 'Role to assign' }).fill('Workspace reviewer');
+  await memberAccess.getByRole('combobox', { name: 'Role to assign' }).press('Enter');
+  await memberAccess.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Search members' }).fill('');
+  await page.getByRole('button', { name: 'Manage Access test owner', exact: true }).click();
+  await expect(memberAccess.getByText('Choose a role', { exact: true })).toBeVisible();
+  await expect(memberAccess.getByRole('button', { name: 'Assign role', exact: true })).toBeDisabled();
+  await memberAccess.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage Taylor Nguyen — external research reviewer' }).click();
+  await expect(memberAccess.getByText('Choose a role', { exact: true })).toBeVisible();
+  await memberAccess.getByRole('combobox', { name: 'Role to assign' }).fill('Workspace reviewer');
+  await memberAccess.getByRole('combobox', { name: 'Role to assign' }).press('Enter');
+  let failMemberRead = true;
+  let assignmentPosts = 0;
+  page.on('request', request => { if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/role-assignments')) assignmentPosts++; });
+  await page.route('**/api/v2/tenants/*/members?*', route => failMemberRead
+    ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ reasonCode: 'service_unavailable' }) })
+    : route.continue());
+  await memberAccess.getByRole('button', { name: 'Assign role', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Assign role', exact: true }).getByRole('button', { name: 'Assign role', exact: true }).click();
+  await expect(memberAccess.getByRole('alert')).toContainText('temporarily unavailable');
+  await expect(memberAccess.getByRole('alert')).not.toContainText('not been saved');
+  await expect(memberAccess.getByText('This member is no longer on the current page.', { exact: true })).toHaveCount(0);
+  failMemberRead = false;
+  await memberAccess.getByRole('button', { name: 'Reload', exact: true }).click();
+  await expect(memberAccess.getByText('Workspace reviewer', { exact: true })).toBeVisible();
+  expect(assignmentPosts).toBe(1);
   await page.getByRole('button', { name: 'Remove member', exact: true }).click();
   await page.getByRole('dialog', { name: 'Remove member' }).getByRole('button', { name: 'Remove member', exact: true }).click();
   await member.goto(tenantPath + '/members');
@@ -117,4 +153,6 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await expect(page.getByRole('heading', { name: 'My organizations', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+  expect(pageErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
 });

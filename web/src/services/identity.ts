@@ -28,7 +28,7 @@ const reasons: Record<string, string> = {
 };
 export class IdentityError extends Error {
   constructor(public status: number, public reasonCode: string) {
-    super(reasons[reasonCode] ?? (status === 429 ? 'Too many attempts. Wait a minute before trying again.' : status === 404 ? 'This item is no longer available. Return to the list.' : status >= 500 ? 'The service is temporarily unavailable. Your changes have not been saved. Try again.' : 'This action could not be completed. Reload the latest information and try again.'));
+    super(reasons[reasonCode] ?? (status === 429 ? 'Too many attempts. Wait a minute before trying again.' : status === 404 ? 'This item is no longer available. Return to the list.' : status >= 500 ? 'The service is temporarily unavailable. Check the latest information before retrying.' : 'This action could not be completed. Reload the latest information and try again.'));
   }
 }
 let csrf: string | null = null;
