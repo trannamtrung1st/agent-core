@@ -1,9 +1,26 @@
 using AgentCore.Domain.Security;
+using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Security;
 
 public static class IamStateRules
 {
+    public static void ValidateAgentWrite(TenantSecurityState next, long expected, Guid instanceId, AgentInstanceLifecycle lifecycle, AuthorizationAudit audit)
+    {
+        if (audit.TenantId != next.Tenant.TenantId || next.Tenant.Revision != checked(expected + 1) || !Enum.IsDefined(lifecycle))
+            throw new ArgumentException("Invalid Instance transaction.");
+        var identity = next.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == instanceId);
+        var status = lifecycle == AgentInstanceLifecycle.Active ? IdentityStatus.Active : IdentityStatus.Suspended;
+        if (identity is null || identity.Status != status) throw new ArgumentException("Instance identity/lifecycle mismatch.");
+    }
+    public static void ValidateAgentContinuity(IReadOnlyList<SystemIdentity> previous, TenantSecurityState next)
+    {
+        foreach (var identity in previous)
+            if (!next.SystemIdentities.Any(i => i.SystemIdentityId == identity.SystemIdentityId
+                && i.TenantId == identity.TenantId && i.PrincipalId == identity.PrincipalId && i.Kind == identity.Kind
+                && i.AgentInstanceId == identity.AgentInstanceId))
+                throw new ArgumentException("Agent identity backing and ownership are immutable; retain a status tombstone.");
+    }
     public static TenantSecurityState Freeze(TenantSecurityState state)
     {
         var tenantId = state.Tenant.TenantId;
@@ -15,6 +32,7 @@ public static class IamStateRules
         Require(state.Principals.Select(p => p.PrincipalId).Distinct().Count() == state.Principals.Count);
         Require(state.SystemIdentities.All(i => i.TenantId == tenantId && i.Kind == SystemIdentityKind.Agent && i.AgentInstanceId is { } agent && agent != Guid.Empty && Enum.IsDefined(i.Status)));
         Require(state.SystemIdentities.Select(i => i.AgentInstanceId).Distinct().Count() == state.SystemIdentities.Count);
+        Require(state.SystemIdentities.Select(i => i.SystemIdentityId).Distinct().Count() == state.SystemIdentities.Count);
         Require(state.Roles.All(r => r.TenantId == tenantId && r.RoleId != Guid.Empty && r.Permissions.Count > 0 && r.Permissions.Distinct(StringComparer.Ordinal).Count() == r.Permissions.Count
             && r.Permissions.All(k => PermissionCatalog.TryGet(k, out var definition) && !definition.SystemOnly)
             && (!r.Permissions.Any(k => PermissionCatalog.Get(k).HumanOnly) || r.HumanOnly)));

@@ -1,10 +1,11 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
+using AgentCore.Infrastructure.Persistence;
 
 namespace AgentCore.Infrastructure.Security;
 
-public sealed class InMemoryIamStore : IIamStore
+public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances) : IIamStore, ITenantAgentStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Account> _accounts = [];
@@ -72,20 +73,21 @@ public sealed class InMemoryIamStore : IIamStore
     }
     public ValueTask<bool> TryCreateTenantAsync(TenantSecurityState tenant, AuthorizationAudit audit, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); tenant = IamStateRules.Freeze(tenant); lock (_gate)
+        ct.ThrowIfCancellationRequested(); tenant = IamStateRules.Freeze(tenant); lock (_gate) lock (instances.CredentialGate)
         {
             if (!_bootstrapped || tenant.Tenant.Revision != 1 || _tenants.ContainsKey(tenant.Tenant.TenantId)
                 || _tenants.Values.Any(t => t.Tenant.Slug == tenant.Tenant.Slug)) return ValueTask.FromResult(false);
-            EnsureReferences(tenant, audit); _tenants.Add(tenant.Tenant.TenantId, tenant); _audit.Add(audit); return ValueTask.FromResult(true);
+            EnsureReferences(tenant, audit); _tenants.Add(tenant.Tenant.TenantId, tenant); MarkOwnedAgents(tenant); _audit.Add(audit); return ValueTask.FromResult(true);
         }
     }
     public ValueTask<bool> TrySaveTenantAsync(TenantSecurityState tenant, long expectedRevision, AuthorizationAudit audit, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested(); tenant = IamStateRules.Freeze(tenant); lock (_gate)
+        ct.ThrowIfCancellationRequested(); tenant = IamStateRules.Freeze(tenant); lock (_gate) lock (instances.CredentialGate)
         {
             if (tenant.Tenant.Revision != checked(expectedRevision + 1) || !_tenants.TryGetValue(tenant.Tenant.TenantId, out var old)
                 || old.Tenant.Revision != expectedRevision || _tenants.Values.Any(t => t.Tenant.TenantId != tenant.Tenant.TenantId && t.Tenant.Slug == tenant.Tenant.Slug)) return ValueTask.FromResult(false);
-            EnsureReferences(tenant, audit); _tenants[tenant.Tenant.TenantId] = tenant; _audit.Add(audit); return ValueTask.FromResult(true);
+            IamStateRules.ValidateAgentContinuity(old.SystemIdentities, tenant);
+            EnsureReferences(tenant, audit); _tenants[tenant.Tenant.TenantId] = tenant; MarkOwnedAgents(tenant); _audit.Add(audit); return ValueTask.FromResult(true);
         }
     }
     public ValueTask SaveSessionAsync(AuthenticationSession session, CancellationToken ct = default)
@@ -109,16 +111,22 @@ public sealed class InMemoryIamStore : IIamStore
         ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult<IReadOnlyList<AuthorizationAudit>>(_audit.Where(a => a.TenantId == tenantId)
             .OrderByDescending(a => a.At).ThenByDescending(a => a.AuditId).Take(Math.Clamp(limit, 1, 200)).ToArray());
     }
-    private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit)
+    private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit, Guid? creatingInstance = null)
     {
         if (audit.TenantId != state.Tenant.TenantId || state.Users.Any(u => !_accounts.ContainsKey(u.AccountId)))
             throw new ArgumentException("Invalid Account or audit ownership.");
         EnsureActiveAccountOwner(state);
+        if (state.SystemIdentities.Any(i => i.AgentInstanceId != creatingInstance && instances.FindAsync(i.AgentInstanceId!.Value).Result is null))
+            throw new ArgumentException("An agent identity requires a backing Instance.");
         if (state.SystemIdentities.Any(i => _tenants.Values.Any(t => t.Tenant.TenantId != state.Tenant.TenantId
             && t.SystemIdentities.Any(other => other.AgentInstanceId == i.AgentInstanceId))))
             throw new SecurityConflictException("agent_identity_exists");
         if (state.Principals.Any(p => _tenants.Values.Any(t => t.Tenant.TenantId != state.Tenant.TenantId && t.Principals.Any(other => other.PrincipalId == p.PrincipalId))))
             throw new ArgumentException("A Principal cannot belong to two tenants.");
+    }
+    private void MarkOwnedAgents(TenantSecurityState state)
+    {
+        foreach (var identity in state.SystemIdentities) instances.MarkTenantOwned(identity.AgentInstanceId!.Value);
     }
     private void EnsureActiveAccountOwner(TenantSecurityState state, Account? changed = null)
     {

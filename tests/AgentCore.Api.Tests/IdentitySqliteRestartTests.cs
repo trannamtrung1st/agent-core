@@ -5,6 +5,7 @@ using AgentCore.Api.Security;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Infrastructure.Identity;
+using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Security;
 using Microsoft.AspNetCore.Builder;
@@ -33,6 +34,7 @@ public sealed class IdentitySqliteRestartTests
             var identity = new IdentityService(new SqliteIamStore(contexts), new AccountPasswordHasher(), new IdentityTokens(), ids, TimeProvider.System);
             var first = await identity.BootstrapAsync("restart@example.test", "Restart owner", "strong-restart-password", "Restart organization", "restart-organization");
             string cookie;
+            Guid instanceId, agentPrincipalId;
             await using (var app = await StartAsync(root, contexts))
             {
                 using var client = app.GetTestClient(); client.BaseAddress = new("https://localhost");
@@ -45,10 +47,19 @@ public sealed class IdentitySqliteRestartTests
                 var login = await client.PostAsJsonAsync("/api/v2/auth/login", new { login = "restart@example.test", password = "strong-restart-password" });
                 Assert.Equal(HttpStatusCode.OK, login.StatusCode);
                 cookie = Assert.Single(login.Headers.GetValues("Set-Cookie"), value => value.StartsWith("agentcore.session=", StringComparison.Ordinal)).Split(';')[0];
-                client.DefaultRequestHeaders.Remove("Cookie"); client.DefaultRequestHeaders.Add("Cookie", cookie);
+                client.DefaultRequestHeaders.Remove("Cookie"); client.DefaultRequestHeaders.Add("Cookie", cookie + "; " + csrfCookie);
+                var authenticatedCsrf = await Json(await client.GetAsync("/api/v2/auth/csrf"));
+                client.DefaultRequestHeaders.Remove("X-AgentCore-CSRF");
+                client.DefaultRequestHeaders.Add("X-AgentCore-CSRF", authenticatedCsrf.GetProperty("token").GetString());
                 var members = await client.GetAsync($"/api/v2/tenants/{first.TenantId:D}/members");
                 Assert.Equal(HttpStatusCode.OK, members.StatusCode);
                 Assert.Equal(first.OwnerPrincipalId, (await Json(members)).GetProperty("items")[0].GetProperty("principalId").GetGuid());
+                var created = await client.PostAsJsonAsync($"/api/v2/tenants/{first.TenantId:D}/agents",
+                    new { templateId = "examiner", version = 1, expectedRevision = 1 });
+                Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+                var agent = await Json(created);
+                instanceId = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+                agentPrincipalId = agent.GetProperty("principalId").GetGuid();
                 await app.StopAsync();
             }
             await using (var reopened = await StartAsync(root, contexts))
@@ -61,6 +72,12 @@ public sealed class IdentitySqliteRestartTests
                 var members = await client.GetAsync($"/api/v2/tenants/{first.TenantId:D}/members");
                 Assert.Equal(HttpStatusCode.OK, members.StatusCode);
                 Assert.Equal(1, (await Json(members)).GetProperty("total").GetInt32());
+                var agents = await client.GetAsync($"/api/v2/tenants/{first.TenantId:D}/agents");
+                Assert.Equal(HttpStatusCode.OK, agents.StatusCode);
+                var inventory = await Json(agents);
+                Assert.Equal(1, inventory.GetProperty("total").GetInt32());
+                Assert.Equal(instanceId, inventory.GetProperty("items")[0].GetProperty("instance").GetProperty("instanceId").GetGuid());
+                Assert.Equal(agentPrincipalId, inventory.GetProperty("items")[0].GetProperty("principalId").GetGuid());
                 Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/v2/tenants/{Guid.NewGuid():D}/members")).StatusCode);
                 await reopened.StopAsync();
             }
@@ -79,10 +96,13 @@ public sealed class IdentitySqliteRestartTests
         builder.Services.AddSingleton(new PersistenceOptions { Provider = "Sqlite", CredentialProtectionKeyRoot = Path.Combine(root, "keys") });
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<IIdGenerator, SystemIdGenerator>();
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
+        builder.Services.AddSingleton<IBuiltInAgentDefinitionStore>(new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default));
         builder.Services.AddAgentCoreIdentity();
         builder.Services.AddIdentityHttp(builder.Configuration);
         var app = builder.Build();
-        app.UseIdentityHttp(); IdentityEndpoints.Map(app); TenantAccessEndpoints.Map(app);
+        app.UseIdentityHttp(); IdentityEndpoints.Map(app); TenantAccessEndpoints.Map(app); TenantAgentEndpoints.Map(app);
         await app.StartAsync(); return app;
     }
     private static async Task<JsonElement> Json(HttpResponseMessage response)

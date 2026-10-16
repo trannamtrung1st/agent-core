@@ -150,6 +150,7 @@ await InitializeIdentityAsync(app.Services, app.Configuration).ConfigureAwait(fa
 app.UseIdentityHttp();
 IdentityEndpoints.Map(app);
 TenantAccessEndpoints.Map(app);
+TenantAgentEndpoints.Map(app);
 
 
 var spaIndex = ResolveSpaIndex(app);

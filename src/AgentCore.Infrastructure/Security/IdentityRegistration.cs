@@ -30,12 +30,14 @@ public static class IdentityRegistration
         services.TryAddSingleton<IIamStore>(provider => provider.GetRequiredService<PersistenceOptions>().Provider.ToUpperInvariant() switch
         {
             "SQLITE" => new SqliteIamStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()),
-            "INMEMORY" => new InMemoryIamStore(),
+            "INMEMORY" => new InMemoryIamStore(provider.GetRequiredService<InMemoryAgentInstanceStore>()),
             _ => throw new InvalidOperationException("Identity storage must explicitly select Sqlite or InMemory.")
         });
         services.TryAddSingleton<IdentityService>();
         services.TryAddSingleton<IamAuthorizer>();
         services.TryAddSingleton<TenantAccessService>();
+        services.TryAddSingleton<ITenantAgentStore>(provider => (ITenantAgentStore)provider.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantAgentService>();
         services.TryAddSingleton<AccountAdministrationService>();
         return services;
     }

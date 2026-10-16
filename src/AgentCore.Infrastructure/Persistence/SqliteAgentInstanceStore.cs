@@ -327,6 +327,8 @@ public sealed partial class SqliteAgentInstanceStore(
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        if (await db.Set<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().AnyAsync(i => i.AgentInstanceId == update.InstanceId.ToString("D"), cancellationToken))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         var existingEvent = await AdminEventPersistence.TryGetByOperationIdAsync(
                 db,
                 historyAppend.OperationId,
@@ -486,6 +488,8 @@ public sealed partial class SqliteAgentInstanceStore(
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        if (update.Lifecycle is not null && await db.Set<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().AnyAsync(i => i.AgentInstanceId == update.InstanceId.ToString("D"), cancellationToken))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         var row = await db.AgentInstances
             .SingleOrDefaultAsync(item => item.InstanceId == update.InstanceId.ToString("D"), cancellationToken)
             .ConfigureAwait(false)
@@ -586,7 +590,7 @@ public sealed partial class SqliteAgentInstanceStore(
         }
     }
 
-    private static AgentInstance Map(AgentInstanceRecord row) =>
+    internal static AgentInstance Map(AgentInstanceRecord row) =>
         new(
             Guid.Parse(row.InstanceId),
             row.DefinitionId,
@@ -604,7 +608,7 @@ public sealed partial class SqliteAgentInstanceStore(
             row.ExecutionBudgetsJson is null ? null : JsonSerializer.Deserialize<ExecutionBudgetPolicy>(row.ExecutionBudgetsJson, Json),
             row.SettingsOverridesJson is null ? null : JsonSerializer.Deserialize<InstanceSettingsOverrides>(row.SettingsOverridesJson, Json));
 
-    private static AgentInstanceRecord Map(AgentInstance instance) =>
+    internal static AgentInstanceRecord Map(AgentInstance instance) =>
         new()
         {
             InstanceId = instance.InstanceId.ToString("D"),

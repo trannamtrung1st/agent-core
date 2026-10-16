@@ -6,6 +6,8 @@ The owner requests a complete replacement of trusted-local owner capabilities wi
 
 This accepted successor supersedes original single-owner/authentication exclusions and incompatible live-only approval design. Canonical tenant routes and the complete interaction contract are specified in [Accounts and access UX](19-multi-tenant-iam-ux.md). The [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) distinguishes implemented gates from the target. Until the cutover is complete, the previous application is not a multi-tenant deployment. Existing user data is never silently converted, reset or deleted.
 
+The canonical tenant-agent slice uses the existing Agent Instance as the backing resource, with ownership normalized through its globally unique SystemIdentity foreign key. `ITenantAgentStore` commits Instance creation, initial Skill state, SystemIdentity/Principal, tenant security revision and audit together. Archive/restore commits Instance lifecycle and identity status together while retaining IDs and grants. This is an intermediate boundary: other Instance settings/resources, old owner routes, Session/Run/Hub execution and durable approvals still require the full cutover.
+
 
 ## Semantic Automation authorization cutover (2026-10-16)
 

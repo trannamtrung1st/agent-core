@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace AgentCore.Infrastructure.Persistence;
 public sealed partial class SqliteAgentInstanceStore
 {
-    private static async Task InitializeSkillsAsync(AgentCoreDbContext db, Guid id, IReadOnlyList<SkillSpec>? skills, DateTimeOffset at, CancellationToken ct)
+    internal static async Task InitializeSkillsAsync(AgentCoreDbContext db, Guid id, IReadOnlyList<SkillSpec>? skills, DateTimeOffset at, CancellationToken ct)
     {
         if (skills is null) return;
         var owner = id.ToString("D");

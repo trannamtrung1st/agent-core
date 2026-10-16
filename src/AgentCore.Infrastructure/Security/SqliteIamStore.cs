@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Security;
 
-public sealed class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts) : IIamStore
+public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts) : IIamStore, ITenantAgentStore
 {
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await db.Set<Account>().AsNoTracking().SingleOrDefaultAsync(a => a.LoginKey == loginKey, ct).ConfigureAwait(false); }
@@ -106,21 +106,27 @@ public sealed class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> context
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var current = await db.Set<Tenant>().SingleOrDefaultAsync(t => t.TenantId == tenant.Tenant.TenantId, ct).ConfigureAwait(false);
         if (current is null || current.Revision != expectedRevision) return false;
+        var previousIdentities = (await db.Set<IamSystemIdentityRow>().AsNoTracking().Where(i => i.TenantId == tenant.Tenant.TenantId).ToArrayAsync(ct).ConfigureAwait(false)).Select(IamPersistenceModel.Domain).ToArray();
+        IamStateRules.ValidateAgentContinuity(previousIdentities, tenant);
         await EnsureActiveAccountOwnerAsync(db, tenant, null, ct).ConfigureAwait(false);
         await EnsureAgentOwnershipAsync(db, tenant, ct).ConfigureAwait(false);
         db.Entry(current).CurrentValues.SetValues(tenant.Tenant);
+        await ApplyTenantChildrenAsync(db, tenant, ct).ConfigureAwait(false);
+        db.Add(audit);
+        try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await transaction.CommitAsync(ct).ConfigureAwait(false); return true; }
+        catch (DbUpdateConcurrencyException) { return false; }
+        catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }
+    }
+    private static async Task ApplyTenantChildrenAsync(AgentCoreDbContext db, TenantSecurityState tenant, CancellationToken ct)
+    {
         await ApplyAsync(db, db.Set<Principal>().Where(p => p.TenantId == tenant.Tenant.TenantId), tenant.Principals, p => p.PrincipalId, ct).ConfigureAwait(false);
         await ApplyAsync(db, db.Set<TenantUser>().Where(u => u.TenantId == tenant.Tenant.TenantId), tenant.Users, u => u.UserId, ct).ConfigureAwait(false);
-        await ApplyAsync(db, db.Set<SystemIdentity>().Where(i => i.TenantId == tenant.Tenant.TenantId), tenant.SystemIdentities, i => i.SystemIdentityId, ct).ConfigureAwait(false);
+        await ApplyAsync(db, db.Set<IamSystemIdentityRow>().Where(i => i.TenantId == tenant.Tenant.TenantId), tenant.SystemIdentities.Select(IamPersistenceModel.Row).ToArray(), i => i.SystemIdentityId, ct).ConfigureAwait(false);
         await ApplyAsync(db, db.Set<IamRoleRow>().Where(r => r.TenantId == tenant.Tenant.TenantId), tenant.Roles.Select(IamPersistenceModel.Row).ToArray(), r => r.RoleId, ct).ConfigureAwait(false);
         await ApplyAsync(db, db.Set<IamRolePermissionRow>().Where(p => db.Set<IamRoleRow>().Any(r => r.TenantId == tenant.Tenant.TenantId && r.RoleId == p.RoleId)),
             tenant.Roles.SelectMany(r => r.Permissions.Select(p => new IamRolePermissionRow(r.RoleId, p))).ToArray(), p => (p.RoleId, p.PermissionKey), ct).ConfigureAwait(false);
         await ApplyAsync(db, db.Set<IamAssignmentRow>().Where(a => a.TenantId == tenant.Tenant.TenantId), tenant.Assignments.Select(IamPersistenceModel.Row).ToArray(), a => a.AssignmentId, ct).ConfigureAwait(false);
         await ApplyAsync(db, db.Set<TenantInvitation>().Where(i => i.TenantId == tenant.Tenant.TenantId), tenant.Invitations, i => i.InvitationId, ct).ConfigureAwait(false);
-        db.Add(audit);
-        try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await transaction.CommitAsync(ct).ConfigureAwait(false); return true; }
-        catch (DbUpdateConcurrencyException) { return false; }
-        catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }
     }
     public async ValueTask SaveSessionAsync(AuthenticationSession session, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); db.Add(session); await db.SaveChangesAsync(ct).ConfigureAwait(false); }
@@ -147,19 +153,22 @@ public sealed class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> context
         if (!accounts.Any(a => (a.AccountId == changed?.AccountId ? changed.Status : a.Status) == IdentityStatus.Active))
             throw new SecurityConflictException("last_owner");
     }
-    private static async Task EnsureAgentOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct)
+    private static async Task EnsureAgentOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
-        var instanceIds = state.SystemIdentities.Where(i => i.AgentInstanceId is not null).Select(i => i.AgentInstanceId!.Value).ToArray();
-        if (await db.Set<SystemIdentity>().AnyAsync(i => i.TenantId != state.Tenant.TenantId
-            && i.AgentInstanceId != null && instanceIds.Contains(i.AgentInstanceId.Value), ct).ConfigureAwait(false))
+        var instanceIds = state.SystemIdentities.Where(i => i.AgentInstanceId is not null).Select(i => i.AgentInstanceId!.Value.ToString("D")).ToArray();
+        if (await db.Set<IamSystemIdentityRow>().AnyAsync(i => i.TenantId != state.Tenant.TenantId
+            && i.AgentInstanceId != null && instanceIds.Contains(i.AgentInstanceId), ct).ConfigureAwait(false))
             throw new SecurityConflictException("agent_identity_exists");
+        var required = instanceIds.Where(id => id != creatingInstance?.ToString("D")).ToArray();
+        if (await db.AgentInstances.CountAsync(i => required.Contains(i.InstanceId), ct).ConfigureAwait(false) != required.Length)
+            throw new ArgumentException("An agent identity requires a backing Instance.");
     }
     private static void ValidateAudit(TenantSecurityState state, AuthorizationAudit audit)
     { if (audit.TenantId != state.Tenant.TenantId) throw new ArgumentException("Audit must belong to the changed tenant.", nameof(audit)); }
     private static bool IsConstraint(DbUpdateException ex) => ex.InnerException is SqliteException { SqliteErrorCode: 19 };
     private static void AddTenantChildren(AgentCoreDbContext db, TenantSecurityState state)
     {
-        db.AddRange(state.Principals); db.AddRange(state.Users); db.AddRange(state.SystemIdentities);
+        db.AddRange(state.Principals); db.AddRange(state.Users); db.AddRange(state.SystemIdentities.Select(IamPersistenceModel.Row));
         db.AddRange(state.Roles.Select(IamPersistenceModel.Row));
         db.AddRange(state.Roles.SelectMany(r => r.Permissions.Select(p => new IamRolePermissionRow(r.RoleId, p))));
         db.AddRange(state.Assignments.Select(IamPersistenceModel.Row)); db.AddRange(state.Invitations);
@@ -179,7 +188,7 @@ public sealed class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> context
         return IamStateRules.Freeze(new(tenant,
             await db.Set<TenantUser>().AsNoTracking().Where(u => u.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false),
             await db.Set<Principal>().AsNoTracking().Where(p => p.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false),
-            await db.Set<SystemIdentity>().AsNoTracking().Where(i => i.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false),
+            (await db.Set<IamSystemIdentityRow>().AsNoTracking().Where(i => i.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false)).Select(IamPersistenceModel.Domain).ToArray(),
             await RolesAsync(db, tenantId, ct).ConfigureAwait(false),
             (await db.Set<IamAssignmentRow>().AsNoTracking().Where(a => a.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false)).Select(IamPersistenceModel.Domain).ToArray(),
             await db.Set<TenantInvitation>().AsNoTracking().Where(i => i.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false)));

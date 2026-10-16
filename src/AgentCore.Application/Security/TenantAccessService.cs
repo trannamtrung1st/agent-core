@@ -175,23 +175,6 @@ public sealed class TenantAccessService(IIamStore store, IamAuthorizer authorize
         await SaveAsync(next, actorId, "iam.roles.revoke", assignmentId, ct).ConfigureAwait(false);
     }
 
-    // Called only by the owning instance lifecycle, after validating this exact tenant-owned Instance.
-    // No role is assigned to a new agent implicitly, even when its creator is an Owner.
-    public async ValueTask<Principal> RegisterAgentAsync(Guid actorId, Guid tenantId, Guid instanceId, long expectedRevision, CancellationToken ct = default)
-    {
-        if (instanceId == Guid.Empty) throw new ArgumentException("An owned Instance is required.", nameof(instanceId));
-        var state = await ForChangeAsync(actorId, tenantId, "agents.create", expectedRevision, ct).ConfigureAwait(false);
-        if (state.SystemIdentities.Any(i => i.AgentInstanceId == instanceId)) throw new SecurityConflictException("agent_identity_exists");
-        var identityId = ids.NewId(); var principalId = ids.NewId();
-        var principal = new Principal(principalId, PrincipalKind.SystemIdentity, tenantId, null, null, identityId, IdentityStatus.Active);
-        await SaveAsync(state with
-        {
-            Principals = state.Principals.Append(principal).ToArray(),
-            SystemIdentities = state.SystemIdentities.Append(new(identityId, tenantId, principalId, SystemIdentityKind.Agent, instanceId, IdentityStatus.Active)).ToArray()
-        }, actorId, "agents.identity.create", instanceId, ct).ConfigureAwait(false);
-        return principal;
-    }
-
     internal static void EnsureOwner(TenantSecurityState state)
     {
         var ownerRoles = state.Roles.Where(r => r.IsBuiltin && r.Key == BuiltinAccessRoles.Owner && r.HumanOnly).Select(r => r.RoleId).ToHashSet();

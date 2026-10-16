@@ -26,6 +26,8 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
     }
     private sealed class ConfigurationGateLease(object gate) : IDisposable { public void Dispose() => Monitor.Exit(gate); }
     private readonly Dictionary<Guid, AgentInstance> _instances = [];
+    private readonly HashSet<Guid> _tenantOwnedInstances = [];
+    internal void MarkTenantOwned(Guid instanceId) { lock (_gate) _tenantOwnedInstances.Add(instanceId); }
 
     internal InMemoryTriggerStore? TriggerStore { get; set; }
 
@@ -44,6 +46,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
     {
         lock (_gate)
         {
+            if (_tenantOwnedInstances.Contains(instanceId)) throw AgentCoreErrors.Conflict("Tenant-owned Instance identity must be retained; use its tenant lifecycle.");
             if (!_instances.TryGetValue(instanceId, out var instance))
             {
                 throw AgentCoreErrors.NotFound("Agent instance was not found.");
@@ -402,6 +405,9 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
             throw AgentCoreErrors.Validation("Admin managed instance history is not available.");
         }
 
+        lock (_gate) if (_tenantOwnedInstances.Contains(update.InstanceId))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
+
         var operationGate = AdminOperationLockRegistry.For(historyAppend.OperationId);
         lock (operationGate)
         {
@@ -553,14 +559,22 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
         }
     }
 
-    public ValueTask<AgentInstance> UpdateWithExpectedRevisionAsync(
+    public ValueTask<AgentInstance> UpdateWithExpectedRevisionAsync(AgentInstanceRevisionUpdate update,
+        DateTimeOffset updatedAt, CancellationToken cancellationToken = default) => UpdateRevisionCore(update, updatedAt, false, cancellationToken);
+
+    internal ValueTask<AgentInstance> SetTenantLifecycleAsync(Guid id, long revision, AgentInstanceLifecycle lifecycle,
+        DateTimeOffset at, CancellationToken ct) => UpdateRevisionCore(new(id, revision, Lifecycle: lifecycle), at, true, ct);
+
+    private ValueTask<AgentInstance> UpdateRevisionCore(
         AgentInstanceRevisionUpdate update,
-        DateTimeOffset updatedAt,
-        CancellationToken cancellationToken = default)
+        DateTimeOffset updatedAt, bool tenantLifecycle,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
+            if (!tenantLifecycle && update.Lifecycle is not null && _tenantOwnedInstances.Contains(update.InstanceId))
+                throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
             if (!_instances.TryGetValue(update.InstanceId, out var instance))
             {
                 throw AgentCoreErrors.NotFound("Agent instance was not found.");

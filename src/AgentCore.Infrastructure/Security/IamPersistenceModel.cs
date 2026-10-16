@@ -9,6 +9,8 @@ public sealed record IamRolePermissionRow(Guid RoleId, string PermissionKey);
 public sealed record IamAssignmentRow(Guid AssignmentId, Guid? TenantId, Guid PrincipalId, Guid RoleId,
     AccessScopeKind ScopeKind, string ResourceType, string ResourceId, Guid CreatedByPrincipalId, DateTimeOffset CreatedAt);
 public sealed record IamBootstrapRow(int Id, DateTimeOffset CompletedAt);
+public sealed record IamSystemIdentityRow(Guid SystemIdentityId, Guid? TenantId, Guid PrincipalId,
+    SystemIdentityKind Kind, string? AgentInstanceId, IdentityStatus Status);
 
 internal static class IamPersistenceModel
 {
@@ -33,11 +35,13 @@ internal static class IamPersistenceModel
         users.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         users.HasOne<Account>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
         users.HasOne<Principal>().WithMany().HasForeignKey(x => x.PrincipalId).OnDelete(DeleteBehavior.Restrict);
-        var identities = model.Entity<SystemIdentity>();
+        var identities = model.Entity<IamSystemIdentityRow>();
         identities.ToTable("SystemIdentities"); identities.HasKey(x => x.SystemIdentityId);
         identities.HasIndex(x => x.AgentInstanceId).IsUnique(); identities.HasIndex(x => x.PrincipalId).IsUnique();
         identities.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         identities.HasOne<Principal>().WithMany().HasForeignKey(x => x.PrincipalId).OnDelete(DeleteBehavior.Restrict);
+        identities.HasOne<AgentCore.Infrastructure.Persistence.AgentInstanceRecord>().WithMany()
+            .HasForeignKey(x => x.AgentInstanceId).OnDelete(DeleteBehavior.Restrict);
         var roles = model.Entity<IamRoleRow>();
         roles.ToTable("AccessRoles"); roles.HasKey(x => x.RoleId); roles.HasIndex(x => new { x.TenantId, x.Key }).IsUnique();
         roles.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
@@ -85,4 +89,8 @@ internal static class IamPersistenceModel
     public static RoleAssignment Domain(IamAssignmentRow a) => new(a.AssignmentId, a.TenantId, a.PrincipalId, a.RoleId,
         new(a.ScopeKind, a.TenantId, a.ResourceType.Length == 0 ? null : a.ResourceType, a.ResourceId.Length == 0 ? null : a.ResourceId), a.CreatedByPrincipalId, a.CreatedAt);
     public static IamRoleRow Row(AccessRole role) => new(role.RoleId, role.TenantId, role.Key, role.Name, role.IsBuiltin, role.HumanOnly);
+    public static IamSystemIdentityRow Row(SystemIdentity identity) => new(identity.SystemIdentityId, identity.TenantId,
+        identity.PrincipalId, identity.Kind, identity.AgentInstanceId?.ToString("D"), identity.Status);
+    public static SystemIdentity Domain(IamSystemIdentityRow row) => new(row.SystemIdentityId, row.TenantId,
+        row.PrincipalId, row.Kind, row.AgentInstanceId is null ? null : Guid.Parse(row.AgentInstanceId), row.Status);
 }

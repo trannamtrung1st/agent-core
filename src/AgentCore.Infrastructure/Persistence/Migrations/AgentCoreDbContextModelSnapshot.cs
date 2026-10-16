@@ -161,40 +161,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("AgentCore.Domain.Security.SystemIdentity", b =>
-                {
-                    b.Property<Guid>("SystemIdentityId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("AgentInstanceId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("PrincipalId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid?>("TenantId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("SystemIdentityId");
-
-                    b.HasIndex("AgentInstanceId")
-                        .IsUnique();
-
-                    b.HasIndex("PrincipalId")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("SystemIdentities", (string)null);
-                });
-
             modelBuilder.Entity("AgentCore.Domain.Security.Tenant", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -2803,6 +2769,40 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("AccessRoles", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.IamSystemIdentityRow", b =>
+                {
+                    b.Property<Guid>("SystemIdentityId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentInstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("PrincipalId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("SystemIdentityId");
+
+                    b.HasIndex("AgentInstanceId")
+                        .IsUnique();
+
+                    b.HasIndex("PrincipalId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("SystemIdentities", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Domain.Security.AuthenticationSession", b =>
                 {
                     b.HasOne("AgentCore.Domain.Security.Account", null)
@@ -2826,20 +2826,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AccountId")
                         .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("AgentCore.Domain.Security.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("AgentCore.Domain.Security.SystemIdentity", b =>
-                {
-                    b.HasOne("AgentCore.Domain.Security.Principal", null)
-                        .WithMany()
-                        .HasForeignKey("PrincipalId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
 
                     b.HasOne("AgentCore.Domain.Security.Tenant", null)
                         .WithMany()
@@ -3142,6 +3128,25 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Infrastructure.Security.IamRoleRow", b =>
                 {
+                    b.HasOne("AgentCore.Domain.Security.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.IamSystemIdentityRow", b =>
+                {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", null)
+                        .WithMany()
+                        .HasForeignKey("AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Domain.Security.Principal", null)
+                        .WithMany()
+                        .HasForeignKey("PrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("AgentCore.Domain.Security.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
