@@ -121,6 +121,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
         if (audit.TenantId != state.Tenant.TenantId || state.Users.Any(u => !_accounts.ContainsKey(u.AccountId)))
             throw new ArgumentException("Invalid Account or audit ownership.");
         EnsureActiveAccountOwner(state);
+        if (state.Assignments.Any(a => TenantDefinitionResourceScopes.TryParse(a.Scope, out var reference) && !OwnsDefinitionResource(state.Tenant.TenantId, reference)))
+            throw new ArgumentException("A Definition resource assignment requires a current owned binding.");
         if (state.Assignments.Any(a => a.Scope.Kind == AccessScopeKind.Resource && a.Scope.ResourceType == "definition"
             && (!Guid.TryParseExact(a.Scope.ResourceId, "D", out var id) || !definitions.OwnsActiveDefinition(state.Tenant.TenantId, id))))
             throw new ArgumentException("A definition assignment requires an owned definition.");

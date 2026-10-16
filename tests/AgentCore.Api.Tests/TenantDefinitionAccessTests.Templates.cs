@@ -25,6 +25,7 @@ public sealed partial class TenantDefinitionAccessTests
         Assert.NotEmpty(authoring.GetProperty("capabilities").EnumerateArray());
         var templates = await Json(await author.GetAsync($"{prefix}/definition-templates"));
         Assert.Contains(templates.GetProperty("items").EnumerateArray(), d => d.GetProperty("id").GetString() == "customer-support" && d.GetProperty("version").GetInt32() == 3);
+        Assert.False(templates.GetProperty("canFork").GetProperty("customer-support:3").GetBoolean());
         Assert.Equal(HttpStatusCode.Forbidden, (await author.GetAsync($"{prefix}/agent-templates")).StatusCode);
         var revision = await Revision(owner, tenant);
         author.DefaultRequestHeaders.Remove("X-AgentCore-CSRF");
@@ -32,6 +33,13 @@ public sealed partial class TenantDefinitionAccessTests
         await Csrf(author);
         Assert.Equal(HttpStatusCode.Forbidden, (await author.PostAsJsonAsync($"{prefix}/agent-definitions/from-template", new { templateId = "customer-support", version = 999, expectedRevision = revision })).StatusCode);
         Assert.Equal(revision, await Revision(owner, tenant));
+        Assert.Equal(HttpStatusCode.Forbidden, (await author.PostAsJsonAsync($"{prefix}/agent-definitions/from-template", new { templateId = "customer-support", version = 3, expectedRevision = revision })).StatusCode);
+        Assert.Equal(revision, await Revision(owner, tenant));
+        var resourceRole = await Json(await owner.PostAsJsonAsync($"{prefix}/roles", new { name = "Template resource creator", permissions = new[] { "resources.read", "resources.manage" }, expectedRevision = await Revision(owner, tenant) }));
+        var principal = (await Json(await owner.GetAsync($"{prefix}/members"))).GetProperty("items").EnumerateArray().Single(m => m.GetProperty("login").GetString() == "TEMPLATE-AUTHOR@EXAMPLE.TEST").GetProperty("principalId").GetGuid();
+        await Json(await owner.PostAsJsonAsync($"{prefix}/role-assignments", new { principalId = principal, roleId = resourceRole.GetProperty("roleId").GetGuid(), expectedRevision = await Revision(owner, tenant) }));
+        Assert.True((await Json(await author.GetAsync($"{prefix}/definition-templates"))).GetProperty("canFork").GetProperty("customer-support:3").GetBoolean());
+        revision = await Revision(owner, tenant);
         var response = await author.PostAsJsonAsync($"{prefix}/agent-definitions/from-template", new { templateId = "customer-support", version = 3, name = "Private support", expectedRevision = revision });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var draft = await Json(response); var id = draft.GetProperty("definitionId").GetString()!; var draftId = draft.GetProperty("draftId").GetGuid();

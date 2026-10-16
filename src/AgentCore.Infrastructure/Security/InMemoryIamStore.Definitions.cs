@@ -12,6 +12,7 @@ public sealed partial class InMemoryIamStore
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
             return ValueTask.FromResult(TenantAgentChildScopes.TryParse(scope, out var instance, out _)
                 ? ChildCatalog(scope.TenantId!.Value, instance, null, ct).Contains(scope)
+                : TenantDefinitionResourceScopes.TryParse(scope, out var resource) ? OwnsDefinitionResource(scope.TenantId!.Value, resource)
                 : scope.Kind == AccessScopeKind.Resource && scope.ResourceType == "definition"
                 && scope.TenantId is { } tenant && tenant != Guid.Empty && Guid.TryParseExact(scope.ResourceId, "D", out var id) && scope.ResourceId == id.ToString("D")
                 && definitions.OwnsActiveDefinition(tenant, id));
@@ -49,7 +50,11 @@ public sealed partial class InMemoryIamStore
     public ValueTask<bool> TrySaveDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision, AgentDefinitionDraft draft, long? expectedDraftRevision, AuthorizationAudit audit, CancellationToken ct = default) =>
         ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => definitions.SaveTenantDraft(next.Tenant.TenantId, draft, expectedDraftRevision) ? draft : null, ct) is not null);
     public ValueTask<AgentDefinitionPublication?> TryPublishDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision, Guid draftId, long expectedDraftRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) =>
-        ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => definitions.PublishTenantDraft(next.Tenant.TenantId, draftId, expectedDraftRevision, at), ct));
+        ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () =>
+        {
+            TenantDefinitionResourceScopes.RequireNoDraftGrants(next, draftId);
+            return definitions.PublishTenantDraft(next.Tenant.TenantId, draftId, expectedDraftRevision, at);
+        }, ct));
     public ValueTask<AgentDefinitionPublication?> TryDeprecateDefinitionPublicationAsync(TenantSecurityState next, long expectedSecurityRevision, Guid definitionId, int version, long expectedMetadataRevision, AuthorizationAudit audit, CancellationToken ct = default) =>
         ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => definitions.DeprecateTenantPublication(next.Tenant.TenantId, definitionId, version, expectedMetadataRevision), ct));
     private T? WriteDefinition<T>(TenantSecurityState next, long expected, AuthorizationAudit audit, Func<T?> change, CancellationToken ct) where T : class

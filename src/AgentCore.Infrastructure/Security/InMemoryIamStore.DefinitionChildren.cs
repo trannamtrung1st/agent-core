@@ -1,5 +1,6 @@
 using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
 
@@ -16,7 +17,13 @@ public sealed partial class InMemoryIamStore
         ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => definitions.BindTenantResources(next.Tenant.TenantId, draftId, expectedDraftRevision, resources, audit.At), ct));
     public ValueTask<AgentDefinitionDraftResourceBatchBound?> TryRemoveDefinitionResourceAsync(TenantSecurityState next, long expectedSecurityRevision,
         Guid draftId, long expectedDraftRevision, Guid resourceId, AuthorizationAudit audit, CancellationToken ct = default) =>
-        ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => definitions.RemoveTenantResource(next.Tenant.TenantId, draftId, expectedDraftRevision, resourceId, audit.At), ct));
+        ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () =>
+        {
+            var draft = definitions.TenantDraft(next.Tenant.TenantId, draftId);
+            if (draft is null || draft.Revision != expectedDraftRevision) return null;
+            TenantDefinitionResourceScopes.RequireNoGrant(next, TenantDefinitionResourceScopes.Draft(next.Tenant.TenantId, Guid.Parse(draft.DefinitionId), draftId, resourceId));
+            return definitions.RemoveTenantResource(next.Tenant.TenantId, draftId, expectedDraftRevision, resourceId, audit.At);
+        }, ct));
     public ValueTask<TenantDefinitionScenarioSaved?> TrySaveDefinitionScenarioAsync(TenantSecurityState next, long expectedSecurityRevision,
         long expectedDraftRevision, DefinitionEvaluationScenarioUpsert scenario, AuthorizationAudit audit, CancellationToken ct = default) =>
         ValueTask.FromResult(WriteDefinition(next, expectedSecurityRevision, audit, () => definitions.SaveTenantScenario(next.Tenant.TenantId, expectedDraftRevision, scenario, audit.At), ct));

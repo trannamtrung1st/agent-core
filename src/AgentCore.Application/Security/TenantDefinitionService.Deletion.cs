@@ -15,7 +15,7 @@ public sealed partial class TenantDefinitionService
         if (draft.Revision != expectedDraftRevision) throw new SecurityConflictException("stale_revision");
         var retire = (await definitions.ListDefinitionDraftsAsync(tenant, id, ct).ConfigureAwait(false)).Count == 1
             && (await definitions.ListDefinitionPublicationsAsync(tenant, id, ct).ConfigureAwait(false)).Count == 0;
-        var next = Advance(state);
+        var next = TenantDefinitionResourceScopes.WithoutDraftGrants(Advance(state), draftId);
         if (retire) next = TenantDefinitionDeletionRules.WithoutResourceGrants(next, id);
         var now = time.GetUtcNow();
         if (await definitions.TryDeleteDefinitionDraftAsync(next, expectedRevision, draftId, expectedDraftRevision, retire, now,
@@ -59,5 +59,6 @@ public static class TenantDefinitionDeletionRules
         if (state.Assignments.Any(a => Targets(a, id))) throw new ArgumentException("Retired definitions cannot retain resource grants.");
     }
     private static bool Targets(RoleAssignment assignment, Guid id) => assignment.Scope.Kind == AccessScopeKind.Resource
-        && assignment.Scope.ResourceType == "definition" && assignment.Scope.ResourceId == id.ToString("D");
+        && (assignment.Scope.ResourceType == "definition" && assignment.Scope.ResourceId == id.ToString("D")
+            || TenantDefinitionResourceScopes.BelongsTo(assignment.Scope, id));
 }

@@ -31,6 +31,7 @@ public sealed partial class TenantDefinitionService
         var state = await ForChange(actor, tenant, "update", Scope(tenant, id), expectedRevision, ct).ConfigureAwait(false);
         if (snapshot.Draft.Revision != expectedDraftRevision) throw new SecurityConflictException("stale_revision");
         var scenario = snapshot.Scenarios.SingleOrDefault(s => s.ScenarioId == scenarioId) ?? throw new AccessDeniedException("resource_unavailable");
+        await RequireEvaluationResources(state, actor, snapshot, ct).ConfigureAwait(false);
         var resourceSnapshots = new List<DefinitionDraftSyntheticResourceSnapshot>();
         foreach (var r in snapshot.Resources)
         {

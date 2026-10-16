@@ -3,7 +3,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public sealed record TenantDefinitionAccess(IReadOnlyList<string> Permissions, long Revision);
+public sealed record TenantDefinitionAccess(IReadOnlyList<string> Permissions, long Revision, IReadOnlyDictionary<int, bool> CanFork);
 public sealed partial class TenantDefinitionService
 {
     public async ValueTask<TenantDefinitionSummary> SummaryAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
@@ -25,6 +25,12 @@ public sealed partial class TenantDefinitionService
         var permissions = new List<string>();
         foreach (var key in new[] { "agent-definitions.read", "agent-definitions.update", "agent-definitions.publish", "agent-definitions.delete", "iam.roles.read", "iam.roles.assign" })
             if ((await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(key), scope, ct).ConfigureAwait(false)).Allowed) permissions.Add(key);
-        return new(permissions, state.Tenant.Revision);
+        var destination = await ResourceAllowed(state, actor, "resources.read", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)
+            && await ResourceAllowed(state, actor, "resources.manage", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
+        var forks = new Dictionary<int, bool>();
+        foreach (var publication in await definitions.ListDefinitionPublicationsAsync(tenant, id, ct).ConfigureAwait(false))
+            forks[publication.Version] = permissions.Contains("agent-definitions.update") && (destination
+                || (await definitions.ListOwnedPublicationResourcesAsync(tenant, id, publication.Version, ct).ConfigureAwait(false)).Count == 0);
+        return new(permissions, state.Tenant.Revision, forks);
     }
 }

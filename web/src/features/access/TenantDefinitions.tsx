@@ -34,7 +34,7 @@ export function TenantDefinitions({ context }: { context: TenantContext }) {
 function CreateDefinition({ context, onClose, onCreated }: { context: TenantContext; onClose: () => void; onCreated: (draft: TenantDraft) => void }) {
   const { message } = App.useApp(); const command = useTenantCommand(); const [form] = Form.useForm<{ name: string; template?: string }>();
   const [dirty, setDirty] = useState(false); const guard = useAccessDraftGuard(dirty, command.busy, onClose);
-  const templates = useIdentityQuery<{ items: DefinitionTemplate[] }>(tenantApi(context.tenant.tenantId, '/definition-templates'));
+  const templates = useIdentityQuery<{ items: DefinitionTemplate[]; canFork: Record<string, boolean> }>(tenantApi(context.tenant.tenantId, '/definition-templates'));
   return <>{guard.holder}<Drawer open title="New definition" onClose={guard.close} className="access-editor-drawer" size={640} styles={{ wrapper: { maxWidth: '100vw' } }} keyboard={!command.busy} maskClosable={!command.busy} closable={!command.busy}
     footer={<Flex gap="var(--ac-space-compact)" justify="end"><Button disabled={command.busy} onClick={guard.close}>Cancel</Button><Button type="primary" htmlType="submit" form="tenant-definition-create" loading={command.busy}>Create definition</Button></Flex>}>
     <Flex vertical gap="var(--ac-space-section)">
@@ -46,10 +46,11 @@ function CreateDefinition({ context, onClose, onCreated }: { context: TenantCont
           const access = await identityRequest<TenantContext>(tenantApi(context.tenant.tenantId, '/access/me'), { signal });
           const source = templates.data?.items.find(t => `${t.id}:${t.version}` === values.template);
           if (values.template && !source) throw new Error('The selected template is no longer available.');
+          if (source && !templates.data?.canFork[`${source.id}:${source.version}`]) throw new Error('Your current access cannot copy this template. Choose a blank definition or ask an access administrator.');
           return identityRequest<TenantDraft>(tenantApi(context.tenant.tenantId, source ? '/agent-definitions/from-template' : '/agent-definitions'), { method: 'POST', signal, body: source ? { name: values.name, templateId: source.id, version: source.version, expectedRevision: access.revision } : { name: values.name, expectedRevision: access.revision } });
         }, draft => { guard.release(); setDirty(false); message.success('Definition created.'); onCreated(draft); })}>
         <Form.Item name="name" label="Definition name" rules={[{ required: true, whitespace: true, message: 'Enter a definition name.' }, { max: 80 }]}><Input autoFocus maxLength={80} /></Form.Item>
-        <Form.Item name="template" label="Starting point" extra="Shipped templates are read-only. Your copy has independent IDs and resources."><Select allowClear placeholder="Blank definition" loading={templates.loading} showSearch optionFilterProp="label" options={templates.data?.items.map(item => ({ value: `${item.id}:${item.version}`, label: `${item.identity.name} · v${item.version}` }))} /></Form.Item>
+        <Form.Item name="template" label="Starting point" extra="Shipped templates are read-only. Copying their files requires organization resource creation access."><Select allowClear placeholder="Blank definition" loading={templates.loading} showSearch optionFilterProp="label" options={templates.data?.items.map(item => ({ value: `${item.id}:${item.version}`, label: `${item.identity.name} · v${item.version}${templates.data?.canFork[`${item.id}:${item.version}`] ? '' : ' · unavailable with current access'}`, disabled: !templates.data?.canFork[`${item.id}:${item.version}`] }))} /></Form.Item>
       </Form>
     </Flex>
   </Drawer></>;

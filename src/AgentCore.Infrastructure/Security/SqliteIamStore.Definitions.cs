@@ -11,6 +11,11 @@ public sealed partial class SqliteIamStore
 {
     public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
+        if (TenantDefinitionResourceScopes.TryParse(scope, out var resource))
+        {
+            await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+            return await OwnsDefinitionResourceAsync(db, scope.TenantId!.Value, resource, ct).ConfigureAwait(false);
+        }
         if (TenantAgentChildScopes.TryParse(scope, out var instance, out _))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
@@ -129,6 +134,7 @@ public sealed partial class SqliteIamStore
             var row = await Draft(db, next.Tenant.TenantId, draftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
             if (row is null || row.Revision != expectedDraftRevision) return null;
             var draft = AgentDefinitionAdminMapping.MapDraft(row); var key = draftId.ToString("D");
+            TenantDefinitionResourceScopes.RequireNoDraftGrants(next, draftId);
             var resources = await db.AgentDefinitionDraftResources.IgnoreQueryFilters().AsNoTracking().Where(r => r.DraftId == key).ToArrayAsync(ct).ConfigureAwait(false);
             var scenarios = await db.AgentDefinitionDraftEvaluationScenarios.IgnoreQueryFilters().AsNoTracking().Where(s => s.DraftId == key).ToArrayAsync(ct).ConfigureAwait(false);
             var results = await LatestDefinitionResults(db, key, ct).ConfigureAwait(false);

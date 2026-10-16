@@ -17,6 +17,7 @@ public sealed partial class InMemoryIamStore
             var actualRetire = definitions.TenantDrafts(next.Tenant.TenantId, id).Count == 1
                 && definitions.TenantPublications(next.Tenant.TenantId, id).Count == 0;
             if (retireDefinition != actualRetire) return null;
+            TenantDefinitionResourceScopes.RequireNoDraftGrants(next, draftId);
             if (retireDefinition) TenantDefinitionDeletionRules.RequireNoResourceGrants(next, id);
             return WithDefinitionReferences(id, retireDefinition,
                 () => definitions.DeleteTenantDraft(next.Tenant.TenantId, draftId, expectedDraftRevision, retireDefinition, at));

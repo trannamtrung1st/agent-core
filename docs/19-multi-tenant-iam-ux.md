@@ -20,6 +20,8 @@ Operate mode, extending the existing dark Ant Design v6 application. Chat stays 
 | Invited person | Sign in or register, accept a specific invitation and enter that organization | Invitation acceptance |
 | Agent inspector | Explain effective permissions, inheritance and human-only exclusions | Agent Instance → Access → Effective access |
 
+Definition file permissions now have [focused implementation/browser evidence](reports/tenant-definition-resource-iam-verification-2026-10-17.md). Settings read-only, per-file edit/delete, limited collections and copy-destination authority are separate visible states. Source-template choices and publication forks use current server eligibility; a failed write retains edits until explicit reload/discard. This is resource-authoring progress, not full tenant runtime or approval acceptance.
+
 ## Routes and navigation ownership
 
 Choose one canonical route scheme: `/sign-in`, `/account`, `/account/organizations`, `/invitations/{id}`, `/system/{page}`, and `/t/{tenantId}/…`. Tenant children retain existing Chat and Admin organization: `/t/{id}/c/{sessionId}`, `/t/{id}/admin/{collection}`, and the existing instance/definition/draft subtrees. No unscoped aliases remain after cutover. The backend mirrors this under `/api/v2/tenants/{tenantId}/…`; `/api/v2/auth`, `/api/v2/account` and `/api/v2/system` remain outside tenant context. The Hub is `/hubs/session`; its handshake and attachment pin the server-validated tenant.

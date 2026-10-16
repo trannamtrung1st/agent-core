@@ -20,7 +20,7 @@ public static partial class TenantDefinitionEndpoints
         group.MapGet("/definition-drafts/{draftId:guid}/resources", (Guid draftId, HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http); var snapshot = await service.ReadDraftStateAsync(a.PrincipalId, a.TenantId, draftId, ct).ConfigureAwait(false);
-            return Results.Json(new { items = snapshot.Resources, snapshot.Draft.Revision });
+            return Results.Json(new { items = snapshot.Resources, snapshot.Draft.Revision, snapshot.ResourceAccess });
         }));
         group.MapPost("/definition-drafts/{draftId:guid}/resources/batch", (Guid draftId, ResourceBatchRequest body, HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -37,7 +37,7 @@ public static partial class TenantDefinitionEndpoints
         }));
         group.MapGet("/agent-definitions/{definitionId:guid}/publications/{version:int}/resources", (Guid definitionId, int version, HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            var a = IdentityHttp.TenantContext(http); return Results.Json(new { items = await service.PublicationResourcesAsync(a.PrincipalId, a.TenantId, definitionId, version, ct).ConfigureAwait(false) });
+            var a = IdentityHttp.TenantContext(http); return Results.Json(await service.PublicationResourceStateAsync(a.PrincipalId, a.TenantId, definitionId, version, ct).ConfigureAwait(false));
         }));
         group.MapGet("/agent-definitions/{definitionId:guid}/publications/{version:int}/resources/{resourceId:guid}/content", (Guid definitionId, int version, Guid resourceId, HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

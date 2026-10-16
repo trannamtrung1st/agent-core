@@ -71,6 +71,7 @@ public sealed partial class TenantDefinitionService(IIamStore security, ITenantD
         // Reading a publication is a separate privilege from writing this definition.
         await authorizer.RequireAsync(actor, "agent-definitions.read", Scope(tenant, id), ct).ConfigureAwait(false);
         var source = await definitions.FindDefinitionPublicationAsync(tenant, id, version, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        await RequireDestinationResources(state, actor, (await definitions.ListOwnedPublicationResourcesAsync(tenant, id, version, ct).ConfigureAwait(false)).Count, ct).ConfigureAwait(false);
         var now = time.GetUtcNow();
         var draft = new AgentDefinitionDraft(ids.NewId(), id.ToString("D"), 1, Validate(AgentDefinitionCandidate.FromDefinition(source.Payload), false),
             DefinitionDraftSourceKind.ForkDurable, version, now, now);
@@ -85,8 +86,10 @@ public sealed partial class TenantDefinitionService(IIamStore security, ITenantD
         var state = await ForChange(actor, tenant, "publish", Scope(tenant, id), expectedRevision, ct).ConfigureAwait(false);
         if (draft.Revision != expectedDraftRevision) throw new SecurityConflictException("stale_revision");
         _ = Validate(draft.Candidate, true);
+        var snapshot = await definitions.ReadDefinitionDraftSnapshotAsync(tenant, draftId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
+        await RequireDestinationResources(state, actor, snapshot.Resources.Count, ct).ConfigureAwait(false);
         var now = time.GetUtcNow();
-        return await definitions.TryPublishDefinitionDraftAsync(Advance(state), expectedRevision, draftId, expectedDraftRevision, now,
+        return await definitions.TryPublishDefinitionDraftAsync(TenantDefinitionResourceScopes.WithoutDraftGrants(Advance(state), draftId), expectedRevision, draftId, expectedDraftRevision, now,
             Audit(tenant, actor, "publish", id, now), ct).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
     }
     public async ValueTask<IReadOnlyList<AgentDefinitionPublicationSummary>> PublicationsAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)

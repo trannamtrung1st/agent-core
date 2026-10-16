@@ -20,6 +20,7 @@ public sealed partial class SqliteIamStore
             var actualRetire = !await db.AgentDefinitionDrafts.IgnoreQueryFilters().AnyAsync(d => d.DefinitionId == draft.DefinitionId && d.DraftId != draft.DraftId, ct).ConfigureAwait(false)
                 && !await db.AgentDefinitionPublications.IgnoreQueryFilters().AnyAsync(p => p.DefinitionId == draft.DefinitionId, ct).ConfigureAwait(false);
             if (retireDefinition != actualRetire) return null;
+            TenantDefinitionResourceScopes.RequireNoDraftGrants(next, draftId);
             if (retireDefinition)
             {
                 TenantDefinitionDeletionRules.RequireNoResourceGrants(next, id);

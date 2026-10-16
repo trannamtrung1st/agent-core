@@ -10,7 +10,7 @@ public static partial class TenantDefinitionEndpoints
         group.MapGet("/definition-templates", (HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            return Results.Json(new { items = await service.ListTemplatesAsync(a.PrincipalId, a.TenantId, ct).ConfigureAwait(false) });
+            return Results.Json(await service.TemplateCatalogAsync(a.PrincipalId, a.TenantId, ct).ConfigureAwait(false));
         }));
         group.MapPost("/agent-definitions/from-template", (TemplateForkRequest body, HttpContext http, TenantDefinitionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

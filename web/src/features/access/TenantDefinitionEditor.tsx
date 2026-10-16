@@ -37,7 +37,7 @@ export function TenantDefinitionEditor({ context, id, draftId, page }: { context
   const busy = command.busy || !revisionKnown || access.loading;
   const guard = useAccessDraftGuard(dirty || childDirty, command.busy, () => {}, childDirty ? undefined : `${tenantDefinitionPath(tenant, id)}/drafts/${draftId}/`);
   const editable = !!access.data?.permissions.includes('agent-definitions.update');
-  const canPublish = !!access.data?.permissions.includes('agent-definitions.publish');
+  const canPublish = !!access.data?.permissions.includes('agent-definitions.publish') && !!snapshot?.resourceAccess.canPublish;
   const canDelete = !!access.data?.permissions.includes('agent-definitions.delete');
   const change = useCallback((value: DefinitionCandidate) => { setCandidate(value); setJsonText(candidateToJson(value)); setJsonError(undefined); }, []);
   const reload = () => {
@@ -76,7 +76,8 @@ export function TenantDefinitionEditor({ context, id, draftId, page }: { context
         {invalid && !jsonError && <Typography.Text type="danger" role="alert">Review number values and execution limits before saving.</Typography.Text>}
         {dirty && <Typography.Text type="secondary">Save candidate edits before changing resources or running evaluations.</Typography.Text>}
         {blockingEvaluation && <Typography.Link href={tenantDraftPath(tenant, id, draftId, 'test-publish')} onClick={followAppLink}>Run the current required evaluations before publishing.</Typography.Link>}
-        {!editable && <Typography.Text type="secondary">Read-only draft. Your current resource access does not include editing.</Typography.Text>}
+        {access.data.permissions.includes('agent-definitions.publish') && !snapshot.resourceAccess.canPublish && <Typography.Text type="secondary">Publishing these resources requires organization resource creation access.</Typography.Text>}
+        {!editable && <Typography.Text type="secondary">Draft settings are read-only.</Typography.Text>}
       </section>
       {command.error !== undefined && <Flex vertical gap="var(--ac-space-compact)"><AccessError error={command.error} /><Button disabled={command.busy} style={{ alignSelf: 'start' }} onClick={access.reload}>Reload access and keep edits</Button></Flex>}
       {saved.error && <AccessError error={saved.error} retry={reload} />}
@@ -87,7 +88,7 @@ export function TenantDefinitionEditor({ context, id, draftId, page }: { context
         : page === 'skills' ? <DefinitionSkillsSection candidate={candidate} busy={busy || !!jsonError} readOnly={!editable} onChange={change} onDirtyChange={setChildDirty} />
         : page === 'state-isolation' ? <DefinitionStateIsolationPolicy candidate={candidate} savedCandidate={draft.candidate} disabled={busy || !!jsonError} readOnly={!editable} onChange={change} />
         : page === 'self-management' ? <DefinitionSelfManagement candidate={candidate} disabled={busy || !editable || !!jsonError} onChange={change} />
-        : page === 'resources' ? <TenantDraftResources tenant={tenant} draftId={draftId} items={snapshot.resources} writable={editable} busy={busy || dirty || childDirty} mutate={mutate} error={command.error} />
+        : page === 'resources' ? <TenantDraftResources tenant={tenant} draftId={draftId} items={snapshot.resources} access={snapshot.resourceAccess} busy={busy || dirty || childDirty} mutate={mutate} error={command.error} />
         : page === 'test-publish' ? <TenantDefinitionEvaluations snapshot={snapshot} writable={editable} busy={busy || dirty || childDirty} mutate={mutate} error={command.error} />
         : page === 'capabilities' ? <TenantDefinitionCapabilities candidate={candidate} resources={snapshot.resources} metadata={metadata.data} disabled={busy || !editable || !!jsonError} onChange={change} />
         : page === 'sandbox' ? <Alert type="info" showIcon title="Sandbox selections are preserved in the candidate." description={<Typography.Paragraph>Tenant-owned Sandbox catalog integration is still in progress. Inspect the saved policy in <Typography.Link href={tenantDraftPath(tenant, id, draftId, 'advanced-json')} onClick={followAppLink}>Advanced JSON</Typography.Link>.</Typography.Paragraph>} />

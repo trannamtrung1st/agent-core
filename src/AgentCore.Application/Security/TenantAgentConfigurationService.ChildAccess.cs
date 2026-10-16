@@ -34,23 +34,9 @@ public sealed partial class TenantAgentConfigurationService
     private async ValueTask<(T[] Items, bool All)> VisibleChildren<T>(TenantSecurityState state, Guid actor, Guid tenant, Guid id,
         string permission, IReadOnlyList<T> items, Func<T, string> key, CancellationToken ct, bool requireAny = false)
     {
-        var metadata = PermissionCatalog.Get(permission);
-        var inherited = await authorizer.CheckTenantAsync(state, actor, metadata, AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
-        if (inherited.Allowed) return (items.ToArray(), true);
-        if (inherited.ReasonCode != "permission_denied") throw new AccessDeniedException(inherited.ReasonCode);
-        var visible = new List<T>();
-        foreach (var item in items)
-        {
-            var scope = ChildScope(tenant, id, permission, key(item));
-            // Skip ungranted keys before an owning-store lookup; counts/pages are based only on visible rows.
-            if (!state.Assignments.Any(a => a.PrincipalId == actor && a.Scope == scope
-                && state.Roles.Any(r => r.RoleId == a.RoleId && r.Permissions.Contains(permission, StringComparer.Ordinal)))) continue;
-            var decision = await authorizer.CheckTenantAsync(state, actor, metadata, scope, ct).ConfigureAwait(false);
-            if (decision.Allowed) visible.Add(item);
-            else if (decision.ReasonCode is not ("permission_denied" or "resource_unavailable")) throw new AccessDeniedException(decision.ReasonCode);
-        }
-        if (requireAny && visible.Count == 0) throw new AccessDeniedException("permission_denied");
-        return (visible.ToArray(), false);
+        var visible = await authorizer.VisibleResourcesAsync(state, actor, permission, items, item => ChildScope(tenant, id, permission, key(item)), ct).ConfigureAwait(false);
+        if (requireAny && !visible.All && visible.Items.Length == 0) throw new AccessDeniedException("permission_denied");
+        return visible;
     }
     private async ValueTask<InstanceResourceView[]> SafeResourceViews(TenantSecurityState state, Guid actor, Guid tenant, Guid id,
         IReadOnlyList<InstanceResourceView> views, CancellationToken ct)

@@ -5,8 +5,23 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
+public sealed record TenantDefinitionTemplateCatalog(IReadOnlyList<AgentDefinition> Items, IReadOnlyDictionary<string, bool> CanFork);
+
 public sealed partial class TenantDefinitionService
 {
+    public async ValueTask<TenantDefinitionTemplateCatalog> TemplateCatalogAsync(Guid actor, Guid tenant, CancellationToken ct = default)
+    {
+        var items = await ListTemplatesAsync(actor, tenant, ct).ConfigureAwait(false);
+        var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        await RequireResourcePermission(state, actor, "agent-definitions.create", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
+        var destination = await ResourceAllowed(state, actor, "resources.read", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)
+            && await ResourceAllowed(state, actor, "resources.manage", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
+        var allowed = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var item in items)
+            allowed[item.Id + ":" + item.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)] = destination
+                || (await templates.ReadAsync(item.Id, item.Version, ct).ConfigureAwait(false))?.Resources.Count == 0;
+        return new(items, allowed);
+    }
     public async ValueTask<IReadOnlyList<AgentDefinition>> ListTemplatesAsync(Guid actor, Guid tenant, CancellationToken ct = default)
     {
         await authorizer.RequireAsync(actor, "agent-definitions.create", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false);
@@ -28,6 +43,7 @@ public sealed partial class TenantDefinitionService
         var payloads = source.Resources.Select(r => r with { Content = r.Content.ToArray() }).ToArray();
         var resources = payloads.Select(r => new AgentDefinitionDraftResource(ids.NewId(), draft.DraftId,
             r.LogicalPath, r.Kind, r.MediaType, DefinitionResourceContentHasher.ComputeSha256Hex(r.Content), r.Content.LongLength, now)).ToArray();
+        await RequireDestinationResources(state, actor, resources.Length, ct).ConfigureAwait(false);
         if (resources.Length > 0) TenantDefinitionChildRules.ValidateResourceBatch(draft.DraftId, [], resources);
         foreach (var r in payloads) DefinitionResourcePolicies.RejectSecretsInTextualContent(r.MediaType, r.Content);
         // Fail before creating anything if the selected source has incomplete dependencies.

@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { App, Button, Drawer, Empty, Flex, Form, Input, Select, Table, Typography } from 'antd';
+import { useEffect, useState } from 'react';
+import { Alert, App, Button, Drawer, Empty, Flex, Form, Input, Select, Table, Typography } from 'antd';
 import { confirmAction } from '../../app/confirmAction';
 import { identityBlob } from '../../services/identity';
-import { definitionApi, draftApi, resourceKinds, type TenantResource } from '../../services/tenantDefinitions';
+import { definitionApi, draftApi, resourceKinds, type DefinitionResourceAccess, type TenantResource } from '../../services/tenantDefinitions';
 import { resourceMediaType } from '../admin/resourcePreview';
 import { AccessError, AccessLoading } from './AccessFeedback';
 import { useIdentityQuery } from './useIdentityQuery';
@@ -17,24 +17,28 @@ function ResourceDownload({ path, resource, disabled }: { path: string; resource
   })}>Download</Button>{command.error !== undefined && <AccessError error={command.error} />}</Flex>;
 }
 export function TenantPublicationResources({ tenant, id, version }: { tenant: string; id: string; version: number }) {
-  const state = useIdentityQuery<{ items: TenantResource[] }>(definitionApi(tenant, id, `/publications/${version}/resources`));
+  const state = useIdentityQuery<{ items: TenantResource[]; allRead: boolean }>(definitionApi(tenant, id, `/publications/${version}/resources`));
   if (state.loading) return <AccessLoading />;
   if (state.error) return <AccessError error={state.error} retry={state.reload} />;
-  return <ResourceTable items={state.data?.items ?? []} actions={r => <ResourceDownload path={definitionApi(tenant, id, `/publications/${version}/resources/${r.resourceId}/content`)} resource={r} />} />;
+  return <Flex vertical gap="var(--ac-space-section)">{!state.data?.allRead && <ResourceAccessNotice />}<ResourceTable items={state.data?.items ?? []} emptyDescription={state.data?.allRead ? 'No resources bound to this version.' : 'No resources are available with your current access.'} actions={r => <ResourceDownload path={definitionApi(tenant, id, `/publications/${version}/resources/${r.resourceId}/content`)} resource={r} />} /></Flex>;
 }
-function ResourceTable({ items, actions }: { items: TenantResource[]; actions: (resource: TenantResource) => React.ReactNode }) {
-  return <Table className="admin-collection-table" rowKey="resourceId" dataSource={items} pagination={{ pageSize: 10, responsive: true, showSizeChanger: false }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No resources bound to this version." /> }} columns={[
+function ResourceAccessNotice() { return <Alert type="info" showIcon title="Resource access is limited" description="Only resources you can read are listed." />; }
+function ResourceTable({ items, actions, emptyDescription }: { items: TenantResource[]; actions: (resource: TenantResource) => React.ReactNode; emptyDescription: string }) {
+  return <Table className="admin-collection-table" rowKey="resourceId" dataSource={items} pagination={{ pageSize: 10, responsive: true, showSizeChanger: false }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyDescription} /> }} columns={[
     { title: 'Resource', render: (_, item) => <Flex vertical><Typography.Text style={{ overflowWrap: 'anywhere' }}>{item.logicalPath}</Typography.Text><Typography.Text type="secondary">{resourceKinds[item.kind - 1]} · {(item.byteLength / 1024).toFixed(1)} KB</Typography.Text></Flex> },
     { title: 'Actions', render: (_, item) => actions(item) }
   ]} />;
 }
-export function TenantDraftResources({ tenant, draftId, items, writable, busy, mutate, error }: { tenant: string; draftId: string; items: TenantResource[]; writable: boolean; busy: boolean; mutate: DraftMutation; error?: unknown }) {
+export function TenantDraftResources({ tenant, draftId, items, access, busy, mutate, error }: { tenant: string; draftId: string; items: TenantResource[]; access: DefinitionResourceAccess; busy: boolean; mutate: DraftMutation; error?: unknown }) {
   const { modal } = App.useApp(); const [editing, setEditing] = useState<TenantResource | null | undefined>();
+  useEffect(() => { if (editing !== undefined && (editing === null ? !access.canCreate : !access.items.some(r => r.resourceId === editing.resourceId && r.canManage))) setEditing(undefined); }, [access, editing]);
   return <Flex vertical gap="var(--ac-space-section)">
-    <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Text type="secondary">Upload actual files. Existing content is reusable only through a resource already bound to this draft.</Typography.Text>{writable && <Button disabled={busy} onClick={() => setEditing(null)}>Upload resources</Button>}</Flex>
-    <ResourceTable items={items} actions={resource => <Flex wrap gap="var(--ac-space-compact)">
+    {!access.allRead && <ResourceAccessNotice />}
+    {access.canCreate && <Flex wrap justify="space-between" gap="var(--ac-space-compact)"><Typography.Text type="secondary">Upload actual files. Existing content is reusable only through a resource already bound to this draft.</Typography.Text><Button disabled={busy} onClick={() => setEditing(null)}>Upload resources</Button></Flex>}
+    <ResourceTable items={items} emptyDescription={access.allRead ? 'No resources bound to this draft.' : 'No resources are available with your current access.'} actions={resource => <Flex wrap gap="var(--ac-space-compact)">
       <ResourceDownload path={draftApi(tenant, draftId, `/resources/${resource.resourceId}/content`)} resource={resource} disabled={busy} />
-      {writable && <><Button disabled={busy} aria-label={`Edit ${resource.logicalPath}`} onClick={() => setEditing(resource)}>Edit</Button><Button danger disabled={busy} aria-label={`Remove ${resource.logicalPath}`} onClick={() => confirmAction(modal, { title: `Remove ${resource.logicalPath}?`, content: 'This removes its binding from this draft. Required references must be updated before publication.', danger: true, okText: 'Remove resource', onOk: () => mutate(`/resources/${resource.resourceId}`, 'DELETE') })}>Remove</Button></>}
+      {access.items.some(r => r.resourceId === resource.resourceId && r.canManage) && <Button disabled={busy} aria-label={`Edit ${resource.logicalPath}`} onClick={() => setEditing(resource)}>Edit</Button>}
+      {access.items.some(r => r.resourceId === resource.resourceId && r.canDelete) && <Button danger disabled={busy} aria-label={`Remove ${resource.logicalPath}`} onClick={() => confirmAction(modal, { title: `Remove ${resource.logicalPath}?`, content: 'This removes its binding and direct access grants from this draft. Required references must be updated before publication.', danger: true, okText: 'Remove resource', onOk: () => mutate(`/resources/${resource.resourceId}`, 'DELETE') })}>Remove</Button>}
     </Flex>} />
     {editing !== undefined && <ResourceEditor existing={editing} busy={busy} error={error} onClose={() => setEditing(undefined)} onSave={body => mutate('/resources/batch', 'POST', body, () => setEditing(undefined))} />}
   </Flex>;

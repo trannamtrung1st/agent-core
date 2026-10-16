@@ -57,6 +57,7 @@ public sealed partial class SqliteIamStore
             var draft = await Draft(db, next.Tenant.TenantId, draftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
             if (draft is null || draft.Revision != expectedDraftRevision) return null;
             var key = draftId.ToString("D"); var id = resourceId.ToString("D");
+            TenantDefinitionResourceScopes.RequireNoGrant(next, TenantDefinitionResourceScopes.Draft(next.Tenant.TenantId, Guid.Parse(draft.DefinitionId), draftId, resourceId));
             var rows = await db.AgentDefinitionDraftResources.IgnoreQueryFilters().Where(r => r.DraftId == key).ToArrayAsync(ct).ConfigureAwait(false);
             var resource = rows.SingleOrDefault(r => r.ResourceId == id) ?? throw new AccessDeniedException("resource_unavailable");
             db.Remove(resource); draft.Revision++; draft.UpdatedAtUtc = audit.At.ToUnixTimeMilliseconds();

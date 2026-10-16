@@ -13,6 +13,82 @@ async function request<T>(page: Page, path: string, body?: unknown, method = bod
   }, { path, body, method }) as Promise<T>;
 }
 
+test('exact Definition file access supports read-only settings, scoped edits and revoked-write recovery', async ({ page, browser }) => {
+  await login(page);
+  const memberships = await request<{ items: { tenantId: string }[] }>(page, '/api/v2/account/tenants');
+  const tenant = memberships.items[0].tenantId; const api = `/api/v2/tenants/${tenant}`; const nonce = crypto.randomUUID().slice(0, 8);
+  const revision = async () => (await request<{ revision: number }>(page, `${api}/access/me`)).revision;
+  const draft = await request<{ definitionId: string; draftId: string }>(page, `${api}/agent-definitions`, { name: `Scoped resource browser verification ${nonce}`, expectedRevision: await revision() });
+  const bound = await request<{ resources: { resourceId: string; logicalPath: string }[] }>(page, `${api}/definition-drafts/${draft.draftId}/resources/batch`, {
+    expectedRevision: await revision(), expectedDraftRevision: 1, items: [
+      { logicalPath: 'visible.txt', kind: 2, mediaType: 'text/plain', content: btoa('Visible scoped browser bytes.') },
+      { logicalPath: 'hidden-file-browser-sentinel.txt', kind: 2, mediaType: 'text/plain', content: btoa('Hidden file bytes.') }
+    ]
+  });
+  const file = bound.resources.find(r => r.logicalPath === 'visible.txt')!;
+  const roles = await request<{ items: { roleId: string; key: string }[] }>(page, `${api}/roles`);
+  const readerRole = roles.items.find(r => r.key === 'reader')!.roleId;
+  const chat = await request<{ roleId: string }>(page, `${api}/roles`, { name: `File viewer chat ${nonce}`, permissions: ['agents.chat'], expectedRevision: await revision() });
+  const invitation = await request<{ invitationId: string; token: string }>(page, `${api}/members/invite`, { login: `file-viewer-${nonce}@example.test`, roleId: chat.roleId, expectedRevision: await revision() });
+  const context = await browser.newContext(); const reader = await context.newPage(); const failures: string[] = [];
+  reader.on('pageerror', error => failures.push(error.message));
+  reader.on('console', entry => { if (entry.type() === 'error' && !/Failed to load resource:.*403/.test(entry.text())) failures.push(entry.text()); });
+  reader.on('response', response => { if (response.status() >= 400 && !(response.status() === 403 && response.url().endsWith(`/definition-drafts/${draft.draftId}/resources/batch`))) failures.push(`HTTP ${response.status()} ${response.url()}`); });
+  reader.on('requestfailed', request => { if (request.failure()?.errorText !== 'net::ERR_ABORTED') failures.push(`Network failure ${request.url()}`); });
+  await reader.goto('/sign-in');
+  await request(reader, '/api/v2/auth/register', { login: `file-viewer-${nonce}@example.test`, displayName: 'Scoped resource operator', password: 'synthetic-resource-viewer-password', invitation: { tenantId: tenant, invitationId: invitation.invitationId, token: invitation.token } });
+  await login(reader, `file-viewer-${nonce}@example.test`, 'synthetic-resource-viewer-password');
+  const members = await request<{ items: { principalId: string; login: string }[] }>(page, `${api}/members`);
+  const principal = members.items.find(m => m.login === `FILE-VIEWER-${nonce.toUpperCase()}@EXAMPLE.TEST`)!.principalId;
+  await request(page, `${api}/role-assignments`, { principalId: principal, roleId: readerRole, resourceType: 'definition', resourceId: draft.definitionId, expectedRevision: await revision() });
+  const fileRole = await request<{ roleId: string }>(page, `${api}/roles`, { name: `Exact file editor ${nonce}`, permissions: ['resources.read', 'resources.manage', 'resources.delete'], expectedRevision: await revision() });
+  const grant = await request<{ assignmentId: string }>(page, `${api}/role-assignments`, { principalId: principal, roleId: fileRole.roleId, resourceType: 'resource', resourceId: `${draft.definitionId}:draft:${draft.draftId}:${file.resourceId}`, expectedRevision: await revision() });
+  await reader.setViewportSize({ width: 1440, height: 1000 });
+  await reader.goto(`/t/${tenant}/admin/definitions/${draft.definitionId}/drafts/${draft.draftId}/resources`);
+  await expect(reader.getByText('Draft settings are read-only.', { exact: false })).toBeVisible();
+  await expect(reader.getByText('Resource access is limited', { exact: true })).toBeVisible();
+  await expect(reader.getByRole('button', { name: 'Upload resources', exact: true })).toHaveCount(0);
+  await expect(reader.getByRole('button', { name: 'Publish', exact: true })).toHaveCount(0);
+  await expect(reader.getByText('hidden-file-browser-sentinel.txt', { exact: true })).toHaveCount(0);
+  await reader.getByRole('button', { name: 'Edit visible.txt', exact: true }).click();
+  await reader.getByLabel('Resource logical path', { exact: true }).fill('scoped-renamed.txt');
+  await reader.getByRole('button', { name: 'Save resources', exact: true }).click();
+  await expect(reader.getByRole('button', { name: 'Edit scoped-renamed.txt', exact: true })).toBeVisible();
+  const downloading = reader.waitForEvent('download'); await reader.getByRole('button', { name: 'Download scoped-renamed.txt', exact: true }).click();
+  const downloaded = await downloading; expect((await readFile((await downloaded.path())!)).toString()).toBe('Visible scoped browser bytes.');
+  await expect(reader.getByRole('button', { name: 'Edit scoped-renamed.txt', exact: true })).toBeEnabled();
+  await reader.screenshot({ path: '../.impeccable/review/definition-resource-iam-desktop.png', fullPage: true });
+  for (const width of [1024, 768, 390, 320]) {
+    await reader.setViewportSize({ width, height: 800 });
+    expect(await reader.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(reader.getByRole('button', { name: 'Edit scoped-renamed.txt', exact: true })).toBeEnabled();
+  }
+  await reader.getByRole('button', { name: 'Edit scoped-renamed.txt', exact: true }).scrollIntoViewIfNeeded();
+  await reader.screenshot({ path: '../.impeccable/review/definition-resource-iam-mobile.png', fullPage: true });
+  await reader.getByRole('button', { name: 'Edit scoped-renamed.txt', exact: true }).click();
+  await reader.getByLabel('Resource logical path', { exact: true }).fill('retain-unsaved-after-denial.txt');
+  await request(page, `${api}/role-assignments/${grant.assignmentId}?expectedRevision=${await revision()}`, undefined, 'DELETE');
+  await reader.getByRole('button', { name: 'Save resources', exact: true }).click();
+  await expect(reader.getByRole('dialog', { name: 'Edit resource' }).getByRole('alert')).toBeVisible();
+  await expect(reader.getByLabel('Resource logical path', { exact: true })).toHaveValue('retain-unsaved-after-denial.txt');
+  await reader.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await reader.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await reader.getByRole('button', { name: 'Reload saved draft', exact: true }).click();
+  await expect(reader.getByText('No resources are available with your current access.', { exact: true })).toBeVisible();
+  await expect(reader.getByRole('button', { name: 'Download scoped-renamed.txt', exact: true })).toHaveCount(0);
+  const creator = await request<{ roleId: string }>(page, `${api}/roles`, { name: `Definition creator without file creation ${nonce}`, permissions: ['agent-definitions.create'], expectedRevision: await revision() });
+  await request(page, `${api}/role-assignments`, { principalId: principal, roleId: creator.roleId, expectedRevision: await revision() });
+  const templateCatalog = await request<{ items: { id: string; version: number; identity: { name: string } }[] }>(page, `${api}/definition-templates`);
+  const support = templateCatalog.items.find(item => item.id === 'customer-support' && item.version === 3)!;
+  await reader.goto(`/t/${tenant}/admin/definitions`);
+  await reader.getByRole('button', { name: 'New definition', exact: true }).click();
+  await reader.getByRole('combobox', { name: 'Starting point', exact: true }).fill(support.identity.name);
+  await expect(reader.getByTitle(`${support.identity.name} · v3 · unavailable with current access`, { exact: true })).toHaveClass(/ant-select-item-option-disabled/);
+  await reader.getByText('Definition name', { exact: true }).click();
+  await reader.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(failures).toEqual([]); await context.close();
+});
+
 test('owned Definition authoring, resource/evaluation publication and lifecycle recovery', async ({ page }) => {
   const definitionName = `Tenant browser Definition with a meaningful long name ${crypto.randomUUID().slice(0, 8)}`;
   const failures: string[] = [];
@@ -104,7 +180,7 @@ test('resource-only Reader, stale save recovery and tenant switch discard old re
   await expect(reader.getByRole('link', { name: `Private owner ${nonce}`, exact: true })).toHaveCount(0);
   await reader.getByRole('link', { name: `Scoped reader ${nonce}`, exact: true }).click();
   await reader.getByRole('link', { name: `Scoped reader ${nonce}`, exact: true }).click();
-  await expect(reader.getByText('Read-only draft.', { exact: false })).toBeVisible();
+  await expect(reader.getByText('Draft settings are read-only.', { exact: false })).toBeVisible();
   await expect(reader.getByRole('button', { name: 'Save draft', exact: true })).toHaveCount(0);
   await expect(reader.getByRole('button', { name: 'Publish', exact: true })).toHaveCount(0);
   await expect(reader.getByRole('button', { name: 'Delete draft', exact: true })).toHaveCount(0);

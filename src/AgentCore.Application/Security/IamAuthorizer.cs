@@ -45,6 +45,26 @@ public sealed class IamAuthorizer(IIamStore store)
         if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
     }
 
+    internal async ValueTask<(T[] Items, bool All)> VisibleResourcesAsync<T>(TenantSecurityState state, Guid actor,
+        string permission, IReadOnlyList<T> items, Func<T, AccessScope> scope, CancellationToken ct)
+    {
+        var metadata = PermissionCatalog.Get(permission);
+        var inherited = await CheckTenantAsync(state, actor, metadata, AccessScope.ForTenant(state.Tenant.TenantId), ct).ConfigureAwait(false);
+        if (inherited.Allowed) return (items.ToArray(), true);
+        if (inherited.ReasonCode != "permission_denied") throw new AccessDeniedException(inherited.ReasonCode);
+        var visible = new List<T>();
+        foreach (var item in items)
+        {
+            var target = scope(item);
+            if (!state.Assignments.Any(a => a.PrincipalId == actor && a.Scope == target
+                && state.Roles.Any(r => r.RoleId == a.RoleId && r.Permissions.Contains(permission, StringComparer.Ordinal)))) continue;
+            var decision = await CheckTenantAsync(state, actor, metadata, target, ct).ConfigureAwait(false);
+            if (decision.Allowed) visible.Add(item);
+            else if (decision.ReasonCode is not ("permission_denied" or "resource_unavailable")) throw new AccessDeniedException(decision.ReasonCode);
+        }
+        return (visible.ToArray(), false);
+    }
+
     internal async ValueTask<AccessDecision> CheckTenantAsync(TenantSecurityState state, Guid principalId,
         PermissionDefinition permission, AccessScope target, CancellationToken ct)
     {
