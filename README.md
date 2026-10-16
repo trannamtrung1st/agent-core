@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Tenant OAuth now has a [locally verified persistence foundation](docs/reports/tenant-oauth-store-verification-2026-10-17.md): durable one-use attempts bound to the original human Account/session/Tenant, atomic protected-grant changes, replay/expiry/supersession fencing and tenant-scoped external identity uniqueness. Canonical consent/provider/callback orchestration, cleanup scheduling, runtime use and credential UI remain pending; this foundation exposes no new OAuth HTTP route.
+
 Canonical tenant Credential APIs now provide scoped metadata inventory, protected-value management and owned Instance binding configuration over the existing rows, with atomic ownership/security/audit, exact grants and retired-ID protection. [Credential verification](docs/reports/tenant-credential-lifecycle-verification-2026-10-17.md) distinguishes this management boundary from pending secret use, OAuth callbacks and the full cutover. [Binding verification](docs/reports/tenant-credential-binding-verification-2026-10-17.md) records association authority and database constraints.
 
 A [legacy-boundary review](docs/reports/tenant-legacy-boundary-review-2026-10-17.md) now excludes owned Instance credential bindings from global operations and preserves owned workspace bytes during deletion recovery and direct cleanup. Runtime secret use and the broader conversion remain pending.

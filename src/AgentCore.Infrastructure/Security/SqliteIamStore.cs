@@ -8,7 +8,8 @@ using Microsoft.EntityFrameworkCore;
 namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null,
-    IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore
+    IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
+    TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore
 {
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await db.Set<Account>().AsNoTracking().SingleOrDefaultAsync(a => a.LoginKey == loginKey, ct).ConfigureAwait(false); }

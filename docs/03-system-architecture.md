@@ -17,6 +17,10 @@ Tenant Definition ownership now lives in the definition aggregate's `TenantAgent
 
 Current canonical management supports General, typed Custom email, disconnected Gmail/Drive and Container Registry credentials. It grants no browser, email, Drive or Sandbox effect authority. Canonical binding configuration is implemented separately below; secret use and initiating Account/session/tenant-bound OAuth flows remain pending; legacy stores hide/reject owned values rather than offering fallback authority. [Local evidence](reports/tenant-credential-lifecycle-verification-2026-10-17.md) does not establish full tenant runtime isolation.
 
+## Canonical tenant OAuth persistence
+
+The separate OAuth persistence foundation binds an attempt to an actual owned Credential, original human Account/authentication session and current tenant User/Principal. Both stores check that live identity at start, one-use claim and grant/disconnect commit. Tenant security, Credential revisions/AuthEpoch, protected grant and redacted audit commit together; a newer attempt supersedes an older in-flight exchange. It stores no permission decision or bearer session material. The future Application orchestration must check current read/manage authority before preparation and again before commit; persistence alone is not authorization. [Store evidence](reports/tenant-oauth-store-verification-2026-10-17.md) does not qualify a tenant OAuth callback, provider integration or runtime consumption.
+
 ## Canonical tenant Credential bindings
 
 Owned association rows carry the server-derived Tenant and restrictive composite foreign keys to the Instance SystemIdentity and Credential owner. The existing binding row remains the association; no implicit IAM inheritance or secret-use grant is introduced. Both owners must be proven in the same Tenant. Configuration requires Instance read/update and exact Credential bind; metadata exposure additionally requires Credential read. Agent writers remain bounded by the current Connections self-management area/freeze, independently of their IAM grants.

@@ -118,14 +118,14 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
     }
     private static async Task Save(AgentCoreDbContext db, CancellationToken ct)
     { try { await db.SaveChangesAsync(ct); } catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Credential or binding changed concurrently or is already bound."); } }
-    internal static void StageValue(AgentCoreDbContext db, CredentialRecord? row, Credential c)
+    internal static void StageValue(AgentCoreDbContext db, CredentialRecord? row, Credential c, Guid? tenantId = null)
     {
         if (row is null) { row = new(); db.Credentials.Add(row); }
         row.CredentialId = c.CredentialId.ToString("D"); row.DisplayName = c.DisplayName; row.Kind = c.Kind.ToString(); row.Status = c.Status.ToString();
         row.Purpose = c.Purpose.ToString();
         row.ContainerRegistryJson = c.ContainerRegistry is null ? null : JsonSerializer.Serialize(c.ContainerRegistry);
-        if (c.EmailAccount is not null) row.EmailAccount = new() { CredentialId = row.CredentialId, ProfileJson = JsonSerializer.Serialize(c.EmailAccount), GoogleSubject = c.EmailAccount.GoogleSubject };
-        if (c.DriveAccount is not null) row.DriveAccount = new() { CredentialId = row.CredentialId, ProfileJson = JsonSerializer.Serialize(c.DriveAccount), GoogleSubject = c.DriveAccount.GoogleSubject };
+        if (c.EmailAccount is not null) row.EmailAccount = new() { TenantId = tenantId, CredentialId = row.CredentialId, ProfileJson = JsonSerializer.Serialize(c.EmailAccount), GoogleSubject = c.EmailAccount.GoogleSubject };
+        if (c.DriveAccount is not null) row.DriveAccount = new() { TenantId = tenantId, CredentialId = row.CredentialId, ProfileJson = JsonSerializer.Serialize(c.DriveAccount), GoogleSubject = c.DriveAccount.GoogleSubject };
         row.MetadataJson = JsonSerializer.Serialize(c.Metadata); row.AllowedOriginsJson = JsonSerializer.Serialize(c.AllowedOrigins);
         row.SecretRevision = c.SecretRevision; row.ProtectedPayload = c.ProtectedPayload; row.ProtectionVersion = c.ProtectionVersion; row.Revision = c.Revision;
         row.CreatedAtUtc = c.CreatedAtUtc.ToUnixTimeMilliseconds(); row.UpdatedAtUtc = c.UpdatedAtUtc.ToUnixTimeMilliseconds();

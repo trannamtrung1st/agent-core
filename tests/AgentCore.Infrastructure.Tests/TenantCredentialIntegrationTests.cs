@@ -84,8 +84,9 @@ public sealed partial class TenantCredentialIntegrationTests
         foreach (var secret in secrets) Assert.DoesNotContain(secret, json);
         foreach (var field in new[] { "ProtectedPayload", "ProtectionVersion", "SecretRevision", "ProtectedValue" }) Assert.DoesNotContain(field, json, StringComparison.OrdinalIgnoreCase);
     }
-    private sealed class Fixture : IAsyncDisposable
+    private sealed class Fixture(TimeProvider? clock = null) : IAsyncDisposable
     {
+        public TimeProvider Clock { get; } = clock ?? TimeProvider.System;
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "tenant-credentials-" + Guid.NewGuid().ToString("N"));
         public IIamStore Iam { get; private set; } = null!;
         public ITenantCredentialStore Credentials => (ITenantCredentialStore)Iam;
@@ -94,10 +95,10 @@ public sealed partial class TenantCredentialIntegrationTests
         public IIdGenerator Ids { get; } = new SystemIdGenerator(TimeProvider.System);
         public IIdentityTokens Tokens { get; } = new IdentityTokens();
         public IamAuthorizer Authorizer => new(Iam);
-        public IdentityService Identity => new(Iam, new AccountPasswordHasher(), Tokens, Ids, TimeProvider.System);
-        public TenantAccessService Access => new(Iam, Authorizer, Identity, Tokens, Ids, TimeProvider.System);
+        public IdentityService Identity => new(Iam, new AccountPasswordHasher(), Tokens, Ids, Clock);
+        public TenantAccessService Access => new(Iam, Authorizer, Identity, Tokens, Ids, Clock);
         public LocalCredentialProtector Protector => new(Path.Combine(Root, "keys"));
-        public TenantCredentialService Service => new(Iam, Credentials, Authorizer, Protector, Ids, TimeProvider.System);
+        public TenantCredentialService Service => new(Iam, Credentials, Authorizer, Protector, Ids, Clock);
         public TenantCredentialBindingService BindingService => new(Iam, (ITenantAgentStore)Iam, Credentials, (ITenantCredentialBindingStore)Iam, Authorizer,
             BuiltIns, (ITenantDefinitionStore)Iam, Ids, TimeProvider.System);
         public TenantAgentService Agents => new(Iam, (ITenantAgentStore)Iam, BuiltIns, Authorizer, Ids, TimeProvider.System, ownedDefinitions: (ITenantDefinitionStore)Iam);
@@ -110,22 +111,22 @@ public sealed partial class TenantCredentialIntegrationTests
             return new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default);
         }
         public IDbContextFactory<AgentCoreDbContext>? Contexts { get; private set; }
-        public static async Task<Fixture> Create(bool sqlite)
+        public static async Task<Fixture> Create(bool sqlite, TimeProvider? clock = null)
         {
-            var f = new Fixture(); Directory.CreateDirectory(f.Root);
+            var f = new Fixture(clock); Directory.CreateDirectory(f.Root);
             try
             {
                 if (sqlite)
                 {
                     f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").Options);
                     await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
-                    f.Iam = new SqliteIamStore(f.Contexts); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
+                    f.Iam = new SqliteIamStore(f.Contexts, clock: f.Clock); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
                 }
                 else
                 {
                     var instances = new InMemoryAgentInstanceStore(); var credentials = new InMemoryCredentialStore(instances);
                     f.Legacy = credentials; f.Instances = instances;
-                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), new InMemoryMemoryStore(), credentials: credentials);
+                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), new InMemoryMemoryStore(), credentials: credentials, clock: f.Clock);
                 }
                 return f;
             }

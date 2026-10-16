@@ -18,6 +18,7 @@ internal static class IamPersistenceModel
     {
         TenantDefinitionRecord.Configure(model);
         TenantCredentialRecord.Configure(model);
+        CredentialOAuthAttemptRow.Configure(model);
         var accounts = model.Entity<Account>();
         accounts.ToTable("Accounts"); accounts.HasKey(x => x.AccountId);
         accounts.Property(x => x.LoginKey).HasMaxLength(254); accounts.HasIndex(x => x.LoginKey).IsUnique();
@@ -37,6 +38,7 @@ internal static class IamPersistenceModel
         users.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         users.HasOne<Account>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
         users.HasOne<Principal>().WithMany().HasForeignKey(x => x.PrincipalId).OnDelete(DeleteBehavior.Restrict);
+        users.HasAlternateKey(x => new { x.TenantId, x.PrincipalId, x.AccountId });
         var identities = model.Entity<IamSystemIdentityRow>();
         identities.ToTable("SystemIdentities"); identities.HasKey(x => x.SystemIdentityId);
         identities.HasIndex(x => x.AgentInstanceId).IsUnique(); identities.HasIndex(x => x.PrincipalId).IsUnique();
@@ -75,7 +77,8 @@ internal static class IamPersistenceModel
         bootstrap.ToTable("IdentityBootstrap", table => table.HasCheckConstraint("CK_IdentityBootstrap_One", "Id = 1")); bootstrap.HasKey(x => x.Id);
 
         // Domain UTC values have one deterministic SQLite representation; no provider-specific types leak out.
-        foreach (var type in new[] { typeof(Account), typeof(Tenant), typeof(TenantUser), typeof(TenantInvitation),
+        model.Entity<AuthenticationSession>().HasAlternateKey(s => new { s.SessionId, s.AccountId });
+        foreach (var type in new[] { typeof(Account), typeof(Tenant), typeof(TenantUser), typeof(TenantInvitation), typeof(CredentialOAuthAttemptRow),
             typeof(AuthenticationSession), typeof(AuthorizationAudit), typeof(IamAssignmentRow), typeof(IamBootstrapRow), typeof(TenantDefinitionRecord), typeof(TenantCredentialRecord) })
         foreach (var property in model.Entity(type).Metadata.GetProperties())
         {

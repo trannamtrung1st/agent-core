@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Credentials;
 using AgentCore.Domain.Security;
+using System.Text.Json;
 
 namespace AgentCore.Application.Security;
 
@@ -19,7 +20,7 @@ public static class TenantCredentialRules
     {
         if (value.CredentialId == Guid.Empty || !Enum.IsDefined(value.Kind) || !Enum.IsDefined(value.Status)
             || !Enum.IsDefined(value.Purpose) || value.ProtectionVersion != 1 || value.SecretRevision < 0
-            || value.ProtectedPayload is null || value.ProtectedPayload.Length > 262144)
+            || value.ProtectedPayload is null || value.ProtectedPayload.Length > 262144 || value.AllowedOrigins is null)
             throw new ArgumentException("Invalid credential value.");
         var email = value.EmailAccount?.Validate(); var drive = value.DriveAccount?.Validate();
         var registry = value.ContainerRegistry?.Validate();
@@ -36,13 +37,13 @@ public static class TenantCredentialRules
             throw new ArgumentException("Invalid credential purpose/profile.");
         if (email?.AuthMethod == EmailAuthMethod.GoogleOAuth2 || drive is not null)
         {
-            // OAuth state is established by a correlated server flow, never ordinary CRUD.
-            if (value.ProtectedPayload != "" || value.SecretRevision != 0
-                || email is not null && (email.ConnectionStatus != EmailConnectionStatus.NotConnected || email.GoogleSubject is not null
-                    || email.GrantedScopes is not null || email.AuthEpoch != 0 || email.ConnectedAtUtc is not null || email.Synthetic)
-                || drive is not null && (drive.ConnectionStatus != DriveConnectionStatus.NotConnected || drive.GoogleSubject is not null
-                    || drive.GrantedScopes is not null || drive.AuthEpoch != 0 || drive.ConnectedAtUtc is not null || drive.ReconnectRequiredAtUtc is not null || drive.Synthetic))
-                throw new ArgumentException("Use correlated OAuth authorization to connect this credential.");
+            var scopes = TenantCredentialOAuthRules.Scopes(value.Purpose, email?.GrantedScopes ?? drive?.GrantedScopes);
+            if (email is not null) email = email with { GrantedScopes = scopes };
+            if (drive is not null) drive = drive with { GrantedScopes = scopes };
+            var connected = email?.ConnectionStatus == EmailConnectionStatus.Connected || drive?.ConnectionStatus == DriveConnectionStatus.Connected;
+            if (connected != (value.ProtectedPayload.Length > 0) || connected && value.SecretRevision == 0
+                || (email?.GoogleSubject ?? drive?.GoogleSubject) is { } subject && (subject.Length is < 1 or > 255 || subject.Any(char.IsControl)))
+                throw new ArgumentException("Invalid protected OAuth authorization state.");
         }
         else if (string.IsNullOrEmpty(value.ProtectedPayload)) throw new ArgumentException("Protected credential value is required.");
         return value with { DisplayName = CredentialRules.DisplayName(value.DisplayName), Metadata = CredentialRules.Metadata(value.Metadata),
@@ -58,13 +59,31 @@ public static class TenantCredentialRules
         {
             if (expectedRevision != 0 || expectedSecretRevision != 0 || value.SecretRevision != 0 || value.Status != CredentialStatus.Active)
                 throw new ArgumentException("Invalid initial credential.");
+            RequireInitialOAuth(value);
             return;
         }
         if (current.Kind != value.Kind || current.Purpose != value.Purpose || current.CreatedAtUtc != value.CreatedAtUtc
             || current.ProtectionVersion != value.ProtectionVersion || current.EmailAccount?.AuthMethod != value.EmailAccount?.AuthMethod
             || current.EmailAccount?.Preset != value.EmailAccount?.Preset)
             throw new ArgumentException("Credential identity, purpose and authentication method are immutable.");
+        if (TenantCredentialOAuthRules.IsOAuth(current))
+        {
+            var expected = TenantCredentialOAuthRules.AdvanceStatusEpoch(current, value.Status);
+            if (value.ProtectedPayload != current.ProtectedPayload || value.SecretRevision != current.SecretRevision
+                || JsonSerializer.Serialize(value.EmailAccount) != JsonSerializer.Serialize(expected.EmailAccount)
+                || JsonSerializer.Serialize(value.DriveAccount) != JsonSerializer.Serialize(expected.DriveAccount))
+                throw new ArgumentException("OAuth authorization is changed only through its correlated flow.");
+        }
         var changed = current.ProtectedPayload != value.ProtectedPayload;
         if (value.SecretRevision != checked(current.SecretRevision + (changed ? 1 : 0))) throw new ArgumentException("Invalid secret generation.");
+    }
+    public static void RequireInitialOAuth(Credential value)
+    {
+        if (!TenantCredentialOAuthRules.IsOAuth(value)) return;
+        var email = value.EmailAccount; var drive = value.DriveAccount;
+        if (value.ProtectedPayload != "" || value.SecretRevision != 0 || TenantCredentialOAuthRules.Epoch(value) != 0
+            || email is not null && (email.ConnectionStatus != EmailConnectionStatus.NotConnected || email.GoogleSubject is not null || email.GrantedScopes is not null || email.ConnectedAtUtc is not null || email.Synthetic)
+            || drive is not null && (drive.ConnectionStatus != DriveConnectionStatus.NotConnected || drive.GoogleSubject is not null || drive.GrantedScopes is not null || drive.ConnectedAtUtc is not null || drive.ReconnectRequiredAtUtc is not null || drive.Synthetic))
+            throw new ArgumentException("Use correlated OAuth authorization to connect this credential.");
     }
 }

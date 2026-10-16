@@ -44,7 +44,7 @@ public sealed partial class SqliteIamStore
             value = TenantCredentialRules.Freeze(value);
             TenantCredentialRules.ValidateChange(owner, value, row is null ? null : SqliteCredentialStore.Map(row), expectedRevision, expectedSecretRevision);
             if (root is null) db.Add(TenantCredentialRecord.Row(owner));
-            SqliteCredentialStore.StageValue(db, row, value); return true;
+            SqliteCredentialStore.StageValue(db, row, value, owner.TenantId); return true;
         }, ct);
     }
     public ValueTask<bool> TryDeleteTenantCredentialAsync(TenantSecurityState next, long expectedSecurityRevision, Guid credentialId,
@@ -87,7 +87,8 @@ public sealed partial class SqliteIamStore
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }
     }
     private static IQueryable<CredentialRecord> OwnedCredentials(AgentCoreDbContext db, Guid tenant) => db.Credentials.Where(c =>
-        db.Set<TenantCredentialRecord>().Any(r => r.CredentialId == c.CredentialId && r.TenantId == tenant && r.DeletedAt == null));
+        db.Set<TenantCredentialRecord>().Any(r => r.CredentialId == c.CredentialId && r.TenantId == tenant && r.DeletedAt == null)
+        && (c.EmailAccount == null || c.EmailAccount.TenantId == tenant) && (c.DriveAccount == null || c.DriveAccount.TenantId == tenant));
     private static async Task<TenantCredential?> CredentialView(AgentCoreDbContext db, Guid tenant, CredentialRecord row, CancellationToken ct)
     {
         var root = await db.Set<TenantCredentialRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.CredentialId == row.CredentialId && r.TenantId == tenant && r.DeletedAt == null, ct).ConfigureAwait(false);

@@ -696,7 +696,10 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<EmailAccountProfileRecord>(entity =>
         {
             entity.ToTable("EmailAccountProfiles");
-            entity.HasIndex(c => c.GoogleSubject).IsUnique(); entity.HasKey(c => c.CredentialId);
+            entity.HasIndex(c => c.GoogleSubject).IsUnique().HasFilter("TenantId IS NULL AND GoogleSubject IS NOT NULL"); entity.HasKey(c => c.CredentialId);
+            entity.HasIndex(c => new { c.TenantId, c.GoogleSubject }).IsUnique().HasFilter("GoogleSubject IS NOT NULL");
+            entity.HasOne<AgentCore.Infrastructure.Security.TenantCredentialRecord>().WithMany().HasForeignKey(c => new { c.TenantId, c.CredentialId })
+                .HasPrincipalKey(c => new { c.TenantId, c.CredentialId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<CredentialRecord>().WithOne(c => c.EmailAccount).HasForeignKey<EmailAccountProfileRecord>(c => c.CredentialId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<DriveOperationRecord>(entity =>
@@ -713,7 +716,10 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<DriveAccountProfileRecord>(entity =>
         {
-            entity.ToTable("DriveAccountProfiles"); entity.HasKey(c => c.CredentialId); entity.HasIndex(c => c.GoogleSubject).IsUnique();
+            entity.ToTable("DriveAccountProfiles"); entity.HasKey(c => c.CredentialId); entity.HasIndex(c => c.GoogleSubject).IsUnique().HasFilter("TenantId IS NULL AND GoogleSubject IS NOT NULL");
+            entity.HasIndex(c => new { c.TenantId, c.GoogleSubject }).IsUnique().HasFilter("GoogleSubject IS NOT NULL");
+            entity.HasOne<AgentCore.Infrastructure.Security.TenantCredentialRecord>().WithMany().HasForeignKey(c => new { c.TenantId, c.CredentialId })
+                .HasPrincipalKey(c => new { c.TenantId, c.CredentialId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<CredentialRecord>().WithOne(c => c.DriveAccount).HasForeignKey<DriveAccountProfileRecord>(c => c.CredentialId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<AgentCredentialBindingRecord>(entity =>

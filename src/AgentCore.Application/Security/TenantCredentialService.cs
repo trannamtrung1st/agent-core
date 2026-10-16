@@ -52,6 +52,7 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
         var value = Validate(() => TenantCredentialRules.Freeze(new(id, input.DisplayName, input.Kind, CredentialStatus.Active,
             CredentialRules.Metadata(input.Metadata), CredentialRules.Origins(input.AllowedOrigins), oauth ? "" : "pending-protection", 1, 1, now, now,
             input.Purpose, input.EmailAccount, 0, input.Purpose == CredentialPurpose.GoogleDriveAccount ? new() : null, input.ContainerRegistry)));
+        Validate(() => { TenantCredentialRules.RequireInitialOAuth(value); return true; });
         if (!oauth)
         {
             Validate(() => { CredentialRules.ProtectedValue(input.ProtectedValue!); return true; });
@@ -68,9 +69,22 @@ public sealed class TenantCredentialService(IIamStore security, ITenantCredentia
         var owned = await Owned(tenant, id, ct).ConfigureAwait(false);
         var state = await ForWrite(actor, tenant, TenantCredentialRules.Scope(tenant, id), expectedSecurityRevision, true, ct).ConfigureAwait(false);
         RequireRevision(owned, expectedRevision); var now = time.GetUtcNow();
-        var value = Validate(() => TenantCredentialRules.Freeze(owned.Value with { DisplayName = input.DisplayName, Status = input.Status,
+        var email = input.EmailAccount ?? owned.Value.EmailAccount;
+        if (owned.Value.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2 && input.EmailAccount is { } incoming)
+        {
+            var plain = incoming.GoogleSubject is null && incoming.GrantedScopes is null && incoming.ConnectionStatus == EmailConnectionStatus.NotConnected
+                && incoming.AuthEpoch == 0 && incoming.ConnectedAtUtc is null && !incoming.Synthetic;
+            if (incoming.Preset != owned.Value.EmailAccount.Preset || incoming.AuthMethod != owned.Value.EmailAccount.AuthMethod
+                || !string.Equals(incoming.EmailAddress, owned.Value.EmailAccount.EmailAddress, StringComparison.OrdinalIgnoreCase)
+                || !plain && System.Text.Json.JsonSerializer.Serialize(incoming) != System.Text.Json.JsonSerializer.Serialize(owned.Value.EmailAccount))
+                throw AgentCoreErrors.Validation("OAuth identity is managed through authorization.");
+            email = owned.Value.EmailAccount;
+        }
+        var baseline = TenantCredentialOAuthRules.AdvanceStatusEpoch(owned.Value, input.Status);
+        if (baseline.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2) email = baseline.EmailAccount;
+        var value = Validate(() => TenantCredentialRules.Freeze(baseline with { DisplayName = input.DisplayName, Status = input.Status,
             Metadata = CredentialRules.Metadata(input.Metadata), AllowedOrigins = CredentialRules.Origins(input.AllowedOrigins),
-            EmailAccount = input.EmailAccount ?? owned.Value.EmailAccount, ContainerRegistry = input.ContainerRegistry ?? owned.Value.ContainerRegistry,
+            EmailAccount = email, ContainerRegistry = input.ContainerRegistry ?? owned.Value.ContainerRegistry,
             Revision = checked(expectedRevision + 1), UpdatedAtUtc = now }));
         Validate(() => { TenantCredentialRules.ValidateChange(owned.Owner, value, owned.Value, expectedRevision, owned.Value.SecretRevision); return true; });
         if (!await credentials.TrySaveTenantCredentialAsync(Advance(state), expectedSecurityRevision, owned.Owner, value, expectedRevision, owned.Value.SecretRevision,

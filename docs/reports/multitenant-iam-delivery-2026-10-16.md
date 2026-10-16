@@ -4,6 +4,8 @@ Owner request: implement the final proposal at `local/proposals/agent-core-multi
 
 ## Status and sequence
 
+The [OAuth store checkpoint](tenant-oauth-store-verification-2026-10-17.md) completes the durable attempt/grant transaction foundation with both-store and actual SQLite constraint evidence. Original human/session fencing, one-use claim, supersession, expiry and per-Tenant identity uniqueness are implemented. Application IAM orchestration, proof protection/generation, purpose-specific consent/provider/callback HTTP, scheduled expiry, runtime consumption and credential UI remain pending; no new OAuth public route is enabled.
+
 | Phase | Deliverable / gate | Current status |
 | --- | --- | --- |
 | 0 | Source/route/store/effect inventory and ownership | Baseline inventoried; [boundary obligations](multitenant-iam-boundary-inventory-2026-10-16.md); no unowned boundary category |

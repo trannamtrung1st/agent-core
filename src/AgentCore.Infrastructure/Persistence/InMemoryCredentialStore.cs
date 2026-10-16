@@ -32,9 +32,9 @@ public sealed partial class InMemoryCredentialStore(InMemoryAgentInstanceStore i
             || c.Purpose == CredentialPurpose.ContainerRegistry && (c.Kind is not (CredentialKind.Password or CredentialKind.Token) || c.AllowedOrigins.Count != 0))
             throw AgentCoreErrors.Validation("Invalid Container Registry purpose/profile.");
         if (c.ContainerRegistry is not null) c = c with { ContainerRegistry=c.ContainerRegistry.Validate() };
-            if (c.EmailAccount?.GoogleSubject is { } subject && _credentials.Values.Any(x => x.CredentialId != c.CredentialId && x.EmailAccount?.GoogleSubject == subject))
+            if (c.EmailAccount?.GoogleSubject is { } subject && _credentials.Values.Any(x => !_tenantOwners.ContainsKey(x.CredentialId) && x.CredentialId != c.CredentialId && x.EmailAccount?.GoogleSubject == subject))
                 throw AgentCoreErrors.Conflict("email_identity_already_connected: This Google identity belongs to another account.");
-            if (c.DriveAccount?.GoogleSubject is { } driveSubject && _credentials.Values.Any(x => x.CredentialId != c.CredentialId && x.DriveAccount?.GoogleSubject == driveSubject))
+            if (c.DriveAccount?.GoogleSubject is { } driveSubject && _credentials.Values.Any(x => !_tenantOwners.ContainsKey(x.CredentialId) && x.CredentialId != c.CredentialId && x.DriveAccount?.GoogleSubject == driveSubject))
                 throw AgentCoreErrors.Conflict("drive_identity_already_connected: This Google identity belongs to another Drive account.");
             _credentials[c.CredentialId] = c; return ValueTask.CompletedTask;
         }

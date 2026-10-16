@@ -33,6 +33,7 @@ public sealed class AgentCredentialBindingRecord
 
 public sealed class EmailAccountProfileRecord
 {
+    public Guid? TenantId { get; set; }
     public string CredentialId { get; set; } = "";
     public string ProfileJson { get; set; } = "{}";
     public string? GoogleSubject { get; set; }
@@ -40,6 +41,7 @@ public sealed class EmailAccountProfileRecord
 
 public sealed class DriveAccountProfileRecord
 {
+    public Guid? TenantId { get; set; }
     public string CredentialId { get; set; } = "";
     public string ProfileJson { get; set; } = "{}";
     public string? GoogleSubject { get; set; }

@@ -1538,10 +1538,20 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("CredentialId");
 
                     b.HasIndex("GoogleSubject")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("TenantId IS NULL AND GoogleSubject IS NOT NULL");
+
+                    b.HasIndex("TenantId", "CredentialId");
+
+                    b.HasIndex("TenantId", "GoogleSubject")
+                        .IsUnique()
+                        .HasFilter("GoogleSubject IS NOT NULL");
 
                     b.ToTable("DriveAccountProfiles", (string)null);
                 });
@@ -1618,10 +1628,20 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("CredentialId");
 
                     b.HasIndex("GoogleSubject")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("TenantId IS NULL AND GoogleSubject IS NOT NULL");
+
+                    b.HasIndex("TenantId", "CredentialId");
+
+                    b.HasIndex("TenantId", "GoogleSubject")
+                        .IsUnique()
+                        .HasFilter("GoogleSubject IS NOT NULL");
 
                     b.ToTable("EmailAccountProfiles", (string)null);
                 });
@@ -2677,6 +2697,92 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("WebhookEvents", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.CredentialOAuthAttemptRow", b =>
+                {
+                    b.Property<Guid>("AttemptId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("AuthEpoch")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("AuthenticationSessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("ClaimedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("CompletedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CorrelationHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CredentialId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CredentialRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ExpiresAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("PrincipalId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProtectedProof")
+                        .IsRequired()
+                        .HasMaxLength(65536)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProviderJson")
+                        .IsRequired()
+                        .HasMaxLength(8192)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StateHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("AttemptId");
+
+                    b.HasIndex("AuthenticationSessionId", "AccountId");
+
+                    b.HasIndex("ExpiresAt", "Outcome");
+
+                    b.HasIndex("TenantId", "CredentialId")
+                        .IsUnique()
+                        .HasFilter("Outcome IN (0, 1)");
+
+                    b.HasIndex("TenantId", "PrincipalId", "AccountId");
+
+                    b.ToTable("CredentialOAuthAttempts", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Security.IamAssignmentRow", b =>
                 {
                     b.Property<Guid>("AssignmentId")
@@ -3063,6 +3169,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AgentCore.Infrastructure.Persistence.DriveAccountProfileRecord", "CredentialId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantCredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CredentialId")
+                        .HasPrincipalKey("TenantId", "CredentialId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.DriveOperationRecord", b =>
@@ -3087,6 +3199,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AgentCore.Infrastructure.Persistence.EmailAccountProfileRecord", "CredentialId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantCredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CredentialId")
+                        .HasPrincipalKey("TenantId", "CredentialId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.EmailSendOperationRecord", b =>
@@ -3163,6 +3281,30 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("LiveSessionId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.CredentialOAuthAttemptRow", b =>
+                {
+                    b.HasOne("AgentCore.Domain.Security.AuthenticationSession", null)
+                        .WithMany()
+                        .HasForeignKey("AuthenticationSessionId", "AccountId")
+                        .HasPrincipalKey("SessionId", "AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantCredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CredentialId")
+                        .HasPrincipalKey("TenantId", "CredentialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Domain.Security.TenantUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PrincipalId", "AccountId")
+                        .HasPrincipalKey("TenantId", "PrincipalId", "AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Security.IamAssignmentRow", b =>

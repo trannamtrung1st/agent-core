@@ -107,6 +107,8 @@ Definition binding references use type `resource` and `{definitionId:D}:draft:{d
 
 ## Canonical tenant Credential HTTP
 
+The [OAuth attempt store](reports/tenant-oauth-store-verification-2026-10-17.md) is internal persistence only. It adds no canonical start/consent/callback/disconnect HTTP route. Tenant-owned Credentials remain excluded from legacy OAuth routes; the Account cookie or an internal attempt ID is not a substitute for a purpose-specific callback proof. Full cookie/PKCE/nonce/provider and live scoped-IAM orchestration remains required before enabling that flow.
+
 Base path: `/api/v2/tenants/{tenantId}/credentials`. Account cookie, CSRF on mutations and `Cache-Control: no-store` follow the canonical identity foundation. No owner capability fallback or plaintext value readback exists.
 
 | Method/path | Contract |

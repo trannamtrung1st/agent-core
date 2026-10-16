@@ -30,7 +30,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<IIamStore>(provider => provider.GetRequiredService<PersistenceOptions>().Provider.ToUpperInvariant() switch
         {
             "SQLITE" => new SqliteIamStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetService<IDefinitionResourceContentStore>(),
-                provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>()),
+                provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(), provider.GetRequiredService<TimeProvider>()),
             "INMEMORY" => CreateInMemoryStore(provider),
             _ => throw new InvalidOperationException("Identity storage must explicitly select Sqlite or InMemory.")
         });
@@ -46,6 +46,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantCredentialService>();
         services.TryAddSingleton<ITenantCredentialBindingStore>(provider => (ITenantCredentialBindingStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantCredentialBindingService>();
+        services.TryAddSingleton<ITenantCredentialOAuthStore>(provider => (ITenantCredentialOAuthStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<AccountAdministrationService>();
         return services;
     }
@@ -55,6 +56,6 @@ public static class IdentityRegistration
         _ = provider.GetRequiredService<IDefinitionDraftEvaluationStore>();
         return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>(),
             provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(),
-            provider.GetRequiredService<InMemoryCredentialStore>());
+            provider.GetRequiredService<InMemoryCredentialStore>(), provider.GetRequiredService<TimeProvider>());
     }
 }

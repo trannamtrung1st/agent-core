@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions, InMemoryMemoryStore definitionReferences,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    InMemoryCredentialStore? credentials = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore
+    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Account> _accounts = [];
