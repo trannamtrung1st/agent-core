@@ -10,6 +10,12 @@ namespace AgentCore.Infrastructure.Sandbox;
 
 public sealed partial class OpenSandboxService
 {
+    // Test the mounted roots, not only the command identity or newly created children.
+    // A writable translated bind can still have a foreign root owner and fail Git's checks.
+    internal static string MountOwnershipProbe(HomeAccess homeAccess) =>
+        "test -O /working\ntest -G /working" +
+        (homeAccess == HomeAccess.Disabled ? "" : "\ntest -O /home\ntest -G /home");
+
     private async Task CheckMountedReadinessAsync(SdkSandbox sdk, CanonicalSandboxMountResolver.Mounts mounted, CancellationToken ct)
     {
         var suffix = ".core-probe-" + Guid.NewGuid().ToString("N");
@@ -35,6 +41,8 @@ public sealed partial class OpenSandboxService
                 stage=execution_identity
                 test "$(id -u)" = '{{authority.Uid}}'
                 test "$(id -g)" = '{{authority.Gid}}'
+                stage=mount_ownership
+                {{MountOwnershipProbe(authority.HomeAccess)}}
                 stage=home_environment
                 test "$HOME" = '{{(authority.HomeAccess == HomeAccess.Disabled ? "/working" : "/home")}}'
                 cd ~
@@ -66,9 +74,9 @@ public sealed partial class OpenSandboxService
             var result = await sdk.Commands.RunAsync(["/bin/sh", "-c", script], CommandOptions(authority, "/working", 30), null, ct);
             if (result.ExitCode != 0)
             {
-                string[] stages = ["process_isolation", "execution_identity", "home_environment", "working_bytes", "links_and_permissions", "home_bytes", "cross_root_links", "home_access"];
+                string[] stages = ["process_isolation", "execution_identity", "mount_ownership", "home_environment", "working_bytes", "links_and_permissions", "home_bytes", "cross_root_links", "home_access"];
                 var stage = stages.FirstOrDefault(value => result.Logs.Stdout.Any(line => line.Text.Contains("core_mount_probe=" + value, StringComparison.Ordinal))) ?? "command_start";
-                throw CanonicalSandboxMountResolver.Incompatible($"Canonical mount probe failed at {stage} (exit {result.ExitCode?.ToString() ?? "unconfirmed"}). Verify the daemon backing path and image default UID/GID matches Core's workspace owner. Capability-restricted providers cannot switch a mismatched image identity. Check HOME, links and permissions.");
+                throw CanonicalSandboxMountResolver.Incompatible($"Canonical mount probe failed at {stage} (exit {result.ExitCode?.ToString() ?? "unconfirmed"}). Verify the actual in-container /working and mounted /home root UID/GID, daemon backing path and image default identity match Core's workspace owner. Capability-restricted providers cannot switch a mismatched image identity. Check HOME, links and permissions.");
             }
             async ValueTask Confirm(CanonicalWorkspaceFilesystem files, string path)
             {

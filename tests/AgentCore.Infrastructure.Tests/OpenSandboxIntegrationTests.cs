@@ -18,9 +18,11 @@ namespace AgentCore.Infrastructure.Tests;
 
 public sealed class OpenSandboxFactAttribute : FactAttribute
 {
-    public OpenSandboxFactAttribute(bool requiresOrdinaryImage = false, bool requiresAlternateImage = false)
+    public OpenSandboxFactAttribute(bool requiresOrdinaryImage = false, bool requiresAlternateImage = false, bool requiresForeignMountRoot = false)
     {
         if (Environment.GetEnvironmentVariable("AGENTCORE_OPENSANDBOX_TESTS") != "1") Skip = "Opt-in real local OpenSandbox/Docker acceptance.";
+        else if (requiresForeignMountRoot && Environment.GetEnvironmentVariable("AGENTCORE_OSB_EXPECT_FOREIGN_MOUNT_ROOT") != "1")
+            Skip = "Opt-in reproduction on a host whose translated mount roots have foreign ownership.";
         else if (requiresOrdinaryImage && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AGENTCORE_OSB_ORDINARY_IMAGE")))
             Skip = "Set AGENTCORE_OSB_ORDINARY_IMAGE to an installed identity-compatible .NET SDK image for the focused compatibility regression.";
         else if (requiresAlternateImage && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AGENTCORE_OSB_ALTERNATE_IMAGE")))
@@ -30,6 +32,20 @@ public sealed class OpenSandboxFactAttribute : FactAttribute
 
 public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+    [OpenSandboxFact(requiresForeignMountRoot: true)]
+    public async Task Foreign_mount_root_is_refused_before_initialization_and_disposable_cleanup_is_confirmed()
+    {
+        await using var f = await CreateFixture("printf initialization-must-not-run");
+        var verification = await f.Service.VerifyProfileAsync(f.Profile, CancellationToken.None);
+        Assert.False(verification.Passed);
+        Assert.Equal("MountIncompatible", verification.FailureCode);
+        Assert.Contains("mount_ownership", verification.Message);
+        Assert.DoesNotContain("initialization-must-not-run", verification.Stdout);
+        Assert.False(Directory.Exists(Path.Combine(f.WorkspaceRoot, ".verification"))
+            && Directory.EnumerateDirectories(Path.Combine(f.WorkspaceRoot, ".verification")).Any());
+        output.WriteLine(verification.Message);
+    }
+
     private async Task<Fixture> CreateFixture(string? initializationScript = null, int idleTtl = 300, int maxCommand = 120, int maxLifetime = 900)
     {
         var fixture = await Fixture.Create(initializationScript, idleTtl, maxCommand, maxLifetime);

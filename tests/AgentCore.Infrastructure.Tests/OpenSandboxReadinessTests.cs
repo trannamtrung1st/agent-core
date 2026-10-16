@@ -19,7 +19,7 @@ public sealed class OpenSandboxReadinessTests
         var options = new OpenSandboxOptions { Enabled=true,AllowLocalImageIds=true,Endpoint="http://127.0.0.1:1",ApiKey="fixture" };
         var readiness = new OpenSandboxReadiness(options,store,new SandboxImageAuthority(options,store,TimeProvider.System));
         await readiness.RefreshAsync(default);
-        Assert.Equal("Unavailable",readiness.State);Assert.False(readiness.IsAvailable);Assert.Contains("mount configuration",readiness.SafeMessage);
+        Assert.Equal("MountIncompatible",readiness.State);Assert.False(readiness.IsAvailable);Assert.Contains("mount configuration",readiness.SafeMessage);
         Assert.DoesNotContain("127.0.0.1",readiness.SafeMessage);Assert.DoesNotContain("fixture",readiness.SafeMessage);
         var gate = new ToolConfigurationGate(null,null,null,sandbox:readiness);
         Assert.True(gate.IsExecutionConfigured(ToolCatalog.SandboxStatus));Assert.True(gate.IsExecutionConfigured(ToolCatalog.SandboxProcessStatus));

@@ -36,8 +36,15 @@ test('DOCX hyperlinks stay readable and inert; unsupported preview recovers with
   await originalDownload();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
-  await page.route('**/office-preview', route => route.fulfill({ status: 400, contentType: 'application/problem+json', body: JSON.stringify({ title: 'office_feature_unsupported', detail: 'UNTRUSTED exception private path' }) }));
+  const previewEndpoint = /\/api\/v2\/agent-instances\/[^/]+\/workspace\/office-preview\?path=/;
+  let injectedFailures = 0;
+  await page.route(previewEndpoint, route => {
+    expect(new URL(route.request().url()).searchParams.get('path')).toBe('/home/hyperlinks.docx');
+    injectedFailures++;
+    return route.fulfill({ status: 400, contentType: 'application/problem+json', body: JSON.stringify({ title: 'office_feature_unsupported', detail: 'UNTRUSTED exception private path' }) });
+  });
   await page.getByRole('button', { name: 'Preview hyperlinks.docx', exact: true }).click();
+  await expect.poll(() => injectedFailures).toBe(1);
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(dialog).toContainText('The original file is still available to download.');
@@ -47,8 +54,10 @@ test('DOCX hyperlinks stay readable and inert; unsupported preview recovers with
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await originalDownload();
-  await page.unroute('**/office-preview');
+  await page.unroute(previewEndpoint);
   await dialog.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(frame.getByText('Inert hyperlinks report', { exact: true })).toBeVisible();
+  expect(injectedFailures).toBe(1);
+  await originalDownload();
   expect(errors).toEqual([]); expect(external).toEqual([]); expect(navigations).toEqual([]);
 });

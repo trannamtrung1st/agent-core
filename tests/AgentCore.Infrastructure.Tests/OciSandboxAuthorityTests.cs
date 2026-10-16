@@ -127,7 +127,9 @@ public sealed class OciSandboxAuthorityTests
             Assert.False((await authority.InspectAsync(profile)).Eligible);
             await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Earlier Python-based contract",ContractVersion:1,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
             Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
-            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Current observation",ContractVersion:2,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
+            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Retired synchronized-files contract",ContractVersion:2,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
+            Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
+            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Current observation",ContractVersion:SandboxProfileVerification.CurrentContractVersion,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
             Assert.True((await authority.InspectAsync(profile)).Eligible);
             var pinned = profile with {RegistryCredentialRevision=1,RegistrySecretRevision=0};
             Assert.Equal("private-oci-sentinel",(await authority.ResolveAuthAsync(pinned,CancellationToken.None,true))!.Password);
@@ -135,6 +137,18 @@ public sealed class OciSandboxAuthorityTests
             Assert.Equal(1,(await store.GetAsync(saved.CredentialId))!.SecretRevision);
             Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
             await Assert.ThrowsAsync<AgentCoreException>(()=>authority.ResolveAuthAsync(pinned,CancellationToken.None,true).AsTask());
+            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Verified rotated authority",ContractVersion:SandboxProfileVerification.CurrentContractVersion,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:1));
+            Assert.True((await authority.InspectAsync(profile)).Eligible);
+            // Reverification never revives a Run admitted with the old secret epoch.
+            await Assert.ThrowsAsync<AgentCoreException>(()=>authority.ResolveAuthAsync(pinned,CancellationToken.None,true).AsTask());
+            var rotated = profile with { RegistryCredentialRevision=saved.Revision, RegistrySecretRevision=1 };
+            Assert.Equal("rotated-oci-sentinel",(await authority.ResolveAuthAsync(rotated,CancellationToken.None,true))!.Password);
+            if (sqlite)
+            {
+                var reopenedAuthority = new SandboxImageAuthority(options,profiles,TimeProvider.System,new SqliteCredentialStore(factory),protector);
+                await Assert.ThrowsAsync<AgentCoreException>(()=>reopenedAuthority.ResolveAuthAsync(pinned,CancellationToken.None,true).AsTask());
+                Assert.Equal("rotated-oci-sentinel",(await reopenedAuthority.ResolveAuthAsync(rotated,CancellationToken.None,true))!.Password);
+            }
             saved = await service.UpdateContainerRegistryAsync(saved.CredentialId,saved.Revision,saved.DisplayName,"Active",new("ghcr.io","owner",["ghcr.io/acme/other"]));
             Assert.Equal("SourceUnavailable",(await authority.InspectAsync(profile)).Status);
             saved = await service.UpdateContainerRegistryAsync(saved.CredentialId,saved.Revision,saved.DisplayName,"Active",new("ghcr.io","owner",["ghcr.io/acme"],DateTimeOffset.UnixEpoch));
