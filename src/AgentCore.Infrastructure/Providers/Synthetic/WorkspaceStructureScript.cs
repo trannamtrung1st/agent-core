@@ -20,17 +20,15 @@ internal static class WorkspaceStructureScript
         if(results.Length==1)
         {
             using var list=JsonDocument.Parse(results[0].Text);
-            var token=home && list.RootElement.TryGetProperty("treeSha256",out var hash) ? hash.GetString() : null;
             if(command.EndsWith("delete",StringComparison.Ordinal))
-                return Call(request,ToolCatalog.WorkspaceDelete,JsonSerializer.Serialize(new {path=root+"/backup",recursive=true,expectedTreeSha256=token},Options));
+                return Call(request,ToolCatalog.WorkspaceDelete,JsonSerializer.Serialize(new {path=root+"/backup",recursive=true},Options));
             return Call(request,ToolCatalog.WorkspaceBatch,JsonSerializer.Serialize(new
             {
                 operations=new WorkspaceStructuralOperation[] {
                     new("mkdir",Path:root+"/projects"),
                     new("move",Source:root+"/inbox",Destination:root+"/projects/project"),
                     new("copy",Source:root+"/projects/project",Destination:root+"/backup"),
-                    new("mkdir",Path:root+"/backup/empty/deep")},
-                expectedTreeSha256=token
+                    new("mkdir",Path:root+"/backup/empty/deep")}
             },Options));
         }
         return [new ModelTextDelta("Filesystem result: "+results[^1].Text),new ModelCompleted(ModelStopReason.Completed)];

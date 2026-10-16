@@ -22,7 +22,7 @@ public sealed class UserResourceReferenceDto
     [Key("kind")] public string Kind { get; set; } = "";
     [Key("agentInstanceId")] public string? AgentInstanceId { get; set; }
     [Key("sessionId")] public string? SessionId { get; set; }
-    [Key("itemId")] public string? ItemId { get; set; }
+    [Key("path")] public string? Path { get; set; }
     [Key("artifactId")] public string? ArtifactId { get; set; }
     [Key("agentRunId")] public string? AgentRunId { get; set; }
     [Key("skillKey")] public string? SkillKey { get; set; }

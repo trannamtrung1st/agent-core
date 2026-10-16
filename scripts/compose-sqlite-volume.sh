@@ -192,7 +192,7 @@ status, workspace_body = request(workspace_url, headers=owner_headers)
 workspace_text = workspace_body.decode("utf-8") if isinstance(workspace_body, bytes) else workspace_body
 assert resource_bytes.decode("utf-8") in workspace_text, workspace_text
 
-# New-mode binary home writes and scratch retain their distinct lifetimes after recreation.
+# Canonical binary home and private working retain their distinct lifetimes after recreation.
 status, v2_owner_body = request(f"http://127.0.0.1:{port}/api/v2/admin/agent-instances", method="POST",
     data=json.dumps({"definitionId": "general-assistant", "version": 28}).encode(), headers=owner_headers)
 v2_owner = json.loads(v2_owner_body)["instanceId"]
@@ -221,12 +221,9 @@ for v2_path in ("/home/binary.dat", "/working/binary.dat"):
     status, _ = request(f"http://127.0.0.1:{port}/api/v2/sessions/{v2_session}/workspace/content?path={v2_path}",
         method="PUT", data=v2_bytes, headers={**owner_headers, "Content-Type": "application/octet-stream"})
     assert status == 204, status
-req = urllib.request.Request(f"http://127.0.0.1:{port}/api/v2/sessions/{v2_session}/workspace/content?path=/home/binary.dat",
-    method="PUT", data=b"unguarded", headers={**owner_headers, "Content-Type": "application/octet-stream"})
-try:
-    urllib.request.urlopen(req)
-    raise AssertionError("unguarded durable replacement succeeded")
-except urllib.error.HTTPError as error: assert error.code == 409
+# Replacing a current path needs no prior file revision or hash.
+request(f"http://127.0.0.1:{port}/api/v2/sessions/{v2_session}/workspace/content?path=/home/binary.dat",
+    method="PUT", data=v2_bytes, headers={**owner_headers, "Content-Type": "application/octet-stream"})
 json.dump({"instanceId": v2_owner, "sessionId": v2_session}, open("/tmp/agent-core-v2-survival.json", "w"))
 
 # Durable home outlives its originating Session and container recreation.
@@ -237,7 +234,7 @@ home_source = json.loads(home_source_body)["sessionId"]
 home_bytes = b"compose durable workspace exact bytes\r\n"
 request(f"http://127.0.0.1:{port}/api/v2/sessions/{home_source}/workspace/content?path=/home/reports/report.txt",
     method="PUT", data=home_bytes, headers=owner_headers)
-_, page_body = request(f"http://127.0.0.1:{port}/api/v2/agent-instances/{instance['instanceId']}/workspace", headers=owner_headers)
+_, page_body = request(f"http://127.0.0.1:{port}/api/v2/agent-instances/{instance['instanceId']}/workspace?prefix=/home/reports", headers=owner_headers)
 home_item = next(item for item in json.loads(page_body)["items"] if item["logicalPath"] == "/home/reports/report.txt")
 assert home_item["byteSize"] == len(home_bytes), home_item
 request(f"http://127.0.0.1:{port}/api/v2/sessions/{home_source}", method="DELETE", headers=owner_headers)
@@ -287,7 +284,7 @@ print("admin", instance["instanceId"], managed["sessionId"], pub_version)
 
 open("/tmp/agent-core-owner-token.txt", "w").write(token)
 # Same owner/correlation flow, visibly Synthetic and no provider network.
-import http.cookiejar
+import http.cookiejar, hashlib
 jar = http.cookiejar.CookieJar()
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 def oauth_request(path, method="GET", data=None, headers=None):
@@ -321,7 +318,7 @@ _, current_owner = oauth_request(f"/api/v2/admin/instances/{v2_owner}/effective-
 _, drive_binding = oauth_request(f"/api/v2/admin/agent-instances/{v2_owner}/credential-bindings", "POST", {"credentialId":drive['credentialId'],"reference":"compose-drive","expectedInstanceRevision":current_owner['instanceRevision']}, owner_headers)
 _, home_page = oauth_request(f"/api/v2/agent-instances/{v2_owner}/workspace", headers=owner_headers)
 source = next(item for item in home_page['items'] if item['logicalPath'] == '/home/binary.dat')
-json.dump({"accountId":drive['credentialId'],"revision":connected_drive['revision'],"epoch":connected_drive['driveAccount']['authEpoch'],"instanceId":v2_owner,"sessionId":v2_session,"bindingId":drive_binding['bindingId'],"sourceSha":source['sha256Hex']}, open('/tmp/agent-core-drive-survival.json','w'))
+json.dump({"accountId":drive['credentialId'],"revision":connected_drive['revision'],"epoch":connected_drive['driveAccount']['authEpoch'],"instanceId":v2_owner,"sessionId":v2_session,"bindingId":drive_binding['bindingId'],"sourceSha":hashlib.sha256(v2_bytes).hexdigest()}, open('/tmp/agent-core-drive-survival.json','w'))
 
 PY
 
@@ -570,12 +567,12 @@ status, workspace = get(workspace_url)
 assert status == 200, workspace
 assert resource_text in workspace, workspace
 home = json.load(open("/tmp/agent-core-home-survival.json"))
-status, retained = get(f"http://127.0.0.1:{port}/api/v2/agent-instances/{home['instanceId']}/workspace/{home['item']['itemId']}/content")
+status, retained = get(f"http://127.0.0.1:{port}/api/v2/agent-instances/{home['instanceId']}/workspace/content?path={urllib.parse.quote(home['item']['logicalPath'], safe='/')}")
 assert status == 200 and retained == home["text"], (status, retained)
 status, listed_home = get(f"http://127.0.0.1:{port}/api/v2/agent-instances/{home['instanceId']}/workspace")
-assert any(item["sha256Hex"] == home["item"]["sha256Hex"] and not item["directory"] for item in json.loads(listed_home)["items"])
 assert any(item["logicalPath"] == "/home/reports" and item["directory"] for item in json.loads(listed_home)["items"])
-assert len(json.loads(listed_home)["treeSha256"]) == 64
+assert any(item["logicalPath"] == "/home/reports" and item["directory"] for item in json.loads(listed_home)["items"])
+assert "treeSha256" not in json.loads(listed_home)
 v2 = json.load(open("/tmp/agent-core-v2-survival.json"))
 skills_seed = json.load(open("/tmp/agent-core-skills-survival.json"))
 skills_url = f"http://127.0.0.1:{port}/api/v2/admin/agent-instances/{skills_seed['instanceId']}/skills"
@@ -602,7 +599,7 @@ try:
     urllib.request.urlopen(req)
     raise AssertionError("new Session inherited scratch")
 except urllib.error.HTTPError as error: assert error.code == 404
-print("managed v2 binary home and nested scratch survived recreation; fresh scratch isolated", v2["instanceId"])
+print("canonical binary home and private working survived recreation; fresh working isolated", v2["instanceId"])
 print("agent workspace survived source deletion and container recreation", home["instanceId"])
 print("admin survived", instance_id, managed_session_id, pub_version, resource_path)
 credential = json.load(open("/tmp/agent-core-credential-survival.json"))

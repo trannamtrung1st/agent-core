@@ -26,7 +26,7 @@ public sealed partial class TerminalDisplayRepairTests
         var root = Path.Combine(Path.GetTempPath(), $"agent-core-checkpoint-write-{Guid.NewGuid():N}");
         try
         {
-            var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"), sessions: new WorkspaceTestSessions());
+            var workspace = WorkspaceTestSessions.CreateWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"));
             var artifacts = new InMemoryArtifactStore(TimeProvider.System);
             var document = new string('x', AgentRunLimits.MaxCheckpointBytes + 1);
             var model = new SemanticResponseLanguageModel(new DocumentModel(document, structured: true));
@@ -39,7 +39,7 @@ public sealed partial class TerminalDisplayRepairTests
             Assert.Equal(EntryStatus.Failed, Assert.Single(runtime.Snapshot.Entries, entry => entry.Role == ConversationRole.Assistant).Status);
             Assert.Empty(await artifacts.ListAsync(runtime.SessionId));
             var error = await Assert.ThrowsAsync<AgentCoreException>(() => workspace.ReadAsync(runtime.SessionId,
-                runtime.Snapshot.Definition, "/workspace/working/playbook.md").AsTask());
+                runtime.Snapshot.Definition, "/working/playbook.md").AsTask());
             Assert.Equal("NotFound", error.Code);
             Assert.Equal(AgentRunStatus.Failed, Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime)).Status);
         }
@@ -54,7 +54,7 @@ public sealed partial class TerminalDisplayRepairTests
         var root = Path.Combine(Path.GetTempPath(), $"agent-core-block-repair-{Guid.NewGuid():N}");
         try
         {
-            var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"), sessions: new WorkspaceTestSessions());
+            var workspace = WorkspaceTestSessions.CreateWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "templates"));
             var artifacts = new InMemoryArtifactStore(TimeProvider.System);
             var document = string.Concat(Enumerable.Repeat("# Scrum playbook\nObserve the current evidence before making changes.\n", 400));
             var inner = new DocumentModel(document, structured);
@@ -80,7 +80,7 @@ public sealed partial class TerminalDisplayRepairTests
             Assert.Equal("Saved the note in notes.md.", answers[1].Text);
             Assert.Empty(answers[1].Envelope!.Blocks);
             Assert.Equal(document, Encoding.UTF8.GetString((await workspace.ReadAsync(runtime.SessionId,
-                runtime.Snapshot.Definition, "/workspace/working/notes.md")).Bytes));
+                runtime.Snapshot.Definition, "/working/notes.md")).Bytes));
             Assert.Single(await artifacts.ListAsync(runtime.SessionId));
             Assert.Equal([ToolCatalog.WorkspaceWrite, ToolCatalog.ArtifactsCreateFromWorkspace, ToolCatalog.WorkspaceWrite], inner.ToolCalls);
             Assert.Equal(6, inner.Requests.Count);

@@ -15,7 +15,7 @@ public sealed record InstanceSettingsSection(string Section, long InstanceRevisi
 
 public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, IAgentDefinitionStore definitions,
     IIdGenerator ids, TimeProvider time, IModelCatalog? models = null, ProviderAliasSet? aliases = null,
-    Triggers.InstanceAutomationPolicy? automationPolicy = null, ISandboxStore? sandboxes = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, IBrowser? browser = null)
+    Triggers.InstanceAutomationPolicy? automationPolicy = null, ISandboxStore? sandboxes = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, IBrowser? browser = null, SandboxPolicyEnforcement? sandboxPolicy = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     public async ValueTask<IReadOnlyList<InstanceSettingsSection>> ReadAllAsync(Guid id, CancellationToken ct = default)
@@ -66,6 +66,7 @@ public sealed class AgentInstanceSettingsService(IAgentInstanceStore instances, 
         var reconciliation = section == "triggerPolicy" && automationPolicy is not null ? await automationPolicy.PlanAsync(owner, effective, now, ct) : null;
         var updated = await instances.UpdateWithExpectedRevisionAsync(new(id, expectedRevision,
             History: history, SetSettingsOverrides: true, SettingsOverrides: next, AutomationPolicyChanges: reconciliation, HarnessManagement: harnessManagement), now, ct);
+        if (sandboxPolicy is not null) await sandboxPolicy.EnforceAsync(id, ct);
         return await ViewAsync(updated, definition, section, ct);
     }
 

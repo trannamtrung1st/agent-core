@@ -30,14 +30,15 @@ internal static class OfficePreviewEndpoints
             await using var stream = await sessions.OpenArtifactContentAsync(sessionId, artifactId, ct);
             return new Source(metadata.DisplayName, metadata.ContentType, await Read(stream, policy.OfficeLimit(metadata.DisplayName, metadata.ContentType), ct));
         }, sheet, range, office, policy, ct));
-        group.MapGet("/agent-instances/{instanceId:guid}/workspace/{itemId:guid}/office-preview", (Guid instanceId, Guid itemId, string? sheet, string? range, AgentInstanceWorkspaceService files, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct) => Respond(async () =>
+        group.MapGet("/agent-instances/{instanceId:guid}/workspace/office-preview", (Guid instanceId, string path, string? sheet, string? range, HttpContext http, AgentInstanceWorkspaceService files, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct) => Respond(async () =>
         {
-            var metadata = (await files.InspectAsync(instanceId, itemId, cancellationToken: ct)).Item;
+            AgentWorkspaceEndpoints.Query(http, "path", "sheet", "range");
+            var metadata = (await files.InspectAsync(instanceId, path, cancellationToken: ct)).Item;
             policy.RequireOfficeSize(metadata.LogicalPath, metadata.ContentType, metadata.ByteSize);
-            var source = await files.InspectAsync(instanceId, itemId, policy.OfficeLimit(metadata.LogicalPath, metadata.ContentType), ct);
+            var source = await files.InspectAsync(instanceId, path, policy.OfficeLimit(metadata.LogicalPath, metadata.ContentType), ct);
             policy.RequireOfficeSize(source.Item.LogicalPath, source.Item.ContentType, source.Item.ByteSize);
             return new Source(Path.GetFileName(source.Item.LogicalPath), source.Item.ContentType, source.Bytes);
-        }, sheet, range, office, policy, ct));
+        }, sheet, range, office, policy, ct, includeDocumentSource:true));
         group.MapGet("/admin/agent-instances/{instanceId:guid}/resources/{key}/office-preview", (Guid instanceId, string key, string? sheet, string? range, AgentInstanceResourceService files, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct) => Respond(async () =>
         {
             var metadata = (await files.ListAsync(instanceId, ct)).Resources.SingleOrDefault(r => r.Key == key) ?? throw AgentCoreErrors.NotFound("File was not found.");
@@ -59,12 +60,12 @@ internal static class OfficePreviewEndpoints
         while (true) { var read = await source.ReadAsync(buffer, ct); if (read == 0) break; if (output.Length + read > maxBytes) throw new AgentCoreException("preview_too_large", "The file exceeds its effective Office preview limit. Download the original.", 413); output.Write(buffer, 0, read); }
         return output.ToArray();
     }
-    private static async Task<IResult> Respond(Func<Task<Source>> read, string? sheet, string? range, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct)
+    private static async Task<IResult> Respond(Func<Task<Source>> read, string? sheet, string? range, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct, bool includeDocumentSource = false)
     {
         try
         {
             var source = await read();
-            return Project(source.Name, source.Mime, source.Bytes, sheet, range, office, policy, ct);
+            return Project(source.Name, source.Mime, source.Bytes, sheet, range, office, policy, ct, includeDocumentSource);
         }
         catch (AgentCoreException ex) { return Problem(ex); }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException or System.Xml.XmlException)
@@ -75,13 +76,13 @@ internal static class OfficePreviewEndpoints
             ? Results.Problem(statusCode: 400, title: ex.Message.Split(':')[0], detail: "This Office file or operation could not be interpreted safely. Download the original or choose a smaller range where applicable.")
             : ProblemResults.From(ex);
 
-    internal static IResult Project(string name, string mime, byte[] bytes, string? sheet, string? range, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct)
+    internal static IResult Project(string name, string mime, byte[] bytes, string? sheet, string? range, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct, bool includeDocumentSource = false)
     {
         policy.RequireOfficeSize(name, mime, bytes.Length);
         if (mime == OfficeLimits.DocumentMime && name.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
         {
             var result = office.InspectDocument(bytes, 0, 1, ct);
-            return Results.Json(new OfficePreviewResponse("docx", result.Sha256, result.Warnings, EmptyBody: result.TotalElements == 0));
+            return Results.Json(new OfficePreviewResponse("docx", result.Sha256, result.Warnings, EmptyBody: result.TotalElements == 0, SourceBase64: includeDocumentSource ? Convert.ToBase64String(bytes) : null));
         }
         if (mime == OfficeLimits.SpreadsheetMime && name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
         {

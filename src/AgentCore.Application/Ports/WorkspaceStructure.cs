@@ -8,16 +8,12 @@ public sealed record WorkspaceOperationOutcome(int Index, string Operation, stri
 
 public sealed record WorkspaceStructureResult(bool Completed, int OperationCount, int CompletedCount,
     int? FailedIndex, IReadOnlyList<WorkspaceOperationOutcome> Results, string? ErrorCode = null,
-    string? Message = null, bool MutationsMayHaveOccurred = false, string? TreeSha256 = null);
-
-public sealed record WorkspaceTreeEntry(string Path, bool Directory, long ByteSize);
+    string? Message = null, bool MutationsMayHaveOccurred = false);
 
 public static class WorkspaceStructureLimits
 {
     // One small inspectable approval, bounded traversal and bounded per-operation outcomes.
     public const int MaxOperations = 16;
-    public const int MaxEntries = 8192;
-    public const int MaxDepth = 8;
-    public const int MaxPathChars = 512;
+    public const int MaxPathChars = 4095;
     public const int MaxRequestBytes = 16 * 1024;
 }

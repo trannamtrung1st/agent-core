@@ -24,7 +24,7 @@ public sealed class StateIsolationWorkspaceTests
         var session = await services.GetRequiredService<SessionManager>().CreateForInstanceAsync(instance.InstanceId, SessionMode.Text);
         var configuration = (await services.GetRequiredService<AgentRunConfigurationResolver>().ResolveAsync(instance.InstanceId)).Configuration;
         var home = services.GetRequiredService<AgentInstanceWorkspaceService>();
-        var item = await home.WriteAsync(session.SessionId, "/home/customer.txt", "text/plain", "customer-A"u8.ToArray(), null, null);
+        var item = await home.WriteAsync(session.SessionId, "/home/customer.txt", "text/plain", "customer-A"u8.ToArray());
         var tool = services.GetRequiredService<SessionToolExecutor>();
         var admission = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: instance.InstanceId, OwnedSessionId: session.SessionId, WorkspaceCwd: "/home");
         async Task<string> Execute(string name, object args) => (await tool.ExecuteAsync(configuration.Definition, session.SessionId,
@@ -37,7 +37,7 @@ public sealed class StateIsolationWorkspaceTests
         Assert.Contains("customer-A", await Execute(ToolCatalog.WorkspaceRead, new { path = "/home/customer.txt" }));
         Assert.Contains("forbidden", (await Execute(ToolCatalog.WorkspaceWrite, new { path = "/home/new.txt", content = "no" })).ToLowerInvariant());
         Assert.Contains("forbidden", (await Execute(ToolCatalog.WorkspaceCopy, new { source = "/working/new.txt", destination = "/home/copied.txt" })).ToLowerInvariant());
-        Assert.Equal("Forbidden", (await Assert.ThrowsAsync<AgentCoreException>(() => home.CommitBinaryAsync(session.SessionId, "/home/indirect.bin", "application/octet-stream", new byte[] { 1 }, null).AsTask())).Code);
+        Assert.Equal("Forbidden", (await Assert.ThrowsAsync<AgentCoreException>(() => home.CommitBinaryAsync(session.SessionId, "/home/indirect.bin", "application/octet-stream", new byte[] { 1 }).AsTask())).Code);
         var updated = (await readOnly.Content.ReadFromJsonAsync<InstanceSettingsSection>())!;
         var disabled = await client.PatchAsJsonAsync(path, new { expectedInstanceRevision = updated.InstanceRevision, set = new { homeAccess = "Disabled" }, clear = Array.Empty<string>() });
         disabled.EnsureSuccessStatusCode();
@@ -47,7 +47,7 @@ public sealed class StateIsolationWorkspaceTests
         Assert.Contains("/working", await Execute(ToolCatalog.WorkspaceCwd, new { operation = "get" }));
         Assert.Contains("forbidden", (await Execute(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "/home" })).ToLowerInvariant());
         Assert.Contains("forbidden", (await Execute(ToolCatalog.WorkspaceCopy, new { source = "/home/customer.txt", destination = "/working/copy.txt" })).ToLowerInvariant());
-        Assert.Equal("customer-A"u8.ToArray(), (await home.ReadAsync(instance.InstanceId, item.ItemId)).Bytes);
+        Assert.Equal("customer-A"u8.ToArray(), (await home.ReadAsync(instance.InstanceId, item.LogicalPath)).Bytes);
         Assert.Equal(HttpStatusCode.Conflict, (await client.PatchAsJsonAsync(path, new { expectedInstanceRevision = updated.InstanceRevision, set = new { homeAccess = "ReadWrite" }, clear = Array.Empty<string>() })).StatusCode);
     }
 }

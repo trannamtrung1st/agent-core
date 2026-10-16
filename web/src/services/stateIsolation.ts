@@ -7,7 +7,7 @@ export type { IsolationPreset, IsolationPresetAction } from './isolationPresets'
 export type IsolationRevisions = { instance: number; experience: number; maintenance: number };
 export type IsolationPatch = { section: string; set: Record<string, SettingValue>; clear: string[] };
 export type IsolationDraft = { settings: IsolationPatch[]; experienceEnabled: boolean; allowMaintenance: boolean };
-export type IsolationView = { revisions: IsolationRevisions; settings: SettingsSection[]; experienceEnabled: boolean; allowMaintenance: boolean; hostBrowserMode: string; browserEnabled: boolean };
+export type IsolationView = { revisions: IsolationRevisions; settings: SettingsSection[]; experienceEnabled: boolean; allowMaintenance: boolean; hostBrowserMode: string; browserEnabled: boolean; sandboxEnforcementState?: 'Enforced' | 'EnforcementPending' };
 export type IsolationPlan = { expected: IsolationRevisions; draft: IsolationDraft; fingerprint: string;
   changes: { owner: string; field: string; before: SettingValue; after: SettingValue; source: string }[]; blockingReasons: string[]; notice: string };
 async function request<T>(id: string, suffix: string, signal: AbortSignal | undefined, body?: unknown): Promise<T> {

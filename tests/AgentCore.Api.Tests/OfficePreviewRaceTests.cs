@@ -21,8 +21,8 @@ public sealed class OfficePreviewRaceTests
             base.ConfigureWebHost(builder);
             builder.ConfigureTestServices(services => {
                 var proxy = DispatchProxy.Create<IAgentInstanceWorkspaceStore, RacingStore>(); Race = (RacingStore)proxy;
-                Race.Inner = new FileAgentInstanceWorkspaceStore(root, TimeProvider.System, new AgentCore.Infrastructure.Identity.SystemIdGenerator(TimeProvider.System));
-                services.Replace(ServiceDescriptor.Singleton(proxy));
+                services.Replace(ServiceDescriptor.Singleton<IAgentInstanceWorkspaceStore>(sp => {
+                    Race.Inner = new FileAgentInstanceWorkspaceStore(root, sp.GetRequiredService<IAgentInstanceStore>(), sp.GetRequiredService<ISandboxStore>()); return proxy; }));
             });
         }
         protected override void Dispose(bool disposing)
@@ -38,13 +38,13 @@ public sealed class OfficePreviewRaceTests
         client.DefaultRequestHeaders.Add(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(host.Services));
         var response = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version = 27 }); response.EnsureSuccessStatusCode();
         var owner = (await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>()).GetProperty("instanceId").GetGuid();
-        var item = await host.Race.Inner.WriteFileAsync(owner, "/home/race.docx", OfficeLimits.DocumentMime, "small"u8.ToArray(), null, null, null);
+        var item = await host.Race.Inner.WriteFileAsync(owner, "/home/race.docx", "small"u8.ToArray());
         host.Race.Armed = true;
-        var path = $"/api/v2/agent-instances/{owner}/workspace/{item.ItemId}";
-        var preview = await client.GetAsync(path + "/office-preview");
+        var path = $"/api/v2/agent-instances/{owner}/workspace";
+        var preview = await client.GetAsync(path + "/office-preview?path=/home/race.docx");
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, preview.StatusCode);
         Assert.False(host.Race.FullRead);
-        Assert.Equal(new byte[64], await client.GetByteArrayAsync(path + "/content"));
+        Assert.Equal(new byte[64], await client.GetByteArrayAsync(path + "/content?path=/home/race.docx"));
     }
     private sealed class ResourceFactory : AgentCoreApiFactory
     {
@@ -118,13 +118,13 @@ public sealed class OfficePreviewRaceTests
         {
             if (method!.Name == nameof(IAgentInstanceWorkspaceStore.ReadAsync)) FullRead = true;
             if (method.Name == nameof(IAgentInstanceWorkspaceStore.InspectAsync))
-                return new ValueTask<AgentWorkspaceContent>(Inspect((Guid)args![0]!, (Guid)args[1]!, (int)args[2]!, (CancellationToken)args[3]!));
+                return new ValueTask<AgentWorkspaceContent>(Inspect((Guid)args![0]!, (string)args[1]!, (int)args[2]!, (CancellationToken)args[3]!));
             return method.Invoke(Inner, args);
         }
-        private async Task<AgentWorkspaceContent> Inspect(Guid owner, Guid id, int max, CancellationToken ct)
+        private async Task<AgentWorkspaceContent> Inspect(Guid owner, string id, int max, CancellationToken ct)
         {
             var result = await Inner.InspectAsync(owner, id, max, ct);
-            if (Armed && max == 0) { Armed = false; await Inner.WriteFileAsync(owner, result.Item.LogicalPath, result.Item.ContentType, new byte[64], null, result.Item.Revision, result.Item.Sha256Hex, ct); }
+            if (Armed && max == 0) { Armed = false; await Inner.WriteFileAsync(owner, result.Item.LogicalPath, new byte[64], ct); }
             return result;
         }
     }

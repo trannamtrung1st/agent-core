@@ -15,7 +15,7 @@ internal static class UserMessageMapping
         {
             if (parts.Any(p => p is null || p.InvalidFields || p.Reference?.InvalidFields == true)) throw new ArgumentException("Unknown or duplicate structured fields.");
             return UserMessageContent.Normalize(parts.Select(p => new UserMessagePart(p.Kind, p.Text, p.InvocationKind, p.SkillKey, p.Reference is { } r ? new(r.Kind,
-                Id(r.AgentInstanceId), Id(r.SessionId), Id(r.ItemId), Id(r.ArtifactId), Id(r.AgentRunId), r.SkillKey, r.SelectedRevision) : null, p.Label)).ToArray(), input: true);
+                Id(r.AgentInstanceId), Id(r.SessionId), r.Path, Id(r.ArtifactId), Id(r.AgentRunId), r.SkillKey, r.SelectedRevision) : null, p.Label)).ToArray(), input: true);
         }
         catch (ArgumentException e) { throw AgentCoreErrors.Validation(e.Message); }
     }
@@ -23,7 +23,7 @@ internal static class UserMessageMapping
     {
         Kind = p.Kind, Text = p.Text, InvocationKind = p.InvocationKind, SkillKey = p.SkillKey, Label = p.Label,
         Reference = p.Reference is { } r ? new UserResourceReferenceDto { Kind = r.Kind, AgentInstanceId = r.AgentInstanceId?.ToString("D"),
-            SessionId = r.SessionId?.ToString("D"), ItemId = r.ItemId?.ToString("D"), ArtifactId = r.ArtifactId?.ToString("D"),
+            SessionId = r.SessionId?.ToString("D"), Path = r.Path, ArtifactId = r.ArtifactId?.ToString("D"),
             AgentRunId = r.AgentRunId?.ToString("D"), SkillKey = r.SkillKey, SelectedRevision = r.SelectedRevision } : null
     }).ToArray();
 }

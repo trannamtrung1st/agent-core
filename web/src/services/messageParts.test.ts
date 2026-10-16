@@ -101,7 +101,7 @@ describe("canonical composer input", () => {
           reference: {
             kind: "session",
             sessionId: "11111111-1111-1111-1111-111111111111",
-            itemId: null,
+            path: null,
             artifactId: null,
             agentRunId: null,
             agentInstanceId: null,

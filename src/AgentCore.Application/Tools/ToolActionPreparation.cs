@@ -44,7 +44,7 @@ public static class ToolActionPreparation
             {
                 var normalized = AgentWorkspacePaths.Arguments(call.Name, args, sessionId, admission?.WorkspaceCwd ?? "/home");
                 var parsed = WorkspaceStructureArguments.Parse(call.Name, normalized);
-                AgentCore.Application.Workspaces.WorkspaceStructuralPaths.Normalize(sessionId, parsed.Operations);
+                AgentCore.Application.Workspaces.WorkspaceStructuralPaths.Normalize(sessionId, parsed);
                 var preview = ToolApprovalPreview.Build(call.Name, args);
                 if (definition is not null)
                 {

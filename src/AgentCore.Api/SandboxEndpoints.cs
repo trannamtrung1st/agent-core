@@ -18,10 +18,10 @@ internal static class SandboxEndpoints
         admin.MapGet("/sandboxes", (ISandboxReadiness readiness, ISandboxStore store, OpenSandboxOptions options, ISandboxImageAuthority authority, CancellationToken ct) => Safe(async () =>
             Results.Json(new SandboxPlatformResponse(readiness.State, readiness.SafeMessage, (await Task.WhenAll((await store.ListProfilesAsync(ct)).Select(p => MapObservedAsync(p, store, authority, readiness, ct)))).ToArray(),
                 options.AllowedImagePrefixes, options.AllowLocalImageIds, "Trusted single-user local demo; own execd loopback remains reachable.",
-                "250 MiB validated canonical /working ceiling; bounded live staging sampling terminates excess usage. Sampling and the OCI writable layer do not provide hard disk quotas."))));
+                "Canonical /working uses the configured Profile/Instance sampled budget; shared Instance /home has a separate 250 MiB sampled budget. Unknown or excess usage stops execution; already-written bytes remain. OCI layer limits are independent. No hard disk quota is claimed.", MaxWorkingStorageBytes: options.MaxWorkingStorageBytes))));
         admin.MapGet("/sandbox-profiles/{id}", (string id, long? revision, ISandboxStore store, ISandboxImageAuthority authority, ISandboxReadiness readiness, CancellationToken ct) => Safe(async () =>
             Results.Json(await MapObservedAsync(await store.GetProfileAsync(id, revision, ct) ?? throw AgentCoreErrors.NotFound("Sandbox profile was not found."), store, authority, readiness, ct))));
-        admin.MapPut("/sandbox-profiles/{id}", (string id, JsonElement body, ISandboxStore store, OpenSandboxOptions options, OpenSandboxReadiness readiness, ISandboxImageAuthority authority, CancellationToken ct) => Safe(async () =>
+        admin.MapPut("/sandbox-profiles/{id}", (string id, JsonElement body, ISandboxStore store, OpenSandboxOptions options, OpenSandboxReadiness readiness, ISandboxImageAuthority authority, SandboxPolicyEnforcement enforcement, CancellationToken ct) => Safe(async () =>
         {
             var request = body.Deserialize<SaveSandboxProfileRequest>(new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? throw new ArgumentException();
             var profile = new SandboxProfile(id,checked(request.ExpectedRevision+1),request.Name,request.Description,request.Enabled,request.ImageReference,
@@ -38,7 +38,10 @@ internal static class SandboxEndpoints
                 if (source.Status != "SourceAuthorized") throw AgentCoreErrors.Validation(source.Message);
             }
             await store.SaveProfileAsync(profile,request.ExpectedRevision,ct,History(profile));
-            await readiness.RefreshAsync(ct); // Commands consult the saved disable immediately; the supervised pass owns cleanup.
+            if (!profile.Enabled)
+                foreach (var owner in (await store.ListLeasesAsync(ct)).Where(l => l.Profile.Id == profile.Id).Select(l => l.AgentInstanceId).Distinct())
+                    await enforcement.EnforceAsync(owner, ct);
+            await readiness.RefreshAsync(ct);
             return Results.Json(await MapObservedAsync(profile,store,authority,readiness,ct));
         }));
         admin.MapPost("/sandbox-profiles/{id}/verify", (string id, VerifySandboxProfileRequest request, ISandboxStore store, OpenSandboxService service, ISandboxImageAuthority authority, OpenSandboxReadiness readiness, CancellationToken ct) => Safe(async () =>

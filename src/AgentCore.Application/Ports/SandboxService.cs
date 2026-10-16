@@ -9,15 +9,14 @@ public sealed record SandboxAccess(Guid SessionId, Guid AgentInstanceId, Guid Ag
 public sealed record SandboxCommandRequest(string? Command, IReadOnlyList<string>? Argv = null,
     string Cwd = "/working", int? TimeoutSeconds = null, bool Background = false, string? ProfileId = null);
 public sealed record SandboxCommandResult(Guid ExecutionId, string Status, int? ExitCode, string Stdout,
-    string Stderr, bool Truncated, long DurationMs, string WorkspaceSyncStatus, string? DiagnosticId = null, bool Background = false, string CommandText = "", string? ProfileId = null, long? ProfileRevision = null, Guid? Generation = null,
+    string Stderr, bool Truncated, long DurationMs, bool FilesystemEffectsMayHaveOccurred, string? DiagnosticId = null, bool Background = false, string CommandText = "", string? ProfileId = null, long? ProfileRevision = null, Guid? Generation = null,
     string? Phase = null, string? FailureCategory = null, string? CancellationReason = null, bool TerminationConfirmed = false, string? Error = null, string? Recovery = null, string? EnvironmentState = null, Guid? EnvironmentGeneration = null,
     bool GenerationRecycled = false, bool RemoteTerminationConfirmed = false);
 public sealed record SandboxEnvironmentInfo(Guid SessionId, Guid Generation, string State, string ProfileId,
     long ProfileRevision, DateTimeOffset ExpiresAt, Guid? ActiveExecutionId, string? DiagnosticId, Guid? LastExecutionId = null, string? Message = null,
     DateTimeOffset? CreatedAt = null, DateTimeOffset? LastActivityAt = null, DateTimeOffset? MaximumLifetimeAt = null,
     string? CleanupReason = null, bool CleanupPending = false, int CleanupPasses = 0, DateTimeOffset? LastCleanupAttemptAt = null,
-    SandboxInitializationEvidence? Initialization = null, string? ProfileName = null, string? ImageReference = null, string? SelectedProfileId = null, string? TransitionProfileId = null, string? TransitionPhase = null, string? FailureCategory = null, string? FailurePhase = null, Guid? AgentRunId = null, bool FileRecoveryRequired = false);
-public sealed record ScratchSnapshot(WorkspaceTransfer Transfer, string Fingerprint);
+    SandboxInitializationEvidence? Initialization = null, string? ProfileName = null, string? ImageReference = null, string? SelectedProfileId = null, string? TransitionProfileId = null, string? TransitionPhase = null, string? FailureCategory = null, string? FailurePhase = null, Guid? AgentRunId = null, string? HomeAccess = null, string StorageEnforcement = "sampled");
 
 public interface ISandboxService
 {

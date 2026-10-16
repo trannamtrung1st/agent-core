@@ -166,8 +166,9 @@ export function FilePreview({
           value.sha256.toLowerCase() !== office.sha256.toLowerCase()
         )
           throw readFailure(409);
-        const blob =
-          format === 'docx'
+        const blob = file.kind === 'home' && format === 'docx'
+          ? liveDocumentBlob(office, limit)
+          : format === 'docx'
             ? await readFile(
                 file,
                 { ...value, sha256: office.sha256 },
@@ -179,23 +180,20 @@ export function FilePreview({
         setLoaded({ metadata: value, format, policy, office, blob });
         return;
       }
-      const blob = await readFile(
-        file,
-        value,
-        limit,
-        controller.signal,
-      );
+      const blob = await readFile(file, value, limit, controller.signal);
+      const currentMetadata = file.kind === 'home' ? {...value, byteSize: blob.size} : value;
+      if (file.kind === 'home') setMetadata(currentMetadata);
       if (['text', 'markdown', 'csv'].includes(format)) {
         const text = await decodeText(blob, format, policy);
         controller.signal.throwIfAborted();
-        setLoaded({ metadata: value, format, policy, text });
+        setLoaded({ metadata: currentMetadata, format, policy, text });
       } else {
         await validateSignature(blob, value.contentType);
         if (format === 'image')
           await validateImageDimensions(blob, value.contentType, policy);
         controller.signal.throwIfAborted();
         url = URL.createObjectURL(blob);
-        setLoaded({ metadata: value, format, policy, url });
+        setLoaded({ metadata: currentMetadata, format, policy, url });
       }
     })().catch((reason) => {
       if (!controller.signal.aborted)
@@ -295,7 +293,8 @@ export function FilePreview({
               </Tooltip>
             )}
           </Flex>
-          <Flex gap={token.paddingXS}>
+          <Flex wrap gap={token.paddingXS}>
+            {file.kind === 'home' && <Button disabled={busy} onClick={() => setAttempt(value => value + 1)}>Reload preview</Button>}
             <Button
               icon={<DownloadOutlined />}
               loading={busy}
@@ -308,6 +307,7 @@ export function FilePreview({
             <Button onClick={onClose}>Close</Button>
           </Flex>
         </Flex>
+        {file.kind === 'home' && <Typography.Text type="secondary">Live file · other Sessions may change this path. Reload preview to read its current content.</Typography.Text>}
         {downloadError && (
           <Alert type="error" showIcon title="Download failed. Try again." />
         )}
@@ -570,4 +570,12 @@ function MediaPreview({
       }}
     />
   );
+}
+
+function liveDocumentBlob(office: OfficePreview, limit: number): Blob {
+  if (typeof office.sourceBase64 !== 'string' || office.sourceBase64.length > Math.ceil(limit / 3) * 4)
+    throw new PreviewError('preview_unavailable', 'The current document could not be loaded with its checked content. Reload preview.');
+  const decoded = atob(office.sourceBase64);
+  if (decoded.length > limit) throw new PreviewError('preview_too_large', 'The current document exceeds its preview limit. Download the original.');
+  return new Blob([Uint8Array.from(decoded, character => character.charCodeAt(0))], {type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }

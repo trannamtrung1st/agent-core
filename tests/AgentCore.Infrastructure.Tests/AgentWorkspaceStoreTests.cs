@@ -1,9 +1,7 @@
-using System.Security.Cryptography;
-using AgentCore.Application.Sessions;
+using System.Text;
 using AgentCore.Application.Ports;
-using AgentCore.Domain.Conversation;
-using AgentCore.Infrastructure.Identity;
-using AgentCore.Infrastructure.Definitions;
+using AgentCore.Application.Sessions;
+using AgentCore.Domain.Definitions;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Workspaces;
 using Microsoft.EntityFrameworkCore;
@@ -15,174 +13,87 @@ public sealed class AgentWorkspaceStoreTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Exact_bytes_isolation_CAS_quota_and_restart(bool sqlite)
+    public async Task Path_reads_observe_shared_bytes_and_reopen_without_file_rows_or_prior_read_tokens(bool sqlite)
     {
-        var root = Path.Combine(Path.GetTempPath(), "agent-home-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
+        using var fixture = await Fixture.Create(sqlite);
+        var store = fixture.Store(); byte[] bytes = [0, 255, 128, 13, 10];
+        var item = await store.WriteFileAsync(fixture.Owner, "/home/project/raw.bin", bytes);
+        Assert.Equal(bytes, (await store.ReadAsync(fixture.Owner, item.LogicalPath)).Bytes);
+        var physical = Path.Combine(AgentWorkspacePhysicalPaths.HomeDirectory(fixture.Workspaces, fixture.Owner), "project", "raw.bin");
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(physical));
+        await File.WriteAllTextAsync(physical, "external process");
+        Assert.Equal("external process", Encoding.UTF8.GetString((await fixture.Store().ReadAsync(fixture.Owner, item.LogicalPath)).Bytes));
+        await store.WriteFileAsync(fixture.Owner, item.LogicalPath, "new writer"u8.ToArray());
+        Assert.Equal("new writer", await File.ReadAllTextAsync(physical));
+        Assert.Empty((await store.ListAsync(fixture.Other, "/home", null, 10)).Items);
+        await Assert.ThrowsAsync<AgentCoreException>(() => store.ReadAsync(fixture.Other, item.LogicalPath).AsTask());
+        Assert.Empty((await store.InspectAsync(fixture.Owner, item.LogicalPath, 0)).Bytes);
+        Assert.Equal("new writer"u8.ToArray(), (await store.InspectAsync(fixture.Owner, item.LogicalPath, 32)).Bytes);
+        if (fixture.Contexts is not null)
         {
-            var factory = sqlite ? new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/store.db").Options) : null;
-            if (factory is not null) await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            var store = NewStore(root, factory);
-            var a = Guid.NewGuid(); var b = Guid.NewGuid(); var sourceSession = Guid.NewGuid();
-            byte[] bytes = [0, 255, 10, 13, 128];
-            var item = await store.WriteFileAsync(a, "/home/reports/exact.bin", "application/octet-stream", bytes, sourceSession, null, null);
-            Assert.Equal(Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), item.Sha256Hex);
-            Assert.Equal(bytes, (await store.ReadAsync(a, item.ItemId, null)).Bytes);
-            Assert.Empty((await store.ListAsync(b, "/home", null, 10)).Items);
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.ReadAsync(b, item.ItemId, null));
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(a, item.LogicalPath, item.ContentType, bytes, sourceSession, null, null));
-            Assert.Empty((await store.InspectAsync(a, item.ItemId, 0)).Bytes);
-            Assert.Empty((await store.InspectAsync(a, item.ItemId, 1)).Bytes);
-            Assert.Equal(bytes, (await store.InspectAsync(a, item.ItemId, 32)).Bytes);
-            var newer = await store.WriteFileAsync(a, item.LogicalPath, item.ContentType, "revision two"u8.ToArray(), sourceSession, item.Revision, item.Sha256Hex);
-            Assert.Equal(item.ItemId, newer.ItemId); Assert.Equal(2, newer.Revision);
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(a, item.LogicalPath, item.ContentType, bytes, sourceSession, 1, null));
-            Assert.Equal("revision two"u8.ToArray(), (await store.ReadAsync(a, item.ItemId, null)).Bytes);
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.DeleteAsync(a, item.ItemId, 1));
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(a, "/home/too-large", "text/plain", new byte[33], sourceSession, null, null));
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(a, "/home/aggregate-limit", "text/plain", new byte[30], sourceSession, null, null));
-            Assert.Single((await store.ListAsync(a, "/home", null, 10)).Items, i => !i.Directory);
-            Assert.Single(Directory.GetFiles(AgentWorkspacePhysicalPaths.HomeBlobRoot(Path.Combine(root, "blobs"), a)));
-            if (factory is not null)
-            {
-                var orphan = Path.Combine(AgentWorkspacePhysicalPaths.HomeBlobRoot(Path.Combine(root, "blobs"), a), Guid.NewGuid().ToString("N") + ".partial");
-                await File.WriteAllTextAsync(orphan, "uncommitted bytes");
-                store = NewStore(root, factory);
-                Assert.Equal("revision two"u8.ToArray(), (await store.ReadAsync(a, null, item.LogicalPath)).Bytes);
-                Assert.False(File.Exists(orphan));
-            }
-            await store.DeleteInstanceAsync(a);
-            await store.DeleteInstanceAsync(a);
-            Assert.Empty((await store.ListAsync(a, "/home", null, 10)).Items);
-            Assert.False(Directory.Exists(AgentWorkspacePhysicalPaths.HomeBlobRoot(Path.Combine(root, "blobs"), a)));
+            await using var db = fixture.Contexts.CreateDbContext();
+            await db.Database.OpenConnectionAsync(); using var query = db.Database.GetDbConnection().CreateCommand();
+            query.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='AgentWorkspaceItems'";
+            Assert.Equal(0L, await query.ExecuteScalarAsync());
         }
-        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Concurrent_replacements_have_one_winner_and_paths_are_portable(bool sqlite)
+    public async Task Ordinary_repository_names_deep_paths_empty_directories_and_concurrent_writers_survive(bool sqlite)
     {
-        var root = Path.Combine(Path.GetTempPath(), "agent-home-tests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        try
-        {
-            var factory = sqlite ? new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/store.db").Options) : null;
-            if (factory is not null) await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            var store = NewStore(root, factory); var a = Guid.NewGuid();
-            var item = await store.WriteFileAsync(a, "/home/Reports/a.md", "text/markdown", "first"u8.ToArray(), null, null, null);
-            var results = await Task.WhenAll(Replace("A"), Replace("B"));
-            Assert.Equal(1, results.Count(r => r));
-            Assert.Equal(2, (await store.ReadAsync(a, item.ItemId, null)).Item.Revision);
-            foreach (var path in new[] { "/home/../a", "/etc/passwd", "/home/.env", "/home/CON.txt", "/home/a/", "/home/a\\b", "/home/Reports/A.md", "/home/reports/b.md", "/home/Reports/a.md/child", "/home/Reports" })
-                await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(a, path, "text/plain", "x"u8.ToArray(), null, null, null));
-            var page = await store.ListAsync(a, "/home", null, 1);
-            Assert.Single(page.Items);
-            async Task<bool> Replace(string body)
-            {
-                try { await store.WriteFileAsync(a, item.LogicalPath, "text/plain", System.Text.Encoding.UTF8.GetBytes(body), null, 1, null); return true; }
-                catch (AgentCoreException e) when (e.Code == "Conflict") { return false; }
-            }
-        }
-        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+        using var fixture = await Fixture.Create(sqlite); var store = fixture.Store();
+        var deep = "/home/" + string.Join('/', Enumerable.Repeat("deep", 12));
+        var made = await store.StructureAsync(fixture.Owner, [new("mkdir", Path: deep + "/empty")]); Assert.True(made.Completed);
+        foreach (var name in new[] { ".git/config", ".env", "appsettings.json", "runtime/data", Guid.NewGuid().ToString("D") })
+            await store.WriteFileAsync(fixture.Owner, "/home/" + name, "normal"u8.ToArray());
+        var path = "/home/concurrent";
+        await Task.WhenAll(store.WriteFileAsync(fixture.Owner, path, "A"u8.ToArray()).AsTask(), store.WriteFileAsync(fixture.Owner, path, "B"u8.ToArray()).AsTask());
+        Assert.Contains(Encoding.UTF8.GetString((await fixture.Store().ReadAsync(fixture.Owner, path)).Bytes), new[] { "A", "B" });
+        var page = await fixture.Store().ListAsync(fixture.Owner, deep, null, 10);
+        Assert.Contains(page.Items, i => i.LogicalPath == deep + "/empty" && i.Directory);
+        Assert.Equal("sampled", page.UsageEnforcement);
     }
 
     [Fact]
-    public async Task Linked_owner_directory_cannot_write_or_clean_another_root()
+    public async Task Owner_validation_and_current_policy_protect_roots_and_bounded_mutations()
     {
-        var root = Path.Combine(Path.GetTempPath(), "agent-home-tests", Guid.NewGuid().ToString("N"));
-        var outside = Path.Combine(root, "outside"); var blobs = Path.Combine(root, "blobs");
-        Directory.CreateDirectory(outside); Directory.CreateDirectory(blobs);
-        var a = Guid.NewGuid(); Directory.CreateSymbolicLink(AgentWorkspacePhysicalPaths.AgentRoot(blobs, a), outside);
-        try
-        {
-            var store = NewStore(root, null);
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(a, "/home/a", "text/plain", "x"u8.ToArray(), null, null, null));
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.DeleteInstanceAsync(a));
-            Assert.True(Directory.Exists(outside)); Assert.Empty(Directory.GetFiles(outside));
-        }
-        finally { Directory.Delete(root, true); }
+        using var fixture = await Fixture.Create(false); var store = fixture.Store(8, 12);
+        await store.WriteFileAsync(fixture.Owner, "/home/file", "12345678"u8.ToArray());
+        await Assert.ThrowsAsync<AgentCoreException>(() => store.WriteFileAsync(fixture.Owner, "/home/too-big", new byte[9]).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => store.WriteFileAsync(fixture.Owner, "/home/aggregate", new byte[5]).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => store.WriteFileAsync(Guid.NewGuid(), "/home/file", "x"u8.ToArray()).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => store.WriteFileAsync(fixture.Owner, "/home/../foreign", "x"u8.ToArray()).AsTask());
+        await Assert.ThrowsAsync<AgentCoreException>(() => store.DeleteInstanceContentAsync(fixture.Owner).AsTask());
+        await fixture.Instances.UpdateWithExpectedRevisionAsync(new(fixture.Owner, 1, Lifecycle: AgentInstanceLifecycle.Archived), DateTimeOffset.UtcNow);
+        await Assert.ThrowsAsync<AgentCoreException>(() => store.WriteFileAsync(fixture.Owner, "/home/file", "x"u8.ToArray()).AsTask());
+        Assert.Equal("12345678"u8.ToArray(), (await store.ReadAsync(fixture.Owner, "/home/file")).Bytes);
     }
 
-    [Fact]
-    public async Task Failed_metadata_commit_removes_new_blob_and_preserves_previous_revision()
+    private sealed class Fixture : IDisposable
     {
-        var root = Path.Combine(Path.GetTempPath(), "agent-home-tests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        try
+        internal string Root { get; } = Path.Combine(Path.GetTempPath(), "canonical-home-" + Guid.NewGuid().ToString("N"));
+        internal string Workspaces => Path.Combine(Root, "workspaces");
+        internal Guid Owner { get; } = Guid.NewGuid(); internal Guid Other { get; } = Guid.NewGuid();
+        internal IAgentInstanceStore Instances = null!; internal Factory? Contexts;
+        internal InMemorySandboxStore Sandboxes { get; } = new();
+        internal FileAgentInstanceWorkspaceStore Store(long maxFile = 50 * 1024 * 1024, long maxRoot = 250 * 1024 * 1024) => new(Workspaces, Instances, Sandboxes, maxFile, maxRoot);
+        internal static async Task<Fixture> Create(bool sqlite)
         {
-            var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/store.db").Options);
-            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            var store = NewStore(root, factory); var owner = Guid.NewGuid();
-            var original = await store.WriteFileAsync(owner, "/home/report.md", "text/markdown", "original"u8.ToArray(), null, null, null);
-            await using (var db = factory.CreateDbContext())
+            var f = new Fixture(); Directory.CreateDirectory(f.Root);
+            if (sqlite)
             {
-                await db.Database.ExecuteSqlRawAsync("CREATE TRIGGER reject_home_insert BEFORE INSERT ON AgentWorkspaceItems BEGIN SELECT RAISE(ABORT, 'forced test failure'); END;");
-                await db.Database.ExecuteSqlRawAsync("CREATE TRIGGER reject_home_update BEFORE UPDATE ON AgentWorkspaceItems BEGIN SELECT RAISE(ABORT, 'forced test failure'); END;");
+                f.Contexts = new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + Path.Combine(f.Root,"core.db")).Options);
+                await new SqliteMemoryStore(f.Contexts, TimeProvider.System).EnsureCreatedAsync();
+                f.Instances = new SqliteAgentInstanceStore(f.Contexts, new AgentCore.Infrastructure.Identity.SystemIdGenerator(TimeProvider.System));
             }
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(owner, "/home/new.md", "text/plain", "new"u8.ToArray(), null, null, null));
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await store.WriteFileAsync(owner, original.LogicalPath, "text/plain", "replacement"u8.ToArray(), null, original.Revision, original.Sha256Hex));
-            store = NewStore(root, factory);
-            var retained = await store.ReadAsync(owner, original.ItemId, null);
-            Assert.Equal(original, retained.Item); Assert.Equal("original"u8.ToArray(), retained.Bytes);
-            Assert.Single((await store.ListAsync(owner, "/home", null, 10)).Items);
-            Assert.Single(Directory.GetFiles(AgentWorkspacePhysicalPaths.HomeBlobRoot(Path.Combine(root, "blobs"), owner)));
+            else f.Instances = new InMemoryAgentInstanceStore();
+            foreach (var id in new[] { f.Owner, f.Other }) await f.Instances.InsertAsync(new(id,"examiner",1,new("Alex","Role","Description","Tone"),AgentInstanceLifecycle.Active,DateTimeOffset.UtcNow,DateTimeOffset.UtcNow));
+            return f;
         }
-        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
+        public void Dispose() { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(Root, true); }
     }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Cross_store_tree_copy_preserves_binary_empty_directories_and_preflights_quotas(bool sqlite)
-    {
-        var root = Path.Combine(Path.GetTempPath(), "workspace-transfer", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        try
-        {
-            var factory = sqlite ? new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={root}/store.db").Options) : null;
-            if (factory is not null) await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
-            var home = NewStore(root, factory); var owner = Guid.NewGuid(); var session = Guid.NewGuid();
-            var scratch = new FileSessionWorkspace(Path.Combine(root, "scratch"), Path.Combine(root, "templates"), maxWritableBytes: 8, sessions: new WorkspaceTestSessions());
-            var repository = new DirectoryInfo(AppContext.BaseDirectory);
-            while (repository is not null && !Directory.Exists(Path.Combine(repository.FullName, "agents"))) repository = repository.Parent;
-            var definition = (await new FileAgentDefinitionStore(Path.Combine(repository!.FullName, "agents"), SyntheticProviderAliases.Default).GetAsync("general-assistant", 21))!;
-            await scratch.EnsureAsync(session, definition);
-            byte[] bytes = [0, 255, 128, 10, 13];
-            var tree = new WorkspaceTransfer([new("", true, "inode/directory", []), new("empty", true, "inode/directory", []), new("data.bin", false, "application/octet-stream", bytes)]);
-            await home.ImportAsync(owner, "/home/project", tree);
-            await scratch.ImportAsync(session, "/workspace/working/copied", await home.ExportAsync(owner, "/home/project"));
-            Assert.Equal(bytes, (await scratch.ReadAsync(session, definition, "/workspace/working/copied/data.bin")).Bytes);
-            Assert.Contains(await scratch.ListAsync(session, definition, "/workspace/working/copied"), n => n.Directory && n.LogicalPath.EndsWith("/empty", StringComparison.Ordinal));
-            var transfer = await scratch.ExportAsync(session, "/workspace/working/copied");
-            await home.ImportAsync(owner, "/home/roundtrip", transfer, session);
-            Assert.Equal(bytes, (await home.ReadAsync(owner, null, "/home/roundtrip/data.bin")).Bytes);
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await scratch.ImportAsync(session, "/workspace/working/over-quota", transfer));
-            Assert.False(Directory.Exists(Path.Combine(await scratch.PhysicalWorkingDirectoryAsync(session), "over-quota")));
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, "/home/project", transfer));
-            var large = new WorkspaceTransfer([new("", true, "inode/directory", []), new("big", false, "text/plain", new byte[31])]);
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, "/home/over-quota", large));
-            Assert.DoesNotContain((await home.ListAsync(owner, "/home", null, 256)).Items, n => n.LogicalPath.StartsWith("/home/over-quota", StringComparison.Ordinal));
-            var existing = (await home.ReadAsync(owner, null, "/home/project/data.bin")).Item;
-            var replacement = new WorkspaceTransfer([new("", false, "application/octet-stream", new byte[] { 42, 0 })]);
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, existing.LogicalPath, replacement));
-            await home.ImportAsync(owner, existing.LogicalPath, replacement, session, existing.Revision, existing.Sha256Hex);
-            await Assert.ThrowsAsync<AgentCoreException>(async () => await home.ImportAsync(owner, existing.LogicalPath, replacement, session, existing.Revision, existing.Sha256Hex));
-            if (sqlite) home = NewStore(root, factory);
-            var overwritten = await home.ReadAsync(owner, null, existing.LogicalPath);
-            Assert.Equal(new byte[] { 42, 0 }, overwritten.Bytes);
-            Assert.Equal(session, overwritten.Item.SourceSessionId);
-            Assert.All((await home.ListAsync(owner, "/home/roundtrip", null, 256)).Items,
-                item => Assert.Equal(session, item.SourceSessionId));
-            Assert.Contains((await home.ListAsync(owner, "/home", null, 256)).Items, n => n.LogicalPath == "/home/roundtrip/empty" && n.Directory);
-        }
-        finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
-    }
-
-    private static FileAgentInstanceWorkspaceStore NewStore(string root, Factory? factory) =>
-        new(Path.Combine(root, "blobs"), TimeProvider.System, new SystemIdGenerator(TimeProvider.System), factory, maxFileBytes: 32, maxInstanceBytes: 40);
     private sealed class Factory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
-    {
-        public AgentCoreDbContext CreateDbContext() => new(options);
-        public Task<AgentCoreDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
-    }
+    { public AgentCoreDbContext CreateDbContext() => new(options); }
 }

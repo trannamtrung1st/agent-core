@@ -1,5 +1,17 @@
 # Implementation Plan
 
+## Canonical filesystem and direct mount cutover
+
+Owner-authorized 2026-10-15; **implemented and locally qualified 2026-10-16** on `develop/branch-1` from baseline `5e58dc81`. Ordinary canonical Instance `/home` and Session `/working`, exact RW/RO/disabled mounts, shared mailbox cwd, current-file APIs/tools/previews, process-only recovery and the fresh database baseline replace file rows/blobs, file/tree CAS and staged synchronization together. Run/configuration/lease fences, approvals, cleanup, State & Isolation presets and immutable source protections remain.
+
+The [cutover ledger](reports/canonical-workspace-cutover-verification-2026-10-16.md) and its source manifest record focused filesystem/persistence/API/Application/frontend tests, five conversational Synthetic browser journeys, 21 final real-container cases, native and packaged identity/mount qualification, actual packaged UI verification, reset refusal and bounded responsive polish. Earlier broader real-container rechecks and exact fixture/image identities are recorded separately; no all-suite or hosted result is inferred.
+
+The [review follow-up](reports/canonical-workspace-review-2026-10-16.md) corrects archived working-list writability, enforces the per-file bound during HTTP intake and synchronizes deployment/limit guidance. Its focused API/filesystem/Application checks are recorded separately.
+
+The [current main synchronization](reports/canonical-workspace-main-sync-2026-10-16.md) incorporates main through `702e3808`, retaining shared isolation drafts, explicit visibility ceilings and private canonical command permissions with focused integrated verification.
+
+Current local acceptance is complete. Existing user data/application was preserved: deployment requires the explicit selected-path backup/reset, matching non-root identity/topology and contract-3 Profile reverification. Limits remain explicit: sampled budgets, deny-default remote Git egress, trusted single-user scope and unqualified other architectures/filesystems. CI, deployment and historical milestone acceptance were not requested and remain separate.
+
 ## Three-layer context cutover (owner-authorized 2026-10-15)
 
 The requested clean replacement covers one typed assembler, separate Core/system and Runtime/developer roles, bounded Evidence, per-field Run provenance, versioned interaction-only checkpoints, the breaking schema-2 `agentInstructions` cutover, explicit backup/transactional maintenance and existing Admin provenance/instruction surfaces. No parallel legacy builder/alias/resume translator is retained. Existing tool/approval/session/provider boundaries and historical milestone freezes remain unchanged.
@@ -505,6 +517,8 @@ Acceptance requires focused/full backend and frontend gates, production build, c
 
 ## Bounded workspace filesystem enhancement
 
+Historical scope and acceptance below describe their original source. The canonical filesystem cutover at the top of this plan supersedes file/tree CAS, staged files, link restrictions and whole-tree preflight.
+
 This user-requested follow-on extends the completed Agent Workspace slice. It does not move historical phase freezes or start P10/P11. Scope: shared logical tree preflight, first-class empty directories, native mkdir/copy/tree move/delete/ordered batch in authorized scratch/home, normal approval/replay policy, durable tree-token concurrency, folder-aware Admin inspection and canonical contracts. Non-goals remain shell expansion, Unix command wrappers, chmod/links/watchers/mounts, cross-owner sharing/synchronization, automatic organization/history/cloud-drive semantics and a transactional filesystem engine.
 
 Acceptance also requires v12/v13 to keep scratch-file-only move authority while explicit structural capabilities enable tree/home moves; scratch approval fingerprints and dynamic batch effects are deferred. Acceptance requires exact-byte tree operations and empty folders in both adapters, rejection before mutation for invalid batches/quota/security, explicit destructive approval, structured unexpected-failure state, Session/identity isolation, SQLite/Compose survival, existing workspace/Artifact/sandbox regressions and the affected live Synthetic browser flow. Verification status is recorded in [the filesystem report](reports/workspace-filesystem-final-verification.md); the original [Agent Workspace freeze](reports/agent-instance-workspace-final-verification.md) remains historical evidence.
@@ -687,9 +701,9 @@ The bounded [Drive upload/recovery follow-up](reports/drive-upload-recovery-2026
 The [Drive credentials/Trash UX successor](reports/drive-credentials-ux-verification-2026-10-14.md) adds operation-specific preflight, trusted approvals, bounded per-item batch recovery, provider-neutral compact file actions, unified credential creation/status and shared OAuth client configuration with staged grant migration. General Assistant v28 explicitly authorizes the new batch tool; old versions do not gain it. Local verification replaces waiting for hosted CI by explicit user instruction. Dedicated Real Trash, migration in an actual Google account and previously deferred manual Office/browser checks remain separate acceptance requirements; the successor ledger records actual local gate status and blockers.
 
 
-## Public binary file download follow-up
+## Historical public binary file download follow-up
 
-The 2026-10-14 owner-approved enhancement extends the implemented public-web, Agent Workspace and Office/Artifact substrate. Scope is exact public binary GET → owned create-only/hash-guarded file → supported Office inspection/edit → explicit Artifact return, using normal capability projection and durable Run fences. General Assistant v29 adds an explicit grant; existing published versions are immutable. This does not start P10/P11 or change prior milestone freezes.
+The 2026-10-14 owner-approved enhancement extends the implemented public-web, Agent Workspace and Office/Artifact substrate. Its original scope was exact public binary GET → owned create-only/hash-guarded file → supported Office inspection/edit → explicit Artifact return. The canonical cutover above supersedes only mutable workspace persistence/preconditions; normal capability projection, download protection and durable Run fences remain. General Assistant v29 adds an explicit grant; existing published versions are immutable. This does not start P10/P11 or change prior milestone freezes.
 
 Local acceptance requires deterministic transfer/security/limits/cancellation fixtures, an actual owned model/tool-to-Office-to-Artifact Run, conflict/failed-write cleanup, cross-Session home/scratch isolation, SQLite restart/retry/checkpoint evidence, applicable backend regression suites and canonical documentation consistency. The user explicitly waived waiting for external CI and authorized commit/push to main. [The verification ledger](reports/public-binary-download-verification-2026-10-14.md) records actual local results and remaining live/manual boundaries; hosted acceptance is not inferred.
 
@@ -706,11 +720,11 @@ The bounded 2026-10-14 [Office productivity stabilization](reports/office-produc
 
 ## Ordinary Linux sandbox images (owner-authorized 2026-10-15)
 
-The requested successor to OCI onboarding removes workload Python and pre-created scratch requirements through private platform `/working` mounts. Implementation order is [decision](10-technology-decisions.md#ordinary-linux-sandbox-images-owner-authorized-2026-10-15) → host mount/file/process adapter → launcher/configuration mapping → current-contract verification → focused tests and Synthetic browser/real SDK evidence. Exact stock .NET verification/execution, Workbench regression, links/quotas/CAS, background/reset and crash recovery are relevant local checks. Hosted CI and milestone acceptance remain opt-in; current evidence belongs to the ordinary-image verification report.
+The requested successor to OCI onboarding removes workload Python and pre-created scratch requirements through private platform `/working` mounts. Implementation order is [decision](10-technology-decisions.md#ordinary-linux-sandbox-images-owner-authorized-2026-10-15) → host mount/file/process adapter → launcher/configuration mapping → current-contract verification → focused tests and Synthetic browser/real SDK evidence. Current acceptance requires explicitly identity-compatible SDK and Workbench images, ordinary links/modes, sampled budgets, background/reset and process recovery. The canonical cutover above supersedes staged/CAS expectations; an unchanged incompatible stock image must be rejected. Hosted CI and milestone acceptance remain opt-in; current evidence belongs to the ordinary-image verification report.
 
 ## Sandbox profile selection and failure recovery (owner-authorized 2026-10-15)
 
-The supplied feedback authorizes descriptor-safe mounted collection, bounded staging safeguards, exact sparse Instance allowed subsets, all-profile Run admission, Session-scoped discovery/selection and serialized switching, durable cancellation/recovery evidence and existing Admin/Chat enhancements. Keep one active generation and the existing OpenSandbox/Workspace/receipt owners. No alternate engine, per-profile Compose workload, parallel writable sandbox or new Agent State framework is introduced. Focused local deterministic, real Docker and responsive Synthetic UI checks are recorded in the [successor ledger](reports/sandbox-selection-recovery-verification-2026-10-15.md). Historical milestones/freezes are unchanged. Hosted CI was explicitly waived; hardware/runtime gaps remain explicit and do not imply unrun acceptance.
+Historical selection/recovery work retained profile authority, one generation per Session, exact receipts and focused local checks. The canonical cutover at the top of this plan supersedes its filesystem transport and old acceptance expectations. Current gates require ordinary direct files/mounts, effective home enforcement, compatible UID/GID, sampled-limit truthfulness, native/packaged topology, fresh-install/reset refusal, source-contract retirement and responsive Synthetic journeys. Historical milestone freezes and their reports remain unchanged; hosted CI is opt-in.
 
 ## Generic Linux sandbox runtime (owner-authorized 2026-10-15)
 

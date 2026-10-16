@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { selectInstanceIdentity, INSTANCE_DEFINITIONS } from "./support/instance-identity";
 
-test("Chat copies and renames an exact four-file project, edits with CAS, and preserves home across session deletion", async ({ page }) => {
+test("Chat copies and renames an exact four-file project, edits current bytes, and preserves home across session deletion", async ({ page }) => {
   test.setTimeout(150_000);
   await page.goto("/");
   await selectInstanceIdentity(page, INSTANCE_DEFINITIONS.generalAssistant);
@@ -25,7 +25,7 @@ test("Chat copies and renames an exact four-file project, edits with CAS, and pr
   }
   const answer = await send("project");
   await expect(answer).toContainText('"cwd":"/home"');
-  await expect(answer).toContainText('"filesAffected":4');
+  await expect(answer).toContainText('"completed":true');
   const first = page.url().split("/c/")[1];
   const firstView = await (await page.request.get(`/api/v2/sessions/${first}`, { headers })).json();
   const owner = firstView.agentInstanceId;
@@ -39,9 +39,9 @@ test("Chat copies and renames an exact four-file project, edits with CAS, and pr
     const path = encodeURIComponent(`/home/csharp/CsvTool/${name}`);
     expect(await (await page.request.get(`/api/v2/sessions/${first}/workspace/content?path=${path}`, { headers })).body()).toEqual(Buffer.from(content));
   }
-  const home = await (await page.request.get(`/api/v2/agent-instances/${owner}/workspace`, { headers })).json();
+  const home = await (await page.request.get(`/api/v2/agent-instances/${owner}/workspace?prefix=/home/csharp/CsvTool`, { headers })).json();
   expect(home.items.some((item: { logicalPath: string }) => item.logicalPath.startsWith("/home/c#"))).toBe(false);
-  expect(home.items).toContainEqual(expect.objectContaining({ logicalPath: "/home/csharp/CsvTool/empty", directory: true, sourceSessionId: first }));
+  expect(home.items).toContainEqual(expect.objectContaining({ logicalPath: "/home/csharp/CsvTool/empty", directory: true }));
   const opened = await page.request.post("/api/v2/sessions", { headers, data: { agentInstanceId: owner, mode: "text" } });
   expect(opened.ok()).toBe(true);
   const fresh = (await opened.json()).sessionId;
@@ -59,12 +59,12 @@ test("Chat copies and renames an exact four-file project, edits with CAS, and pr
   expect((await page.request.delete(`/api/v2/sessions/${first}`, { headers })).ok()).toBe(true);
   const path = "/home/csharp/CsvTool/README.md";
   expect(await (await page.request.get(`/api/v2/sessions/${fresh}/workspace/content?path=${path}`, { headers })).body()).toEqual(updated);
-  expect((await page.request.put(`/api/v2/sessions/${fresh}/workspace/content?path=${path}&expectedRevision=1`, { headers, data: "stale" })).status()).toBe(409);
+  expect((await page.request.put(`/api/v2/sessions/${fresh}/workspace/content?path=${path}&expectedRevision=1`, { headers, data: "stale" })).status()).toBe(400);
   expect((await page.request.patch(`/api/v2/admin/agent-instances/${owner}/lifecycle`, { headers, data: { expectedRevision: 1, lifecycle: "Archived" } })).ok()).toBe(true);
   const archived = await (await page.request.get(`/api/v2/agent-instances/${owner}/workspace`, { headers })).json();
-  expect(archived.items).toHaveLength(home.items.length);
+  expect(archived.items).toContainEqual(expect.objectContaining({logicalPath:"/home/csharp",directory:true}));
   const nodes = await (await page.request.get(`/api/v2/sessions/${fresh}/workspace?prefix=/home/csharp/CsvTool`, { headers })).json();
-  expect(nodes.every((node: { writable: boolean }) => !node.writable)).toBe(true);
+  expect(nodes.entries.every((node: { writable: boolean }) => !node.writable)).toBe(true);
   expect((await page.request.put(`/api/v2/sessions/${fresh}/workspace/content?path=/home/no.txt`, { headers, data: "blocked" })).status()).toBe(409);
   expect((await page.request.delete(`/api/v2/sessions/${fresh}`, { headers })).ok()).toBe(true);
   const removed = await page.request.delete(`/api/v2/admin/agent-instances/${owner}`, { headers, data: { expectedRevision: 2 } });

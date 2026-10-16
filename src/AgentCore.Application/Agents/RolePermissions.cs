@@ -47,50 +47,10 @@ public static class RolePermissions
 
     public static bool AllowsLogicalPath(string path, Guid sessionId)
     {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return false;
-        }
-
-        var normalized = path.Replace('\\', '/').Trim();
-        if (normalized.StartsWith('/') && !normalized.StartsWith("/agent/", StringComparison.Ordinal)
-            && !normalized.StartsWith("/attachments/", StringComparison.Ordinal)
-            && !normalized.StartsWith("/home/", StringComparison.Ordinal)
-            && !normalized.StartsWith("/workspace/", StringComparison.Ordinal)
-            && normalized is not "/" and not "/agent" and not "/attachments" and not "/workspace" and not "/home")
-        {
-            return false;
-        }
-
-        if (WorkspaceLogicalPath.HasParentSegment(normalized)
-            || Path.IsPathRooted(normalized) && !normalized.StartsWith('/'))
-        {
-            return false;
-        }
-
-        var lower = normalized.ToLowerInvariant();
-        if (lower.Contains(".git", StringComparison.Ordinal)
-            || lower.Contains("src/agentcore", StringComparison.Ordinal)
-            || lower.Contains("local/tdp-workspace", StringComparison.Ordinal)
-            || lower.Contains(".env", StringComparison.Ordinal)
-            || lower.Contains("user-secrets", StringComparison.Ordinal)
-            || lower.Contains("appsettings.", StringComparison.Ordinal) && lower.Contains("secret"))
-        {
-            return false;
-        }
-
-        // Home identifiers are logical names; its Application service derives identity ownership.
-        // Session GUID segments still retain the existing scratch isolation rule.
-        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(normalized)) return true;
-        foreach (var token in normalized.Split('/', StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (Guid.TryParse(token, out var found) && found != sessionId)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        if (string.IsNullOrEmpty(path) || path.Contains('\0') || path.Contains('\\') || WorkspaceLogicalPath.HasParentSegment(path)) return false;
+        if (path == "/") return true;
+        return new[] { "/home", "/working", "/agent", "/attachments" }
+            .Any(root => path == root || path.StartsWith(root + "/", StringComparison.Ordinal));
     }
 
     public static void EnsureLogicalPathAllowed(string path, Guid sessionId)

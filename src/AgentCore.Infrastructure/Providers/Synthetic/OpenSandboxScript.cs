@@ -73,7 +73,7 @@ internal static class OpenSandboxScript
         if (scenario == "status" && results.Length == 0) name = ToolCatalog.SandboxStatus;
         if (args is null && name is not null) return [new ModelTextDelta("Unknown Synthetic sandbox scenario."),new ModelCompleted(ModelStopReason.Completed)];
         if (name is not null && request.Tools?.Any(t => t.Name == name) == true)
-            return [new ModelToolCallEvent(new("sandbox-proof-"+results.Length,name,JsonSerializer.Serialize(args))),new ModelCompleted(ModelStopReason.ToolCalls)];
+            return [new ModelToolCallEvent(new("sandbox-proof-"+results.Length,name,Arguments(name,args))),new ModelCompleted(ModelStopReason.ToolCalls)];
         if (name is not null) return [new ModelTextDelta("Sandbox capability unavailable. Register and verify an authorized prebuilt image and start a new Run."),new ModelCompleted(ModelStopReason.Completed)];
         if (scenario == "demo" && results.Length == 7)
         {
@@ -91,4 +91,11 @@ internal static class OpenSandboxScript
         }
         return [new ModelTextDelta("Real sandbox scenario completed. Results:\n" + string.Join("\n",results.Select(r => r.Text))),new ModelCompleted(ModelStopReason.Completed)];
     }
+    private static string Arguments(string name, object? args)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(args))!.AsObject();
+        if (name == ToolCatalog.SandboxExec) node["cwd"] = "/working";
+        return node.ToJsonString();
+    }
+
 }

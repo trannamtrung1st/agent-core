@@ -1,1106 +1,256 @@
 using System.Collections.Concurrent;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
-using AgentCore.Domain.Conversation;
 using AgentCore.Application.Agents;
-using AgentCore.Application.Observability;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
 using AgentCore.Application.Tools;
+using AgentCore.Application.Workspaces;
+using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
-using AgentCore.Infrastructure.Persistence;
 
 namespace AgentCore.Infrastructure.Workspaces;
 
 public sealed partial class FileSessionWorkspace : ISessionWorkspace
 {
-    private static readonly string[] WritableTrees = ["/workspace/working"];
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private readonly string _root;
     private readonly string _templateRoot;
     private readonly IAttachmentStore? _attachments;
     private readonly DefinitionPublicationResourceReader? _publicationResources;
     private readonly long _maxWritableBytes;
     private readonly IMemoryStore _sessions;
-    private readonly ConcurrentDictionary<Guid, Guid> _owners = new();
-    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
-    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _writers = new();
-    private readonly object _writerFence = new();
+    private readonly IAgentInstanceStore _instances;
+    private readonly ISandboxStore _sandboxes;
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _provisioning = new();
     private readonly ConcurrentDictionary<Guid, byte> _deleted = new();
+    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _ioLifetimes = new();
+    internal Func<CancellationToken, ValueTask>? BeforeFilesystemRead { get; set; }
 
-    public FileSessionWorkspace(
-        string workspaceRoot,
-        string templateRoot,
-        IAttachmentStore? attachments = null,
-        long maxWritableBytes = WorkspaceLimits.MaxWritableBytes,
-        DefinitionPublicationResourceReader? publicationResources = null,
-        IMemoryStore? sessions = null)
+    public FileSessionWorkspace(string workspaceRoot, string templateRoot, IAttachmentStore? attachments = null,
+        long maxWritableBytes = WorkspaceLimits.MaxWritableBytes, DefinitionPublicationResourceReader? publicationResources = null,
+        IMemoryStore? sessions = null, IAgentInstanceStore? instances = null, ISandboxStore? sandboxes = null)
     {
-        AttachmentBlobKeys.EnsureSafeRoot(templateRoot);
         _root = AgentWorkspacePhysicalPaths.ValidateRoot(workspaceRoot);
         _templateRoot = Path.GetFullPath(templateRoot);
-        _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions), "A trusted Session store is required for workspace ownership.");
-        _attachments = attachments;
-        _publicationResources = publicationResources;
-        _maxWritableBytes = maxWritableBytes;
-        Directory.CreateDirectory(_root);
+        _attachments = attachments; _maxWritableBytes = maxWritableBytes; _publicationResources = publicationResources;
+        _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
+        _instances = instances ?? throw new ArgumentNullException(nameof(instances));
+        _sandboxes = sandboxes ?? throw new ArgumentNullException(nameof(sandboxes));
     }
 
-    public async ValueTask EnsureAsync(
-        Guid sessionId,
-        AgentDefinition definition,
-        CancellationToken cancellationToken = default)
+    private async ValueTask<(SessionSnapshot Session, AgentInstance Instance)> OwnerAsync(Guid sessionId, bool write, CancellationToken ct)
     {
-        ThrowIfDeleted(sessionId);
-        await ResolveOwnerAsync(sessionId, cancellationToken);
-        var gate = Gate(sessionId);
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (_deleted.ContainsKey(sessionId)) throw AgentCoreErrors.NotFound("Session workspace was deleted.");
+        var snapshot = await _sessions.LoadMetadataAsync(sessionId, ct) ?? throw AgentCoreErrors.NotFound("Session was not found.");
+        if (snapshot.DurablyDeletedAt is not null) throw AgentCoreErrors.NotFound("Session was not found.");
+        var instance = await _instances.FindAsync(snapshot.AgentInstanceId, ct) ?? throw AgentCoreErrors.NotFound("Agent Instance was not found.");
+        if (write && !CanWrite(snapshot, instance))
+            throw AgentCoreErrors.Conflict("Ended or archived workspace is read-only.");
+        return (snapshot, instance);
+    }
+    private static bool CanWrite(SessionSnapshot session, AgentInstance instance) =>
+        session.Status != SessionStatus.Ended && session.ArchivedAt is null && instance.Lifecycle == AgentInstanceLifecycle.Active;
+    private CanonicalWorkspaceFilesystem Working(Guid owner, Guid sessionId) =>
+        new(AgentWorkspacePhysicalPaths.WorkingDirectory(_root, owner, sessionId), "/working");
+
+    private async ValueTask<T> WithIoAsync<T>(Guid sessionId, bool write, Func<CancellationToken, ValueTask<T>> action, CancellationToken ct)
+    {
+        var gate = _provisioning.GetOrAdd(sessionId, _ => new(1, 1));
+        await gate.WaitAsync(ct);
         try
         {
-            ThrowIfDeleted(sessionId);
-            var physical = SessionRoot(sessionId);
-            DenyEscapingLinks(physical, _root);
-            RecoverSandboxStages(physical);
-            Directory.CreateDirectory(Path.Combine(physical, "working"));
-            var marker = Path.Combine(physical, ".provisioned");
-            if (File.Exists(marker))
-            {
-                return;
-            }
-
-            ApplyTemplate(definition, physical);
-            await ApplyPublicationTemplateResourcesAsync(definition, physical, cancellationToken).ConfigureAwait(false);
-            await File.WriteAllTextAsync(marker, RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId ?? "", cancellationToken)
-                .ConfigureAwait(false);
+            await OwnerAsync(sessionId, write, ct);
+            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct, _ioLifetimes.GetOrAdd(sessionId, _ => new()).Token);
+            lifetime.Token.ThrowIfCancellationRequested();
+            return await action(lifetime.Token);
         }
-        finally
-        {
-            gate.Release();
-        }
+        finally { gate.Release(); }
     }
 
-    public async ValueTask<IReadOnlyList<WorkspaceNode>> ListAsync(
-        Guid sessionId,
-        AgentDefinition definition,
-        string prefix,
-        CancellationToken cancellationToken = default)
+    public async ValueTask EnsureAsync(Guid sessionId, AgentDefinition definition, CancellationToken cancellationToken = default)
     {
-        await EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
-        var path = Normalize(prefix);
-        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
-        if (path is "/" or "")
+        var owner = await OwnerAsync(sessionId, false, cancellationToken);
+        var gate = _provisioning.GetOrAdd(sessionId, _ => new(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
         {
-            return
-            [
-                new WorkspaceNode("/agent", true, 0, false),
-                new WorkspaceNode("/attachments", true, 0, false),
-                new WorkspaceNode("/workspace", true, 0, false)
-            ];
+            owner = await OwnerAsync(sessionId, false, cancellationToken);
+            var sessionRoot = AgentWorkspacePhysicalPaths.SessionRoot(_root, owner.Instance.InstanceId, sessionId);
+            var files = Working(owner.Instance.InstanceId, sessionId);
+            var marker = Path.Combine(sessionRoot, ".provisioned");
+            if (File.Exists(marker)) { files.Stat("/working"); return; }
+            await OwnerAsync(sessionId, true, cancellationToken);
+            files.Ensure();
+            await ApplyTemplateAsync(files, definition, cancellationToken);
+            await File.WriteAllTextAsync(marker, RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId ?? "", cancellationToken);
         }
-
-        if (path.StartsWith("/agent", StringComparison.Ordinal))
-        {
-            return await ListAgentAsync(definition, path, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (path.StartsWith("/attachments", StringComparison.Ordinal))
-        {
-            return await ListAttachmentsAsync(sessionId, path, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (path.StartsWith("/workspace", StringComparison.Ordinal))
-        {
-            return await WithFilesystemAsync(sessionId, ct =>
-            {
-                ct.ThrowIfCancellationRequested();
-                var nodes = ListPhysical(sessionId, path);
-                ct.ThrowIfCancellationRequested();
-                return ValueTask.FromResult(nodes);
-            }, cancellationToken);
-        }
-
-        throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
+        finally { gate.Release(); }
     }
 
-    public async ValueTask<WorkspaceContent> ReadAsync(
-        Guid sessionId,
-        AgentDefinition definition,
-        string logicalPath,
-        CancellationToken cancellationToken = default)
+    public async ValueTask<IReadOnlyList<WorkspaceNode>> ListAsync(Guid sessionId, AgentDefinition definition, string prefix, CancellationToken cancellationToken = default)
     {
-        await EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
-        var path = Normalize(logicalPath);
-        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
-        if (path.StartsWith("/agent/", StringComparison.Ordinal) || path == "/agent")
-        {
-            return await ReadAgentAsync(definition, path, cancellationToken).ConfigureAwait(false);
-        }
+        var owner = await OwnerAsync(sessionId, false, cancellationToken);
+        var path = WorkspaceLogicalPath.Resolve(prefix, sessionId);
+        if (path == "/") return [new("/agent", true, 0, false, "directory"), new("/attachments", true, 0, false, "directory"), new("/working", true, 0, CanWrite(owner.Session, owner.Instance), "directory")];
+        if (path == "/agent" || path.StartsWith("/agent/", StringComparison.Ordinal)) return await ListAgentAsync(definition, path, cancellationToken);
+        if (path == "/attachments" || path.StartsWith("/attachments/", StringComparison.Ordinal)) return await ListAttachmentsAsync(sessionId, path, cancellationToken);
+        await EnsureAsync(sessionId, definition, cancellationToken);
+        owner = await OwnerAsync(sessionId, false, cancellationToken);
+        var files = Working(owner.Instance.InstanceId, sessionId);
+        var entry = files.Stat(path);
+        var writable = CanWrite(owner.Session, owner.Instance);
+        if (!entry.Directory) return [Node(entry, writable)];
+        return files.List(path, limit: WorkspaceLimits.MaxListEntries + 1).Entries.Select(node => Node(node, writable)).ToArray();
+    }
 
-        if (path.StartsWith("/attachments/", StringComparison.Ordinal))
+    public async ValueTask<WorkspaceContent> ReadAsync(Guid sessionId, AgentDefinition definition, string logicalPath, CancellationToken cancellationToken = default)
+    {
+        var owner = await OwnerAsync(sessionId, false, cancellationToken);
+        var path = WorkspaceLogicalPath.Resolve(logicalPath, sessionId);
+        if (path == "/agent" || path.StartsWith("/agent/", StringComparison.Ordinal)) return await ReadAgentAsync(definition, path, cancellationToken);
+        if (path.StartsWith("/attachments/", StringComparison.Ordinal)) return await ReadAttachmentAsync(sessionId, path, cancellationToken);
+        await EnsureAsync(sessionId, definition, cancellationToken);
+        return await WithIoAsync<WorkspaceContent>(sessionId, false, async token =>
         {
-            return await ReadAttachmentAsync(sessionId, path, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (!path.StartsWith("/workspace/", StringComparison.Ordinal))
-        {
-            throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
-        }
-
-        return await WithFilesystemAsync(sessionId, async ct =>
-        {
-            var physical = MapWorkspaceFile(sessionId, path);
-            DenyEscapingLinks(physical, SessionRoot(sessionId));
-            if (!File.Exists(physical) || Directory.Exists(physical)) throw AgentCoreErrors.NotFound("Workspace path was not found.");
-            if (BeforeFilesystemRead is not null) await BeforeFilesystemRead(ct);
-            var bytes = await File.ReadAllBytesAsync(physical, ct).ConfigureAwait(false);
-            return new WorkspaceContent(path, ContentType(physical), bytes);
+            if (BeforeFilesystemRead is not null) await BeforeFilesystemRead(token);
+            return new(path, WorkspaceContentTypes.Of(path), await Working(owner.Instance.InstanceId, sessionId).ReadAsync(path, AgentWorkspaceLimits.MaxFileBytes, token));
         }, cancellationToken);
     }
 
-    public ValueTask WriteAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
-        WriteCoreAsync(sessionId, logicalPath, bytes, cancellationToken);
-
-    private async ValueTask WriteCoreAsync(
-        Guid sessionId,
-        string logicalPath,
-        ReadOnlyMemory<byte> bytes,
-        CancellationToken cancellationToken = default)
+    public async ValueTask<WorkspaceNodePage> ListPageAsync(Guid sessionId, AgentDefinition definition, string prefix, string? cursor, int limit, CancellationToken ct = default)
     {
-        ThrowIfDeleted(sessionId);
-        await ResolveOwnerAsync(sessionId, cancellationToken);
-        var path = Normalize(logicalPath);
-        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
-        if (!IsWritableFile(path))
+        if (limit is < 1 or > WorkspaceLimits.MaxListEntries) throw AgentCoreErrors.Validation("List limit must be between 1 and 256.");
+        var path = WorkspaceLogicalPath.Resolve(prefix, sessionId);
+        if (cursor is not null && !cursor.StartsWith(path.TrimEnd('/') + "/", StringComparison.Ordinal)) throw AgentCoreErrors.Validation("Cursor must belong to the listed directory.");
+        if (path == "/working" || path.StartsWith("/working/", StringComparison.Ordinal))
         {
-            throw AgentCoreErrors.Forbidden("Execution view writes are limited to /workspace.");
+            await EnsureAsync(sessionId, definition, ct);
+            var owner = await OwnerAsync(sessionId, false, ct);
+            var page = Working(owner.Instance.InstanceId, sessionId).List(path, cursor, limit);
+            return new(page.Entries.Select(node => Node(node, CanWrite(owner.Session, owner.Instance))).ToArray(), page.NextPath, page.Truncated);
         }
-
-        if (IsForbiddenPersist(path))
-        {
-            throw AgentCoreErrors.Forbidden("Runtime internals and secret files cannot be stored in the workspace.");
-        }
-
-        var gate = Gate(sessionId);
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            ThrowIfDeleted(sessionId);
-            using var linked = LinkWriter(sessionId, cancellationToken);
-            linked.Token.ThrowIfCancellationRequested();
-            var physical = MapWorkspaceFile(sessionId, path);
-            var parent = Path.GetDirectoryName(physical)!;
-            DenyEscapingLinks(physical, SessionRoot(sessionId));
-            DenyEscapingLinks(parent, SessionRoot(sessionId));
-            Directory.CreateDirectory(parent);
-            DenyEscapingLinks(physical, SessionRoot(sessionId));
-            var used = Measure(Path.Combine(SessionRoot(sessionId), "working"));
-            var existing = File.Exists(physical) ? new FileInfo(physical).Length : 0;
-            if (used - existing + bytes.Length > _maxWritableBytes)
-            {
-                OperationalDiagnostics.RecordResourceLimit("workspaceStore");
-                throw AgentCoreErrors.WorkspaceQuotaExceeded();
-            }
-
-            await using var stream = new FileStream(
-                physical,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                4096,
-                FileOptions.Asynchronous);
-            await stream.WriteAsync(bytes, linked.Token).ConfigureAwait(false);
-        }
-        finally
-        {
-            gate.Release();
-        }
+        var nodes = (await ListAsync(sessionId, definition, path, ct)).OrderBy(node => node.LogicalPath, StringComparer.Ordinal)
+            .Where(node => cursor is null || string.CompareOrdinal(node.LogicalPath, cursor) > 0).Take(limit + 1).ToArray();
+        return new(nodes.Take(limit).ToArray(), nodes.Length > limit ? nodes[limit - 1].LogicalPath : null, nodes.Length > limit);
     }
 
-    public async ValueTask<WorkspacePatchResult> PatchTextAsync(
-        Guid sessionId,
-        AgentDefinition definition,
-        string logicalPath,
-        string expectedSha256Hex,
-        IReadOnlyList<WorkspaceTextEdit> edits,
+    public async ValueTask RequireDirectoryAsync(Guid sessionId, AgentDefinition definition, string path, CancellationToken ct = default)
+    {
+        await EnsureAsync(sessionId, definition, ct);
+        var owner = await OwnerAsync(sessionId, false, ct);
+        Working(owner.Instance.InstanceId, sessionId).RequireDirectory(path);
+    }
+
+    public async ValueTask WriteAsync(Guid sessionId, string logicalPath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
+    {
+        var owner = await OwnerAsync(sessionId, true, cancellationToken);
+        await EnsureAsync(sessionId, owner.Session.Definition, cancellationToken);
+        await WithIoAsync(sessionId, true, async token =>
+        {
+            await Working(owner.Instance.InstanceId, sessionId).WriteAsync(logicalPath, bytes, AgentWorkspaceLimits.MaxFileBytes, _maxWritableBytes, token);
+            return true;
+        }, cancellationToken);
+    }
+
+    public async ValueTask<WorkspacePatchResult> PatchTextAsync(Guid sessionId, AgentDefinition definition, string logicalPath,
+        IReadOnlyList<WorkspaceTextEdit> edits, CancellationToken cancellationToken = default)
+    {
+        var owner = await OwnerAsync(sessionId, true, cancellationToken);
+        await EnsureAsync(sessionId, definition, cancellationToken);
+        return await WithIoAsync<WorkspacePatchResult>(sessionId, true, async token =>
+        {
+            var files = Working(owner.Instance.InstanceId, sessionId);
+            var current = await files.ReadAsync(logicalPath, AgentWorkspaceLimits.MaxFileBytes, token);
+            var bytes = WorkspaceTextPatches.Apply(current, edits);
+            await files.WriteAsync(logicalPath, bytes, AgentWorkspaceLimits.MaxFileBytes, _maxWritableBytes, token);
+            return new(logicalPath, bytes.LongLength, edits.Count);
+        }, cancellationToken);
+    }
+
+    public async ValueTask<WorkspaceStructureResult> StructureAsync(Guid sessionId, IReadOnlyList<WorkspaceStructuralOperation> operations,
         CancellationToken cancellationToken = default)
     {
-        ThrowIfDeleted(sessionId);
-        if (edits.Count == 0 || edits.Count > WorkspaceLimits.MaxPatchEdits)
+        var owner = await OwnerAsync(sessionId, true, cancellationToken);
+        await EnsureAsync(sessionId, owner.Session.Definition, cancellationToken);
+        operations = WorkspaceStructuralPaths.Normalize(sessionId, operations);
+        return await WithIoAsync(sessionId, true, token => ValueTask.FromResult(
+            Working(owner.Instance.InstanceId, sessionId).Structure(operations, AgentWorkspaceLimits.MaxFileBytes, _maxWritableBytes, token)), cancellationToken);
+    }
+
+    public async ValueTask CopyAcrossScopesAsync(Guid sessionId, string source, string destination, CancellationToken cancellationToken = default)
+    {
+        var owner = await OwnerAsync(sessionId, true, cancellationToken);
+        await EnsureAsync(sessionId, owner.Session.Definition, cancellationToken);
+        await WithIoAsync(sessionId, true, token =>
         {
-            throw AgentCoreErrors.Validation("Patch must include between 1 and 32 edits.");
-        }
-
-        foreach (var edit in edits)
-        {
-            if (string.IsNullOrEmpty(edit.OldText))
-            {
-                throw AgentCoreErrors.Validation("Each edit oldText must be non-empty.");
-            }
-        }
-
-        if (!IsLowerHexSha256(expectedSha256Hex))
-        {
-            throw AgentCoreErrors.Validation("expectedSha256 must be a lowercase SHA-256 hex digest.");
-        }
-
-        var path = Normalize(logicalPath);
-        RolePermissions.EnsureLogicalPathAllowed(path, sessionId);
-        if (!IsWritableFile(path))
-        {
-            throw AgentCoreErrors.Forbidden("Execution view writes are limited to /workspace.");
-        }
-
-        if (IsForbiddenPersist(path))
-        {
-            throw AgentCoreErrors.Forbidden("Runtime internals and secret files cannot be stored in the workspace.");
-        }
-
-        await EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
-        var gate = Gate(sessionId);
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            ThrowIfDeleted(sessionId);
-            using var linked = LinkWriter(sessionId, cancellationToken);
-            linked.Token.ThrowIfCancellationRequested();
-            var physical = MapWorkspaceFile(sessionId, path);
-            DenyEscapingLinks(physical, SessionRoot(sessionId));
-            if (!File.Exists(physical) || Directory.Exists(physical))
-            {
-                throw AgentCoreErrors.NotFound("Workspace path was not found.");
-            }
-
-            var originalBytes = await File.ReadAllBytesAsync(physical, linked.Token).ConfigureAwait(false);
-            if (!TryDecodeStrictUtf8(originalBytes, out var text))
-            {
-                throw AgentCoreErrors.Validation("Workspace file must be strict UTF-8 text.");
-            }
-
-            var previousHash = ComputeSha256Hex(originalBytes);
-            if (!string.Equals(previousHash, expectedSha256Hex, StringComparison.Ordinal))
-            {
-                throw AgentCoreErrors.Conflict("Workspace file hash does not match expectedSha256.");
-            }
-
-            var updated = text;
-            foreach (var edit in edits)
-            {
-                var occurrences = CountOccurrences(updated, edit.OldText);
-                if (occurrences != 1)
-                {
-                    throw AgentCoreErrors.Conflict("Each edit oldText must match exactly once in the current file content.");
-                }
-
-                updated = updated.Replace(edit.OldText, edit.NewText, StringComparison.Ordinal);
-            }
-
-            var newBytes = Encoding.UTF8.GetBytes(updated);
-            var used = Measure(Path.Combine(SessionRoot(sessionId), "working"));
-            var existing = originalBytes.Length;
-            if (used - existing + newBytes.Length > _maxWritableBytes)
-            {
-                OperationalDiagnostics.RecordResourceLimit("workspaceStore");
-                throw AgentCoreErrors.WorkspaceQuotaExceeded();
-            }
-
-            await CommitBytesAtomicallyAsync(physical, newBytes, linked.Token).ConfigureAwait(false);
-
-            return new WorkspacePatchResult(
-                path,
-                previousHash,
-                ComputeSha256Hex(newBytes),
-                newBytes.Length,
-                edits.Count);
-        }
-        finally
-        {
-            gate.Release();
-        }
+            var home = new CanonicalWorkspaceFilesystem(AgentWorkspacePhysicalPaths.HomeDirectory(_root, owner.Instance.InstanceId), "/home");
+            home.Ensure();
+            var working = Working(owner.Instance.InstanceId, sessionId);
+            if (AgentHomePath.IsHome(source) == AgentHomePath.IsHome(destination)) throw AgentCoreErrors.Validation("Cross-scope copy requires distinct roots.");
+            var from = AgentHomePath.IsHome(source) ? home : working;
+            var to = AgentHomePath.IsHome(destination) ? home : working;
+            from.CopyTo(source, to, destination, token, AgentWorkspaceLimits.MaxFileBytes,
+                AgentHomePath.IsHome(destination) ? AgentWorkspaceLimits.MaxInstanceBytes : _maxWritableBytes);
+            return ValueTask.FromResult(true);
+        }, cancellationToken);
     }
 
     public async ValueTask DeleteSessionAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
-        await ResolveOwnerAsync(sessionId, cancellationToken);
-        CancellationTokenSource? writers;
-        lock (_writerFence)
-        {
-            _deleted[sessionId] = 1;
-            _writers.TryRemove(sessionId, out writers);
-        }
-        if (writers is not null)
-        {
-            await writers.CancelAsync().ConfigureAwait(false);
-            writers.Dispose();
-        }
-
-        var gate = Gate(sessionId);
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var physical = SessionRoot(sessionId);
-            for (var attempt = 0; attempt < 5; attempt++)
-            {
-                if (!Directory.Exists(physical))
-                {
-                    return;
-                }
-
-                try
-                {
-                    Directory.Delete(physical, recursive: true);
-                    return;
-                }
-                catch (IOException) when (attempt < 4)
-                {
-                    await Task.Delay(10, cancellationToken).ConfigureAwait(false);
-                }
-            }
-        }
-        finally
-        {
-            gate.Release();
-        }
-    }
-
-    private async ValueTask<IReadOnlyList<WorkspaceNode>> ListAgentAsync(
-        AgentDefinition definition,
-        string path,
-        CancellationToken cancellationToken)
-    {
-        if (definition.ExecutionResources is { } manifest && (path == "/agent/instance" || path == "/agent/instance/resources" || path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal)
-            || path == "/agent/resources" || path.StartsWith("/agent/resources/", StringComparison.Ordinal)))
-            return ListPinnedResources(manifest, path);
-        if (path.StartsWith("/agent/resources", StringComparison.Ordinal))
-        {
-            return await ListAgentPublicationResourcesAsync(definition, path, cancellationToken).ConfigureAwait(false);
-        }
-
-        var env = RoleEnvironments.Of(definition);
-        if (path is "/agent")
-        {
-            var nodes = new List<WorkspaceNode> { new("/agent/definition.json", false, 0, false) };
-            if (definition.ExecutionResources?.Any(r => r.Key.StartsWith("instance:", StringComparison.Ordinal)) == true)
-                nodes.Add(new("/agent/instance", true, 0, false));
-            if (env.HarnessList.Count > 0)
-            {
-                nodes.Add(new WorkspaceNode("/agent/harness", true, 0, false));
-            }
-
-            if (env.KnowledgeList.Count > 0)
-            {
-                nodes.Add(new WorkspaceNode("/agent/knowledge", true, 0, false));
-            }
-
-            if (_publicationResources is not null)
-            {
-                var published = await _publicationResources.ListAsync(definition.Id, definition.Version, cancellationToken)
-                    .ConfigureAwait(false);
-                if (definition.ExecutionResources is { } resolved ? resolved.Any(r => r.Key.StartsWith("definition:", StringComparison.Ordinal)) : published.Count > 0)
-                {
-                    nodes.Add(new WorkspaceNode("/agent/resources", true, 0, false));
-                }
-            }
-
-            return nodes;
-        }
-
-        if (path == "/agent/definition.json")
-        {
-            var content = await ReadAgentAsync(definition, path, cancellationToken).ConfigureAwait(false);
-            return [new WorkspaceNode(path, false, content.Bytes.Length, false)];
-        }
-
-        if (path is "/agent/harness")
-        {
-            return env.HarnessList
-                .Select(name => new WorkspaceNode($"/agent/harness/{name}", false, 0, false))
-                .ToArray();
-        }
-
-        if (path is "/agent/knowledge")
-        {
-            return env.KnowledgeList
-                .Select(item => new WorkspaceNode($"/agent/knowledge/{item.Identity}", false, 0, false))
-                .ToArray();
-        }
-
-        var leaf = await ReadAgentAsync(definition, path, cancellationToken).ConfigureAwait(false);
-        return [new WorkspaceNode(path, false, leaf.Bytes.Length, false)];
-    }
-
-    private async ValueTask<WorkspaceContent> ReadAgentAsync(
-        AgentDefinition definition,
-        string path,
-        CancellationToken cancellationToken)
-    {
-        if (definition.ExecutionResources is { } manifest && (path.StartsWith("/agent/resources/", StringComparison.Ordinal)
-            || path.StartsWith("/agent/instance/resources/", StringComparison.Ordinal)))
-        {
-            var resource = manifest.SingleOrDefault(r => r.VirtualPath == path) ?? throw AgentCoreErrors.NotFound("Pinned resource path was not found.");
-            var bytes = _publicationResources is null ? throw AgentCoreErrors.Persistence("Pinned content reader is unavailable.")
-                : await _publicationResources.ReadPinnedAsync(resource, cancellationToken);
-            return new(path, resource.MediaType, bytes);
-        }
-        if (path.StartsWith("/agent/resources", StringComparison.Ordinal))
-        {
-            return await ReadAgentPublicationResourceAsync(definition, path, cancellationToken).ConfigureAwait(false);
-        }
-
-        var env = RoleEnvironments.Of(definition);
-        if (path == "/agent/definition.json")
-        {
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(
-                new
-                {
-                    definition.Id,
-                    definition.Version,
-                    name = definition.Identity.Name,
-                    role = definition.Identity.Role
-                },
-                JsonOptions);
-            return new WorkspaceContent(path, "application/json", bytes);
-        }
-
-        if (path.StartsWith("/agent/harness/", StringComparison.Ordinal))
-        {
-            var name = path["/agent/harness/".Length..];
-            if (!env.HarnessList.Contains(name, StringComparer.Ordinal))
-            {
-                throw AgentCoreErrors.NotFound("Harness entry was not found.");
-            }
-
-            var text = Encoding.UTF8.GetBytes($"name={name}\n");
-            return new WorkspaceContent(path, "text/plain", text);
-        }
-
-        if (path.StartsWith("/agent/knowledge/", StringComparison.Ordinal))
-        {
-            var identity = path["/agent/knowledge/".Length..];
-            var source = env.KnowledgeList.FirstOrDefault(item =>
-                string.Equals(item.Identity, identity, StringComparison.Ordinal))
-                ?? throw AgentCoreErrors.NotFound("Knowledge entry was not found.");
-            var text = Encoding.UTF8.GetBytes($"title={source.Title}\ncitation={source.Citation}\n");
-            return new WorkspaceContent(path, "text/plain", text);
-        }
-
-        throw AgentCoreErrors.NotFound("Agent path was not found.");
-    }
-
-    private static IReadOnlyList<WorkspaceNode> ListPinnedResources(IReadOnlyList<EffectiveAgentResource> resources, string path)
-    {
-        var nodes = new Dictionary<string, WorkspaceNode>(StringComparer.Ordinal);
-        var prefix = path.TrimEnd('/') + "/";
-        foreach (var resource in resources.Where(r => r.VirtualPath.StartsWith(prefix, StringComparison.Ordinal)))
-        {
-            var remainder = resource.VirtualPath[prefix.Length..];
-            var segment = remainder.Split('/')[0];
-            var directory = remainder.Contains('/');
-            nodes[prefix + segment] = new(prefix + segment, directory, directory ? 0 : resource.ByteLength, false);
-        }
-        return nodes.Values.OrderBy(n => n.LogicalPath, StringComparer.Ordinal).ToArray();
-    }
-
-    private async ValueTask<IReadOnlyList<WorkspaceNode>> ListAgentPublicationResourcesAsync(
-        AgentDefinition definition,
-        string path,
-        CancellationToken cancellationToken)
-    {
-        if (_publicationResources is null)
-        {
-            throw AgentCoreErrors.NotFound("Agent path was not found.");
-        }
-
-        const string root = "/agent/resources";
-        if (path != root && !path.StartsWith(root + "/", StringComparison.Ordinal))
-        {
-            throw AgentCoreErrors.NotFound("Agent path was not found.");
-        }
-
-        var relativePrefix = path == root
-            ? string.Empty
-            : path[(root.Length + 1)..];
-        var items = await _publicationResources.ListAsync(definition.Id, definition.Version, cancellationToken)
-            .ConfigureAwait(false);
-        var nodes = new Dictionary<string, WorkspaceNode>(StringComparer.Ordinal);
-        foreach (var item in items)
-        {
-            var logical = DefinitionPublicationResourceReader.NormalizeLogicalPath(item.LogicalPath);
-            if (!string.IsNullOrEmpty(relativePrefix)
-                && !logical.StartsWith(relativePrefix + "/", StringComparison.Ordinal)
-                && !string.Equals(logical, relativePrefix, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var remainder = string.IsNullOrEmpty(relativePrefix)
-                ? logical
-                : logical.Length == relativePrefix.Length
-                    ? string.Empty
-                    : logical[(relativePrefix.Length + 1)..];
-            if (string.IsNullOrEmpty(remainder))
-            {
-                continue;
-            }
-
-            if (remainder.Contains('/', StringComparison.Ordinal))
-            {
-                var segment = remainder.Split('/')[0];
-                var dirPath = string.IsNullOrEmpty(relativePrefix)
-                    ? $"{root}/{segment}"
-                    : $"{root}/{relativePrefix}/{segment}";
-                nodes[dirPath] = new WorkspaceNode(dirPath, true, 0, false);
-            }
-            else
-            {
-                var filePath = string.IsNullOrEmpty(relativePrefix)
-                    ? $"{root}/{remainder}"
-                    : $"{root}/{relativePrefix}/{remainder}";
-                nodes[filePath] = new WorkspaceNode(filePath, false, item.ByteLength, false);
-            }
-        }
-
-        return nodes.Values.OrderBy(node => node.LogicalPath, StringComparer.Ordinal).ToArray();
-    }
-
-    private async ValueTask<WorkspaceContent> ReadAgentPublicationResourceAsync(
-        AgentDefinition definition,
-        string path,
-        CancellationToken cancellationToken)
-    {
-        if (_publicationResources is null || path == "/agent/resources")
-        {
-            throw AgentCoreErrors.NotFound("Agent path was not found.");
-        }
-
-        const string root = "/agent/resources/";
-        if (!path.StartsWith(root, StringComparison.Ordinal))
-        {
-            throw AgentCoreErrors.NotFound("Agent path was not found.");
-        }
-
-        var logicalPath = path[root.Length..];
-        var resource = await _publicationResources.FindByLogicalPathAsync(
-                definition.Id,
-                definition.Version,
-                logicalPath,
-                cancellationToken)
-            .ConfigureAwait(false)
-            ?? throw AgentCoreErrors.NotFound("Agent path was not found.");
-        var bytes = await _publicationResources.ReadContentAsync(resource, cancellationToken).ConfigureAwait(false)
-            ?? throw AgentCoreErrors.NotFound("Agent path was not found.");
-        return new WorkspaceContent(path, resource.MediaType, bytes);
-    }
-
-    private async ValueTask<IReadOnlyList<WorkspaceNode>> ListAttachmentsAsync(
-        Guid sessionId,
-        string path,
-        CancellationToken cancellationToken)
-    {
-        if (_attachments is null)
-        {
-            return path is "/attachments" ? [] : throw AgentCoreErrors.NotFound("Attachment path was not found.");
-        }
-
-        var records = await _attachments.ListForSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        if (path is "/attachments")
-        {
-            return records
-                .Select(record => new WorkspaceNode($"/attachments/{record.AttachmentId}", false, record.ByteSize, false))
-                .ToArray();
-        }
-
-        var id = ParseAttachmentId(path);
-        var match = records.FirstOrDefault(record => record.AttachmentId == id)
-            ?? throw AgentCoreErrors.NotFound("Attachment path was not found.");
-        return [new WorkspaceNode($"/attachments/{match.AttachmentId}", false, match.ByteSize, false)];
-    }
-
-    private async ValueTask<WorkspaceContent> ReadAttachmentAsync(
-        Guid sessionId,
-        string path,
-        CancellationToken cancellationToken)
-    {
-        if (_attachments is null)
-        {
-            throw AgentCoreErrors.NotFound("Attachment path was not found.");
-        }
-
-        var id = ParseAttachmentId(path);
-        var record = await _attachments.GetAsync(sessionId, id, cancellationToken).ConfigureAwait(false)
-            ?? throw AgentCoreErrors.NotFound("Attachment path was not found.");
-        await using var stream = await _attachments.OpenContentAsync(sessionId, id, cancellationToken).ConfigureAwait(false);
-        using var buffer = new MemoryStream();
-        await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
-        return new WorkspaceContent(path, record.ContentType, buffer.ToArray());
-    }
-
-    private IReadOnlyList<WorkspaceNode> ListPhysical(Guid sessionId, string path)
-    {
-        if (path is "/workspace")
-        {
-            return
-            [
-                new WorkspaceNode("/workspace/working", true, 0, false)
-            ];
-        }
-
-        var physical = MapWorkspacePath(sessionId, path);
-        DenyEscapingLinks(physical, SessionRoot(sessionId));
-        if (Directory.Exists(physical))
-        {
-            var nodes = new List<WorkspaceNode>();
-            foreach (var dir in Directory.GetDirectories(physical))
-            {
-                nodes.Add(new WorkspaceNode(ToLogical(sessionId, dir), true, 0, false));
-            }
-
-            foreach (var file in Directory.GetFiles(physical))
-            {
-                DenyEscapingLinks(file, SessionRoot(sessionId));
-                nodes.Add(new WorkspaceNode(ToLogical(sessionId, file), false, new FileInfo(file).Length, true));
-            }
-
-            return nodes;
-        }
-
-        if (File.Exists(physical))
-        {
-            return [new WorkspaceNode(path, false, new FileInfo(physical).Length, true)];
-        }
-
-        throw AgentCoreErrors.NotFound("Workspace path was not found.");
-    }
-
-    private string MapWorkspaceFile(Guid sessionId, string path)
-    {
-        if (!IsWritableFile(path))
-        {
-            throw AgentCoreErrors.Forbidden("Execution view writes are limited to /workspace.");
-        }
-
-        return MapWorkspacePath(sessionId, path);
-    }
-
-    private string MapWorkspacePath(Guid sessionId, string path)
-    {
-        var relative = path["/workspace".Length..].TrimStart('/');
-        if (WorkspaceLogicalPath.HasParentSegment(relative))
-        {
-            throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
-        }
-
-        var combined = Path.GetFullPath(Path.Combine(SessionWorkspaceDir(sessionId), relative.Replace('/', Path.DirectorySeparatorChar)));
-        if (!IsUnder(SessionWorkspaceDir(sessionId), combined))
-        {
-            throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
-        }
-
-        return combined;
-    }
-
-    private string ToLogical(Guid sessionId, string physical)
-    {
-        var root = SessionWorkspaceDir(sessionId);
-        var relative = Path.GetRelativePath(root, physical).Replace('\\', '/');
-        return relative is "." ? "/workspace" : "/workspace/" + relative;
-    }
-
-    private async ValueTask ApplyPublicationTemplateResourcesAsync(
-        AgentDefinition definition,
-        string physical,
-        CancellationToken cancellationToken)
-    {
-        if (_publicationResources is null)
-        {
-            return;
-        }
-
-        var templateId = RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId;
-        if (string.IsNullOrWhiteSpace(templateId))
-        {
-            return;
-        }
-
-        var items = await _publicationResources.ListAsync(definition.Id, definition.Version, cancellationToken)
-            .ConfigureAwait(false);
-        if (items.Count == 0)
-        {
-            return;
-        }
-
-        var templatePrefix = templateId + "/";
-        var working = Path.Combine(physical, "working");
-        foreach (var item in items)
-        {
-            if (item.Kind != AgentDefinitionResourceKind.Template)
-            {
-                continue;
-            }
-
-            var relative = DefinitionPublicationResourceReader.NormalizeLogicalPath(item.LogicalPath);
-            if (!relative.StartsWith(templatePrefix, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var workingRelative = relative[templatePrefix.Length..];
-            if (string.IsNullOrEmpty(workingRelative)
-                || WorkspaceLogicalPath.HasParentSegment(workingRelative)
-                || workingRelative.StartsWith("knowledge/", StringComparison.OrdinalIgnoreCase)
-                || workingRelative.StartsWith("harness/", StringComparison.OrdinalIgnoreCase)
-                || IsForbiddenPersist("/workspace/working/" + workingRelative))
-            {
-                continue;
-            }
-
-            var dest = Path.GetFullPath(Path.Combine(working, workingRelative.Replace('/', Path.DirectorySeparatorChar)));
-            if (!IsUnder(working, dest))
-            {
-                continue;
-            }
-
-            var bytes = await _publicationResources.ReadContentAsync(item, cancellationToken).ConfigureAwait(false);
-            if (bytes is null || bytes.Length == 0)
-            {
-                continue;
-            }
-
-            var destParent = Path.GetDirectoryName(dest)!;
-            DenyEscapingLinks(dest, physical);
-            DenyEscapingLinks(destParent, physical);
-            Directory.CreateDirectory(destParent);
-            await File.WriteAllBytesAsync(dest, bytes, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    private void ApplyTemplate(AgentDefinition definition, string physical)
-    {
-        var templateId = RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId;
-        if (string.IsNullOrWhiteSpace(templateId))
-        {
-            return;
-        }
-
-        var source = Path.GetFullPath(Path.Combine(_templateRoot, templateId));
-        if (!IsUnder(_templateRoot, source) || !Directory.Exists(source))
-        {
-            return;
-        }
-
-        var working = Path.Combine(physical, "working");
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
-        {
-            DenyEscapingLinks(file, source);
-            var relative = Path.GetRelativePath(source, file).Replace('\\', '/');
-            if (WorkspaceLogicalPath.HasParentSegment(relative)
-                || relative.StartsWith("knowledge/", StringComparison.OrdinalIgnoreCase)
-                || relative.StartsWith("harness/", StringComparison.OrdinalIgnoreCase)
-                || IsForbiddenPersist("/workspace/working/" + relative))
-            {
-                continue;
-            }
-
-            var dest = Path.GetFullPath(Path.Combine(working, relative.Replace('/', Path.DirectorySeparatorChar)));
-            if (!IsUnder(working, dest))
-            {
-                continue;
-            }
-
-            var destParent = Path.GetDirectoryName(dest)!;
-            DenyEscapingLinks(dest, physical);
-            DenyEscapingLinks(destParent, physical);
-            Directory.CreateDirectory(destParent);
-            File.Copy(file, dest, overwrite: false);
-        }
-    }
-
-    private static bool IsWritableFile(string path)
-    {
-        if (path.EndsWith('/'))
-        {
-            return false;
-        }
-
-        return WritableTrees.Any(tree =>
-            path.StartsWith(tree + "/", StringComparison.Ordinal) && path.Length > tree.Length + 1);
-    }
-
-    private static bool IsForbiddenPersist(string path)
-    {
-        var lower = path.ToLowerInvariant();
-        var name = Path.GetFileName(lower);
-        return name.StartsWith(".env", StringComparison.Ordinal)
-            || name.Contains("user-secrets", StringComparison.Ordinal)
-            || name.Contains("secrets.json", StringComparison.Ordinal)
-            || lower.Contains("appsettings.", StringComparison.Ordinal) && lower.Contains("secret")
-            || lower.Contains("cancellationtokensource", StringComparison.Ordinal)
-            || lower.Contains("dbcontext", StringComparison.Ordinal)
-            || lower.Contains("providerstream", StringComparison.Ordinal)
-            || name.EndsWith(".sock", StringComparison.Ordinal);
-    }
-
-    private static Guid ParseAttachmentId(string path)
-    {
-        var token = path["/attachments/".Length..].Split('/', 2)[0];
-        if (!Guid.TryParse(token, out var id))
-        {
-            throw AgentCoreErrors.NotFound("Attachment path was not found.");
-        }
-
-        return id;
-    }
-
-    private static string Normalize(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return "/";
-        }
-
-        var normalized = path.Replace('\\', '/').Trim();
-        if (!normalized.StartsWith('/'))
-        {
-            normalized = "/" + normalized;
-        }
-
-        while (normalized.Contains("//", StringComparison.Ordinal))
-        {
-            normalized = normalized.Replace("//", "/", StringComparison.Ordinal);
-        }
-
-        if (normalized.Length > 1)
-        {
-            normalized = normalized.TrimEnd('/');
-        }
-
-        return normalized;
-    }
-
-    private static string ContentType(string physical) =>
-        Path.GetExtension(physical).ToLowerInvariant() switch
-        {
-            ".json" => "application/json",
-            ".md" => "text/markdown",
-            ".txt" => "text/plain",
-            ".docx" => OfficeLimits.DocumentMime,
-            ".xlsx" => OfficeLimits.SpreadsheetMime,
-            ".csv" => "text/csv",
-            ".tsv" => "text/tab-separated-values",
-            ".markdown" => "text/markdown",
-            ".jsonl" or ".ndjson" => "application/x-ndjson",
-            ".yaml" or ".yml" => "application/yaml",
-            ".toml" => "application/toml",
-            ".xml" => "application/xml",
-            ".log" or ".ini" or ".js" or ".jsx" or ".ts" or ".tsx" or ".cs" or ".py" or ".sql" or ".css" or ".html" or ".sh" or ".rb" or ".go" or ".rs" or ".java" or ".c" or ".cpp" or ".h" => "text/plain",
-            ".png" => "image/png",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".webp" => "image/webp",
-            ".gif" => "image/gif",
-            ".bmp" => "image/bmp",
-            ".avif" => "image/avif",
-            ".mp3" => "audio/mpeg",
-            ".wav" => "audio/wav",
-            ".ogg" => "audio/ogg",
-            ".m4a" => "audio/mp4",
-            ".flac" => "audio/flac",
-            ".mp4" => "video/mp4",
-            ".webm" => "video/webm",
-            ".mov" => "video/quicktime",
-            _ => "application/octet-stream"
-        };
-
-    private async ValueTask ResolveOwnerAsync(Guid sessionId, CancellationToken ct)
-    {
-        if (_owners.ContainsKey(sessionId)) return;
-        var snapshot = await _sessions.LoadMetadataAsync(sessionId, ct);
-        if (snapshot is null) throw AgentCoreErrors.NotFound("Session workspace owner was not found.");
-        _owners.TryAdd(sessionId, snapshot.AgentInstanceId);
-    }
-
-    private string SessionRoot(Guid sessionId)
-    {
-        if (!_owners.TryGetValue(sessionId, out var owner))
-            throw AgentCoreErrors.Persistence("Session workspace ownership has not been resolved.");
-        var root = AgentWorkspacePhysicalPaths.SessionRoot(_root, owner, sessionId);
-        DenyEscapingLinks(root, _root);
-        return root;
+        var snapshot = await _sessions.LoadMetadataAsync(sessionId, cancellationToken) ?? throw AgentCoreErrors.NotFound("Session was not found.");
+        if (await _sandboxes.GetLeaseAsync(sessionId, cancellationToken) is { State: not SandboxLeaseState.Terminated })
+            throw AgentCoreErrors.Conflict("Live or uncertain sandbox mounts block Session filesystem cleanup.");
+        _deleted[sessionId] = 1;
+        await _ioLifetimes.GetOrAdd(sessionId, _ => new()).CancelAsync();
+        var gate = _provisioning.GetOrAdd(sessionId, _ => new(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try { CanonicalWorkspaceFilesystem.PurgeOwner(AgentWorkspacePhysicalPaths.SessionRoot(_root, snapshot.AgentInstanceId, sessionId), cancellationToken); }
+        finally { gate.Release(); }
     }
 
     public async ValueTask<string> PhysicalWorkingDirectoryAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
-        ThrowIfDeleted(sessionId);
-        await ResolveOwnerAsync(sessionId, cancellationToken);
-        var working = Path.Combine(SessionRoot(sessionId), "working");
-        DenyEscapingLinks(working, _root);
-        return working;
+        var owner = await OwnerAsync(sessionId, false, cancellationToken);
+        return Working(owner.Instance.InstanceId, sessionId).PhysicalRoot;
     }
 
-    private string SessionWorkspaceDir(Guid sessionId) => SessionRoot(sessionId);
-
-    private SemaphoreSlim Gate(Guid sessionId) => _locks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
-
-    private CancellationTokenSource LinkWriter(Guid sessionId, CancellationToken cancellationToken)
+    private async ValueTask ApplyTemplateAsync(CanonicalWorkspaceFilesystem files, AgentDefinition definition, CancellationToken ct)
     {
-        lock (_writerFence)
+        var template = RoleEnvironments.Of(definition).WorkspacePolicy.TemplateId;
+        if (string.IsNullOrEmpty(template)) return;
+        var source = Path.GetFullPath(Path.Combine(_templateRoot, template));
+        if (source.StartsWith(_templateRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal) && Directory.Exists(source))
         {
-            ThrowIfDeleted(sessionId);
-            return CancellationTokenSource.CreateLinkedTokenSource(
-                _writers.GetOrAdd(sessionId, _ => new CancellationTokenSource()).Token, cancellationToken);
-        }
-    }
-
-    private void ThrowIfDeleted(Guid sessionId)
-    {
-        if (_deleted.ContainsKey(sessionId))
-        {
-            throw AgentCoreErrors.NotFound("Workspace was deleted.");
-        }
-    }
-
-    private static long Measure(string directory)
-    {
-        if (!Directory.Exists(directory))
-        {
-            return 0;
-        }
-
-        return Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
-            .Where(file => (File.GetAttributes(file) & FileAttributes.ReparsePoint) == 0)
-            .Select(file => new FileInfo(file).Length)
-            .Sum();
-    }
-
-    private static StringComparison PathComparison =>
-        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-
-    private static bool IsUnder(string root, string candidate)
-    {
-        var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
-        var full = Path.GetFullPath(candidate);
-        return full.StartsWith(prefix, PathComparison)
-            || string.Equals(Path.GetFullPath(root), full, PathComparison);
-    }
-
-    private static void DenyEscapingLinks(string path, string root)
-    {
-        var rootFull = Path.GetFullPath(root);
-        var current = string.IsNullOrEmpty(path) ? path : Path.GetFullPath(path);
-        while (!string.IsNullOrEmpty(current))
-        {
-            if (File.Exists(current) || Directory.Exists(current))
+            // Use the same descriptor-relative reader for trusted template resources;
+            // a linked template is never followed into arbitrary host data.
+            var reader = new CanonicalWorkspaceFilesystem(source, "/working");
+            async ValueTask Copy(string prefix)
             {
-                var attrs = File.GetAttributes(current);
-                if ((attrs & FileAttributes.ReparsePoint) != 0)
+                string? cursor = null;
+                do
                 {
-                    var target = File.ResolveLinkTarget(current, returnFinalTarget: true);
-                    if (target is null || !IsUnder(rootFull, target.FullName))
+                    var page = reader.List(prefix, cursor);
+                    foreach (var entry in page.Entries)
                     {
-                        throw AgentCoreErrors.Forbidden("Symlink targets outside the session workspace are denied.");
+                        if (prefix == "/working" && Path.GetFileName(entry.Path) is "knowledge" or "harness") continue;
+                        if (entry.Directory) { files.Mkdir(entry.Path); await Copy(entry.Path); }
+                        else if (entry.Kind == "file") await files.WriteAsync(entry.Path, await reader.ReadAsync(entry.Path, AgentWorkspaceLimits.MaxFileBytes, ct), AgentWorkspaceLimits.MaxFileBytes, _maxWritableBytes, ct);
                     }
-                }
+                    cursor = page.NextPath;
+                } while (cursor is not null);
             }
-
-            if (string.Equals(current, rootFull, PathComparison))
+            await Copy("/working");
+        }
+        // Explicit published resources take precedence during first provisioning.
+        if (_publicationResources is not null)
+            foreach (var item in await _publicationResources.ListAsync(definition.Id, definition.Version, ct))
             {
-                break;
+                if (item.Kind != AgentDefinitionResourceKind.Template || !item.LogicalPath.StartsWith(template + "/", StringComparison.Ordinal)) continue;
+                var relative = item.LogicalPath[(template.Length + 1)..];
+                var bytes = await _publicationResources.ReadContentAsync(item, ct);
+                if (bytes is not null) await files.WriteAsync("/working/" + relative, bytes, AgentWorkspaceLimits.MaxFileBytes, _maxWritableBytes, ct);
             }
-
-            var parent = Path.GetDirectoryName(current);
-            if (string.IsNullOrEmpty(parent) || string.Equals(parent, current, PathComparison))
-            {
-                break;
-            }
-
-            current = parent;
-        }
-
-        if (!IsUnder(rootFull, path) && (File.Exists(path) || Directory.Exists(path)))
-        {
-            throw AgentCoreErrors.Forbidden("Path is not permitted for this role.");
-        }
     }
-
-    private static bool IsLowerHexSha256(string value) =>
-        value.Length == 64 && value.All(static c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
-
-    private static bool TryDecodeStrictUtf8(byte[] bytes, out string text)
-    {
-        text = "";
-        try
-        {
-            text = Encoding.GetEncoding(
-                    "utf-8",
-                    EncoderFallback.ExceptionFallback,
-                    DecoderFallback.ExceptionFallback)
-                .GetString(bytes);
-            return true;
-        }
-        catch (DecoderFallbackException)
-        {
-            return false;
-        }
-    }
-
-    private static string ComputeSha256Hex(byte[] bytes) =>
-        Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-
-    private static async Task CommitBytesAtomicallyAsync(
-        string physicalPath,
-        byte[] bytes,
-        CancellationToken cancellationToken)
-    {
-        var directory = Path.GetDirectoryName(physicalPath)!;
-        var tempPath = Path.Combine(
-            directory,
-            $".{Path.GetFileName(physicalPath)}.{Guid.NewGuid():N}.patchtmp");
-        try
-        {
-            await using (var stream = new FileStream(
-                             tempPath,
-                             FileMode.CreateNew,
-                             FileAccess.Write,
-                             FileShare.None,
-                             4096,
-                             FileOptions.Asynchronous))
-            {
-                await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
-                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            File.Move(tempPath, physicalPath, overwrite: true);
-        }
-        catch
-        {
-            if (File.Exists(tempPath))
-            {
-                File.Delete(tempPath);
-            }
-
-            throw;
-        }
-    }
-
-    private static int CountOccurrences(string haystack, string needle)
-    {
-        if (needle.Length == 0)
-        {
-            return 0;
-        }
-
-        var count = 0;
-        var index = 0;
-        while ((index = haystack.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
-        {
-            count++;
-            index += needle.Length;
-        }
-
-        return count;
-    }
+    private static WorkspaceNode Node(CanonicalWorkspaceFilesystem.Entry entry, bool writable) =>
+        new(entry.Path, entry.Directory, entry.ByteSize, writable, entry.Kind, entry.ModifiedAt, entry.LinkTarget, entry.Mode);
 }

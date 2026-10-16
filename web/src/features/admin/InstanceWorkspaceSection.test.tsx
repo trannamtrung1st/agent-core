@@ -4,16 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InstanceWorkspaceSection } from "./InstanceWorkspaceSection";
 import { listAgentWorkspace, downloadAgentWorkspaceItem, deleteAgentWorkspaceItem, type AgentWorkspacePage } from "../../services/agentWorkspace";
 vi.mock("../../services/agentWorkspace", () => ({ listAgentWorkspace: vi.fn(), downloadAgentWorkspaceItem: vi.fn(), deleteAgentWorkspaceItem: vi.fn() }));
-const item = { itemId: "i1", agentInstanceId: "a", logicalPath: "/home/reports/store-review.md", contentType: "text/markdown", byteSize: 123,
-  sha256Hex: "a".repeat(64), revision: 4, createdAt: "2026-10-06T00:00:00Z", updatedAt: "2026-10-06T00:00:00Z", sourceSessionId: "s1" };
-const page: AgentWorkspacePage = { items: [item], usedBytes: 123, totalItems: 1, nextPath: null, maxFileBytes: 52428800, maxInstanceBytes: 262144000 };
+const item = { agentInstanceId: "a", logicalPath: "/home/reports/store-review.md", contentType: "text/markdown", byteSize: 123,
+  directory:false, kind:'file' as const, mode:384, linkTarget:null, updatedAt: "2026-10-06T00:00:00Z" };
+const page: AgentWorkspacePage = { items: [item], usedBytes: 123, totalItems: 1, nextPath: null, maxFileBytes: 52428800, maxInstanceBytes: 262144000, usageEnforcement:'sampled', truncated:false };
 const view = (id = "a", archived = false) => <ConfigProvider><App><InstanceWorkspaceSection instanceId={id} archived={archived} /></App></ConfigProvider>;
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(listAgentWorkspace).mockResolvedValue(page); vi.mocked(downloadAgentWorkspaceItem).mockResolvedValue(); vi.mocked(deleteAgentWorkspaceItem).mockResolvedValue(); });
 
 describe("Agent Workspace inspection", () => {
   it("loads metadata, downloads and requires modal confirmation before guarded deletion", async () => {
     render(view()); await screen.findByText(item.logicalPath);
-    expect(screen.getByText("123 B of 250.0 MB · 1 item")).toBeInTheDocument();
+    expect(screen.getByText("123 B · 250.0 MB sampled budget · 1 items")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: `Download ${item.logicalPath}` }));
     await waitFor(() => expect(downloadAgentWorkspaceItem).toHaveBeenCalledWith("a", item, expect.any(AbortSignal)));
     await waitFor(() => expect(screen.getByRole("button", { name: `Delete ${item.logicalPath}` })).toBeEnabled());
@@ -26,7 +26,7 @@ describe("Agent Workspace inspection", () => {
     await waitFor(() => expect(deleteAgentWorkspaceItem).toHaveBeenCalledWith("a", item));
   });
   it("shows folders, disables file downloads and confirms only empty-folder deletion", async () => {
-    const folder = { ...item, itemId: "folder", logicalPath: "/home/empty", contentType: "inode/directory", byteSize: 0, directory: true };
+    const folder = { ...item, logicalPath: "/home/empty", contentType: "inode/directory", byteSize: 0, directory: true, kind:'directory' as const };
     vi.mocked(listAgentWorkspace).mockResolvedValue({ ...page, items: [folder], usedBytes: 0 });
     render(view()); await screen.findByText(folder.logicalPath);
     expect(screen.getByText("Folder")).toBeInTheDocument();

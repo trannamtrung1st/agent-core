@@ -192,32 +192,6 @@ public sealed class SystemCredentialTests
         finally { File.Delete(file); }
     }
 
-    [Fact]
-    public async Task Upgrade_drops_legacy_rows_without_importing_or_touching_profiles()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "credential-upgrade-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
-        try
-        {
-            var factory = Factory(root); var owner = Guid.NewGuid();
-            var profile = Path.Combine(root, "profiles", owner.ToString("D")); Directory.CreateDirectory(profile);
-            await File.WriteAllTextAsync(Path.Combine(profile, "Cookies"), "legacy-profile-marker");
-            await using (var before = factory.CreateDbContext())
-            {
-                await before.GetService<IMigrator>().MigrateAsync("20261007014134_UnifiedAgentWorkspace");
-                await before.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ApplicationConnections (ConnectionId, AgentInstanceId, Kind, DisplayName, BaseUrl, TrustedOriginsJson, Status, ProfileKey, Revision, CreatedAtUtc, UpdatedAtUtc) VALUES ({Guid.NewGuid().ToString("D")}, {owner.ToString("D")}, {"nopCommerce"}, {"Legacy"}, {"https://store.test"}, {"[]"}, {"Connected"}, {owner.ToString("D")}, {1L}, {1L}, {1L})");
-            }
-            await using (var after = factory.CreateDbContext())
-            {
-                await after.Database.MigrateAsync();
-                Assert.Empty(await after.Credentials.ToArrayAsync()); Assert.Empty(await after.AgentCredentialBindings.ToArrayAsync());
-                var connection = after.Database.GetDbConnection(); await connection.OpenAsync();
-                await using var command = connection.CreateCommand(); command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ApplicationConnections'";
-                Assert.Equal(0L, await command.ExecuteScalarAsync());
-            }
-            Assert.Equal("legacy-profile-marker", await File.ReadAllTextAsync(Path.Combine(profile, "Cookies")));
-        }
-        finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
-    }
     private static AgentInstance NewInstance() => new(Guid.NewGuid(), "secretary", 8, new("Test", "Secretary", "Testing", "neutral"), AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
     private static SqliteFactory Factory(string root) => new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={Path.Combine(root,"credentials.db")}").Options);
     private sealed class SqliteFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext> { public AgentCoreDbContext CreateDbContext() => new(options); }

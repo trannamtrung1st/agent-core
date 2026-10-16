@@ -37,8 +37,8 @@ public sealed class PublicDownloadRuntimeTests
             var snapshot = new SessionSnapshot(1, session, 1, definition, SessionMode.Text, null, SessionStatus.Created, [], "", 0, null, null, clock.GetUtcNow(), clock.GetUtcNow(), AgentInstanceId: owner);
             var memory = new InMemoryMemoryStore(); await memory.SaveAsync(snapshot, 0);
             var instances = new InMemoryAgentInstanceStore(); await instances.InsertAsync(new(owner, definition.Id, definition.Version, definition.Identity, AgentInstanceLifecycle.Active, clock.GetUtcNow(), clock.GetUtcNow()));
-            var workspace = new FileSessionWorkspace(root, Path.Combine(root,"templates"), sessions: memory);
-            var homeStore = new FileAgentInstanceWorkspaceStore(root, clock, ids);
+            var workspace = new FileSessionWorkspace(root, Path.Combine(root,"templates"), sessions: memory, instances: instances, sandboxes: new InMemorySandboxStore());
+            var homeStore = new FileAgentInstanceWorkspaceStore(root, instances, new InMemorySandboxStore());
             var home = new AgentInstanceWorkspaceService(instances, homeStore, memory, workspace, new AdminLifecycleCoordinator());
             var office = new OfficeProcessor(); var original = office.CreateDocument(new("Public form", [new("Name", ["Applicant: ______", "Keep this text"], null)]), default).Bytes;
             var transport = new Transport(original); var artifacts = new InMemoryArtifactStore(clock);
@@ -61,7 +61,7 @@ public sealed class PublicDownloadRuntimeTests
             var entry = Assert.Single(runtime.Snapshot.Entries, e => e.Role == ConversationRole.Assistant);
             Assert.True(entry.Status == EntryStatus.Completed, JsonSerializer.Serialize(entry.Failure));
             var artifact = Assert.Single(await artifacts.ListAsync(session)); Assert.Equal(artifact.ArtifactId.ToString(), Assert.Single(entry.Envelope!.Blocks).ArtifactId);
-            var filled = await homeStore.ReadAsync(owner, null, "/home/form.docx"); Assert.Contains("Applicant: Nguyen An", JsonSerializer.Serialize(office.InspectDocument(filled.Bytes,0,20,default)));
+            var filled = await homeStore.ReadAsync(owner, "/home/form.docx"); Assert.Contains("Applicant: Nguyen An", JsonSerializer.Serialize(office.InspectDocument(filled.Bytes,0,20,default)));
             Assert.Equal(1, transport.Calls); Assert.NotEqual(original, filled.Bytes);
             var run = Assert.Single(await SessionRuntimeFixture.RunsForAsync(runtime)); Assert.Equal(AgentRunStatus.Completed,run.Status);
             Assert.DoesNotContain(Convert.ToBase64String(original), JsonSerializer.Serialize(model.Requests));
@@ -99,7 +99,7 @@ public sealed class PublicDownloadRuntimeTests
             {
                 using var inspection = JsonDocument.Parse(inspected.Text); using var receipt = JsonDocument.Parse(downloaded.Text);
                 var selector = inspection.RootElement.GetProperty("inspection").GetProperty("elements").EnumerateArray().Single(e => e.GetProperty("text").GetString() == "Applicant: ______").GetProperty("selector").GetString();
-                call = new("edit", ToolCatalog.OfficeDocumentEdit, JsonSerializer.Serialize(new { path="/home/form.docx", expectedSha256=receipt.RootElement.GetProperty("sha256").GetString(), operations=new[] { new {operation="replace_paragraph",selector,text="Applicant: Nguyen An"} } }));
+                call = new("edit", ToolCatalog.OfficeDocumentEdit, JsonSerializer.Serialize(new { path="/home/form.docx", operations=new[] { new {operation="replace_paragraph",selector,text="Applicant: Nguyen An"} } }));
             }
             else if (published is null) call = new("publish",ToolCatalog.ArtifactsCreateFromWorkspace,"""{"path":"/home/form.docx","displayName":"completed.docx"}""");
             if (call is not null)

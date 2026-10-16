@@ -27,7 +27,7 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
     }
 
     [Fact]
-    public async Task Owner_filter_removed_transfer_routes_and_delete_CAS_are_enforced()
+    public async Task Owner_filter_path_reads_and_current_path_deletion_are_enforced()
     {
         var client = Owner(); var owner = await CreateInstance(client); var session = await CreateSession(client, owner);
         Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync($"/api/v2/agent-instances/{owner}/workspace")).StatusCode);
@@ -35,12 +35,12 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
             Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync($"/api/v2/sessions/{session}/workspace/{removed}", new { })).StatusCode);
         (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/note.txt", new ByteArrayContent("hello"u8.ToArray()))).EnsureSuccessStatusCode();
         var item = Assert.Single((await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!.Items, i => !i.Directory);
-        var download = await client.GetAsync($"/api/v2/agent-instances/{owner}/workspace/{item.ItemId}/content");
+        var download = await client.GetAsync($"/api/v2/agent-instances/{owner}/workspace/content?path={Uri.EscapeDataString(item.LogicalPath)}");
         Assert.Contains("note.txt", download.Content.Headers.ContentDisposition!.ToString());
-        Assert.Equal("\"1\"", download.Headers.ETag!.ToString());
-        Assert.Equal(HttpStatusCode.Conflict, (await client.DeleteAsync($"/api/v2/agent-instances/{owner}/workspace/{item.ItemId}?expectedRevision=9")).StatusCode);
-        (await client.DeleteAsync($"/api/v2/agent-instances/{owner}/workspace/{item.ItemId}?expectedRevision=1")).EnsureSuccessStatusCode();
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{owner}/workspace/{item.ItemId}/content")).StatusCode);
+        Assert.Null(download.Headers.ETag);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.DeleteAsync($"/api/v2/agent-instances/{owner}/workspace/content?path={Uri.EscapeDataString(item.LogicalPath)}&expectedRevision=9")).StatusCode);
+        (await client.DeleteAsync($"/api/v2/agent-instances/{owner}/workspace/content?path={Uri.EscapeDataString(item.LogicalPath)}")).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{owner}/workspace/content?path={Uri.EscapeDataString(item.LogicalPath)}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/../secret", new ByteArrayContent([1]))).StatusCode);
     }
 
@@ -54,24 +54,24 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         var before = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!;
         Assert.Contains(before.Items, i => i.Directory && i.LogicalPath == "/home/inbox");
         var arguments = System.Text.Json.JsonSerializer.Serialize(new {
-            operations = new[] { new { op="mkdir",path="/home/projects" }, new { op="mkdir",path="/home/empty" } }, expectedTreeSha256=before.TreeSha256 });
+            operations = new[] { new { op="mkdir",path="/home/projects" }, new { op="mkdir",path="/home/empty" } } });
         var call = new ModelToolCall("structure", ToolCatalog.WorkspaceBatch, arguments);
         Assert.Contains("approval_required", (await executor.ExecuteAsync(definition,session,call,8192)).Text!);
         using var json = System.Text.Json.JsonDocument.Parse(arguments);
         var grant = new ToolApprovalGrant(Guid.NewGuid(),call.Name,ToolActionHash.Compute(call.Name,json.RootElement),Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid());
         Assert.Contains("approval", (await executor.ExecuteAsync(definition,session,call with { ArgumentsJson=arguments.Replace("projects","changed") },8192,approvalGrant:grant)).Text!);
         Assert.Contains("\"completedCount\":2", (await executor.ExecuteAsync(definition,session,call,8192,approvalGrant:grant)).Text!);
-        Assert.Contains("Conflict", (await executor.ExecuteAsync(definition,session,call,8192,approvalGrant:grant)).Text!);
+        Assert.Contains("completed", (await executor.ExecuteAsync(definition,session,call,8192,approvalGrant:grant)).Text!);
         var current = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!;
-        var copied = await executor.ExecuteAsync(definition,session,new("copy",ToolCatalog.WorkspaceCopy,System.Text.Json.JsonSerializer.Serialize(new {source="/home/inbox",destination="/home/projects/report",expectedTreeSha256=current.TreeSha256})),8192);
+        var copied = await executor.ExecuteAsync(definition,session,new("copy",ToolCatalog.WorkspaceCopy,System.Text.Json.JsonSerializer.Serialize(new {source="/home/inbox",destination="/home/projects/report"})),8192);
         Assert.Contains("\"completed\":true",copied.Text!);
         Assert.Equal("exact"u8.ToArray(),await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/projects/report/report.txt"));
         Assert.Contains("completed",(await executor.ExecuteAsync(definition,session,new("cross",ToolCatalog.WorkspaceCopy,"""{"source":"/home/inbox/report.txt","destination":"/working/leak"}"""),8192)).Text!);
-        foreach(var args in new[] { """{"path":"/home/test","agentInstanceId":"spoof"}""", """{"path":"/home/../escape"}""", """{"path":"/home/.env"}""", """{"path":"/home/a","path":"/home/b"}""" })
+        foreach(var args in new[] { """{"path":"/home/test","agentInstanceId":"spoof"}""", """{"path":"/home/../escape"}""", """{"path":"/home/a","path":"/home/b"}""" })
             Assert.Contains("error",(await executor.ExecuteAsync(definition,session,new("bad",ToolCatalog.WorkspaceMkdir,args),8192)).Text!);
         (await client.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{owner}/lifecycle",new AdminUpdateAgentInstanceLifecycleRequest(1,"Archived"))).EnsureSuccessStatusCode();
         current = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{owner}/workspace"))!;
-        Assert.Contains("Conflict",(await executor.ExecuteAsync(definition,session,new("mkdir",ToolCatalog.WorkspaceMkdir,System.Text.Json.JsonSerializer.Serialize(new {path="/home/archived",expectedTreeSha256=current.TreeSha256})),8192)).Text!);
+        Assert.Contains("Conflict",(await executor.ExecuteAsync(definition,session,new("mkdir",ToolCatalog.WorkspaceMkdir,System.Text.Json.JsonSerializer.Serialize(new {path="/home/archived"})),8192)).Text!);
     }
 
     [Fact]
@@ -79,24 +79,22 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
     {
         var client = Owner(); var owner = await CreateInstance(client, 21); var session = await CreateSession(client, owner);
         var store = _factory.Services.GetRequiredService<IAgentInstanceWorkspaceStore>();
-        for (var i=0; i<270; i++) await store.WriteFileAsync(owner, $"/home/a/file{i:D3}.txt", "text/plain", "x"u8.ToArray(), null, null, null);
-        await store.WriteFileAsync(owner, "/home/z/last.txt", "text/plain", "last"u8.ToArray(), null, null, null);
+        for (var i=0; i<270; i++) await store.WriteFileAsync(owner, $"/home/a/file{i:D3}.txt", "x"u8.ToArray());
+        await store.WriteFileAsync(owner, "/home/z/last.txt", "last"u8.ToArray());
         var executor = _factory.Services.GetRequiredService<SessionToolExecutor>();
         var definition = (await _factory.Services.GetRequiredService<IMemoryStore>().LoadAsync(session))!.Definition;
         using var result = System.Text.Json.JsonDocument.Parse((await executor.ExecuteAsync(definition,session,new("list",ToolCatalog.WorkspaceList,"""{"path":"/home"}"""),8192)).Text!);
         var paths = result.RootElement.GetProperty("entries").EnumerateArray().Select(e=>e.GetProperty("path").GetString()!).ToArray();
         Assert.Equal(["/home/a","/home/z"], paths);
-        Assert.Equal((await store.ListAsync(owner,"/home",null,1)).TreeSha256,result.RootElement.GetProperty("treeSha256").GetString());
-        var copy = await executor.ExecuteAsync(definition,session,new("copy-many",ToolCatalog.WorkspaceCopy,System.Text.Json.JsonSerializer.Serialize(new {source="/home/a",destination="/home/copied",expectedTreeSha256=result.RootElement.GetProperty("treeSha256").GetString()})),8192);
-        Assert.Contains("\"filesAffected\":270",copy.Text!);
+        var copy = await executor.ExecuteAsync(definition,session,new("copy-many",ToolCatalog.WorkspaceCopy,System.Text.Json.JsonSerializer.Serialize(new {source="/home/a",destination="/home/copied"})),8192);
+        Assert.Contains("\"completed\":true",copy.Text!);
         using var copiedResult = System.Text.Json.JsonDocument.Parse(copy.Text!);
         Assert.Equal("/home/a",copiedResult.RootElement.GetProperty("operations")[0].GetProperty("source").GetString());
-        Assert.Equal(64,copiedResult.RootElement.GetProperty("treeSha256").GetString()!.Length);
         Assert.Equal("x"u8.ToArray(),await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/copied/file269.txt"));
     }
 
     [Fact]
-    public async Task Managed_workspace_uses_cwd_direct_CAS_tree_copy_and_home_artifacts()
+    public async Task Managed_workspace_uses_shared_cwd_current_edits_tree_copy_and_home_artifacts()
     {
         var client = Owner(); var owner = await CreateInstance(client, 21); var session = await CreateSession(client, owner);
         var executor = _factory.Services.GetRequiredService<SessionToolExecutor>();
@@ -115,15 +113,14 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         }
         var initial = await Tool(ToolCatalog.WorkspaceCwd, new { operation = "get" }); Assert.Equal("/home", initial.GetProperty("cwd").GetString());
         var listing = await Tool(ToolCatalog.WorkspaceList, new { });
-        await Tool(ToolCatalog.WorkspaceMkdir, new { path = "project/empty", expectedTreeSha256 = listing.GetProperty("treeSha256").GetString() });
+        await Tool(ToolCatalog.WorkspaceMkdir, new { path = "project/empty" });
         await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "/home/project" }); Assert.Equal("/home/project", cwd);
         var written = await Tool(ToolCatalog.WorkspaceWrite, new { path = "notes.md", content = "hello café" });
         Assert.Equal("/home/project/notes.md", written.GetProperty("path").GetString());
-        var metadata = written.GetProperty("homeItem"); var hash = metadata.GetProperty("Sha256Hex").GetString();
-        Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspaceWrite, new { path = "notes.md", content = "lost" })).GetProperty("error").GetString());
-        var patch = await Tool(ToolCatalog.WorkspacePatch, new { path = "notes.md", expectedSha256 = hash, edits = new[] { new { oldText = "hello", newText = "updated" } } });
-        Assert.True(patch.TryGetProperty("newSha256", out _));
-        Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspacePatch, new { path = "notes.md", expectedSha256 = hash, edits = new[] { new { oldText = "updated", newText = "lost" } } })).GetProperty("error").GetString());
+        await Tool(ToolCatalog.WorkspaceWrite, new { path = "notes.md", content = "another writer café" });
+        var patch = await Tool(ToolCatalog.WorkspacePatch, new { path = "notes.md", edits = new[] { new { oldText = "another writer", newText = "updated" } } });
+        Assert.Equal(1, patch.GetProperty("editsApplied").GetInt32());
+        Assert.True((await Tool(ToolCatalog.WorkspacePatch, new { path = "notes.md", edits = new[] { new { oldText = "absent", newText = "lost" } } })).TryGetProperty("error", out _));
         Assert.Contains("updated", (await Tool(ToolCatalog.WorkspaceRead, new { path = "notes.md" })).GetProperty("content").GetString());
         Assert.Contains("/home/project/notes.md", (await Tool(ToolCatalog.WorkspaceSearch, new { query = "updated" })).GetRawText());
         foreach (var name in new[] { ToolCatalog.WorkspaceDelete, ToolCatalog.WorkspaceBatch })
@@ -138,27 +135,19 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
             Assert.Contains("/home/project/notes.md", prepared.Preparation.Details!["Exact operations"]);
             Assert.DoesNotContain("/workspace", prepared.Preparation.Details["Path scope"]);
         }
-        Assert.Equal("notFound", (await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "missing" })).GetProperty("error").GetString());
-        Assert.Equal("invalid", (await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "notes.md" })).GetProperty("error").GetString());
+        Assert.Equal("NotFound", (await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "missing" })).GetProperty("error").GetString());
+        Assert.Equal("Forbidden", (await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "notes.md" })).GetProperty("error").GetString());
         Assert.True((await Tool(ToolCatalog.WorkspaceCwd, new { operation = "set", path = "/agent" })).TryGetProperty("error", out _));
-        listing = await Tool(ToolCatalog.WorkspaceList, new { path = "/home" });
-        var treeToken = listing.GetProperty("treeSha256").GetString();
-        Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspaceMove, new { source = "/home/project", destination = "/home/renamed", expectedTreeSha256 = treeToken })).GetProperty("error").GetString());
-        Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspaceDelete, new { path = "/home/project", recursive = true, expectedTreeSha256 = treeToken }, true)).GetProperty("error").GetString());
         await Tool(ToolCatalog.WorkspaceCopy, new { source = "/home/project", destination = "/working/copy" });
-        var scratch = await client.GetFromJsonAsync<WorkspaceNodeResponse[]>($"/api/v2/sessions/{session}/workspace?prefix=/working/copy");
-        Assert.Contains(scratch!, n => n.LogicalPath == "/working/copy/empty" && n.Directory);
+        var scratch = await client.GetFromJsonAsync<WorkspaceNodePageResponse>($"/api/v2/sessions/{session}/workspace?prefix=/working/copy");
+        Assert.Contains(scratch!.Entries, n => n.LogicalPath == "/working/copy/empty" && n.Directory);
         var bytes = new byte[] { 0, 255, 128, 13, 10 };
         (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/copy/raw.bin", new ByteArrayContent(bytes))).EnsureSuccessStatusCode();
         await Tool(ToolCatalog.WorkspaceCopy, new { source = "/working/copy", destination = "/home/binary-tree" });
         var homeStore = _factory.Services.GetRequiredService<IAgentInstanceWorkspaceStore>();
-        Assert.All((await homeStore.ListAsync(owner, "/home/binary-tree", null, 256)).Items,
-            item => Assert.Equal(session, item.SourceSessionId));
+        Assert.Contains((await homeStore.ListAsync(owner, "/home/binary-tree", null, 256)).Items, item => item.LogicalPath.EndsWith("raw.bin"));
         await Tool(ToolCatalog.WorkspaceCopy, new { source = "/working/copy/raw.bin", destination = "/home/single.bin" });
-        var copiedFile = (await homeStore.ReadAsync(owner, null, "/home/single.bin")).Item;
-        Assert.Equal(session, copiedFile.SourceSessionId);
-        await Tool(ToolCatalog.WorkspaceCopy, new { source = "/working/copy/raw.bin", destination = "/home/single.bin", expectedRevision = copiedFile.Revision });
-        Assert.Equal(session, (await homeStore.ReadAsync(owner, null, "/home/single.bin")).Item.SourceSessionId);
+        Assert.Equal(bytes, (await homeStore.ReadAsync(owner, "/home/single.bin")).Bytes);
         Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary-tree/raw.bin"));
         Assert.Equal("Conflict", (await Tool(ToolCatalog.WorkspaceCopy, new { source = "/home/project", destination = "/working/copy" })).GetProperty("error").GetString());
         Assert.Equal("Forbidden", (await Tool(ToolCatalog.WorkspaceMove, new { source = "/working/copy", destination = "/home/transferred" })).GetProperty("error").GetString());
@@ -182,7 +171,7 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/working/scratch.md")).StatusCode);
         var other = await CreateInstance(client, 21); var otherSession = await CreateSession(client, other);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{otherSession}/workspace/content?path=/home/project/notes.md")).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/working/{session}/scratch.md")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/sessions/{fresh}/workspace/content?path=/working/{session}/scratch.md")).StatusCode);
     }
 
     private static async Task<Guid> CreateInstance(HttpClient client, int version = 21)
@@ -215,7 +204,8 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
                 var client = OwnerOf(second);
                 Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary.dat"));
                 Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/v2/sessions/{session}/workspace/content?path=/working/binary.dat"));
-                Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary.dat", new ByteArrayContent([42]))).StatusCode);
+                (await client.PutAsync($"/api/v2/sessions/{session}/workspace/content?path=/home/binary.dat", new ByteArrayContent([42]))).EnsureSuccessStatusCode();
+                bytes = [42];
                 (await client.DeleteAsync($"/api/v2/sessions/{session}")).EnsureSuccessStatusCode();
                 Assert.False(Directory.Exists(AgentWorkspacePhysicalPaths.SessionRoot(Path.Combine(root, "workspaces"), owner, session)));
                 var fresh = await CreateSession(client, owner);
@@ -247,7 +237,7 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
                 var client = OwnerOf(first); owner = await CreateInstance(client, 21);
                 var services = first.Services;
                 await services.GetRequiredService<IAgentInstanceWorkspaceStore>().WriteFileAsync(owner,
-                    "/home/leftover.bin", "application/octet-stream", new byte[] { 0, 255, 128 }, null, null, null);
+                    "/home/leftover.bin", new byte[] { 0, 255, 128 });
                 (await client.PatchAsJsonAsync($"/api/v2/admin/agent-instances/{owner}/lifecycle",
                     new AdminUpdateAgentInstanceLifecycleRequest(1, "Archived"))).EnsureSuccessStatusCode();
                 // Simulate exit in the commit-to-purge gap: commit deletion with no physical adapter.
@@ -293,10 +283,9 @@ public sealed class AgentWorkspaceJourneyTests : IClassFixture<AgentCoreApiFacto
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<ISessionWorkspace>();
-                services.AddSingleton<ISessionWorkspace>(sp => new FileSessionWorkspace(Path.Combine(root, "workspaces"), Path.Combine(root, "templates"), sessions: sp.GetRequiredService<IMemoryStore>()));
+                services.AddSingleton<ISessionWorkspace>(sp => new FileSessionWorkspace(Path.Combine(root, "workspaces"), Path.Combine(root, "templates"), sessions: sp.GetRequiredService<IMemoryStore>(), instances: sp.GetRequiredService<IAgentInstanceStore>(), sandboxes: sp.GetRequiredService<ISandboxStore>()));
                 services.RemoveAll<IAgentInstanceWorkspaceStore>();
-                services.AddSingleton<IAgentInstanceWorkspaceStore>(sp => new FileAgentInstanceWorkspaceStore(Path.Combine(root, "workspaces"),
-                    sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<IIdGenerator>(), sp.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()));
+                services.AddSingleton<IAgentInstanceWorkspaceStore>(sp => new FileAgentInstanceWorkspaceStore(Path.Combine(root, "workspaces"), sp.GetRequiredService<IAgentInstanceStore>(), sp.GetRequiredService<ISandboxStore>()));
                 services.RemoveAll<IAdminLifecycleDeletion>();
                 services.AddSingleton<IAdminLifecycleDeletion>(sp =>
                 {

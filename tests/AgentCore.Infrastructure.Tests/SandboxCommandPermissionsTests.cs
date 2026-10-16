@@ -25,11 +25,11 @@ public sealed class SandboxCommandPermissionsTests
             var stdout = await process.StandardOutput.ReadToEndAsync();
             var stderr = await process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync();
-            Assert.Equal(7, process.ExitCode); Assert.Empty(stderr); Assert.Equal(0, Convert.ToInt32(stdout.Trim(), 8));
+            Assert.Equal(7, process.ExitCode); Assert.Empty(stderr); Assert.Equal(0x3f, Convert.ToInt32(stdout.Trim(), 8));
             Assert.Equal(argv ? literal : "shell literal", await File.ReadAllTextAsync(Path.Combine(root, "nested/child/value")));
             foreach (var directory in new[] { "nested", "nested/child" })
-                Assert.Equal(UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute,
-                    File.GetUnixFileMode(Path.Combine(root, directory)) & (UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute));
+                Assert.Equal((UnixFileMode)0,
+                    File.GetUnixFileMode(Path.Combine(root, directory)) & (UnixFileMode.GroupRead | UnixFileMode.GroupWrite | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute));
             Assert.False(File.Exists(Path.Combine(root, "injected"))); Assert.False(File.Exists(Path.Combine(root, "backtick")));
         }
         finally { Directory.Delete(root, true); }

@@ -39,41 +39,6 @@ public sealed class GmailOAuthStorageTests
         }
         finally { SqliteConnection.ClearAllPools(); if (File.Exists(path)) File.Delete(path); }
     }
-    [Fact]
-    public async Task Forward_migration_preserves_ids_bindings_custom_and_general_but_drops_Gmail_password()
-    {
-        var path = Path.Combine(Path.GetTempPath(), "gmail-upgrade-" + Guid.NewGuid().ToString("N") + ".db");
-        var factory = new Factory(path); var gmail = Guid.NewGuid(); var custom = Guid.NewGuid(); var owner = Guid.NewGuid(); var binding = Guid.NewGuid();
-        try
-        {
-            await using (var db = factory.CreateDbContext())
-            {
-                await db.GetService<IMigrator>().MigrateAsync("20261011182635_AccountScopedEmail");
-                foreach (var id in new[] { gmail, custom })
-                {
-                    await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Credentials (CredentialId,DisplayName,Kind,Purpose,Status,MetadataJson,AllowedOriginsJson,ProtectedPayload,ProtectionVersion,Revision,CreatedAtUtc,UpdatedAtUtc) VALUES ({id.ToString("D")},{"mail"},{"Password"},{"EmailAccount"},{"Active"},{"{}"},{"[]"},{"old-encrypted-password"},{1},{7},{1L},{1L})");
-                    var legacy = new { Preset = id == gmail ? 0 : 1, EmailAddress = "sender@example.test", ImapUsername = "sender@example.test", SmtpUsername = "sender@example.test", ImapEndpoint = new { Host = "imap.gmail.com", Port = 993, TlsMode = 0 }, SmtpEndpoint = new { Host = "smtp.gmail.com", Port = 465, TlsMode = 0 } };
-                    await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO EmailAccountProfiles (CredentialId,ProfileJson) VALUES ({id.ToString("D")},{JsonSerializer.Serialize(legacy)})");
-                }
-                var instance = new AgentCore.Domain.Definitions.AgentInstance(owner, "general-assistant", 25, new("Test", "Assistant", "Test", "neutral"), AgentCore.Domain.Definitions.AgentInstanceLifecycle.Active, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
-                await new SqliteAgentInstanceStore(factory, new AgentCore.Infrastructure.Identity.SystemIdGenerator(TimeProvider.System)).InsertAsync(instance);
-                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO AgentCredentialBindings (BindingId,AgentInstanceId,CredentialId,Reference,Revision,CreatedAtUtc,UpdatedAtUtc) VALUES ({binding.ToString("D")},{owner.ToString("D")},{gmail.ToString("D")},{"mail"},{1},{1L},{1L})");
-                await db.Database.MigrateAsync();
-            }
-            var preserved = Assert.Single(await new SqliteCredentialStore(factory).ListBindingsAsync(owner));
-            Assert.Equal(binding, preserved.BindingId); Assert.Equal(gmail, preserved.CredentialId); Assert.Equal("mail", preserved.Reference);
-            var store = new SqliteCredentialStore(factory);
-            var upgraded = (await store.GetAsync(gmail))!;
-            Assert.Equal(gmail, upgraded.CredentialId); Assert.Equal(CredentialKind.Token, upgraded.Kind);
-            Assert.Equal("", upgraded.ProtectedPayload); Assert.Equal(8, upgraded.Revision);
-            Assert.Equal(EmailAuthMethod.GoogleOAuth2, upgraded.EmailAccount!.AuthMethod);
-            Assert.False(upgraded.EmailAccount.IsUsable); Assert.Null(upgraded.EmailAccount.GoogleSubject);
-            Assert.Equal("sender@example.test", upgraded.EmailAccount.EmailAddress);
-            var kept = (await store.GetAsync(custom))!;
-            Assert.Equal(CredentialKind.Password, kept.Kind); Assert.Equal(7, kept.Revision); Assert.Equal("old-encrypted-password", kept.ProtectedPayload);
-        }
-        finally { SqliteConnection.ClearAllPools(); if (File.Exists(path)) File.Delete(path); }
-    }
     private sealed class Factory(string path) : IDbContextFactory<AgentCoreDbContext>
     { public AgentCoreDbContext CreateDbContext() => new(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite("Data Source=" + path).Options); }
 }

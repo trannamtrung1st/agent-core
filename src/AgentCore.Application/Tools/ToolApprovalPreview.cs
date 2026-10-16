@@ -30,7 +30,7 @@ public static class ToolApprovalPreview
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["Exact operations"] = args.GetRawText(),
-                    ["Path scope"] = "Relative paths use /workspace/working; explicit /home uses this managed identity.",
+                    ["Path scope"] = "Relative paths use /working; explicit /home uses this managed identity.",
                     ["Failure behavior"] = "Entire preflight before mutation. Earlier changes remain if execution stops; reload before retrying."
                 });
         }

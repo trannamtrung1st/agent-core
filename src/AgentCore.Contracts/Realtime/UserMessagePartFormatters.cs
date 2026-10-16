@@ -48,7 +48,7 @@ public sealed class UserResourceReferenceFormatter : IMessagePackFormatter<UserR
         if (value is null) { w.WriteNil(); return; }
         w.WriteMapHeader(8);
         w.Write("kind"); w.Write(value.Kind); w.Write("agentInstanceId"); w.Write(value.AgentInstanceId);
-        w.Write("sessionId"); w.Write(value.SessionId); w.Write("itemId"); w.Write(value.ItemId);
+        w.Write("sessionId"); w.Write(value.SessionId); w.Write("path"); w.Write(value.Path);
         w.Write("artifactId"); w.Write(value.ArtifactId); w.Write("agentRunId"); w.Write(value.AgentRunId);
         w.Write("skillKey"); w.Write(value.SkillKey); w.Write("selectedRevision");
         if(value.SelectedRevision is { } revision) w.Write(revision); else w.WriteNil();
@@ -69,7 +69,7 @@ public sealed class UserResourceReferenceFormatter : IMessagePackFormatter<UserR
                     case "kind": result.Kind = r.ReadString() ?? ""; break;
                     case "agentInstanceId": result.AgentInstanceId = r.ReadString(); break;
                     case "sessionId": result.SessionId = r.ReadString(); break;
-                    case "itemId": result.ItemId = r.ReadString(); break;
+                    case "path": result.Path = r.ReadString(); break;
                     case "artifactId": result.ArtifactId = r.ReadString(); break;
                     case "agentRunId": result.AgentRunId = r.ReadString(); break;
                     case "skillKey": result.SkillKey = r.ReadString(); break;

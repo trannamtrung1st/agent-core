@@ -49,7 +49,7 @@ def main():
             raise SystemExit(
                 "Another pinned OpenSandbox server is running. Reuse or safely stop its owned deployment first."
             )
-    project_key(key)
+    project_key(key, uid=int(os.environ.get("AGENTCORE_SANDBOX_UID", "1654")), gid=int(os.environ.get("AGENTCORE_SANDBOX_GID", "1654")))
     env = os.environ.copy()
     env["OPENSANDBOX_SERVER_API_KEY"] = key
     os.execvpe(

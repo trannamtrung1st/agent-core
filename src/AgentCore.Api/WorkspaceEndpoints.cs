@@ -18,14 +18,18 @@ public static class WorkspaceEndpoints
         group.MapGet("", async (
             Guid sessionId,
             string? prefix,
+            string? cursor,
+            int? limit,
+            HttpContext http,
             SessionManager sessions,
             CancellationToken cancellationToken) =>
         {
             try
             {
-                var nodes = await sessions.ListWorkspaceAsync(sessionId, prefix ?? "/", cancellationToken)
+                AgentWorkspaceEndpoints.Query(http, "prefix", "cursor", "limit");
+                var page = await sessions.ListWorkspacePageAsync(sessionId, prefix ?? "/home", cursor, limit ?? 256, cancellationToken)
                     .ConfigureAwait(false);
-                return Results.Json(nodes.Select(HttpMapping.ToWorkspaceNode).ToArray());
+                return Results.Json(new WorkspaceNodePageResponse(page.Entries.Select(HttpMapping.ToWorkspaceNode).ToArray(), page.NextPath, page.Truncated));
             }
             catch (AgentCoreException ex)
             {
@@ -36,6 +40,7 @@ public static class WorkspaceEndpoints
         group.MapGet("content", async (
             Guid sessionId,
             string? path,
+            HttpContext http,
             SessionManager sessions,
             CancellationToken cancellationToken) =>
         {
@@ -46,6 +51,9 @@ public static class WorkspaceEndpoints
                     throw AgentCoreErrors.Validation("path is required.");
                 }
 
+                AgentWorkspaceEndpoints.Query(http, "path");
+                http.Response.Headers.CacheControl = "private, no-store";
+                http.Response.Headers.XContentTypeOptions = "nosniff";
                 var content = await sessions.ReadWorkspaceAsync(sessionId, path, cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Bytes(content.Bytes, content.ContentType);
@@ -60,8 +68,6 @@ public static class WorkspaceEndpoints
             Guid sessionId,
             string? path,
             HttpContext http,
-            long? expectedRevision,
-            string? expectedSha256,
             SessionManager sessions,
             CancellationToken cancellationToken) =>
         {
@@ -72,7 +78,8 @@ public static class WorkspaceEndpoints
                     throw AgentCoreErrors.Validation("path is required.");
                 }
 
-                if (http.Request.ContentLength is > WorkspaceLimits.MaxWritableBytes)
+                AgentWorkspaceEndpoints.Query(http, "path");
+                if (http.Request.ContentLength is > AgentWorkspaceLimits.MaxFileBytes)
                 {
                     OperationalDiagnostics.RecordResourceLimit("workspaceContentLength");
                     throw AgentCoreErrors.WorkspaceQuotaExceeded();
@@ -90,7 +97,7 @@ public static class WorkspaceEndpoints
                     }
 
                     total += read;
-                    if (total > WorkspaceLimits.MaxWritableBytes)
+                    if (total > AgentWorkspaceLimits.MaxFileBytes)
                     {
                         OperationalDiagnostics.RecordResourceLimit("workspaceStream");
                         throw AgentCoreErrors.WorkspaceQuotaExceeded();
@@ -100,7 +107,7 @@ public static class WorkspaceEndpoints
                 }
 
                 await sessions.WriteWorkspaceAsync(sessionId, path, buffer.ToArray(), cancellationToken,
-                    expectedRevision, expectedSha256, http.Request.ContentType)
+                    http.Request.ContentType)
                     .ConfigureAwait(false);
                 return Results.NoContent();
             }

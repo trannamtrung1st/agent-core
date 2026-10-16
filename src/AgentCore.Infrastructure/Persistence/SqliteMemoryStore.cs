@@ -45,30 +45,22 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         var connection = db.Database.GetDbConnection();
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         // The cutover is explicit. Startup never converts, retires or deletes an existing legacy execution graph.
-        foreach (var table in new[] { "WorkItems", "WorkApprovals", "WorkAttentionAlerts", "WorkCaptures", "ConversationTurnExecutions" })
+        foreach (var table in new[] { "AgentWorkspaceItems", "WorkItems", "WorkApprovals", "WorkAttentionAlerts", "WorkCaptures", "ConversationTurnExecutions" })
             if (await TableExistsAsync(connection, table, cancellationToken).ConfigureAwait(false))
                 throw ResetRequired("Legacy execution tables are present.");
         if (await ColumnExistsAsync(connection, "TriggerOccurrences", "DurableWorkItemId", cancellationToken).ConfigureAwait(false))
             throw ResetRequired("Legacy occurrence links are present.");
 
-        if (await TableExistsAsync(connection, "Sessions", cancellationToken).ConfigureAwait(false))
+        var applied = (await db.Database.GetAppliedMigrationsAsync(cancellationToken).ConfigureAwait(false)).ToArray();
+        var migrations = db.Database.GetMigrations().ToArray();
+        if (applied.Any(id => !migrations.Contains(id, StringComparer.Ordinal)))
+            throw ResetRequired("data_reset_required: Installed schema predates the canonical filesystem baseline.");
+        if (!applied.SequenceEqual(migrations, StringComparer.Ordinal))
         {
-            var migrations = db.Database.GetMigrations().ToArray();
-            var applied = (await db.Database.GetAppliedMigrationsAsync(cancellationToken).ConfigureAwait(false)).ToArray();
-            // The cutover baseline must be complete. Later known migrations can have gaps when
-            // parallel branches merge; EF applies those pending migrations before current-schema validation.
-            // Legacy/untracked fixtures still require the exact current schema before stamping.
-            var cutoverIndex = Array.IndexOf(migrations, "20261008063000_RetireLegacyExecution");
-            var trackedCanonicalSchema = cutoverIndex >= 0
-                && applied.Take(cutoverIndex + 1).SequenceEqual(migrations.Take(cutoverIndex + 1), StringComparer.Ordinal)
-                && applied.All(migration => migrations.Contains(migration, StringComparer.Ordinal));
-            if (!trackedCanonicalSchema)
-            {
-                await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);
-                await db.Database.ExecuteSqlRawAsync("CREATE TABLE IF NOT EXISTS __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL);", cancellationToken).ConfigureAwait(false);
-                foreach (var migration in migrations)
-                    await db.Database.ExecuteSqlInterpolatedAsync($"INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({migration}, {"10.0.12"});", cancellationToken).ConfigureAwait(false);
-            }
+            await using var existing = connection.CreateCommand();
+            existing.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name <> '__EFMigrationsHistory' LIMIT 1";
+            if (await existing.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null)
+                throw ResetRequired("data_reset_required: Existing untracked or incomplete schema cannot be adopted.");
         }
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         await ValidateCanonicalSchemaAsync(db, cancellationToken).ConfigureAwait(false);

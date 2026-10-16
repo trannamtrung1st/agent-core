@@ -102,9 +102,9 @@ public sealed class ComposerReferenceService(IAgentInstanceStore instances, Agen
             {
                 case "homeFile":
                     if (reference.AgentInstanceId != owner.AgentInstanceId) throw AgentCoreErrors.Forbidden("Reference is outside this Instance.");
-                    var file = await home.InspectAsync(owner.AgentInstanceId, reference.ItemId!.Value, includeContent ? MaxBodyBytes : 0, ct);
+                    var file = await home.InspectAsync(owner.AgentInstanceId, reference.Path!, includeContent ? MaxBodyBytes : 0, ct);
                     if (file.Item.Directory) throw AgentCoreErrors.Validation("Select a file, not a directory.");
-                    label = file.Item.LogicalPath; revision = file.Item.Revision; hash = file.Item.Sha256Hex;
+                    label = file.Item.LogicalPath;
                     if (includeContent) (text, status, truncated) = file.Item.ByteSize > MaxBodyBytes ? ("", "metadataOnly", true) : ReadText(file.Bytes, file.Item.ContentType);
                     break;
                 case "session":
@@ -182,7 +182,7 @@ public sealed class ComposerReferenceService(IAgentInstanceStore instances, Agen
     public async ValueTask<ComposerChoicePage> DiscoverAsync(AgentRunOwner owner, string category, string? search, string? cursor, CancellationToken ct)
     {
         await ActiveAsync(owner.AgentInstanceId, ct);
-        if ((search?.Length ?? 0) > 200 || (cursor?.Length ?? 0) > 1024) throw AgentCoreErrors.Validation("Picker search or cursor is too long.");
+        if ((search?.Length ?? 0) > 200 || (cursor?.Length ?? 0) > 4095) throw AgentCoreErrors.Validation("Picker search or cursor is too long.");
         // Each native page is bounded to 40 candidates. Keep scanning empty filtered
         // pages, but return the exact native continuation after at most 40 scans.
         for (var scanned = 0; scanned < 40; scanned++)
@@ -217,9 +217,9 @@ public sealed class ComposerReferenceService(IAgentInstanceStore instances, Agen
         }
         else if (category == "homeFile")
         {
-            var page = await home.ListAsync(owner.AgentInstanceId, "/home", cursor, 40, ct); next = page.NextPath;
+            var page = await home.FindFilesAsync(owner.AgentInstanceId, search ?? "", cursor, 40, ct); next = page.NextPath;
             foreach (var item in page.Items.Where(i => !i.Directory && Matches(i.LogicalPath, i.ContentType)))
-                choices.Add(new(item.ItemId.ToString("D"), Label(item.LogicalPath), ContentDescription(item.ContentType, item.ByteSize, item.ContentType), category, Reference: new(category, AgentInstanceId: owner.AgentInstanceId, ItemId: item.ItemId, SelectedRevision: item.Revision)));
+                choices.Add(new(item.LogicalPath, Label(item.LogicalPath), ContentDescription(item.ContentType, item.ByteSize, item.ContentType), category, Reference: new(category, AgentInstanceId: owner.AgentInstanceId, Path: item.LogicalPath)));
         }
         else if (category is "session" or "backgroundSession")
         {

@@ -1440,7 +1440,7 @@ describe("historyFromPayload", () => {
           code: "InvalidResponse",
           failureReason: reason,
           providerResponseChannel: "toolCall",
-          arguments: "{\"path\":\"/workspace/working/secret.cs\"}"
+          arguments: "{\"path\":\"/working/secret.cs\"}"
         }
       }
     ]);

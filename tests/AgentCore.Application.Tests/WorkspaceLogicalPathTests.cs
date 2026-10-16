@@ -7,13 +7,13 @@ public sealed class WorkspaceLogicalPathTests
     private static readonly Guid Session = Guid.Parse("019944af-0001-7000-8000-000000000001");
 
     [Theory]
-    [InlineData("notes.md", "/workspace/working/notes.md")]
-    [InlineData("./notes.md", "/workspace/working/notes.md")]
-    [InlineData("reports/summary.txt", "/workspace/working/reports/summary.txt")]
-    [InlineData("draft..txt", "/workspace/working/draft..txt")]
-    [InlineData("notes/../summary.txt", "/workspace/working/summary.txt")]
-    [InlineData("/workspace/working/a.txt", "/workspace/working/a.txt")]
-    [InlineData("/workspace/working/notes/../summary.txt", "/workspace/working/summary.txt")]
+    [InlineData("notes.md", "/working/notes.md")]
+    [InlineData("./notes.md", "/working/notes.md")]
+    [InlineData("reports/summary.txt", "/working/reports/summary.txt")]
+    [InlineData("draft..txt", "/working/draft..txt")]
+    [InlineData("notes/../summary.txt", "/working/summary.txt")]
+    [InlineData("/working/a.txt", "/working/a.txt")]
+    [InlineData("/working/notes/../summary.txt", "/working/summary.txt")]
     [InlineData("/", "/")]
     [InlineData("/agent/definition.json", "/agent/definition.json")]
     public void Resolve_maps_model_paths_to_canonical_logical_paths(string raw, string expected)
@@ -35,7 +35,7 @@ public sealed class WorkspaceLogicalPathTests
     [InlineData("../outside.txt")]
     [InlineData("notes/../../outside.txt")]
     [InlineData("/workspace/../outside.txt")]
-    [InlineData("/workspace/working/../secret")]
+    [InlineData("/working/../secret")]
     public void Resolve_rejects_parent_segments_that_escape_the_root(string raw)
     {
         Assert.False(WorkspaceLogicalPath.TryResolve(raw, Session, out _, out var code, out var message));

@@ -77,7 +77,7 @@ public static class AgentCoreErrors
             fatal: false);
 
     public static AgentCoreException WorkspaceQuotaExceeded() =>
-        new("WorkspaceQuotaExceeded", "Workspace writes cannot exceed 250 MiB.", 413);
+        new("WorkspaceQuotaExceeded", "Workspace file or storage limit exceeded.", 413);
 
     public static AgentCoreException ArtifactQuotaExceeded() =>
         new("ArtifactQuotaExceeded", "Artifact writes cannot exceed 50 MiB each or 250 MiB per session.", 413);

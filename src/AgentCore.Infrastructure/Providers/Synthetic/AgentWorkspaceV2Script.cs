@@ -26,7 +26,7 @@ internal static class AgentWorkspaceV2Script
                 5 => (ToolCatalog.WorkspaceWrite, new { path = "/working/c#/CsvTool/README.md", content = "# CsvTool\r\nExact project bytes.\n" }),
                 6 => (ToolCatalog.WorkspaceCopy, new { source = "/working/c#", destination = "/home/c#" }),
                 7 => (ToolCatalog.WorkspaceList, new { path = "/home" }),
-                8 => (ToolCatalog.WorkspaceMove, new { source = "/home/c#", destination = "/home/csharp", expectedTreeSha256 = Token(results[7].Text) }),
+                8 => (ToolCatalog.WorkspaceMove, new { source = "/home/c#", destination = "/home/csharp" }),
                 _ => (null, null)
             };
             (name, args) = step;
@@ -37,7 +37,7 @@ internal static class AgentWorkspaceV2Script
             {
                 0 => (ToolCatalog.WorkspaceCwd, new { operation = "get" }),
                 1 => (ToolCatalog.WorkspaceRead, new { path = "csharp/CsvTool/README.md" }),
-                2 => (ToolCatalog.WorkspacePatch, new { path = "csharp/CsvTool/README.md", expectedSha256 = HomeHash(results[1].Text), edits = new[] { new { oldText = "Exact project bytes.", newText = "Verified durable project." } } }),
+                2 => (ToolCatalog.WorkspacePatch, new { path = "csharp/CsvTool/README.md", edits = new[] { new { oldText = "Exact project bytes.", newText = "Verified durable project." } } }),
                 3 => (ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "csharp/CsvTool/README.md", displayName = "README.md" }),
                 _ => (null, null)
             };
@@ -56,7 +56,7 @@ internal static class AgentWorkspaceV2Script
             {
                 0 => (ToolCatalog.WorkspaceCwd, new { operation = "get" }),
                 1 => (ToolCatalog.WorkspaceList, new { path = "/home" }),
-                2 => (ToolCatalog.WorkspaceMkdir, new { path = "projects/customer-a", expectedTreeSha256 = Token(results[1].Text) }),
+                2 => (ToolCatalog.WorkspaceMkdir, new { path = "projects/customer-a" }),
                 3 => (ToolCatalog.WorkspaceCwd, new { operation = "set", path = "/home/projects/customer-a" }),
                 4 => (ToolCatalog.WorkspaceWrite, new { path = "draft.md", content = "Workspace v2 exact café\r\n" }),
                 5 => (ToolCatalog.WorkspaceCopy, new { source = "draft.md", destination = "/working/draft.md" }),
@@ -84,6 +84,4 @@ internal static class AgentWorkspaceV2Script
             return [new ModelTextDelta("Agent Workspace v2 capability unavailable: " + name), new ModelCompleted(ModelStopReason.Completed)];
         return [new ModelToolCallEvent(new("workspace-v2-proof-" + results.Length, name, JsonSerializer.Serialize(args))), new ModelCompleted(ModelStopReason.ToolCalls)];
     }
-    private static string? Token(string json) { using var doc = JsonDocument.Parse(json); return doc.RootElement.TryGetProperty("treeSha256", out var token) ? token.GetString() : null; }
-    private static string HomeHash(string json) { using var doc = JsonDocument.Parse(json); return doc.RootElement.GetProperty("homeItem").GetProperty("Sha256Hex").GetString()!; }
 }

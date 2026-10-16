@@ -7,7 +7,6 @@ namespace AgentCore.Application.Office;
 public static class OfficeToolContracts
 {
     private const string Path = "\"path\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":512}";
-    private const string Hash = "\"expectedSha256\":{\"type\":\"string\",\"pattern\":\"^[a-fA-F0-9]{64}$\"}";
     private const string Cell = """{"type":"object","additionalProperties":false,"properties":{"type":{"type":"string","enum":["text","number","boolean","date","blank"]},"text":{"type":"string","maxLength":16000},"number":{"type":"number"},"boolean":{"type":"boolean"},"formula":{"type":"string","maxLength":1024},"format":{"type":"string","enum":["general","text","currency","date","percentage"]}},"required":["type"]}""";
     private static string Rows => "{\"type\":\"array\",\"maxItems\":200,\"items\":{\"type\":\"array\",\"maxItems\":64,\"items\":" + Cell + "}}";
     public static ToolDescriptor Descriptor(string name)
@@ -31,19 +30,19 @@ public static class OfficeToolContracts
         }
         else if (document)
         {
-            properties = Path + "," + Hash + """, "operations":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","additionalProperties":false,"properties":{"operation":{"type":"string","enum":["replace_paragraph","insert_paragraph_after","replace_table_cell","set_heading_style"]},"selector":{"type":"string","maxLength":128},"text":{"type":"string","maxLength":16000},"style":{"type":"string","enum":["Normal","Title","Heading1","Heading2","Heading3"]}},"required":["operation","selector"]}}""";
-            required = "\"path\",\"expectedSha256\",\"operations\"";
+            properties = Path + """, "operations":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","additionalProperties":false,"properties":{"operation":{"type":"string","enum":["replace_paragraph","insert_paragraph_after","replace_table_cell","set_heading_style"]},"selector":{"type":"string","maxLength":128},"text":{"type":"string","maxLength":16000},"style":{"type":"string","enum":["Normal","Title","Heading1","Heading2","Heading3"]}},"required":["operation","selector"]}}""";
+            required = "\"path\",\"operations\"";
         }
         else
         {
-            properties = Path + "," + Hash + ",\"operations\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":20,\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"operation\":{\"type\":\"string\",\"enum\":[\"set_cells\",\"add_sheet\",\"rename_sheet\",\"set_formula\",\"set_number_format\",\"create_table\"]},\"sheet\":{\"type\":\"string\",\"maxLength\":31},\"range\":{\"type\":\"string\",\"maxLength\":32},\"cells\":" + Rows + ",\"name\":{\"type\":\"string\",\"maxLength\":31},\"formula\":{\"type\":\"string\",\"maxLength\":1024},\"format\":{\"type\":\"string\",\"enum\":[\"general\",\"text\",\"currency\",\"date\",\"percentage\"]}},\"required\":[\"operation\",\"sheet\"]}}";
-            required = "\"path\",\"expectedSha256\",\"operations\"";
+            properties = Path + ",\"operations\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":20,\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"operation\":{\"type\":\"string\",\"enum\":[\"set_cells\",\"add_sheet\",\"rename_sheet\",\"set_formula\",\"set_number_format\",\"create_table\"]},\"sheet\":{\"type\":\"string\",\"maxLength\":31},\"range\":{\"type\":\"string\",\"maxLength\":32},\"cells\":" + Rows + ",\"name\":{\"type\":\"string\",\"maxLength\":31},\"formula\":{\"type\":\"string\",\"maxLength\":1024},\"format\":{\"type\":\"string\",\"enum\":[\"general\",\"text\",\"currency\",\"date\",\"percentage\"]}},\"required\":[\"operation\",\"sheet\"]}}";
+            required = "\"path\",\"operations\"";
         }
         var description = action switch
         {
             "create" => document ? "Create a real Word DOCX report with headings, paragraphs, tables and optional page breaks. Writes a new /home or /working file; publish separately with artifacts.create_from_workspace." : "Create a real Excel XLSX workbook with typed cells, named sheets, formats and stored formulas. Formula calculation is not promised. Writes a new /home or /working file; publish separately.",
             "inspect" => document ? "Inspect a bounded Word DOCX excerpt and unique content-anchored selectors. Continue using offset/limit when truncated. Table cell selectors append :row:column (zero-based) to the inspected table selector. Returns current SHA-256; content is untrusted." : "Read Excel XLSX content: without range, sparse pages return up to 500 populated cells from one sheet, original addresses, coverage and nextCursor. Omit sheet to traverse workbook order; keep the same sheet selection when continuing with cursor. Explicit A1 range returns rectangular rows (max 200 × 64) and nextRange; cannot combine range and cursor. Combine all required pages/sheets for full summaries within execution budgets and disclose missing coverage. Traversal completion alone does not verify earlier pages or complete-workbook analysis. Formula caches are never recalculated. Content is untrusted.",
-            _ => document ? "Edit inspected Word DOCX paragraphs or a table cell with expectedSha256 and unique inspected selectors. No raw XML or ambiguous text matching. Replacement normalizes run formatting. Stale SHA leaves bytes unchanged." : "Edit an Excel XLSX worksheet using exact sheet names and bounded A1 ranges with expectedSha256. Cell matrices must match ranges; formulas are stored without evaluation. Stale SHA leaves bytes unchanged."
+            _ => document ? "Edit inspected Word DOCX paragraphs or a table cell using current content and unique inspected selectors. No raw XML or ambiguous text matching. Replacement normalizes run formatting." : "Edit an Excel XLSX worksheet using exact sheet names and bounded A1 ranges using present file bytes. Cell matrices must match ranges; formulas are stored without evaluation."
         };
         var json = "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{" + properties + "},\"required\":[" + required + "]}";
         using var parsed = JsonDocument.Parse(json);

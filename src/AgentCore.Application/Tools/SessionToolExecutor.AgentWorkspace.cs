@@ -15,20 +15,6 @@ public sealed partial class SessionToolExecutor
         catch (AgentCoreException ex) when (ex.Code is "ValidationError" or "NotFound") { return false; }
     }
 
-    private static long? ExpectedRevision(JsonElement args)
-    {
-        if (!args.TryGetProperty("expectedRevision", out var value)) return null;
-        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var revision) || revision < 1)
-            throw AgentCoreErrors.Validation("expectedRevision must be a positive integer.");
-        return revision;
-    }
-    private static string? ExpectedHash(JsonElement args)
-    {
-        if (!args.TryGetProperty("expectedSha256", out var value)) return null;
-        if (value.ValueKind != JsonValueKind.String) throw AgentCoreErrors.Validation("expectedSha256 must be a SHA-256 string.");
-        return value.GetString();
-    }
-
     private async ValueTask<WorkspaceContent> ReadExecutionWorkspaceAsync(Guid sessionId, AgentDefinition definition, string path, CancellationToken ct)
     {
         AgentCore.Application.Agents.StateIsolationAccess.RequireHome(await IsolationAsync(definition, sessionId, ct), path, false);

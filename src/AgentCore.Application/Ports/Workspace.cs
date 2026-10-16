@@ -2,41 +2,39 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Application.Ports;
 
-public sealed record WorkspaceNode(string LogicalPath, bool Directory, long ByteSize, bool Writable);
+public sealed record WorkspaceNode(string LogicalPath, bool Directory, long ByteSize, bool Writable,
+    string Kind = "file", DateTimeOffset? ModifiedAt = null, string? LinkTarget = null, uint? Mode = null);
 
 public sealed record WorkspaceContent(string LogicalPath, string ContentType, byte[] Bytes);
+public sealed record WorkspaceNodePage(IReadOnlyList<WorkspaceNode> Entries, string? NextPath, bool Truncated);
 
 public sealed record WorkspaceTextEdit(string OldText, string NewText);
 
 public sealed record WorkspacePatchResult(
     string LogicalPath,
-    string PreviousSha256Hex,
-    string NewSha256Hex,
     long ByteSize,
     int EditsApplied);
 
 public interface ISessionWorkspace
 {
-    ValueTask<ScratchSnapshot> CaptureScratchAsync(Guid sessionId, AgentDefinition definition, CancellationToken ct = default) =>
-        throw new NotSupportedException("Atomic scratch capture is unavailable.");
-    ValueTask CommitScratchAsync(Guid sessionId, WorkspaceTransfer transfer, string expectedFingerprint, CancellationToken ct = default,
-        Func<CancellationToken, ValueTask>? validateCommit = null, Guid? commitId = null) =>
-        throw new NotSupportedException("Atomic scratch commit is unavailable.");
-    ValueTask<string> GetScratchCommitStatusAsync(Guid sessionId, Guid commitId, CancellationToken ct = default) =>
-        ValueTask.FromResult("unknown");
-    ValueTask<WorkspaceTransfer> ExportAsync(Guid sessionId, string path, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException("Workspace tree export is unavailable.");
-    ValueTask ImportAsync(Guid sessionId, string destination, WorkspaceTransfer transfer,
-        long? expectedRevision = null, string? expectedSha256 = null, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException("Workspace tree import is unavailable.");
+    ValueTask CopyAcrossScopesAsync(Guid sessionId, string source, string destination, CancellationToken cancellationToken = default);
 
     ValueTask EnsureAsync(Guid sessionId, AgentDefinition definition, CancellationToken cancellationToken = default);
+    ValueTask RequireDirectoryAsync(Guid sessionId, AgentDefinition definition, string path, CancellationToken ct = default) =>
+        throw new NotSupportedException("Workspace directory inspection is unavailable.");
 
     ValueTask<IReadOnlyList<WorkspaceNode>> ListAsync(
         Guid sessionId,
         AgentDefinition definition,
         string prefix,
         CancellationToken cancellationToken = default);
+    async ValueTask<WorkspaceNodePage> ListPageAsync(Guid sessionId, AgentDefinition definition, string prefix,
+        string? cursor, int limit, CancellationToken ct = default)
+    {
+        var entries = (await ListAsync(sessionId, definition, prefix, ct)).OrderBy(node => node.LogicalPath, StringComparer.Ordinal)
+            .Where(node => cursor is null || string.CompareOrdinal(node.LogicalPath, cursor) > 0).Take(limit + 1).ToArray();
+        return new(entries.Take(limit).ToArray(), entries.Length > limit ? entries[limit - 1].LogicalPath : null, entries.Length > limit);
+    }
 
     ValueTask<WorkspaceContent> ReadAsync(
         Guid sessionId,
@@ -54,7 +52,6 @@ public interface ISessionWorkspace
         Guid sessionId,
         AgentDefinition definition,
         string logicalPath,
-        string expectedSha256Hex,
         IReadOnlyList<WorkspaceTextEdit> edits,
         CancellationToken cancellationToken = default);
 

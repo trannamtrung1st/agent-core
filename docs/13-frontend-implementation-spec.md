@@ -313,7 +313,7 @@ Experience enablement and consolidation permission remain separate settings. Rec
 
 ## Agent Instance Workspace inspection
 
-Managed Instance Workspace is addressable at `/admin/instances/{id}/workspace`. It reuses the Admin panel, collection toolbar, compact Ant Design table and modal confirmation. Rows show full logical path via title/ellipsis, type, size, updated time and source conversation provenance, with explicit authenticated Download and revision-checked Delete. Usage shows bytes against the Core quota. Search and table pagination remain local; Load more retrieves bounded server pages.
+Managed Instance Workspace at `/admin/instances/{id}/workspace` reuses the Admin panel, toolbar, compact Ant Design table and confirmation. Rows show current path, kind, size and modification time with folder Open, authenticated Preview/Download and present-path Delete. Breadcrumbs navigate folders; Load more reads bounded server pages; search filters loaded current-folder entries. Usage explicitly says sampled or unknown. Home previews label the path live and offer Reload; no file provenance/revision/hash or synchronization state appears.
 
 Loading, empty, no-match and recoverable error states are distinct. Delayed reads from a previous instance cannot replace the current instance's files. Downloads use ownerFetch and short-lived local object URLs; no unauthenticated links or stored blobs enter UI state. Archived instances keep inspection/download and disable Delete. Narrow tables scroll inside the existing Admin container without document overflow; the shared Admin rules own insets and minimum action heights. This surface adds no file editor, drag/drop explorer, permissions or version-history UI.
 
@@ -545,9 +545,9 @@ Cleanly terminated Sessions retain a reachable confirmed Reset while a selected 
 
 ## Generic sandbox lifecycle presentation
 
-The existing Ant Design v6 Session drawer shows Completed/exit and files committed independently of a Container recycled tag. Successful recycling gets concise informational copy: container-only state was discarded, canonical files and profile selection remain. It does not trigger the previous-execution warning. Lifecycle evidence is collapsed for routine success and expanded for recovery, with separate remote termination and staging cleanup truth. Pending completion/commit/cleanup and unknown outcomes retain recovery actions and diagnostic IDs. Reuse the 640px/full-width narrow drawer, native wrapping, labeled diagnostics, Escape/focus behavior and 40px narrow controls; Admin gains no mode or page. [Provider findings and verification](reports/generic-linux-sandbox-runtime-verification-2026-10-15.md).
+The existing Ant Design v6 Session drawer reports command status/exit separately from container recycling and filesystemEffectsMayHaveOccurred. It explains shared `/home` access (RW/RO/disabled), private `/working`, immediate visibility, partial writes after failure/cancellation, and sampled storage. Process cleanup uncertainty and EnforcementPending keep recovery actions and diagnostics. Reset preserves canonical files and Artifacts. Reuse the 640px/full-width narrow drawer, native wrapping, labeled diagnostics, Escape/focus behavior and 40px narrow controls.
 
-For NeedsResync, the existing drawer adds a File recovery row and labels cleanup as staging retained until file recovery resolves. File recovery is independent of pending termination/cleanup; unknown file effects remain explicit. Existing spacing, focus, responsive Descriptions and recovery controls are reused.
+Admin Workspace uses current logical-path row keys and folder breadcrumbs. It displays sampled/unknown usage, bounded pages and search over loaded current-folder entries. Home FileRef contains Instance/path; previews fetch current metadata/bytes, label the file live and offer Reload preview. Deletes target the present path with exact confirmation, without revision CAS. Archived inspection remains read-only. Source-owned immutable and versioned previews retain their independent checks.
 
 ## State and isolation Admin surfaces
 

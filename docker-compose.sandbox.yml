@@ -7,6 +7,8 @@ services:
     entrypoint: [python, /opt/agent-core/server-bootstrap.py]
     environment:
       AGENTCORE_SANDBOX_SERVER_IMAGE: ${AGENTCORE_SANDBOX_SERVER_IMAGE}
+      AGENTCORE_SANDBOX_UID: ${AGENTCORE_SANDBOX_UID:?Run sandbox prepare}
+      AGENTCORE_SANDBOX_GID: ${AGENTCORE_SANDBOX_GID:?Run sandbox prepare}
     labels:
       agent-core.opensandbox.server: "true"
     ports:

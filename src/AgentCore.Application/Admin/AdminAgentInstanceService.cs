@@ -20,7 +20,7 @@ public sealed class AdminAgentInstanceService(
     IModelCatalog? modelCatalog = null,
     IAgentDefinitionResourceAdminStore? resourcePublications = null,
     InstanceAutomationPolicy? automationPolicy = null,
-    Agents.InheritedDefinitionResourceCatalog? inheritedResources = null)
+    Agents.InheritedDefinitionResourceCatalog? inheritedResources = null, SandboxPolicyEnforcement? sandboxPolicy = null)
 {
     public async ValueTask<InstanceVersionPreview> PreviewVersionAsync(Guid instanceId, int version, CancellationToken ct = default)
     {
@@ -233,6 +233,7 @@ public sealed class AdminAgentInstanceService(
             updated.ActiveVersion,
             updated.InstanceId,
             "active");
+        if (sandboxPolicy is not null) await sandboxPolicy.EnforceAsync(instanceId, cancellationToken);
         return updated;
     }
 
@@ -431,6 +432,7 @@ public sealed class AdminAgentInstanceService(
             updated.ActiveVersion,
             updated.InstanceId,
             lifecycle == AgentInstanceLifecycle.Archived ? "archived" : "active");
+        if (sandboxPolicy is not null) await sandboxPolicy.EnforceAsync(instanceId, cancellationToken);
         return updated;
     }
 

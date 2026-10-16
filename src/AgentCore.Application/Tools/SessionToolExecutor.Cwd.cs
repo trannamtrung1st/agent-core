@@ -23,13 +23,12 @@ public sealed partial class SessionToolExecutor
             && !path.StartsWith(WorkspaceLogicalPath.WorkingDirectory + "/", StringComparison.Ordinal))
             return TextResult(Error("forbidden", "cwd must be an authorized /home or /working directory."));
         await workspace!.EnsureAsync(sessionId, definition, ct);
-        if (path is not "/home" && path != WorkspaceLogicalPath.WorkingDirectory)
+        if (AgentHomePath.IsHome(path))
         {
-            var parent = path[..path.LastIndexOf('/')];
-            var node = (await ListExecutionWorkspaceAsync(sessionId, definition, parent, ct)).SingleOrDefault(n => n.LogicalPath == path);
-            if (node is null) return TextResult(Error("notFound", "cwd target directory does not exist."));
-            if (!node.Directory) return TextResult(Error("invalid", "cwd target must be a directory."));
+            if (agentWorkspace is null) return TextResult(Error("unavailable", "Home is unavailable."));
+            await agentWorkspace.RequireSessionDirectoryAsync(sessionId, path, ct);
         }
+        else await workspace.RequireDirectoryAsync(sessionId, definition, path, ct);
         var next = AgentWorkspacePaths.Public(path);
         return new(JsonSerializer.Serialize(new { cwd = next }), WorkspaceCwd: next);
     }
@@ -37,7 +36,7 @@ public sealed partial class SessionToolExecutor
     private static void ProtectCwd(string tool, JsonElement args, Guid sessionId, string cwd)
     {
         if (tool is not (ToolCatalog.WorkspaceMove or ToolCatalog.WorkspaceDelete or ToolCatalog.WorkspaceBatch)) return;
-        var operations = WorkspaceStructureArguments.Parse(tool, args).Operations;
+        var operations = WorkspaceStructureArguments.Parse(tool, args);
         var current = AgentWorkspacePaths.Resolve(cwd, sessionId);
         foreach (var operation in operations)
         {

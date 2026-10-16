@@ -10,16 +10,20 @@ public sealed class OpenSandboxOptions
     public string? ApiKey { get => _apiKey ?? (ApiKeyFile == "/run/secrets/opensandbox_api_key" ? File.ReadAllText(ApiKeyFile).Trim() : null); set => _apiKey = value; }
     public string? ApiKeyFile { get; set; }
     public bool TrustLocalComposeEndpoint { get; set; }
-    public string WorkspaceMountRoot { get; set; } = "";
-    public string? WorkspaceMountHostRoot { get; set; }
-    internal string MountRoot()
+    // Core's root is populated centrally from Persistence:WorkspaceRoot. The
+    // daemon mapping is a distinct explicit host-visible path to the same storage.
+    public string CanonicalWorkspaceRoot { get; set; } = "";
+    public string WorkspaceDockerHostRoot { get; set; } = "";
+    internal string CanonicalRoot() => DedicatedRoot(CanonicalWorkspaceRoot);
+    internal string DaemonRoot() => DedicatedRoot(WorkspaceDockerHostRoot);
+    private static string DedicatedRoot(string path)
     {
-        static bool DedicatedRoot(string path) => Path.IsPathFullyQualified(path)
-            && Path.GetFullPath(path) != Path.GetPathRoot(Path.GetFullPath(path));
-        if (!DedicatedRoot(WorkspaceMountRoot) || WorkspaceMountHostRoot is { } host && !DedicatedRoot(host))
-            throw new ArgumentException("Configure a dedicated absolute OpenSandbox workspace mount root using the updated Sandbox launcher.");
-        return Path.GetFullPath(WorkspaceMountRoot);
+        if (!Path.IsPathFullyQualified(path) || Path.GetFullPath(path) == Path.GetPathRoot(Path.GetFullPath(path)))
+            throw new ArgumentException("Configure dedicated canonical Core and Docker-host workspace roots using the current launcher.");
+        return Path.GetFullPath(path);
     }
+    public long MaxWorkingStorageBytes { get; set; } = SandboxProfile.MaximumStorageBytes;
+    public bool RequireHardStorageQuota { get; set; }
     public string[] InsecureRegistryHosts { get; set; } = [];
     public string[] AllowedRegistryTokenOrigins { get; set; } = [];
     public bool AllowLocalImageIds { get; set; }
@@ -27,12 +31,14 @@ public sealed class OpenSandboxOptions
     public void ValidateProfile(SandboxProfile profile)
     {
         profile.Validate();
+        if (profile.StorageBytes > MaxWorkingStorageBytes) throw new ArgumentException("Sandbox mounted storage exceeds the host ceiling.");
         var source = OciImageReference.Parse(profile.ImageReference);
         if (source.IsLocal ? !AllowLocalImageIds : !AllowedImagePrefixes.Any(source.IsWithin))
             throw new ArgumentException("Sandbox image is outside the host registry allowlist.");
     }
     public void ValidatePolicy()
     {
+        if (MaxWorkingStorageBytes is < 1 or > SandboxProfile.MaximumStorageBytes) throw new ArgumentException("Invalid mounted storage host ceiling.");
         foreach (var prefix in AllowedImagePrefixes) _ = OciImageReference.ParseScope(prefix);
         foreach (var host in InsecureRegistryHosts)
             if (!Uri.TryCreate("http://" + OciImageReference.CanonicalRegistry(host), UriKind.Absolute, out var uri) || !uri.IsLoopback)

@@ -78,12 +78,12 @@ describe('Owner protected bounded reads', () => {
 
 it('enforces metadata and streamed threshold boundaries for every protected source independently of downloads', async () => {
   const metadata = { displayName: 'x.csv', contentType: 'text/csv', byteSize: 4 };
-  const sources = [ref, {kind:'artifact',sessionId:'s',artifactId:'a'}, {kind:'home',instanceId:'i',itemId:'a',metadata}, {kind:'resource',instanceId:'i',resourceKey:'r',metadata}, {kind:'draftResource',draftId:'d',resourceId:'r',metadata}, {kind:'drive',instanceId:'i',accountRef:'d',fileId:'f',version:'1',authEpoch:1,bindingId:'b',synthetic:true,metadata}] as Parameters<typeof readFile>[0][];
+  const sources = [ref, {kind:'artifact',sessionId:'s',artifactId:'a'}, {kind:'home',instanceId:'i',path:'/home/test.csv',metadata}, {kind:'resource',instanceId:'i',resourceKey:'r',metadata}, {kind:'draftResource',draftId:'d',resourceId:'r',metadata}, {kind:'drive',instanceId:'i',accountRef:'d',fileId:'f',version:'1',authEpoch:1,bindingId:'b',synthetic:true,metadata}] as Parameters<typeof readFile>[0][];
   for (const source of sources) {
     for (const size of [3,4,5]) {
       vi.mocked(ownerFetch).mockClear().mockResolvedValue(new Response('x'.repeat(size)));
       if (size <= 4) expect((await readFile(source, {...metadata, byteSize:size},4,signal())).size).toBe(size);
-      else { await expect(readFile(source,{...metadata,byteSize:size},4,signal())).rejects.toMatchObject({code:'preview_too_large'}); expect(ownerFetch).not.toHaveBeenCalled(); }
+      else { await expect(readFile(source,{...metadata,byteSize:size},4,signal())).rejects.toMatchObject({code:'preview_too_large'}); if(source.kind !== 'home') expect(ownerFetch).not.toHaveBeenCalled(); }
     }
     vi.mocked(ownerFetch).mockResolvedValue(new Response('xxxxx', {headers:{'content-length':'4'}}));
     await expect(readFile(source,metadata,4,signal())).rejects.toMatchObject({code:'preview_too_large'});

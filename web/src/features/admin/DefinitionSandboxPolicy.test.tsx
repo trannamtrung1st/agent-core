@@ -7,7 +7,7 @@ import { getSandboxPlatform, type SandboxPlatform } from '../../services/sandbox
 import type { DefinitionCandidate } from './definitionCandidate';
 vi.mock('../../services/sandboxes', async (importOriginal) => ({...await importOriginal<typeof import('../../services/sandboxes')>(), getSandboxPlatform: vi.fn() }));
 const profile = { id: 'fixture', revision: 2, name: 'Fixture', description: '', enabled: true, availability:'Eligible', imageReference: 'sha256:' + 'a'.repeat(64), initializationScript: 'echo Profile', cpu: 1, memoryMiB: 1024, pids: 64, maxCommandSeconds: 120, idleTtlSeconds: 1800, maxLifetimeSeconds: 7200, storageBytes: 262144000, lastVerifiedAt: null, verificationReason: null };
-const platform: SandboxPlatform = { state: 'Ready', message: 'Authenticated.', profiles: [profile, { ...profile, id: 'other', name: 'Other' }], allowedImagePrefixes: [], localImageIdsAllowed: true, securityScope: '', storageScope: '' };
+const platform: SandboxPlatform = { state: 'Ready', message: 'Authenticated.', profiles: [profile, { ...profile, id: 'other', name: 'Other' }], allowedImagePrefixes: [], localImageIdsAllowed: true, securityScope: '', storageScope: '', maxWorkingStorageBytes: 16 * 1024 * 1024 * 1024 };
 const candidate: DefinitionCandidate = { sandboxPolicy: { defaultProfileId: 'fixture', allowedProfileIds: ['fixture', 'other'] } };
 const tree = (readOnly = false, onChange = vi.fn()) => <ConfigProvider theme={{ token: { motion: false } }}><DefinitionSandboxPolicy candidate={candidate} readOnly={readOnly} onChange={onChange} /></ConfigProvider>;
 beforeEach(() => vi.mocked(getSandboxPlatform).mockReset().mockResolvedValue(platform));

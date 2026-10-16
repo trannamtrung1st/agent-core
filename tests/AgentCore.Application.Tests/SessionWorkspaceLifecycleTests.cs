@@ -14,11 +14,12 @@ public sealed class SessionWorkspaceLifecycleTests
     public async Task Create_is_lazy_and_lifecycle_preserves_workspace_until_durable_delete()
     {
         var root = Path.Combine(Path.GetTempPath(), "agent-core-ws-life", Guid.NewGuid().ToString("N"));
-        var templates = Path.Combine(root, "templates");
+        var templates = root + "-templates";
         Directory.CreateDirectory(templates);
         var store = new InMemoryMemoryStore();
-        var workspace = new FileSessionWorkspace(root, templates, sessions: store);
-        var manager = CreateManager(store, workspace);
+        var owners = new InMemoryAgentInstanceStore();
+        var workspace = new FileSessionWorkspace(root, templates, sessions: store, instances: owners, sandboxes: new InMemorySandboxStore());
+        var manager = CreateManager(store, workspace, owners);
         var created = await manager.CreateOwnedAsync("examiner", 1, SessionMode.Text);
         var physical = AgentWorkspacePhysicalPaths.SessionRoot(root, created.AgentInstanceId, created.SessionId);
         Assert.False(Directory.Exists(physical));
@@ -48,7 +49,7 @@ public sealed class SessionWorkspaceLifecycleTests
         Assert.Equal("NotFound", missing.Code);
     }
 
-    private static SessionManager CreateManager(IMemoryStore store, ISessionWorkspace workspace)
+    private static SessionManager CreateManager(IMemoryStore store, ISessionWorkspace workspace, IAgentInstanceStore owners)
     {
         var ids = new DeterministicIdGenerator(
             Enumerable.Range(1, 16).Select(index => Guid.Parse($"019944af-0003-7000-8000-{index:D12}")),
@@ -59,7 +60,7 @@ public sealed class SessionWorkspaceLifecycleTests
             ids,
             TimeProvider.System,
             new VoiceAvailability { SpeechAdaptersResolved = true },
-            workspace: workspace);
+            workspace: workspace, instanceStore: owners);
     }
 
     private sealed class StaticDefinitions(AgentDefinition definition) : IAgentDefinitionStore

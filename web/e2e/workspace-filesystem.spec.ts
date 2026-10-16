@@ -46,9 +46,11 @@ for (const scope of ["scratch", "home"]) test(`native ${scope} filesystem batche
   for (const path of [`${root}/projects/project/sub/raw.bin`, `${root}/backup/sub/raw.bin`])
     expect(await (await page.request.get(`/api/v2/sessions/${session}/workspace/content?path=${path}`, { headers })).body()).toEqual(binary);
   const nodes = await (await page.request.get(`/api/v2/sessions/${session}/workspace?prefix=${root}/backup/empty`, { headers })).json();
-  expect(nodes).toContainEqual(expect.objectContaining({ logicalPath: `${root}/backup/empty/deep`, directory: true }));
+  expect(nodes.entries).toContainEqual(expect.objectContaining({ logicalPath: `${root}/backup/empty/deep`, directory: true }));
   if (scope === "home") {
     await page.goto(`/admin/instances/${owner}/identity`); await navigateAdmin(page, "Workspace");
+    await page.getByRole("button", { name: `Open ${root}/backup`, exact: true }).click();
+    await page.getByRole("button", { name: `Open ${root}/backup/empty`, exact: true }).click();
     await expect(page.getByRole("button", { name: `Download ${root}/backup/empty/deep`, exact: true })).toBeDisabled();
     await expect(page.getByText(`${root}/backup/empty/deep`, { exact: true })).toBeVisible();
     await openSession();

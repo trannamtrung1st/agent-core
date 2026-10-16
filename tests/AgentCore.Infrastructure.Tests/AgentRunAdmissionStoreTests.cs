@@ -878,7 +878,7 @@ public sealed class AgentRunAdmissionStoreTests
     }
 
     [Fact]
-    public async Task Complete_current_ensurecreated_schema_is_stamped_and_reopened()
+    public async Task Current_untracked_schema_is_refused_without_stamping_or_mutating_data()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agent-run-current-schema-{Guid.NewGuid():N}.db");
         var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
@@ -886,14 +886,14 @@ public sealed class AgentRunAdmissionStoreTests
         {
             await using (var db = factory.CreateDbContext()) await db.Database.EnsureCreatedAsync();
             var memory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now));
-            await memory.EnsureCreatedAsync();
             var turn = UserTurn();
-            var runs = new SqliteAgentRunStore(factory, memory, new Diagnostics());
-            await runs.AdmitAsync(turn.Snapshot, 0, turn.Run);
-            await memory.EnsureCreatedAsync();
-            Assert.NotNull(await runs.GetAsync(Owner, turn.Run.AgentRunId));
+            var runs = new SqliteAgentRunStore(factory,memory,new Diagnostics());
+            await runs.AdmitAsync(turn.Snapshot,0,turn.Run);
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() => memory.EnsureCreatedAsync().AsTask());
+            Assert.Contains("data_reset_required",error.Message);
+            Assert.NotNull(await runs.GetAsync(Owner,turn.Run.AgentRunId));
             await using var verify = factory.CreateDbContext();
-            Assert.Contains("20261008013446_ActivationAgentRunFoundation", await verify.Database.GetAppliedMigrationsAsync());
+            Assert.Empty(await verify.Database.GetAppliedMigrationsAsync());
         }
         finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
     }
@@ -912,7 +912,7 @@ public sealed class AgentRunAdmissionStoreTests
             }
             var memory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now));
             var error = await Assert.ThrowsAsync<AgentCoreException>(() => memory.EnsureCreatedAsync().AsTask());
-            Assert.Contains("Canonical index on TriggerOccurrences is missing or incompatible", error.Message, StringComparison.Ordinal);
+            Assert.Contains("data_reset_required", error.Message, StringComparison.Ordinal);
             await using var verify = factory.CreateDbContext();
             var applied = await verify.Database.GetAppliedMigrationsAsync();
             Assert.DoesNotContain("20261008021141_BackgroundOccurrenceAdmission", applied);
@@ -935,7 +935,7 @@ public sealed class AgentRunAdmissionStoreTests
             }
             var memory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now));
             var error = await Assert.ThrowsAsync<AgentCoreException>(() => memory.EnsureCreatedAsync().AsTask());
-            Assert.Contains("Canonical index on AgentRuns is missing or incompatible", error.Message, StringComparison.Ordinal);
+            Assert.Contains("data_reset_required", error.Message, StringComparison.Ordinal);
             await using var verify = factory.CreateDbContext();
             Assert.DoesNotContain("20261008013446_ActivationAgentRunFoundation", await verify.Database.GetAppliedMigrationsAsync());
         }
@@ -1463,50 +1463,6 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.Equal("NotFound", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.ListBackgroundPageAsync(Owner, Guid.NewGuid(), last, false, 20).AsTask())).Code);
     }
 
-    [Fact]
-    public async Task Forward_migration_preserves_populated_legacy_completion_receipts_and_session_run_identity()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"completion-upgrade-{Guid.NewGuid():N}.db");
-        var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
-        try
-        {
-            var (parentSnapshot, parent) = UserTurn(); var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
-            var claimed = new AgentRunCommand.Claim(child.Run.Revision, Now, Guid.NewGuid(), Now.AddMinutes(1)).Apply(child.Run, Guid.NewGuid);
-            var completed = new AgentRunCommand.Complete(claimed.Revision, Now, claimed.Claim!.Generation, "Legacy result", AgentRunOutcomeKind.NeedsAttention, Guid.NewGuid()).Apply(claimed, Guid.NewGuid);
-            await using (var db = await factory.CreateDbContextAsync())
-            {
-                await db.Database.MigrateAsync("20261008115119_AutomationDestinations");
-                // Copy only columns available in the historical schema, then retain its legacy entry shape below.
-                await MigrationSessionSeed.CopyPersistedSessionAsync(factory, parentSnapshot with { Entries = [] }, "20261008115119_AutomationDestinations");
-                await MigrationSessionSeed.CopyPersistedSessionAsync(factory, child.Snapshot with { Entries = [] }, "20261008115119_AutomationDestinations");
-                db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(parentSnapshot, parent));
-                db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(parent));
-                db.Activations.Add(AgentRunStoreMapping.ToActivationRecord(child.Snapshot, completed));
-                db.AgentRuns.Add(AgentRunStoreMapping.ToRecord(completed));
-                await db.SaveChangesAsync();
-                foreach (var snapshot in new[] { parentSnapshot, child.Snapshot })
-                    foreach (var entry in snapshot.Entries)
-                        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ConversationEntries (EntryId, SessionId, EntrySequence, SourceEventId, Role, Text, ResponseId, Status, DeliveryMode, HeardTextEndExclusive, ReceivedTextEndExclusive, CreatedAtUtc) VALUES ({entry.EntryId.ToString("D")}, {snapshot.SessionId.ToString("D")}, {entry.Sequence}, {entry.SourceEventId?.ToString("D")}, {entry.Role.ToString()}, {entry.Text}, {entry.ResponseId?.ToString("D")}, {entry.Status.ToString()}, {entry.DeliveryMode.ToString()}, {entry.HeardTextEndExclusive}, {entry.ReceivedTextEndExclusive}, {entry.CreatedAt.ToUnixTimeMilliseconds()})");
-                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO BackgroundCompletionReceipts (ChildAgentRunId, AgentInstanceId, ProfileId, ParentActivationId, SkipReason, CreatedAtUtc) VALUES ({completed.AgentRunId.ToString("D")}, {Owner.AgentInstanceId.ToString("D")}, {Owner.ProfileId.ToString("D")}, NULL, 'quiet-outcome', {Now.ToUnixTimeMilliseconds()})");
-                await db.Database.MigrateAsync();
-            }
-            var upgradedMemory = new SqliteMemoryStore(factory, new FakeTimeProvider(Now)); await upgradedMemory.EnsureCreatedAsync();
-            var runs = new SqliteAgentRunStore(factory, upgradedMemory, new Diagnostics());
-            Assert.Equal(parent.SessionId, (await upgradedMemory.LoadAsync(parent.SessionId))!.SessionId);
-            Assert.Equal(parentSnapshot.Entries.Select(e => e.EntryId), (await upgradedMemory.LoadAsync(parent.SessionId))!.Entries.Select(e => e.EntryId));
-            Assert.Equal(child.Snapshot.Entries.Select(e => e.Text), (await upgradedMemory.LoadAsync(child.Run.SessionId))!.Entries.Select(e => e.Text));
-            Assert.Equal(completed.ResponseId, (await runs.GetAsync(Owner, completed.AgentRunId))!.ResponseId);
-            var item = (await runs.GetCompletionInboxAsync(Owner, parent.SessionId, completed.AgentRunId, Now))!;
-            Assert.Equal(Owner, item.Owner); Assert.Equal(child.Run.SessionId, item.ChildSessionId);
-            Assert.Equal(CompletionInboxStatus.Skipped, item.Status); Assert.Equal("quiet-outcome", item.SkipReason);
-            Assert.True(await runs.HasCompletionReceiptAsync(Owner, completed.AgentRunId));
-        }
-        finally
-        {
-            using var connection = new SqliteConnection($"Data Source={path}"); SqliteConnection.ClearPool(connection);
-            foreach (var suffix in new[] { "", "-wal", "-shm" }) File.Delete(path + suffix);
-        }
-    }
 
     [Theory]
     [InlineData(false)]

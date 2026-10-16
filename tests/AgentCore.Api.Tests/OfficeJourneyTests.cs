@@ -50,16 +50,16 @@ public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixt
         var elements = inspection.GetProperty("elements").EnumerateArray().ToArray();
         var hash = inspection.GetProperty("sha256").GetString();
         var linked = elements.Single(e => e.GetProperty("text").GetString() == "Read the report").GetProperty("selector").GetString();
-        var unsafeEdit = await Execute(ToolCatalog.OfficeDocumentEdit, new { path, expectedSha256 = hash, operations = new[] { new { operation = "replace_paragraph", selector = linked, text = "Must not replace hyperlink" } } });
+        var unsafeEdit = await Execute(ToolCatalog.OfficeDocumentEdit, new { path, operations = new[] { new { operation = "replace_paragraph", selector = linked, text = "Must not replace hyperlink" } } });
         Assert.Equal("office_operation_unsupported", unsafeEdit.GetProperty("error").GetString());
         var selector = elements.Single(e => e.GetProperty("text").GetString() == "Editable business text.").GetProperty("selector").GetString();
-        var edited = await Execute(ToolCatalog.OfficeDocumentEdit, new { path, expectedSha256 = hash, operations = new[] { new { operation = "replace_paragraph", selector, text = "Updated business text." } } });
+        var edited = await Execute(ToolCatalog.OfficeDocumentEdit, new { path, operations = new[] { new { operation = "replace_paragraph", selector, text = "Updated business text." } } });
         Assert.False(edited.TryGetProperty("error", out _), edited.ToString());
         var page = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{instance.InstanceId}/workspace"))!;
         var item = page.Items.Single(i => !i.Directory && i.LogicalPath.EndsWith("business-links.docx", StringComparison.Ordinal));
-        var preview = await client.GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/office-preview");
+        var preview = await client.GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/office-preview?path={Uri.EscapeDataString(item.LogicalPath)}");
         preview.EnsureSuccessStatusCode(); Assert.True(preview.Headers.CacheControl!.NoStore);
-        var bytes = await client.GetByteArrayAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/content");
+        var bytes = await client.GetByteArrayAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/content?path={Uri.EscapeDataString(item.LogicalPath)}");
         using var reopened = WordprocessingDocument.Open(new MemoryStream(bytes), false);
         Assert.Equal("https://example.test/business-report", reopened.MainDocumentPart!.HyperlinkRelationships.Single().Uri.ToString());
         Assert.Contains("Updated business text.", reopened.MainDocumentPart.Document!.InnerText);
@@ -108,7 +108,7 @@ public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixt
         Assert.NotNull(initialCursor);
         Assert.Equal(Enumerable.Range(1, 100).Select(i => "First!A" + i).Append("Second!A1"), seen);
         Assert.Equal("invalid", (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path, cursor = initialCursor, range = "A1" })).GetProperty("error").GetString());
-        var changed = await Execute(ToolCatalog.OfficeSpreadsheetEdit, new { path, expectedSha256 = file.GetProperty("sha256").GetString(), operations = new[] {
+        var changed = await Execute(ToolCatalog.OfficeSpreadsheetEdit, new { path, operations = new[] {
             new { operation = "set_cells", sheet = "First", range = "A1", cells = new[] { new[] { new { type = "number", number = 999 } } } } } });
         Assert.False(changed.TryGetProperty("error", out _), changed.ToString());
         Assert.Equal("office_revision_conflict", (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path, cursor = initialCursor })).GetProperty("error").GetString());
@@ -159,7 +159,7 @@ public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixt
     }
 
     [Fact]
-    public async Task Office_create_inspect_targeted_edit_and_stale_hash_preserve_owned_real_files()
+    public async Task Office_create_inspect_targeted_edit_and_stale_selector_preserve_owned_real_files()
     {
         var client = factory.CreateClient(); client.DefaultRequestHeaders.TryAddWithoutValidation(OwnerCapabilityHeaders.Name, TestOwnerCapability.Token(factory.Services));
         var created = await client.PostAsJsonAsync("/api/v2/admin/agent-instances", new { definitionId = "general-assistant", version = 26 }); created.EnsureSuccessStatusCode();
@@ -185,10 +185,10 @@ public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixt
         Assert.False(word.TryGetProperty("error", out _), word.ToString());
         var inspection = (await Execute(ToolCatalog.OfficeDocumentInspect, new { path = "/home/report.docx" })).GetProperty("inspection");
         var selector = inspection.GetProperty("elements").EnumerateArray().Single(e => e.GetProperty("text").GetString() == "Specific paragraph to edit.").GetProperty("selector").GetString();
-        var edited = await Execute(ToolCatalog.OfficeDocumentEdit, new { path = "/home/report.docx", expectedSha256 = word.GetProperty("sha256").GetString(), operations = new[] { new { operation = "replace_paragraph", selector, text = "Reviewed recommendation." } } });
+        var edited = await Execute(ToolCatalog.OfficeDocumentEdit, new { path = "/home/report.docx", operations = new[] { new { operation = "replace_paragraph", selector, text = "Reviewed recommendation." } } });
         Assert.False(edited.TryGetProperty("error", out _), edited.ToString()); Assert.NotEqual(word.GetProperty("sha256").GetString(), edited.GetProperty("sha256").GetString());
-        var stale = await Execute(ToolCatalog.OfficeDocumentEdit, new { path = "/home/report.docx", expectedSha256 = word.GetProperty("sha256").GetString(), operations = new[] { new { operation = "replace_paragraph", selector, text = "Must not commit." } } });
-        Assert.Contains("office_revision_conflict", stale.ToString());
+        var stale = await Execute(ToolCatalog.OfficeDocumentEdit, new { path = "/home/report.docx", operations = new[] { new { operation = "replace_paragraph", selector, text = "Must not commit." } } });
+        Assert.Contains("office_operation_unsupported", stale.ToString());
         var after = (await Execute(ToolCatalog.OfficeDocumentInspect, new { path = "/home/report.docx" })).GetProperty("inspection");
         Assert.Contains("Reviewed recommendation.", after.ToString()); Assert.DoesNotContain("Must not commit.", after.ToString());
         var excel = await Execute(ToolCatalog.OfficeSpreadsheetCreate, new
@@ -201,25 +201,25 @@ public sealed class OfficeJourneyTests(AgentCoreApiFactory factory) : IClassFixt
         Assert.False(excel.TryGetProperty("error", out _), excel.ToString());
         var sheet = (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path = "/home/sales.xlsx", sheet = "Sales", range = "A1:B3" })).GetProperty("inspection");
         Assert.Equal(2, sheet.GetProperty("sheets").GetArrayLength()); Assert.Contains("SUM(B2:B2)", sheet.ToString()); Assert.Contains("cached_value", sheet.ToString());
-        var changed = await Execute(ToolCatalog.OfficeSpreadsheetEdit, new { path = "/home/sales.xlsx", expectedSha256 = excel.GetProperty("sha256").GetString(), operations = new[] { new { operation = "set_cells", sheet = "Sales", range = "B2", cells = new[] { new[] { new { type = "number", number = 1700, format = "currency" } } } } } });
+        var changed = await Execute(ToolCatalog.OfficeSpreadsheetEdit, new { path = "/home/sales.xlsx", operations = new[] { new { operation = "set_cells", sheet = "Sales", range = "B2", cells = new[] { new[] { new { type = "number", number = 1700, format = "currency" } } } } } });
         Assert.False(changed.TryGetProperty("error", out _), changed.ToString());
         var value = (await Execute(ToolCatalog.OfficeSpreadsheetInspect, new { path = "/home/sales.xlsx", sheet = "Sales", range = "B2" })).GetProperty("inspection").GetProperty("rows")[0][0].GetProperty("value").GetString();
         Assert.Equal("$1,700.00", value);
         var page = (await client.GetFromJsonAsync<AgentWorkspacePageResponse>($"/api/v2/agent-instances/{instance.InstanceId}/workspace"))!;
         foreach (var item in page.Items.Where(item => !item.Directory))
         {
-            var download = await client.GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/content"); download.EnsureSuccessStatusCode();
+            var download = await client.GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/content?path={Uri.EscapeDataString(item.LogicalPath)}"); download.EnsureSuccessStatusCode();
             var bytes = await download.Content.ReadAsByteArrayAsync(); Assert.Equal(new byte[] { 80, 75, 3, 4 }, bytes[..4]);
-            Assert.Equal(item.Sha256Hex, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)));
-            var preview = await client.GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/office-preview"); preview.EnsureSuccessStatusCode(); Assert.True(preview.Headers.CacheControl!.NoStore);
-            var projected = await preview.Content.ReadFromJsonAsync<OfficePreviewResponse>(); Assert.Equal(item.Sha256Hex, projected!.Sha256);
-            Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/{item.ItemId}/office-preview")).StatusCode);
-            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{Guid.NewGuid()}/workspace/{item.ItemId}/office-preview")).StatusCode);
+            var checkedHash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+            var preview = await client.GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/office-preview?path={Uri.EscapeDataString(item.LogicalPath)}"); preview.EnsureSuccessStatusCode(); Assert.True(preview.Headers.CacheControl!.NoStore);
+            var projected = await preview.Content.ReadFromJsonAsync<OfficePreviewResponse>(); Assert.Equal(checkedHash, projected!.Sha256);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await factory.CreateClient().GetAsync($"/api/v2/agent-instances/{instance.InstanceId}/workspace/office-preview?path={Uri.EscapeDataString(item.LogicalPath)}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v2/agent-instances/{Guid.NewGuid()}/workspace/office-preview?path={Uri.EscapeDataString(item.LogicalPath)}")).StatusCode);
 
         }
         var scratch = await Execute(ToolCatalog.OfficeSpreadsheetCreate, new { path = "/working/scratch.xlsx", sheets = new[] { new { name = "Scratch", rows = new object[][] { [new { type = "text", text = "exact scratch bytes" }] } } } });
         Assert.False(scratch.TryGetProperty("error", out _), scratch.ToString());
-        var publication = await Execute(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/scratch.xlsx", displayName = "scratch.xlsx" }); Assert.Equal(OfficeLimits.SpreadsheetMime, publication.GetProperty("contentType").GetString());
+        var publication = await Execute(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/scratch.xlsx", displayName = "scratch.xlsx" }); Assert.False(publication.TryGetProperty("error", out _), publication.ToString()); Assert.Equal(OfficeLimits.SpreadsheetMime, publication.GetProperty("contentType").GetString());
         var artifactId = publication.GetProperty("artifactId").GetString(); var projection = await client.GetFromJsonAsync<OfficePreviewResponse>($"/api/v2/sessions/{sessionId}/artifacts/{artifactId}/office-preview"); Assert.Equal("exact scratch bytes", projection!.Rows![0][0].Value);
         var empty = await Execute(ToolCatalog.OfficeDocumentCreate, new { path = "/working/empty.docx", sections = new[] { new { heading = (string?)null, paragraphs = Array.Empty<string>() } } }); Assert.False(empty.TryGetProperty("error", out _), empty.ToString());
         var emptyArtifact = await Execute(ToolCatalog.ArtifactsCreateFromWorkspace, new { path = "/working/empty.docx", displayName = "empty.docx" }); var emptyPreview = await client.GetFromJsonAsync<OfficePreviewResponse>($"/api/v2/sessions/{sessionId}/artifacts/{emptyArtifact.GetProperty("artifactId").GetString()}/office-preview"); Assert.True(emptyPreview!.EmptyBody);

@@ -872,7 +872,7 @@ public sealed class BrowserToolTests
         try
         {
         var session = Guid.NewGuid();
-        var workspace = new FileSessionWorkspace(workspaceRoot, templateRoot, sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(workspaceRoot, templateRoot);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var definition = BrowserDefinition() with
         {
@@ -888,7 +888,7 @@ public sealed class BrowserToolTests
         };
         await workspace.EnsureAsync(session, definition);
         var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
-        await workspace.WriteAsync(session, "/workspace/working/ac-keyboard.png", png);
+        await workspace.WriteAsync(session, "/working/ac-keyboard.png", png);
         var browser = new FakeBrowser { CurrentUrl = new Uri("http://127.0.0.1:5091/") };
         var executor = new SessionToolExecutor(
             workspace: workspace, agentWorkspace: OwnedWorkspaces.Create(workspace),

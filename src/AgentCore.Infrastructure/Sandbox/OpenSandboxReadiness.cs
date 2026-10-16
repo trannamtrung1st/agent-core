@@ -10,7 +10,7 @@ public sealed class OpenSandboxReadiness(OpenSandboxOptions options, ISandboxSto
     private volatile bool _profilesAvailable;
     private volatile bool _mountReady;
     public bool IsAvailable => options.Enabled && _ready && _mountReady && _profilesAvailable;
-    public string State => !options.Enabled ? "Disabled" : _ready && _mountReady ? "Ready" : "Unavailable";
+    public string State => !options.Enabled ? "Disabled" : !_mountReady ? "MountIncompatible" : _ready ? "Ready" : "Unavailable";
     public string SafeMessage => !options.Enabled ? "Enable OpenSandbox in host configuration to use sandbox capabilities."
         : !_mountReady ? "Workspace mount configuration is missing, inaccessible or contains symbolic links. Run the updated Sandbox launcher and restart the known Core host to load its handoff. Verify server allowlist/mapping and reverify profiles under the current contract; no command was attempted."
         : _ready && !_profilesAvailable ? "Private OpenSandbox is reachable. Register and verify an approved sandbox profile before using commands."
@@ -19,7 +19,7 @@ public sealed class OpenSandboxReadiness(OpenSandboxOptions options, ISandboxSto
     public async ValueTask RefreshAsync(CancellationToken ct)
     {
         if (!options.Enabled) { _ready = false; return; }
-        try { new SandboxMountFiles(options).ValidateConfiguration(); _mountReady = true; }
+        try { new CanonicalSandboxMountResolver(options).ValidateConfiguration(); _mountReady = true; }
         catch { _mountReady = false; _ready = false; return; }
         try
         {

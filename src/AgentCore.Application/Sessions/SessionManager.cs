@@ -783,24 +783,24 @@ public sealed class SessionManager
         return await _knowledge.RetrieveAsync(definition, identity, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<WorkspaceNode>> ListWorkspaceAsync(
-        Guid sessionId,
-        string prefix,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<WorkspaceNode>> ListWorkspaceAsync(Guid sessionId, string prefix, CancellationToken cancellationToken = default) =>
+        (await ListWorkspacePageAsync(sessionId, prefix, null, WorkspaceLimits.MaxListEntries, cancellationToken)).Entries;
+
+    public async Task<WorkspaceNodePage> ListWorkspacePageAsync(Guid sessionId, string prefix, string? cursor, int limit, CancellationToken cancellationToken = default)
     {
-        var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        var snapshot = await GetAsync(sessionId, cancellationToken);
         var workspace = RequireWorkspace();
-        var resolvedPrefix = prefix == "/" ? "/home" : AgentWorkspacePaths.Resolve(string.IsNullOrWhiteSpace(prefix) ? "/home" : prefix, sessionId);
-        if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(resolvedPrefix) && _agentWorkspace is not null)
-        {
-            var homeNodes = await _agentWorkspace.ListNodesAsync(await _agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), resolvedPrefix, cancellationToken);
-            var writable = await _agentWorkspace.SessionWritableAsync(sessionId, cancellationToken);
-            return writable ? homeNodes.Select(n => n with { Writable = true }).ToArray() : homeNodes;
-        }
+        var resolvedPrefix = prefix == "/" ? "/home" : AgentWorkspacePaths.Resolve(string.IsNullOrEmpty(prefix) ? "/home" : prefix, sessionId);
         var definition = _configurations is null ? snapshot.Definition : (await _configurations.ResolveAsync(snapshot.AgentInstanceId, cancellationToken, allowArchived: true)).Configuration.Definition;
-        await workspace.EnsureAsync(sessionId, definition, cancellationToken).ConfigureAwait(false);
-        var nodes = await workspace.ListAsync(sessionId, definition, resolvedPrefix, cancellationToken).ConfigureAwait(false);
-        return nodes.Select(n => n with { LogicalPath = AgentWorkspacePaths.Public(n.LogicalPath) }).ToArray();
+        Agents.StateIsolationAccess.RequireHome(definition.StateIsolationPolicy ?? StateIsolationPolicy.Default, resolvedPrefix, false);
+        if (Workspaces.AgentHomePath.IsHome(resolvedPrefix) && _agentWorkspace is not null)
+        {
+            await _agentWorkspace.RequireSessionHomeAsync(sessionId, resolvedPrefix, false, cancellationToken);
+            var page = await _agentWorkspace.ListNodePageAsync(await _agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), resolvedPrefix, cursor, limit, cancellationToken);
+            var writable = await _agentWorkspace.SessionWritableAsync(sessionId, cancellationToken) && (definition.StateIsolationPolicy ?? StateIsolationPolicy.Default).HomeAccess == HomeAccess.ReadWrite;
+            return page with { Entries = page.Entries.Select(node => node with { Writable = writable }).ToArray() };
+        }
+        return await workspace.ListPageAsync(sessionId, definition, resolvedPrefix, cursor, limit, cancellationToken);
     }
 
     public async Task<WorkspaceContent> ReadWorkspaceAsync(
@@ -813,6 +813,7 @@ public sealed class SessionManager
         var resolvedPath = AgentWorkspacePaths.Resolve(logicalPath, sessionId);
         if (AgentCore.Application.Workspaces.AgentHomePath.IsHome(resolvedPath) && _agentWorkspace is not null)
         {
+            await _agentWorkspace.RequireSessionHomeAsync(sessionId, resolvedPath, false, cancellationToken);
             var home = await _agentWorkspace.ReadAsync(await _agentWorkspace.SessionOwnerAsync(sessionId, cancellationToken), path: resolvedPath, cancellationToken: cancellationToken);
             return new WorkspaceContent(home.Item.LogicalPath, home.Item.ContentType, home.Bytes);
         }
@@ -827,7 +828,7 @@ public sealed class SessionManager
         string logicalPath,
         ReadOnlyMemory<byte> bytes,
         CancellationToken cancellationToken = default,
-        long? expectedRevision = null, string? expectedSha256 = null, string? contentType = null)
+        string? contentType = null)
     {
         var snapshot = await GetAsync(sessionId, cancellationToken).ConfigureAwait(false);
         if (snapshot.ArchivedAt is not null)
@@ -848,7 +849,7 @@ public sealed class SessionManager
         {
             if (_agentWorkspace is null)
                 throw AgentCoreErrors.Forbidden("Durable workspace is unavailable.");
-            await _agentWorkspace.WriteAsync(sessionId, resolvedPath, contentType ?? "application/octet-stream", bytes, expectedRevision, expectedSha256, cancellationToken);
+            await _agentWorkspace.WriteAsync(sessionId, resolvedPath, contentType ?? "application/octet-stream", bytes, cancellationToken);
         }
         else await workspace.WriteAsync(sessionId, resolvedPath, bytes, cancellationToken).ConfigureAwait(false);
         RuntimeTelemetry.Record("workspace", RuntimeTelemetry.ElapsedMs(started));
@@ -886,14 +887,14 @@ public sealed class SessionManager
         }
 
         await workspace.EnsureAsync(sessionId, snapshot.Definition, cancellationToken).ConfigureAwait(false);
-        var existing = await workspace.ListAsync(sessionId, snapshot.Definition, "/workspace/working", cancellationToken)
+        var existing = await workspace.ListAsync(sessionId, snapshot.Definition, "/working", cancellationToken)
             .ConfigureAwait(false);
         var taken = existing
             .Where(node => !node.Directory)
             .Select(node => Path.GetFileName(node.LogicalPath).ToLowerInvariant())
             .ToHashSet(StringComparer.Ordinal);
         var fileName = WorkspaceFileNames.Deduplicate(WorkspaceFileNames.Sanitize(source.DisplayName), taken);
-        var logical = "/workspace/working/" + fileName;
+        var logical = "/working/" + fileName;
         var started = Stopwatch.GetTimestamp();
         await workspace.WriteAsync(sessionId, logical, bytes, cancellationToken).ConfigureAwait(false);
         RuntimeTelemetry.Record("workspace", RuntimeTelemetry.ElapsedMs(started));

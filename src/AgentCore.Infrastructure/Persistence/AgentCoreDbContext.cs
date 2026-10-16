@@ -197,7 +197,6 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     public DbSet<OwnerCapabilityRecord> OwnerCapabilities => Set<OwnerCapabilityRecord>();
     public DbSet<AttachmentRecordRow> Attachments => Set<AttachmentRecordRow>();
     public DbSet<MessageAttachmentRow> MessageAttachments => Set<MessageAttachmentRow>();
-    public DbSet<AgentWorkspaceRow> AgentWorkspaceItems => Set<AgentWorkspaceRow>();
     public DbSet<ArtifactRecordRow> Artifacts => Set<ArtifactRecordRow>();
     public DbSet<StructuredMemoryRecord> StructuredMemories => Set<StructuredMemoryRecord>();
     public DbSet<AgentInstanceRecord> AgentInstances => Set<AgentInstanceRecord>();
@@ -410,17 +409,6 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.ToTable("MessageAttachments");
             entity.HasKey(row => new { row.EntryId, row.AttachmentId });
             entity.HasIndex(row => row.SessionId);
-        });
-        modelBuilder.Entity<AgentWorkspaceRow>(entity =>
-        {
-            entity.ToTable("AgentWorkspaceItems");
-            entity.HasKey(row => row.ItemId);
-            entity.Property(row => row.ItemId).HasMaxLength(36);
-            entity.Property(row => row.AgentInstanceId).HasMaxLength(36).IsRequired();
-            entity.Property(row => row.PathKey).HasMaxLength(512).IsRequired();
-            entity.Property(row => row.BlobKey).HasMaxLength(32).IsRequired();
-            entity.Property(row => row.Revision).IsConcurrencyToken();
-            entity.HasIndex(row => new { row.AgentInstanceId, row.PathKey }).IsUnique();
         });
         modelBuilder.Entity<ArtifactRecordRow>(entity =>
         {

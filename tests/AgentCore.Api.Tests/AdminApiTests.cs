@@ -2011,10 +2011,10 @@ public sealed class AdminApiTests : IClassFixture<AdminSecretSentinelApiFactory>
         Assert.NotNull(legacyView);
         Assert.Equal(1, legacyView!.PinnedPersonaRevision);
 
-        var listed = await client.GetFromJsonAsync<WorkspaceNodeResponse[]>(
+        var listed = await client.GetFromJsonAsync<WorkspaceNodePageResponse>(
             $"/api/v2/sessions/{view.SessionId}/workspace?prefix=/agent");
         Assert.NotNull(listed);
-        Assert.Contains(listed!, node => node.LogicalPath == "/agent/resources");
+        Assert.Contains(listed!.Entries, node => node.LogicalPath == "/agent/resources");
 
         var bytes = await client.GetByteArrayAsync(
             $"/api/v2/sessions/{view.SessionId}/workspace/content?path=/agent/resources/knowledge/policy.md");

@@ -23,7 +23,7 @@ internal static class OwnedWorkspaces
         var instances = new InMemoryAgentInstanceStore();
         instances.InsertAsync(new AgentInstance(owner, "examiner", 1, SampleDefinitions.Examiner.Identity,
             AgentInstanceLifecycle.Active, now, now)).AsTask().GetAwaiter().GetResult();
-        return new(instances, new FileAgentInstanceWorkspaceStore(Root, time, ids),
+        return new(instances, new FileAgentInstanceWorkspaceStore(Root, instances, new InMemorySandboxStore()),
             new SessionMetadata(owner), scratch, new AdminLifecycleCoordinator());
     }
 

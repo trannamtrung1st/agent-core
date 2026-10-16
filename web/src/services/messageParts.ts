@@ -8,7 +8,7 @@ export type ResourceReference = {
     | "skill";
   agentInstanceId?: string;
   sessionId?: string;
-  itemId?: string;
+  path?: string;
   artifactId?: string;
   agentRunId?: string;
   skillKey?: string;
@@ -26,7 +26,7 @@ export type MessagePart =
 export function locator(r: ResourceReference): string {
   switch (r.kind) {
     case "homeFile":
-      return `homeFile:${r.agentInstanceId}/${r.itemId}`;
+      return `homeFile:${r.agentInstanceId}${r.path}`;
     case "session":
     case "backgroundSession":
       return `${r.kind}:${r.sessionId}`;
@@ -124,7 +124,7 @@ export function normalizeParts(raw: unknown): MessagePart[] {
               "kind",
               "agentInstanceId",
               "sessionId",
-              "itemId",
+              "path",
               "artifactId",
               "agentRunId",
               "skillKey",
@@ -137,7 +137,7 @@ export function normalizeParts(raw: unknown): MessagePart[] {
         Object.entries(p.reference).filter(([, v]) => v != null),
       ) as ResourceReference;
       const fields: Record<string, string[]> = {
-        homeFile: ["agentInstanceId", "itemId"],
+        homeFile: ["agentInstanceId", "path"],
         session: ["sessionId"],
         backgroundSession: ["sessionId"],
         artifact: ["sessionId", "artifactId"],
@@ -152,13 +152,13 @@ export function normalizeParts(raw: unknown): MessagePart[] {
             ![
               "kind",
               ...required,
-              ...(r.kind === "artifact" || r.kind === "skill" ? [] : ["selectedRevision"]),
+              ...(r.kind === "artifact" || r.kind === "skill" || r.kind === "homeFile" ? [] : ["selectedRevision"]),
             ].includes(k),
         ) ||
         required.some(
           (k) =>
             typeof r[k as keyof ResourceReference] !== "string" ||
-            !(k === "skillKey" ? validSkill : validGuid)(
+            !(k === "skillKey" ? validSkill : k === "path" ? validHomePath : validGuid)(
               r[k as keyof ResourceReference] as string,
             ),
         ) ||
@@ -208,3 +208,8 @@ export type ComposerChoice = {
   reference?: ResourceReference | null;
   unavailableReason?: string | null;
 };
+
+function validHomePath(path: string): boolean {
+  return path.startsWith('/home/') && new TextEncoder().encode(path).length <= 4095 && !path.includes('\\') && !path.includes('\0')
+    && path.slice(6).split('/').every(part => part !== '' && part !== '.' && part !== '..' && new TextEncoder().encode(part).length <= 255);
+}

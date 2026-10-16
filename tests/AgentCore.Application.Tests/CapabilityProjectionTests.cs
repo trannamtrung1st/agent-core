@@ -41,7 +41,7 @@ public sealed class CapabilityProjectionTests
         var snapshot = new SessionSnapshot(1, Guid.NewGuid(), 1, d, SessionMode.Text, null, SessionStatus.Created, [], "", 0, null, null, now, now, ModelSelection: new SessionModelSelection("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.SystemDefault, null), AgentInstanceId: Guid.NewGuid());
         var memory = new AgentCore.Infrastructure.Persistence.InMemoryMemoryStore();
         var turns = new RuntimeAgentRunStore();
-        var workspace = new AgentCore.Infrastructure.Workspaces.FileSessionWorkspace(root, root, sessions: new WorkspaceTestSessions());
+        var workspace = AgentCore.Tests.Shared.WorkspaceTestSessions.CreateWorkspace(root, root + "-templates");
         await workspace.EnsureAsync(snapshot.SessionId, d);
         snapshot = RuntimeAgentRunStore.WithPins(snapshot);
         turns.Bind(memory);
@@ -60,7 +60,7 @@ public sealed class CapabilityProjectionTests
             var answer = runtime.Snapshot.Entries.Last(e => e.Role == ConversationRole.Assistant);
             Assert.Contains("Capability projection results:", answer.Text);
             Assert.DoesNotContain("error", answer.Text);
-            Assert.Equal("Loaded exact capability café\r\n", System.Text.Encoding.UTF8.GetString((await workspace.ReadAsync(snapshot.SessionId, d, "/workspace/working/loaded-capability.txt")).Bytes));
+            Assert.Equal("Loaded exact capability café\r\n", System.Text.Encoding.UTF8.GetString((await workspace.ReadAsync(snapshot.SessionId, d, "/working/loaded-capability.txt")).Bytes));
             var execution = await turns.ForSourceAsync(snapshot.SessionId, source);
             Assert.Equal([ToolCatalog.WorkspaceWrite], execution!.LoadedCapabilityIds);
             Assert.Equal(1, execution.CapabilityLoadCount);

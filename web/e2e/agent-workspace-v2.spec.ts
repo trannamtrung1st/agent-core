@@ -55,8 +55,10 @@ test("managed workspace uses durable cwd, explicit scratch, and downloads across
   await expect(page.locator(".chat-message-assistant").last()).toContainText("Durable result caf");
   await page.goto(`/admin/instances/${owner}/identity`); await navigateAdmin(page, "Workspace");
   await expect(page.getByRole("heading", { name: "Agent Workspace", exact: true })).toBeVisible();
-  await expect(page.getByText("/home · Durable across sessions.", { exact: true })).toBeVisible();
+  await expect(page.getByText("/home · Live files shared by this Instance’s Sessions. Changes are visible immediately.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Open /home/projects", exact: true }).click();
   await expect(page.getByRole("button", { name: "Download /home/projects/customer-a", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Open /home/projects/customer-a", exact: true }).click();
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(page.getByText("/home/projects/customer-a/result.md", { exact: true })).toBeVisible();

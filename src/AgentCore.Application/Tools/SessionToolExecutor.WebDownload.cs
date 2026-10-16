@@ -18,7 +18,7 @@ public sealed partial class SessionToolExecutor
         if (admission?.AgentInstanceId is not Guid owner || admission.OwnedSessionId != sessionId
             || owner != await agentWorkspace.SessionOwnerAsync(sessionId, ct) || !await agentWorkspace.SessionWritableAsync(sessionId, ct))
             return Error("forbidden", "Download requires the active owning Session and Agent Instance.");
-        if (args.ValueKind != JsonValueKind.Object || args.EnumerateObject().Any(p => p.Name is not ("url" or "path" or "expectedSha256"))
+        if (args.ValueKind != JsonValueKind.Object || args.EnumerateObject().Any(p => p.Name is not ("url" or "path"))
             || args.EnumerateObject().Select(p => p.Name).Distinct(StringComparer.Ordinal).Count() != args.EnumerateObject().Count()
             || !TryString(args, "url", out var urlText) || urlText.Length > 4096
             || !Uri.TryCreate(urlText, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https") || url.UserInfo.Length != 0)
@@ -30,15 +30,6 @@ public sealed partial class SessionToolExecutor
             if (!TryString(args, "path", out var raw) || raw.Length > 1024) return Error("invalid", "path must be a Workspace file path.");
             path = DownloadPath(raw);
         }
-        string? expectedHash = null;
-        if (args.TryGetProperty("expectedSha256", out _))
-        {
-            if (path is null || !TryString(args, "expectedSha256", out expectedHash) || expectedHash.Length != 64 || !expectedHash.All(Uri.IsHexDigit))
-                return Error("invalid", "Replacement requires an explicit path and current expectedSha256.");
-            expectedHash = expectedHash.ToLowerInvariant();
-        }
-        // Preflight known destinations; the storage owner rechecks atomically at commit.
-        if (path is not null) await PreflightAsync(path);
         var started = Stopwatch.GetTimestamp();
         var result = await publicWebFetcher.DownloadAsync(new(url), ct);
         RuntimeTelemetry.Record("web.download", RuntimeTelemetry.ElapsedMs(started));
@@ -48,7 +39,7 @@ public sealed partial class SessionToolExecutor
         var mismatch = DownloadTypeMismatch(path, result.Bytes);
         if (mismatch is not null) return JsonSerializer.Serialize(new { status = "failed", untrusted = true, finalUrl = result.FinalUrl, contentType = result.ContentType, error = "file_type_mismatch", message = mismatch });
         var contentType = DownloadContentType(path, result.ContentType);
-        await agentWorkspace.CommitBinaryAsync(sessionId, path, contentType, result.Bytes, expectedHash, ct);
+        await agentWorkspace.CommitBinaryAsync(sessionId, path, contentType, result.Bytes, ct);
         return JsonSerializer.Serialize(new { status = "completed", untrusted = true, path = AgentWorkspacePaths.Public(path), sourceUrl = url.AbsoluteUri, finalUrl = result.FinalUrl,
             contentType, declaredContentType = result.ContentType, byteSize = result.Bytes.Length, sha256 = Convert.ToHexStringLower(SHA256.HashData(result.Bytes)),
             published = false, formatValidation = "Basic signature checks only; inspect with the appropriate tool before claiming format validity or editing support." });
@@ -60,16 +51,6 @@ public sealed partial class SessionToolExecutor
                 throw AgentCoreErrors.Forbidden("Download destinations must be files in /home or current Session /working.");
             AgentCore.Application.Agents.StateIsolationAccess.RequireHome(isolation, resolved, true);
             return resolved;
-        }
-        async Task PreflightAsync(string destination)
-        {
-            await workspace.EnsureAsync(sessionId, definition, ct);
-            WorkspaceContent? existing = null;
-            try { existing = await ReadExecutionWorkspaceAsync(sessionId, definition, destination, ct); }
-            catch (AgentCoreException ex) when (ex.Code == "NotFound") { }
-            if (existing is not null && (expectedHash is null || Convert.ToHexStringLower(SHA256.HashData(existing.Bytes)) != expectedHash))
-                throw AgentCoreErrors.Conflict("Destination exists or its hash changed. Inspect it before requesting replacement.");
-            if (existing is null && expectedHash is not null) throw AgentCoreErrors.Conflict("Replacement destination no longer exists.");
         }
     }
 

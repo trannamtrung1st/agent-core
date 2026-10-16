@@ -14,7 +14,7 @@ public sealed class ArtifactMaterializeTests
     public async Task Materialize_copies_workspace_file_preserves_hash_and_survives_deactivate()
     {
         var root = Path.Combine(Path.GetTempPath(), "agent-core-art", Guid.NewGuid().ToString("N"));
-        var workspace = new FileSessionWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "tpl"), sessions: new WorkspaceTestSessions());
+        var workspace = WorkspaceTestSessions.CreateWorkspace(Path.Combine(root, "ws"), Path.Combine(root, "tpl"));
         var attachments = new InMemoryAttachmentStore(TimeProvider.System);
         var artifacts = new InMemoryArtifactStore(TimeProvider.System);
         var manager = CreateManager(new InMemoryMemoryStore(), attachments, workspace, artifacts);
@@ -29,7 +29,7 @@ public sealed class ArtifactMaterializeTests
         var first = await manager.MaterializeAttachmentAsync(created.SessionId, uploaded.AttachmentId);
         Assert.Equal(uploaded.Sha256Hex, first.Sha256Hex);
         Assert.Equal(uploaded.AttachmentId, first.SourceAttachmentId);
-        Assert.Equal("/workspace/working/notes.txt", first.WorkspaceLogicalPath);
+        Assert.Equal("/working/notes.txt", first.WorkspaceLogicalPath);
         var working = await manager.ReadWorkspaceAsync(created.SessionId, "/working/notes.txt");
         Assert.Equal("hello-artifact"u8.ToArray(), working.Bytes);
         await using var original = await attachments.OpenContentAsync(created.SessionId, uploaded.AttachmentId);
@@ -38,7 +38,7 @@ public sealed class ArtifactMaterializeTests
         Assert.Equal("hello-artifact"u8.ToArray(), copy.ToArray());
 
         var second = await manager.MaterializeAttachmentAsync(created.SessionId, uploaded.AttachmentId);
-        Assert.Equal("/workspace/working/notes-2.txt", second.WorkspaceLogicalPath);
+        Assert.Equal("/working/notes-2.txt", second.WorkspaceLogicalPath);
 
         await manager.DeactivateAsync(created.SessionId);
         var listed = await manager.ListArtifactsAsync(created.SessionId);

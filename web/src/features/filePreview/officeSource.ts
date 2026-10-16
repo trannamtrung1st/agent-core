@@ -19,6 +19,7 @@ export type OfficeCell = {
 export type OfficePreview = {
   format: 'docx' | 'xlsx';
   emptyBody?: boolean;
+  sourceBase64?: string;
   sha256: string;
   warnings: string[];
   sheets?: string[];
@@ -35,7 +36,7 @@ export async function readOfficePreview(
   range?: string,
 ): Promise<OfficePreview> {
   const query = new URLSearchParams(
-    file.kind === 'drive' ? driveReadQuery(file) : '',
+    file.kind === 'drive' ? driveReadQuery(file) : file.kind === 'home' ? new URLSearchParams({path: file.path}).toString() : '',
   );
   const selection = new URLSearchParams({
     ...(sheet ? { sheet } : {}),
