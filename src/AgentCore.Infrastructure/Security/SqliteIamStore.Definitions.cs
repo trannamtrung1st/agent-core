@@ -11,6 +11,11 @@ public sealed partial class SqliteIamStore
 {
     public async ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
+        if (TenantSessionRules.TryId(scope, out var session))
+        {
+            await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+            return await OwnedSessions(db, scope.TenantId!.Value).AnyAsync(s => s.SessionId == session.ToString("D"), ct).ConfigureAwait(false);
+        }
         if (TenantCredentialRules.TryId(scope, out var credential))
         {
             await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);

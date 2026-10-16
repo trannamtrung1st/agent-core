@@ -29,9 +29,9 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
     }
     private sealed class ConfigurationGateLease(object gate) : IDisposable { public void Dispose() => Monitor.Exit(gate); }
     private readonly Dictionary<Guid, AgentInstance> _instances = [];
-    private readonly HashSet<Guid> _tenantOwnedInstances = [];
-    internal void MarkTenantOwned(Guid instanceId) { lock (_gate) _tenantOwnedInstances.Add(instanceId); }
-    internal bool IsTenantOwned(Guid instanceId) { lock (_gate) return _tenantOwnedInstances.Contains(instanceId); }
+    private System.Collections.Immutable.ImmutableHashSet<Guid> _tenantOwnedInstances = [];
+    internal void MarkTenantOwned(Guid instanceId) { lock (_gate) Volatile.Write(ref _tenantOwnedInstances, _tenantOwnedInstances.Add(instanceId)); }
+    internal bool IsTenantOwned(Guid instanceId) => Volatile.Read(ref _tenantOwnedInstances).Contains(instanceId);
 
     internal InMemoryTriggerStore? TriggerStore { get; set; }
 

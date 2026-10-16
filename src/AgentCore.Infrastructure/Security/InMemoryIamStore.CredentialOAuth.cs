@@ -12,7 +12,7 @@ public sealed partial class InMemoryIamStore
         AuthorizationAudit audit, CancellationToken ct = default) => ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
         {
             if (audit.ActorPrincipalId != initiator.PrincipalId) throw new ArgumentException("Invalid OAuth actor.");
-            RequireOAuthInitiator(next.Tenant.TenantId, initiator);
+            RequireHumanSession(next.Tenant.TenantId, initiator);
             if (!CredentialBacking().ApplyTenantOAuthCheck(next.Tenant.TenantId, credentialId, expectedCredentialRevision, expectedSecretRevision, check, OAuthNow)) return false;
             if (check.ReconnectRequired) SupersedeOAuth(next.Tenant.TenantId, credentialId);
             return true;
@@ -28,7 +28,7 @@ public sealed partial class InMemoryIamStore
         return ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
         {
             if (attempt.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != attempt.PrincipalId) throw new ArgumentException("Invalid OAuth ownership.");
-            RequireOAuthInitiator(attempt.TenantId, new(attempt.AccountId, attempt.AuthenticationSessionId, attempt.PrincipalId));
+            RequireHumanSession(attempt.TenantId, new(attempt.AccountId, attempt.AuthenticationSessionId, attempt.PrincipalId));
             var current = CredentialBacking().ReadTenantCredential(attempt.TenantId, attempt.CredentialId)?.Value;
             if (current is null || current.Revision != attempt.CredentialRevision || current.Purpose != attempt.Purpose || current.Status != CredentialStatus.Active
                 || !TenantCredentialOAuthRules.IsOAuth(current) || TenantCredentialOAuthRules.Epoch(current) != attempt.AuthEpoch || attempt.CreatedAt > OAuthNow || attempt.ExpiresAt <= OAuthNow
@@ -46,7 +46,7 @@ public sealed partial class InMemoryIamStore
             var a = _credentialOAuthAttempts.GetValueOrDefault(id); var now = OAuthNow;
             if (a is null || a.Outcome != CredentialOAuthOutcome.Pending || a.ExpiresAt <= now || _tenants.GetValueOrDefault(a.TenantId)?.Tenant.Revision != expectedSecurityRevision
                 || !TenantCredentialOAuthRules.DigestMatches(a.StateHash, stateHash) || !TenantCredentialOAuthRules.DigestMatches(a.CorrelationHash, correlationHash)) return ValueTask.FromResult<CredentialOAuthClaim?>(null);
-            RequireOAuthInitiator(a.TenantId, new(a.AccountId, a.AuthenticationSessionId, a.PrincipalId));
+            RequireHumanSession(a.TenantId, new(a.AccountId, a.AuthenticationSessionId, a.PrincipalId));
             var current = CredentialBacking().ReadTenantCredential(a.TenantId, a.CredentialId)?.Value;
             if (current is null || current.Revision != a.CredentialRevision || current.Purpose != a.Purpose || current.Status != CredentialStatus.Active
                 || !TenantCredentialOAuthRules.IsOAuth(current) || TenantCredentialOAuthRules.Epoch(current) != a.AuthEpoch) return ValueTask.FromResult<CredentialOAuthClaim?>(null);
@@ -63,7 +63,7 @@ public sealed partial class InMemoryIamStore
             var a = _credentialOAuthAttempts.GetValueOrDefault(id); var now = OAuthNow;
             if (a is null || a.Outcome != CredentialOAuthOutcome.Claimed || a.Revision != claimRevision || a.ExpiresAt <= now
                 || a.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != a.PrincipalId || value.CredentialId != a.CredentialId) return false;
-            RequireOAuthInitiator(a.TenantId, new(a.AccountId, a.AuthenticationSessionId, a.PrincipalId));
+            RequireHumanSession(a.TenantId, new(a.AccountId, a.AuthenticationSessionId, a.PrincipalId));
             var current = CredentialBacking().ReadTenantCredential(a.TenantId, a.CredentialId)?.Value;
             if (current is null || current.Revision != a.CredentialRevision || !TenantCredentialOAuthRules.IsOAuth(current) || TenantCredentialOAuthRules.Epoch(current) != a.AuthEpoch) return false;
             TenantCredentialOAuthValidation.RequireConnection(current, value, a.Provider.Synthetic);
@@ -78,7 +78,7 @@ public sealed partial class InMemoryIamStore
         return ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
         {
             if (audit.ActorPrincipalId != initiator.PrincipalId) throw new ArgumentException("Invalid OAuth actor.");
-            RequireOAuthInitiator(next.Tenant.TenantId, initiator);
+            RequireHumanSession(next.Tenant.TenantId, initiator);
             var current = CredentialBacking().ReadTenantCredential(next.Tenant.TenantId, credentialId)?.Value;
             if (current is null || current.Revision != expectedCredentialRevision || current.SecretRevision != expectedSecretRevision) return false;
             if (!CredentialBacking().SaveTenantOAuthAuthorization(next.Tenant.TenantId, TenantCredentialOAuthRules.Disconnect(current, OAuthNow), expectedCredentialRevision, expectedSecretRevision)) return false;
@@ -108,7 +108,7 @@ public sealed partial class InMemoryIamStore
         foreach (var a in _credentialOAuthAttempts.Values.Where(a => a.TenantId == tenant && a.CredentialId == credential && a.Outcome is CredentialOAuthOutcome.Pending or CredentialOAuthOutcome.Claimed).ToArray())
             _credentialOAuthAttempts[a.AttemptId] = a with { Outcome = CredentialOAuthOutcome.Superseded, CompletedAt = now, ProtectedProof = "", Revision = checked(a.Revision + 1) };
     }
-    private void RequireOAuthInitiator(Guid tenant, CredentialOAuthInitiator initiator)
+    private void RequireHumanSession(Guid tenant, HumanSessionReference initiator)
     {
         var state = _tenants.GetValueOrDefault(tenant); var account = _accounts.GetValueOrDefault(initiator.AccountId); var session = _sessions.GetValueOrDefault(initiator.AuthenticationSessionId);
         if (state?.Tenant.Status != IdentityStatus.Active || account?.Status != IdentityStatus.Active || session is null || session.AccountId != account.AccountId

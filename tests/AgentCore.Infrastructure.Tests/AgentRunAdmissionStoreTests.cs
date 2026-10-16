@@ -1209,6 +1209,11 @@ public sealed class AgentRunAdmissionStoreTests
                 2 => snapshot with { ProfileId = Guid.NewGuid() },
                 _ => snapshot with { ArchivedAt = Now }
             };
+            if (i == 1)
+            {
+                await Assert.ThrowsAsync<AgentCoreException>(() => f.Memory.SaveAsync(updated with { Revision = snapshot.Revision + 1 }, snapshot.Revision).AsTask());
+                updated = snapshot with { DurablyDeletedAt = Now };
+            }
             await f.Memory.SaveAsync(updated with { Revision = snapshot.Revision + 1 }, snapshot.Revision);
         }
         await f.ReopenAsync();

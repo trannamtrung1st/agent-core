@@ -4,7 +4,8 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Ports;
 
 public enum CredentialOAuthOutcome { Pending, Claimed, Connected, Denied, Failed, Expired, Superseded }
-public sealed record CredentialOAuthInitiator(Guid AccountId, Guid AuthenticationSessionId, Guid PrincipalId);
+public sealed record CredentialOAuthInitiator(Guid AccountId, Guid AuthenticationSessionId, Guid PrincipalId)
+    : HumanSessionReference(AccountId, AuthenticationSessionId, PrincipalId);
 public sealed record CredentialOAuthDescriptor(string ClientId, string RedirectUri, bool Synthetic, bool Configured, bool HostEnabled = true);
 public sealed record CredentialOAuthAttempt(Guid AttemptId, Guid TenantId, Guid CredentialId, CredentialPurpose Purpose,
     Guid AccountId, Guid AuthenticationSessionId, Guid PrincipalId, long CredentialRevision, long AuthEpoch,

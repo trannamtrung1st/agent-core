@@ -2,6 +2,16 @@
 
 ## Canonical Account and tenant access HTTP foundation
 
+Canonical Session metadata uses `/api/v2/tenants/{tenantId}/sessions` with current Account cookie, tenant membership, no-store and mutation CSRF. It has no owner-capability fallback. These endpoints create and inspect a saved Session; tenant-aware live messaging and Run admission remain pending.
+
+| Method/path | Contract |
+| --- | --- |
+| `POST /` | `{ agentInstanceId, expectedRevision, expectedInstanceRevision, mode = "text", modelKey?, reasoningEffort? }`. Current human/session; tenant `sessions.create/read`; exact owned Instance `agents.chat`. Pins actual active executor, source version, settings/model/persona and creator. Returns 201 safe metadata; no global profile, caller-supplied Principal or authority snapshot. |
+| `GET /` | `page`/`pageSize` default 0/30, capped at 100. Current tenant/exact Session read filters precede count/paging. Returns `{ items, total, page, pageSize }`. |
+| `GET /{sessionId}` | Actual same-tenant Session and scoped `sessions.read`; returns safe metadata only. |
+
+Session metadata fields are `tenantId`, `sessionId`, `agentInstanceId`, `executorPrincipalId`, `createdByPrincipalId`, `title`, lowercase `mode`/`status`, `revision`, `createdAt`, `updatedAt`. It contains no Definition, instructions, global ProfileId, owner capability, entries or summary. Missing authentication is 401; foreign/unavailable resource or insufficient authority is 403; invalid mode/inputs are 400; stale security/Instance witnesses are 409. Creator attribution grants no automatic resource or tool authority. [Executed HTTP and persistence evidence](reports/tenant-session-ownership-verification-2026-10-17.md).
+
 The UI successor uses `GET /api/v2/tenants/{tenantId}/access/me` for safe current User roles and effective tenant-wide permission keys. `GET /api/v2/account/me` also returns `systemPermissions`; its global Principal reference alone grants no system authority. Organization/member collections accept `q` before pagination and never search another Account/tenant. `GET /api/v2/tenants/{tenantId}/members/invitations` requires `members.invite` and returns the latest 100 safe invitation summaries/statuses with the security revision, never purpose tokens or token hashes. Invitation links carry their one-use proof in the fragment; the UI clears it from history and sends the proof in CSRF-protected POST bodies.
 
 Human authentication uses a same-origin HttpOnly `agentcore.session` cookie, SameSite Strict, Secure under HTTPS, twelve-hour maximum age and no sliding renewal. The encrypted ticket contains Account/session references, not role/permission snapshots. Current server session revocation, Account status and security stamp are validated on every request. Native cleartext HTTP requires explicit `Security:Http:AllowInsecureLocalHttp=true` and a loopback caller; it never enables remote cleartext authentication. Account-session data protection uses the configured credential-key root under the separate `account-sessions` purpose/directory.

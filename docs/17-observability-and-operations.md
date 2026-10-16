@@ -1,5 +1,7 @@
 # Observability and Operations
 
+Canonical tenant Session metadata creation requires the authenticated human session, current tenant Session create/read and exact Instance chat authority. It saves a new owned Session without starting a runtime, creating a global profile or mounting a workspace. Legacy owner routes and recovery do not adopt these Sessions. [Verification and remaining runtime gates](reports/tenant-session-ownership-verification-2026-10-17.md). Existing installations still require the explicit reviewed final cutover/reset procedure; no application data is reset by this checkpoint.
+
 ## Explicit identity bootstrap foundation
 
 The multi-tenant cutover is in progress; the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) records remaining resource/Hub/UI integration. These commands initialize the new identity foundation only. Do not deploy intermediate source or reset an existing user database to make it start. No live-data deletion is authorized. The current schema guard refuses an incomplete/older populated baseline rather than migrating its unscoped records into a tenant.

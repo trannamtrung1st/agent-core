@@ -84,7 +84,7 @@ public sealed partial class TenantCredentialIntegrationTests
         foreach (var secret in secrets) Assert.DoesNotContain(secret, json);
         foreach (var field in new[] { "ProtectedPayload", "ProtectionVersion", "SecretRevision", "ProtectedValue" }) Assert.DoesNotContain(field, json, StringComparison.OrdinalIgnoreCase);
     }
-    private sealed class Fixture(TimeProvider? clock = null) : IAsyncDisposable
+    internal sealed class Fixture(TimeProvider? clock = null) : IAsyncDisposable
     {
         public TimeProvider Clock { get; } = clock ?? TimeProvider.System;
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "tenant-credentials-" + Guid.NewGuid().ToString("N"));
@@ -92,6 +92,10 @@ public sealed partial class TenantCredentialIntegrationTests
         public ITenantCredentialStore Credentials => (ITenantCredentialStore)Iam;
         public ICredentialStore Legacy { get; private set; } = null!;
         public IAgentInstanceStore Instances { get; private set; } = null!;
+        public IMemoryStore Memory { get; private set; } = null!;
+        public TenantSessionService Sessions => SessionService((ITenantSessionStore)Iam);
+        public TenantSessionService SessionService(ITenantSessionStore sessions) => new(Iam, (ITenantAgentStore)Iam, sessions, (ITenantDefinitionStore)Iam, BuiltIns,
+            Identity, Authorizer, ModelCatalogFactory.Create("Synthetic", null, null), new(), Ids, Clock);
         public IIdGenerator Ids { get; } = new SystemIdGenerator(TimeProvider.System);
         public IIdentityTokens Tokens { get; } = new IdentityTokens();
         public IamAuthorizer Authorizer => new(Iam);
@@ -121,12 +125,14 @@ public sealed partial class TenantCredentialIntegrationTests
                     f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").Options);
                     await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
                     f.Iam = new SqliteIamStore(f.Contexts, clock: f.Clock); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
+                    f.Memory = new SqliteMemoryStore(f.Contexts, f.Clock);
                 }
                 else
                 {
                     var instances = new InMemoryAgentInstanceStore(); var credentials = new InMemoryCredentialStore(instances);
                     f.Legacy = credentials; f.Instances = instances;
-                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), new InMemoryMemoryStore(), credentials: credentials, clock: f.Clock);
+                    var memory = new InMemoryMemoryStore(instances); f.Memory = memory;
+                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), memory, credentials: credentials, clock: f.Clock);
                 }
                 return f;
             }

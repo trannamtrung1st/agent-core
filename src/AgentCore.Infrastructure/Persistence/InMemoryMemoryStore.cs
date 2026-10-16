@@ -5,14 +5,14 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryMemoryStore : IMemoryStore
+public sealed partial class InMemoryMemoryStore(InMemoryAgentInstanceStore? instances = null) : IMemoryStore
 {
     public ValueTask<DurableSessionState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            var rows = _sessions.Values.Where(s => s.AgentInstanceId == owner.AgentInstanceId && s.ProfileId == owner.ProfileId
+            var rows = LegacySessions.Where(s => s.AgentInstanceId == owner.AgentInstanceId && s.ProfileId == owner.ProfileId
                 && s.DurablyDeletedAt is null && s.ArchivedAt is null).ToArray();
             return ValueTask.FromResult(new DurableSessionState(rows.Count(s => s.LifecycleStatus == SessionLifecycleStatus.Active),
                 rows.Count(s => s.LifecycleStatus == SessionLifecycleStatus.Paused), rows.Count(s => SessionLifecycle.IsTerminal(s.LifecycleStatus)),
@@ -46,7 +46,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
 
     internal IReadOnlyList<Guid> PendingInputSessions(int limit)
     {
-        lock (_gate) return _sessions.Values.Where(session => session.PendingAgentInputIds.Count > 0
+        lock (_gate) return LegacySessions.Where(session => session.PendingAgentInputIds.Count > 0
                 && session.DurablyDeletedAt is null && session.ArchivedAt is null
                 && !SessionLifecycle.IsTerminal(session.LifecycleStatus)
                 && session.Status is not (SessionStatus.Ended or SessionStatus.Ending)
@@ -90,7 +90,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            return _sessions.TryGetValue(sessionId, out var snapshot)
+            return !tenantSessions.ContainsKey(sessionId) && _sessions.TryGetValue(sessionId, out var snapshot)
                 ? ValueTask.FromResult<SessionSnapshot?>(CloneWindow(snapshot, sessionId))
                 : ValueTask.FromResult<SessionSnapshot?>(null);
         }
@@ -103,7 +103,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            return _sessions.TryGetValue(sessionId, out var snapshot)
+            return !tenantSessions.ContainsKey(sessionId) && _sessions.TryGetValue(sessionId, out var snapshot)
                 ? ValueTask.FromResult<SessionSnapshot?>(CloneMeta(snapshot))
                 : ValueTask.FromResult<SessionSnapshot?>(null);
         }
@@ -114,6 +114,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
+            if (tenantSessions.ContainsKey(snapshot.SessionId) || tenantInstances?.IsTenantOwned(snapshot.AgentInstanceId) == true) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
             if (!_sessions.TryGetValue(snapshot.SessionId, out var existing))
             {
                 if (expectedRevision != 0 || snapshot.Revision != 1)
@@ -126,6 +127,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
             }
 
             var storedWindow = CloneForCompare(existing, snapshot.SessionId, snapshot.Entries);
+            if (existing.AgentInstanceId != snapshot.AgentInstanceId) throw AgentCoreErrors.Conflict("Session Instance identity is immutable.");
             if (existing.Revision == snapshot.Revision && SameContent(storedWindow, snapshot))
             {
                 return ValueTask.CompletedTask;
@@ -153,7 +155,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            if (!_entries.TryGetValue(sessionId, out var entries))
+            if (tenantSessions.ContainsKey(sessionId) || !_entries.TryGetValue(sessionId, out var entries))
             {
                 return ValueTask.FromResult<IReadOnlyList<ConversationEntry>>([]);
             }
@@ -177,7 +179,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            if (!_sessions.TryGetValue(sessionId, out var snapshot) || snapshot.DurablyDeletedAt is not null)
+            if (tenantSessions.ContainsKey(sessionId) || !_sessions.TryGetValue(sessionId, out var snapshot) || snapshot.DurablyDeletedAt is not null)
             {
                 return ValueTask.FromResult<ConversationHistoryPage?>(null);
             }
@@ -249,7 +251,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            foreach (var id in _sessions.Keys.ToArray())
+            foreach (var id in _sessions.Keys.Where(id => !tenantSessions.ContainsKey(id)).ToArray())
             {
                 var snapshot = Full(id);
                 var ownedResponses = AgentRuns.Runs.Values.Where(run => run.SessionId == id && !run.IsTerminal)
@@ -267,7 +269,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
-            return ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>(_sessions.Values
+            return ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>(LegacySessions
                 .Where(s => s.AgentInstanceId == instanceId && s.ProfileId == profileId && s.DurablyDeletedAt is null
                     && (!activeOnly || s.Status == SessionStatus.Attached && s.LifecycleStatus == SessionLifecycleStatus.Active))
                 .OrderByDescending(s => s.UpdatedAt).ThenByDescending(s => s.SessionId)
@@ -279,7 +281,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
-        lock (_gate) return ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>(_sessions.Values
+        lock (_gate) return ValueTask.FromResult<IReadOnlyList<SessionSnapshot>>(LegacySessions
             .Where(s => s.AgentInstanceId == instanceId && s.ProfileId == profileId && s.DurablyDeletedAt is null
                 && s.Status == SessionStatus.Attached && s.LifecycleStatus == SessionLifecycleStatus.Active
                 && (afterId is null || string.CompareOrdinal(s.SessionId.ToString("D"), afterId.Value.ToString("D")) > 0))
@@ -292,7 +294,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         ct.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            var items = _sessions.Values.Where(session => session.AgentInstanceId == owner.AgentInstanceId && session.ProfileId == owner.ProfileId
+            var items = LegacySessions.Where(session => session.AgentInstanceId == owner.AgentInstanceId && session.ProfileId == owner.ProfileId
                 && session.Surfaces.HasFlag(SessionSurface.BackgroundWork)).Select(CloneMeta).ToArray();
             return ValueTask.FromResult(CatalogCursor.Page(items, cursor, limit, includeArchived));
         }
@@ -303,7 +305,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         ct.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            var items = _sessions.Values.Where(session => session.AgentInstanceId == owner.AgentInstanceId && session.ProfileId == owner.ProfileId).Select(CloneMeta).ToArray();
+            var items = LegacySessions.Where(session => session.AgentInstanceId == owner.AgentInstanceId && session.ProfileId == owner.ProfileId).Select(CloneMeta).ToArray();
             return ValueTask.FromResult(CatalogCursor.Page(items, cursor, limit, true));
         }
     }
@@ -312,7 +314,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
     {
         ct.ThrowIfCancellationRequested();
         lock (_gate)
-            return ValueTask.FromResult(CatalogCursor.Page(_sessions.Values.Where(s => SessionLifecycle.IsTerminal(s.LifecycleStatus))
+            return ValueTask.FromResult(CatalogCursor.Page(LegacySessions.Where(s => SessionLifecycle.IsTerminal(s.LifecycleStatus))
                 .Select(CloneMeta).ToArray(), cursor, limit, true));
     }
 
@@ -325,7 +327,7 @@ public sealed class InMemoryMemoryStore : IMemoryStore
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate)
         {
-            var items = _sessions.Values.Where(session => session.Surfaces.HasFlag(SessionSurface.ChatList)).Select(CloneMeta).ToArray();
+            var items = LegacySessions.Where(session => session.Surfaces.HasFlag(SessionSurface.ChatList)).Select(CloneMeta).ToArray();
             return ValueTask.FromResult(CatalogCursor.Page(items, cursor, limit, includeArchived));
         }
     }

@@ -71,6 +71,9 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         TriggerOccurrenceRecord? occurrenceRow = null;
+        if (await db.Set<AgentCore.Infrastructure.Security.TenantSessionRecord>().AnyAsync(s => s.SessionId == snapshot.SessionId.ToString("D"), cancellationToken).ConfigureAwait(false)
+            || await db.Set<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().AnyAsync(i => i.AgentInstanceId == snapshot.AgentInstanceId.ToString("D"), cancellationToken).ConfigureAwait(false))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         TriggerOccurrence? occurrence = null;
         if (expectedRoutingRevision is { } routingRevision)
         {

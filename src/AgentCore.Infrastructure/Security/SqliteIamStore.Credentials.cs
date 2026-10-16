@@ -33,7 +33,7 @@ public sealed partial class SqliteIamStore
         Credential value, long expectedRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next); value = TenantCredentialRules.Freeze(value);
-        return WriteCredentialAsync(next, expectedSecurityRevision, audit, async db =>
+        return WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             if (owner.TenantId != next.Tenant.TenantId) throw new ArgumentException("Invalid credential ownership.");
             var key = owner.CredentialId.ToString("D");
@@ -51,7 +51,7 @@ public sealed partial class SqliteIamStore
         long expectedRevision, long expectedSecretRevision, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next);
-        return WriteCredentialAsync(next, expectedSecurityRevision, audit, async db =>
+        return WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var key = credentialId.ToString("D");
             if (next.Assignments.Any(a => a.Scope == TenantCredentialRules.Scope(next.Tenant.TenantId, credentialId)))
@@ -63,7 +63,7 @@ public sealed partial class SqliteIamStore
             db.Credentials.Remove(row); db.Entry(root).CurrentValues.SetValues(root with { DeletedAt = at }); return true;
         }, ct);
     }
-    private async ValueTask<bool> WriteCredentialAsync(TenantSecurityState next, long expected, AuthorizationAudit audit,
+    private async ValueTask<bool> WriteTenantResourceAsync(TenantSecurityState next, long expected, AuthorizationAudit audit,
         Func<AgentCoreDbContext, Task<bool>> change, CancellationToken ct)
     {
         next = IamStateRules.Freeze(next);

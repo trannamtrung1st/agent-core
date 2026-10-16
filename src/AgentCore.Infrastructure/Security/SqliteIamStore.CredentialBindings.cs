@@ -32,7 +32,7 @@ public sealed partial class SqliteIamStore
         next = IamStateRules.Freeze(next); TenantCredentialBindingRules.NewBinding(binding);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, binding.AgentInstanceId, AgentInstanceLifecycle.Active, audit);
         TenantAgent? result = null;
-        var saved = await WriteCredentialAsync(next, expectedSecurityRevision, audit, async db =>
+        var saved = await WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             // Inventory joins default to no tracking; this transaction must update the backing Instance.
             var parent = await OwnedAgents(db, next.Tenant.TenantId).AsTracking().SingleOrDefaultAsync(item => item.Instance.InstanceId == binding.AgentInstanceId.ToString("D"), ct).ConfigureAwait(false);
@@ -58,7 +58,7 @@ public sealed partial class SqliteIamStore
         next = IamStateRules.Freeze(next);
         IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, instanceId, AgentInstanceLifecycle.Active, audit);
         TenantAgent? result = null;
-        var saved = await WriteCredentialAsync(next, expectedSecurityRevision, audit, async db =>
+        var saved = await WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var parent = await OwnedAgents(db, next.Tenant.TenantId).AsTracking().SingleOrDefaultAsync(item => item.Instance.InstanceId == instanceId.ToString("D"), ct).ConfigureAwait(false);
             if (parent is null || parent.Instance.Revision != expectedInstanceRevision) return false;

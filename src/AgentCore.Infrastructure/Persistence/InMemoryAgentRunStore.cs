@@ -135,6 +135,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
         AgentRun run, CancellationToken cancellationToken, bool occurrenceValidated = false, Guid? expectedParentGeneration = null, Guid? completionSourceRunId = null, bool preserveSession = false, IReadOnlyList<Guid>? additionalCompletionSources = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (sessions.RequiresTenantContext(snapshot.SessionId, snapshot.AgentInstanceId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         AgentRunStoreMapping.ValidateAdmission(snapshot, run);
         snapshot = snapshot with { PendingAgentInputIds = snapshot.PendingAgentInputIds.Except(run.Admission.Activation.SourceEntryIds).ToArray() };
         if (!occurrenceValidated && run.Admission.Activation.TriggerOccurrenceId is not null

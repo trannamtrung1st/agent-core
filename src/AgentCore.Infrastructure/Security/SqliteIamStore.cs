@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore
+    TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore
 {
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await db.Set<Account>().AsNoTracking().SingleOrDefaultAsync(a => a.LoginKey == loginKey, ct).ConfigureAwait(false); }
@@ -161,6 +161,9 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     }
     private async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
+        foreach (var assignment in state.Assignments.Where(a => TenantSessionRules.TryId(a.Scope, out _)))
+            if (!await OwnedSessions(db, state.Tenant.TenantId).AnyAsync(s => s.SessionId == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
+                throw new ArgumentException("A Session assignment requires a current owned Session.");
         foreach (var assignment in state.Assignments.Where(a => TenantCredentialRules.TryId(a.Scope, out _)))
             if (!await OwnedCredentials(db, state.Tenant.TenantId).AnyAsync(c => c.CredentialId == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
                 throw new ArgumentException("A credential assignment requires a current owned credential.");

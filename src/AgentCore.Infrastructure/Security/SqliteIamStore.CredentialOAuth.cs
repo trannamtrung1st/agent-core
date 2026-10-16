@@ -11,10 +11,10 @@ public sealed partial class SqliteIamStore
 {
     public ValueTask<bool> TryCheckCredentialOAuthAsync(TenantSecurityState next, long expectedSecurityRevision, Guid credentialId,
         CredentialOAuthInitiator initiator, long expectedCredentialRevision, long expectedSecretRevision, CredentialOAuthCheck check,
-        AuthorizationAudit audit, CancellationToken ct = default) => WriteCredentialAsync(next, expectedSecurityRevision, audit, async db =>
+        AuthorizationAudit audit, CancellationToken ct = default) => WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             if (audit.ActorPrincipalId != initiator.PrincipalId) throw new ArgumentException("Invalid OAuth actor.");
-            await RequireOAuthInitiatorAsync(db, next.Tenant.TenantId, initiator, ct).ConfigureAwait(false);
+            await RequireHumanSessionAsync(db, next.Tenant.TenantId, initiator, ct).ConfigureAwait(false);
             var row = await OAuthCredentialAsync(db, next.Tenant.TenantId, credentialId, ct).ConfigureAwait(false);
             if (row is null || row.Revision != expectedCredentialRevision || row.SecretRevision != expectedSecretRevision) return false;
             var value = TenantCredentialOAuthRules.Checked(SqliteCredentialStore.Map(row), check, OAuthNow);
@@ -34,10 +34,10 @@ public sealed partial class SqliteIamStore
         AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next); attempt = TenantCredentialOAuthRules.Attempt(attempt);
-        return WriteCredentialAsync(next, expectedSecurityRevision, audit, async db =>
+        return WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             if (attempt.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != attempt.PrincipalId) throw new ArgumentException("Invalid OAuth ownership.");
-            await RequireOAuthInitiatorAsync(db, attempt.TenantId, new(attempt.AccountId, attempt.AuthenticationSessionId, attempt.PrincipalId), ct).ConfigureAwait(false);
+            await RequireHumanSessionAsync(db, attempt.TenantId, new(attempt.AccountId, attempt.AuthenticationSessionId, attempt.PrincipalId), ct).ConfigureAwait(false);
             var row = await OAuthCredentialAsync(db, attempt.TenantId, attempt.CredentialId, ct).ConfigureAwait(false);
             var current = row is null ? null : SqliteCredentialStore.Map(row); var now = OAuthNow;
             if (current is null || current.Revision != attempt.CredentialRevision || current.Purpose != attempt.Purpose || current.Status != CredentialStatus.Active
@@ -60,7 +60,7 @@ public sealed partial class SqliteIamStore
         if (row is null || row.Outcome != CredentialOAuthOutcome.Pending || row.ExpiresAt <= now
             || !TenantCredentialOAuthRules.DigestMatches(row.StateHash, stateHash) || !TenantCredentialOAuthRules.DigestMatches(row.CorrelationHash, correlationHash)
             || !await db.Set<Tenant>().AnyAsync(t => t.TenantId == row.TenantId && t.Revision == expectedSecurityRevision, ct).ConfigureAwait(false)) return null;
-        await RequireOAuthInitiatorAsync(db, row.TenantId, new(row.AccountId, row.AuthenticationSessionId, row.PrincipalId), ct).ConfigureAwait(false);
+        await RequireHumanSessionAsync(db, row.TenantId, new(row.AccountId, row.AuthenticationSessionId, row.PrincipalId), ct).ConfigureAwait(false);
         var credential = await OAuthCredentialAsync(db, row.TenantId, Guid.Parse(row.CredentialId), ct).ConfigureAwait(false);
         var current = credential is null ? null : SqliteCredentialStore.Map(credential);
         if (current is null || current.Revision != row.CredentialRevision || current.Purpose.ToString() != row.Purpose || current.Status != CredentialStatus.Active
@@ -76,12 +76,12 @@ public sealed partial class SqliteIamStore
         Credential value, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next); value = TenantCredentialRules.Freeze(value);
-        return WriteCredentialAsync(next, expectedSecurityRevision, audit, async db =>
+        return WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var a = await db.Set<CredentialOAuthAttemptRow>().SingleOrDefaultAsync(a => a.AttemptId == id, ct).ConfigureAwait(false); var now = OAuthNow;
             if (a is null || a.Outcome != CredentialOAuthOutcome.Claimed || a.Revision != claimRevision || a.ExpiresAt <= now
                 || a.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != a.PrincipalId || value.CredentialId.ToString("D") != a.CredentialId) return false;
-            await RequireOAuthInitiatorAsync(db, a.TenantId, new(a.AccountId, a.AuthenticationSessionId, a.PrincipalId), ct).ConfigureAwait(false);
+            await RequireHumanSessionAsync(db, a.TenantId, new(a.AccountId, a.AuthenticationSessionId, a.PrincipalId), ct).ConfigureAwait(false);
             var row = await OAuthCredentialAsync(db, a.TenantId, value.CredentialId, ct).ConfigureAwait(false);
             if (row is null || row.Revision != a.CredentialRevision || row.SecretRevision != expectedSecretRevision) return false;
             var current = SqliteCredentialStore.Map(row);
@@ -98,10 +98,10 @@ public sealed partial class SqliteIamStore
         CredentialOAuthInitiator initiator, long expectedCredentialRevision, long expectedSecretRevision, AuthorizationAudit audit, CancellationToken ct = default)
     {
         next = IamStateRules.Freeze(next);
-        return WriteCredentialAsync(next, expectedSecurityRevision, audit, async db =>
+        return WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             if (audit.ActorPrincipalId != initiator.PrincipalId) throw new ArgumentException("Invalid OAuth actor.");
-            await RequireOAuthInitiatorAsync(db, next.Tenant.TenantId, initiator, ct).ConfigureAwait(false);
+            await RequireHumanSessionAsync(db, next.Tenant.TenantId, initiator, ct).ConfigureAwait(false);
             var row = await OAuthCredentialAsync(db, next.Tenant.TenantId, credentialId, ct).ConfigureAwait(false);
             if (row is null || row.Revision != expectedCredentialRevision || row.SecretRevision != expectedSecretRevision) return false;
             var value = TenantCredentialOAuthRules.Disconnect(SqliteCredentialStore.Map(row), OAuthNow);
@@ -138,7 +138,7 @@ public sealed partial class SqliteIamStore
     private static Task<CredentialRecord?> OAuthCredentialAsync(AgentCoreDbContext db, Guid tenant, Guid id, CancellationToken ct) =>
         OwnedCredentials(db, tenant).Include(c => c.EmailAccount).Include(c => c.DriveAccount).SingleOrDefaultAsync(c => c.CredentialId == id.ToString("D"), ct);
 
-    private async Task RequireOAuthInitiatorAsync(AgentCoreDbContext db, Guid tenant, CredentialOAuthInitiator initiator, CancellationToken ct)
+    private async Task RequireHumanSessionAsync(AgentCoreDbContext db, Guid tenant, HumanSessionReference initiator, CancellationToken ct)
     {
         var now = OAuthNow;
         var live = await (from session in db.Set<AuthenticationSession>()

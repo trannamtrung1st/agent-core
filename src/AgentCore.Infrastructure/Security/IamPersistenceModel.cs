@@ -18,6 +18,7 @@ internal static class IamPersistenceModel
     {
         TenantDefinitionRecord.Configure(model);
         TenantCredentialRecord.Configure(model);
+        TenantSessionRecord.Configure(model);
         CredentialOAuthAttemptRow.Configure(model);
         var accounts = model.Entity<Account>();
         accounts.ToTable("Accounts"); accounts.HasKey(x => x.AccountId);

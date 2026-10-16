@@ -4,6 +4,8 @@ using AgentCore.Application.Sessions;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Diagnostics;
+using AgentCore.Infrastructure.Security;
+using AgentCore.Application.Security;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -16,7 +18,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     public async ValueTask<DurableSessionState> ReadStateAsync(AgentRunOwner owner, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
-        var groups = await db.Sessions.AsNoTracking().Where(s => s.AgentInstanceId == owner.AgentInstanceId.ToString("D")
+        var groups = await LegacySessions(db).AsNoTracking().Where(s => s.AgentInstanceId == owner.AgentInstanceId.ToString("D")
             && s.Snapshot!.ProfileId == owner.ProfileId.ToString("D") && s.DurablyDeletedAtUtc == null && s.ArchivedAtUtc == null)
             .GroupBy(s => s.Snapshot!.LifecycleStatus ?? (s.Status == "Ended" ? "Ended" : s.Status == "Paused" ? "Paused" : "Active"))
             .Select(g => new { Status = g.Key, Count = g.Count(), UpdatedAt = g.Max(s => s.UpdatedAtUtc) }).ToArrayAsync(ct);
@@ -24,6 +26,8 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             groups.Where(g => g.Status is "Completed" or "Expired" or "Cancelled" or "Ended").Sum(g => g.Count),
             groups.Length == 0 ? null : DateTimeOffset.FromUnixTimeMilliseconds(groups.Max(g => g.UpdatedAt)));
     }
+
+    private static IQueryable<SessionRecord> LegacySessions(AgentCoreDbContext db) => db.Sessions.Where(s => !db.Set<TenantSessionRecord>().Any(t => t.SessionId == s.SessionId));
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -179,7 +183,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var key = sessionId.ToString("D");
-        var row = await db.Sessions
+        var row = await LegacySessions(db)
             .AsNoTracking()
             .Include(item => item.Snapshot)
             .SingleOrDefaultAsync(item => item.SessionId == key, cancellationToken)
@@ -201,7 +205,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var key = sessionId.ToString("D");
-        var row = await db.Sessions
+        var row = await LegacySessions(db)
             .AsNoTracking()
             .Include(item => item.Snapshot)
             .SingleOrDefaultAsync(item => item.SessionId == key, cancellationToken)
@@ -225,7 +229,10 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         long expectedRevision, CancellationToken cancellationToken)
     {
         var key = snapshot.SessionId.ToString("D");
-        var existing = await db.Sessions
+        if (await db.Set<TenantSessionRecord>().AnyAsync(s => s.SessionId == key, cancellationToken).ConfigureAwait(false)
+            || await db.Set<IamSystemIdentityRow>().AnyAsync(i => i.AgentInstanceId == snapshot.AgentInstanceId.ToString("D"), cancellationToken).ConfigureAwait(false))
+            throw new AccessDeniedException("tenant_context_required");
+        var existing = await LegacySessions(db)
             .Include(item => item.Snapshot)
             .SingleOrDefaultAsync(item => item.SessionId == key, cancellationToken)
             .ConfigureAwait(false);
@@ -243,6 +250,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
 
         var matched = await LoadMatchingEntryRowsAsync(db, key, snapshot.Entries, cancellationToken)
             .ConfigureAwait(false);
+        if (existing.AgentInstanceId != snapshot.AgentInstanceId.ToString("D")) throw AgentCoreErrors.Conflict("Session Instance identity is immutable.");
         var current = ToSnapshot(existing, matched);
         if (existing.Revision == snapshot.Revision && MemoryStoreSemantics.SameContent(current, snapshot))
         {
@@ -274,7 +282,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var key = sessionId.ToString("D");
         var rows = await db.Entries.AsNoTracking()
-            .Where(entry => entry.SessionId == key && entry.EntrySequence > afterEntrySequence)
+            .Where(entry => entry.SessionId == key && entry.EntrySequence > afterEntrySequence && LegacySessions(db).Any(s => s.SessionId == entry.SessionId))
             .OrderBy(entry => entry.EntrySequence)
             .Take(limit)
             .ToArrayAsync(cancellationToken)
@@ -293,7 +301,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var key = sessionId.ToString("D");
-        var exists = await db.Sessions.AsNoTracking()
+        var exists = await LegacySessions(db).AsNoTracking()
             .AnyAsync(row => row.SessionId == key && row.DurablyDeletedAtUtc == null, cancellationToken)
             .ConfigureAwait(false);
         if (!exists)
@@ -414,7 +422,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
             .ToArrayAsync(cancellationToken).ConfigureAwait(false);
         var openResponses = openRunRows.Select(AgentRunStoreMapping.ToDomain).GroupBy(run => run.SessionId)
             .ToDictionary(group => group.Key, group => group.Select(run => run.ResponseId).OfType<Guid>().ToHashSet());
-        var rows = await db.Sessions.Include(item => item.Snapshot)
+        var rows = await LegacySessions(db).Include(item => item.Snapshot)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         var now = time.GetUtcNow();
@@ -449,7 +457,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var instance = instanceId.ToString("D"); var profile = profileId.ToString("D");
-        var query = db.Sessions.AsNoTracking().Include(s => s.Snapshot)
+        var query = LegacySessions(db).AsNoTracking().Include(s => s.Snapshot)
             .Where(s => s.AgentInstanceId == instance && s.Snapshot!.ProfileId == profile && s.DurablyDeletedAtUtc == null);
         if (activeOnly) query = query.Where(s => s.Status == "Attached" && (s.Snapshot!.LifecycleStatus == "Active" || s.Snapshot.LifecycleStatus == null));
         var rows = await query.OrderByDescending(s => s.UpdatedAtUtc).ThenByDescending(s => s.SessionId)
@@ -463,7 +471,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var instance = instanceId.ToString("D"); var profile = profileId.ToString("D");
-        var query = db.Sessions.AsNoTracking().Include(s => s.Snapshot).Where(s => s.AgentInstanceId == instance && s.Snapshot!.ProfileId == profile
+        var query = LegacySessions(db).AsNoTracking().Include(s => s.Snapshot).Where(s => s.AgentInstanceId == instance && s.Snapshot!.ProfileId == profile
             && s.DurablyDeletedAtUtc == null && s.Status == "Attached" && (s.Snapshot!.LifecycleStatus == "Active" || s.Snapshot.LifecycleStatus == null));
         if (afterId is Guid id) { var cursor = id.ToString("D"); query = query.Where(s => string.Compare(s.SessionId, cursor) > 0); }
         return (await query.OrderBy(s => s.SessionId).Take(limit).ToArrayAsync(cancellationToken)).Select(s => ToSnapshot(s, [])).ToArray();
@@ -490,7 +498,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         }
 
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var query = db.Sessions.AsNoTracking().Include(item => item.Snapshot)
+        var query = LegacySessions(db).AsNoTracking().Include(item => item.Snapshot)
             .Where(row => row.DurablyDeletedAtUtc == null);
         if (surface != SessionSurface.None) query = query.Where(row => (row.Surfaces & (int)surface) != 0);
         if (terminalOnly) query = query.Where(row => row.Snapshot!.LifecycleStatus == "Completed" || row.Snapshot.LifecycleStatus == "Ended"
@@ -724,7 +732,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         ApplyModelSelection(row.Snapshot, snapshot.ModelSelection);
     }
 
-    private static SessionRecord ToRecord(SessionSnapshot snapshot)
+    internal static SessionRecord ToRecord(SessionSnapshot snapshot)
     {
         var id = snapshot.SessionId.ToString("D");
         var row = new SessionRecord
