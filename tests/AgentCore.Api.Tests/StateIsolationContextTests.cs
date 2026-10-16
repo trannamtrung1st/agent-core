@@ -296,12 +296,14 @@ public sealed class StateIsolationContextTests
             else Assert.Contains("forbidden", await Read("{\"scope\":\"instanceSummary\"}"), StringComparison.OrdinalIgnoreCase);
             await Task.Delay(1050);
             var revoked = false;
+            var settings = host.Services.GetRequiredService<AgentInstanceSettingsService>();
+            var state = await settings.ReadAsync(id, "stateIsolationPolicy");
             host.Browser.BeforeObservation = async _ => {
                 if (revoked) return; revoked = true;
-                var root = $"/api/v2/admin/agent-instances/{id}/settings/stateIsolationPolicy";
-                var state = (await client.GetFromJsonAsync<InstanceSettingsSection>(root))!;
-                (await client.PatchAsJsonAsync(root, new { expectedInstanceRevision = state.InstanceRevision,
-                    set = new { agentStateVisibility = "Off" }, clear = Array.Empty<string>() })).EnsureSuccessStatusCode();
+                // Revoke through the endpoint's owner without fitting first-use HTTP
+                // pipeline startup inside the observation's two-second read budget.
+                await settings.PatchAsync(id, "stateIsolationPolicy", state.InstanceRevision,
+                    new Dictionary<string, JsonElement> { ["agentStateVisibility"] = JsonSerializer.SerializeToElement("Off") }, []);
             };
             Assert.Contains("forbidden", await Read("{}"), StringComparison.OrdinalIgnoreCase);
             Assert.True(revoked);

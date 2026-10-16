@@ -366,6 +366,8 @@ The service and physical adapter derive Instance and Session ownership on every 
 
 Archive preserves home inspection. Session cleanup removes only its private working root after IO cancellation and confirmed process retirement. Instance deletion commits owner removal and its durable receipt before descriptor-relative purge; retries skip live owners.
 
+Terminal Sessions retain read access to existing working files. Reading a never-allocated terminal workspace returns NotFound without provisioning a directory or applying a template; writes remain blocked.
+
 ## Native workspace filesystem tools
 
 Attachment materialization stages complete bytes under the trusted parent descriptor, then uses Linux `renameat2(RENAME_NOREPLACE)` or macOS `renameatx_np(RENAME_EXCL)` to publish without replacing an existing leaf. It resolves only parent links, retries occupied sanitized names up to 128 times, and preserves ordinary workspace.write replacement behavior. Search follows lexical directory pages with at most 200 files, 4096 entries, depth 8 and 50 results; default result limit remains 20. Budget exhaustion or observed list/read failure reports `truncated=true`, including concurrent deletions.

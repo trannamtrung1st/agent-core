@@ -79,6 +79,8 @@ public sealed partial class FileSessionWorkspace : ISessionWorkspace
             var files = Working(owner.Instance.InstanceId, sessionId);
             var marker = Path.Combine(sessionRoot, ".provisioned");
             if (File.Exists(marker)) { files.Stat("/working"); return; }
+            if (!CanWrite(owner.Session, owner.Instance))
+                throw AgentCoreErrors.NotFound("Session workspace has no retained files.");
             await OwnerAsync(sessionId, true, cancellationToken);
             files.Ensure();
             await ApplyTemplateAsync(files, definition, cancellationToken);

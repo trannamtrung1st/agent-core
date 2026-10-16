@@ -3,11 +3,8 @@ using System.Net.Http.Json;
 using AgentCore.Api.Realtime;
 using AgentCore.Contracts.Http;
 using AgentCore.Contracts.Realtime;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Connections;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Api.Tests;
@@ -104,41 +101,8 @@ public sealed class SessionCapacityTests : IClassFixture<CapacityOneApiFactory>
     }
 }
 
-public sealed class CapacityOneApiFactory : WebApplicationFactory<Program>
+public sealed class CapacityOneApiFactory : AgentCoreApiFactory
 {
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
-    {
-        var repo = FindRepoRoot();
-        builder.UseContentRoot(Path.Combine(repo, "src", "AgentCore.Api"));
-        builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration((_, config) =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["AgentCore:Profile"] = "Synthetic",
-                ["Browser:FixturePort"] = "0",
-                ["Browser:Headless"] = "true",
-                ["AgentCore:AgentDirectory"] = Path.Combine(repo, "agents"),
-                ["AgentCore:MaxActiveSessions"] = "1",
-                ["AgentCore:DetachGracePeriodSeconds"] = "0"
-            });
-        });
-        TestHttpDefaults.UseLoopbackCaller(builder);
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "AgentCore.sln")))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        throw new DirectoryNotFoundException();
-    }
+    protected override IReadOnlyDictionary<string, string?> ExtraConfiguration =>
+        new Dictionary<string, string?> { ["AgentCore:MaxActiveSessions"] = "1" };
 }
