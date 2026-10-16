@@ -5,6 +5,17 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryCredentialStore
 {
+    internal bool ApplyTenantOAuthCheck(Guid tenant, Guid id, long revision, long secretRevision,
+        AgentCore.Application.Ports.CredentialOAuthCheck check, DateTimeOffset at)
+    {
+        lock (instances.CredentialGate)
+        {
+            if (!OwnsTenantCredential(tenant, id)) return false;
+            var current = _credentials[id];
+            if (current.Revision != revision || current.SecretRevision != secretRevision) return false;
+            _credentials[id] = TenantCredentialOAuthRules.Checked(current, check, at); return true;
+        }
+    }
     internal bool SaveTenantOAuthAuthorization(Guid tenant, Credential value, long expectedRevision, long expectedSecretRevision)
     {
         lock (instances.CredentialGate)

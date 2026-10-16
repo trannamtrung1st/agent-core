@@ -8,8 +8,8 @@ using AgentCore.Infrastructure.Drive;
 
 namespace AgentCore.Infrastructure.Credentials;
 
-public sealed class TenantGoogleOAuthProvider(GoogleOAuthConfiguration configuration, GoogleDriveOptions driveHost, TenantOAuthProofProtector proofs,
-    ICredentialProtector credentials, IHttpClientFactory clients, bool synthetic) : ITenantCredentialOAuthProvider
+public sealed partial class TenantGoogleOAuthProvider(GoogleOAuthConfiguration configuration, GoogleDriveOptions driveHost, TenantOAuthProofProtector proofs,
+    ICredentialProtector credentials, IHttpClientFactory clients, bool synthetic) : ITenantCredentialOAuthProvider, ITenantCredentialOAuthVerifier
 {
     public const string HttpClientName = "TenantGoogleOAuth";
     public const string Root = "/api/v2/integrations/tenant-google/oauth";

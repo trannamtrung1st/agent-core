@@ -4,6 +4,8 @@ Owner request: implement the final proposal at `local/proposals/agent-core-multi
 
 ## Status and sequence
 
+The [tenant Google check checkpoint](tenant-oauth-check-verification-2026-10-17.md) adds bounded protected refresh verification under current human/session and scoped read/manage/use authority. Both-store rotation/permanent-rejection recovery and canonical HTTP checks are locally verified; runtime credential consumption and live Google acceptance remain pending.
+
 The [OAuth store checkpoint](tenant-oauth-store-verification-2026-10-17.md) completes the durable attempt/grant transaction foundation with both-store and actual SQLite constraint evidence. Original human/session fencing, one-use claim, supersession, expiry and per-Tenant identity uniqueness are implemented. The [backend flow successor](tenant-oauth-flow-verification-2026-10-17.md) now wires Application IAM/original-session revalidation, protected private proof, purpose-specific consent/provider/callback HTTP and scheduled expiry. The [canonical Credential UI checkpoint](tenant-credential-ui-verification-2026-10-17.md) adds management and exact OAuth return browser evidence. Runtime consumption, live Google acceptance and full cutover remain pending.
 
 | Phase | Deliverable / gate | Current status |

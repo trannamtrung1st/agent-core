@@ -15,6 +15,13 @@ public sealed record CredentialOAuthPrepared(string AuthorizationUrl, string Pro
 public sealed record CredentialOAuthClaim(CredentialOAuthAttempt Attempt, string ProtectedProof);
 // Provider tokens/DTOs stay in Infrastructure. Only verified normalized facts and a protected grant cross this port.
 public sealed record CredentialOAuthGrant(string Subject, string EmailAddress, IReadOnlyList<string> Scopes, string ProtectedPayload, bool Synthetic);
+// A check consumes tokens only inside Infrastructure and returns no bearer credential.
+public sealed record CredentialOAuthCheck(string? RotatedProtectedPayload = null, bool ReconnectRequired = false);
+public interface ITenantCredentialOAuthVerifier
+{
+    CredentialOAuthDescriptor Describe(CredentialPurpose purpose);
+    ValueTask<CredentialOAuthCheck> CheckAsync(Credential current, CancellationToken ct);
+}
 
 public interface ITenantCredentialOAuthProvider
 {
@@ -25,6 +32,9 @@ public interface ITenantCredentialOAuthProvider
 }
 public interface ITenantCredentialOAuthStore
 {
+    ValueTask<bool> TryCheckCredentialOAuthAsync(TenantSecurityState next, long expectedSecurityRevision, Guid credentialId,
+        CredentialOAuthInitiator initiator, long expectedCredentialRevision, long expectedSecretRevision,
+        CredentialOAuthCheck check, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<CredentialOAuthAttempt?> ReadCredentialOAuthAttemptAsync(Guid attemptId, CancellationToken ct = default);
     ValueTask<bool> TryBeginCredentialOAuthAsync(TenantSecurityState next, long expectedSecurityRevision,
         CredentialOAuthAttempt attempt, AuthorizationAudit audit, CancellationToken ct = default);

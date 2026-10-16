@@ -128,19 +128,8 @@ public sealed class TenantCredentialOAuthService(IIamStore security, ITenantCred
             || current.Value.Status != CredentialStatus.Active || TenantCredentialOAuthRules.Epoch(current.Value) != a.AuthEpoch || a.ExpiresAt <= time.GetUtcNow()) throw InvalidCallback();
         return (state, current);
     }
-    private async ValueTask<TenantSecurityState> Authority(Guid tenant, Guid credential, CredentialOAuthInitiator initiator, CancellationToken ct)
-    {
-        var account = await identity.ValidateSessionAsync(initiator.AuthenticationSessionId, ct).ConfigureAwait(false);
-        var user = await identity.ResolveUserAsync(initiator.AccountId, tenant, ct).ConfigureAwait(false);
-        if (account?.AccountId != initiator.AccountId || user?.PrincipalId != initiator.PrincipalId) throw new AccessDeniedException("oauth_initiator_unavailable");
-        var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
-        foreach (var key in new[] { "credentials.manage", "credentials.read" })
-        {
-            var decision = await authorizer.CheckTenantAsync(state, initiator.PrincipalId, PermissionCatalog.Get(key), TenantCredentialRules.Scope(tenant, credential), ct).ConfigureAwait(false);
-            if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
-        }
-        return state;
-    }
+    private ValueTask<TenantSecurityState> Authority(Guid tenant, Guid credential, CredentialOAuthInitiator initiator, CancellationToken ct) =>
+        TenantCredentialOAuthAuthority.RequireAsync(security, identity, authorizer, tenant, credential, initiator, false, ct);
     private async ValueTask Finish(CredentialOAuthClaim claim, CredentialOAuthOutcome outcome)
     {
         using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5), time);

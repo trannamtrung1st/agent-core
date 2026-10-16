@@ -8,6 +8,22 @@ namespace AgentCore.Application.Security;
 
 public static class TenantCredentialOAuthRules
 {
+    public static Credential Checked(Credential current, CredentialOAuthCheck check, DateTimeOffset at)
+    {
+        if (!IsOAuth(current) || current.Status != CredentialStatus.Active || current.ProtectedPayload.Length == 0
+            || !(current.EmailAccount?.ConnectionStatus == EmailConnectionStatus.Connected || current.DriveAccount?.ConnectionStatus == DriveConnectionStatus.Connected)
+            || check.ReconnectRequired && check.RotatedProtectedPayload is not null
+            || check.RotatedProtectedPayload is { Length: 0 or > 262144 }) throw new ArgumentException("Invalid OAuth check transition.");
+        if (check.ReconnectRequired)
+        {
+            var cleared = Disconnect(current, at);
+            return TenantCredentialRules.Freeze(cleared with {
+                EmailAccount = cleared.EmailAccount is { } email ? email with { ConnectionStatus = EmailConnectionStatus.ReconnectRequired } : null,
+                DriveAccount = cleared.DriveAccount is { } drive ? drive with { ConnectionStatus = DriveConnectionStatus.ReconnectRequired, ReconnectRequiredAtUtc = at } : null });
+        }
+        return check.RotatedProtectedPayload is null ? current : TenantCredentialRules.Freeze(current with {
+            ProtectedPayload = check.RotatedProtectedPayload, SecretRevision = checked(current.SecretRevision + 1), UpdatedAtUtc = at });
+    }
     public static bool IsOAuth(Credential value) => value.Purpose == CredentialPurpose.GoogleDriveAccount
         || value.Purpose == CredentialPurpose.EmailAccount && value.EmailAccount?.AuthMethod == EmailAuthMethod.GoogleOAuth2;
     public static long Epoch(Credential value) => value.EmailAccount?.AuthEpoch ?? value.DriveAccount?.AuthEpoch ?? throw new ArgumentException("OAuth profile is required.");

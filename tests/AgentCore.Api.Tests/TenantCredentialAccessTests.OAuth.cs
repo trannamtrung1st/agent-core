@@ -51,12 +51,24 @@ public sealed partial class TenantCredentialAccessTests
         var connected = await Json(await owner.GetAsync(root + $"/{id}")); Safe(connected);
         var profile = connected.GetProperty("credential").GetProperty(purpose == "EmailAccount" ? "emailAccount" : "driveAccount");
         Assert.Equal("Connected", profile.GetProperty("connectionStatus").GetString()); Assert.True(profile.GetProperty("synthetic").GetBoolean());
+        var beta = (await Json(await owner.PostAsJsonAsync("/api/v2/system/tenants", new { name = "Check Beta", slug = "check-beta" }))).GetProperty("tenantId").GetGuid();
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync($"/api/v2/tenants/{beta}/credentials/{id}/oauth/check", new TenantCredentialOAuthRequest(1, 2))).StatusCode);
+        owner.DefaultRequestHeaders.Remove("X-AgentCore-CSRF");
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsJsonAsync(path + "/check", new TenantCredentialOAuthRequest(await Revision(owner, tenant), 2))).StatusCode);
+        await Csrf(owner);
+        var check = await owner.PostAsJsonAsync(path + "/check", new TenantCredentialOAuthRequest(await Revision(owner, tenant), 2));
+        Assert.Equal(HttpStatusCode.OK, check.StatusCode); Assert.True(check.Headers.CacheControl?.NoStore);
+        var checkedBody = await Json(check); Safe(checkedBody); Assert.False(checkedBody.GetProperty("reconnectRequired").GetBoolean());
+        Assert.Equal(2, checkedBody.GetProperty("credential").GetProperty("revision").GetInt64());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await callback.PostAsJsonAsync(path + "/check", new TenantCredentialOAuthRequest(1, 1))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await owner.PostAsJsonAsync(path + "/check", new TenantCredentialOAuthRequest(1, 2))).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await callback.PostAsync("/api/v2/integrations/tenant-google/oauth/synthetic",
             new FormUrlEncodedContent(new Dictionary<string, string> { ["state"] = state, ["decision"] = "authorize" }))).StatusCode);
         var disconnected = await owner.PostAsJsonAsync(path + "/disconnect", new TenantCredentialOAuthRequest(await Revision(owner, tenant), 2));
         Assert.Equal(HttpStatusCode.OK, disconnected.StatusCode); var result = await Json(disconnected); Safe(result);
         Assert.True(result.GetProperty("providerRevoked").GetBoolean());
         Assert.Equal("Disconnected", result.GetProperty("credential").GetProperty(purpose == "EmailAccount" ? "emailAccount" : "driveAccount").GetProperty("connectionStatus").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await owner.PostAsJsonAsync(path + "/check", new TenantCredentialOAuthRequest(await Revision(owner, tenant), 3))).StatusCode);
         Assert.Equal(0, factory.Outbound); Assert.Equal(0, factory.Services.GetRequiredService<OutboundHttpProbe>().Attempts);
     }
     [Fact]

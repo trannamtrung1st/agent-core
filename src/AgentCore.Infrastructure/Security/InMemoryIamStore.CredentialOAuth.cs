@@ -7,6 +7,16 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore
 {
+    public ValueTask<bool> TryCheckCredentialOAuthAsync(TenantSecurityState next, long expectedSecurityRevision, Guid credentialId,
+        CredentialOAuthInitiator initiator, long expectedCredentialRevision, long expectedSecretRevision, CredentialOAuthCheck check,
+        AuthorizationAudit audit, CancellationToken ct = default) => ValueTask.FromResult(WriteCredential(next, expectedSecurityRevision, audit, () =>
+        {
+            if (audit.ActorPrincipalId != initiator.PrincipalId) throw new ArgumentException("Invalid OAuth actor.");
+            RequireOAuthInitiator(next.Tenant.TenantId, initiator);
+            if (!CredentialBacking().ApplyTenantOAuthCheck(next.Tenant.TenantId, credentialId, expectedCredentialRevision, expectedSecretRevision, check, OAuthNow)) return false;
+            if (check.ReconnectRequired) SupersedeOAuth(next.Tenant.TenantId, credentialId);
+            return true;
+        }, ct));
     private readonly Dictionary<Guid, CredentialOAuthAttempt> _credentialOAuthAttempts = [];
     private DateTimeOffset OAuthNow => (clock ?? TimeProvider.System).GetUtcNow();
     public ValueTask<CredentialOAuthAttempt?> ReadCredentialOAuthAttemptAsync(Guid id, CancellationToken ct = default)

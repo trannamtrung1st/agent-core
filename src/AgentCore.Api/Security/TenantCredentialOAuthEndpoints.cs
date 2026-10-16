@@ -19,6 +19,12 @@ public static class TenantCredentialOAuthEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/credentials/{credentialId:guid}/oauth").RequireAuthorization();
+        group.MapPost("/check", (Guid credentialId, TenantCredentialOAuthRequest body, HttpContext http, [FromServices] TenantCredentialOAuthCheckService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var result = await service.CheckAsync(actor.TenantId, credentialId, Initiator(http, actor), body.ExpectedRevision, body.ExpectedCredentialRevision, ct).ConfigureAwait(false);
+            return Results.Json(new { result.Credential.TenantId, credential = AdminCredentialEndpoints.Map(result.Credential.Credential), result.ReconnectRequired });
+        })).WithMetadata(new RequestSizeLimitAttribute(8192));
         group.MapGet("", (Guid credentialId, HttpContext http, [FromServices] TenantCredentialOAuthService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);

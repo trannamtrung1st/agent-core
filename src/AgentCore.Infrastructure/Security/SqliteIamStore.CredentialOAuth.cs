@@ -9,6 +9,19 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
+    public ValueTask<bool> TryCheckCredentialOAuthAsync(TenantSecurityState next, long expectedSecurityRevision, Guid credentialId,
+        CredentialOAuthInitiator initiator, long expectedCredentialRevision, long expectedSecretRevision, CredentialOAuthCheck check,
+        AuthorizationAudit audit, CancellationToken ct = default) => WriteCredentialAsync(next, expectedSecurityRevision, audit, async db =>
+        {
+            if (audit.ActorPrincipalId != initiator.PrincipalId) throw new ArgumentException("Invalid OAuth actor.");
+            await RequireOAuthInitiatorAsync(db, next.Tenant.TenantId, initiator, ct).ConfigureAwait(false);
+            var row = await OAuthCredentialAsync(db, next.Tenant.TenantId, credentialId, ct).ConfigureAwait(false);
+            if (row is null || row.Revision != expectedCredentialRevision || row.SecretRevision != expectedSecretRevision) return false;
+            var value = TenantCredentialOAuthRules.Checked(SqliteCredentialStore.Map(row), check, OAuthNow);
+            SqliteCredentialStore.StageValue(db, row, value, next.Tenant.TenantId);
+            if (check.ReconnectRequired) await SupersedeOAuthAsync(db, next.Tenant.TenantId, credentialId, OAuthNow, ct).ConfigureAwait(false);
+            return true;
+        }, ct);
     private DateTimeOffset OAuthNow => (clock ?? TimeProvider.System).GetUtcNow();
 
     public async ValueTask<CredentialOAuthAttempt?> ReadCredentialOAuthAttemptAsync(Guid id, CancellationToken ct = default)

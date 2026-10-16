@@ -14,8 +14,10 @@ internal static class TenantOAuthRegistration
         services.AddHttpClient(TenantGoogleOAuthProvider.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20)).RemoveAllLoggers()
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, MaxConnectionsPerServer = 4 });
         services.TryAddSingleton<TenantOAuthProofProtector>(p => new(p.GetRequiredService<PersistenceOptions>().CredentialProtectionKeyRoot));
-        services.TryAddSingleton<ITenantCredentialOAuthProvider>(p => new TenantGoogleOAuthProvider(p.GetRequiredService<GoogleOAuthConfiguration>(),
+        services.TryAddSingleton<TenantGoogleOAuthProvider>(p => new TenantGoogleOAuthProvider(p.GetRequiredService<GoogleOAuthConfiguration>(),
             p.GetRequiredService<GoogleDriveOptions>(), p.GetRequiredService<TenantOAuthProofProtector>(), p.GetRequiredService<ICredentialProtector>(),
             p.GetRequiredService<IHttpClientFactory>(), string.Equals(profile, "Synthetic", StringComparison.OrdinalIgnoreCase)));
+        services.TryAddSingleton<ITenantCredentialOAuthProvider>(p => p.GetRequiredService<TenantGoogleOAuthProvider>());
+        services.TryAddSingleton<ITenantCredentialOAuthVerifier>(p => p.GetRequiredService<TenantGoogleOAuthProvider>());
     }
 }
