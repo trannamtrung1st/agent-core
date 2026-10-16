@@ -166,6 +166,7 @@ Current Admin enhancement: global Connections contains shared Credentials and Ev
 - [Design system and presentation guidance](.agents/context/DESIGN.md)
 - [Shared Admin compositions](web/src/features/admin/README.md)
 - [Ant Design migration handoff](docs/reports/antd-migration-handoff.md)
+- [Current design system sync and focused UI checks](docs/reports/design-system-sync-2026-10-16.md)
 - [HTTP API and Realtime Protocol](docs/14-api-and-realtime-protocol.md)
 - [Persistence and Configuration](docs/15-persistence-and-configuration.md)
 - [Testing Strategy](docs/16-testing-strategy.md)

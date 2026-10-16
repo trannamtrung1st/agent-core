@@ -183,6 +183,8 @@ The [recent Git and UI review](../../docs/reports/recent-git-ui-design-review-20
 
 ## Overview
 
+Current design sync: October 16, 2026. Theme values come from `antdTheme.ts` and the resolved `AppShell` bridge; compositions come from current product components. The [focused sync report](../../docs/reports/design-system-sync-2026-10-16.md) records inspected surfaces, responsive measurements and local checks. Earlier dated evidence remains tied to its original source.
+
 **Creative North Star: "Ant Design operate UI"**
 
 Agent Core is a personal-chat operate surface plus a shipped Admin configuration surface. Both use Ant Design v6. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone. Admin uses the same dark roles, type, and 8/12/16 spacing for definitions and instances. It does not borrow a navy enterprise sider or copy Chat's composer onto configuration screens.
@@ -585,6 +587,35 @@ The Sandbox catalog uses six compact columns (Profile, Profile ID, Revision, Sou
 
 The existing Registry credential dialog adds optional expiry using the native Ant Design DatePicker, viewer-zone guidance and UTC storage. Details pair the stored offset-bearing date with Expired/Not expired, or No expiry. Creation, preservation, explicit renewal and clearing use the existing revision-protected owner workflow. Registry date/time popups extend the existing narrow-screen automation popup rules: stacked calendar/time panels, viewport-bounded scrolling and unchanged native focus/keyboard behavior. Catalog, Credentials, Definition and Instance were inspected at 1440/1024/768/390/320px; the 320×600 expiry popup fits within x=16…304 and y=16…584. [Focused evidence](../../docs/reports/oci-sandbox-final-hardening-2026-10-15.md) owns actual tests and external-provider limitations.
 
+### State observation and isolation previews
+
+Reuse `AgentConfigurationPanel` for both the read-only State observation and editable State & Isolation policy. The panel owns 16px heading/body insets; its body stack owns the 8/12/16px gaps. `StateIsolationPolicyFields` owns the responsive field grid shared by Definition drafts, published inspection and Instances. Preset, Memory and Voice controls retain their existing configuration owner and sticky action frame.
+
+`IsolationChangePreview` reuses `useAdminDetailLayout`: one 12rem, top-aligned label column at 768px and above, stacked labels below. Long policy names and complete before/after/source values wrap. The same preview appears on State & Isolation, Memory policy and Voice; none adds an independent label width or outer inset. Preset replacement retains the bounded native confirmation, reachable Keep editing/Replace draft actions and focus return. Custom is a local editing choice; Use Definition defaults remains a separate action.
+
+State uses compact native Descriptions for hosted/durable counts and resource observations, wrapping refresh/actions, readable observation time and explicit Partial/Stale/Unknown labels. Preserve the last observation during failed refresh and keep Retry beside the affected surface. Unknown counts never look like measured zeroes. This is presentation guidance; [Frontend](../../docs/13-frontend-implementation-spec.md#state-and-isolation-admin-surfaces) owns policy, atomic saves and observation behavior.
+
+### Sandbox Session selection and recovery
+
+Existing Ant Design v6 Sandbox owners distinguish Definition allowed IDs, sparse Instance allowed-subset inheritance and the default from per-Session selection. Reuse the shared field grid, 16px section gaps, field provenance/reset and sticky configuration action frame. The optional Instance script follows each chosen Profile script; saved-setup verification uses a separate exact-profile chooser.
+
+The Session drawer uses human-readable lifecycle/cancellation labels, exact image/profile revisions and retained execution diagnostics. It reports current canonical files independently from process status, with shared home RW/RO/disabled and private working scope. Cleanup uncertainty and EnforcementPending warn that writes can continue until termination is confirmed. Reset preserves canonical files. Preserve labeled diagnostics, output disclosure and Escape/focus restoration; use the same min(640px, 100vw) shell as Background Work, with a 100vw wrapper cap and 40px narrow controls.
+
+
+### Generic Linux sandbox lifecycle
+
+The canonical cutover supersedes the former file-commit presentation. The Session drawer shows command exit, possible filesystem writes and container lifecycle independently. Complete or partial writes are already visible in /home and /working; process cleanup has no file import or rollback stage. Successful recycling uses one concise informational notice; unknown process outcome retains safe Inspect status/Reset controls and diagnostics. Reset preserves files and clears profile selection.
+
+Preserve the incumbent Ant Design v6 640px drawer, full width below 768px, token-owned spacing, copyable wrapped command/output and 40px mobile controls. Native diagnostics restore focus on Escape; the next Escape restores the Session sandbox opener. Existing Admin Instance policy/setup stays in its saved configuration owner with no new mode or page. Real isolated Synthetic + OpenSandbox commands, polling failure/Retry, controlled pending/unknown projections and both surfaces were reviewed at 1440/1024/768/390/320px. The [generic runtime ledger](../../docs/reports/generic-linux-sandbox-runtime-verification-2026-10-15.md) owns source/runtime evidence and remaining platform gaps; earlier quiescence-rejection/managed-shutdown claims are historical. This does not renew hosted or milestone acceptance.
+
+#### Canonical workspace presentation
+
+Canonical workspace cutover (2026-10-16): Admin uses current path keys, folder breadcrumbs, immediate-child paging and search of loaded current-folder entries, sampled/unknown usage, and present-path deletion. Home previews show a live-file note and Reload preview, reading fresh bounded bytes. The final pass exercised folder navigation, external writer → preview reload, injected 503 → Retry, keyboard Escape and five widths (1440/1024/768/390/320). The sandbox wrapper cap fixes transient clipping during viewport changes. Detailed source/runtime evidence belongs to the [cutover ledger](../../docs/reports/canonical-workspace-cutover-verification-2026-10-16.md). Historical reports remain evidence for their original versions.
+
+#### Coordinated configuration draft
+
+State & Isolation, detailed Memory policy and Voice enablement share one Instance-owned draft/provider and reviewed atomic Save. Navigation retains it, Discard restores inherited values, and pending Save retains its reviewed preview. Custom selects local manual editing without changing fields or persisting a mode. Definition visibility defaults and maxima are distinct; Instance choices stay within the ceiling. Retain the canonical mount warning and existing private-working/shared-home presentation. Mobile Admin navigation defers focus restoration until after React commit. The current merge ledger owns runtime evidence; earlier visual records stay tied to their original source.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -634,24 +665,3 @@ The existing Registry credential dialog adds optional expiry using the native An
 - **Don't** present schedule occurrence timestamps as raw transport strings when they parse as dates.
 - **Don't** use transient `Popconfirm` overlays for lifecycle, deletion, approval, cancellation, reset, or revoke actions when `confirmAction` is available; reserve Popconfirm for low-risk inline affordances only.
 - **Don't** add a browser panel, iframe, screenshot, or click log. Browser progress stays on the existing activity row as `Using browser…`.
-
-## Sandbox Session selection and recovery successor
-
-Existing Ant Design v6 Sandbox owners distinguish Definition allowed IDs, sparse Instance allowed-subset inheritance and the default from per-Session selection. Reuse the shared field grid, 16px section gaps, field provenance/reset and sticky configuration action frame. The optional Instance script follows each chosen Profile script; saved-setup verification uses a separate exact-profile chooser.
-
-The Session drawer uses human-readable lifecycle/cancellation labels, exact image/profile revisions and retained execution diagnostics. It reports current canonical files independently from process status, with shared home RW/RO/disabled and private working scope. Cleanup uncertainty and EnforcementPending warn that writes can continue until termination is confirmed. Reset preserves canonical files. Preserve labeled diagnostics, output disclosure and Escape/focus restoration; use the same min(640px, 100vw) shell as Background Work, with a 100vw wrapper cap and 40px narrow controls.
-
-
-## Generic Linux sandbox lifecycle (2026-10-15)
-
-The canonical cutover supersedes the former file-commit presentation. The Session drawer shows command exit, possible filesystem writes and container lifecycle independently. Complete or partial writes are already visible in /home and /working; process cleanup has no file import or rollback stage. Successful recycling uses one concise informational notice; unknown process outcome retains safe Inspect status/Reset controls and diagnostics. Reset preserves files and clears profile selection.
-
-Preserve the incumbent Ant Design v6 640px drawer, full width below 768px, token-owned spacing, copyable wrapped command/output and 40px mobile controls. Native diagnostics restore focus on Escape; the next Escape restores the Session sandbox opener. Existing Admin Instance policy/setup stays in its saved configuration owner with no new mode or page. Real isolated Synthetic + OpenSandbox commands, polling failure/Retry, controlled pending/unknown projections and both surfaces were reviewed at 1440/1024/768/390/320px. The [generic runtime ledger](../../docs/reports/generic-linux-sandbox-runtime-verification-2026-10-15.md) owns source/runtime evidence and remaining platform gaps; earlier quiescence-rejection/managed-shutdown claims are historical. This does not renew hosted or milestone acceptance.
-
-### Final Sandbox recovery wording and acceptance (2026-10-15)
-
-Canonical workspace cutover (2026-10-16): Admin uses current path keys, folder breadcrumbs, immediate-child paging and search of loaded current-folder entries, sampled/unknown usage, and present-path deletion. Home previews show a live-file note and Reload preview, reading fresh bounded bytes. The final pass exercised folder navigation, external writer → preview reload, injected 503 → Retry, keyboard Escape and five widths (1440/1024/768/390/320). The sandbox wrapper cap fixes transient clipping during viewport changes. Detailed source/runtime evidence belongs to the [cutover ledger](../../docs/reports/canonical-workspace-cutover-verification-2026-10-16.md). Historical reports remain evidence for their original versions.
-
-### Current main integration — 2026-10-16
-
-State & Isolation, detailed Memory policy and Voice enablement share one Instance-owned draft/provider and reviewed atomic Save. Navigation retains it, Discard restores inherited values, and pending Save retains its reviewed preview. Custom selects local manual editing without changing fields or persisting a mode. Definition visibility defaults and maxima are distinct; Instance choices stay within the ceiling. Retain the canonical mount warning and existing private-working/shared-home presentation. Mobile Admin navigation defers focus restoration until after React commit. The current merge ledger owns runtime evidence; earlier visual records stay tied to their original source.

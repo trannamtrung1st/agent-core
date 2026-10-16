@@ -51,6 +51,13 @@ related_targets:
   - web/src/features/admin/EventsSection.tsx
   - web/src/features/admin/WebhookRequestExample.tsx
   - web/src/features/admin/AdminCollectionToolbar.tsx
+  - web/src/features/admin/InstanceStateSection.tsx
+  - web/src/features/admin/StateIsolationPolicyFields.tsx
+  - web/src/features/admin/IsolationPresetControl.tsx
+  - web/src/features/admin/IsolationChangePreview.tsx
+  - web/src/features/admin/StateIsolationConfigurationSection.tsx
+  - web/src/features/admin/StateIsolationConfigurationProvider.tsx
+  - web/src/features/admin/DefinitionStateIsolationPolicy.tsx
   - web/src/features/admin/useAdminDetailLayout.ts
   - web/src/app/confirmAction.ts
   - web/src/app/appFeedback.ts
@@ -61,7 +68,7 @@ related_targets:
 
 # Admin configuration and continuity
 
-CURRENT SYNC (2026-10-15): This brief follows the commit candidate based on `0f994232`. Ordinary-image onboarding and its helper-copy correction are committed in `0ca35e86`; shared diagnostic popover labeling/focus now also serves Session sandbox. [DESIGN.md](../../.agents/context/DESIGN.md) owns presentation; [Frontend Implementation](../../docs/13-frontend-implementation-spec.md) owns behavior. The sidecar records candidate hashes. [Sandbox diagnostics verification](../../docs/reports/sandbox-diagnostics-polish-verification-2026-10-15.md) includes the representative Admin error-popup check; earlier reports retain their original scope. No hosted or milestone acceptance is renewed.
+CURRENT SYNC (2026-10-16): This refresh merges the current State observation, coordinated isolation/Memory/Voice draft and canonical Workspace presentation into the incumbent Ant Design v6 system. Shared change previews use the existing 12rem/stacked Admin detail layout. [DESIGN.md](../../.agents/context/DESIGN.md) owns presentation; [Frontend](../../docs/13-frontend-implementation-spec.md) owns behavior. The [design sync report](../../docs/reports/design-system-sync-2026-10-16.md) records focused Synthetic interactions, viewport measurements and checks. Historical reports keep their original scope; no hosted or milestone acceptance is renewed.
 
 Definition Automation permissions use two primary checkboxes, Schedule and Events, with Built-in/Webhook children indented by Ant Design paddingLG. Checked/mixed/unchecked state derives from canonical child values. Concise descriptions explain explicit both-family enable and local restricted pause/resume; overall-disabled configuration is visible with inactive-authority guidance. Published inspection uses the same disabled controls. Keep ordinary text wrapping, shared section spacing and keyboard focus; no extra boxes or new tokens. Effective/Instance summaries and publish diffs name exact family grants. `/docs/13` owns behavior and canonical mappings.
 
@@ -169,3 +176,7 @@ SANDBOX SELECTION/RECOVERY (2026-10-15): Admin keeps allowed profiles/default di
 Instance setup verification names an available alternate explicitly when the configured default is missing; the saved default and next-Run execution selection remain separate.
 
 GENERIC LINUX RUNTIME (2026-10-15): Admin policy/setup owners retain the current Ant Design form and saved provenance. No runtime mode or language-specific setting is added. The existing Instance Sandbox page was inspected at 1440/1024/768/390/320px without horizontal overflow. Actual Session recycling/switching uses the same saved allowed profiles; no Admin layout mutation was needed. [Current evidence and coverage limits](../../docs/reports/generic-linux-sandbox-runtime-verification-2026-10-15.md).
+
+## State, isolation and canonical Workspace
+
+State observations retain read-only counts, freshness and partial failures with local Retry. Isolation, Memory and Voice reuse one reviewed draft and shared preview; Definition and Instance policy grids share spacing and provenance. Preview labels use the common 12rem desktop column and stack below 768px. Preset replacement preserves native confirmation/focus, and mobile controls remain reachable. Workspace uses current path breadcrumbs, folder-local search/paging, sampled usage and live-file reload; obsolete opaque file IDs and file-import stages are not presentation patterns. The dated design sync report owns this pass’s evidence.

@@ -36,7 +36,7 @@ The distinctive mechanism is one Session Runtime mailbox owning mutable conversa
 - Fast loop: native .NET + Vite; Synthetic profile is the default key-free path.
 - Demo target: current Chromium-family desktop (Chrome/Edge).
 - Identities load from versioned JSON under `agents/` (`examiner.json`, `customer-support.json`, `compliance.json`; see [docs/12](../../docs/12-backend-implementation-spec.md)).
-- `voiceAvailable` on GET `/api/v1/agents` and on `session.ready` agent uses the same backend gate ([docs/04](../../docs/04-backend-interfaces.md)); the composer hides Voice when it is false. Synthetic profile advertises voice for voice-enabled agents; Real profile keeps voice hidden until hosted STT/TTS is wired, even if synthetic speech adapters are registered for development.
+- Voice availability follows the selected Instance and advertised speech transports. The composer uses the server descriptor plus local browser support; current adapter and mode rules belong to [Frontend](../../docs/13-frontend-implementation-spec.md#primary-screens). Do not infer availability from the provider profile label alone.
 - Browser talks to `/hubs/session` (SignalR + MessagePack by default; `VITE_AGENTCORE_REALTIME_PROTOCOL=json` is a same-hub diagnostic mode). HTTP is for agent/session/history and health, not live chat text.
 - A failed assistant turn, failed AgentRun, or admin server error can show one safe diagnostic id for copy. The id is server-owned. Conversation text and stacks stay off that copy.
 - Persistence/reconnect restores the active conversation; ended catalog rows open a read-only history without attach; durable sessions use the v2 catalog rail (see [docs/13](../../docs/13-frontend-implementation-spec.md)), not a separate inbox product.
@@ -47,7 +47,7 @@ Confirmed MVP UI/product facts (see `/docs`; do not extend here):
 
 - Choose an identity, open or resume a durable session from the catalog rail, or open an ended session as read-only history, and talk in one live conversation at a time.
 - Text chat: agent header, scrollable conversation, composer/send, voice control when `voiceAvailable`, connection/error indicator.
-- Voice is a **mode transition on the same session**, not a new conversation. Preflight microphone/AudioContext/worklets under user activation; send PCM only after Mode=voice. Pending voice shows Starting voice… and Cancel. After reconnect the user must press Voice again.
+- Voice is a **mode transition on the same session**, not a new conversation. Preflight microphone/AudioContext/worklets under user activation; send PCM only after Mode=voice. Pending voice shows Starting voice… and Cancel. After transport loss capture is disarmed; when the Session remains in Voice, Resume microphone reauthorizes capture without changing mode. See the current mode rules in docs/13.
 - Mute is input-only. The labeled composer stays available during voice (current session still accepts user text). Cancel voice returns to the same conversation’s text composer. Header End keeps `/c/{id}` as read-only history without attach.
 - Visible status such as Listening, User speaking, Thinking, Agent speaking, Interrupted, Reconnecting (see [docs/13](../../docs/13-frontend-implementation-spec.md)). Assistant content renders as sanitized Markdown and blocks per docs/13; interrupted/failed entries keep a status label.
 - Session catalog rail, attachment picker, and authorized blob fetch for history chips are shipped MVP UI (see [docs/13](../../docs/13-frontend-implementation-spec.md)); Artifact refs resolve canonical Core metadata and show file cards with authenticated, explicit Download and local Retry; retained files work in ended history.
@@ -73,6 +73,8 @@ Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, stric
 - Do not fabricate testimonials, customers, or SLAs.
 
 ## Evidence on Hand
+
+- The [October 16 design sync](../../docs/reports/design-system-sync-2026-10-16.md) records current State observation, coordinated isolation/Memory/Voice drafts and canonical Workspace presentation. Shared preview details use the existing responsive Admin label layout. This is focused local evidence, with no new milestone or hosted acceptance claim.
 
 - Official docs under `/docs` (source of truth).
 - Implemented SPA in `web/` uses Ant Design v6 plus the presentation policy in DESIGN.md (composer Model chip with in-button reasoning level, Spoken inset (first in assistant turn when it differs from display; TTS uses that projection only), compact 8px composer/overlay shells, 8/12/16px rhythm, 8px control inner padding matching session rows). `/docs` still owns behavior.
