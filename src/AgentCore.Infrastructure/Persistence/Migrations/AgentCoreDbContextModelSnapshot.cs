@@ -561,6 +561,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SourceDefinitionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("SourceKind")
                         .HasColumnType("INTEGER");
 

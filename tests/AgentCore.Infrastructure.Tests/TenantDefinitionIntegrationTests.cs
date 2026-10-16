@@ -58,7 +58,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         var collisionId = f.Ids.NewId(); var collision = nextFork with { DefinitionId = collisionId.ToString("D"),
             Candidate = nextFork.Candidate with { DefinitionId = collisionId.ToString("D") }, SourceKind = DefinitionDraftSourceKind.New, SourceVersion = null };
         Assert.False(await f.Definitions.TryCreateDefinitionAsync(alphaState with { Tenant = alphaState.Tenant with { Revision = alphaState.Tenant.Revision + 1 } },
-            alphaState.Tenant.Revision, new(owner.TenantId, collisionId, DateTimeOffset.UtcNow), collision, f.Audit(owner.TenantId, owner.OwnerPrincipalId, collisionId)));
+            alphaState.Tenant.Revision, new(owner.TenantId, collisionId, DateTimeOffset.UtcNow), collision, [], f.Audit(owner.TenantId, owner.OwnerPrincipalId, collisionId)));
         Assert.Null(await f.Definitions.FindDefinitionAsync(owner.TenantId, collisionId));
         Assert.Equal(alphaState.Tenant.Revision, (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision);
         if (sqlite)
@@ -162,8 +162,17 @@ public sealed partial class TenantDefinitionIntegrationTests
         public IdentityService Identity => new(Iam, new AccountPasswordHasher(), Tokens, Ids, TimeProvider.System);
         public TenantAccessService Access => new(Iam, Authorizer, Identity, Tokens, Ids, TimeProvider.System);
         public IDefinitionDraftSyntheticBehaviorEvaluator Evaluator => new AgentCore.Infrastructure.Admin.SyntheticDefinitionDraftBehaviorEvaluator(new AgentCore.Infrastructure.Admin.DefinitionDraftSyntheticOfflineLanguageModel(), ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll);
+        private IBuiltInDefinitionTemplateSource? _shippedTemplates;
         public TenantDefinitionService Service => WithEvaluator(Evaluator);
-        public TenantDefinitionService WithEvaluator(IDefinitionDraftSyntheticBehaviorEvaluator evaluator) => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System, Content, new(evaluator, ToolConfigurationGates.AllowAll));
+        public TenantDefinitionService WithEvaluator(IDefinitionDraftSyntheticBehaviorEvaluator evaluator) => WithTemplates(_shippedTemplates ??= ShippedTemplates(), evaluator);
+        public TenantDefinitionService WithTemplates(IBuiltInDefinitionTemplateSource templates, IDefinitionDraftSyntheticBehaviorEvaluator? evaluator = null) => new(Iam, Definitions, Authorizer, SyntheticProviderAliases.Default, ModelCatalogFactory.Synthetic(), ToolConfigurationGates.AllowAll, Ids, TimeProvider.System, Content, new(evaluator ?? Evaluator, ToolConfigurationGates.AllowAll), templates);
+        public static IBuiltInDefinitionTemplateSource ShippedTemplates()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
+            var root = Path.Combine(directory!.FullName, "agents");
+            return new FileBuiltInDefinitionTemplateSource(new FileAgentDefinitionStore(root, SyntheticProviderAliases.Default), root, Path.Combine(root, "templates"));
+        }
         public IDbContextFactory<AgentCoreDbContext>? Contexts { get; private set; }
         private string? _path;
         public static async Task<Fixture> Create(bool sqlite)

@@ -101,11 +101,13 @@ internal sealed partial class CanonicalWorkspaceFilesystem
 
     // Cursors are lexical observations. Concurrent renames can omit/repeat entries;
     // callers restart from the first page to refresh. No stable snapshot is implied.
-    internal Page List(string path, string? afterPath = null, int limit = 256)
+    internal Page List(string path, string? afterPath = null, int limit = 256) => ListCore(path, afterPath, limit, true);
+    internal Page ListUnlinked(string path, string? afterPath = null, int limit = 256) => ListCore(path, afterPath, limit, false);
+    private Page ListCore(string path, string? afterPath, int limit, bool resolveLinks)
     {
         if (limit is < 1 or > 4096) throw AgentCoreErrors.Validation("Invalid workspace page size.");
         using var root = OpenRoot();
-        var relative = Resolve(root, Relative(path));
+        var relative = resolveLinks ? Resolve(root, Relative(path)) : Relative(path);
         using var directory = Descend(root, Parts(relative));
         var entries = new List<Entry>();
         foreach (var name in Names(directory).Order(StringComparer.Ordinal))
@@ -120,10 +122,12 @@ internal sealed partial class CanonicalWorkspaceFilesystem
         return new(entries, null, false);
     }
 
-    internal async ValueTask<byte[]> ReadAsync(string path, long maxBytes, CancellationToken ct = default)
+    internal ValueTask<byte[]> ReadAsync(string path, long maxBytes, CancellationToken ct = default) => ReadFileAsync(path, maxBytes, true, ct);
+    internal ValueTask<byte[]> ReadUnlinkedAsync(string path, long maxBytes, CancellationToken ct = default) => ReadFileAsync(path, maxBytes, false, ct);
+    private async ValueTask<byte[]> ReadFileAsync(string path, long maxBytes, bool resolveLinks, CancellationToken ct)
     {
         using var root = OpenRoot();
-        var relative = Resolve(root, Relative(path));
+        var relative = resolveLinks ? Resolve(root, Relative(path)) : Relative(path);
         using var parent = Parent(root, relative);
         var name = Leaf(relative);
         BeforeOpen?.Invoke(path);

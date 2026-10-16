@@ -67,15 +67,23 @@ public sealed partial class SqliteIamStore
         return rows.Select(AgentDefinitionAdminMapping.MapPublication).Select(Summary).ToArray();
     }
     public async ValueTask<bool> TryCreateDefinitionAsync(TenantSecurityState next, long expectedSecurityRevision, TenantDefinition definition,
-        AgentDefinitionDraft draft, AuthorizationAudit audit, CancellationToken ct = default) =>
+        AgentDefinitionDraft draft, IReadOnlyList<AgentDefinitionDraftResource> initialResources, AuthorizationAudit audit, CancellationToken ct = default) =>
         await WriteDefinitionAsync(next, expectedSecurityRevision, audit, async db =>
         {
-            if (definition.DeletedAt is not null || definition.TenantId != next.Tenant.TenantId || definition.DefinitionId == Guid.Empty || draft.DefinitionId != definition.DefinitionId.ToString("D") || draft.Candidate.DefinitionId != draft.DefinitionId || draft.Revision != 1)
+            if (definition.TenantId != next.Tenant.TenantId)
                 throw new ArgumentException("Invalid definition ownership.");
+            TenantDefinitionCreationRules.Validate(definition, draft, initialResources);
             if (await db.Set<TenantDefinitionRecord>().AnyAsync(d => d.DefinitionId == draft.DefinitionId, ct).ConfigureAwait(false)
                 || await db.AgentDefinitionDrafts.IgnoreQueryFilters().AnyAsync(d => d.DefinitionId == draft.DefinitionId, ct).ConfigureAwait(false)
                 || await db.AgentDefinitionPublications.IgnoreQueryFilters().AnyAsync(d => d.DefinitionId == draft.DefinitionId, ct).ConfigureAwait(false)) return null;
             AgentDefinitionValidator.ValidateCandidate(draft.Candidate);
+            foreach (var resource in initialResources)
+            {
+                if (definitionContent is null) throw new AccessDeniedException("resource_content_unavailable");
+                _ = await AgentCore.Application.Admin.DefinitionResourceStoredContent.RequireForBindingAsync(definitionContent,
+                    resource.ContentSha256, resource.ByteLength, resource.MediaType, ct).ConfigureAwait(false);
+                db.AgentDefinitionDraftResources.Add(DefinitionResourcePersistence.MapDraftResource(resource));
+            }
             var root = TenantDefinitionRecord.Row(definition); db.Add(root); db.AgentDefinitionDrafts.Add(AgentDefinitionAdminMapping.MapDraft(draft));
             return root;
         }, ct).ConfigureAwait(false) is not null;
@@ -90,7 +98,7 @@ public sealed partial class SqliteIamStore
             var row = await Draft(db, next.Tenant.TenantId, draft.DraftId).SingleOrDefaultAsync(ct).ConfigureAwait(false);
             if (expectedDraftRevision is null)
             {
-                if (row is not null || draft.Revision != 1 || draft.SourceKind != DefinitionDraftSourceKind.ForkDurable || draft.SourceVersion is not { } sourceVersion) return null;
+                if (row is not null || draft.Revision != 1 || draft.SourceKind != DefinitionDraftSourceKind.ForkDurable || draft.SourceVersion is not { } sourceVersion || draft.SourceDefinitionId is not null) return null;
                 if (!await Publication(db, next.Tenant.TenantId, definitionId, sourceVersion).AnyAsync(ct).ConfigureAwait(false)) return null;
                 db.AgentDefinitionDrafts.Add(AgentDefinitionAdminMapping.MapDraft(draft));
                 var resources = await db.AgentDefinitionPublicationResources.IgnoreQueryFilters().AsNoTracking().Where(r => r.DefinitionId == draft.DefinitionId && r.Version == sourceVersion).ToArrayAsync(ct).ConfigureAwait(false);
@@ -99,7 +107,8 @@ public sealed partial class SqliteIamStore
             }
             else
             {
-                if (row is null || row.DefinitionId != draft.DefinitionId || row.Revision != expectedDraftRevision || draft.Revision != checked(expectedDraftRevision + 1)) return null;
+                if (row is null || row.DefinitionId != draft.DefinitionId || row.Revision != expectedDraftRevision || draft.Revision != checked(expectedDraftRevision + 1)
+                    || !TenantDefinitionCreationRules.SameSource(AgentDefinitionAdminMapping.MapDraft(row), draft)) return null;
                 db.Entry(row).CurrentValues.SetValues(AgentDefinitionAdminMapping.MapDraft(draft));
             }
             return draft;

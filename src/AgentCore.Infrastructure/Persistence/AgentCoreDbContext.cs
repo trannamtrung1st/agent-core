@@ -122,6 +122,7 @@ public sealed class AgentDefinitionDraftRecord
     public string CandidateJson { get; set; } = "";
     public int SourceKind { get; set; }
     public int? SourceVersion { get; set; }
+    public string? SourceDefinitionId { get; set; }
     public long CreatedAtUtc { get; set; }
     public long UpdatedAtUtc { get; set; }
 }
@@ -594,6 +595,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.Property(row => row.DraftId).HasMaxLength(36);
             entity.Property(row => row.DefinitionId).HasMaxLength(128).IsRequired();
             entity.Property(row => row.CandidateJson).IsRequired();
+            entity.Property(row => row.SourceDefinitionId).HasMaxLength(64);
             entity.Property(row => row.Revision).IsConcurrencyToken();
             entity.HasIndex(row => row.DefinitionId);
         });

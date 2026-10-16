@@ -15,6 +15,16 @@ public sealed record TenantDefinitionResourceContent(string LogicalPath, string 
 public sealed record TenantDefinitionScenarioSaved(DefinitionEvaluationScenario Scenario, long Revision);
 public sealed record TenantDefinitionDraftRevision(long Revision);
 public sealed record TenantDefinitionDeleted(bool DefinitionRetired);
+public sealed record BuiltInDefinitionResource(string LogicalPath, AgentDefinitionResourceKind Kind, string MediaType, byte[] Content);
+public sealed record BuiltInDefinitionTemplate(AgentDefinition Definition, IReadOnlyList<BuiltInDefinitionResource> Resources);
+
+// Shipped immutable definitions plus explicitly approved bytes only. Never resolve the tenant
+// or global durable publication store as a fallback for a missing shipped source.
+public interface IBuiltInDefinitionTemplateSource
+{
+    ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default);
+    ValueTask<BuiltInDefinitionTemplate?> ReadAsync(string templateId, int version, CancellationToken ct = default);
+}
 
 // Ownership belongs to the definition aggregate. Drafts, publications and resource/evaluation
 // children remain in their existing stores; canonical mutations commit with security CAS and audit.
@@ -43,7 +53,7 @@ public interface ITenantDefinitionStore
     ValueTask<AgentDefinitionPublication?> FindDefinitionPublicationAsync(Guid tenantId, Guid definitionId, int version, CancellationToken ct = default);
     ValueTask<IReadOnlyList<AgentDefinitionPublicationSummary>> ListDefinitionPublicationsAsync(Guid tenantId, Guid definitionId, CancellationToken ct = default);
     ValueTask<bool> TryCreateDefinitionAsync(TenantSecurityState next, long expectedSecurityRevision, TenantDefinition definition,
-        AgentDefinitionDraft draft, AuthorizationAudit audit, CancellationToken ct = default);
+        AgentDefinitionDraft draft, IReadOnlyList<AgentDefinitionDraftResource> initialResources, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<bool> TrySaveDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision,
         AgentDefinitionDraft draft, long? expectedDraftRevision, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<AgentDefinitionPublication?> TryPublishDefinitionDraftAsync(TenantSecurityState next, long expectedSecurityRevision,

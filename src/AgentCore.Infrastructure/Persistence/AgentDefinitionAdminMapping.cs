@@ -20,7 +20,7 @@ internal static class AgentDefinitionAdminMapping
             (DefinitionDraftSourceKind)row.SourceKind,
             row.SourceVersion,
             DateTimeOffset.FromUnixTimeMilliseconds(row.CreatedAtUtc),
-            DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc));
+            DateTimeOffset.FromUnixTimeMilliseconds(row.UpdatedAtUtc), row.SourceDefinitionId);
 
     internal static AgentDefinitionDraftRecord MapDraft(AgentDefinitionDraft draft) =>
         new()
@@ -31,6 +31,7 @@ internal static class AgentDefinitionAdminMapping
             CandidateJson = SerializeCandidate(draft.Candidate),
             SourceKind = (int)draft.SourceKind,
             SourceVersion = draft.SourceVersion,
+            SourceDefinitionId = draft.SourceDefinitionId,
             CreatedAtUtc = draft.CreatedAt.ToUnixTimeMilliseconds(),
             UpdatedAtUtc = draft.UpdatedAt.ToUnixTimeMilliseconds()
         };

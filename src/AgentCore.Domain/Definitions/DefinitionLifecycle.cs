@@ -21,7 +21,8 @@ public sealed record AgentDefinitionDraft(
     DefinitionDraftSourceKind SourceKind,
     int? SourceVersion,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? SourceDefinitionId = null);
 
 public sealed record AgentDefinitionDraftSummary(
     Guid DraftId,

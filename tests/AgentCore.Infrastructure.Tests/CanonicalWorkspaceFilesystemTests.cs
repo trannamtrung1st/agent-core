@@ -16,6 +16,26 @@ public sealed class CanonicalWorkspaceFilesystemTests : IDisposable
     private static async Task<string> Read(CanonicalWorkspaceFilesystem fs, string path) =>
         Encoding.UTF8.GetString(await fs.ReadAsync(path, 1024 * 1024));
 
+    [Fact]
+    public async Task Approved_asset_reads_never_follow_links_or_a_file_swapped_at_open()
+    {
+        var home = Home; home.Ensure(); home.Mkdir("/home/approved");
+        await Write(home, "/home/approved/note.txt", "approved"); await Write(home, "/home/other.txt", "other approved-area file");
+        File.CreateSymbolicLink(Path.Combine(home.PhysicalRoot, "alias.txt"), "other.txt");
+        Directory.CreateSymbolicLink(Path.Combine(home.PhysicalRoot, "alias-dir"), "approved");
+        Assert.Equal("other approved-area file", await Read(home, "/home/alias.txt"));
+        await Assert.ThrowsAsync<AgentCoreException>(() => home.ReadUnlinkedAsync("/home/alias.txt", 1024).AsTask());
+        Assert.Throws<AgentCoreException>(() => home.ListUnlinked("/home/alias-dir"));
+        home.BeforeOpen = _ =>
+        {
+            var path = Path.Combine(home.PhysicalRoot, "approved", "note.txt");
+            File.Delete(path); File.CreateSymbolicLink(path, "../other.txt");
+        };
+        await Assert.ThrowsAsync<AgentCoreException>(() => home.ReadUnlinkedAsync("/home/approved/note.txt", 1024).AsTask());
+        home.BeforeOpen = null;
+        Assert.Equal("other approved-area file", await Read(home, "/home/other.txt"));
+    }
+
     [Theory]
     [InlineData("file")]
     [InlineData("directory")]

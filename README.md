@@ -12,6 +12,8 @@ Canonical tenant definition resources and offline evaluation workflows now suppo
 
 Canonical tenant Definition deletion now checks current authority, complete revisions and actual references, removes grants/children atomically, and retains ownership markers that prevent ID reuse. [Deletion verification](docs/reports/tenant-definition-deletion-verification-2026-10-16.md) records local evidence and the remaining template/UI/runtime cutover.
 
+Shipped-template forks now create independent tenant Definitions with approved knowledge/workspace bytes and immutable source provenance. [Template verification](docs/reports/tenant-definition-template-verification-2026-10-16.md) records isolation, rollback and HTTP evidence; tenant editor/runtime and the full IAM/approval cutover remain in progress.
+
 Automatic Sandbox filesystem compatibility now prepares private owned roots and selects non-root execution in the trusted server without rebuilding the chosen image. Verification contract 4 attests exact mounts and real filesystem/Git behavior, accepting proven Docker Desktop metadata translation while retaining strict Linux ownership. [Root cause, local evidence and platform limits](docs/reports/automatic-sandbox-filesystem-compatibility-2026-10-16.md).
 
 Semantic response recovery now keeps initial background Work/Cleanup on the work.complete contract, reserves one durable correction, and exposes precise bounded recovery diagnostics. [Incident evidence and focused verification](docs/reports/semantic-response-reliability-verification-2026-10-16.md).

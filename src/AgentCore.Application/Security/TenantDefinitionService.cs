@@ -7,7 +7,8 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed partial class TenantDefinitionService(IIamStore security, ITenantDefinitionStore definitions, IamAuthorizer authorizer,
-    ProviderAliasSet aliases, IModelCatalog models, IToolConfigurationGate configuration, IIdGenerator ids, TimeProvider time, IDefinitionResourceContentStore content, AgentDefinitionDraftSyntheticEvaluationRunner evaluation)
+    ProviderAliasSet aliases, IModelCatalog models, IToolConfigurationGate configuration, IIdGenerator ids, TimeProvider time, IDefinitionResourceContentStore content, AgentDefinitionDraftSyntheticEvaluationRunner evaluation,
+    IBuiltInDefinitionTemplateSource templates)
 {
     public async ValueTask<TenantDefinitionPage> ListAsync(Guid actor, Guid tenant, int page = 0, int pageSize = 30, CancellationToken ct = default)
     {
@@ -35,7 +36,7 @@ public sealed partial class TenantDefinitionService(IIamStore security, ITenantD
         candidate = candidate with { Identity = candidate.Identity with { Name = name } };
         candidate = Validate(candidate, false);
         var draft = new AgentDefinitionDraft(ids.NewId(), id.ToString("D"), 1, candidate, DefinitionDraftSourceKind.New, null, now, now);
-        if (!await definitions.TryCreateDefinitionAsync(Advance(state), expectedRevision, new(tenant, id, now), draft,
+        if (!await definitions.TryCreateDefinitionAsync(Advance(state), expectedRevision, new(tenant, id, now), draft, [],
             Audit(tenant, actor, "create", id, now), ct).ConfigureAwait(false)) throw new SecurityConflictException("stale_revision");
         return draft;
     }

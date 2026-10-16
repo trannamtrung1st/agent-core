@@ -352,6 +352,8 @@ public static class InfrastructureServiceCollectionExtensions
             new FileAgentDefinitionStore(agentDirectory, provider.GetRequiredService<ProviderAliasSet>()));
         services.TryAddSingleton<IBuiltInAgentDefinitionStore>(provider =>
             provider.GetRequiredService<FileAgentDefinitionStore>());
+        services.TryAddSingleton<IBuiltInDefinitionTemplateSource>(provider => new FileBuiltInDefinitionTemplateSource(
+            provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), agentDirectory, provider.GetRequiredService<PersistenceOptions>().TemplateRoot));
         services.TryAddSingleton<IAgentDefinitionStore>(provider =>
             new CompositeAgentDefinitionStore(
                 provider.GetRequiredService<FileAgentDefinitionStore>(),
