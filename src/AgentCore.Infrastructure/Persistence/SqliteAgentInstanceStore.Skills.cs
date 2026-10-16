@@ -22,6 +22,10 @@ public sealed partial class SqliteAgentInstanceStore
     public async ValueTask<InstanceSkillSnapshot> ReadSkillsAsync(Guid instanceId, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
+        return await ReadSkillsAsync(db, instanceId, ct);
+    }
+    internal static async ValueTask<InstanceSkillSnapshot> ReadSkillsAsync(AgentCoreDbContext db, Guid instanceId, CancellationToken ct)
+    {
         var id = instanceId.ToString("D");
         var states = await db.AgentDefinitionSkillStates.AsNoTracking().Where(s => s.AgentInstanceId == id).ToArrayAsync(ct);
         var skills = await db.AgentInstanceSkills.AsNoTracking().Where(s => s.AgentInstanceId == id).ToArrayAsync(ct);

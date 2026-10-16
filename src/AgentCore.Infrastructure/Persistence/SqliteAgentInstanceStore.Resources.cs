@@ -18,6 +18,10 @@ public sealed partial class SqliteAgentInstanceStore
     public async ValueTask<InstanceResourceSnapshot> ReadResourcesAsync(Guid id, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
+        return await ReadResourcesAsync(db, id, ct);
+    }
+    internal static async ValueTask<InstanceResourceSnapshot> ReadResourcesAsync(AgentCoreDbContext db, Guid id, CancellationToken ct)
+    {
         var owner = id.ToString("D");
         var resources = await db.AgentInstanceResources.AsNoTracking().Where(r => r.InstanceId == owner).ToArrayAsync(ct);
         var states = await db.AgentDefinitionResourceStates.AsNoTracking().Where(r => r.InstanceId == owner).ToArrayAsync(ct);

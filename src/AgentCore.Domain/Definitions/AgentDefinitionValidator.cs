@@ -334,10 +334,10 @@ public static class AgentDefinitionValidator
 
     public static void ValidateIdentity(AgentIdentity identity)
     {
-        if (identity.Name.Length is < 1 or > 256
-            || identity.Role.Length is < 1 or > 256
-            || identity.Tone.Length is < 1 or > 256
-            || identity.Description.Length is < 1 or > 1024)
+        if (identity is null || string.IsNullOrWhiteSpace(identity.Name) || identity.Name.Length > 256
+            || string.IsNullOrWhiteSpace(identity.Role) || identity.Role.Length > 256
+            || string.IsNullOrWhiteSpace(identity.Tone) || identity.Tone.Length > 256
+            || string.IsNullOrWhiteSpace(identity.Description) || identity.Description.Length > 1024)
         {
             throw new ArgumentException("identity field lengths are invalid.");
         }

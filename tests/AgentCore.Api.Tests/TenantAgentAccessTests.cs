@@ -47,6 +47,9 @@ public sealed class TenantAgentAccessTests
         var assigned = await owner.PostAsJsonAsync($"/api/v2/tenants/{a}/role-assignments", new { principalId = human, roleId = readerRole, resourceType = "agent", resourceId = id, expectedRevision = await Revision(owner, a) });
         Assert.Equal(HttpStatusCode.Created, assigned.StatusCode);
         var assignmentId = (await Json(assigned)).GetProperty("assignmentId").GetGuid();
+        Assert.Equal(HttpStatusCode.OK, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/effective-config")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{secondId}/effective-config")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/persona", new { persona = new { name = "Denied", role = "Guide", description = "Denied", tone = "Clear" }, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1, expectedPersonaRevision = 1 })).StatusCode);
         var scoped = await Json(await member.GetAsync($"/api/v2/tenants/{a}/agents?pageSize=1"));
         Assert.Equal(1, scoped.GetProperty("total").GetInt32());
         Assert.Equal(id, scoped.GetProperty("items")[0].GetProperty("instance").GetProperty("instanceId").GetGuid());
@@ -55,6 +58,8 @@ public sealed class TenantAgentAccessTests
         var archived = await owner.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/lifecycle", new { lifecycle = 1, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1 });
         Assert.Equal(HttpStatusCode.OK, archived.StatusCode);
         var archive = await Json(archived); Assert.Equal("Archived", archive.GetProperty("instance").GetProperty("lifecycle").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"/api/v2/tenants/{a}/agents/{id}/effective-config")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/persona", new { persona = new { name = "Archived", role = "Guide", description = "Read only", tone = "Clear" }, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 2, expectedPersonaRevision = 1 })).StatusCode);
         var stale = await owner.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/lifecycle", new { lifecycle = 0, expectedRevision = await Revision(owner, a), expectedInstanceRevision = 1 });
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
         var restored = await owner.PutAsJsonAsync($"/api/v2/tenants/{a}/agents/{id}/lifecycle", new { lifecycle = 0, expectedRevision = await Revision(owner, a), expectedInstanceRevision = archive.GetProperty("instance").GetProperty("revision").GetInt64() });
@@ -63,6 +68,7 @@ public sealed class TenantAgentAccessTests
         Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync($"/api/v2/tenants/{a}/role-assignments/{assignmentId}?expectedRevision={await Revision(owner, a)}")).StatusCode);
         Assert.Equal(0, (await Json(await member.GetAsync($"/api/v2/tenants/{a}/agents"))).GetProperty("total").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync($"/api/v2/tenants/{a}/agents/{id}/effective-config")).StatusCode);
     }
 
     private static async Task Login(HttpClient client, string login, string password)

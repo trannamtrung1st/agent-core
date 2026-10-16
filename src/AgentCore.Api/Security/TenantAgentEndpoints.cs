@@ -5,7 +5,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Api.Security;
 
-public static class TenantAgentEndpoints
+public static partial class TenantAgentEndpoints
 {
     public sealed record CreateRequest(string TemplateId, int Version, long ExpectedRevision, AgentIdentity? Persona = null);
     public sealed record PublicationCreateRequest(Guid DefinitionId, int Version, long ExpectedRevision, AgentIdentity? Persona = null);
@@ -14,6 +14,7 @@ public static class TenantAgentEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}").RequireAuthorization();
+        MapConfiguration(group);
         group.MapGet("/agent-templates", (HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);

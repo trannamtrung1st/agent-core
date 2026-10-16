@@ -6,6 +6,8 @@ Resource-scoped IAM now validates member, role and registered-agent ownership, r
 
 Canonical tenant-agent APIs now commit actual Instance creation and archive/restore with agent identity, security revision and audit. [Transaction and scoped-inventory evidence](docs/reports/tenant-agent-lifecycle-verification-2026-10-16.md) records local verification and the remaining Instance/resource/execution cutover.
 
+Canonical tenant Instance configuration now resolves owned publication/resources, preserves independent persona and explicitly adopts exact active versions with atomic revisions, inherited Skills, Automation policy reconciliation and audit. [Configuration verification](docs/reports/tenant-agent-configuration-verification-2026-10-16.md) records both-store, HTTP and recovery evidence; full settings/resource/runtime/approval cutover remains in progress.
+
 Tenant-owned definition draft/publication APIs now preserve immutable versions and publication gates, support scoped IAM reads and create owned Instances from exact active tenant publications. [Authoring verification and remaining boundaries](docs/reports/tenant-definition-verification-2026-10-16.md) separate this progress from the subsequent resource/evaluation UI and pending tenant-aware runtime execution.
 
 Canonical tenant definition resources and offline evaluation workflows now support owned byte uploads, atomic batches, protected downloads and revision-bound publication evidence. [Child workflow verification](docs/reports/tenant-definition-children-verification-2026-10-16.md) records isolation, race, cancellation and recovery checks; the full resource/runtime/UI cutover remains in progress.

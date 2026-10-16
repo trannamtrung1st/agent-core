@@ -1,0 +1,68 @@
+using System.Text.Json;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
+using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Security;
+using AgentCore.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace AgentCore.Infrastructure.Security;
+
+public sealed partial class SqliteIamStore
+{
+    public async ValueTask<TenantAgentConfigurationSnapshot?> ReadTenantAgentConfigurationAsync(Guid tenantId, Guid instanceId, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var key = instanceId.ToString("D");
+        var row = await OwnedAgents(db, tenantId).SingleOrDefaultAsync(x => x.Instance.InstanceId == key, ct).ConfigureAwait(false);
+        if (row is null) return null;
+        return new(Owned(row), await SqliteAgentInstanceStore.ReadSkillsAsync(db, instanceId, ct).ConfigureAwait(false),
+            await SqliteAgentInstanceStore.ReadResourcesAsync(db, instanceId, ct).ConfigureAwait(false));
+    }
+
+    public async ValueTask<TenantAgent?> TryChangeTenantAgentConfigurationAsync(TenantSecurityState next, long expectedSecurityRevision,
+        TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+    {
+        next = IamStateRules.Freeze(next);
+        IamStateRules.ValidateAgentWrite(next, expectedSecurityRevision, change.InstanceId, AgentInstanceLifecycle.Active, audit);
+        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var tenant = await db.Set<Tenant>().SingleOrDefaultAsync(t => t.TenantId == next.Tenant.TenantId, ct).ConfigureAwait(false);
+        if (tenant is null || tenant.Revision != expectedSecurityRevision) return null;
+        var before = (await ReadTenantAsync(db, tenant.TenantId, ct).ConfigureAwait(false))!;
+        IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
+        await ValidateTenantActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
+        await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
+        var identity = before.SystemIdentities.SingleOrDefault(i => i.AgentInstanceId == change.InstanceId);
+        if (identity is null) return null;
+        var key = change.InstanceId.ToString("D");
+        var row = await db.AgentInstances.SingleOrDefaultAsync(i => i.InstanceId == key, ct).ConfigureAwait(false);
+        if (row is null || row.Revision != change.ExpectedInstanceRevision) return null;
+        var current = SqliteAgentInstanceStore.Map(row);
+        var updated = TenantAgentConfigurationRules.Apply(current, change, at);
+        if (change.ActiveVersion is { } version && Guid.TryParse(current.DefinitionId, out var definitionId))
+        {
+            var id = definitionId.ToString("D");
+            var publication = await db.AgentDefinitionPublications.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(p => p.DefinitionId == id && p.Version == version
+                && db.Set<TenantDefinitionRecord>().Any(r => r.DefinitionId == id && r.TenantId == next.Tenant.TenantId && r.DeletedAt == null), ct).ConfigureAwait(false);
+            var source = publication is null ? null : AgentDefinitionAdminMapping.MapPublication(publication);
+            if (source?.Status != DefinitionPublicationStatus.Active || source.MetadataRevision != change.ExpectedPublicationRevision)
+                throw new SecurityConflictException("resource_changed");
+            change = change with { DefinitionSkills = source.Payload.SkillList };
+        }
+        row.PersonaJson = JsonSerializer.Serialize(updated.Persona, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        row.PersonaRevision = updated.PersonaRevision; row.ActiveVersion = updated.ActiveVersion;
+        row.Revision = updated.Revision; row.UpdatedAtUtc = at.ToUnixTimeMilliseconds();
+        await SqliteAgentInstanceStore.InitializeSkillsAsync(db, change.InstanceId, change.DefinitionSkills, at, ct).ConfigureAwait(false);
+        await SqliteAgentInstanceStore.StageAutomationPolicyAsync(db, new(change.InstanceId, change.ExpectedInstanceRevision,
+            AutomationPolicyChanges: change.AutomationPolicyChanges), at, ct).ConfigureAwait(false);
+        db.Entry(tenant).CurrentValues.SetValues(next.Tenant);
+        await ApplyTenantChildrenAsync(db, next, ct).ConfigureAwait(false); db.Add(audit);
+        foreach (var e in CoreEventPersistence.Instance(current, updated)) CoreEventPersistence.Stage(db, e);
+        try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); }
+        catch (DbUpdateConcurrencyException) { return null; }
+        catch (DbUpdateException ex) when (IsConstraint(ex)) { return null; }
+        return new(next.Tenant.TenantId, identity.SystemIdentityId, identity.PrincipalId, SqliteAgentInstanceStore.Map(row));
+    }
+}
