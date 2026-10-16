@@ -210,24 +210,24 @@ public sealed class IdentityConsolidationContractTests
     }
 
     [Fact]
-    public async Task Old_SQLite_memory_and_Experience_upgrade_with_empty_lineage_and_default_off_setting()
+    public async Task Current_SQLite_baseline_reopen_preserves_empty_lineage_and_default_off_setting()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"p910-upgrade-{Guid.NewGuid():N}.db");
+        var path = Path.Combine(Path.GetTempPath(), $"p910-reopen-{Guid.NewGuid():N}.db");
         var factory = new Factory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path}").Options);
         try
         {
+            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
             await using (var db = factory.CreateDbContext())
             {
-                var previous = db.Database.GetMigrations().Last(m => !m.Contains("P910"));
-                await db.Database.MigrateAsync(previous);
-                // Deliberately omit new columns, as a persisted pre-P9.10 row does.
-                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO StructuredMemories (MemoryId,SessionId,Kind,Status,Subject,Content,SubjectKey,Source,SourceEntryIdsJson,ProvenanceRecordedAtUtc,CreatedAtUtc,UpdatedAtUtc,Scope,OwnerInstanceId,OwnerProfileId) VALUES ({Guid.NewGuid().ToString()}, {Session.ToString()}, {0}, {0}, {"Legacy"}, {"Retained fact"}, {"legacy"}, {"agent_inferred"}, {"[]"}, {Now.ToUnixTimeMilliseconds()}, {Now.ToUnixTimeMilliseconds()}, {Now.ToUnixTimeMilliseconds()}, {1}, {Instance.ToString()}, {Profile.ToString()})");
+                // Current rows explicitly persist empty lineage; old-schema upgrades are unsupported.
+                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO StructuredMemories (MemoryId,SessionId,Kind,Status,Subject,Content,SubjectKey,Source,SourceEntryIdsJson,ProvenanceRecordedAtUtc,CreatedAtUtc,UpdatedAtUtc,Scope,OwnerInstanceId,OwnerProfileId,DerivedFromMemoryIdsJson) VALUES ({Guid.NewGuid().ToString()}, {Session.ToString()}, {0}, {0}, {"Existing"}, {"Retained fact"}, {"existing"}, {"agent_inferred"}, {"[]"}, {Now.ToUnixTimeMilliseconds()}, {Now.ToUnixTimeMilliseconds()}, {Now.ToUnixTimeMilliseconds()}, {1}, {Instance.ToString()}, {Profile.ToString()}, {"[]"})");
                 var ex = Experience();
                 db.Experiences.Add(new() { ExperienceId = ex.ExperienceId.ToString(), AgentInstanceId = Instance.ToString(), ProfileId = Profile.ToString(), SourceKind = 0, SourceId = ex.SourceId.ToString(), ThroughCursor = ex.ThroughCursor, CreatedAtUtc = Now.ToUnixTimeMilliseconds(), PayloadJson = System.Text.Json.JsonSerializer.Serialize(ex), Revision = 1 });
                 await db.SaveChangesAsync();
-                await db.Database.MigrateAsync();
             }
+            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
             var memory = Assert.Single(await new SqliteStructuredMemoryStore(factory).ListActiveIdentityUserAsync(Instance, Profile));
+            Assert.Equal("Retained fact", memory.Content);
             Assert.Empty(memory.Provenance.DerivedFromMemoryIds!);
             Assert.Null(memory.Provenance.MaintenanceAgentInstanceId);
             Assert.Null(memory.Provenance.MaintenanceSessionId);

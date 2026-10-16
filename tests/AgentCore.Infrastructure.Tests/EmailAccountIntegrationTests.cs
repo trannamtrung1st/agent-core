@@ -13,8 +13,6 @@ using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using AgentCore.Application.Testing;
 using Microsoft.Extensions.Logging;
 
@@ -144,21 +142,23 @@ public sealed class EmailAccountIntegrationTests
         Assert.Throws<ArgumentException>(() => EmailAccountProfile.Custom("forged\r\nTo: someone@example.test").Validate());
     }
     [Fact]
-    public async Task Upgrade_preserves_existing_general_credentials_and_ciphertext()
+    public async Task Current_SQLite_baseline_reopen_preserves_general_credentials_and_ciphertext()
     {
-        var root = Path.Combine(Path.GetTempPath(), "email-upgrade-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        var root = Path.Combine(Path.GetTempPath(), "email-reopen-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
             var factory = new DbFactory(root); var id = Guid.NewGuid().ToString("D");
-            var previous = new AgentCoreDbContext(factory.Options).Database.GetMigrations().Last(m => string.CompareOrdinal(m, "20261011182635_AccountScopedEmail") < 0);
+            await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
             await using (var db = factory.CreateDbContext())
             {
-                await db.GetService<IMigrator>().MigrateAsync(previous);
-                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Credentials (CredentialId,DisplayName,Kind,Status,MetadataJson,AllowedOriginsJson,ProtectedPayload,ProtectionVersion,Revision,CreatedAtUtc,UpdatedAtUtc) VALUES ({id},{"existing"},{"Password"},{"Active"},{"{}"},{"[]"},{"unchanged-ciphertext"},{1},{7},{1L},{1L})");
+                // Omit Purpose to exercise the current baseline's General default.
+                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Credentials (CredentialId,DisplayName,Kind,Status,MetadataJson,AllowedOriginsJson,ProtectedPayload,ProtectionVersion,SecretRevision,Revision,CreatedAtUtc,UpdatedAtUtc) VALUES ({id},{"existing"},{"Password"},{"Active"},{"{}"},{"[]"},{"unchanged-ciphertext"},{1},{7},{7},{1L},{1L})");
             }
-            await using (var db = factory.CreateDbContext()) await db.Database.MigrateAsync();
-            var restored = await new SqliteCredentialStore(factory).GetAsync(Guid.Parse(id));
+            var reopened = new DbFactory(root);
+            await new SqliteMemoryStore(reopened, TimeProvider.System).EnsureCreatedAsync();
+            var restored = await new SqliteCredentialStore(reopened).GetAsync(Guid.Parse(id));
             Assert.Equal(CredentialPurpose.General, restored!.Purpose); Assert.Equal(7, restored.Revision); Assert.Equal("unchanged-ciphertext", restored.ProtectedPayload);
+            Assert.Equal(7, restored.SecretRevision); Assert.Equal(1, restored.ProtectionVersion); Assert.Null(restored.EmailAccount);
         }
         finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     }

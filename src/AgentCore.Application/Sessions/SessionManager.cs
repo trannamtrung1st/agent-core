@@ -786,13 +786,15 @@ public sealed class SessionManager
     public async Task<IReadOnlyList<WorkspaceNode>> ListWorkspaceAsync(Guid sessionId, string prefix, CancellationToken cancellationToken = default) =>
         (await ListWorkspacePageAsync(sessionId, prefix, null, WorkspaceLimits.MaxListEntries, cancellationToken)).Entries;
 
-    public async Task<WorkspaceNodePage> ListWorkspacePageAsync(Guid sessionId, string prefix, string? cursor, int limit, CancellationToken cancellationToken = default)
+    public async Task<WorkspaceNodePage> ListWorkspacePageAsync(Guid sessionId, string? prefix, string? cursor, int limit, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetAsync(sessionId, cancellationToken);
         var workspace = RequireWorkspace();
-        var resolvedPrefix = prefix == "/" ? "/home" : AgentWorkspacePaths.Resolve(string.IsNullOrEmpty(prefix) ? "/home" : prefix, sessionId);
         var definition = _configurations is null ? snapshot.Definition : (await _configurations.ResolveAsync(snapshot.AgentInstanceId, cancellationToken, allowArchived: true)).Configuration.Definition;
-        Agents.StateIsolationAccess.RequireHome(definition.StateIsolationPolicy ?? StateIsolationPolicy.Default, resolvedPrefix, false);
+        var policy = definition.StateIsolationPolicy ?? StateIsolationPolicy.Default;
+        var defaultRoot = policy.HomeAccess == HomeAccess.Disabled ? "/working" : "/home";
+        var resolvedPrefix = prefix is null or "" or "/" ? defaultRoot : AgentWorkspacePaths.Resolve(prefix, sessionId);
+        Agents.StateIsolationAccess.RequireHome(policy, resolvedPrefix, false);
         if (Workspaces.AgentHomePath.IsHome(resolvedPrefix) && _agentWorkspace is not null)
         {
             await _agentWorkspace.RequireSessionHomeAsync(sessionId, resolvedPrefix, false, cancellationToken);

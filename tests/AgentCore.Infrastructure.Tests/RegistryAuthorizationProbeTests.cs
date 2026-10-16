@@ -200,13 +200,13 @@ public sealed class RegistryAuthorizationProbeTests
     {
         var root=Path.Combine(Path.GetTempPath(),"oci-probe-race-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
         var builder=WebApplication.CreateSlimBuilder();builder.Logging.ClearProviders();
-        await using var app=builder.Build();app.Urls.Add("http://127.0.0.1:0");var creates=0;
+        await using var app=builder.Build();app.Urls.Add("http://127.0.0.1:0");var creates=0;var probes=0;
         var owners=new AgentCore.Infrastructure.Persistence.InMemoryAgentInstanceStore();
         var credentials=new AgentCore.Infrastructure.Persistence.InMemoryCredentialStore(owners);
         var protector=new AgentCore.Infrastructure.Credentials.LocalCredentialProtector(root);
         var service=new AgentCore.Application.Credentials.CredentialService(credentials,credentials,protector,owners,new AgentCore.Infrastructure.Identity.SystemIdGenerator(TimeProvider.System),TimeProvider.System);
         AgentCore.Application.Credentials.CredentialView? credential=null;
-        app.MapMethods("/v2/acme/tool/manifests/{digest}",["HEAD"],async()=>{await service.ReplaceAsync(credential!.CredentialId,credential.Revision,"rotated-probe-sentinel");return Results.Ok();});
+        app.MapMethods("/v2/acme/tool/manifests/{digest}",["HEAD"],async()=>{Interlocked.Increment(ref probes);await service.ReplaceAsync(credential!.CredentialId,credential.Revision,"rotated-probe-sentinel");return Results.Ok();});
         app.MapPost("/sandboxes",()=>{Interlocked.Increment(ref creates);return Results.StatusCode(500);});
         await app.StartAsync();
         try
@@ -216,11 +216,12 @@ public sealed class RegistryAuthorizationProbeTests
             var profiles=new AgentCore.Infrastructure.Persistence.InMemorySandboxStore();
             var profile=new AgentCore.Domain.Definitions.SandboxProfile("race",1,"Race","",true,host+"/acme/tool@sha256:"+new string('a',64),RegistryCredentialId:credential.CredentialId);
             await profiles.SaveProfileAsync(profile,0);
-            var options=new OpenSandboxOptions {Enabled=true,Endpoint=app.Urls.Single(),ApiKey="fixture-key",InsecureRegistryHosts=[host],AllowedImagePrefixes=[host+"/acme"]};
+            var mounts=Path.Combine(root,"mounts");
+            var options=new OpenSandboxOptions {Enabled=true,Endpoint=app.Urls.Single(),ApiKey="fixture-key",InsecureRegistryHosts=[host],AllowedImagePrefixes=[host+"/acme"],CanonicalWorkspaceRoot=mounts,WorkspaceDockerHostRoot=mounts};
             var authority=new SandboxImageAuthority(options,profiles,TimeProvider.System,credentials,protector);
             var adapter=new OpenSandboxService(options,profiles,null!,null!,null!,TimeProvider.System,imageAuthority:authority);
             var result=await adapter.VerifyProfileAsync(profile,CancellationToken.None);
-            Assert.False(result.Passed);Assert.Equal(0,creates);Assert.DoesNotContain("probe-sentinel",result.Message);
+            Assert.False(result.Passed);Assert.Equal(1,probes);Assert.Equal(0,creates);Assert.DoesNotContain("probe-sentinel",result.Message);
             Assert.Equal(2,(await credentials.GetAsync(credential.CredentialId))!.Revision);
         }
         finally {await app.StopAsync();Directory.Delete(root,true);}

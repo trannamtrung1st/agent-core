@@ -609,7 +609,7 @@ public static partial class TriggerScheduleCommands
             throw new ArgumentException(
                 "Schedule time is missing or ambiguous. Present: "
                 + (present.Count == 0 ? "none" : string.Join(',', present))
-                + ". Use exactly one of relativeDelaySeconds, relativeDayOffset with localTime, localDate with localTime, or atUtc. Ask the user to restate the full request with a clear time. Do not ask for a bare yes/no confirmation.");
+                + ". Use exactly one of relativeDelaySeconds, relativeDayOffset with localTime, localDate with localTime, or atUtc in a complete structured proposal. Ask only for missing or ambiguous timing details; retain the user's clear intent. Do not ask for a bare yes/no confirmation.");
         }
 
         DateTimeOffset instant;
@@ -1150,10 +1150,10 @@ public static partial class TriggerScheduleCommands
             scheduleDraft = draft.ToJsonObject(),
             retryGuidance = code switch
             {
-                "recurrence_below_minimum" => "The user may correct only the interval on the next turn. Do not change the intent.",
-                "unsupported_recurrence" => "Explain supported cadences and ask the user to restate the request.",
+                "recurrence_below_minimum" => "Explain the minimum recurrence interval and ask for a supported interval if needed. Submit a complete structured proposal preserving the user's intent and incorporating their correction; draft evidence is not authorization.",
+                "unsupported_recurrence" => "Explain supported cadences and clarify only the unsupported timing. Submit a complete structured proposal preserving the user's clear intent.",
                 "authorization_denied" => "Do not retry with different time argument shapes.",
-                _ => "Ask the user to restate the schedule request clearly."
+                _ => "Clarify only missing or ambiguous schedule details, then submit a complete structured proposal preserving the user's clear intent."
             }
         });
     }

@@ -70,6 +70,8 @@ public sealed class TriggerScheduleSemanticsTests
             new AgentCore.Infrastructure.Providers.Synthetic.SyntheticTriggerCommandAuthorizer());
         Assert.Contains("\"error\":\"recurrence_below_minimum\"", result.Text, StringComparison.Ordinal);
         Assert.Contains("\"scheduleDraft\"", result.Text, StringComparison.Ordinal);
+        using var rejected = JsonDocument.Parse(result.Text);
+        Assert.Contains("complete structured proposal", rejected.RootElement.GetProperty("retryGuidance").GetString(), StringComparison.Ordinal);
         Assert.Empty(await store.ListAsync(owner, null));
     }
 

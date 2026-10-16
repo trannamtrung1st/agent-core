@@ -364,7 +364,7 @@ Historical Phases A–H included Docker `sandbox.run`; [current sandbox contract
 | PATCH /api/v2/profile | Owner capability; optimistic `expectedRevision`; allowlisted keys only; null/whitespace removes a field; server stamps `UserSet` (browser cannot set source) |
 | POST /api/v2/sessions/{id}/model | Catalog-level session model mutation (`key` Default or a catalog key, optional `reasoningEffort`). Server resolves and persists concrete `SessionModelSelection`. Rejects `SessionBusy` while generating. Terminal sessions are read-only |
 | GET /api/v2/sessions/{id}/knowledge/{identity} | Approved knowledge retrieval with citation metadata; 403 if current Instance authority does not allow `knowledge.retrieve` or the identity |
-| GET /api/v2/sessions/{id}/workspace | Execution-view listing (`prefix` query; omitted or `/` resolves `/home`); owner capability |
+| GET /api/v2/sessions/{id}/workspace | Execution-view listing (`prefix` query; omitted, empty or `/` resolves `/working` when effective HomeAccess is Disabled, otherwise `/home`); explicit forbidden paths remain forbidden; owner capability |
 | GET /api/v2/sessions/{id}/workspace/content?path= | Read authorized `/home` or `/working` content and read-only `/agent` or `/attachments`; relative HTTP paths resolve from `/home`; host paths are never returned |
 | PUT /api/v2/sessions/{id}/workspace/content?path= | Writes current bytes under authorized `/working` or `/home` without file CAS; bounded application budgets and effective home policy apply; escaping paths and unsafe links fail closed |
 | POST /api/v2/sessions/{id}/attachments/{attachmentId}/materialize | Explicit working copy plus Artifact metadata; originals unchanged; SHA-256 preserved; deterministic `name-2` collisions |
@@ -792,7 +792,7 @@ All routes below use existing owner-capability authorization and safe problem de
 | `GET /api/v2/admin/agent-instances/{id}/sandbox` | Effective exact policy/profile plus safe readiness |
 | `GET /api/v2/sessions/{id}/sandbox` | Owned generation, profile revision, lifecycle/expiry, Core active/latest execution ID, diagnostic ID; no environment returns HTTP 200 with an empty body (clients also accept JSON `null`) |
 | `GET /api/v2/sessions/{id}/sandbox/executions/{executionId}` | Owned bounded command receipt/status/output; Core ID only |
-| `POST .../executions/{executionId}/stop` | Stop/confirm owned tracked execution and validate file synchronization |
+| `POST .../executions/{executionId}/stop` | Stop/confirm the owned tracked execution; retain complete or partial canonical writes and report unconfirmed termination truthfully |
 | `POST /api/v2/sessions/{id}/sandbox/reset` | Explicit owner request with `expectedGeneration` and nullable `expectedExecutionId` (active ID, otherwise latest); changed generation/execution returns conflict |
 
 Profile saves use the existing validation/conflict semantics and retain immutable history. Tools are `sandbox.profiles`, `sandbox.exec`, `sandbox.status`, `sandbox.process.status`, `sandbox.process.stop`, approval-gated `sandbox.reset`. Retired `sandbox.run` has no executable alias. Commands/stop/reset are non-replayable. Foreground streams are separate; background logs are explicitly combined. Command progress uses safe existing Run progress plus owner-scoped HTTP receipt polling, without changing the audio/MessagePack protocol or exposing upstream routes. Run budget diagnostics add `sandboxCommandSeconds`; ordinary per-tool budget remains independent.

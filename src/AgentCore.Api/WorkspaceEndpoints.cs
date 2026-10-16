@@ -27,7 +27,7 @@ public static class WorkspaceEndpoints
             try
             {
                 AgentWorkspaceEndpoints.Query(http, "prefix", "cursor", "limit");
-                var page = await sessions.ListWorkspacePageAsync(sessionId, prefix ?? "/home", cursor, limit ?? 256, cancellationToken)
+                var page = await sessions.ListWorkspacePageAsync(sessionId, prefix, cursor, limit ?? 256, cancellationToken)
                     .ConfigureAwait(false);
                 return Results.Json(new WorkspaceNodePageResponse(page.Entries.Select(HttpMapping.ToWorkspaceNode).ToArray(), page.NextPath, page.Truncated));
             }
