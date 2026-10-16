@@ -151,6 +151,7 @@ app.UseIdentityHttp();
 IdentityEndpoints.Map(app);
 TenantAccessEndpoints.Map(app);
 TenantAgentEndpoints.Map(app);
+TenantCredentialEndpoints.Map(app);
 TenantDefinitionEndpoints.Map(app);
 
 

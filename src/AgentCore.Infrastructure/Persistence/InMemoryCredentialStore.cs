@@ -7,18 +7,19 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Infrastructure.Persistence;
 
-public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances) : ICredentialStore, IAgentCredentialBindingStore
+public sealed partial class InMemoryCredentialStore(InMemoryAgentInstanceStore instances) : ICredentialStore, IAgentCredentialBindingStore
 {
     private readonly Dictionary<Guid, Credential> _credentials = [];
     private readonly Dictionary<Guid, AgentCredentialBinding> _bindings = [];
     public ValueTask<IReadOnlyList<Credential>> ListAsync(CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) return ValueTask.FromResult<IReadOnlyList<Credential>>(_credentials.Values.OrderBy(c => c.DisplayName).ToArray()); }
+    { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) return ValueTask.FromResult<IReadOnlyList<Credential>>(_credentials.Values.Where(c => !_tenantOwners.ContainsKey(c.CredentialId)).OrderBy(c => c.DisplayName).ToArray()); }
     public ValueTask<Credential?> GetAsync(Guid id, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) return ValueTask.FromResult(_credentials.GetValueOrDefault(id)); }
+    { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) return ValueTask.FromResult(_tenantOwners.ContainsKey(id) ? null : _credentials.GetValueOrDefault(id)); }
     public ValueTask SaveAsync(Credential c, long expectedRevision, CancellationToken ct = default, long? expectedSecretRevision = null)
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
+            RequireLegacyCredential(c.CredentialId);
             var current = _credentials.GetValueOrDefault(c.CredentialId);
             if (expectedSecretRevision is not null && current?.SecretRevision != expectedSecretRevision || (current?.Revision ?? 0) != expectedRevision || c.Revision != expectedRevision + 1 || current is not null && (current.Kind != c.Kind || current.Purpose != c.Purpose))
                 throw AgentCoreErrors.Conflict("Credential revision is stale.");
@@ -42,7 +43,7 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
-            if (!_credentials.TryGetValue(id, out var c) || c.Revision != expectedRevision || c.SecretRevision != expectedSecretRevision
+            if (_tenantOwners.ContainsKey(id) || !_credentials.TryGetValue(id, out var c) || c.Revision != expectedRevision || c.SecretRevision != expectedSecretRevision
                 || c.Status != CredentialStatus.Active || (c.EmailAccount is not { AuthMethod: EmailAuthMethod.GoogleOAuth2, ConnectionStatus: EmailConnectionStatus.Connected } && c.DriveAccount is not { ConnectionStatus: DriveConnectionStatus.Connected }))
                 return ValueTask.FromResult(false);
             _credentials[id] = c with { ProtectedPayload = payload, SecretRevision = c.SecretRevision + 1 };
@@ -53,6 +54,7 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
+            RequireLegacyCredential(id);
             var current = _credentials.GetValueOrDefault(id) ?? throw AgentCoreErrors.NotFound("Credential was not found.");
             if (current.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Credential revision is stale.");
             var count = _bindings.Values.Count(b => b.CredentialId == id);
@@ -68,6 +70,7 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
             RequireActive(b.AgentInstanceId, expectedInstanceRevision);
+            RequireLegacyCredential(b.CredentialId);
             if (!_credentials.TryGetValue(b.CredentialId,out var credential)) throw AgentCoreErrors.NotFound("Credential was not found.");
             if (credential.Purpose == CredentialPurpose.ContainerRegistry) throw AgentCoreErrors.Forbidden("Registry credentials cannot be bound to agents.");
             if (_bindings.ContainsKey(b.BindingId) || _bindings.Values.Any(x => x.AgentInstanceId == b.AgentInstanceId && (x.Reference == b.Reference || x.CredentialId == b.CredentialId)))
@@ -106,5 +109,9 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
     private void RequireLegacyContext(Guid id)
     {
         if (instances.IsTenantOwned(id)) throw new AccessDeniedException("tenant_context_required");
+    }
+    private void RequireLegacyCredential(Guid id)
+    {
+        if (_tenantOwners.ContainsKey(id)) throw new AccessDeniedException("tenant_context_required");
     }
 }

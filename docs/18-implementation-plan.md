@@ -2,6 +2,8 @@
 
 ## Account, tenant IAM and durable approvals cutover (authorized 2026-10-16)
 
+Canonical tenant Credential ownership and management APIs now use the existing protected rows with exact scoped metadata/manage permissions, atomic security/audit writes, current Account fencing and retained-ID exclusion. [Credential checkpoint](reports/tenant-credential-lifecycle-verification-2026-10-17.md) is Phase 4 progress; canonical tenant binding/use, correlated OAuth, complete credential UI and runtime effects remain required alongside the rest of this cutover. This does not advance historical milestone acceptance.
+
 Implement the owner-requested complete successor in dependency order: baseline boundary audit; internally reviewed UX; identity/authentication and canonical stores; centralized scoped IAM; every resource/effect tenant cutover; trusted execution/requester/root lineage; durable approvals and exact one-time grants; tenant-aware frontend; obsolete-authority removal and final security/browser/Impeccable verification. The [UX contract](19-multi-tenant-iam-ux.md) is complete before new UI implementation. [Delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) owns actual progress and evidence; [boundary inventory](reports/multitenant-iam-boundary-inventory-2026-10-16.md) owns cutover obligations.
 
 No intermediate insecure production release, dual owner/IAM fallback, implicit tenant or live-data reset is permitted. Disposable tests use new roots only. Complete each phase's integrated gate before depending on it. CI remains explicit opt-in. This replacement supersedes the original authentication/multi-tenant exclusions without reopening historical milestone acceptance.

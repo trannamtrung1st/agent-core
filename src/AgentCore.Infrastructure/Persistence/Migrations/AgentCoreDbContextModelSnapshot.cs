@@ -2812,6 +2812,28 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("SystemIdentities", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantCredentialRecord", b =>
+                {
+                    b.Property<string>("CredentialId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("DeletedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("CredentialId");
+
+                    b.HasIndex("TenantId", "CredentialId")
+                        .IsUnique();
+
+                    b.ToTable("TenantCredentials", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantDefinitionRecord", b =>
                 {
                     b.Property<string>("DefinitionId")
@@ -3182,6 +3204,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantCredentialRecord", b =>
+                {
+                    b.HasOne("AgentCore.Domain.Security.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantDefinitionRecord", b =>

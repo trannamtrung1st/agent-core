@@ -42,6 +42,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAgentConfigurationService>();
         services.TryAddSingleton<ITenantDefinitionStore>(provider => (ITenantDefinitionStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantDefinitionService>();
+        services.TryAddSingleton<ITenantCredentialStore>(provider => (ITenantCredentialStore)provider.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantCredentialService>();
         services.TryAddSingleton<AccountAdministrationService>();
         return services;
     }
@@ -50,6 +52,7 @@ public static class IdentityRegistration
         var definitions = (AgentCore.Infrastructure.Definitions.InMemoryAgentDefinitionAdminStore)provider.GetRequiredService<IAgentDefinitionAdminStore>();
         _ = provider.GetRequiredService<IDefinitionDraftEvaluationStore>();
         return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions, provider.GetRequiredService<InMemoryMemoryStore>(),
-            provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>());
+            provider.GetRequiredService<IBuiltInAgentDefinitionStore>(), provider.GetRequiredService<AgentCore.Application.Agents.InheritedDefinitionResourceCatalog>(),
+            provider.GetRequiredService<InMemoryCredentialStore>());
     }
 }

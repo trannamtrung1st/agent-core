@@ -170,7 +170,7 @@ public sealed class CredentialService(ICredentialStore store, IAgentCredentialBi
     }
     private async ValueTask<Credential> RequireCredential(Guid id, CancellationToken ct) =>
         await store.GetAsync(id, ct) ?? throw AgentCoreErrors.NotFound("Credential was not found.");
-    private static CredentialView View(Credential c, int count) => new(c.CredentialId, c.DisplayName, c.Kind.ToString(), c.Status.ToString(),
+    internal static CredentialView View(Credential c, int count) => new(c.CredentialId, c.DisplayName, c.Kind.ToString(), c.Status.ToString(),
         c.Metadata, c.AllowedOrigins, c.Revision, c.CreatedAtUtc, c.UpdatedAtUtc, count, c.Purpose.ToString(), c.EmailAccount, c.DriveAccount, c.ContainerRegistry);
     private static T Parse<T>(string value) where T : struct, Enum =>
         Enum.TryParse<T>(value, false, out var kind) && Enum.IsDefined(kind) && Enum.GetNames<T>().Contains(value)

@@ -10,7 +10,8 @@ public sealed partial class InMemoryIamStore
     public ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); lock (_gate) lock (instances.CredentialGate) lock (definitions.TenantGate)
-            return ValueTask.FromResult(TenantAgentChildScopes.TryParse(scope, out var instance, out _)
+            return ValueTask.FromResult(TenantCredentialRules.TryId(scope, out var credential) ? credentials?.OwnsTenantCredential(scope.TenantId!.Value, credential) == true
+                : TenantAgentChildScopes.TryParse(scope, out var instance, out _)
                 ? ChildCatalog(scope.TenantId!.Value, instance, null, ct).Contains(scope)
                 : TenantDefinitionResourceScopes.TryParse(scope, out var resource) ? OwnsDefinitionResource(scope.TenantId!.Value, resource)
                 : scope.Kind == AccessScopeKind.Resource && scope.ResourceType == "definition"

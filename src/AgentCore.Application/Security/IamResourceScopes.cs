@@ -2,8 +2,8 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-// Member/role/agent ownership is in security state; definition ownership resolves through its
-// actual store, including owner-qualified Instance children. An arbitrary string is never an owner.
+// Member/role/agent ownership is in security state; Definitions, Credentials and qualified
+// children resolve through their actual stores. An arbitrary string is never an owner.
 public static class IamResourceScopes
 {
     public static AccessScope Create(Guid tenantId, string? resourceType, string? resourceId)
@@ -15,7 +15,7 @@ public static class IamResourceScopes
             if (!TenantAgentChildScopes.TryParse(child, out _, out _) && !TenantDefinitionResourceScopes.TryParse(child, out _)) throw new AccessDeniedException("resource_unavailable");
             return child;
         }
-        if (tenantId == Guid.Empty || resourceType is not ("member" or "role" or "agent" or "definition")
+        if (tenantId == Guid.Empty || resourceType is not ("member" or "role" or "agent" or "definition" or "credential")
             || !Guid.TryParse(resourceId, out var id) || id == Guid.Empty)
             throw new AccessDeniedException("resource_unavailable");
         return AccessScope.ForResource(tenantId, resourceType, id.ToString("D"));
@@ -23,7 +23,7 @@ public static class IamResourceScopes
 
     public static bool ExternalShape(AccessScope scope) => scope.ResourceType == "definition"
         ? Guid.TryParseExact(scope.ResourceId, "D", out var id) && id != Guid.Empty && scope.ResourceId == id.ToString("D")
-        : TenantAgentChildScopes.TryParse(scope, out _, out _) || TenantDefinitionResourceScopes.TryParse(scope, out _);
+        : TenantCredentialRules.TryId(scope, out _) || TenantAgentChildScopes.TryParse(scope, out _, out _) || TenantDefinitionResourceScopes.TryParse(scope, out _);
 
     public static bool Exists(TenantSecurityState state, AccessScope scope)
     {

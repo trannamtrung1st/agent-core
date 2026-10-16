@@ -105,6 +105,25 @@ Instance child assignment/access targets use `resourceType: "skill"` or `"resour
 
 Definition binding references use type `resource` and `{definitionId:D}:draft:{draftId:D}:{resourceId:D}` or `{definitionId:D}:publication:{positive-version}:{resourceId:D}`. Version numbers have no leading zeros. Grant inspection/assignment uses these URL-encoded values in the existing resource IAM routes. Draft consumption/deletion, file removal and aggregate Definition deletion retire corresponding grants atomically; direct grants never propagate to forks/publications. Typed permissions are checked before stale witnesses; authorized stale writes retain 409 conflicts. [Verification](reports/tenant-definition-resource-iam-verification-2026-10-17.md).
 
+## Canonical tenant Credential HTTP
+
+Base path: `/api/v2/tenants/{tenantId}/credentials`. Account cookie, CSRF on mutations and `Cache-Control: no-store` follow the canonical identity foundation. No owner capability fallback or plaintext value readback exists.
+
+| Method/path | Contract |
+| --- | --- |
+| `GET /` | `page`/`pageSize` default 0/30, capped at 100 items. Returns `{ items: [{ tenantId, credential }], total, page, pageSize }`; current tenant/exact `credentials.read` filters precede totals and paging. |
+| `GET /{credentialId}` | Safe metadata projection only; `credentials.read` at the actual owned Credential scope. |
+| `POST /` | `displayName`, exact enum-name `kind`/`purpose`, `expectedRevision` (tenant security), optional `metadata`, `allowedOrigins`, `protectedValue`, `emailAccount`, `containerRegistry`. Requires tenant `credentials.read/manage`; returns 201 with safe saved metadata. |
+| `PATCH /{credentialId}` | `displayName`, exact `status`, `expectedRevision`, `expectedCredentialRevision`; metadata/origins replace their editable collections (null/omitted clears them), omitted typed profile preserves it. Kind, purpose and authentication method stay immutable. Requires item read/manage. |
+| `PUT /{credentialId}/value` | `protectedValue`, `expectedRevision`, `expectedCredentialRevision`; only General, Custom password and registry values. Requires item read/manage. There is no `GET` value route. |
+| `DELETE /{credentialId}` | Query `expectedRevision` and `expectedCredentialRevision`, current item `credentials.manage`; returns 204, refuses bindings and retires direct Credential grants atomically. |
+
+The nested safe `credential` uses `AdminCredentialResponse` fields; it never includes the protected payload, input value, protection version or secret generation. Exact Resource scope is type `credential`, ID the canonical Credential GUID. Tenant inheritance reaches only this actual owned resource; fabricated, retired and foreign references fail closed. `credentials.use` alone does not expose metadata or authorize a secret sink or another effect.
+
+Purposes are `General`, `EmailAccount`, `GoogleDriveAccount`, `ContainerRegistry`; kinds retain the existing closed Credential enum. `emailAccount` accepts only preset/address and typed Custom IMAP/SMTP usernames/endpoints with exact TLS mode names. Gmail requires Token and no password/mail endpoints; Drive requires Token; both are created disconnected. Ordinary CRUD cannot supply verified OAuth identity/scopes/refresh grants. Registry profiles accept the existing registry/username/repository-prefix/expiry fields and Password or Token. Non-General credentials reject Browser origins. Tenant binding/use, OAuth connect/callback and credential UI remain pending.
+
+Missing authentication returns 401; absent read/management or foreign/retired resources return 403; malformed inputs return 400; stale security/credential/secret witnesses return 409. Item permissions are checked before stale-witness errors or protected-value preparation. Creation/update/replace responses require read as well as manage; deleting returns no metadata. [Executed local verification](reports/tenant-credential-lifecycle-verification-2026-10-17.md).
+
 ## Agent instructions and context diagnostics
 
 Definition candidate/publication JSON uses schemaVersion `2` with `agentInstructions`. Instance `instructions` settings retain their existing section route but set/clear the `agentInstructions` field. `systemInstructions` is invalid input; Form and Advanced JSON use the same new shape. Saves retain existing expected-revision, validation and next-Run semantics.

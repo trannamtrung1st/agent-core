@@ -17,6 +17,7 @@ internal static class IamPersistenceModel
     public static void Configure(ModelBuilder model)
     {
         TenantDefinitionRecord.Configure(model);
+        TenantCredentialRecord.Configure(model);
         var accounts = model.Entity<Account>();
         accounts.ToTable("Accounts"); accounts.HasKey(x => x.AccountId);
         accounts.Property(x => x.LoginKey).HasMaxLength(254); accounts.HasIndex(x => x.LoginKey).IsUnique();
@@ -74,7 +75,7 @@ internal static class IamPersistenceModel
 
         // Domain UTC values have one deterministic SQLite representation; no provider-specific types leak out.
         foreach (var type in new[] { typeof(Account), typeof(Tenant), typeof(TenantUser), typeof(TenantInvitation),
-            typeof(AuthenticationSession), typeof(AuthorizationAudit), typeof(IamAssignmentRow), typeof(IamBootstrapRow), typeof(TenantDefinitionRecord) })
+            typeof(AuthenticationSession), typeof(AuthorizationAudit), typeof(IamAssignmentRow), typeof(IamBootstrapRow), typeof(TenantDefinitionRecord), typeof(TenantCredentialRecord) })
         foreach (var property in model.Entity(type).Metadata.GetProperties())
         {
             if (property.ClrType == typeof(DateTimeOffset))

@@ -7,7 +7,8 @@ using AgentCore.Infrastructure.Definitions;
 namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions, InMemoryMemoryStore definitionReferences,
-    IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore
+    IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
+    InMemoryCredentialStore? credentials = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Account> _accounts = [];
@@ -118,6 +119,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     }
     private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit, Guid? creatingInstance = null, CancellationToken ct = default)
     {
+        if (state.Assignments.Any(a => TenantCredentialRules.TryId(a.Scope, out var id) && credentials?.OwnsTenantCredential(state.Tenant.TenantId, id) != true))
+            throw new ArgumentException("A credential assignment requires a current owned credential.");
         if (audit.TenantId != state.Tenant.TenantId || state.Users.Any(u => !_accounts.ContainsKey(u.AccountId)))
             throw new ArgumentException("Invalid Account or audit ownership.");
         EnsureActiveAccountOwner(state);
