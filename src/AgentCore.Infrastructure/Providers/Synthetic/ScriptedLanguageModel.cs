@@ -479,10 +479,12 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var toolRounds = request.Messages.Count(message => message.Role == ModelRole.Tool);
+        var currentResults = request.Messages.Skip(request.Messages.ToList().FindLastIndex(m => m.Role == ModelRole.User) + 1)
+            .Where(m => m.Role == ModelRole.Tool).ToArray();
+        var toolRounds = currentResults.Length;
         var scheduleToolRounds = ToolRoundsSinceLastUser(request.Messages);
         var lastUser = SyntheticTaskContext.Text(request);
-        var lastTool = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool)?.Text ?? string.Empty;
+        var lastTool = currentResults.LastOrDefault()?.Text ?? string.Empty;
         var scheduleLastTool = LastToolTextSinceLastUser(request.Messages);
         var lastToolMessage = request.Messages.LastOrDefault(message => message.Role == ModelRole.Tool);
         if (lastToolMessage?.Parts?.OfType<ModelImageContent>().Any() == true)
@@ -923,13 +925,20 @@ public sealed class ScriptedLanguageModel : ILanguageModel
         || lastUser.Contains(AutomationApprovalMarker, StringComparison.Ordinal)
         // These choose offline agent scripts, never a Core/verifier authority decision.
         || lastUser.Contains("remind me", StringComparison.OrdinalIgnoreCase)
-        || lastUser.Contains("hello", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("set a reminder", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("what reminders", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("check the oven", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("viet nam", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Contains("vietnam", StringComparison.OrdinalIgnoreCase)
+        || lastUser.Trim().Equals("every minute", StringComparison.OrdinalIgnoreCase)
+        || (lastUser.Contains("hello", StringComparison.OrdinalIgnoreCase)
+            && (lastUser.Contains("min", StringComparison.OrdinalIgnoreCase) || lastUser.Contains("second", StringComparison.OrdinalIgnoreCase)))
         || lastUser.Contains("every monday", StringComparison.OrdinalIgnoreCase)
         || lastUser.Contains("schedule", StringComparison.OrdinalIgnoreCase)
         || lastUser.Contains("another at", StringComparison.OrdinalIgnoreCase)
         || lastUser.Contains("move that", StringComparison.OrdinalIgnoreCase)
         || lastUser.Contains("cancel that", StringComparison.OrdinalIgnoreCase)
-        || request.Context?.Sections.Any(section => section.Id == AgentCore.Application.Context.ContextSectionId.SchedulingEvidence) == true;
+        || request.Context?.Text(ContextSectionId.SchedulingEvidence).Contains("Schedule draft (", StringComparison.Ordinal) == true;
 
     // Offline agent interpretation fixture: reconstruct a complete proposal from retained Evidence.
     private static string CorrectedSyntheticIntervalArguments(ModelRequest request)
@@ -1176,7 +1185,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             || lastUser.Contains(EmailHarnessMarker, StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("email account chooser", StringComparison.OrdinalIgnoreCase)
             || (request.Tools?.Any(t => t.Name == ToolCatalog.AutomationList || t.Name == ToolCatalog.AutomationCreate) == true && IsScheduleTurn(request, lastUser))
-            || request.Messages.Any(message => message.Role == ModelRole.Tool)
+            || ToolRoundsSinceLastUser(request.Messages) > 0
             || request.Messages.Any(message =>
                 message.Role == ModelRole.Developer
                 && message.Text.StartsWith(DefinitionEvaluationHarness.SystemPrefix, StringComparison.Ordinal));

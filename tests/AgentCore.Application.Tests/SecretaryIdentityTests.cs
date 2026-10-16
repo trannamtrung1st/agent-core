@@ -88,7 +88,7 @@ public sealed class SecretaryIdentityTests
         var current = new FileAgentDefinitionStore(FindAgents(), SyntheticProviderAliases.Default);
         for (var version = 1; version <= 20; version++)
             Assert.Null(await current.GetAsync("general-assistant", version));
-        Assert.Equal(31, (await current.GetAsync("general-assistant"))!.Version);
+        Assert.Equal(32, (await current.GetAsync("general-assistant"))!.Version);
     }
 
     [Fact]
@@ -307,7 +307,8 @@ public sealed class SecretaryIdentityTests
         var tools = new SessionToolExecutor(
             knowledge, agentInstances: agents,
             artifacts: artifacts,
-            triggerRegistrations: new AutomationService(triggers, triggerIds, time));
+            triggerRegistrations: new AutomationService(triggers, triggerIds, time),
+            triggerAuthorizer: new SyntheticTriggerCommandAuthorizer());
         var sessionIds = new DeterministicIdGenerator(
             Enumerable.Range(1, 64).Select(index => Guid.Parse($"019944af-00c4-7000-8000-{index:D12}")),
             [Guid.Parse("873f07d1-e264-4c81-a31b-7e59e940bf22")]);

@@ -3043,8 +3043,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                     request.ResponseId,
                                     new ModelFailed(new ProviderFailure(
                                         ProviderErrorCode.InvalidResponse,
-                                        "Malformed assistant envelope.",
-                                        FailureReason: repairReason)),
+                                        repairReason == ProviderFailureReason.OutputLimit ? "The model output was cut off before a complete response." : "Malformed assistant envelope.",
+                                        FailureReason: repairReason, ResponseChannel: protocolRecovery?.Channel)),
                                     generateToken)
                                 .ConfigureAwait(false);
                             finished = true;
@@ -3198,8 +3198,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             request.ResponseId,
                             new ModelFailed(new ProviderFailure(
                                 ProviderErrorCode.InvalidResponse,
-                                "Malformed assistant envelope.",
-                                FailureReason: repairReason)),
+                                repairReason == ProviderFailureReason.OutputLimit ? "The model output was cut off before a complete response." : "Malformed assistant envelope.",
+                                FailureReason: repairReason, ResponseChannel: protocolRecovery?.Channel)),
                             generateToken)
                         .ConfigureAwait(false);
                     return;

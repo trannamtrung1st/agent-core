@@ -122,9 +122,10 @@ test('actual Workbench artifacts, stream, recovery and process recreation', asyn
     await page.getByRole('button', { name: 'Verify profile', exact: true }).click();
     const failedObservation = await (await brokenVerify).json();
     expect(failedObservation.passed).toBe(false); expect(failedObservation.profile.revision).toBe(brokenRevision);
-    expect(failedObservation.message).toContain('Initialization failed with exit code 7');
+    expect(failedObservation.exitCode).toBe(7);
+    expect(failedObservation.message).toBe('Profile initialization failed; inspect bounded output and correct the script.');
     expect(failedObservation.message).not.toContain('private-verification-sentinel');
-    await expect(page.getByRole('status')).toContainText('Initialization failed with exit code 7');
+    await expect(page.getByRole('status')).toContainText(failedObservation.message);
 
     await page.getByLabel('Sandbox initialization script').fill('printf I >> init-count.txt');
     const savedProfile = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/sandbox-profiles/general-workbench'));

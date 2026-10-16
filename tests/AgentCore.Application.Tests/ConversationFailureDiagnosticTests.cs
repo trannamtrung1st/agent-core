@@ -156,6 +156,8 @@ public sealed class ConversationFailureDiagnosticTests
         Assert.Equal("InvalidResponse", failed.Failure!.Code);
         Assert.Equal(ProviderFailureReason.OutputLimit, failed.Failure.FailureReason);
         Assert.Equal(ProviderResponseChannel.MarkerCompatibility, failed.Failure.ProviderResponseChannel);
+        Assert.Equal("attempted", failed.Failure.ProtocolRepair);
+        Assert.Equal("failed", failed.Failure.ProtocolRepairOutcome);
         Assert.NotEqual(ProviderFailureReason.MissingDisplayText, failed.Failure.FailureReason);
         var error = Assert.IsType<ErrorOutput>(Assert.Single(Items(runtime), item => item.Payload is ErrorOutput).Payload);
         Assert.Equal("The model output was cut off before a complete response.", error.SafeMessage);

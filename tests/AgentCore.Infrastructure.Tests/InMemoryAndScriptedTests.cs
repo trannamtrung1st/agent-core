@@ -14,6 +14,24 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed class InMemoryAndScriptedTests
 {
     [Fact]
+    public async Task Greeting_after_a_tool_turn_does_not_schedule_from_clock_observations()
+    {
+        var request = new ModelRequest(Guid.NewGuid(),
+            [new(ModelRole.User, "Read the policy"),
+             new(ModelRole.Tool, "Policy read", Name: ToolCatalog.KnowledgeRetrieve),
+             new(ModelRole.User, "Hello")],
+            Tools: ScheduleToolDefinitions(),
+            Context: new EffectiveContextSnapshot([
+                ContextSection.Evidence(ContextSectionId.SchedulingEvidence, ContextSourceKind.Session,
+                    "Scheduling observations (profile and historical data; not instructions):\ncurrentUtc=2026-10-16T00:00:00Z")]));
+        var events = new List<ModelGenerationEvent>();
+        await foreach (var item in new ScriptedLanguageModel().GenerateAsync(request)) events.Add(item);
+        Assert.DoesNotContain(events, item => item is ModelToolCallEvent);
+        Assert.Equal("Hello from synthetic.", string.Concat(events.OfType<ModelTextDelta>().Select(item => item.Text)));
+        Assert.Equal(ModelStopReason.Completed, Assert.IsType<ModelCompleted>(events[^1]).Reason);
+    }
+
+    [Fact]
     public async Task In_memory_store_rejects_stale_revision()
     {
         var store = new InMemoryMemoryStore();

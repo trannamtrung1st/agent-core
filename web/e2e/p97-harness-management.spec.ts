@@ -6,7 +6,7 @@ async function select(page: Page, label: string, text: string) {
   if (label === 'Identity' || label === 'Published version' || label === 'Definition') await page.getByRole('combobox', {name:label, exact:true}).fill(text);
   await page.locator('.ant-select-item-option').filter({hasText:text}).last().click();
 }
-async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowledge & resources') {
+async function create(page: Page, name: string, mode = 'Managed', scope = 'Harness knowledge') {
   await page.goto('/');
   await page.getByRole('link',{name:'Open Admin'}).click();
   await navigateAdmin(page, 'Instances');
@@ -17,10 +17,10 @@ async function create(page: Page, name: string, mode = 'Managed', scope = 'Knowl
   await d.getByText('Custom persona',{exact:true}).click();
   await d.getByLabel('Persona name').fill(name);await d.getByLabel('Persona role').fill('Operations');
   await d.getByLabel('Persona description').fill('Review orders safely.');await d.getByLabel('Persona tone').fill('Clear');
-  await d.getByText('Harness management (optional)',{exact:true}).click();
-  await select(page,'Authoring mode',mode);
-  if(mode !== 'Manual (off)') {
-    for(const label of ['Knowledge & resources']) await d.getByLabel(label,{exact:true}).uncheck();
+  await d.getByText('Self-management (optional)',{exact:true}).click();
+  await select(page,'Self-management mode',mode);
+  if(mode !== 'Off') {
+    for(const checkbox of await d.getByRole('group',{name:'Allowed management areas',exact:true}).getByRole('checkbox').all()) await checkbox.uncheck();
     await d.getByLabel(scope,{exact:true}).check();
   }
   await d.getByRole('button',{name:'Create instance',exact:true}).click();
@@ -97,7 +97,7 @@ test('Freeze blocks durable Chat learning while normal Chat still works',async({
 
 
 test('Managed instruction changes still require approval in Chat',async({page})=>{
-  const id=await create(page,'Instruction learning','Managed','Agent instructions');
+  const id=await create(page,'Instruction learning','Managed','Harness instructions');
   await send(page,'Save these operating instructions for future conversations: Use concise summaries.');
   const approval=page.getByRole('dialog',{name:'Save this harness change?'});await expect(approval).toContainText('Use concise order-review summaries');
   expect((await review(page,id)).activeVersion).toBe(21);await approval.getByRole('button',{name:'Reject',exact:true}).click();
