@@ -1,5 +1,16 @@
 # Persistence and Configuration
 
+## Identity foundation schema and configuration
+
+The account/IAM foundation adds normalized `Accounts`, `Tenants`, `TenantUsers`, `Principals`, `SystemIdentities`, `AccessRoles`, `AccessRolePermissions`, `AccessRoleAssignments`, `TenantInvitations`, `AuthenticationSessions`, `AuthorizationAudit` and one-row `IdentityBootstrap`. Unique login and tenant slug, tenant+Account membership, one Principal per membership/agent identity, tenant role keys, assignment scope and invitation token hash are indexed. Foreign keys restrict identity/resource removal. Principal-kind and scope check constraints reject malformed shapes. Application aggregate validation additionally rejects mismatched tenant/role/principal links and reserved permission escalation.
+
+Tenant security CAS, membership/role/invitation updates and audit commit together. SQLite immediate transactions serialize mutations with Account suspension and last-active-Owner checks; stale operations do not append success audit. Authentication sessions store no bearer token or plaintext credential. Passwords use ASP.NET Identity's versioned PBKDF2 hasher; invitation tokens are random, hash-only at rest and purpose-bound. Credential rotation advances the Account security stamp and invalidates all earlier web sessions without copying permission snapshots into cookies.
+
+`20261016105846_IdentityFoundation` is the current development migration after the prior filesystem baseline. It is an intermediate foundation, **not the final full tenant-resource baseline**; the complete cutover must consolidate the schema and remove OwnerCapabilities. Startup still refuses an existing incomplete/unknown migration graph rather than adopting or converting user data. Create fresh disposable roots for development verification. No reset or deployment has been performed. The [ledger](reports/multitenant-iam-delivery-2026-10-16.md) owns remaining full-schema obligations.
+
+Account cookie protection uses `Persistence:CredentialProtectionKeyRoot/account-sessions` and a separate application purpose from Credential protection. Preserve this configured key ring with the database for intended session continuity. InMemory authentication requires explicit `Security:EphemeralBootstrap:{Login,DisplayName,Password,TenantName,TenantSlug}` every process start; there is no default account/password. SQLite requires the explicit one-use bootstrap command before normal startup. [Operations](17-observability-and-operations.md#explicit-identity-bootstrap-foundation) owns commands.
+
+
 ## Semantic Automation verification configuration and recovery
 
 Real uses the selected catalog verifier route and unchanged bounded platform budget. Synthetic registers `SyntheticTriggerCommandAuthorizer`, a typed deterministic fixture; optional `Synthetic:AutomationAuthorizationDecision` chooses its enum verdict for offline scenarios (default Allow). This option is validated and read only in Synthetic; it is not a Real authorization bypass.

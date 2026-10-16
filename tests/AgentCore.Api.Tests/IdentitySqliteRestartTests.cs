@@ -1,0 +1,92 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using AgentCore.Api.Security;
+using AgentCore.Application.Ports;
+using AgentCore.Application.Security;
+using AgentCore.Infrastructure.Identity;
+using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Security;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace AgentCore.Api.Tests;
+
+public sealed class IdentitySqliteRestartTests
+{
+    [Fact]
+    public async Task Real_identity_http_composition_keeps_cookie_and_tenant_authority_across_sqlite_host_restart()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"iam-http-restart-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var options = new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={Path.Combine(root, "identity.db")};Foreign Keys=True").Options;
+        var contexts = new ContextFactory(options);
+        try
+        {
+            await using (var db = contexts.CreateDbContext()) await db.Database.MigrateAsync();
+            var ids = new SystemIdGenerator(TimeProvider.System);
+            var identity = new IdentityService(new SqliteIamStore(contexts), new AccountPasswordHasher(), new IdentityTokens(), ids, TimeProvider.System);
+            var first = await identity.BootstrapAsync("restart@example.test", "Restart owner", "strong-restart-password", "Restart organization", "restart-organization");
+            string cookie;
+            await using (var app = await StartAsync(root, contexts))
+            {
+                using var client = app.GetTestClient(); client.BaseAddress = new("https://localhost");
+                var csrfResponse = await client.GetAsync("/api/v2/auth/csrf");
+                Assert.Equal(HttpStatusCode.OK, csrfResponse.StatusCode);
+                var csrfCookie = Assert.Single(csrfResponse.Headers.GetValues("Set-Cookie"), value => value.StartsWith("agentcore.csrf=", StringComparison.Ordinal)).Split(';')[0];
+                var csrf = await Json(csrfResponse);
+                client.DefaultRequestHeaders.Add("Cookie", csrfCookie);
+                client.DefaultRequestHeaders.Add("X-AgentCore-CSRF", csrf.GetProperty("token").GetString());
+                var login = await client.PostAsJsonAsync("/api/v2/auth/login", new { login = "restart@example.test", password = "strong-restart-password" });
+                Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+                cookie = Assert.Single(login.Headers.GetValues("Set-Cookie"), value => value.StartsWith("agentcore.session=", StringComparison.Ordinal)).Split(';')[0];
+                client.DefaultRequestHeaders.Remove("Cookie"); client.DefaultRequestHeaders.Add("Cookie", cookie);
+                var members = await client.GetAsync($"/api/v2/tenants/{first.TenantId:D}/members");
+                Assert.Equal(HttpStatusCode.OK, members.StatusCode);
+                Assert.Equal(first.OwnerPrincipalId, (await Json(members)).GetProperty("items")[0].GetProperty("principalId").GetGuid());
+                await app.StopAsync();
+            }
+            await using (var reopened = await StartAsync(root, contexts))
+            {
+                using var client = reopened.GetTestClient(); client.BaseAddress = new("https://localhost");
+                client.DefaultRequestHeaders.Add("Cookie", cookie);
+                var current = await client.GetAsync("/api/v2/account/me");
+                Assert.Equal(HttpStatusCode.OK, current.StatusCode);
+                Assert.Equal(first.AccountId, (await Json(current)).GetProperty("account").GetProperty("accountId").GetGuid());
+                var members = await client.GetAsync($"/api/v2/tenants/{first.TenantId:D}/members");
+                Assert.Equal(HttpStatusCode.OK, members.StatusCode);
+                Assert.Equal(1, (await Json(members)).GetProperty("total").GetInt32());
+                Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/v2/tenants/{Guid.NewGuid():D}/members")).StatusCode);
+                await reopened.StopAsync();
+            }
+        }
+        finally { SqliteConnection.ClearAllPools(); Directory.Delete(root, recursive: true); }
+    }
+
+    // Uses the production identity registration, cookie/CSRF middleware and endpoint mappers. Other
+    // runtime/worker boundaries are intentionally excluded and are not claimed verified by this test.
+    private static async Task<WebApplication> StartAsync(string root, IDbContextFactory<AgentCoreDbContext> contexts)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>());
+        builder.Services.AddSingleton(contexts);
+        builder.Services.AddSingleton(new PersistenceOptions { Provider = "Sqlite", CredentialProtectionKeyRoot = Path.Combine(root, "keys") });
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<IIdGenerator, SystemIdGenerator>();
+        builder.Services.AddAgentCoreIdentity();
+        builder.Services.AddIdentityHttp(builder.Configuration);
+        var app = builder.Build();
+        app.UseIdentityHttp(); IdentityEndpoints.Map(app); TenantAccessEndpoints.Map(app);
+        await app.StartAsync(); return app;
+    }
+    private static async Task<JsonElement> Json(HttpResponseMessage response)
+    { using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync()); return document.RootElement.Clone(); }
+    private sealed class ContextFactory(DbContextOptions<AgentCoreDbContext> options) : IDbContextFactory<AgentCoreDbContext>
+    { public AgentCoreDbContext CreateDbContext() => new(options); }
+}

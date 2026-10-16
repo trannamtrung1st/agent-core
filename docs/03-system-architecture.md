@@ -1,5 +1,12 @@
 # System Architecture
 
+## Accepted Account, tenant IAM and durable approval replacement (2026-10-16)
+
+The owner requests a complete replacement of trusted-local owner capabilities with global Accounts, tenant Users and agent SystemIdentities under scoped Principal IAM. System platform privileges never imply tenant-private access; each agent executes under its own current roles. Requester authority influences review policy, not the agent's permission set. Human-only permissions cannot be delegated. Durable first-class approvals distinguish Review from an exact ExceptionalGrant, preserve causal root lineage and revalidate authority before effects.
+
+This accepted successor supersedes original single-owner/authentication exclusions and incompatible live-only approval design. Canonical tenant routes and the complete interaction contract are specified in [Accounts and access UX](19-multi-tenant-iam-ux.md). The [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) distinguishes implemented gates from the target. Until the cutover is complete, the previous application is not a multi-tenant deployment. Existing user data is never silently converted, reset or deleted.
+
+
 ## Semantic Automation authorization cutover (2026-10-16)
 
 Automation natural-language interpretation belongs to the agent and an independent semantic verifier. Core never recognizes command vocabulary, language, referents or confirmation words to grant Automation authority. For a trusted current user turn, the verifier compares that request plus explicitly marked historical context with the exact structured mutation and the owned current target. Owner, revision, capability, schedule completeness and execution policy remain deterministic gates. Reads do not grant mutation authority. Historical, Memory, initiative, environment and occurrence inputs cannot independently authorize a mutation.

@@ -1,6 +1,9 @@
 using AgentCore.Api;
 using AgentCore.Api.Http;
 using AgentCore.Api.Mapping;
+using AgentCore.Api.Security;
+using AgentCore.Application.Security;
+using AgentCore.Infrastructure.Security;
 using AgentCore.Api.Realtime;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Observability;
@@ -22,7 +25,8 @@ if (args.Length > 0 && args[0] == "migrate-context")
     return;
 }
 
-var builder = WebApplication.CreateBuilder(args);
+var identityBootstrapCommand = args.Length == 1 && args[0] == "bootstrap-identity";
+var builder = WebApplication.CreateBuilder(identityBootstrapCommand ? [] : args);
 // Hosting request diagnostics include raw query strings. OAuth codes/state must never enter logs.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 
@@ -32,6 +36,8 @@ builder.Services.Configure<JsonOptions>(options =>
     options.SerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never;
 });
 
+builder.Services.AddAgentCoreIdentity();
+builder.Services.AddIdentityHttp(builder.Configuration);
 builder.Services.AddSingleton<SchedulerReadiness>();
 builder.Services.AddHostedService<OpenSandboxHostedService>();
 var agentDirectory = ResolveAgentDirectory(builder);
@@ -128,6 +134,23 @@ builder.Services.AddProblemDetails();
 var app = builder.Build();
 app.UseExceptionHandler();
 await InitializePersistenceAsync(app.Services).ConfigureAwait(false);
+if (identityBootstrapCommand)
+{
+    var persistence = app.Services.GetRequiredService<PersistenceOptions>();
+    if (!string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("bootstrap-identity requires explicitly configured SQLite storage; InMemory uses explicit ephemeral bootstrap configuration.");
+    var identity = app.Services.GetRequiredService<IdentityService>();
+    var result = await identity.BootstrapAsync(
+        RequiredBootstrap("LOGIN"), RequiredBootstrap("DISPLAY_NAME"), RequiredBootstrap("PASSWORD"),
+        RequiredBootstrap("TENANT_NAME"), RequiredBootstrap("TENANT_SLUG"));
+    Console.WriteLine($"Identity bootstrap complete. Account {result.AccountId:D}; organization {result.TenantId:D}. Bootstrap is now disabled.");
+    return;
+}
+await InitializeIdentityAsync(app.Services, app.Configuration).ConfigureAwait(false);
+app.UseIdentityHttp();
+IdentityEndpoints.Map(app);
+TenantAccessEndpoints.Map(app);
+
 
 var spaIndex = ResolveSpaIndex(app);
 if (spaIndex is not null)
@@ -310,6 +333,22 @@ static async Task InitializePersistenceAsync(IServiceProvider services)
     }
 
     await store.RecoverCrashedSessionsAsync().ConfigureAwait(false);
+}
+
+static string RequiredBootstrap(string key) => Environment.GetEnvironmentVariable("AGENTCORE_BOOTSTRAP_" + key)
+    ?? throw new InvalidOperationException("Set AGENTCORE_BOOTSTRAP_" + key + " for the explicit one-use CLI bootstrap.");
+
+static async Task InitializeIdentityAsync(IServiceProvider services, IConfiguration configuration)
+{
+    var store = services.GetRequiredService<IIamStore>();
+    if (await store.HasBootstrapAsync().ConfigureAwait(false)) return;
+    var persistence = services.GetRequiredService<PersistenceOptions>();
+    if (!string.Equals(persistence.Provider, "InMemory", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("Identity is not initialized. Run bootstrap-identity with explicit SQLite storage and operator-supplied credentials before starting the application.");
+    string Required(string key) => configuration["Security:EphemeralBootstrap:" + key]
+        ?? throw new InvalidOperationException("InMemory storage requires explicit Security:EphemeralBootstrap:" + key + ". No default account or password is supplied.");
+    await services.GetRequiredService<IdentityService>().BootstrapAsync(Required("Login"), Required("DisplayName"), Required("Password"),
+        Required("TenantName"), Required("TenantSlug")).ConfigureAwait(false);
 }
 
 public partial class Program;

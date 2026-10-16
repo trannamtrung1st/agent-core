@@ -1,5 +1,14 @@
 # Backend Implementation Specification
 
+## Account / tenant access foundation
+
+The accepted replacement uses `IdentityService` for bootstrap/login/session validation/password rotation and invitation-bound Account registration. Every Account has a global human Principal for Account/system attribution, with **no system roles by default**. Tenant membership has a separate User and Principal per tenant. Only explicit System-scoped role assignments confer platform authority; neither a global login nor a tenant Owner role grants it. `TenantAccessService` derives builtin roles, custom roles, member invitations/status, agent identities and scoped assignments through one tenant revision. `AccountAdministrationService` requires explicit system account-management authority.
+
+`IamAuthorizer` resolves current Account, tenant, principal and assignments for each check. System permissions cannot target tenant data. Agent principals cannot exercise human-only permissions or receive human-only roles, including custom roles containing reserved permissions. Agent creation grants no roles automatically. Tenant roles inherit to owned resources; resource assignments match exact type/id. Owners are explicit tenant-wide builtin assignments. Store transactions reject changes that leave no active human Owner, including the race between global Account suspension and tenant membership changes. Password rotation changes the security stamp and invalidates all previous sessions.
+
+This section describes the implemented identity/access foundation and its canonical new HTTP namespaces. Existing resource/tool/Hub integration and durable approval replacement remain pending in the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md). Do not interpret foundation tests as full tenant isolation or approval acceptance.
+
+
 Automation admission freezes the bounded owner-authored task in `AgentRunAdmission.TaskIntent` with Automation identity/revision. Immediate/manual background admission pins its accepted objective with AgentRun provenance. The builder consumes this typed pin as Runtime `RunTask`; it never parses trigger display text into instructions. Raw event/trigger JSON remains Evidence. Native events without an authored Automation do not fabricate a Runtime task.
 
 `ILanguageModel.PrepareRequest` exposes selected platform semantic-output context before SessionRuntime records the manifest. The semantic adapter selects the same Core section by identity during forwarding, so retries cannot duplicate it or append it after tool receipts.

@@ -21,6 +21,13 @@ public class AgentCoreApiFactory : WebApplicationFactory<Program>
             var values = new Dictionary<string, string?>
             {
                 ["AgentCore:Profile"] = "Synthetic",
+                ["Security:Http:AllowInsecureLocalHttp"] = "true",
+                ["Security:EphemeralBootstrap:Login"] = "owner@example.test",
+                ["Security:EphemeralBootstrap:DisplayName"] = "Synthetic test owner",
+                ["Security:EphemeralBootstrap:Password"] = "explicit-synthetic-test-password",
+                ["Security:EphemeralBootstrap:TenantName"] = "Synthetic test organization",
+                ["Security:EphemeralBootstrap:TenantSlug"] = "synthetic-test",
+
                 ["Browser:FixturePort"] = "0",
                 ["Browser:Headless"] = "true",
                 ["AgentCore:DetachGracePeriodSeconds"] = "0",

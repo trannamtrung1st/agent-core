@@ -1,5 +1,30 @@
 # Observability and Operations
 
+## Explicit identity bootstrap foundation
+
+The multi-tenant cutover is in progress; the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) records remaining resource/Hub/UI integration. These commands initialize the new identity foundation only. Do not deploy intermediate source or reset an existing user database to make it start. No live-data deletion is authorized. The current schema guard refuses an incomplete/older populated baseline rather than migrating its unscoped records into a tenant.
+
+For a **new, explicitly selected SQLite database and data roots**, set `Persistence:Provider=Sqlite`, its ConnectionString and attachment/workspace/artifact/definition-resource/credential-key roots through the existing configuration mechanism. Run the one-use command with five operator-supplied environment values: `AGENTCORE_BOOTSTRAP_LOGIN`, `AGENTCORE_BOOTSTRAP_DISPLAY_NAME`, `AGENTCORE_BOOTSTRAP_PASSWORD`, `AGENTCORE_BOOTSTRAP_TENANT_NAME`, `AGENTCORE_BOOTSTRAP_TENANT_SLUG`. No default credentials are shipped; missing values fail before identity creation. Database creation uses the tracked migrations. Bootstrap creates Account, explicit platform role assignment, initial Tenant and human Owner atomically, records audit, then exits without starting hosted workers or listening for traffic. The persistent singleton marker permanently disables repeat bootstrap.
+
+In a private zsh terminal, a password can be supplied without entering it into shell history:
+
+```zsh
+read -rs 'AGENTCORE_BOOTSTRAP_PASSWORD?New account password: '
+print
+export AGENTCORE_BOOTSTRAP_PASSWORD
+# Set the other non-secret AGENTCORE_BOOTSTRAP_* values and exact persistence roots first.
+# Persistence__Provider and Persistence__ConnectionString must select the intended new database.
+dotnet run --project src/AgentCore.Api -- bootstrap-identity
+unset AGENTCORE_BOOTSTRAP_PASSWORD
+```
+
+Use at least 12 characters (maximum 256). Never pass a password as a command argument, commit it, print it or copy it into a report. After successful bootstrap, start normally with the same configured storage/key roots. SQLite startup fails clearly if identity has not been initialized; it never supplies an implicit local Owner or accepts an owner header in the new identity namespaces. Authentication cookies are session references validated against current server session, Account status and security stamp. Sign out revokes one device session; password rotation invalidates all previous device sessions. Keep Account cookie keys in `Persistence:CredentialProtectionKeyRoot/account-sessions`; they are purpose-separated from credential protection. Back up the database and private key/file roots together when preserving this deployment.
+
+An intentionally ephemeral InMemory host instead requires explicit `Security:EphemeralBootstrap:Login`, `DisplayName`, `Password`, `TenantName` and `TenantSlug` configuration on each start. Supply its password through private environment/secret configuration (`Security__EphemeralBootstrap__Password`), never a committed default. `bootstrap-identity` refuses InMemory because its initialized state would disappear on command exit. Provider profile and store selection remain independent; Synthetic makes no provider requests.
+
+Human authentication defaults to HTTPS with Secure/HttpOnly/SameSite Strict cookies. For native loopback-only development, explicitly set `Security:Http:AllowInsecureLocalHttp=true`; non-loopback cleartext requests still fail. Future cross-origin realtime entry points use exact configured `Security:Http:AllowedOrigins`; no wildcard or generic CORS authority is granted. The UI/API resource route cutover and launcher fixture updates must be completed before claiming the complete application startup journey.
+
+
 ## Three-layer context maintenance
 
 This is an explicit offline one-way conversion. First drain/complete or deliberately cancel nonterminal old Runs using the previous application, then stop writers and back up workspace/resource/artifact/credential roots together. Do not restart or reset a user's active host as verification.

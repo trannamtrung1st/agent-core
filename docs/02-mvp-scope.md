@@ -1,5 +1,10 @@
 # MVP Scope
 
+## Accepted successor: authenticated organizations and IAM
+
+The 2026-10-16 owner requirement adds global Accounts, tenant membership, independent agent principals, scoped IAM, durable review/exceptional approval and tenant-aware administration. It supersedes the original MVP authentication/multi-tenant exclusions for this successor. The historical local-demo scope below does not establish multi-tenant safety. [Architecture](03-system-architecture.md#accepted-account-tenant-iam-and-durable-approval-replacement-2026-10-16), [UX](19-multi-tenant-iam-ux.md) and the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) own design, implementation and evidence respectively.
+
+
 ## MVP question
 
 The MVP should answer one question convincingly:

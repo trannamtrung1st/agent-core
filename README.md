@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+The owner-requested Account/organization/IAM replacement is **in progress**. Its [UX contract](docs/19-multi-tenant-iam-ux.md) and [boundary inventory](docs/reports/multitenant-iam-boundary-inventory-2026-10-16.md) precede the new identity/store/HTTP foundation. [Delivery status and remaining gates](docs/reports/multitenant-iam-delivery-2026-10-16.md) distinguish passing foundation checks from the pending full resource/Hub/approval/UI cutover. New identity startup requires [explicit bootstrap](docs/17-observability-and-operations.md#explicit-identity-bootstrap-foundation); existing user data has not been reset. This intermediate source is not a multi-tenant deployment.
+
 Automatic Sandbox filesystem compatibility now prepares private owned roots and selects non-root execution in the trusted server without rebuilding the chosen image. Verification contract 4 attests exact mounts and real filesystem/Git behavior, accepting proven Docker Desktop metadata translation while retaining strict Linux ownership. [Root cause, local evidence and platform limits](docs/reports/automatic-sandbox-filesystem-compatibility-2026-10-16.md).
 
 Semantic response recovery now keeps initial background Work/Cleanup on the work.complete contract, reserves one durable correction, and exposes precise bounded recovery diagnostics. [Incident evidence and focused verification](docs/reports/semantic-response-reliability-verification-2026-10-16.md).

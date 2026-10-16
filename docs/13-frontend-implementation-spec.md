@@ -1,5 +1,10 @@
 # Frontend Implementation Specification
 
+## Accepted account / organization / IAM UX
+
+[Accounts, organizations, access and approvals UX](19-multi-tenant-iam-ux.md) owns the internally reviewed interaction contract for the complete successor: canonical `/t/{tenantId}/…` routing; one Account with distinct tenant memberships; an organization selector shared by Chat/Admin; Members, Roles, Agent Access, Approvals and Account/Platform destinations; asynchronous exact-action decisions; safe tenant teardown and accessible responsive states. The existing dark Ant Design v6 presentation and shared shell/collection/configuration owners remain authoritative. UI implementation and browser acceptance are tracked separately in the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md); no new UI journey is claimed implemented by the design document.
+
+
 ## Agent instruction authoring and provenance
 
 Existing Definition Form/Advanced JSON and Instance sparse-settings controls call the editable field **Agent instructions** (`agentInstructions`). Helper copy states: “Configures agent behavior at Runtime. Agent Core rules, permissions and approvals cannot be overridden.” Inherit/reset tooltips, dirty-state preservation, save/retry, publication and next-Run behavior retain their existing owners. There is no Core or Environment editor.

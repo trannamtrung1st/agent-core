@@ -1,5 +1,12 @@
 # Testing Strategy
 
+## Account / tenant access foundation verification
+
+`IamIdentityIntegrationTests` executes the same security workflows through real Application services and both InMemory and temporary migrated SQLite: one Account Owner in A and Reader in B; distinct tenant principals; platform/tenant separation; invitation-bound membership; independent agent roles and exact resource-scope inheritance; immediate revocation; concurrent last-Owner removal; stamp-based logout/expiry/credential rotation; global Account suspension and last-active-Owner races; and SQLite reopen. `IdentityAndTenantAccessTests` uses WebApplicationFactory/Synthetic for real HTTP cookie/CSRF/login/invitation/access/revocation/logout/replay behavior and safe response projections. Test fixtures bootstrap explicit test credentials and create independent data/key roots.
+
+These focused tests verify the identity foundation only. Full protected resource/tool/SignalR isolation, durable exact approval continuation, canonical reset and every new responsive UI journey remain mandatory for the requested full replacement. [Delivery evidence](reports/multitenant-iam-delivery-2026-10-16.md) records exact executed commands/results separately from the target matrix. No CI or browser acceptance follows from foundation tests.
+
+
 ## Three-layer context verification
 
 The focused cutover matrix covers assembler source/role/budget validation and deterministic fingerprints; Definition/Instance value and field-source inheritance; current-task ordering and delivered/heard/summary/Office boundaries; tool/Skill/capability reprojection; typed checkpoint reopen, pending IDs, response/budget/effect fences and retired-format denial; explicit transactional conversion/backup/refusal; and separate Chat Completions/Responses wire roles. Synthetic uses the same production assembly path without hosted keys.

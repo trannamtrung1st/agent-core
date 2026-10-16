@@ -1,5 +1,42 @@
 # HTTP API and Realtime Protocol
 
+## Canonical Account and tenant access HTTP foundation
+
+Human authentication uses a same-origin HttpOnly `agentcore.session` cookie, SameSite Strict, Secure under HTTPS, twelve-hour maximum age and no sliding renewal. The encrypted ticket contains Account/session references, not role/permission snapshots. Current server session revocation, Account status and security stamp are validated on every request. Native cleartext HTTP requires explicit `Security:Http:AllowInsecureLocalHttp=true` and a loopback caller; it never enables remote cleartext authentication. Account-session data protection uses the configured credential-key root under the separate `account-sessions` purpose/directory.
+
+`GET /api/v2/auth/csrf` returns `token` and `headerName` (`X-AgentCore-CSRF`) and sets the HttpOnly antiforgery cookie. Send both the cookie and header on mutations, including login/registration/logout. Obtain a fresh token after login/logout changes identity. Identity responses use `Cache-Control: no-store`; authentication middleware may add `no-cache`. Login/invitation inspection/registration have a fixed-window per-caller limit. No durable browser JWT or owner header authenticates these namespaces.
+
+| Method / route | Body / authority | Result |
+| --- | --- | --- |
+| POST `/api/v2/auth/login` | `login`, `password`; CSRF | Safe Account metadata; protected session cookie; generic 401 invalid credentials |
+| POST `/api/v2/auth/logout` | CSRF | Revoke current server session and clear cookie; 204 |
+| POST `/api/v2/auth/invitation` | `tenantId`, `invitationId`, `token`; CSRF | Valid one-use invitation preview; no token hash |
+| POST `/api/v2/auth/register` | `login`, `displayName`, `password`, `invitation` proof | Invitation-bound registration/acceptance; no implicit login; 201 |
+| GET `/api/v2/account/me` | Authenticated Account | Safe account metadata and global Principal reference; that reference grants no authority |
+| GET `/api/v2/account/tenants` | Account; `page` (zero-based), `pageSize` (1–100) | Only current Account's active memberships and tenant-specific Principal references |
+| POST `/api/v2/account/password` | `currentPassword`, `newPassword`; Account + CSRF | Reauthenticate and rotate hash/stamp; all previous sessions invalid; 204 |
+| POST `/api/v2/account/tenant-invitations/{invitationId}/accept` | Invitation proof; Account + CSRF | Idempotent accepted membership while valid; no cross-Account acceptance |
+| POST `/api/v2/system/tenants` | `name`, `slug`; `system.tenants.create` + CSRF | Atomic new Tenant/Owner; 201 |
+| PUT `/api/v2/system/accounts/{accountId}/status` | `status`; `system.accounts.manage` + CSRF | Current Account stamp changes; last active Owner protected; 204 |
+
+All routes below start `/api/v2/tenants/{tenantId}` and derive the actor from cookie + current membership. Caller-supplied actor IDs never establish authority. Tenant mutation bodies include `expectedRevision` for security-state CAS. New read DTOs never include password hashes, security stamps or invitation token hashes.
+
+| Method / suffix | Permission / contract |
+| --- | --- |
+| GET `/members` | `members.read`; bounded page/pageSize; safe Account labels, membership/roles and tenant security revision |
+| POST `/members/invite` | `members.invite` + `iam.roles.assign`; `login`, `roleId`, `expectedRevision`; returns purpose token once |
+| POST `/members/invitations/{invitationId}/revoke` | `members.invite`; expected revision |
+| PUT `/members/{userId}/status` | `members.update` or `members.remove`; status + expected revision; last active Owner retained |
+| GET `/roles`, `/permissions` | `iam.roles.read`; exact closed catalog, builtin/custom and human-only metadata |
+| POST `/roles`, PUT `/roles/{roleId}` | `iam.roles.manage`; name/permissions/revision; builtins immutable |
+| POST `/role-assignments` | `iam.roles.assign`; target principal/role/revision; tenant-wide assignment |
+| DELETE `/role-assignments/{assignmentId}` | `iam.roles.assign` at saved scope; expectedRevision query value |
+| POST `/access/check` | Current principal self-check, or `iam.roles.read` to inspect another same-tenant principal; permission key |
+| GET `/audit` | `security.audit.read`; bounded limit 1–200 |
+
+Resource-specific Access endpoints will resolve actual ownership before scoped assignment/effective inspection; the foundation's generic check cannot accept an arbitrary resource ID as proof of tenant ownership. Final resource/Hub contracts and removal of former owner APIs are pending in the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md). Foundation errors use safe `reasonCode`: 401 not authenticated, 403 not member/permission denied, 400 invalid request/CSRF, 409 stale revision/last owner, 429 login rate limit. No unrun full-cutover behavior is implied.
+
+
 ## Agent instructions and context diagnostics
 
 Definition candidate/publication JSON uses schemaVersion `2` with `agentInstructions`. Instance `instructions` settings retain their existing section route but set/clear the `agentInstructions` field. `systemInstructions` is invalid input; Form and Advanced JSON use the same new shape. Saves retain existing expected-revision, validation and next-Run semantics.

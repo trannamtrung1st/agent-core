@@ -1,5 +1,12 @@
 # Implementation Plan
 
+## Account, tenant IAM and durable approvals cutover (authorized 2026-10-16)
+
+Implement the owner-requested complete successor in dependency order: baseline boundary audit; internally reviewed UX; identity/authentication and canonical stores; centralized scoped IAM; every resource/effect tenant cutover; trusted execution/requester/root lineage; durable approvals and exact one-time grants; tenant-aware frontend; obsolete-authority removal and final security/browser/Impeccable verification. The [UX contract](19-multi-tenant-iam-ux.md) is complete before new UI implementation. [Delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) owns actual progress and evidence; [boundary inventory](reports/multitenant-iam-boundary-inventory-2026-10-16.md) owns cutover obligations.
+
+No intermediate insecure production release, dual owner/IAM fallback, implicit tenant or live-data reset is permitted. Disposable tests use new roots only. Complete each phase's integrated gate before depending on it. CI remains explicit opt-in. This replacement supersedes the original authentication/multi-tenant exclusions without reopening historical milestone acceptance.
+
+
 ## Automatic Sandbox filesystem compatibility (2026-10-16)
 
 Owner-requested focused enhancement on current main: prepare exact managed roots → select non-root runtime identity in the existing trusted server → attest image/generation/daemon bind provenance → validate filesystem/Git behavior → initialize/dispatch. Contract 4 invalidates earlier Profile verification, with workspace contract 3 and canonical files preserved. Strict native Linux ownership and narrowly attested Docker Desktop translation retain existing policy/isolation/receipt owners. Focused local and real Desktop evidence, unsupported cases and separate native Linux/AMD64/CI gaps are recorded in [the verification report](reports/automatic-sandbox-filesystem-compatibility-2026-10-16.md). This does not reopen milestone acceptance.

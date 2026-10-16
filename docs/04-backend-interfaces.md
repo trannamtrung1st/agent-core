@@ -1,5 +1,12 @@
 # Backend Interfaces
 
+## Account and scoped IAM ports (identity foundation)
+
+`IIamStore` is the specialized transactional security store: Account lookup, system/tenant security reads, Account membership listing, one-use bootstrap, atomic tenant create/CAS with audit, Account security-stamp CAS, authentication-session persistence/revocation and scoped bounded audit reads. `TenantSecurityState` is an immutable security aggregate whose revision serializes membership, invitations, roles, assignments and agent identities; it is never a cached authorization decision. Each store validates references, freezes collections and protects the last active human Owner, including Account suspension. SQLite security reads/writes use per-operation contexts and transactions; InMemory uses equivalent locked operations.
+
+`IAccountPasswordHasher` keeps the vetted ASP.NET password implementation in Infrastructure. `IIdentityTokens` creates and hashes opaque invitation/security material. `IdentityService`, `TenantAccessService`, `AccountAdministrationService` and `IamAuthorizer` remain framework-free Application services. Account authentication stores only protected session references in the cookie and resolves current status/stamp on every request. Tenant resource owners must resolve target ownership before asking `IamAuthorizer`; a client-provided scope is not evidence of ownership. The [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md) records remaining store/resource/Hub integration; these ports alone do not complete the cutover.
+
+
 ## Automation semantic authorization boundary
 
 `ITriggerCommandAuthorizer.AuthorizeAsync(AutomationAuthorizationRequest, CancellationToken)` returns a typed `TriggerCommandAuthorizationVerdict`: Allow, Deny, Ambiguous, ClassifierUnavailable or ClassifierInvalidOutput with an optional safe failure reason. The request carries current trusted-user text, operation, tool, the exact prepared JSON/fingerprint and optional historical referent/draft and bounded conversation evidence. Implementations interpret semantics; Core gates runtime provenance and deterministic structure/policy. A tool call alone never grants mutation authority. The fail-closed default is unavailable, and Synthetic uses typed decision fixtures. Exact UI recovery reuses existing durable AgentRun approvals; no new persistence or provider DTO crosses the boundary. [Backend behavior](12-backend-implementation-spec.md#timeouts-and-retry-policy).
