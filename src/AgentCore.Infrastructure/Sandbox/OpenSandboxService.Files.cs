@@ -18,7 +18,7 @@ public sealed partial class OpenSandboxService
         // Admission validates aliases; the usage sampler checks them again in
         // its single tree walk. Identity checks themselves need only root stat.
         var mounted = MountResolver.Resolve(lease.AgentInstanceId, lease.SessionId, authority.HomeAccess, validateHardLinks:false);
-        if (mounted.Authority != authority) throw CanonicalSandboxMountResolver.Incompatible("Canonical root identity or execution identity changed. Retire the old generation before dispatch.");
+        if (mounted.Authority != authority with { TranslatedOwnership = false }) throw CanonicalSandboxMountResolver.Incompatible("Canonical root identity or execution identity changed. Retire the old generation before dispatch.");
         return mounted;
     }
     private async ValueTask<HomeAccess> EffectiveHomeAsync(SandboxAccess access, CancellationToken ct) =>
@@ -59,15 +59,18 @@ public sealed partial class OpenSandboxService
         _ = ResolveMounts(lease);
     }
 
-    private static RunCommandOptions CommandOptions(SandboxLease lease, string cwd, int timeout, bool background = false)
+    private RunCommandOptions CommandOptions(SandboxLease lease, string cwd, int timeout, bool background = false)
     {
-        return CommandOptions(lease.MountAuthority ?? throw CanonicalSandboxMountResolver.Incompatible("Missing execution identity."), cwd, timeout, background);
+        var authority = lease.MountAuthority ?? throw CanonicalSandboxMountResolver.Incompatible("Missing execution identity.");
+        var result = CommandOptions(authority, cwd, timeout, background);
+        result.Envs = GitEnvironment(authority, GitRepositories(lease));
+        return result;
     }
     private static RunCommandOptions CommandOptions(SandboxMountAuthority authority, string cwd, int timeout, bool background = false)
     {
         return new() { WorkingDirectory = cwd, TimeoutSeconds = timeout, Background = background,
             Uid = authority.Uid, Gid = authority.Gid,
-            Envs = new Dictionary<string,string> { ["HOME"] = authority.HomeAccess == HomeAccess.Disabled ? "/working" : "/home" } };
+            Envs = GitEnvironment(authority) };
     }
 
     private void ValidateCwd(SandboxLease lease, string cwd)

@@ -539,7 +539,7 @@ Registry creation/editing reuses the Credentials dialog with optional date/time 
 
 ### Ordinary-image verification presentation
 
-Image help explains that ordinary Linux images need `/bin/sh` and `/proc`, Python is optional and the platform supplies writable `/working`. Workload protections report the image default user, bounded PIDs, dropped capabilities and no Docker socket. Save still pins tags independently of verification; Check image readiness is ephemeral and skips initialization, while Verify persists current-contract evidence for the exact saved revision. Existing stale observations remain visible but unavailable until reverification.
+Image help explains that compatible Linux images need shell/proc/Git/stat/Unix utilities, Python is optional and Agent Core prepares private filesystem access automatically. Workload protections report managed non-root execution, bounded PIDs, dropped capabilities and no Docker socket. Normal users configure no UID/GID. Filesystem incompatibility guidance directs trusted-deployment repair and reverification; an identical reset is not a remedy. Save still pins tags independently of verification; Check image readiness is ephemeral and skips initialization, while Verify persists current-contract evidence for the exact saved revision. Existing stale observations remain visible but unavailable until reverification.
 
 ### Session selection and recovery presentation
 

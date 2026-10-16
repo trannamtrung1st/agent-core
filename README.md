@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+Automatic Sandbox filesystem compatibility now prepares private owned roots and selects non-root execution in the trusted server without rebuilding the chosen image. Verification contract 4 attests exact mounts and real filesystem/Git behavior, accepting proven Docker Desktop metadata translation while retaining strict Linux ownership. [Root cause, local evidence and platform limits](docs/reports/automatic-sandbox-filesystem-compatibility-2026-10-16.md).
+
 Semantic response recovery now keeps initial background Work/Cleanup on the work.complete contract, reserves one durable correction, and exposes precise bounded recovery diagnostics. [Incident evidence and focused verification](docs/reports/semantic-response-reliability-verification-2026-10-16.md).
 
 Automation mutations now use independent semantic verification of the current user request and exact structured action, without language-specific Core matching. Verifier failures retain that action for explicit owner UI approval. Ownership, revisions, policy, schedule validity and future-effect permissions remain enforced. [Local verification and deployment limits](docs/reports/semantic-automation-authorization-verification-2026-10-16.md).

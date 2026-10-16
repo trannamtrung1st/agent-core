@@ -439,7 +439,7 @@ The local owner manages one versioned profile catalog, with multiple immutable i
 
 ## Ordinary Linux sandbox images (owner-authorized 2026-10-15)
 
-Ordinary Linux images require `/bin/sh`, Linux `/proc`, basic Unix filesystem utilities and an execution identity compatible with Core. Python and pre-created workspace directories are optional. The platform binds the exact canonical directories at `/working` and, when allowed, `/home`. Readiness proves bidirectional bytes, UID/GID, HOME, links, modes and rejected cross-root hardlinks. Mismatched images/hosts fail `MountIncompatible`. Verification contract 3 exercises RW, RO and absent home independently. See [mount configuration](15-persistence-and-configuration.md#ordinary-image-mount-configuration).
+Ordinary Linux images require `/bin/sh`, Linux `/proc`, Git and basic Unix filesystem utilities. The trusted server selects the deployment’s non-root execution identity before starting the unchanged selected image, retaining dropped capabilities and no-new-privileges. Core prepares exact owned roots through no-follow descriptors; it never recursively repairs host trees. Verification contract 4 proves authenticated daemon/image/mount provenance, bidirectional bytes, RW/RO/disabled home, private modes, links and Git before initialization. Native Linux retains strict root ownership; only positively identified Docker Desktop translation of root metadata to `0:0` can use validated command-local exact Git directory exceptions. Unsupported images, foreign owners and unproven topology fail `MountIncompatible`. See [mount configuration](15-persistence-and-configuration.md#ordinary-image-mount-configuration).
 
 ### Authorized Session profile selection and recovery
 

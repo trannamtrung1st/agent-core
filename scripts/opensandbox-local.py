@@ -86,7 +86,12 @@ def up(args):
             "--mount", f"type=bind,src={state}/server.toml,dst=/etc/opensandbox/config.toml,readonly",
             "--mount", f"type=volume,src={args.name}-state,dst=/var/lib/opensandbox",
             "--mount", f"type=bind,src={state}/canonical-workspaces,dst={state}/canonical-workspaces",
-            PINS["server"], "--config", "/etc/opensandbox/config.toml")
+            "--env", f"AGENTCORE_SANDBOX_SERVER_IMAGE={PINS['server']}",
+            "--env", f"AGENTCORE_SANDBOX_UID={os.getuid()}", "--env", f"AGENTCORE_SANDBOX_GID={os.getgid()}",
+            "--env", "AGENTCORE_SANDBOX_RUNNER=1",
+            "--mount", f"type=bind,src={ROOT}/deploy/sandbox/server-bootstrap.py,dst=/opt/agent-core/server-bootstrap.py,readonly",
+            "--mount", f"type=bind,src={ROOT}/deploy/sandbox/compatibility.py,dst=/opt/agent-core/compatibility.py,readonly",
+            "--entrypoint", "python", PINS["server"], "/opt/agent-core/server-bootstrap.py")
     elif not current["State"]["Running"]:
         run("docker", "start", args.name)
     if not any(m.get("Destination") == str(state / "canonical-workspaces") for m in owned(args.name).get("Mounts", [])):

@@ -46,14 +46,15 @@ public sealed partial class OpenSandboxService
                     ConnectionConfig = Connection(), Image = profile.ImageReference, ImageAuth = auth,
                     TimeoutSeconds = Math.Min(profile.MaxLifetimeSeconds, 45 + profile.MaxCommandSeconds + ProcessCleanupGraceSeconds), ReadyTimeoutSeconds = 45,
                     Resource = new Dictionary<string,string> { ["cpu"] = profile.Cpu.ToString(CultureInfo.InvariantCulture), ["memory"] = profile.MemoryMiB + "Mi" },
-                    Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = id.ToString("N") },
+                    Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = id.ToString("N"), ["agent-core-filesystem-contract"] = SandboxProfileVerification.CurrentContractVersion.ToString(CultureInfo.InvariantCulture) },
                     Volumes = mounted.Volumes, NetworkPolicy = new NetworkPolicy { DefaultAction = NetworkRuleAction.Deny, Egress = [] } }, deadline.Token);
                 auth = null;
                 phase = "mountValidation";
-                await CheckMountedReadinessAsync(sdk, mounted, deadline.Token);
+                var translated = await AttestMountsAsync(sdk.Id, mounted, profile.ImageReference, "agent-core-image-verification", id.ToString("N"), deadline.Token);
+                var authority = await CheckMountedReadinessAsync(sdk, mounted, translated, deadline.Token);
                 var lease = new SandboxLease(Guid.Empty, Guid.Empty, id, 1, profile, SandboxLeaseState.Provisioning, sdk.Id,
                     time.GetUtcNow(), time.GetUtcNow().AddSeconds(profile.MaxLifetimeSeconds),
-                    BaselineProcesses: await ProcessIdentitiesAsync(sdk, deadline.Token), MountAuthority: mounted.Authority);
+                    BaselineProcesses: await ProcessIdentitiesAsync(sdk, deadline.Token), MountAuthority: authority);
                 if (!imageOnly && access == HomeAccess.ReadWrite)
                 {
                     var setupStarted = time.GetUtcNow();
@@ -66,7 +67,7 @@ public sealed partial class OpenSandboxService
                         using var scriptDeadline = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
                         scriptDeadline.CancelAfter(TimeSpan.FromSeconds(remaining));
                         var initialized = await GuardCommandStorageAsync(lease, token => sdk.Commands.RunAsync(SandboxCommandPermissions.Shell(script),
-                            CommandOptions(lease, "/working", Math.Max(1, (int)Math.Ceiling(remaining))),
+                            CommandOptions(authority, "/working", Math.Max(1, (int)Math.Ceiling(remaining))),
                             new ExecutionHandlers { SkipAccumulation = true, OnStdout = m => { stdout.Append(m.Text); return Task.CompletedTask; },
                                 OnStderr = m => { stderr.Append(m.Text); return Task.CompletedTask; } }, token), scriptDeadline.Token, mounted);
                         if (initialized.ExitCode != 0) throw new VerificationInitializationFailure(stage, initialized.ExitCode);
@@ -82,8 +83,12 @@ public sealed partial class OpenSandboxService
             var final = await Images.InspectAsync(profile, deadline.Token, requireVerification: false);
             if (final.Status != "SourceAuthorized" || final.CredentialRevision != source.CredentialRevision || final.SecretRevision != source.SecretRevision)
                 throw AgentCoreErrors.Forbidden("Image authority changed during verification; verify the current saved source again.");
-            result = Observation(true, "Disposable direct mounts passed RW/RO/disabled home, Core/container bytes, UID/GID, HOME, links, modes and cleanup. Storage enforcement is sampled."
+            result = Observation(true, "Disposable direct mounts passed RW/RO/disabled home, trusted daemon provenance, non-root identity, Core/container bytes, HOME, links, modes, Git and cleanup. Storage enforcement is sampled."
                 + (imageOnly ? " Initialization was not executed." : " Profile and Instance initialization passed."), exit: 0);
+        }
+        catch (OpenSandbox.Core.SandboxApiException error) when (error.Error?.Code == "MountIncompatible")
+        {
+            result = Observation(false, "Automatic preparation could not establish safe filesystem access during mount preparation. Check the trusted deployment mapping and reverify; an identical reset will not help.", "MountIncompatible");
         }
         catch (VerificationInitializationFailure error)
         {
@@ -101,7 +106,7 @@ public sealed partial class OpenSandboxService
                 else if (!safeToPurge)
                 {
                     await using var manager = SandboxManager.Create(new SandboxManagerOptions { ConnectionConfig = Connection() });
-                    var candidates = await manager.ListSandboxInfosAsync(new SandboxFilter { Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = id.ToString("N") }, PageSize = 100 }, cleanup.Token);
+                    var candidates = await manager.ListSandboxInfosAsync(new SandboxFilter { Metadata = new Dictionary<string,string> { ["agent-core-image-verification"] = id.ToString("N"), ["agent-core-filesystem-contract"] = SandboxProfileVerification.CurrentContractVersion.ToString(CultureInfo.InvariantCulture) }, PageSize = 100 }, cleanup.Token);
                     foreach (var candidate in candidates.Items) await manager.KillSandboxAsync(candidate.Id, cleanup.Token);
                     safeToPurge = candidates.Items.Count < 100;
                 }

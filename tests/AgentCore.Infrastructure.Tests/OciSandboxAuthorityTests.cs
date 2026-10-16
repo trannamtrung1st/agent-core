@@ -129,6 +129,8 @@ public sealed class OciSandboxAuthorityTests
             Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
             await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Retired synchronized-files contract",ContractVersion:2,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
             Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
+            await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Retired strict metadata mount contract",ContractVersion:3,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
+            Assert.Equal("NeedsVerification",(await authority.InspectAsync(profile)).Status);
             await profiles.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Current observation",ContractVersion:SandboxProfileVerification.CurrentContractVersion,RegistryCredentialId:saved.CredentialId,RegistryCredentialRevision:saved.Revision,RegistrySecretRevision:0));
             Assert.True((await authority.InspectAsync(profile)).Eligible);
             var pinned = profile with {RegistryCredentialRevision=1,RegistrySecretRevision=0};

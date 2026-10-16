@@ -1,3 +1,4 @@
+using AgentCore.Domain.Conversation;
 using System.Net;
 using System.Net.Http.Json;
 using AgentCore.Contracts.Http;
@@ -27,7 +28,7 @@ public sealed class SandboxApiTests
         var alternate = first with { Id="alternate",Name="Alternate",Enabled=true,Cpu=.5,MemoryMiB=512 };
         foreach(var profile in new[]{first,alternate}) {
             await store.SaveProfileAsync(profile,0);
-            await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Deterministic admission observation",ContractVersion:3));
+            await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Deterministic admission observation",ContractVersion:SandboxProfileVerification.CurrentContractVersion));
         }
         var definitions=factory.Services.GetRequiredService<IAgentDefinitionAdminStore>();
         var baseline=(await factory.Services.GetRequiredService<IBuiltInAgentDefinitionStore>().GetAsync("general-assistant",31))!;
@@ -47,7 +48,7 @@ public sealed class SandboxApiTests
         await store.SaveProfileAsync(alternate with {Revision=2,Cpu=.25},1);
         var beforeVerification=(await resolver.ResolveAsync(id)).Configuration;
         Assert.False(beforeVerification.Definition.ExecutionSandboxProfiles!.Single(p=>p.Id=="alternate").AdmittedForExecution);
-        await store.SaveVerificationAsync(new(alternate.Id,2,DateTimeOffset.UtcNow,true,"New exact observation",ContractVersion:3));
+        await store.SaveVerificationAsync(new(alternate.Id,2,DateTimeOffset.UtcNow,true,"New exact observation",ContractVersion:SandboxProfileVerification.CurrentContractVersion));
         Assert.Equal(1,alternatePin.Revision);Assert.True(alternatePin.AdmittedForExecution);
         Assert.False(beforeVerification.Definition.ExecutionSandboxProfiles!.Single(p=>p.Id=="alternate").AdmittedForExecution);
         var next=(await resolver.ResolveAsync(id)).Configuration.Definition.ExecutionSandboxProfiles!.Single(p=>p.Id=="alternate");
@@ -239,7 +240,7 @@ public sealed class SandboxApiTests
         var store=factory.Services.GetRequiredService<ISandboxStore>();
         var profile=new SandboxProfile("general-workbench",1,"Verified fixture","",true,"sha256:"+new string('a',64));
         await store.SaveProfileAsync(profile,0);
-        await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Policy fixture observation",ContractVersion:3));
+        await store.SaveVerificationAsync(new(profile.Id,1,DateTimeOffset.UtcNow,true,"Policy fixture observation",ContractVersion:SandboxProfileVerification.CurrentContractVersion));
         var created=await owner.PostAsJsonAsync("/api/v2/admin/agent-instances",new{definitionId="general-assistant",version=30});created.EnsureSuccessStatusCode();
         var instance=(await created.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>());var id=instance.GetProperty("instanceId").GetGuid();
         var saved=(await owner.GetFromJsonAsync<SandboxProfileResponse>("/api/v2/admin/sandbox-profiles/general-workbench"))!;

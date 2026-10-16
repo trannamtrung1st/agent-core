@@ -58,6 +58,10 @@ public sealed class CanonicalSandboxMountResolverTests : IDisposable
         Directory.Move(mounted.Working.PhysicalRoot, mounted.Working.PhysicalRoot + "-retained");
         Directory.CreateSymbolicLink(mounted.Working.PhysicalRoot, mounted.Home!.PhysicalRoot);
         Assert.Throws<AgentCoreException>(() => resolver.Resolve(owner, session, HomeAccess.ReadWrite));
+        var preparation = Assert.Throws<AgentCoreException>(() => resolver.Resolve(owner, session, HomeAccess.ReadWrite, create: true));
+        Assert.Equal("MountIncompatible", preparation.Code);
+        Assert.Contains("mount_preparation", preparation.Message);
+        Assert.NotNull(preparation.DiagnosticId);
         OpenSandboxOptions withHardQuota() { var configured = Options; configured.RequireHardStorageQuota = true; return configured; }
     }
 

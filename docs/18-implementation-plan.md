@@ -1,5 +1,9 @@
 # Implementation Plan
 
+## Automatic Sandbox filesystem compatibility (2026-10-16)
+
+Owner-requested focused enhancement on current main: prepare exact managed roots → select non-root runtime identity in the existing trusted server → attest image/generation/daemon bind provenance → validate filesystem/Git behavior → initialize/dispatch. Contract 4 invalidates earlier Profile verification, with workspace contract 3 and canonical files preserved. Strict native Linux ownership and narrowly attested Docker Desktop translation retain existing policy/isolation/receipt owners. Focused local and real Desktop evidence, unsupported cases and separate native Linux/AMD64/CI gaps are recorded in [the verification report](reports/automatic-sandbox-filesystem-compatibility-2026-10-16.md). This does not reopen milestone acceptance.
+
 ## Semantic Automation authorization successor (2026-10-16)
 
 The explicitly requested bounded cutover replaces language-specific authorization and preflight/confirmation logic while retaining Automation services, policy, durable records and the existing Run approval workflow. Gates are exact-action semantic verification, deterministic trusted provenance/structure, failure-only owner UI recovery, changed-action/revision/Session/response fencing, focused runtime/provider/SQLite tests, Synthetic browser approval/rejection and canonical docs. It does not reopen milestone acceptance or require optional CI/live-provider execution. [Verification ledger](reports/semantic-automation-authorization-verification-2026-10-16.md) records observed scope and remaining boundaries.
@@ -16,7 +20,7 @@ The [review follow-up](reports/canonical-workspace-review-2026-10-16.md) correct
 
 The [current main synchronization](reports/canonical-workspace-main-sync-2026-10-16.md) incorporates main through `702e3808`, retaining shared isolation drafts, explicit visibility ceilings and private canonical command permissions with focused integrated verification.
 
-Current local acceptance is complete. Existing user data/application was preserved: deployment requires the explicit selected-path backup/reset, matching non-root identity/topology and contract-3 Profile reverification. Limits remain explicit: sampled budgets, deny-default remote Git egress, trusted single-user scope and unqualified other architectures/filesystems. CI, deployment and historical milestone acceptance were not requested and remain separate.
+Current local acceptance is complete. Existing user data/application was preserved: deployment requires the explicit selected-path backup/reset, matching non-root identity/topology and current-contract Profile reverification. Limits remain explicit: sampled budgets, deny-default remote Git egress, trusted single-user scope and unqualified other architectures/filesystems. CI, deployment and historical milestone acceptance were not requested and remain separate.
 
 ## Three-layer context cutover (owner-authorized 2026-10-15)
 
@@ -726,7 +730,7 @@ The bounded 2026-10-14 [Office productivity stabilization](reports/office-produc
 
 ## Ordinary Linux sandbox images (owner-authorized 2026-10-15)
 
-The requested successor to OCI onboarding removes workload Python and pre-created scratch requirements through private platform `/working` mounts. Implementation order is [decision](10-technology-decisions.md#ordinary-linux-sandbox-images-owner-authorized-2026-10-15) → host mount/file/process adapter → launcher/configuration mapping → current-contract verification → focused tests and Synthetic browser/real SDK evidence. Current acceptance requires explicitly identity-compatible SDK and Workbench images, ordinary links/modes, sampled budgets, background/reset and process recovery. The canonical cutover above supersedes staged/CAS expectations; an unchanged incompatible stock image must be rejected. Hosted CI and milestone acceptance remain opt-in; current evidence belongs to the ordinary-image verification report.
+The requested successor to OCI onboarding removes workload Python and pre-created scratch requirements through private platform `/working` mounts. Implementation order is [decision](10-technology-decisions.md#ordinary-linux-sandbox-images-owner-authorized-2026-10-15) → host mount/file/process adapter → launcher/configuration mapping → current-contract verification → focused tests and Synthetic browser/real SDK evidence. Current acceptance requires explicitly identity-compatible SDK and Workbench images, ordinary links/modes, sampled budgets, background/reset and process recovery. The canonical cutover above supersedes staged/CAS expectations; the automatic compatibility successor above now selects non-root execution before startup, superseding the earlier matching-image-default requirement; genuinely unsupported images remain refused. Hosted CI and milestone acceptance remain opt-in; current evidence belongs to the ordinary-image verification report.
 
 ## Sandbox profile selection and failure recovery (owner-authorized 2026-10-15)
 

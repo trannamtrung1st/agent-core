@@ -34,7 +34,7 @@ internal sealed partial class CanonicalWorkspaceFilesystem
         OperatingSystem.IsMacOS() ? MacRenameAt(Fd(source), from, Fd(destination), to, 4) : LinuxRenameAt(Fd(source), from, Fd(destination), to, 1);
     [DllImport("libc", EntryPoint = "readlinkat", SetLastError = true)] private static extern nint ReadLinkAt(int fd, string name, byte[] buffer, nuint size);
     [DllImport("libc", EntryPoint = "symlinkat", SetLastError = true)] private static extern int SymlinkAt(string target, int fd, string name);
-    private sealed record Node(uint Kind, ulong Inode, ulong Links, long Size, long ModifiedSeconds, long ModifiedNanos, ulong Device, long ChangedSeconds, long ChangedNanos, uint Mode);
+    private sealed record Node(uint Kind, ulong Inode, ulong Links, long Size, long ModifiedSeconds, long ModifiedNanos, ulong Device, long ChangedSeconds, long ChangedNanos, uint Mode, uint Uid, uint Gid);
     private static bool SameIdentity(Node a, Node? b) => b is not null && a.Device == b.Device && a.Inode == b.Inode && a.Kind == b.Kind;
     private static int Fd(SafeFileHandle handle) => handle.DangerousGetHandle().ToInt32();
     private static int DirectoryFlag => OperatingSystem.IsMacOS() ? 0x100000 : RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? 0x4000 : 0x10000;
@@ -58,9 +58,13 @@ internal sealed partial class CanonicalWorkspaceFilesystem
     }
     private static void MakeDirectory(SafeFileHandle parent, string name, bool exclusive = false)
     {
-        if (MkdirAt(Fd(parent), name, 0x1c0) != 0 && (exclusive || Marshal.GetLastPInvokeError() != 17))
+        var created = MkdirAt(Fd(parent), name, 0x1c0) == 0;
+        if (!created && (exclusive || Marshal.GetLastPInvokeError() != 17))
             ThrowIo("Workspace directory could not be created.");
         using var directory = OpenChild(parent, name, directory: true);
+        // Pin the exact private mode on newly created directory descriptors;
+        // existing arbitrary host ancestors are never chmodded.
+        if (created && Chmod(Fd(directory), 0x1c0) != 0) ThrowIo("Workspace directory permissions could not be established.");
     }
     private static SafeFileHandle Descend(SafeFileHandle start, IEnumerable<string> parts, bool create = false)
     {
@@ -129,7 +133,8 @@ internal sealed partial class CanonicalWorkspaceFilesystem
         var mode = mac ? BitConverter.ToUInt16(bytes, 4) : BitConverter.ToUInt32(bytes, arm ? 16 : 24);
         return new(mode & 0xf000, BitConverter.ToUInt64(bytes, 8), mac ? BitConverter.ToUInt16(bytes, 6) : arm ? BitConverter.ToUInt32(bytes, 20) : BitConverter.ToUInt64(bytes, 16),
             BitConverter.ToInt64(bytes, mac ? 96 : 48), BitConverter.ToInt64(bytes, mac ? 48 : 88), BitConverter.ToInt64(bytes, mac ? 56 : 96),
-            mac ? BitConverter.ToUInt32(bytes, 0) : BitConverter.ToUInt64(bytes, 0), BitConverter.ToInt64(bytes, mac ? 64 : 104), BitConverter.ToInt64(bytes, mac ? 72 : 112), mode);
+            mac ? BitConverter.ToUInt32(bytes, 0) : BitConverter.ToUInt64(bytes, 0), BitConverter.ToInt64(bytes, mac ? 64 : 104), BitConverter.ToInt64(bytes, mac ? 72 : 112), mode,
+            BitConverter.ToUInt32(bytes, mac ? 16 : arm ? 24 : 28), BitConverter.ToUInt32(bytes, mac ? 20 : arm ? 28 : 32));
     }
     [DllImport("libc", EntryPoint = "fstat$INODE64", SetLastError = true)] private static extern int MacFStat(int fd, byte[] buffer);
     [DllImport("libc", EntryPoint = "fstat", SetLastError = true)] private static extern int FStat(int fd, byte[] buffer);

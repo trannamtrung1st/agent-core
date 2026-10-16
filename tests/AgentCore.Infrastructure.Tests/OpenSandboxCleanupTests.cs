@@ -187,6 +187,9 @@ public sealed class OpenSandboxCleanupTests
         {
             lists++;
             Assert.Contains(generation!, Uri.UnescapeDataString(context.Request.QueryString.Value!));
+            // Orphans from an earlier compatibility contract still belong to
+            // this generation. Never hide them behind a current-version filter.
+            Assert.DoesNotContain("agent-core-filesystem-contract", Uri.UnescapeDataString(context.Request.QueryString.Value!));
             await context.Response.WriteAsJsonAsync(new { items = Array.Empty<object>(), pagination = new { page = 1, pageSize = 100, totalItems = 0, totalPages = 0 } });
         });
         var now = DateTimeOffset.UtcNow;

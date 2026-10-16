@@ -29,6 +29,22 @@ public sealed class MountOwnershipProbeTests
         finally { root.Delete(true); }
     }
 
+    [Theory]
+    [InlineData("0:0", "700", true)]
+    [InlineData("0:0", "755", true)]
+    [InlineData("0:0", "777", false)]
+    [InlineData("999:999", "700", false)]
+    public async Task Translated_metadata_requires_attested_desktop_root_mapping_and_private_permissions(string owner, string mode, bool allowed)
+    {
+        // The real / root is foreign to the non-root test process. Supply only
+        // deterministic container stat output; native policy still refuses it.
+        var stat = $"stat() {{ case \"$2\" in '%u:%g') printf '%s' '{owner}';; '%a') printf '%s' '{mode}';; *) exit 99;; esac; }}\n";
+        var desktop = OpenSandboxService.MountOwnershipProbe(HomeAccess.Disabled, trustedDesktop: true).Replace("/working", "/");
+        Assert.Equal(allowed, await Run(stat + desktop) == 0);
+        var native = OpenSandboxService.MountOwnershipProbe(HomeAccess.Disabled).Replace("/working", "/");
+        Assert.NotEqual(0, await Run(stat + native));
+    }
+
     private static async Task<int> Run(string script)
     {
         using var process = new Process { StartInfo = new("/bin/sh") { ArgumentList = { "-ec", script } } };

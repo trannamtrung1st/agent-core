@@ -41,17 +41,28 @@ internal sealed class CanonicalSandboxMountResolver(OpenSandboxOptions options)
     private Mounts Build(string workingPath, string homePath, HomeAccess access, bool create = true,
         bool validateHardLinks = true, CancellationToken ct = default)
     {
-        var working = new CanonicalWorkspaceFilesystem(workingPath, "/working"); if (create) working.Ensure();
+        var working = new CanonicalWorkspaceFilesystem(workingPath, "/working"); if (create) Prepare(working);
         CanonicalWorkspaceFilesystem? home = null;
-        if (access != HomeAccess.Disabled) { home = new(homePath, "/home"); if (create) home.Ensure(); }
+        if (access != HomeAccess.Disabled) { home = new(homePath, "/home"); if (create) Prepare(home); }
         static string Identity(CanonicalWorkspaceFilesystem files, string path)
         { var node = files.Stat(path); return $"{node.Device:x}:{node.Inode:x}"; }
         if (validateHardLinks) { working.ValidateHardLinkOwnership(ct); home?.ValidateHardLinkOwnership(ct); }
         var identity = new SandboxMountAuthority(Identity(working, "/working"), home is null ? null : Identity(home, "/home"),
-            access, checked((int)GetUid()), checked((int)GetGid()));
+            access, checked((int)GetUid()), checked((int)GetGid()), CompatibilityContract: SandboxProfileVerification.CurrentContractVersion);
         List<Volume> volumes = [Volume(workingPath, "working", "/working", false)];
         if (home is not null) volumes.Add(Volume(homePath, "home", "/home", access == HomeAccess.ReadOnly));
         return new(working, home, identity, volumes);
+    }
+
+    private static void Prepare(CanonicalWorkspaceFilesystem files)
+    {
+        try { files.PrepareManagedRoot(GetUid(), GetGid()); }
+        catch (Exception error) when (error is AgentCoreException or IOException or UnauthorizedAccessException)
+        {
+            throw new AgentCoreException("MountIncompatible",
+                "Sandbox filesystem is incompatible with this Docker environment. Automatic preparation could not establish safe access (stage: mount_preparation). Canonical files were retained. Repair the trusted deployment and reverify; an identical reset will not help.", 409)
+                { DiagnosticId = Guid.CreateVersion7() };
+        }
     }
 
     private Volume Volume(string physical, string name, string logical, bool readOnly)

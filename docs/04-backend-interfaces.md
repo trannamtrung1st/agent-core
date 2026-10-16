@@ -824,7 +824,7 @@ OpenSandbox process reliability: uncertain termination retains its exact generat
 
 ### Ordinary-image workspace boundary
 
-`ISessionWorkspace` no longer exposes capture/commit/transfer APIs. Infrastructure resolves exact owner mounts and persists `SandboxMountAuthority` with working/home root identities, effective HomeAccess and UID/GID. The public workspace and profile verification contracts are both version 3. Fresh data and reverification are required; no legacy mount fallback exists.
+`ISessionWorkspace` no longer exposes capture/commit/transfer APIs. Infrastructure resolves exact owner mounts and persists `SandboxMountAuthority` with working/home root identities, effective HomeAccess and UID/GID. The public workspace contract remains version 3; profile verification is version 4. `SandboxMountAuthority.TranslatedOwnership` records demonstrated Docker Desktop translation, independently of the canonical root identities. The private authenticated trusted-server mount attestation remains an Infrastructure/deployment detail; no Docker DTO or physical path enters Application/Contracts. Fresh data and reverification are required; no legacy mount fallback exists.
 
 ### Sandbox discovery, selection and safe failure evidence
 

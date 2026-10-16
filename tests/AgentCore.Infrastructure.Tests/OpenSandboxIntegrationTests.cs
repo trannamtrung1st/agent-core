@@ -33,17 +33,122 @@ public sealed class OpenSandboxFactAttribute : FactAttribute
 public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     [OpenSandboxFact(requiresForeignMountRoot: true)]
-    public async Task Foreign_mount_root_is_refused_before_initialization_and_disposable_cleanup_is_confirmed()
+    public async Task Trusted_translated_mount_root_passes_before_initialization_and_disposable_cleanup_is_confirmed()
     {
-        await using var f = await CreateFixture("printf initialization-must-not-run");
+        await using var f = await CreateFixture("printf initialization-passed");
         var verification = await f.Service.VerifyProfileAsync(f.Profile, CancellationToken.None);
-        Assert.False(verification.Passed);
-        Assert.Equal("MountIncompatible", verification.FailureCode);
-        Assert.Contains("mount_ownership", verification.Message);
-        Assert.DoesNotContain("initialization-must-not-run", verification.Stdout);
+        Assert.True(verification.Passed, verification.Message);
+        Assert.Null(verification.FailureCode);
+        Assert.Contains("initialization-passed", verification.Stdout);
         Assert.False(Directory.Exists(Path.Combine(f.WorkspaceRoot, ".verification"))
             && Directory.EnumerateDirectories(Path.Combine(f.WorkspaceRoot, ".verification")).Any());
         output.WriteLine(verification.Message);
+    }
+
+    [OpenSandboxFact]
+    public async Task Python_digest_project_tests_report_core_readback_and_reset_preserve_canonical_bytes()
+    {
+        await using var f = await CreateFixture();
+        var created = await f.Exec("""
+            set -eu
+            mkdir -p binance-digest/binance_digest binance-digest/tests
+            cat > binance-digest/binance_digest/__init__.py <<'PY'
+            def render():
+                return "# Binance digest\n\nOffline compatibility fixture.\n"
+            PY
+            cat > binance-digest/binance_digest/__main__.py <<'PY'
+            import argparse
+            from pathlib import Path
+            from . import render
+            parser = argparse.ArgumentParser()
+            parser.add_argument('--format', choices=['markdown'], required=True)
+            parser.add_argument('-o', required=True)
+            args = parser.parse_args()
+            target = Path(args.o)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(render())
+            PY
+            cat > binance-digest/tests/test_digest.py <<'PY'
+            import unittest
+            from binance_digest import render
+            class DigestTest(unittest.TestCase):
+                def test_report(self):
+                    self.assertIn('# Binance digest', render())
+            PY
+            cd /working/binance-digest
+            python3 -m unittest discover -s tests
+            python3 -m binance_digest --format markdown -o reports/digest.md
+            """);
+        Assert.True(created.ExitCode == 0, created.Stdout + created.Stderr);
+        Assert.Contains("OK", created.Stderr);
+        var report = await f.Read("binance-digest/reports/digest.md");
+        Assert.Contains("# Binance digest", report);
+        var readDefinition = f.Definition with { Environment = new(ToolAllowlist: [ToolCatalog.WorkspaceRead]) };
+        var readThroughTool = await f.Executor().ExecuteAsync(readDefinition, f.Session.SessionId,
+            new("read-generated-report", ToolCatalog.WorkspaceRead, """{"path":"/working/binance-digest/reports/digest.md"}"""), 8192,
+            admission: new(false, TriggerKind.UserTurn, AgentInstanceId: f.Session.AgentInstanceId,
+                AgentRunId: f.Run.AgentRunId, OwnedSessionId: f.Session.SessionId, WorkspaceCwd: "/working"));
+        Assert.Contains("# Binance digest", readThroughTool.Text);
+        // Git at both canonical roots and at the nested project, with exact
+        // per-command trust only when the daemon attests Desktop translation.
+        var git = await f.Exec("""
+            set -eu
+            for directory in /working /home /working/binance-digest; do
+              git -C "$directory" init -q
+              printf proof > "$directory/git-proof"
+              git -C "$directory" add git-proof
+              git -C "$directory" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm proof
+              git -C "$directory" status --porcelain
+              git -C "$directory" checkout -qb compatibility
+            done
+            """);
+        Assert.True(git.ExitCode == 0, git.Stdout + git.Stderr);
+        var oldContract = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
+        await f.Store.SaveLeaseAsync(oldContract with { Revision = oldContract.Revision + 1,
+            MountAuthority = oldContract.MountAuthority! with { CompatibilityContract = 0 } }, oldContract.Revision);
+        Assert.Equal(0, (await f.Exec("test -f binance-digest/reports/digest.md; git -C /working status --porcelain")).ExitCode);
+        var before = (await f.Service.InspectAsync(f.Session.SessionId))!.Generation;
+        Assert.NotEqual(oldContract.Generation, before);
+        var access = f.Access("once-before-reset"); var command = new SandboxCommandRequest("printf x >> once.txt");
+        await f.Service.ExecuteAsync(access, command);
+        await f.Service.StopSessionAsync(f.Session.SessionId, intent: SandboxStopIntent.OwnerReset);
+        var after = await f.Exec("cat binance-digest/reports/digest.md; git -C /working status --porcelain; git -C /home status --porcelain; git -C /working/binance-digest status --porcelain");
+        Assert.True(after.ExitCode == 0, after.Stdout + after.Stderr);
+        Assert.Contains(report, after.Stdout);
+        Assert.NotEqual(before, (await f.Service.InspectAsync(f.Session.SessionId))!.Generation);
+        await f.Service.ExecuteAsync(access, command); // Existing receipt, never replay.
+        Assert.Equal("x", await f.Read("once.txt"));
+        Assert.Equal(report, await f.Read("binance-digest/reports/digest.md"));
+    }
+
+    [OpenSandboxFact]
+    public async Task Mismatched_backing_directory_refuses_dispatch_preserves_files_and_cleans_only_its_generation()
+    {
+        await using var f = await CreateFixture("printf must-not-initialize > /working/initialized");
+        await f.Workspace.EnsureAsync(f.Session.SessionId, f.Definition);
+        await f.Workspace.WriteAsync(f.Session.SessionId, "/working/retained", "original"u8.ToArray());
+        var alternate = Path.Combine(Path.GetDirectoryName(f.WorkspaceRoot)!, Guid.NewGuid().ToString("N"));
+        try
+        {
+            var wrong = new CanonicalSandboxMountResolver(new() { CanonicalWorkspaceRoot = alternate, WorkspaceDockerHostRoot = alternate });
+            wrong.Resolve(f.Session.AgentInstanceId, f.Session.SessionId, HomeAccess.ReadWrite, create: true);
+            f.SetDaemonRoot(alternate);
+            var error = await Assert.ThrowsAsync<AgentCoreException>(() => f.Exec("printf must-not-run > dispatched").AsTask());
+            Assert.Equal("MountIncompatible", error.Code);
+            Assert.Equal("original", await f.Read("retained"));
+            var lease = (await f.Store.GetLeaseAsync(f.Session.SessionId))!;
+            Assert.Equal(SandboxLeaseState.Failed, lease.State);
+            Assert.Equal("mountFailure", lease.FailureCategory);
+            Assert.Null(lease.LastExecutionId);
+            var root = AgentWorkspacePhysicalPaths.WorkingDirectory(f.WorkspaceRoot, f.Session.AgentInstanceId, f.Session.SessionId);
+            Assert.False(File.Exists(Path.Combine(root, "initialized")));
+            Assert.False(File.Exists(Path.Combine(root, "dispatched")));
+            f.SetDaemonRoot(f.WorkspaceRoot);
+            await f.Service.StopSessionAsync(f.Session.SessionId, intent: SandboxStopIntent.OwnerReset);
+            Assert.Equal(0, (await f.Exec("test ! -e dispatched; cat retained")).ExitCode);
+            Assert.Equal("original", await f.Read("retained"));
+        }
+        finally { if (Directory.Exists(alternate)) Directory.Delete(alternate, true); }
     }
 
     private async Task<Fixture> CreateFixture(string? initializationScript = null, int idleTtl = 300, int maxCommand = 120, int maxLifetime = 900)
@@ -789,6 +894,7 @@ public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHe
             run=await _runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));
             return new(sibling.SessionId,sibling.AgentInstanceId,run.AgentRunId,run.Claim!.Generation,Guid.NewGuid().ToString("N"),_profile,Definition);
         }
+        public void SetDaemonRoot(string root) => _options.WorkspaceDockerHostRoot = root;
         public async Task UseImage(string image)
         {
             var next = _profile with { ImageReference = image, Revision = _profile.Revision + 1 };

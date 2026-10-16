@@ -13,7 +13,9 @@ public sealed partial class OpenSandboxService
         var result = evidence is null ? new SandboxCommandResult(Guid.Empty, lease.State.ToString(), null, "", "", false, 0, false) : Result(evidence);
         return result with { Stdout = "", Stderr = "", Error = "recovery_required", EnvironmentState = lease.State.ToString(), EnvironmentGeneration = lease.Generation,
             Phase = lease.FailurePhase ?? lease.TransitionPhase ?? result.Phase, FailureCategory = lease.FailureCategory ?? result.FailureCategory,
-            Recovery = lease.State is SandboxLeaseState.Terminating or SandboxLeaseState.NeedsReconciliation
+            Recovery = lease.FailureCategory == "mountFailure"
+                ? "Automatic filesystem preparation could not establish safe access. Canonical files are retained. Inspect the diagnostic and reverify after repairing the trusted deployment; do not repeat an identical reset or replay commands. Confirm any pending remote cleanup first."
+                : lease.State is SandboxLeaseState.Terminating or SandboxLeaseState.NeedsReconciliation
                 ? "Remote termination is pending; canonical writes may still occur. Inspect durable status and wait for confirmed cleanup. Do not retry execution or switch profiles. Owner reset may be required after readiness is restored."
                 : lease.ActiveExecutionId is not null && lease.State == SandboxLeaseState.Executing
                     ? "An execution is active. Inspect its Core execution ID; stop background work only when authorized. Do not switch or dispatch another command."

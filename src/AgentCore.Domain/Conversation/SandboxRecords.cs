@@ -5,7 +5,7 @@ namespace AgentCore.Domain.Conversation;
 public enum SandboxLeaseState { Provisioning, Ready, Executing, NeedsReconciliation, Terminating, Terminated, Failed }
 public enum SandboxExecutionState { Dispatching, Running, Completed, Canceled, Indeterminate }
 
-public sealed record SandboxMountAuthority(string WorkingIdentity, string? HomeIdentity, HomeAccess HomeAccess, int Uid, int Gid);
+public sealed record SandboxMountAuthority(string WorkingIdentity, string? HomeIdentity, HomeAccess HomeAccess, int Uid, int Gid, bool TranslatedOwnership = false, int CompatibilityContract = 0);
 
 // Provider identities are opaque server-side values; public projections omit them.
 public sealed record SandboxLease(Guid SessionId, Guid AgentInstanceId, Guid Generation, long Revision,
@@ -26,7 +26,7 @@ public sealed record SandboxExecution(Guid Id, Guid SessionId, Guid AgentInstanc
 public sealed record SandboxProfileVerification(string ProfileId, long ProfileRevision,
     DateTimeOffset VerifiedAt, bool Passed, string Message, string? FailureCode = null, int? ExitCode = null, string Stdout = "", string Stderr = "", bool Truncated = false, long DurationMs = 0, string? DiagnosticId = null, int ContractVersion = 0, Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null)
 {
-    public const int CurrentContractVersion = 3;
+    public const int CurrentContractVersion = 4;
 }
 
 public sealed record SandboxInitializationEvidence(string State, string ProfileId, long ProfileRevision, long? InstanceRevision,

@@ -13,7 +13,7 @@ namespace AgentCore.Infrastructure.Workspaces;
 internal sealed partial class CanonicalWorkspaceFilesystem
 {
     internal sealed record Entry(string Path, string Kind, long ByteSize, DateTimeOffset ModifiedAt,
-        uint Mode, ulong Device, ulong Inode, ulong Links, string? LinkTarget = null)
+        uint Mode, ulong Device, ulong Inode, ulong Links, string? LinkTarget = null, uint Uid = 0, uint Gid = 0)
     {
         internal bool Directory => Kind == "directory";
     }
@@ -38,6 +38,18 @@ internal sealed partial class CanonicalWorkspaceFilesystem
     internal void Ensure()
     {
         using var root = OpenRoot(create: true);
+    }
+
+    // Reconcile only this exact managed root through its no-follow descriptor.
+    // Same-owner concurrent Sessions converge on 0700 without touching contents.
+    internal void PrepareManagedRoot(uint uid, uint gid)
+    {
+        using var root = OpenRoot(create: true);
+        var node = Metadata(Fd(root));
+        if (uid == 0 || node.Uid != uid || node.Gid != gid)
+            throw AgentCoreErrors.Forbidden("Managed workspace ownership could not be verified; canonical files were retained.");
+        if ((node.Mode & 0xfff) != 0x1c0 && Chmod(Fd(root), 0x1c0) != 0)
+            ThrowIo("Managed workspace permissions could not be prepared.");
     }
 
     private static readonly object LayoutGate = new();
@@ -473,5 +485,5 @@ internal sealed partial class CanonicalWorkspaceFilesystem
     private static Entry Describe(string path, Node node, string? target = null) => new(path,
         node.Kind switch { DirectoryKind => "directory", FileKind => "file", LinkKind => "symlink", _ => "special" },
         node.Kind == FileKind ? node.Size : 0, DateTimeOffset.FromUnixTimeSeconds(node.ModifiedSeconds).AddTicks(node.ModifiedNanos / 100),
-        node.Mode & 0xfff, node.Device, node.Inode, node.Links, target);
+        node.Mode & 0xfff, node.Device, node.Inode, node.Links, target, node.Uid, node.Gid);
 }

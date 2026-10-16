@@ -25,7 +25,7 @@ def project_key(key, directory=Path("/run/agent-core-auth"), uid=1654, gid=1654)
 
 
 def main():
-    key = Path("/run/secrets/opensandbox_api_key").read_text().strip()
+    key = os.environ.get("OPENSANDBOX_SERVER_API_KEY") or Path("/run/secrets/opensandbox_api_key").read_text().strip()
     if len(key) < 32:
         raise SystemExit("A private generated OpenSandbox API key is required.")
     if sys.argv[1:] == ["health"]:
@@ -49,14 +49,21 @@ def main():
             raise SystemExit(
                 "Another pinned OpenSandbox server is running. Reuse or safely stop its owned deployment first."
             )
-    project_key(key, uid=int(os.environ.get("AGENTCORE_SANDBOX_UID", "1654")), gid=int(os.environ.get("AGENTCORE_SANDBOX_GID", "1654")))
-    env = os.environ.copy()
-    env["OPENSANDBOX_SERVER_API_KEY"] = key
-    os.execvpe(
-        "opensandbox-server",
-        ["opensandbox-server", "--config", "/etc/opensandbox/config.toml"],
-        env,
-    )
+    if not os.environ.get("AGENTCORE_SANDBOX_RUNNER"):
+        project_key(key, uid=int(os.environ.get("AGENTCORE_SANDBOX_UID", "1654")), gid=int(os.environ.get("AGENTCORE_SANDBOX_GID", "1654")))
+    os.environ["OPENSANDBOX_SERVER_API_KEY"] = key
+    os.environ["SANDBOX_CONFIG_PATH"] = "/etc/opensandbox/config.toml"
+    from opensandbox_server.main import app, app_config
+    from compatibility import install
+    import uvicorn
+
+    install(app, app_config)
+    server = app_config.server
+    uvicorn.run(app, host=server.host, port=server.port, date_header=False,
+                timeout_keep_alive=server.timeout_keep_alive,
+                limit_concurrency=server.limit_concurrency, backlog=server.backlog,
+                loop=server.loop, http=server.http,
+                timeout_graceful_shutdown=server.timeout_graceful_shutdown)
 
 
 if __name__ == "__main__":

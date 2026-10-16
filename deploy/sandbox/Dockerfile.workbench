@@ -20,14 +20,14 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 COPY requirements.txt /usr/share/agent-core/requirements.txt
 RUN pip install --no-cache-dir --require-hashes -r /usr/share/agent-core/requirements.txt \
     && pip inspect > /usr/share/agent-core/python-manifest.json \
-    && groupadd --gid 1000 sandbox \
-    && useradd --uid 1000 --gid 1000 --create-home sandbox \
+    && (getent group "$AGENTCORE_RUNTIME_GID" >/dev/null || groupadd --gid "$AGENTCORE_RUNTIME_GID" sandbox) \
+    && (getent passwd "$AGENTCORE_RUNTIME_UID" >/dev/null || useradd --uid "$AGENTCORE_RUNTIME_UID" --gid "$AGENTCORE_RUNTIME_GID" --create-home sandbox) \
     && mkdir -p /working /opt/opensandbox \
     && chown $AGENTCORE_RUNTIME_UID:$AGENTCORE_RUNTIME_GID /working /opt/opensandbox
 ENV MPLBACKEND=Agg PYTHONDONTWRITEBYTECODE=1
 COPY --from=node /usr/local/LICENSE /usr/share/agent-core/node-LICENSE
 COPY inventory.py /usr/share/agent-core/inventory.py
 # Match Core's declared workspace owner; the provider drops all capabilities.
-# Images with a different default identity fail the mount readiness probe.
+# The trusted server also selects this identity before starting ordinary images.
 USER $AGENTCORE_RUNTIME_UID:$AGENTCORE_RUNTIME_GID
 WORKDIR /working

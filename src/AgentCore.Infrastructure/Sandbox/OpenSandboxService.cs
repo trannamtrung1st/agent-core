@@ -216,7 +216,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         if (lease is not null && lease.AgentInstanceId != access.AgentInstanceId) throw AgentCoreErrors.NotFound("Sandbox was not found.");
         if (lease is not null && lease.State != SandboxLeaseState.Terminated)
         {
-            if (lease.MountAuthority != mounted.Authority || lease.Profile.Id != access.Profile.Id || lease.Profile.Revision != access.Profile.Revision
+            if (lease.MountAuthority != mounted.Authority with { TranslatedOwnership = lease.MountAuthority?.TranslatedOwnership ?? false } || lease.Profile.Id != access.Profile.Id || lease.Profile.Revision != access.Profile.Revision
                 || lease.Profile.RegistryCredentialId != access.Profile.RegistryCredentialId
                 || lease.Profile.RegistryCredentialRevision != access.Profile.RegistryCredentialRevision
                 || lease.Profile.RegistrySecretRevision != access.Profile.RegistrySecretRevision
@@ -280,14 +280,16 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             sdk = await SdkSandbox.CreateAsync(new SandboxCreateOptions {
                 ConnectionConfig = Connection(), Image = lease.Profile.ImageReference, ImageAuth = imageAuth, TimeoutSeconds = initialTtl, ReadyTimeoutSeconds = 45,
                 Resource = new Dictionary<string,string> { ["cpu"] = lease.Profile.Cpu.ToString(CultureInfo.InvariantCulture), ["memory"] = lease.Profile.MemoryMiB + "Mi" },
-                Metadata = new Dictionary<string,string> { ["agent-core-generation"] = lease.Generation.ToString("N") },
+                Metadata = new Dictionary<string,string> { ["agent-core-generation"] = lease.Generation.ToString("N"), ["agent-core-filesystem-contract"] = SandboxProfileVerification.CurrentContractVersion.ToString(CultureInfo.InvariantCulture) },
                 Volumes = mounted.Volumes,
                 NetworkPolicy = new NetworkPolicy { DefaultAction = NetworkRuleAction.Deny, Egress = [] }
             }, ct);
             imageAuth = null;
             lease = await SaveAsync(lease with { ProviderId = sdk.Id }, ct);
             phase = "mountValidation";
-            await CheckMountedReadinessAsync(sdk, mounted, ct);
+            var translated = await AttestMountsAsync(sdk.Id, mounted, lease.Profile.ImageReference, "agent-core-generation", lease.Generation.ToString("N"), ct);
+            var authority = await CheckMountedReadinessAsync(sdk, mounted, translated, ct);
+            lease = await SaveAsync(lease with { MountAuthority = authority }, ct);
             phase = "processBaseline";
             lease = await SaveAsync(lease with { BaselineProcesses = await ProcessIdentitiesAsync(sdk, ct) }, ct);
             if (!string.IsNullOrWhiteSpace(lease.Profile.InitializationScript) || !string.IsNullOrWhiteSpace(lease.Profile.InstanceInitializationScript))
@@ -300,8 +302,11 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 time.GetUtcNow(), time.GetUtcNow(), 0) }, ct);
             return await SaveAsync(lease with { State = SandboxLeaseState.Ready, TransitionPhase = null, InitializedAt = time.GetUtcNow(), LastActivityAt = time.GetUtcNow(), ExpiresAt = await RenewIdleAsync(sdk, lease, ct) }, ct);
         }
-        catch (Exception error)
+        catch (Exception caught)
         {
+            var error = caught is SandboxApiException { Error.Code: "MountIncompatible" }
+                ? CanonicalSandboxMountResolver.Incompatible("Automatic preparation could not establish safe filesystem access. The deployment mapping or execution configuration is unsupported.") : caught;
+            if (error is AgentCoreException { Code: "MountIncompatible" }) phase = "mountValidation";
             // Retain a safe cause even when orphan cleanup later reports pending.
             // SDK messages/bodies, provider IDs and credentials are never logged.
             var failure = error is SandboxApiException ? "http" : error is OperationCanceledException ? "canceled"
@@ -316,7 +321,9 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 CleanupReason = phase == "initialization" ? "initializationFailed" : "setupFailed", FailurePhase = phase,
                 FailureCategory = error is AgentCoreException { Code: "WorkspaceQuotaExceeded" } ? "storageLimit" : error is OperationCanceledException ? "cancellation" : error is AgentCoreException { Code: "Forbidden" } ? "sourceAuthorizationChanged"
                     : phase.StartsWith("mount", StringComparison.Ordinal) ? "mountFailure" : "provisioningFailure",
-                SafeMessage = phase == "initialization" ? "Environment initialization failed. Correct and verify the profile script, then reset before retrying." : error is AgentCoreException sourceError ? sourceError.Message + " Inspect the saved source, then reset before retrying." : "Environment setup failed. Check private server readiness and the pinned image, then reset before retrying." }, CancellationToken.None);
+                SafeMessage = error is AgentCoreException { Code: "MountIncompatible" } ? "Sandbox filesystem is incompatible with this Docker environment. Automatic preparation could not establish safe access. Reverify after repairing the trusted deployment; an identical reset will not help." : phase == "initialization" ? "Environment initialization failed. Correct and verify the profile script, then reset before retrying." : error is AgentCoreException sourceError ? sourceError.Message + " Inspect the saved source, then reset before retrying." : "Environment setup failed. Check private server readiness and the pinned image, then reset before retrying." }, CancellationToken.None);
+            if (error is AgentCoreException { Code: "MountIncompatible" })
+                throw CanonicalSandboxMountResolver.Incompatible(lease.SafeMessage ?? "Sandbox filesystem compatibility failed. Inspect readiness and reverify after repairing the deployment.");
             throw AgentCoreErrors.Persistence("Sandbox provisioning failed. Inspect readiness and reset before retrying.");
         }
         finally { if (sdk is not null) await sdk.DisposeAsync(); }

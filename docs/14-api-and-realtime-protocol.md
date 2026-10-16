@@ -818,13 +818,13 @@ Invalid package errors remain distinct from `office_feature_unsupported` and `of
 
 ### OpenSandbox reliability observations
 
-POST profile `/verify` returns passed/message/profile with the same configuration revision. Verification contract 3 separately observes exact source epochs and direct canonical mounts in RW/RO/disabled home modes. GET execution and sandbox.process.status remain read-only. Session inspection includes safe setup guidance, homeAccess and storageEnforcement; it never exposes provider IDs or raw exceptions.
+POST profile `/verify` returns passed/message/profile with the same configuration revision. Verification contract 4 separately observes source epochs, automatic non-root preparation, authenticated daemon/image/mount provenance and filesystem/Git behavior in RW/RO/disabled home modes. The workspace API remains contract 3. Ordinary errors carry safe status/stage/diagnostic metadata, never host paths or identity setup requirements. GET execution and sandbox.process.status remain read-only. Session inspection includes safe setup guidance, homeAccess and storageEnforcement; it never exposes provider IDs or raw exceptions.
 
 ### Sandbox setup and verification owner routes
 
 All routes below require the existing local owner capability; scripts and output never enter realtime agent conversation messages.
 
-- `POST /api/v2/admin/sandbox-profiles/{id}/check-image` with `expectedRevision`: ephemeral shell/mounted-workspace readiness under the image default user, explicitly no script execution.
+- `POST /api/v2/admin/sandbox-profiles/{id}/check-image` with `expectedRevision`: ephemeral shell/mounted-workspace readiness under the automatically selected non-root execution identity, explicitly no script execution.
 - `POST /api/v2/admin/sandbox-profiles/{id}/verify` with `expectedRevision`: full saved Profile initialization and direct disposable mount verification; persisted observation and unchanged Profile revision.
 - `POST /api/v2/admin/agent-instances/{id}/sandbox/verify` with `expectedInstanceRevision` and optional authorized `profileId`: effective selected Profile then Instance setup in a disposable environment; persisted exact Instance/Profile observation.
 - `GET /api/v2/admin/agent-instances/{id}/sandbox`: effective limits, image, scripts, saved Instance revision, readiness and current exact verification observation.

@@ -31,6 +31,12 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ./deploy/sandbox/compatibility.py
+        target: /opt/agent-core/compatibility.py
+        read_only: true
+        bind:
+          create_host_path: false
       - ${AGENTCORE_SANDBOX_WORKSPACE_ROOT:?Run sandbox prepare}:${AGENTCORE_SANDBOX_WORKSPACE_ROOT}
       - opensandbox-metadata:/var/lib/opensandbox
       - opensandbox-auth:/run/agent-core-auth
