@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-16T11:39:15.785147+00:00",
+  "generatedAt": "2026-10-16T11:47:55.643485+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -315,7 +315,7 @@
     ],
     "inspection": {
       "branch": "main",
-      "baseCommit": "baf9a3e78406034085f8d1414ada1c86fc920b4f",
+      "baseCommit": "e6807f7b7c7bcd660d6975c50608a335dbab27b0",
       "sourceSha256": {
         ".agents/context/DESIGN.md": "a666d89ad3d7df4332bb5e34f7e7225dace2fffedf9d977f4834cf34d2fec7f4",
         ".agents/context/PRODUCT.md": "e2bdbdf0696ebfe2c07d82670c0ad6d33b475cf246f930a8123f5cc19a804eaa",
@@ -330,9 +330,9 @@
         "web/src/features/access/AccessFeedback.tsx": "fdc04b0d6ddbbd367f5d6ae95d1b7e698397ad2a2cc97b2cbb8ab8c4d1a9c81d",
         "web/src/features/access/AccountForms.tsx": "62a822bd844235509266b14782391eebe07b180ed7e4f83fd79aaae74e0d2ad0",
         "web/src/features/access/InvitationAcceptance.tsx": "1470f5c3689f3fea9c2f69c9f38c8980e3b1e76f5c32b0f8265a8792e903cbb2",
-        "web/src/features/access/Members.tsx": "4e83bbeb10ecdce4b1766ef0e8ae420fb91f580e7901efc9bcf032507594bfcc",
+        "web/src/features/access/Members.tsx": "06f6326baffe1ea46cabaac9e015f26365daef2f0f1f6696694da5bfc617b52d",
         "web/src/features/access/Organizations.tsx": "0eda7c1cd4a00e0aad5bf773fe94c92fe587f7d0954d7e12f7fc494a8017face",
-        "web/src/features/access/Roles.tsx": "f8f7ffb928aacc14ff7c0fbd40508f99286e3aa7fee8af219e67cd033253310d",
+        "web/src/features/access/Roles.tsx": "5b06a54e2aa5ce20d166e28ca480b5bd6f18f36c72d00e652ea9829395193d16",
         "web/src/features/access/accessRoute.ts": "0f40109d0c402e7ffab428b2247925b781e414081464fa4570d8373d3d8bb5f8",
         "web/src/features/access/useAccessDraftGuard.tsx": "bbda915f9c66bfd5b4419bbdb9a64413bc8fd5207eeff2459ad517b9d5e4adaf",
         "web/src/features/access/useIdentityQuery.ts": "616a38b7b403a71fe3486cc9f8d2463c22f6e86ae1323430cca05615fa5ce538",
@@ -381,7 +381,7 @@
       "evidence": "docs/reports/access-ui-polish-2026-10-16.md",
       "scope": "Current access UI candidate fingerprints; this report verifies only the listed identity/access surfaces and focused shared-navigation consumers. Historical reports retain their original source and acceptance scope.",
       "snapshotKind": "commit-candidate",
-      "inspectedAt": "2026-10-16T11:39:15.785147+00:00",
+      "inspectedAt": "2026-10-16T11:47:55.643485+00:00",
       "evidenceRecords": [
         "docs/reports/access-ui-polish-2026-10-16.md",
         "docs/reports/design-system-sync-2026-10-16.md",
@@ -399,7 +399,7 @@
         "docs/reports/oci-sandbox-final-hardening-2026-10-15.md",
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
-      "verification": "36 focused frontend tests, six canonical API integrations, production build and the isolated two-browser access journey. MCP measures 320/390/768/1024/1440px with no document overflow and viewport-bounded access drawers. The report records negative-path and keyboard/focus corrections and explicitly pending resource/Hub/approval acceptance.",
+      "verification": "Owner-requested second polish pass: 31 focused frontend tests, production build, expanded isolated owner/Reader browser journey and MCP permission-search/manual-copy recovery. Prior API and shared-Admin evidence remains tied to its original source in the same report. No resource/Hub/approval acceptance is claimed.",
       "verificationReport": "docs/reports/access-ui-polish-2026-10-16.md"
     }
   },

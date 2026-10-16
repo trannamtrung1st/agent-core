@@ -29,6 +29,14 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await page.getByRole('textbox', { name: 'Role name' }).fill('Workspace reviewer');
   await page.getByRole('textbox', { name: 'Search permissions' }).fill('workspaces');
   await page.getByRole('checkbox', { name: 'Read workspaces', exact: true }).check();
+  await page.getByRole('textbox', { name: 'Search permissions' }).fill('no-matching-permission-xyz');
+  await expect(page.getByText('No permissions match your search.', { exact: true })).toBeVisible();
+  await expect(page.getByText('1 selected', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Search permissions' })).toHaveValue('');
+  await expect(page.getByRole('textbox', { name: 'Search permissions' })).toBeFocused();
+  await page.getByRole('textbox', { name: 'Search permissions' }).fill('  workspaces  ');
+  await expect(page.getByRole('checkbox', { name: 'Read workspaces', exact: true })).toBeChecked();
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await expect.poll(async () => {
@@ -58,6 +66,21 @@ test('owner and invited Reader use scoped access UI, with safe mobile drawers an
   await page.getByRole('combobox', { name: 'Initial role' }).press('Enter');
   await page.getByRole('button', { name: 'Create invitation' }).click();
   const invitationLink = await page.getByRole('textbox', { name: 'Invitation link' }).inputValue();
+  const clipboard = await page.evaluateHandle(() => navigator.clipboard);
+  await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }); });
+  await page.getByRole('button', { name: 'Copy invitation link', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Copy failed.' })).toContainText('Select the link and copy it manually');
+  await page.getByRole('textbox', { name: 'Invitation link' }).focus();
+  expect(await page.getByRole('textbox', { name: 'Invitation link' }).evaluate((node: HTMLTextAreaElement) => node.selectionEnd - node.selectionStart)).toBe(invitationLink.length);
+  await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('Clipboard permission denied')) } }); });
+  await page.getByRole('button', { name: 'Copy invitation link', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Copy failed.' })).toContainText('Select the link and copy it manually');
+  await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.resolve() } }); });
+  await page.getByRole('button', { name: 'Copy invitation link', exact: true }).click();
+  await expect(page.getByText('Invitation link copied.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Copy failed\./)).toHaveCount(0);
+  await page.evaluate(value => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value }); }, clipboard);
+  await clipboard.dispose();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('tab', { name: 'Invitations', exact: true }).click();
   await expect(page.getByRole('row').filter({ hasText: 'reader-access@example.test' })).toContainText('Pending');

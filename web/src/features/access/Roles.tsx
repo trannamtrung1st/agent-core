@@ -1,6 +1,6 @@
 import { useAccessDraftGuard } from './useAccessDraftGuard';
 import { useRef, useState } from 'react';
-import { Alert, Button, Checkbox, Collapse, Drawer, Empty, Flex, Form, Input, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Checkbox, Collapse, Drawer, Empty, Flex, Form, Input, Table, Tag, Typography, message, type InputRef } from 'antd';
 import { EditOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons';
 import { appMessageConfig } from '../../app/appFeedback';
 import { AdminCollectionToolbar, useAdminCollectionSearch } from '../admin/AdminCollectionToolbar';
@@ -36,6 +36,7 @@ function RoleEditor({ role, context, permissions, catalogError, catalogRetry, re
 }) {
   const [form] = Form.useForm<{ name: string }>(); const [selected, setSelected] = useState<string[]>(role?.permissions ?? []);
   const [openGroups, setOpenGroups] = useState<string[]>([]);
+  const searchInput = useRef<InputRef>(null);
   const [query, setQuery] = useState(''); const [dirty, setDirty] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>();
   const [feedback, holder] = message.useMessage(appMessageConfig);
   const guard = useAccessDraftGuard(dirty, busy, onClose);
@@ -45,7 +46,9 @@ function RoleEditor({ role, context, permissions, catalogError, catalogRetry, re
     try { await identityRequest(tenantApi(context.tenant.tenantId, role ? `/roles/${role.roleId}` : '/roles'), { method: role ? 'PUT' : 'POST', body: { name, permissions: selected, expectedRevision: revision } }); setDirty(false); onSaved(); }
     catch (reason) { setError(reason); } finally { setBusy(false); }
   };
-  const groups = [...new Set(permissions.map(p => permissionFamily(p.key)))];
+  const search = query.trim().toLowerCase();
+  const matching = permissions.filter(p => `${permissionFamily(p.key)} ${permissionLabel(p.key)} ${p.key}`.toLowerCase().includes(search));
+  const groups = [...new Set(matching.map(p => permissionFamily(p.key)))];
   return <Drawer className="access-editor-drawer" title={editable ? role ? 'Edit role' : 'Create role' : role?.name} open onClose={guard.close} size="large" styles={{ wrapper: { maxWidth: '100vw' } }} footer={<Flex justify="end" gap="var(--ac-space-compact)" wrap><Button disabled={busy} onClick={guard.close}>{editable ? 'Cancel' : 'Close'}</Button>{editable && <Button form="access-role-form" type="primary" htmlType="submit" loading={busy}>Save role</Button>}</Flex>}>
     {holder}{guard.holder}<Flex vertical gap="var(--ac-space-section)">
       <Typography.Paragraph type="secondary">{context.tenant.name} · Roles describe authority. Assigning a role is a separate step.</Typography.Paragraph>
@@ -55,8 +58,8 @@ function RoleEditor({ role, context, permissions, catalogError, catalogRetry, re
         <Form.Item name="name" label="Role name" rules={[{ required: true, whitespace: true, message: 'Enter a role name.' }, { max: 160 }]}><Input autoFocus={editable} maxLength={160} /></Form.Item>
       </Form>
       <Flex justify="space-between" align="center" gap="var(--ac-space-compact)" wrap><Typography.Text strong>Permissions</Typography.Text><Typography.Text type="secondary" aria-live="polite">{selected.length} selected{selected.some(key => permissions.some(p => p.key === key && p.humanOnly)) ? ' · People only' : ''}</Typography.Text></Flex>
-      <Input aria-label="Search permissions" placeholder="Search permissions" value={query} onChange={event => setQuery(event.target.value)} allowClear />
-      {catalogError ? <AccessError error={catalogError} retry={catalogRetry} /> : !permissions.length ? <AccessLoading /> : <Collapse items={groups.map(group => ({ key: group, label: group, forceRender: !!query, children: <Flex vertical gap="var(--ac-space-default)">{permissions.filter(p => permissionFamily(p.key) === group && `${group} ${permissionLabel(p.key)} ${p.key}`.toLowerCase().includes(query.toLowerCase())).map(permission => <Checkbox aria-label={`${permissionLabel(permission.key)} ${permissionFamily(permission.key).toLowerCase()}`} key={permission.key} disabled={!editable || busy} checked={selected.includes(permission.key)} onChange={event => { setDirty(true); setSelected(current => event.target.checked ? [...current, permission.key] : current.filter(key => key !== permission.key)); }}>{permissionLabel(permission.key)}{permission.humanOnly && <Typography.Text type="secondary"> · People only</Typography.Text>}</Checkbox>)}</Flex> })).filter(item => !query || permissions.some(p => permissionFamily(p.key) === item.key && `${item.key} ${permissionLabel(p.key)} ${p.key}`.toLowerCase().includes(query.toLowerCase())))} activeKey={query ? groups : openGroups} onChange={keys => setOpenGroups(typeof keys === 'string' ? [keys] : keys)} />}
+      <Input ref={searchInput} aria-label="Search permissions" placeholder="Search permissions" value={query} onChange={event => setQuery(event.target.value)} allowClear />
+      {catalogError ? <AccessError error={catalogError} retry={catalogRetry} /> : !permissions.length ? <AccessLoading /> : !matching.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No permissions match your search."><Button onClick={() => { setQuery(''); searchInput.current?.focus(); }}>Clear search</Button></Empty> : <Collapse items={groups.map(group => ({ key: group, label: group, forceRender: !!search, children: <Flex vertical gap="var(--ac-space-default)">{matching.filter(p => permissionFamily(p.key) === group).map(permission => <Checkbox aria-label={`${permissionLabel(permission.key)} ${permissionFamily(permission.key).toLowerCase()}`} key={permission.key} disabled={!editable || busy} checked={selected.includes(permission.key)} onChange={event => { setDirty(true); setSelected(current => event.target.checked ? [...current, permission.key] : current.filter(key => key !== permission.key)); }}>{permissionLabel(permission.key)}{permission.humanOnly && <Typography.Text type="secondary"> · People only</Typography.Text>}</Checkbox>)}</Flex> }))} activeKey={search ? groups : openGroups} onChange={keys => setOpenGroups(typeof keys === 'string' ? [keys] : keys)} />}
     </Flex>
   </Drawer>;
 }

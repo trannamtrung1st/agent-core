@@ -62,6 +62,12 @@ export function Members({ context }: { context: TenantContext }) {
 function InviteMember({ context, roles, rolesError, rolesRetry, revision, onClose, onCreated }: { context: TenantContext; roles: Role[]; rolesError?: Error; rolesRetry: () => void; revision: number; onClose: () => void; onCreated: () => void }) {
   const [form] = Form.useForm<{ login: string; roleId: string }>(); const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>(); const [dirty, setDirty] = useState(false); const [link, setLink] = useState<string>();
   const [feedback, holder] = message.useMessage(appMessageConfig);
+  const [copyError, setCopyError] = useState(false);
+  const copyLink = async () => {
+    if (!link) return;
+    try { await navigator.clipboard.writeText(link); setCopyError(false); void feedback.success('Invitation link copied.'); }
+    catch { setCopyError(true); }
+  };
   const guard = useAccessDraftGuard(dirty && !link, busy, onClose);
   const save = async (values: { login: string; roleId: string }) => {
     setBusy(true); setError(undefined);
@@ -71,7 +77,7 @@ function InviteMember({ context, roles, rolesError, rolesRetry, revision, onClos
     } catch (reason) { setError(reason); } finally { setBusy(false); }
   };
   return <Modal title={link ? 'Invitation created' : 'Invite member'} open onCancel={guard.close} footer={null} destroyOnHidden>{holder}{guard.holder}
-    {link ? <Flex vertical gap="var(--ac-space-section)"><Alert type="success" showIcon title="Send this link to the invited person. No email has been sent." /><Typography.Paragraph type="secondary">This invitation is for {context.tenant.name} and expires in seven days. Copy it before closing this dialog.</Typography.Paragraph><Input.TextArea aria-label="Invitation link" value={link} readOnly autoSize={{ minRows: 3, maxRows: 6 }} onFocus={event => event.target.select()} /><Flex justify="end" gap="var(--ac-space-compact)" wrap><Button icon={<CopyOutlined aria-hidden />} onClick={() => { void navigator.clipboard.writeText(link).then(() => feedback.success('Invitation link copied.'), () => feedback.error('Copy failed. Select the link and copy it manually.')); }}>Copy invitation link</Button><Button type="primary" onClick={onClose}>Done</Button></Flex></Flex> : <Form form={form} layout="vertical" disabled={busy} onValuesChange={() => setDirty(true)} onFinish={values => void save(values)} onFinishFailed={reason => showAdminFormValidation(feedback, form, reason)}>
+    {link ? <Flex vertical gap="var(--ac-space-section)"><Alert type="success" showIcon title="Send this link to the invited person. No email has been sent." /><Typography.Paragraph type="secondary">This invitation is for {context.tenant.name} and expires in seven days. Copy it before closing this dialog.</Typography.Paragraph><Input.TextArea aria-label="Invitation link" value={link} readOnly autoSize={{ minRows: 3, maxRows: 6 }} onFocus={event => event.target.select()} />{copyError && <Alert type="error" showIcon role="alert" title="Copy failed. Select the link and copy it manually, or try copying again." />}<Flex justify="end" gap="var(--ac-space-compact)" wrap><Button icon={<CopyOutlined aria-hidden />} onClick={() => void copyLink()}>Copy invitation link</Button><Button type="primary" onClick={onClose}>Done</Button></Flex></Flex> : <Form form={form} layout="vertical" disabled={busy} onValuesChange={() => setDirty(true)} onFinish={values => void save(values)} onFinishFailed={reason => showAdminFormValidation(feedback, form, reason)}>
       <Typography.Paragraph type="secondary">Invite a person to {context.tenant.name}. Their access to other organizations will stay the same.</Typography.Paragraph>
       {error !== undefined && <div className="access-form-error"><Alert type="error" showIcon role="alert" title={accessErrorMessage(error)} /></div>}
       <Form.Item name="login" label="Email" rules={[{ required: true, message: 'Enter the invited person’s email.' }, { type: 'email', message: 'Enter a valid email address.' }]}><Input type="email" autoFocus autoComplete="off" maxLength={254} /></Form.Item>
