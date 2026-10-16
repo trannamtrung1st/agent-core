@@ -16,19 +16,54 @@ public static class TenantAccessEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}").RequireAuthorization();
-        group.MapGet("/members", (HttpContext http, TenantAccessService access, IIamStore store, int? page, int? pageSize, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/access/me", (HttpContext http, IIamStore store, IamAuthorizer authorizer, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var state = await store.ReadTenantAsync(actor.TenantId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("not_member");
+            var permissions = new List<string>();
+            foreach (var permission in PermissionCatalog.All.Where(p => !p.SystemOnly))
+                if ((await authorizer.CheckAsync(actor.PrincipalId, permission.Key, AccessScope.ForTenant(actor.TenantId), ct).ConfigureAwait(false)).Allowed)
+                    permissions.Add(permission.Key);
+            var roleIds = state.Assignments.Where(a => a.PrincipalId == actor.PrincipalId && a.Scope.Kind == AccessScopeKind.Tenant).Select(a => a.RoleId).ToHashSet();
+            return Results.Json(new { tenant = state.Tenant, actor.UserId, actor.PrincipalId, permissions,
+                roles = state.Roles.Where(r => roleIds.Contains(r.RoleId)).Select(r => new { r.RoleId, r.Name }), revision = state.Tenant.Revision });
+        }));
+        group.MapGet("/members", (HttpContext http, TenantAccessService access, IIamStore store, int? page, int? pageSize, string? q, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
             var state = await access.ReadAsync(actor.PrincipalId, actor.TenantId, ct: ct).ConfigureAwait(false);
             var size = Math.Clamp(pageSize ?? 30, 1, 100); var index = Math.Clamp(page ?? 0, 0, 100_000);
             var rows = new List<object>();
-            foreach (var member in state.Users.OrderBy(u => u.CreatedAt).ThenBy(u => u.UserId).Skip(index * size).Take(size))
+            IReadOnlyList<TenantUser> visible = state.Users;
+            if (!string.IsNullOrWhiteSpace(q))
+            {
+                var matches = new List<TenantUser>();
+                foreach (var user in state.Users)
+                {
+                    var account = await store.ReadAccountAsync(user.AccountId, ct).ConfigureAwait(false);
+                    if (account is not null && (account.DisplayName.Contains(q.Trim(), StringComparison.OrdinalIgnoreCase)
+                        || account.LoginKey.Contains(q.Trim(), StringComparison.OrdinalIgnoreCase))) matches.Add(user);
+                }
+                visible = matches;
+            }
+            foreach (var member in visible.OrderBy(u => u.CreatedAt).ThenBy(u => u.UserId).Skip(index * size).Take(size))
             {
                 var account = await store.ReadAccountAsync(member.AccountId, ct).ConfigureAwait(false);
                 rows.Add(new { member.UserId, member.PrincipalId, member.Status, displayName = account?.DisplayName, login = account?.LoginKey,
                     roles = state.Assignments.Where(a => a.PrincipalId == member.PrincipalId).Select(a => new { a.AssignmentId, a.RoleId, a.Scope }) });
             }
-            return Results.Json(new { items = rows, total = state.Users.Count, revision = state.Tenant.Revision, page = index, pageSize = size });
+            return Results.Json(new { items = rows, total = visible.Count, revision = state.Tenant.Revision, page = index, pageSize = size });
+        }));
+        group.MapGet("/members/invitations", (HttpContext http, TenantAccessService access, TimeProvider time, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var state = await access.ReadAsync(actor.PrincipalId, actor.TenantId, "members.invite", ct).ConfigureAwait(false);
+            var now = time.GetUtcNow();
+            return Results.Json(new { items = state.Invitations.OrderByDescending(i => i.ExpiresAt).Take(100).Select(i => new
+            {
+                i.InvitationId, i.LoginKey, i.ExpiresAt, roleName = state.Roles.SingleOrDefault(r => r.RoleId == i.RoleId)?.Name,
+                status = i.Revoked ? "Revoked" : i.AcceptedAt is not null ? "Accepted" : i.ExpiresAt <= now ? "Expired" : "Pending"
+            }), revision = state.Tenant.Revision });
         }));
         group.MapPost("/members/invite", (InviteRequest body, HttpContext http, TenantAccessService access, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

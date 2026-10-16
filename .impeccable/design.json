@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-16T04:35:52.140694+00:00",
+  "generatedAt": "2026-10-16T11:39:15.785147+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -315,16 +315,31 @@
     ],
     "inspection": {
       "branch": "main",
-      "baseCommit": "7d622c85db8a5925da441e88b8d7e46e9b608628",
+      "baseCommit": "baf9a3e78406034085f8d1414ada1c86fc920b4f",
       "sourceSha256": {
-        "web/src/app.css": "860d053888e3a7f2c0c5a7a7e89b23351e48a3c7a87d50bf430e2c92665c0fc8",
+        ".agents/context/DESIGN.md": "a666d89ad3d7df4332bb5e34f7e7225dace2fffedf9d977f4834cf34d2fec7f4",
+        ".agents/context/PRODUCT.md": "e2bdbdf0696ebfe2c07d82670c0ad6d33b475cf246f930a8123f5cc19a804eaa",
+        "web/src/app.css": "dc468ad01500703521a4f484455e71531646aa453e21c5379d5f7051c9e111bd",
+        "web/src/app/AppRouter.tsx": "5abd9590770a9535810e5cbb2aaca49052975a7f131a54f576151a4e4286e339",
         "web/src/app/AppShell.tsx": "35826591f0e988cd4a1ac068c23b61fd05404fb8a6a3a1f494832cd32a5998d1",
         "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66",
         "web/src/app/appFeedback.ts": "9fb2b3caaffb16f19a2320e0f3c241905c80420f0c417f259cd50eaf1b41bbb2",
         "web/src/app/appFeedbackPlacement.ts": "4232563daa5a53ce141c2585035b5aa65bd5ea443590c32167c52354c8c1c6e5",
+        "web/src/app/appRoute.ts": "29e10e1396b8a456c44d0a72312dceca782791ed6cd83c94d9b1d76cb3cc7aef",
+        "web/src/features/access/AccessApp.tsx": "7fb72d4986d97ea78e30c0e435850065ed52d3d7bda505ddaf70dd481b7c4190",
+        "web/src/features/access/AccessFeedback.tsx": "fdc04b0d6ddbbd367f5d6ae95d1b7e698397ad2a2cc97b2cbb8ab8c4d1a9c81d",
+        "web/src/features/access/AccountForms.tsx": "62a822bd844235509266b14782391eebe07b180ed7e4f83fd79aaae74e0d2ad0",
+        "web/src/features/access/InvitationAcceptance.tsx": "1470f5c3689f3fea9c2f69c9f38c8980e3b1e76f5c32b0f8265a8792e903cbb2",
+        "web/src/features/access/Members.tsx": "4e83bbeb10ecdce4b1766ef0e8ae420fb91f580e7901efc9bcf032507594bfcc",
+        "web/src/features/access/Organizations.tsx": "0eda7c1cd4a00e0aad5bf773fe94c92fe587f7d0954d7e12f7fc494a8017face",
+        "web/src/features/access/Roles.tsx": "f8f7ffb928aacc14ff7c0fbd40508f99286e3aa7fee8af219e67cd033253310d",
+        "web/src/features/access/accessRoute.ts": "0f40109d0c402e7ffab428b2247925b781e414081464fa4570d8373d3d8bb5f8",
+        "web/src/features/access/useAccessDraftGuard.tsx": "bbda915f9c66bfd5b4419bbdb9a64413bc8fd5207eeff2459ad517b9d5e4adaf",
+        "web/src/features/access/useIdentityQuery.ts": "616a38b7b403a71fe3486cc9f8d2463c22f6e86ae1323430cca05615fa5ce538",
         "web/src/features/admin/AddCredentialDialog.tsx": "e9e217a5e84579e386bfb8610e104e48e2955c426db4b192cc714459036b0127",
         "web/src/features/admin/AdminApp.tsx": "59d46f1a41c694953ceb2c8386ab1ec50bee97ff7c07aee035bd464b9cd84587",
-        "web/src/features/admin/AdminShell.tsx": "58aa8322bc4dc0e3e6ff137284c4e3049f04ec420e3864f6e7b66c1fab5f93e4",
+        "web/src/features/admin/AdminCollectionToolbar.tsx": "6be3aeb9ec851b022ab1521f09a529ca64bc71549e6544438464c0bd3ddb7c30",
+        "web/src/features/admin/AdminShell.tsx": "3cfd2bab0d593ea623a77a0f47029aea266a38ef3cd0a2330de285c500677034",
         "web/src/features/admin/AgentConfigurationLayout.tsx": "b36bde3bb2f8a11cc14abb20f29df25656b9ee2ee5490b1663d724513589e73b",
         "web/src/features/admin/BrowserPrivacySection.tsx": "3b6c1aa94e2b5253330b7ff2f9c8e2a6ddb3f8077b8e6dfe13287f465539cbce",
         "web/src/features/admin/CredentialsSection.tsx": "17406d7a757110be6d783a5f98abb8c94d1495e438cf982826de7dda8bc8dba6",
@@ -337,15 +352,18 @@
         "web/src/features/admin/InstanceSandboxSummary.tsx": "61c664c0d8ae6fa268451a86fdf1880e7da9cc8c731e003205336a6351321d30",
         "web/src/features/admin/InstanceSettingsSection.tsx": "8ac7ed48a90e1be1e12db20b1c26fe4e7bed02269098eaaf2d9dc5d9fc11bc07",
         "web/src/features/admin/InstanceSkillsSection.tsx": "874bd6ecdaf4fadc261bc9e61954a0184b24cb590cb665fafe69f889da952868",
+        "web/src/features/admin/InstanceStateSection.tsx": "cec615f0bfd6b25cde0ff57b1dda40c6f937d071af691ba6fabb02cbb144edd9",
         "web/src/features/admin/InstanceWorkspaceSection.tsx": "09a2e73523d08b60d8756fce2040ce9fb44a82ef5af589564e082e3d71d56bbb",
+        "web/src/features/admin/IsolationChangePreview.tsx": "3b56ebda9c2a88d6bcee7a75a331d615e5bea2f42c5a1330cb2c2cab62520f96",
         "web/src/features/admin/IsolationPresetControl.tsx": "b195e712cbb6b8b999f80a790365ae9f52ea9004f5a132b6423102970706a20a",
         "web/src/features/admin/SandboxProfileDetails.tsx": "0a1d5395f3c6ff85c4fb004e57e3e4b5b595a9347345a7edd67ed39c653282d3",
-        "web/src/features/admin/SandboxProfilesSection.tsx": "c9187b38686704192f3b4640280e2a12ea118e6c3ff959c782ba382fa8be863c",
+        "web/src/features/admin/SandboxProfilesSection.tsx": "6f6d5a1602198462a76c074a9ea63e95ebd48fe41e9509af6861a7bf2015beed",
         "web/src/features/admin/SkillDrawer.tsx": "48c5aab113b87567037d4a275c220f9d436f0751299117e2de3e5dfdf1705ce2",
         "web/src/features/admin/StateIsolationConfigurationProvider.tsx": "d827459f760d812abc22f682de55a76507411fbd7c80164aea5402d437b1bd18",
         "web/src/features/admin/StateIsolationConfigurationSection.tsx": "0eae5902e35d5bd10177f7e2b4e73f3f1326e5b53a62a2269752ede3131a4a33",
         "web/src/features/admin/adminFailure.tsx": "27edf8d0a895e3eb8d5b80245deac4eb6686138cb60967949c051008c05f62b1",
         "web/src/features/admin/adminFormFeedback.ts": "0d14ed96ba94bad96af6da12af25e1075ecce880cf8056700c49e93e17546bd5",
+        "web/src/features/admin/useAdminDetailLayout.ts": "b0f7d9585d713164dd1cf79a44b3c427a9dade81fa6d8df58c2bee2e86593c71",
         "web/src/features/admin/useInstanceSettingsController.ts": "b0f2cfd173aee9dd9ff692a17380fd8480a45d6d896ee62bd24e01cff6dbe9a5",
         "web/src/features/chat/ChatApp.tsx": "27e9686d7d65885abc8cb4fb1f34cef0ff8ce2c3db9f918fb3ff573e7e36f6a6",
         "web/src/features/chat/DiagnosticDetails.tsx": "4ed6285461c76ef36f0416fc20ce182be43c347449f01bf0c81f02adb7f2183f",
@@ -356,17 +374,16 @@
         "web/src/features/filePreview/fileSource.ts": "933f574961f53d35e203ff4a09aff0542fb36360cf627fe909fc131113d88759",
         "web/src/features/filePreview/officeSource.ts": "a1d03786d9b2bc4e56b717a058959714313494ffd364971dc1d75f9d0a1a8a3e",
         "web/src/services/agentWorkspace.ts": "8a854df53db331ab20d358918c555086a64e525e0cdd52312832c2368e5df88f",
+        "web/src/services/identity.ts": "3998cd3ce1e305a30f73e5542ddad8ec2b0a508dec18071e4bed4c16e9d7b7dc",
         "web/src/services/sandboxes.ts": "96a8d1f7e0ad363bdeecd97551196755c7a33b460c2dd3a1485c4ff1320d4d8c",
-        "web/src/services/stateIsolation.ts": "b1a87a108608e5abbd75a7f21d75530f70fe6862fec2b74384cb70a59de71ddb",
-        "web/src/features/admin/IsolationChangePreview.tsx": "3b56ebda9c2a88d6bcee7a75a331d615e5bea2f42c5a1330cb2c2cab62520f96",
-        "web/src/features/admin/InstanceStateSection.tsx": "cec615f0bfd6b25cde0ff57b1dda40c6f937d071af691ba6fabb02cbb144edd9",
-        "web/src/features/admin/useAdminDetailLayout.ts": "b0f7d9585d713164dd1cf79a44b3c427a9dade81fa6d8df58c2bee2e86593c71"
+        "web/src/services/stateIsolation.ts": "b1a87a108608e5abbd75a7f21d75530f70fe6862fec2b74384cb70a59de71ddb"
       },
-      "evidence": "docs/reports/design-system-sync-2026-10-16.md",
-      "scope": "Source fingerprints identify the inspected checkout; the report lists exercised behavior. Unrelated concurrent backend/diagnostic edits are outside this design sync.",
+      "evidence": "docs/reports/access-ui-polish-2026-10-16.md",
+      "scope": "Current access UI candidate fingerprints; this report verifies only the listed identity/access surfaces and focused shared-navigation consumers. Historical reports retain their original source and acceptance scope.",
       "snapshotKind": "commit-candidate",
-      "inspectedAt": "2026-10-16T04:35:52.140694+00:00",
+      "inspectedAt": "2026-10-16T11:39:15.785147+00:00",
       "evidenceRecords": [
+        "docs/reports/access-ui-polish-2026-10-16.md",
         "docs/reports/design-system-sync-2026-10-16.md",
         "docs/reports/canonical-workspace-main-sync-2026-10-16.md",
         "docs/reports/canonical-workspace-cutover-verification-2026-10-16.md",
@@ -382,8 +399,8 @@
         "docs/reports/oci-sandbox-final-hardening-2026-10-15.md",
         "docs/reports/oci-image-tag-onboarding-fix-2026-10-15.md"
       ],
-      "verification": "54 focused frontend tests and production build pass. Synthetic MCP verifies coordinated drafts, responsive preview geometry and State 503/Retry. The focused isolated CLI check covers six preview widths, shared Memory/Voice consumers, Escape after the native dialog opens, Discard, State recovery and empty Workspace. See the report for final results and limits; older evidence remains historical.",
-      "verificationReport": "docs/reports/design-system-sync-2026-10-16.md"
+      "verification": "36 focused frontend tests, six canonical API integrations, production build and the isolated two-browser access journey. MCP measures 320/390/768/1024/1440px with no document overflow and viewport-bounded access drawers. The report records negative-path and keyboard/focus corrections and explicitly pending resource/Hub/approval acceptance.",
+      "verificationReport": "docs/reports/access-ui-polish-2026-10-16.md"
     }
   },
   "components": [
@@ -610,6 +627,13 @@
       "description": "Static illustration of the shared native Ant Design change preview. Sample values are illustrative. One panel owns 16px insets; 12rem top-aligned labels at 768px+ stack below. Long labels and before/after/source values wrap. Actual draft revisions, atomic Save, blocking warnings, confirmation and focus belong to the application.",
       "html": "<section class=\"ds-isolation-panel\" aria-label=\"Isolation change preview illustration\"><h4>Change preview</h4><div class=\"ds-isolation-body\"><p>Illustrative draft. Review changes before saving.</p><dl><div><dt>State &amp; Isolation · Conversation context</dt><dd>Within this Session → Current request · new Session each time · Instance override</dd></div><div><dt>Memory policy · Session Memory</dt><dd>On → Off · Instance override</dd></div><div><dt>Voice · Enabled</dt><dd>On → Off · Instance override</dd></div></dl></div></section>",
       "css": ".ds-isolation-panel{min-width:0;background:var(--ac-color-container,#141414);color:var(--ac-color-text,rgba(255,255,255,.85));border:1px solid var(--ac-color-border,#303030);border-radius:var(--ac-radius-surface,8px);font:14px/1.5714285714 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.ds-isolation-panel h4{margin:0;padding:var(--ac-space-section,16px);border-bottom:1px solid var(--ac-color-border,#303030);font-size:16px;line-height:1.3}.ds-isolation-body{padding:var(--ac-space-section,16px);display:flex;flex-direction:column;gap:var(--ac-space-default,12px)}.ds-isolation-body p{margin:0;color:var(--ac-color-text-secondary,rgba(255,255,255,.65))}.ds-isolation-body dl{margin:0;display:flex;flex-direction:column;gap:var(--ac-space-compact,8px)}.ds-isolation-body dl>div{display:grid;grid-template-columns:12rem minmax(0,1fr);align-items:start}.ds-isolation-body dt{color:var(--ac-color-text-secondary,rgba(255,255,255,.65));overflow-wrap:anywhere}.ds-isolation-body dd{margin:0;min-width:0;overflow-wrap:anywhere}@media(max-width:767px){.ds-isolation-body dl>div{grid-template-columns:minmax(0,1fr);gap:var(--ac-space-compact,8px)}}"
+    },
+    {
+      "name": "Organization access",
+      "kind": "custom",
+      "description": "Illustrative access foundation: the same dark Admin hierarchy, visible organization context, wrapping member metadata and a scoped action. Actual Ant Design screens, authentication and permission decisions live in the application.",
+      "html": "<section class=\"ds-access\"><header><strong>Members</strong><span>Northstar Research · illustrative</span></header><p>Manage access to this organization.</p><div class=\"ds-access-row\"><div><strong>Taylor Nguyen</strong><span>Reader · Organization-wide</span></div><button type=\"button\">Inspect access</button></div></section>",
+      "css": ".ds-access{background:#141414;color:rgba(255,255,255,.85);font:14px/1.57 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;padding:16px;border:1px solid #303030;border-radius:8px}.ds-access header{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px}.ds-access header>strong{font-size:24px}.ds-access header>span,.ds-access p,.ds-access-row span{color:rgba(255,255,255,.65)}.ds-access-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px;padding-block:16px;border-top:1px solid #303030}.ds-access-row>div{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}.ds-access button{font:inherit;color:inherit;background:#141414;border:1px solid #424242;border-radius:6px;padding:4px 12px;min-height:32px;cursor:pointer}.ds-access button:hover{color:#3c89e8;border-color:#3c89e8}.ds-access button:focus-visible{outline:2px solid #3c89e8;outline-offset:2px}@media(max-width:767px){.ds-access button{min-height:40px}}"
     }
   ],
   "narrative": {
@@ -626,7 +650,8 @@
       "Admin uses contextual creation dialogs, one shared sticky configuration action frame, shared conversation source selection and explicit time-zone previews. Failed submissions give immediate warning/error feedback alongside persistent field or local error details; invalid fields are revealed, scrolled into view and focused.",
       "`AdminShell` and the typed registry own focused icon-and-label pages. Shared panels retain one inset; exact-owner controllers retain drafts across pages. Immutable inspectors keep their local read-only controls.",
       "Structured composer choices use category icons and quiet type labels in one flat list; draft, queue and history share immutable chip labels, with pending and historical tooltips distinguished.",
-      "Shared file previews keep code/grids locally scrollable, mobile controls at 40px, worksheet selection stable through resizing and full metadata accessible. Drive connections and browsing reuse existing Credentials and Instance owners; file mutations remain authorized agent capabilities."
+      "Shared file previews keep code/grids locally scrollable, mobile controls at 40px, worksheet selection stable through resizing and full metadata accessible. Drive connections and browsing reuse existing Credentials and Instance owners; file mutations remain authorized agent capabilities.",
+      "Account and organization access inherit the shared AdminShell context, page headings, collection toolbar, navigation drawer, confirmation and feedback compositions."
     ],
     "rules": [
       {

@@ -57,10 +57,10 @@ Confirmed MVP UI/product facts (see `/docs`; do not extend here):
 
 Explicitly out of this UI foundation and out of MVP product UI:
 
-- a multi-tenant inbox, an enterprise admin theme separate from the shipped Admin, or a second UI framework;
+- an enterprise admin theme separate from the shipped Admin, or a second UI framework; the authorized organization-access successor keeps the same dark application;
 - unsanitized HTML injection, raw provider secrets in the UI, or a second component framework;
 - unrestricted autonomous tooling or post-MVP proactive policy changes beyond current docs;
-- authentication, WebRTC, native speech-to-speech, Ant Design Pro/ProComponents/X.
+- WebRTC, native speech-to-speech, Ant Design Pro/ProComponents/X. The original authentication exclusion is superseded by the owner-authorized Account/IAM successor below.
 
 Stack (existing codebase, not a greenfield choice): React SPA, Vite, pnpm, strict TypeScript, Zustand, Ant Design v6 imported directly in product components, minimal `app.css`, `@microsoft/signalr` + MessagePack. No SSR or Next.js.
 
@@ -145,3 +145,7 @@ OCI catalog owner journey: start trusted server infrastructure, register prebuil
 ## State and isolation tooling context
 
 Instance Operations → State shows live versus durable activity and truthful partial/stale resource observations. Configuration → State & Isolation uses ordinary inherited fields and editable Persistent, Session-isolated and Stateless preset drafts, with the existing Save/Discard/Refresh owner. Definition drafts author defaults; publications remain read-only. Preset changes retain historical data and external credentials keep their own authority. [Frontend](../../docs/13-frontend-implementation-spec.md#state-and-isolation-admin-surfaces) owns behavior; the dated state/isolation ledger owns evidence. Existing Ant Design v6 panels and responsive grids are reused.
+
+## Account and organization access tooling context
+
+The owner-authorized Account/IAM successor adds sign-in, invitation acceptance, Account password changes, My Organizations, organization switching, current effective access, Members/Invitations, builtin/custom Roles and audit to the existing Ant Design operate UI. These surfaces reuse AdminShell and shared collection/confirmation/form-feedback owners. Current permissions govern visible actions; human and agent authority remain distinct. New canonical access pages link only to implemented identity surfaces. Existing Chat/resource/Hub tenant isolation and durable approvals remain pending; this UI is not evidence of a complete multi-tenant deployment. `/docs/19` owns the UX contract and the [access UI report](../../docs/reports/access-ui-polish-2026-10-16.md) owns observed local evidence.

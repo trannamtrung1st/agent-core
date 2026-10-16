@@ -2,6 +2,8 @@
 
 ## Accepted account / organization / IAM UX
 
+The foundation UI is implemented at `/sign-in`, `/account/organizations`, `/account/profile`, invitation acceptance and `/t/{tenantId}/admin/{access,members,roles,audit}`. It reuses AdminShell through an explicit account/tenant context, the shared collection toolbar, form feedback and confirmations. Current server permissions control navigation and editing; search/pagination is server-scoped. Scoped queries abort and discard stale data on route changes. Role drawers preserve drafts and keyboard focus, cap their width to the viewport and retain reachable actions. Invitations show purpose links once and explicitly do not imply email delivery. Tenant switching replaces the document to retire prior browser resources. [Access UI verification](reports/access-ui-polish-2026-10-16.md) owns actual evidence. Tenant-aware Chat/resources, Agent Access and durable Approvals are still pending; no full migration acceptance is implied.
+
 [Accounts, organizations, access and approvals UX](19-multi-tenant-iam-ux.md) owns the internally reviewed interaction contract for the complete successor: canonical `/t/{tenantId}/…` routing; one Account with distinct tenant memberships; an organization selector shared by Chat/Admin; Members, Roles, Agent Access, Approvals and Account/Platform destinations; asynchronous exact-action decisions; safe tenant teardown and accessible responsive states. The existing dark Ant Design v6 presentation and shared shell/collection/configuration owners remain authoritative. UI implementation and browser acceptance are tracked separately in the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md); no new UI journey is claimed implemented by the design document.
 
 

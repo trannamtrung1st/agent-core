@@ -18,7 +18,17 @@ export function adminPage(route: AdminRoute): NavigationPage | undefined {
   return adminNavigationFor(route).find(p => p.id === id);
 }
 
-export function AdminShell({ route, ownerName, headingActions, headingMetadata, children }: { route: AdminRoute; ownerName?: string; headingActions?: ReactNode; headingMetadata?: ReactNode; children: ReactNode }) {
+export type AdminShellContext = {
+  key: string;
+  name: string;
+  areaLabel: string;
+  page: NavigationPage;
+  navigation: (NavigationPage & { href: string })[];
+  headerActions: ReactNode;
+  scopeAction?: ReactNode;
+};
+
+export function AdminShell({ route, ownerName, headingActions, headingMetadata, context, children }: { route: AdminRoute; context?: AdminShellContext; ownerName?: string; headingActions?: ReactNode; headingMetadata?: ReactNode; children: ReactNode }) {
   const { token } = theme.useToken();
   // The Admin navigation contract uses 1024px; AntD's default lg begins at 992px.
   const [desktop, setDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
@@ -52,12 +62,12 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
     window.addEventListener('keydown', keyboard, true); window.addEventListener('pointerdown', pointer, true);
     return () => { window.removeEventListener('keydown', keyboard, true); window.removeEventListener('pointerdown', pointer, true); };
   }, []);
-  const active = adminPage(route);
-  const items = adminNavigationFor(route);
-  const scoped = route.view === 'instance' || route.view === 'definition' || route.view === 'draft';
+  const active = context?.page ?? adminPage(route);
+  const items = context?.navigation ?? adminNavigationFor(route);
+  const scoped = !context && (route.view === 'instance' || route.view === 'definition' || route.view === 'draft');
   const collection = route.view === 'instance' ? 'instances' : 'definitions';
   const owner = ownerName ?? (route.view === 'instance' ? `Instance ${route.instanceId.slice(0, 8)}` : route.view === 'definition' || route.view === 'draft' ? route.definitionId : '');
-  const routeKey = route.view === 'instance' ? `${route.instanceId}/${route.page}` : route.view === 'draft' ? `${route.draftId}/${route.page}` : route.view === 'definition' ? `${route.definitionId}/${route.tab}` : route.view === 'home' ? route.collection : 'not-found';
+  const routeKey = context?.key ?? (route.view === 'instance' ? `${route.instanceId}/${route.page}` : route.view === 'draft' ? `${route.draftId}/${route.page}` : route.view === 'definition' ? `${route.definitionId}/${route.tab}` : route.view === 'home' ? route.collection : 'not-found');
   useEffect(() => {
     if (menuOpen) menuNavigation.current = true;
     setMenuOpen(false); setSearchOpen(false);
@@ -76,6 +86,7 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
       {group && <Typography.Text type="secondary" className="admin-nav-group-title">{group}</Typography.Text>}
       {items.filter(p => p.group === group).map(p => <Tooltip key={p.id} title={dirtyPages.includes(p.id) ? 'Unsaved changes' : undefined} placement="right" trigger={['hover', 'focus']}><a href={p.href} aria-label={p.label} aria-description={dirtyPages.includes(p.id) ? "Unsaved changes" : undefined} aria-current={active?.id === p.id ? 'page' : undefined} className="admin-nav-link" onClick={event => { followAppLink(event); if (event.defaultPrevented) { menuNavigation.current = true; setMenuOpen(false); } }}><AdminNavigationIcon id={p.id} /><span className="admin-nav-label">{p.label}</span>{dirtyPages.includes(p.id) && <span className="admin-nav-unsaved" aria-hidden="true" />}</a></Tooltip>)}
     </div>)}
+    {!context && <div className="admin-nav-group"><Typography.Text type="secondary" className="admin-nav-group-title">Account</Typography.Text><a className="admin-nav-link" href="/account/organizations" onClick={followAppLink}><AdminNavigationIcon id="profile" /><span>Account & organizations</span></a></div>}
   </nav>;
   const fieldResults = route.view === 'instance' || route.view === 'draft' ? settingSearch.filter(p => route.view === 'instance' ? !('draftOnly' in p) : !('instanceOnly' in p)).map(p => ({
     id: `setting:${p.label}`, label: p.label, description: 'Setting · ' + (route.view === 'instance' ? instancePages.find(item => item.id === p.page)?.label : draftPages.find(item => item.id === ('draftPage' in p ? p.draftPage : p.page))?.label), aliases: p.aliases, scope: 'owner' as const,
@@ -90,20 +101,23 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
     { id: 'owner', label: route.view === 'draft' ? `Draft ${route.draftId.slice(0, 8)} · ${owner}` : `${route.view === 'instance' ? 'Instance' : 'Definition'} · ${owner}`, items: searchItems.filter(p => p.scope === 'owner') },
     { id: 'global', label: 'Global Admin', items: searchItems.filter(p => p.scope === 'global') },
   ].filter(group => group.items.length > 0);
-  return <AdminDraftStatus.Provider value={reportDirty}><Layout className="admin-layout">
+  return <AdminDraftStatus.Provider value={reportDirty}><Layout className={`admin-layout${context ? ' access-layout' : ''}`}>
     <Layout.Header className="admin-header">
       <Flex align="center" wrap gap="var(--ac-space-compact)" className="admin-header-inner">
         {!desktop && <Button icon={<MenuOutlined aria-hidden />} aria-label="Open Admin navigation" onClick={e => { cancelMenuFocus(); opener.current = e.currentTarget; menuNavigation.current = false; setMenuOpen(true); }} />}
-        <Flex align="center" gap="var(--ac-space-compact)" className="admin-brand"><Typography.Title level={3} className="admin-title">Agent Core</Typography.Title><Typography.Text type="secondary" className="admin-brand-area" style={{ fontSize: token.fontSizeSM }}>Admin</Typography.Text></Flex><Divider orientation="vertical" className="admin-brand-divider" />
+        <Flex align="center" gap="var(--ac-space-compact)" className="admin-brand"><Typography.Title level={3} className="admin-title">Agent Core</Typography.Title><Typography.Text type="secondary" className="admin-brand-area" style={{ fontSize: token.fontSizeSM }}>{context?.areaLabel ?? 'Admin'}</Typography.Text></Flex><Divider orientation="vertical" className="admin-brand-divider" />
         <Breadcrumb aria-label="Admin breadcrumb" className={`admin-breadcrumbs${scoped ? ' admin-breadcrumbs-scoped' : ''}`} items={[
+          ...(context ? [{ title: <span className="admin-breadcrumb-owner" title={context.name}>{context.scopeAction ?? context.name}</span> }] : []),
           ...(scoped ? [{ title: <a href={adminHomePath(collection)} onClick={followAppLink}>{collection === 'instances' ? 'Instances' : 'Definitions'}</a> }, { title: <span className="admin-breadcrumb-owner" title={owner}>{owner}</span> }] : []),
           ...(route.view === 'draft' ? [{ title: `Draft ${route.draftId.slice(0, 8)}` }] : []),
           { title: active?.label ?? 'Page not found' },
         ]} />
         <Flex wrap gap="var(--ac-space-compact)" className="admin-header-actions">
+          {context ? context.headerActions : <>
           <Button className="admin-header-search" icon={<SearchOutlined aria-hidden />} aria-label="Search Admin" onClick={event => { searchOpener.current = event.currentTarget; searchNavigation.current = false; setQuery(''); setSearchOpen(true); }}><span className="admin-search-label">Search Admin</span></Button>
           <Button className="admin-header-chat" type="text" icon={<MessageOutlined aria-hidden />} href="/" onClick={followAppLink} aria-label="Chat"><span className="admin-chat-label">Chat</span></Button>
           <Button className="admin-header-return" icon={<ArrowLeftOutlined aria-hidden />} href={lastChatUrl()} onClick={followAppLink} aria-label="Return to last chat"><span className="admin-return-label-wide">Return to last chat</span><span className="admin-return-label-compact">Return</span></Button>
+          </>}
         </Flex>
       </Flex>
     </Layout.Header>
@@ -111,7 +125,7 @@ export function AdminShell({ route, ownerName, headingActions, headingMetadata, 
       {desktop && <aside className="admin-sidebar">{nav}</aside>}
       <Layout.Content className="admin-content" ref={main}>
         <Flex vertical gap="var(--ac-space-section)">
-          {(route.view === 'home' || route.view === 'not-found') && <AdminPageHeading page={active} extra={headingActions} metadata={headingMetadata} />}
+          {(context || route.view === 'home' || route.view === 'not-found') && <AdminPageHeading page={active} extra={headingActions} metadata={headingMetadata} />}
           {children}
         </Flex>
       </Layout.Content>

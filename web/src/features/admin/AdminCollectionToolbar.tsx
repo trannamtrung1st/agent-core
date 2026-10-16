@@ -3,11 +3,12 @@ import { Flex, Input, Typography, theme } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 
 /** Shared collection search; the enclosing collection owns outer insets and gaps. */
-export function AdminCollectionToolbar({ label, value, onChange, filters }: {
+export function AdminCollectionToolbar({ label, value, onChange, filters, showScrollHint = true }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   filters?: React.ReactNode;
+  showScrollHint?: boolean;
 }) {
   const { token } = theme.useToken();
   return (
@@ -23,7 +24,7 @@ export function AdminCollectionToolbar({ label, value, onChange, filters }: {
       />
       {filters}
       </Flex>
-      <Typography.Text type="secondary" className="admin-table-scroll-hint">Scroll horizontally for more columns.</Typography.Text>
+      {showScrollHint && <Typography.Text type="secondary" className="admin-table-scroll-hint">Scroll horizontally for more columns.</Typography.Text>}
     </div>
   );
 }

@@ -1,17 +1,18 @@
+import { parseAccessRoute, type AccessRoute } from '../features/access/accessRoute';
 import { definitionPages, definitionPath, draftPages, draftPath, globalPages, globalPath, instancePages, instancePath, legacyDraftPages, type AdminCollection, type DefinitionPage, type DraftPage, type InstancePage } from '../features/admin/adminNavigation';
 export type { AdminCollection };
 export type AdminDefinitionTab = DefinitionPage;
 // Input compatibility for callers being migrated; parsed routes contain only canonical pages.
 export type AdminInstanceTab = 'identity' | 'skills' | 'continuity' | 'automation' | 'activity' | 'credentials' | 'effective';
 export type AdminInstanceSection = 'profile' | 'settings' | 'workspace' | 'skills' | 'resources' | 'sessions' | 'runs' | 'memory' | 'experience' | 'automations' | 'controls';
-export type AppArea = 'chat' | 'admin';
+export type AppArea = 'chat' | 'admin' | 'access';
 export type AdminRoute =
   | { area: 'admin'; view: 'home'; collection?: AdminCollection }
   | { area: 'admin'; view: 'definition'; definitionId: string; tab?: DefinitionPage }
   | { area: 'admin'; view: 'draft'; definitionId: string; draftId: string; page: DraftPage }
   | { area: 'admin'; view: 'instance'; instanceId: string; page: InstancePage }
   | { area: 'admin'; view: 'not-found' };
-export type AppRoute = { area: 'chat' } | AdminRoute;
+export type AppRoute = { area: 'chat' } | AdminRoute | AccessRoute;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const missing: AdminRoute = { area: 'admin', view: 'not-found' };
 const legacyInstance: Record<string, InstancePage> = {
@@ -22,6 +23,8 @@ const legacyInstance: Record<string, InstancePage> = {
   runs: 'runs',
 };
 export function parseAppRoute(pathname: string): AppRoute {
+  const access = parseAccessRoute(pathname);
+  if (access) return access;
   if (!/^\/admin(?:\/|$)/i.test(pathname)) return { area: 'chat' };
   const path = pathname.replace(/\/$/, '');
   if (path.toLowerCase() === '/admin') return { area: 'admin', view: 'home', collection: 'instances' };

@@ -30,6 +30,8 @@ production hardening is deferred. P11 remains unopened and requirement-triggered
 
 ## Open work and acceptance gaps
 
+- [ ] **Account / tenant IAM and durable approvals cutover:** identity/store/HTTP foundations and the owner-prioritized [access UI](docs/reports/access-ui-polish-2026-10-16.md) are locally verified. Complete tenant ownership across resources/stores/tools/Hub, trusted execution/root context, durable exact-operation approval/grant continuation, Agent Access and tenant-aware Chat, obsolete owner-authority removal and final canonical schema qualification. The [delivery ledger](docs/reports/multitenant-iam-delivery-2026-10-16.md) is authoritative for remaining gates; no full multi-tenant deployment or milestone acceptance is claimed.
+
 - [ ] **Office/Drive manual and Real acceptance:** implementation and all seven automated Synthetic/Compose gates passed on `a451600a`. Dedicated real Google UAT, desktop Office-client fidelity and actual native browser 200% zoom remain unverified; see the [successor ledger](docs/reports/office-file-preview-drive-verification-2026-10-13.md).
 
 - [ ] **Original Background Work results:** reconcile the remaining exact-source hosted acceptance after follow-up fixture/native-browser corrections. Local checks and earlier green runs are recorded in the [verification ledger](docs/reports/background-original-result-verification.md); preserve the distinction between earlier acceptance and later edits.

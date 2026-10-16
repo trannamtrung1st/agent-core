@@ -2,6 +2,8 @@
 
 Status: implementation contract, internally reviewed 2026-10-16. This defines the approved target; implementation and verification status live in the [delivery ledger](reports/multitenant-iam-delivery-2026-10-16.md). It does not claim that the previous owner-only application already enforces IAM. The owner-requested proposal at `local/proposals/agent-core-multitenant-iam-approval-final-proposal.md` supersedes the original MVP authentication exclusion.
 
+The owner-prioritized foundation UI now implements sign-in, Account/organization selection, invitation acceptance, member/invitation access, roles, current effective access and audit. [Observed frontend evidence](reports/access-ui-polish-2026-10-16.md) covers these routes only. Agent/resource access, tenant-aware Chat and durable approval journeys below remain requirements for the complete successor.
+
 ## Purpose and audience
 
 Operate mode, extending the existing dark Ant Design v6 application. Chat stays primary. A global Account authenticates a person; an organization is a Tenant and a Member is its User. One Account may have different roles in several organizations. An agent executes as its own SystemIdentity Principal. Capability configuration remains separate from IAM.

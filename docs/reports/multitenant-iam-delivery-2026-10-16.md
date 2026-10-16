@@ -13,7 +13,7 @@ Owner request: implement the final proposal at `local/proposals/agent-core-multi
 | 4 | Every tenant resource/store/effect cut over with negative tests | Pending |
 | 5 | Trusted Run executor/requester/root lineage and inspection tools | Pending |
 | 6 | Durable approval/outbox/claim/revalidation/exact grants and bounded loops | Pending |
-| 7 | Canonical tenant UI/auth/account/IAM/approvals/Chat | Pending |
+| 7 | Canonical tenant UI/auth/account/IAM/approvals/Chat | Owner-prioritized foundation UI implemented and locally verified for auth/account/Members/Roles/Audit; Agent Access, resource access, durable Approvals and tenant-aware Chat remain pending |
 | 8 | Remove old authority, canonical reset/bootstrap docs, focused security/browser checks and Impeccable/design sync | Pending |
 
 Do not mark the goal complete or describe the application as multi-tenant until all protected boundaries, durable approval execution and designed UI journeys are verified. Intermediate source is not an authorized production release. No live storage reset, deployment/restart or CI has occurred.
@@ -37,10 +37,14 @@ The foundation's canonical `/api/v2/auth`, `/account`, `/system`, `/tenants/{id}
 
 ## Continuation notes
 
-Next required work is the tenant ownership/resource integration needed to finish Phase 2 and proceed through Phases 3–8. Do not skip the full proposal, claim completion, or treat the currently passing identity tests as Session/Hub/tool isolation. No UI implementation has begun; the complete UX gate is recorded in docs/19. Existing owner resources remain unscoped and old live approval authority still exists. The full boundary source inventory retains its baseline obligations rather than claiming conversion.
+Next required work is the tenant ownership/resource integration needed to finish Phase 2 and proceed through Phases 3–8. Do not skip the full proposal, claim completion, or treat the currently passing identity tests as Session/Hub/tool isolation. The owner subsequently prioritized frontend polish; the implemented foundation UI and measured limitations are recorded in the [access UI report](access-ui-polish-2026-10-16.md). The complete UX contract remains in docs/19. Existing owner resources remain unscoped and old live approval authority still exists. The full boundary source inventory retains its baseline obligations rather than claiming conversion.
 
 Foundation code lives in Domain/Security, Application/Security + Ports/Iam, Infrastructure/Security, Api/Security. New identity services have no ASP.NET/EF dependencies in Application/Domain; human authentication and endpoint mapping are API concerns. Main DbContext adds the normalized identity model and an intermediate migration; all test databases are new temporary paths. Cookie key ring is isolated under configured credential roots. Do not use the Real application's populated database for tests or a reset.
 
 Working native check uses `--disable-build-servers -p:UseSharedCompilation=false -m:1` because an initial default shared-compiler build stalled. VSTest loopback needs approved local execution under the sandbox. There is no frontend execution claim and no CI request. Final source still needs canonical baseline consolidation, obsolete authority removal, bootstrap/launcher/test fixture updates across supported profiles and bounded Impeccable/browser acceptance.
 
 Final foundation rerun: **8/8 Infrastructure scenarios** and **6/6 API scenarios**, zero skips. `git diff --check` and relative-file-link/fence validation across fourteen changed Markdown documents pass. This is a verified local checkpoint, not full proposal completion or milestone acceptance.
+
+## Owner-prioritized frontend pass
+
+The owner requested frontend/Impeccable consistency after foundation commit `baf9a3e7`. Auth/account/organization selection, member/invitation access, role authoring/inspection and audit now have real canonical UI routes, responsive/keyboard handling and focused browser evidence. [Verification](access-ui-polish-2026-10-16.md) distinguishes this delivered slice from the original proposal's unimplemented resource/agent/Hub/approval requirements. The original goal remains active; no insecure intermediate deployment or full tenant-isolation claim is authorized.

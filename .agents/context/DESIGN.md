@@ -305,6 +305,8 @@ Inline/control/surface radii map to Ant Design `borderRadiusSM`/`borderRadius`/`
 
 ## Components
 
+Account and organization access inherit the shared AdminShell context, page headings, collection toolbar, navigation drawer, confirmation and feedback compositions. Account forms use one bounded column; organization rows wrap realistic long names and paginate server-filtered memberships. The organization selector opens the same list in a native dialog. Access tables keep a readable summary and a compact action column on phones. Member/role drawers cap their wrapper at the viewport, own scrolling and preserve reachable actions. Mobile controls use 40px outer hits without increasing the height of an input inside an affix wrapper. Each permission has a contextual accessible label and human-only rules have text. Dirty forms keep one confirmation owner across Escape and the native close transition. Lists without horizontal scrolling omit table-scroll guidance. Current server authority determines edit controls; permission-denied, last-Owner and stale-revision recovery remain distinct. [Access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) records this bounded extension; no palette, token or typography system is replaced.
+
 ### Conversational harness learning
 
 - Teach durable knowledge and procedures in Chat. Automatic receipts say “saved to this Instance for its next Run” and disclose relevant verification limits; current Run pins remain unchanged.

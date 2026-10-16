@@ -55,13 +55,18 @@ public static class IdentityEndpoints
         })).RequireRateLimiting("account-login");
 
         var accounts = app.MapGroup("/api/v2/account").RequireAuthorization();
-        accounts.MapGet("/me", (HttpContext http, IIamStore store, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        accounts.MapGet("/me", (HttpContext http, IIamStore store, IamAuthorizer authorizer, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var account = await store.ReadAccountAsync(IdentityHttp.AccountId(http.User)!.Value, ct).ConfigureAwait(false);
             if (account is null) return Results.Unauthorized();
             var system = await store.ReadSystemAsync(ct).ConfigureAwait(false);
             var principal = system.Principals.SingleOrDefault(p => p.AccountId == account.AccountId && p.Kind == PrincipalKind.User && p.Status == IdentityStatus.Active);
-            return Results.Json(new { account = SafeAccount(account), systemPrincipalId = principal?.PrincipalId });
+            var permissions = new List<string>();
+            if (principal is not null)
+                foreach (var permission in PermissionCatalog.All.Where(p => p.SystemOnly))
+                    if ((await authorizer.CheckAsync(principal.PrincipalId, permission.Key, AccessScope.System, ct).ConfigureAwait(false)).Allowed)
+                        permissions.Add(permission.Key);
+            return Results.Json(new { account = SafeAccount(account), systemPrincipalId = principal?.PrincipalId, systemPermissions = permissions });
         }));
         accounts.MapPost("/password", (PasswordChangeRequest request, HttpContext http, IdentityService identity, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -69,9 +74,12 @@ public static class IdentityEndpoints
             await http.SignOutAsync(IdentityHttp.Scheme).ConfigureAwait(false);
             return Results.NoContent();
         }));
-        accounts.MapGet("/tenants", (HttpContext http, IIamStore store, int? page, int? pageSize, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        accounts.MapGet("/tenants", (HttpContext http, IIamStore store, int? page, int? pageSize, string? q, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            var memberships = await store.ListMembershipsAsync(IdentityHttp.AccountId(http.User)!.Value, ct).ConfigureAwait(false);
+            var all = await store.ListMembershipsAsync(IdentityHttp.AccountId(http.User)!.Value, ct).ConfigureAwait(false);
+            var query = q?.Trim();
+            var memberships = string.IsNullOrEmpty(query) ? all : all.Where(m => m.Tenant.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || m.Tenant.Slug.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
             var size = Math.Clamp(pageSize ?? 30, 1, 100); var index = Math.Clamp(page ?? 0, 0, 100_000);
             return Results.Json(new { items = memberships.Skip(index * size).Take(size).Select(m => new { m.Tenant.TenantId, m.Tenant.Name, m.Tenant.Slug, m.User.UserId, m.User.PrincipalId }), total = memberships.Count, page = index, pageSize = size });
         }));

@@ -2900,3 +2900,32 @@ body,
 .file-preview-spreadsheet .fortune-cols-change-size, .file-preview-spreadsheet .fortune-rows-change-size,
 .file-preview-spreadsheet .fortune-cols-freeze-handle, .file-preview-spreadsheet .fortune-rows-freeze-handle,
 .file-preview-spreadsheet .luckysheet-cs-fillhandle, .file-preview-spreadsheet .luckysheet-cs-draghandle { display: none; pointer-events: none; }
+
+/* Account/access surfaces inherit the shared Admin frame and Ant Design controls. */
+.access-auth-page { min-height: 100%; display: grid; place-items: center; padding: var(--ac-space-section); overflow-y: auto; }
+.access-auth-form { width: min(100%, 26rem); display: flex; flex-direction: column; gap: var(--ac-space-section); padding-block: var(--ac-space-section); min-width: 0; overflow-wrap: anywhere; }
+.access-auth-form > .ant-typography, .access-bounded-form > .ant-typography { margin: 0; }
+.access-bounded-form { max-inline-size: 48rem; min-width: 0; }
+.access-loading-page { padding: var(--ac-space-section); display: flex; flex-direction: column; gap: var(--ac-space-section); }
+.access-form-error { margin-block-end: var(--ac-space-section); }
+.access-organization-list { display: flex; flex-direction: column; }
+.access-organization-row { display: flex; align-items: center; gap: var(--ac-space-section); justify-content: space-between; padding-block: var(--ac-space-section); border-block-end: 1px solid var(--ac-color-border); }
+.access-row-summary { min-width: 0; overflow-wrap: anywhere; }
+.access-tenant-switcher { max-inline-size: min(20rem, 35vw); }
+.access-tenant-switcher > span:not(.anticon) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.access-role-select { flex: 1 1 15rem; min-width: 0; }
+.access-editor-drawer .ant-drawer-body { overflow-wrap: anywhere; }
+.access-editor-drawer .ant-typography { max-inline-size: 72ch; }
+.access-editor-drawer .ant-drawer-footer { padding: var(--ac-space-default) var(--ac-space-section); }
+@media (max-width: 767px) {
+  .access-auth-page { place-items: start center; }
+  .access-auth-form { padding-block: var(--ac-space-section); }
+  .access-organization-row { align-items: start; flex-wrap: wrap; }
+  .access-organization-row > .access-row-summary { flex: 1 1 12rem; }
+  .access-tenant-switcher { max-inline-size: 7rem; }
+  :is(.access-editor-drawer, .access-auth-form, .access-bounded-form) :is(input.ant-input:not(.ant-input-affix-wrapper input), .ant-input-affix-wrapper) { min-height: 40px; }
+  .access-editor-drawer .ant-btn, .access-auth-form .ant-btn { min-height: 40px; }
+}
+@media (max-width: 767px) {
+  .access-bounded-form .ant-btn, .access-layout .admin-collection-table .ant-btn { min-height: 40px; }
+}

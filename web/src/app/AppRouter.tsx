@@ -1,3 +1,4 @@
+import { AccessApp } from "../features/access/AccessApp";
 import { useEffect, useRef, useState } from "react";
 import { ChatApp } from "../features/chat/ChatApp";
 import { AdminApp } from "../features/admin/AdminApp";
@@ -28,7 +29,7 @@ export function AppRouter() {
       const previousArea = currentRoute.current.area;
       currentRoute.current = next;
       setRoute(next);
-      if (next.area === "admin") {
+      if (next.area !== "chat") {
         void suspendLiveSessionForNavigation();
         return;
       }
@@ -57,11 +58,12 @@ export function AppRouter() {
   }, []);
 
   useEffect(() => {
-    if (route.area === "admin") {
+    if (route.area !== "chat") {
       void suspendLiveSessionForNavigation();
     }
   }, [route.area]);
 
+  if (route.area === "access") return <AccessApp key={route.view === 'tenant' ? route.tenantId : route.view} route={route} />;
   if (route.area === "admin") {
     return <AdminApp route={route} />;
   }
