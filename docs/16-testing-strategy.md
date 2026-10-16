@@ -595,6 +595,10 @@ Email correction regressions exercise recent inbox search through the real tool 
 Native navigation regressions exercise ordinary SPA clicks, modifier/middle-click destination restoration, retained source edits, Ant Design tab keyboard activation, refresh and Back at desktop/mobile widths. Route controls are located as links; state-only controls and mutations remain buttons. Shared acceptance helpers and action-row geometry checks include the anchors rendered by Ant Design. Opening Chat retains the existing Session attachment contract. The [current-change review](reports/current-changes-review-2026-10-12.md) records the combined email/navigation verification and corrected test consumers.
 
 
+## Automation approval presentation
+
+Automation approval presentation tests cover complete/inert long instructions, operation-specific decisions, daily/weekly resolution, Event filters/dispatch and disabled triggers, changed names/instructions/state, explicit filter clearing, unknown settings, malformed/missing action fallback and disclosure reset between approval identities. The existing Drive/configuration/Memory consumers stay in the shared component regression set. Synthetic browser checks exercise disclosure, rejection, reload recovery and keyboard approval with saved-state readback at desktop/mobile widths. [Polish evidence](reports/automation-approval-modal-polish-2026-10-16.md) separates rendered checks from unit-only stress cases.
+
 ## Existing Automation activation regression
 
 `AutomationActivationJourneyTests` scripts list → inspect → enabled-only update through real SignalR Chat and temporary SQLite. A separate typed semantic fixture allows a uniquely aligned target or returns Ambiguous. Assert one verifier call, original ID/settings/child revisions, one stored Automation and one due completed occurrence without duplicate admission.

@@ -19,49 +19,142 @@ const approval: PendingApproval = {
 };
 
 describe('ApprovalModal', () => {
-  it.each(['automation.create', 'automation.run'])(
-    'reviews the complete %s action as inert text before an explicit owner decision',
-    (toolName) => {
-      const approve = vi.fn();
-      const instructions =
-        'Review experience safely. '.repeat(30) + '<script>untrusted</script>';
-      const exact = JSON.stringify(
-        {
-          instructions,
-          localTime: '09:00',
-          timeZone: 'Asia/Ho_Chi_Minh',
-          executionTarget: 'backgroundSession',
-          reportBack: false,
-        },
-        null,
-        2,
-      );
-      render(
-        <ApprovalModal
-          approval={{
-            ...approval,
-            toolName,
-            summary: 'Review exact Automation change',
-            details: {
-              Reason: 'Semantic verification could not complete.',
-              'Exact action': exact,
-            },
-          }}
-          onApprove={approve}
-          onReject={vi.fn()}
-        />,
-      );
-      const dialog = screen.getByRole('dialog', {
-        name: 'Approve Automation change?',
-      });
-      expect(dialog.textContent).toContain(instructions);
-      expect(dialog.textContent).toContain('Asia/Ho_Chi_Minh');
-      expect(dialog.querySelector('script')).toBeNull();
-      expect(approve).not.toHaveBeenCalled();
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
-      expect(approve).toHaveBeenCalledOnce();
-    },
-  );
+  const exactAction = (toolName = 'automation.create', changes: Record<string, unknown> = {}) => JSON.stringify({
+    tool: toolName,
+    AgentInstanceId: 'private-instance-id',
+    SessionId: 'this-session',
+    arguments: { name: 'Daily review', instructions: 'Review experience safely.', kind: 'daily', localTime: '09:00', timeZone: 'Asia/Ho_Chi_Minh', executionTarget: 'backgroundSession', reportBack: false, ...changes },
+    resolvedSchedule: { Kind: 1, IntervalDays: 1, LocalTime: '09:00:00', TimeZoneId: 'Asia/Ho_Chi_Minh' },
+    executionTarget: { Kind: 0, SessionId: null },
+    completionDelivery: { SessionId: null },
+    proposedEnabled: true,
+  }, null, 2);
+  const automation = (toolName = 'automation.create', raw = exactAction(toolName)): PendingApproval => ({
+    ...approval, toolName, summary: 'Review exact Automation change', details: { Reason: 'Semantic verification could not complete.', 'Exact action': raw },
+  });
+
+  it('puts the complete task and schedule ahead of technical metadata', () => {
+    const approve = vi.fn();
+    const instructions = 'Review experience safely. '.repeat(30) + '<script>untrusted</script>';
+    const raw = exactAction('automation.create', { instructions });
+    render(<ApprovalModal approval={automation('automation.create', raw)} onApprove={approve} onReject={vi.fn()} />);
+    const dialog = screen.getByRole('dialog', { name: 'Create automation?' });
+    expect(within(dialog).getByText(instructions)).toBeInTheDocument();
+    expect(within(dialog).getByText('Every day')).toBeInTheDocument();
+    expect(within(dialog).getByText('09:00')).toBeInTheDocument();
+    expect(within(dialog).getByText('Asia/Ho_Chi_Minh')).toBeInTheDocument();
+    expect(within(dialog).getByText('Background work')).toBeInTheDocument();
+    expect(within(dialog).getByText('No report back')).toBeInTheDocument();
+    expect(dialog.textContent).not.toContain('private-instance-id');
+    expect(dialog.textContent).not.toContain('Semantic verification');
+    expect(dialog.querySelector('script')).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Technical details' }));
+    expect(Array.from(dialog.querySelectorAll('pre')).some(element => element.textContent === raw)).toBe(true);
+    expect(dialog.querySelector('script')).toBeNull();
+    expect(approve).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create automation' }));
+    expect(approve).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['automation.update', 'Save automation changes?', 'Save changes'],
+    ['automation.enable', 'Enable automation?', 'Enable automation'],
+    ['automation.disable', 'Disable automation?', 'Disable automation'],
+    ['automation.delete', 'Delete automation?', 'Delete automation'],
+    ['automation.run', 'Run automation now?', 'Run now'],
+  ])('names the exact %s decision', (tool, title, button) => {
+    const approve = vi.fn();
+    render(<ApprovalModal approval={automation(tool)} onApprove={approve} onReject={vi.fn()} />);
+    const dialog = screen.getByRole('dialog', { name: title });
+    expect(approve).not.toHaveBeenCalled();
+    if (tool === 'automation.run') expect(within(dialog).getByText('Once, now')).toBeInTheDocument();
+    if (tool === 'automation.delete') expect(within(dialog).getByText(/Stops future runs/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: button }));
+    expect(approve).toHaveBeenCalledOnce();
+  });
+
+  it('keeps unknown proposed settings visible and preserves changed instructions', () => {
+    const raw = JSON.parse(exactAction('automation.update', { instructions: 'New instructions', futureSetting: 'An explicit new setting' }));
+    raw.current = { name: 'Original name', instructions: 'Original instructions', status: 'Disabled' };
+    render(<ApprovalModal approval={automation('automation.update', JSON.stringify(raw))} onApprove={vi.fn()} onReject={vi.fn()} />);
+    expect(screen.getByText('New instructions')).toBeInTheDocument();
+    expect(screen.getByText('Previously: Original name')).toBeInTheDocument();
+    expect(screen.getByText('An explicit new setting')).toBeInTheDocument();
+    expect(screen.getByText('Previously: Disabled')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous instructions' }));
+    expect(screen.getByText('Original instructions')).toBeInTheDocument();
+  });
+
+  it('shows resolved weekly limits and destination without inferring defaults', () => {
+    const raw = JSON.parse(exactAction());
+    raw.resolvedSchedule = { Kind: 2, IntervalWeeks: 2, Weekdays: [1, 5], LocalTime: '09:30:00', TimeZoneId: 'Asia/Ho_Chi_Minh', StartDate: '2026-10-17', EndDate: '2026-12-31', MaxOccurrences: 8 };
+    raw.executionTarget = { Kind: 1, SessionId: 'this-session' };
+    raw.completionDelivery = { SessionId: 'another-conversation' };
+    render(<ApprovalModal approval={automation('automation.create', JSON.stringify(raw))} onApprove={vi.fn()} onReject={vi.fn()} />);
+    for (const value of ['Every 2 weeks', 'Monday, Friday', '09:30', '2026-10-17', '2026-12-31', '8', 'This conversation', 'Conversation another-conversation'])
+      expect(screen.getByText(value)).toBeInTheDocument();
+  });
+
+  it('shows every Event trigger and its filter, dispatch and disabled state', () => {
+    const raw = JSON.parse(exactAction());
+    delete raw.resolvedSchedule;
+    delete raw.arguments.kind;
+    raw.resolvedTriggers = [
+      { Enabled: true, Configuration: { CoreEventKey: 'run.completed', FilterExpression: 'event.data.ok === true', Dispatch: { Mode: 1, WindowSeconds: 120 } } },
+      { Enabled: false, Configuration: { EventId: 'orders-event-id', Dispatch: { Mode: 0 } } },
+    ];
+    render(<ApprovalModal approval={automation('automation.create', JSON.stringify(raw))} onApprove={vi.fn()} onReject={vi.fn()} />);
+    for (const value of ['Built-in Event · run.completed', 'event.data.ok === true', 'Coalesce latest · 120 seconds', 'Trigger 2 · Disabled', 'Webhook · orders-event-id', 'Every match'])
+      expect(screen.getByText(value)).toBeInTheDocument();
+  });
+
+  it('presents the proposed Event source rather than the previous source on update', () => {
+    const raw = JSON.parse(exactAction('automation.update', { coreEventKey: 'run.failed', filterExpression: 'event.data.retry === true' }));
+    delete raw.arguments.kind;
+    delete raw.resolvedSchedule;
+    raw.current = { name: 'Existing automation', triggers: [{ kind: 'event', source: { kind: 'builtin', key: 'run.completed' } }] };
+    render(<ApprovalModal approval={automation('automation.update', JSON.stringify(raw))} onApprove={vi.fn()} onReject={vi.fn()} />);
+    expect(screen.getByText('Built-in Event · run.failed')).toBeInTheDocument();
+    expect(screen.queryByText('Built-in Event · run.completed')).not.toBeInTheDocument();
+    expect(screen.getAllByText('event.data.retry === true').length).toBeGreaterThan(0);
+  });
+
+  it('shows clearing an Event filter as No filter and does not duplicate it', () => {
+    const raw = JSON.parse(exactAction('automation.update', { coreEventKey: 'run.failed', filterExpression: null, modelKey: null }));
+    delete raw.arguments.kind;
+    delete raw.resolvedSchedule;
+    raw.current = { name: 'Existing automation', triggers: [{ kind: 'event', source: { kind: 'builtin', key: 'run.completed' }, filterExpression: 'old condition' }] };
+    render(<ApprovalModal approval={automation('automation.update', JSON.stringify(raw))} onApprove={vi.fn()} onReject={vi.fn()} />);
+    expect(screen.getAllByText('No filter')).toHaveLength(1);
+    expect(screen.getByText('Instance default')).toBeInTheDocument();
+    expect(screen.queryByText('old condition')).not.toBeInTheDocument();
+  });
+
+  it('exposes malformed details without inventing a readable proposal', () => {
+    const raw = '{invalid <script>untrusted</script>';
+    render(<ApprovalModal approval={automation('automation.create', raw)} onApprove={vi.fn()} onReject={vi.fn()} />);
+    expect(screen.getByText('Review the full request')).toBeInTheDocument();
+    expect(screen.getByText(raw)).toBeInTheDocument();
+    expect(document.querySelector('script')).toBeNull();
+  });
+
+  it('keeps rejection available when the exact action is missing', () => {
+    const reject = vi.fn();
+    render(<ApprovalModal approval={automation('automation.create', '')} onApprove={vi.fn()} onReject={reject} />);
+    expect(screen.getByRole('button', { name: 'Create automation' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    expect(reject).toHaveBeenCalledOnce();
+  });
+
+  it('resets technical disclosure for a different pending action', () => {
+    const props = { onApprove: vi.fn(), onReject: vi.fn() };
+    const view = render(<ApprovalModal {...props} approval={automation()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Technical details' }));
+    view.rerender(<ApprovalModal {...props} approval={{ ...automation(), approvalId: 'next-approval' }} />);
+    expect(screen.getByRole('button', { name: 'Technical details' })).toHaveAttribute('aria-expanded', 'false');
+    expect(props.onApprove).not.toHaveBeenCalled();
+  });
+
   it('shows an unconfirmed decision inside the dialog and keeps rejection retryable', () => {
     const reject = vi.fn();
     render(

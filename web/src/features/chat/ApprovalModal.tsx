@@ -10,6 +10,7 @@ import {
   theme,
 } from 'antd';
 import type { PendingApproval } from '../../state/sessionStore';
+import { AutomationApprovalPreview, automationApprovalActions } from './AutomationApprovalPreview';
 
 type ApprovalModalProps = {
   approval: PendingApproval | null;
@@ -60,14 +61,9 @@ export function ApprovalModal({
   const filesystem = ['workspace.delete', 'workspace.batch'].includes(
     approval?.toolName ?? '',
   );
-  const automation = [
-    'automation.create',
-    'automation.update',
-    'automation.delete',
-    'automation.enable',
-    'automation.disable',
-    'automation.run',
-  ].includes(approval?.toolName ?? '');
+  const automationAction = Object.hasOwn(automationApprovalActions, approval?.toolName ?? '')
+    ? automationApprovalActions[approval!.toolName] : undefined;
+  const automation = automationAction !== undefined;
   const management =
     /^(configuration|management|settings|resources|skills|credentials\.binding|automation\.preferences)\./.test(
       approval?.toolName ?? '',
@@ -149,12 +145,12 @@ export function ApprovalModal({
   return (
     <Modal
       open={open}
-      className="chat-approval"
+      className={`chat-approval${automation ? ' chat-approval-automation' : ''}`}
       centered
       width={semantic ? 720 : drive ? 880 : 520}
       title={
         automation
-          ? 'Approve Automation change?'
+          ? automationAction.title
           : drive
             ? driveTitle
             : management
@@ -172,7 +168,7 @@ export function ApprovalModal({
                       : 'Approve sensitive action'
       }
       okText={
-        drive
+        automation ? automationAction.confirm : drive
           ? driveAction
           : management
             ? approval?.toolName === 'management.freeze'
@@ -181,13 +177,13 @@ export function ApprovalModal({
             : 'Approve'
       }
       okButtonProps={{
-        danger: trash,
-        type: trash ? 'default' : undefined,
+        danger: trash || automationAction?.danger,
+        type: automation && !automationAction?.danger ? 'primary' : trash || automationAction?.danger ? 'default' : undefined,
         style:
           trash && driveFiles.length > 0
             ? { color: token.colorErrorTextHover }
             : undefined,
-        disabled: drive && driveFiles.length === 0,
+        disabled: (drive && driveFiles.length === 0) || (automation && !approval?.details['Exact action']?.trim()),
       }}
       cancelText="Reject"
       onOk={onApprove}
@@ -214,10 +210,10 @@ export function ApprovalModal({
               description="This saved request has no complete target details. Reject it, inspect the files and request a fresh exact approval."
             />
           ) : null}
-          <Typography.Paragraph className="chat-approval-summary">
+          {!automation && <Typography.Paragraph className="chat-approval-summary">
             {approval.summary}
-          </Typography.Paragraph>
-          {scope !== undefined ? (
+          </Typography.Paragraph>}
+          {!automation && scope !== undefined ? (
             <Alert
               className="chat-approval-scope"
               type="info"
@@ -226,7 +222,7 @@ export function ApprovalModal({
               description={scope}
             />
           ) : null}
-          {revisions.length > 0 ? (
+          {!automation && revisions.length > 0 ? (
             <ul className="chat-approval-revisions">
               {revisions.map(([key, value]) => (
                 <li key={key}>
@@ -239,15 +235,15 @@ export function ApprovalModal({
               ))}
             </ul>
           ) : null}
-          {content.length > 0 ? (
+          {automation || content.length > 0 ? (
             <div
               key={approval.approvalId}
-              className={`chat-approval-details${drive ? ' chat-approval-drive-details' : ''}`}
+              className={`chat-approval-details${automation ? ' chat-approval-automation-details' : drive ? ' chat-approval-drive-details' : ''}`}
               role="region"
               aria-label="Approval details"
               tabIndex={0}
             >
-              {!semantic ? (
+              {automation ? <AutomationApprovalPreview approval={approval} /> : !semantic ? (
                 <Descriptions
                   className={`chat-approval-fields${drive ? ' chat-approval-drive-fields' : ''}`}
                   size="small"
@@ -346,7 +342,7 @@ export function ApprovalModal({
                         {key}
                         {': '}
                       </Typography.Text>
-                      {key === 'Change' || (automation && key === 'Exact action') ? (
+                      {key === 'Change' ? (
                         <ProposalText value={value} />
                       ) : (
                         <Typography.Text className="chat-approval-value">

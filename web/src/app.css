@@ -2450,6 +2450,17 @@ body,
   outline: 2px solid var(--ac-color-primary);
   outline-offset: 2px;
 }
+/* Automation review uses one body scroller; the decision footer stays visible. */
+.chat-approval-automation .ant-modal-body { gap: var(--ac-space-section); }
+.chat-approval-automation-details {
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+  flex-shrink: 0;
+  scrollbar-gutter: auto;
+  overflow-wrap: anywhere;
+}
+.chat-approval-code { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--ac-font-size-label); }
 .chat-approval-drive-details { max-height: 60vh; }
 .chat-approval-list {
   list-style: none;
