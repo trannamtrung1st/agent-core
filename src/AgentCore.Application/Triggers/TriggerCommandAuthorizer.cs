@@ -262,7 +262,8 @@ public sealed class HeuristicTriggerCommandAuthorizer : ITriggerCommandAuthorize
 
 public sealed class ModelTriggerCommandAuthorizer(
     ILanguageModel languageModel,
-    HeuristicTriggerCommandAuthorizer heuristic) : ITriggerCommandAuthorizer
+    HeuristicTriggerCommandAuthorizer heuristic,
+    string? reasoningEffort = null) : ITriggerCommandAuthorizer
 {
     public async ValueTask<TriggerCommandAuthorizationDecision> AuthorizeCurrentTurnAsync(string? currentUserText, string? conversationLanguage,
         TriggerCommandAction requestedAction, ScheduleConversationContext? scheduleContext = null, ScheduleDraftContext? scheduleDraft = null,
@@ -309,7 +310,7 @@ public sealed class ModelTriggerCommandAuthorizer(
                 $"Proposed action: {requestedAction}; conversation language: {conversationLanguage ?? "auto"}.", semantics: ContextSemantics.TrustedFact),
             ContextSection.Evidence(ContextSectionId.History, ContextSourceKind.Session, string.Join('\n',
                 (scheduleContext?.ToPromptLines() ?? []).Concat(scheduleDraft?.ToPromptLines() ?? [])))
-        ], purpose: ContextPurpose.Platform), [new(ModelRole.User, text)], maxOutputTokens: 64, temperature: 0);
+        ], purpose: ContextPurpose.Platform), [new(ModelRole.User, text)], maxOutputTokens: 64, temperature: 0, reasoningEffort: reasoningEffort);
 
         var (raw, failure) = await ReadTextAsync(languageModel, request, cancellationToken).ConfigureAwait(false);
         if (failure is { } failedDecision) return failedDecision;

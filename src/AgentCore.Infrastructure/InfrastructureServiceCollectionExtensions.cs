@@ -377,9 +377,12 @@ public static class InfrastructureServiceCollectionExtensions
         else
         {
             services.TryAddSingleton<ModelTriggerCommandAuthorizer>(static provider =>
-                new ModelTriggerCommandAuthorizer(
-                    provider.GetRequiredService<ILanguageModel>(),
-                    provider.GetRequiredService<HeuristicTriggerCommandAuthorizer>()));
+            {
+                var selection = SessionModelBinder.PinDefault(provider.GetRequiredService<IModelCatalog>());
+                return new ModelTriggerCommandAuthorizer(
+                    provider.GetRequiredService<ILanguageModelResolver>().Resolve(selection, ModelPurpose.TriggerAuthorization),
+                    provider.GetRequiredService<HeuristicTriggerCommandAuthorizer>(), selection.ReasoningEffort);
+            });
             services.TryAddSingleton<ITriggerCommandAuthorizer>(static provider =>
                 provider.GetRequiredService<ModelTriggerCommandAuthorizer>());
         }

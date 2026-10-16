@@ -6,7 +6,8 @@ public enum ModelPurpose
 {
     Conversation,
     Initiative,
-    CompletionEvaluation
+    CompletionEvaluation,
+    TriggerAuthorization
 }
 
 public enum ModelInferenceTransport { ChatCompletions, Responses }
