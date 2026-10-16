@@ -202,6 +202,12 @@ def stop_process(process):
             process.wait()
 
 
+def ui_workspace_root(mount_root):
+    # Share the same private qualification namespace accepted by the trusted
+    # mount adapter; log/artifact directory labels are not mount authority.
+    return Path(mount_root) / secrets.token_hex(16)
+
+
 def ui_acceptance(args, state, env):
     for port in (args.api_port, args.web_port):
         with socket.socket() as probe:
@@ -211,7 +217,7 @@ def ui_acceptance(args, state, env):
     run("dotnet", "build", "src/AgentCore.Api/AgentCore.Api.csproj", "--nologo", "-m:1", env=env)
     data = state / ("ui-" + secrets.token_hex(4))
     data.mkdir()
-    workspaces = Path(env["AGENTCORE_OSB_PROOF_MOUNT_ROOT"]) / data.name
+    workspaces = ui_workspace_root(env["AGENTCORE_OSB_PROOF_MOUNT_ROOT"])
     api_url = f"http://127.0.0.1:{args.api_port}"
     web_url = f"http://127.0.0.1:{args.web_port}"
     env = env.copy()

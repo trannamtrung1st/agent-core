@@ -3,6 +3,7 @@ import copy
 import importlib.util
 from pathlib import Path, PurePosixPath
 import unittest
+import sys
 
 spec = importlib.util.spec_from_file_location("compatibility", Path(__file__).resolve().parents[2] / "deploy/sandbox/compatibility.py")
 compat = importlib.util.module_from_spec(spec)
@@ -31,6 +32,24 @@ def fixture(home="rw", desktop=True):
 
 
 class CompatibilityTests(unittest.TestCase):
+    def test_browser_acceptance_uses_a_disposable_namespace_accepted_by_mount_authority(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        runner_spec = importlib.util.spec_from_file_location("sandbox_runner", Path(__file__).resolve().parents[1] / "opensandbox-local.py")
+        runner = importlib.util.module_from_spec(runner_spec)
+        runner_spec.loader.exec_module(runner)
+        first = runner.ui_workspace_root("/canonical")
+        second = runner.ui_workspace_root("/canonical")
+        self.assertNotEqual(first, second)
+        for root in (first, second):
+            working = f"{root}/agent-{OWNER}/sessions/session-{SESSION}/working"
+            home = f"{root}/agent-{OWNER}/home"
+            for mode in ("rw", "ro", None):
+                binds = [f"{working}:/working:rw"] + ([] if mode is None else [f"{home}:/home:{mode}"])
+                self.assertIn("/working", compat.validate_binds(binds, ROOTS))
+            self.assertTrue(compat.validate_source(f"{root}/.verification/{SESSION}/working", ROOTS))
+        with self.assertRaises(ValueError):
+            compat.validate_source(f"/canonical/ui-deadbeef/.verification/{SESSION}/working", ROOTS)
+
     def test_preparation_keeps_source_image_and_records_actual_default_identity(self):
         kwargs, prepared, *_ = fixture()
         self.assertEqual(kwargs["image"], prepared["image"])

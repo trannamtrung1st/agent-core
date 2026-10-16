@@ -93,7 +93,7 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p test_event_storage_snapshot.py -v
 
       - name: Native launcher and nopCommerce reuse regressions
-        run: python3 -m unittest scripts.tests.test_dev_real scripts.tests.test_nopcommerce_progress scripts.tests.test_nopcommerce_reuse scripts.tests.test_opensandbox_config -v
+        run: python3 -m unittest scripts.tests.test_dev_real scripts.tests.test_nopcommerce_progress scripts.tests.test_nopcommerce_reuse scripts.tests.test_opensandbox_config scripts.tests.test_sandbox_compatibility -v
 
       # Offline fixtures complement the real-Docker job when CI is requested.
       - name: OpenSandbox proof build and offline receipt tests
