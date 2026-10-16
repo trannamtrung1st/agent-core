@@ -7,6 +7,7 @@ using AgentCore.Infrastructure.Credentials;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Providers;
 using AgentCore.Infrastructure.Security;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -97,23 +98,38 @@ public sealed partial class TenantCredentialIntegrationTests
         public TenantAccessService Access => new(Iam, Authorizer, Identity, Tokens, Ids, TimeProvider.System);
         public LocalCredentialProtector Protector => new(Path.Combine(Root, "keys"));
         public TenantCredentialService Service => new(Iam, Credentials, Authorizer, Protector, Ids, TimeProvider.System);
+        public TenantCredentialBindingService BindingService => new(Iam, (ITenantAgentStore)Iam, Credentials, (ITenantCredentialBindingStore)Iam, Authorizer,
+            BuiltIns, (ITenantDefinitionStore)Iam, Ids, TimeProvider.System);
+        public TenantAgentService Agents => new(Iam, (ITenantAgentStore)Iam, BuiltIns, Authorizer, Ids, TimeProvider.System, ownedDefinitions: (ITenantDefinitionStore)Iam);
+        private IBuiltInAgentDefinitionStore? _builtIns;
+        private IBuiltInAgentDefinitionStore BuiltIns => _builtIns ??= LoadBuiltIns();
+        private static IBuiltInAgentDefinitionStore LoadBuiltIns()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
+            return new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default);
+        }
         public IDbContextFactory<AgentCoreDbContext>? Contexts { get; private set; }
         public static async Task<Fixture> Create(bool sqlite)
         {
             var f = new Fixture(); Directory.CreateDirectory(f.Root);
-            if (sqlite)
+            try
             {
-                f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").Options);
-                await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
-                f.Iam = new SqliteIamStore(f.Contexts); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
+                if (sqlite)
+                {
+                    f.Contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={f.Root}/store.db;Foreign Keys=True;Default Timeout=10").Options);
+                    await using (var db = f.Contexts.CreateDbContext()) { await db.Database.MigrateAsync(); Assert.False(db.Database.HasPendingModelChanges()); }
+                    f.Iam = new SqliteIamStore(f.Contexts); f.Legacy = new SqliteCredentialStore(f.Contexts); f.Instances = new SqliteAgentInstanceStore(f.Contexts, f.Ids);
+                }
+                else
+                {
+                    var instances = new InMemoryAgentInstanceStore(); var credentials = new InMemoryCredentialStore(instances);
+                    f.Legacy = credentials; f.Instances = instances;
+                    f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), new InMemoryMemoryStore(), credentials: credentials);
+                }
+                return f;
             }
-            else
-            {
-                var instances = new InMemoryAgentInstanceStore(); var credentials = new InMemoryCredentialStore(instances);
-                f.Legacy = credentials; f.Instances = instances;
-                f.Iam = new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(f.Ids), new InMemoryMemoryStore(), credentials: credentials);
-            }
-            return f;
+            catch { await f.DisposeAsync(); throw; }
         }
         public AuthorizationAudit Audit(Guid tenant, Guid actor, Guid id) => new(Ids.NewId(), tenant, actor, "credentials.update", id.ToString("D"), "allowed", "test", DateTimeOffset.UtcNow);
         public ValueTask DisposeAsync() { SqliteConnection.ClearAllPools(); Directory.Delete(Root, true); return ValueTask.CompletedTask; }

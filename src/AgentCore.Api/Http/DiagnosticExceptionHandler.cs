@@ -19,6 +19,18 @@ public sealed class DiagnosticExceptionHandler(
             return false;
         }
 
+        if (exception is BadHttpRequestException { StatusCode: >= 400 and < 500 } rejected)
+        {
+            // Binding failures can contain submitted values in their exception text.
+            // Return the client status without logging or echoing the exception/body.
+            var invalid = new ProblemDetails { Type = "about:blank", Title = "InvalidRequest", Status = rejected.StatusCode,
+                Detail = rejected.StatusCode switch { 413 => "The request exceeds the allowed size.", 415 => "Use a supported request content type.", _ => "The request is invalid." } };
+            invalid.Extensions["code"] = "InvalidRequest";
+            httpContext.Response.StatusCode = rejected.StatusCode;
+            await httpContext.Response.WriteAsJsonAsync(invalid, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
         var diagnosticId = diagnostics.NewId();
         DiagnosticLog.Error(
             logger,

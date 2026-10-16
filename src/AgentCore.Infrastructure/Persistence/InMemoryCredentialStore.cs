@@ -64,7 +64,8 @@ public sealed partial class InMemoryCredentialStore(InMemoryAgentInstanceStore i
     }
     public ValueTask<IReadOnlyList<AgentCredentialBinding>> ListBindingsAsync(Guid? instanceId = null, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) return ValueTask.FromResult<IReadOnlyList<AgentCredentialBinding>>(_bindings.Values
-        .Where(b => !instances.IsTenantOwned(b.AgentInstanceId) && (instanceId is null || b.AgentInstanceId == instanceId)).OrderBy(b => b.Reference).ToArray()); }
+        .Where(b => !_tenantBindingOwners.ContainsKey(b.BindingId) && !_tenantOwners.ContainsKey(b.CredentialId)
+            && !instances.IsTenantOwned(b.AgentInstanceId) && (instanceId is null || b.AgentInstanceId == instanceId)).OrderBy(b => b.Reference).ToArray()); }
     public ValueTask BindAsync(AgentCredentialBinding b, long expectedInstanceRevision, CancellationToken ct = default, AdminEventAppend? history = null)
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
@@ -85,6 +86,7 @@ public sealed partial class InMemoryCredentialStore(InMemoryAgentInstanceStore i
         {
             RequireActive(instanceId, instanceRevision);
             if (!_bindings.TryGetValue(bindingId, out var b) || b.AgentInstanceId != instanceId) throw AgentCoreErrors.NotFound("Binding was not found.");
+            RequireLegacyCredential(b.CredentialId);
             if (b.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Binding revision is stale.");
             instances.UpdateWithExpectedRevisionAsync(new(instanceId, instanceRevision, History: instances.EventStore is null ? null : history), history?.OccurredAt ?? DateTimeOffset.UtcNow, ct).GetAwaiter().GetResult();
             _bindings.Remove(bindingId); return ValueTask.CompletedTask;
@@ -95,6 +97,8 @@ public sealed partial class InMemoryCredentialStore(InMemoryAgentInstanceStore i
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
         {
             RequireLegacyContext(instanceId);
+            if (_bindings.Values.Any(b => b.AgentInstanceId == instanceId && (_tenantBindingOwners.ContainsKey(b.BindingId) || _tenantOwners.ContainsKey(b.CredentialId))))
+                throw new AccessDeniedException("tenant_context_required");
             foreach (var id in _bindings.Values.Where(b => b.AgentInstanceId == instanceId).Select(b => b.BindingId).ToArray()) _bindings.Remove(id);
         }
         return ValueTask.CompletedTask;

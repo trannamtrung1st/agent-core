@@ -56,7 +56,8 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
     {
         await using var db = await contexts.CreateDbContextAsync(ct);
         var query = db.AgentCredentialBindings.AsNoTracking()
-            .Where(b => !db.Set<IamSystemIdentityRow>().Any(i => i.AgentInstanceId == b.AgentInstanceId));
+            .Where(b => b.TenantId == null && !db.Set<IamSystemIdentityRow>().Any(i => i.AgentInstanceId == b.AgentInstanceId)
+                && !db.Set<TenantCredentialRecord>().Any(c => c.CredentialId == b.CredentialId));
         if (instanceId is Guid id) query = query.Where(b => b.AgentInstanceId == id.ToString("D"));
         return (await query.OrderBy(b => b.Reference).ToArrayAsync(ct)).Select(b => new AgentCredentialBinding(Guid.Parse(b.BindingId), Guid.Parse(b.AgentInstanceId), Guid.Parse(b.CredentialId), b.Reference, b.Revision, DateTimeOffset.FromUnixTimeMilliseconds(b.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(b.UpdatedAtUtc))).ToArray();
     }
@@ -76,6 +77,8 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
         await using var db = await contexts.CreateDbContextAsync(ct); await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await RequireActive(db, instanceId, instanceRevision, ct);
         var row = await db.AgentCredentialBindings.SingleOrDefaultAsync(b => b.BindingId == bindingId.ToString("D") && b.AgentInstanceId == instanceId.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Binding was not found.");
+        if (row.TenantId is not null) throw new AccessDeniedException("tenant_context_required");
+        await RequireLegacyCredential(db, Guid.Parse(row.CredentialId), ct);
         if (row.Revision != expectedRevision) throw AgentCoreErrors.Conflict("Binding revision is stale.");
         db.AgentCredentialBindings.Remove(row);
         if (history is not null) AdminEventPersistence.StageAppend(db, history, Guid.NewGuid());
@@ -86,6 +89,9 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
         await using var db = await contexts.CreateDbContextAsync(ct);
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         await RequireLegacyContext(db, instanceId, ct);
+        if (await db.AgentCredentialBindings.AnyAsync(b => b.AgentInstanceId == instanceId.ToString("D")
+            && (b.TenantId != null || db.Set<TenantCredentialRecord>().Any(c => c.CredentialId == b.CredentialId)), ct))
+            throw new AccessDeniedException("tenant_context_required");
         await db.AgentCredentialBindings.Where(b => b.AgentInstanceId == instanceId.ToString("D")).ExecuteDeleteAsync(ct);
         await transaction.CommitAsync(ct);
     }

@@ -120,9 +120,23 @@ Base path: `/api/v2/tenants/{tenantId}/credentials`. Account cookie, CSRF on mut
 
 The nested safe `credential` uses `AdminCredentialResponse` fields; it never includes the protected payload, input value, protection version or secret generation. Exact Resource scope is type `credential`, ID the canonical Credential GUID. Tenant inheritance reaches only this actual owned resource; fabricated, retired and foreign references fail closed. `credentials.use` alone does not expose metadata or authorize a secret sink or another effect.
 
-Purposes are `General`, `EmailAccount`, `GoogleDriveAccount`, `ContainerRegistry`; kinds retain the existing closed Credential enum. `emailAccount` accepts only preset/address and typed Custom IMAP/SMTP usernames/endpoints with exact TLS mode names. Gmail requires Token and no password/mail endpoints; Drive requires Token; both are created disconnected. Ordinary CRUD cannot supply verified OAuth identity/scopes/refresh grants. Registry profiles accept the existing registry/username/repository-prefix/expiry fields and Password or Token. Non-General credentials reject Browser origins. Tenant binding/use, OAuth connect/callback and credential UI remain pending.
+Purposes are `General`, `EmailAccount`, `GoogleDriveAccount`, `ContainerRegistry`; kinds retain the existing closed Credential enum. `emailAccount` accepts only preset/address and typed Custom IMAP/SMTP usernames/endpoints with exact TLS mode names. Gmail requires Token and no password/mail endpoints; Drive requires Token; both are created disconnected. Ordinary CRUD cannot supply verified OAuth identity/scopes/refresh grants. Registry profiles accept the existing registry/username/repository-prefix/expiry fields and Password or Token. Non-General credentials reject Browser origins. Canonical binding configuration is described next; secret use, OAuth connect/callback and credential UI remain pending.
 
 Missing authentication returns 401; absent read/management or foreign/retired resources return 403; malformed inputs return 400; stale security/credential/secret witnesses return 409. Item permissions are checked before stale-witness errors or protected-value preparation. Creation/update/replace responses require read as well as manage; deleting returns no metadata. [Executed local verification](reports/tenant-credential-lifecycle-verification-2026-10-17.md).
+
+## Canonical tenant Credential binding HTTP
+
+Base path: `/api/v2/tenants/{tenantId}/agents/{instanceId}/credential-bindings`, with canonical Account cookie, mutation CSRF and no-store responses. Both Instance and Credential must actually belong to the route Tenant.
+
+| Method/path | Contract |
+| --- | --- |
+| `GET /` | `page`/`pageSize` default 0/30, maximum 100. Parent `agents.read`; item `credentials.read` filters before totals/paging. Returns safe `items`, visible `total`, paging, `allRead` (inherited tenant Credential read), `instanceRevision`, `securityRevision`. |
+| `POST /` | `credentialId`, normalized `reference`, `expectedRevision` (tenant security), `expectedInstanceRevision`, `expectedCredentialRevision`. Parent read/update plus item Credential read/bind. Returns 201 `{ binding, instanceRevision, securityRevision }`; `binding` uses the existing safe binding/credential metadata projection. |
+| `DELETE /{bindingId}` | Query `expectedRevision`, `expectedInstanceRevision`, `expectedBindingRevision`. Parent read/update plus item `credentials.bind`. Returns 200 `{ instanceRevision, securityRevision }` without Credential content. |
+
+Binding IDs are server-minted; reference and Credential are unique within the Instance. New bind requires an active non-registry Credential and active Instance. Disconnected Gmail/Drive association is configuration only. Disabled existing credentials can be unlinked; archived Instances retain readable bindings but reject changes until restored. Agent service writers additionally require current Connections self-management scope and no freeze. Bind/unbind changes no Credential value, role assignment or `credentials.use` authority. Runtime admission/use and downstream browser/email/Drive/Sandbox effects remain separate pending boundaries.
+
+Authentication failure is 401; denied/foreign targets, disabled new binding, registry binding and archived mutation are 403; stale witnesses/duplicates/bound Credential deletion are 409. Permission denial precedes stale-witness errors. Malformed typed bodies remain client 4xx with generic `InvalidRequest`, no submitted value and no server diagnostic ID. The shared handler preserves 400/413/415 request-rejection status; unexpected server failures retain their existing diagnostic behavior. [Executed evidence](reports/tenant-credential-binding-verification-2026-10-17.md).
 
 ## Agent instructions and context diagnostics
 

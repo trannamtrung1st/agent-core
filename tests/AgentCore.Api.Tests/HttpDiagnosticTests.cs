@@ -15,6 +15,21 @@ namespace AgentCore.Api.Tests;
 
 public sealed class HttpDiagnosticTests
 {
+    [Theory]
+    [InlineData(400)]
+    [InlineData(413)]
+    [InlineData(415)]
+    public async Task Request_rejections_preserve_client_status_without_echoing_values_or_creating_server_diagnostics(int status)
+    {
+        await using var factory = new SaveFailureApiFactory(new Microsoft.AspNetCore.Http.BadHttpRequestException("private-request-sentinel", status));
+        var client = TestOwnerCapability.CreateOwnerClient(factory);
+        var response = await client.PostAsJsonAsync("/api/v2/sessions", new CreateSessionRequest(TestInstances.Create(client, "examiner", 1), "text"));
+        Assert.Equal((HttpStatusCode)status, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("private-request-sentinel", body); Assert.DoesNotContain("diagnosticId", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(factory.Logs, line => line.Contains("HTTP request failed.", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Expected_http_failures_omit_diagnostic_id()
     {

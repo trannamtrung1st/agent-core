@@ -9,3 +9,5 @@ public sealed record TenantCredentialUpdateRequest(string DisplayName, string St
     IReadOnlyDictionary<string, string>? Metadata = null, IReadOnlyList<string>? AllowedOrigins = null,
     TenantEmailProfileInput? EmailAccount = null, ContainerRegistryProfileDto? ContainerRegistry = null);
 public sealed record TenantCredentialReplaceRequest(string ProtectedValue, long ExpectedRevision, long ExpectedCredentialRevision);
+public sealed record TenantBindCredentialRequest(Guid CredentialId, string Reference, long ExpectedRevision,
+    long ExpectedInstanceRevision, long ExpectedCredentialRevision);

@@ -152,6 +152,7 @@ IdentityEndpoints.Map(app);
 TenantAccessEndpoints.Map(app);
 TenantAgentEndpoints.Map(app);
 TenantCredentialEndpoints.Map(app);
+TenantCredentialBindingEndpoints.Map(app);
 TenantDefinitionEndpoints.Map(app);
 
 

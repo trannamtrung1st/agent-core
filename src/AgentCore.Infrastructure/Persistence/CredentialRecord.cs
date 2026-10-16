@@ -21,6 +21,7 @@ public sealed class CredentialRecord
 }
 public sealed class AgentCredentialBindingRecord
 {
+    public Guid? TenantId { get; set; }
     public string BindingId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
     public string CredentialId { get; set; } = "";

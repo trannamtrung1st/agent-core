@@ -719,6 +719,13 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<AgentCredentialBindingRecord>(entity =>
         {
             entity.ToTable("AgentCredentialBindings"); entity.HasKey(b => b.BindingId);
+            entity.HasIndex(b => new { b.TenantId, b.AgentInstanceId });
+            entity.HasOne<AgentCore.Infrastructure.Security.IamSystemIdentityRow>().WithMany()
+                .HasForeignKey(b => new { b.TenantId, b.AgentInstanceId })
+                .HasPrincipalKey(i => new { i.TenantId, i.AgentInstanceId }).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AgentCore.Infrastructure.Security.TenantCredentialRecord>().WithMany()
+                .HasForeignKey(b => new { b.TenantId, b.CredentialId })
+                .HasPrincipalKey(c => new { c.TenantId, c.CredentialId }).OnDelete(DeleteBehavior.Restrict);
             entity.Property(b => b.Revision).IsConcurrencyToken();
             entity.Property(b => b.Reference).HasMaxLength(64).IsRequired();
             entity.HasIndex(b => new { b.AgentInstanceId, b.Reference }).IsUnique();

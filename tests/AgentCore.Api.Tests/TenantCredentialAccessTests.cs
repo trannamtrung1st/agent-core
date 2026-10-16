@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace AgentCore.Api.Tests;
 
-public sealed class TenantCredentialAccessTests
+public sealed partial class TenantCredentialAccessTests
 {
     [Fact]
     public async Task Owned_HTTP_credential_lifecycle_redacts_values_and_blocks_foreign_and_legacy_paths()

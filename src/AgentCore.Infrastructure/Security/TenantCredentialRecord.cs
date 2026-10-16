@@ -10,7 +10,7 @@ public sealed record TenantCredentialRecord(string CredentialId, Guid TenantId, 
     {
         var entity = model.Entity<TenantCredentialRecord>();
         entity.ToTable("TenantCredentials"); entity.HasKey(c => c.CredentialId);
-        entity.HasIndex(c => new { c.TenantId, c.CredentialId }).IsUnique();
+        entity.HasAlternateKey(c => new { c.TenantId, c.CredentialId });
         entity.HasOne<Tenant>().WithMany().HasForeignKey(c => c.TenantId).OnDelete(DeleteBehavior.Restrict);
     }
     internal static TenantCredentialRecord Row(TenantCredentialRoot owner) => new(owner.CredentialId.ToString("D"), owner.TenantId, owner.CreatedAt, owner.DeletedAt);

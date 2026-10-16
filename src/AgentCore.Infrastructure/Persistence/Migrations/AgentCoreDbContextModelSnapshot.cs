@@ -425,6 +425,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("UpdatedAtUtc")
                         .HasColumnType("INTEGER");
 
@@ -437,6 +440,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AgentInstanceId", "Reference")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "AgentInstanceId");
+
+                    b.HasIndex("TenantId", "CredentialId");
 
                     b.ToTable("AgentCredentialBindings", (string)null);
                 });
@@ -2785,6 +2792,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("AgentInstanceId")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Kind")
@@ -2796,7 +2804,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
-                    b.Property<Guid?>("TenantId")
+                    b.Property<Guid>("TenantId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("SystemIdentityId");
@@ -2806,8 +2814,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PrincipalId")
                         .IsUnique();
-
-                    b.HasIndex("TenantId");
 
                     b.ToTable("SystemIdentities", (string)null);
                 });
@@ -2827,9 +2833,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("CredentialId");
-
-                    b.HasIndex("TenantId", "CredentialId")
-                        .IsUnique();
 
                     b.ToTable("TenantCredentials", (string)null);
                 });
@@ -2965,6 +2968,18 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CredentialId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.IamSystemIdentityRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "AgentInstanceId")
+                        .HasPrincipalKey("TenantId", "AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantCredentialRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "CredentialId")
+                        .HasPrincipalKey("TenantId", "CredentialId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentDefinitionResourceStateRecord", b =>
@@ -3192,7 +3207,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasOne("AgentCore.Infrastructure.Persistence.AgentInstanceRecord", null)
                         .WithMany()
                         .HasForeignKey("AgentInstanceId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("AgentCore.Domain.Security.Principal", null)
                         .WithMany()
@@ -3203,7 +3219,8 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasOne("AgentCore.Domain.Security.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantCredentialRecord", b =>

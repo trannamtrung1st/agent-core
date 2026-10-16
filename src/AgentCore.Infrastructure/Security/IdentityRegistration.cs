@@ -44,6 +44,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantDefinitionService>();
         services.TryAddSingleton<ITenantCredentialStore>(provider => (ITenantCredentialStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantCredentialService>();
+        services.TryAddSingleton<ITenantCredentialBindingStore>(provider => (ITenantCredentialBindingStore)provider.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantCredentialBindingService>();
         services.TryAddSingleton<AccountAdministrationService>();
         return services;
     }

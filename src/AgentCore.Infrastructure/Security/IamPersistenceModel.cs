@@ -40,6 +40,7 @@ internal static class IamPersistenceModel
         var identities = model.Entity<IamSystemIdentityRow>();
         identities.ToTable("SystemIdentities"); identities.HasKey(x => x.SystemIdentityId);
         identities.HasIndex(x => x.AgentInstanceId).IsUnique(); identities.HasIndex(x => x.PrincipalId).IsUnique();
+        identities.HasAlternateKey(x => new { x.TenantId, x.AgentInstanceId });
         identities.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         identities.HasOne<Principal>().WithMany().HasForeignKey(x => x.PrincipalId).OnDelete(DeleteBehavior.Restrict);
         identities.HasOne<AgentCore.Infrastructure.Persistence.AgentInstanceRecord>().WithMany()
