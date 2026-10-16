@@ -1,12 +1,12 @@
-import { Alert, App, Button, Collapse, Empty, Flex, Form, Input, Modal, Radio, Select, Table, Tag, Typography } from "antd";
+import { Alert, App, Button, Collapse, Empty, Flex, Form, Input, Modal, Radio, Select, Table, Tag, Typography, theme } from "antd";
 import { useEffect, useState } from "react";
 import { followAppLink } from "../../app/appLink";
 import { adminDraftPath, adminInstancePath, navigateToAppPath } from "../../app/appRoute";
-import { createAdminAgentInstance, createNewAdminDefinitionDraft, getAdminDefinitionVersion, updateHarness, type AdminCreateInstancePersona } from "../../services/adminApi";
+import { createAdminAgentInstance, createNewAdminDefinitionDraft, getAdminDefinitionVersion, getSelfManagement, saveSelfManagement, type AdminAgentInstance, type SelfManagementPolicy, type AdminCreateInstancePersona } from "../../services/adminApi";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { AdminRetryAction, showAdminFailure } from "./adminFailure";
-import { HarnessPolicyModeScopes } from "./HarnessManagementSection";
+import { defaultManagement, inheritedManagement, SelfManagementFields } from './SelfManagementFields';
 import { parsePersonaJson } from "./instanceManagedControls";
 
 import { AdminCollectionToolbar, useAdminCollectionSearch } from "./AdminCollectionToolbar";
@@ -89,8 +89,11 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
   const [definitionId, setDefinitionId] = useState("");
   const [version, setVersion] = useState<number | null>(null);
   const [personaMode, setPersonaMode] = useState<"default" | "custom">("default");
-  const [harnessMode, setHarnessMode] = useState<import("../../services/adminApi").HarnessMode>("Disabled");
-  const [harnessAreas, setHarnessAreas] = useState<import("../../services/adminApi").HarnessScope[]>(["KnowledgeResources"]);
+  const { token } = theme.useToken();
+  const [management, setManagement] = useState(inheritedManagement);
+  const [managementDefaults, setManagementDefaults] = useState(defaultManagement);
+  const [createdInstance, setCreatedInstance] = useState<AdminAgentInstance | null>(null);
+  const [managementError, setManagementError] = useState<AdminFailureNotice | null>(null);
   const [persona, setPersona] = useState<AdminCreateInstancePersona>({
     name: "",
     role: "",
@@ -110,7 +113,7 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
   const customPersonaReady = personaFieldsReady(persona);
   const canCreate = Boolean(selectedGroup && selectedVersion) && (personaMode === "default" ||
     (customPersonaReady && !personaLoading && personaSource === sourceKey))
-    && (harnessMode === "Disabled" || harnessAreas.length > 0);
+    && !personaLoading && personaSource === sourceKey && !personaError;
 
   useEffect(() => {
     if (!open || !definitionId || version === null || !source) return;
@@ -123,12 +126,13 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
       .then(definition => {
         const defaults = parsePersonaJson(JSON.stringify(definition.identity));
         if (!cancelled) {
+          setManagementDefaults({ ...defaultManagement, ...(definition.selfManagement as Partial<SelfManagementPolicy> | undefined) });
           setPersona(defaults);
           setPersonaSource(`${definitionId}:${source}:${version}`);
         }
       })
       .catch((error: unknown) => {
-        if (!cancelled) setPersonaError(describeAdminError(error, "Definition persona could not be loaded."));
+        if (!cancelled) setPersonaError(describeAdminError(error, "Definition defaults could not be loaded."));
       })
       .finally(() => { if (!cancelled) setPersonaLoading(false); });
     return () => { cancelled = true; };
@@ -144,8 +148,10 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
       setVersion(null);
     }
     setPersonaMode("default");
-    setHarnessMode("Disabled");
-    setHarnessAreas(["KnowledgeResources"]);
+    setManagement(inheritedManagement);
+    setManagementDefaults(defaultManagement);
+    setCreatedInstance(null);
+    setManagementError(null);
     setPersona({ name: "", role: "", description: "", tone: "" });
     setOpen(true);
   };
@@ -155,17 +161,22 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
       return;
     }
     setBusy(true);
+    setManagementError(null);
     try {
-      const created = await createAdminAgentInstance(
+      const created = createdInstance ?? await createAdminAgentInstance(
         selectedGroup.definitionId,
         version,
         personaMode === "custom" ? trimmedPersona(persona) : null
       );
-      if (harnessMode !== "Disabled") {
+      setCreatedInstance(created);
+      if (Object.values(management).some(value => value !== null)) {
         try {
-          await updateHarness(created.instanceId, "policy", { expectedRevision: created.revision, mode: harnessMode,
-            scopes: harnessAreas, sources: [], eligibleTools: [], frozen: false });
-        } catch (error) { showAdminFailure(message, error, "Instance created; configure its authoring policy in the detail view."); }
+          const revision = createdInstance ? (await getSelfManagement(created.instanceId)).instanceRevision : created.revision;
+          await saveSelfManagement(created.instanceId, { expectedRevision: revision, ...management });
+        } catch (error) {
+          setManagementError(describeAdminError(error, 'Instance created, but self-management could not be saved. Retry or open the Instance to configure it.'));
+          return;
+        }
       }
       setOpen(false);
       navigateToAppPath(adminInstancePath(created.instanceId));
@@ -182,21 +193,22 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
       <Modal
         title="New instance"
         open={open}
-        okText="Create instance"
-        cancelText="Cancel"
+        okText={createdInstance ? "Retry self-management" : "Create instance"}
+        cancelText={createdInstance ? "Open instance" : "Cancel"}
         confirmLoading={busy}
         okButtonProps={{ disabled: !canCreate }}
         onOk={() => void createInstance()}
         onCancel={() => {
           if (!busy) {
             setOpen(false);
+            if (createdInstance) navigateToAppPath(adminInstancePath(createdInstance.instanceId));
           }
         }}
       >
         {groups.length === 0 ? (
           <Typography.Paragraph>No published definition is available.</Typography.Paragraph>
         ) : (
-          <Flex vertical gap={12}>
+          <Flex vertical gap={token.paddingSM}>
             <label className="admin-draft-field">
               <Typography.Text strong>Definition</Typography.Text>
               <Select
@@ -209,12 +221,13 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
                 }))}
                 onChange={(nextId) => {
                   setDefinitionId(nextId);
+                  setManagement(inheritedManagement);
                   const next = groups.find((group) => group.definitionId === nextId);
                   if (next) {
                     setVersion(latestActiveVersion(instanceVersionRows(next.versions)) ?? next.latestVersion);
                   }
                 }}
-                disabled={busy}
+                disabled={busy || !!createdInstance}
               />
             </label>
             <label className="admin-draft-field">
@@ -228,8 +241,8 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
                   value: row.version,
                   label: formatForkSourceOptionLabel(row)
                 }))}
-                onChange={(nextVersion) => setVersion(nextVersion)}
-                disabled={busy}
+                onChange={(nextVersion) => { setVersion(nextVersion); setManagement(inheritedManagement); }}
+                disabled={busy || !!createdInstance}
               />
             </label>
             {selectedVersion && selectedVersion.status.toLowerCase() === "deprecated" ? (
@@ -239,31 +252,39 @@ export function NewInstanceButton({ groups, loading = false }: { groups: Definit
                 message={`v${selectedVersion.version} is deprecated. New instances normally use the latest active publication.`}
               />
             ) : null}
-            <Collapse items={[{ key: "harness", label: "Harness management (optional)", children:
-              <Form layout="vertical"><HarnessPolicyModeScopes mode={harnessMode} scopes={harnessAreas} busy={busy}
-                onMode={setHarnessMode} onScopes={setHarnessAreas} />
-              </Form>
+            {personaLoading && <Typography.Text type="secondary" role="status">Loading Definition defaults…</Typography.Text>}
+            {personaError && <Alert type="error" showIcon title={personaError.message}
+              description={personaError.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: personaError.diagnosticId }} /> : undefined}
+              action={<Button disabled={busy} onClick={() => setPersonaRetry(value => value + 1)}>Retry</Button>} />}
+            {managementError && <Alert type="error" showIcon title="Instance created; self-management was not saved"
+              description={<><Typography.Paragraph>{managementError.message}</Typography.Paragraph>
+                Retry saves to the same Instance. Open instance continues with its current inherited policy.
+                {managementError.diagnosticId && <DiagnosticDetails fields={{ diagnosticId: managementError.diagnosticId }} />}</>} />}
+            <Collapse items={[{ key: "self-management", label: "Self-management (optional)", children:
+              <Flex vertical gap={token.padding}>
+                <Typography.Text type="secondary">Inherit the selected Definition defaults or customize individual fields. Runtime permissions still apply independently.</Typography.Text>
+                <Form layout="vertical" className="admin-config-form">
+                  <SelfManagementFields value={management} defaults={managementDefaults}
+                    disabled={busy || personaLoading || personaSource !== sourceKey || !!personaError} onChange={setManagement} />
+                </Form>
+              </Flex>
             }]} />
             <Radio.Group
               aria-label="Persona"
               value={personaMode}
               onChange={(event) => setPersonaMode(event.target.value)}
-              disabled={busy}
+              disabled={busy || !!createdInstance}
             >
               <Radio value="default">Definition persona</Radio>
               <Radio value="custom">Custom persona</Radio>
             </Radio.Group>
             {personaMode === "custom" ? (
               <>
-                {personaLoading ? <Typography.Text type="secondary" role="status">Loading Definition persona…</Typography.Text> : null}
-                {personaError ? <Alert type="error" showIcon title={personaError.message}
-                  description={personaError.diagnosticId ? <DiagnosticDetails fields={{ diagnosticId: personaError.diagnosticId }} /> : undefined}
-                  action={<Button disabled={busy} onClick={() => setPersonaRetry(value => value + 1)}>Retry</Button>} /> : null}
                 <div className="admin-draft-field-grid">
-                  <PersonaField label="Persona name" value={persona.name} disabled={busy || personaLoading || personaSource !== sourceKey} onChange={(name) => setPersona({ ...persona, name })} />
-                  <PersonaField label="Persona role" value={persona.role} disabled={busy || personaLoading || personaSource !== sourceKey} onChange={(role) => setPersona({ ...persona, role })} />
-                  <PersonaField label="Persona description" value={persona.description} disabled={busy || personaLoading || personaSource !== sourceKey} onChange={(description) => setPersona({ ...persona, description })} />
-                  <PersonaField label="Persona tone" value={persona.tone} disabled={busy || personaLoading || personaSource !== sourceKey} onChange={(tone) => setPersona({ ...persona, tone })} />
+                  <PersonaField label="Persona name" value={persona.name} disabled={busy || !!createdInstance || personaLoading || personaSource !== sourceKey} onChange={(name) => setPersona({ ...persona, name })} />
+                  <PersonaField label="Persona role" value={persona.role} disabled={busy || !!createdInstance || personaLoading || personaSource !== sourceKey} onChange={(role) => setPersona({ ...persona, role })} />
+                  <PersonaField label="Persona description" value={persona.description} disabled={busy || !!createdInstance || personaLoading || personaSource !== sourceKey} onChange={(description) => setPersona({ ...persona, description })} />
+                  <PersonaField label="Persona tone" value={persona.tone} disabled={busy || !!createdInstance || personaLoading || personaSource !== sourceKey} onChange={(tone) => setPersona({ ...persona, tone })} />
                 </div>
               </>
             ) : null}

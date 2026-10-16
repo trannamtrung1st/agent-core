@@ -1,21 +1,14 @@
 import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, App, Button, Checkbox, Flex, Form, Select, Spin, Tag, Typography, theme } from 'antd';
+import { Alert, App, Button, Flex, Form, Spin, Tag, Typography, theme } from 'antd';
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { AdminErrorNotice } from './adminFailure';
 import { describeAdminError, type AdminFailureNotice } from './adminErrors';
 import { confirmAction } from '../../app/confirmAction';
-import { getSelfManagement, saveSelfManagement, type SelfManagementView, type HarnessMode, type HarnessScope, type ManagementAutoApply } from '../../services/adminApi';
+import { getSelfManagement, saveSelfManagement, type SelfManagementView } from '../../services/adminApi';
 
-export const managementAreas = [
-  { label: 'Settings', value: 'Settings' }, { label: 'Skills', value: 'Skills' }, { label: 'Resources', value: 'Resources' },
-  { label: 'Connections', value: 'Connections' }, { label: 'Harness knowledge', value: 'KnowledgeResources' },
-  { label: 'Harness instructions', value: 'Instructions' }, { label: 'Tool proposals', value: 'ToolSelection' },
-  { label: 'Management policy proposals', value: 'ManagementPolicy' }, { label: 'Automation preferences', value: 'AutomationPreferences' }
-];
-type Draft = { mode: HarnessMode | null; scopes: HarnessScope[] | null; managedAutoApply: ManagementAutoApply[] | null;
-  configurationAssistance: boolean | null; harnessAuthoring: boolean | null };
-const inherited: Draft = { mode: null, scopes: null, managedAutoApply: null, configurationAssistance: null, harnessAuthoring: null };
+import { SelfManagementFields, inheritedManagement as inherited, type SelfManagementDraft as Draft } from './SelfManagementFields';
+
 function draftOf(view: SelfManagementView): Draft {
   const o = view.overrides;
   return o ? { mode: o.mode?.value ?? null, scopes: o.scopes?.value ?? null, managedAutoApply: o.autoApply?.value ?? null,
@@ -53,12 +46,10 @@ export function SelfManagementSection({ instanceId, archived, onUpdated, onDirty
     } catch (e) { if (request === generation.current) setError(describeAdminError(e, 'Policy could not be saved. Refresh revisions; your draft is retained.')); if (expectedRevision !== undefined) throw e; }
     finally { if (request === generation.current) setBusy(false); }
   }
-  const effectiveMode = draft.mode ?? view?.definitionDefaults.mode ?? 'Disabled';
   const changed = view && JSON.stringify(draft) !== JSON.stringify(draftOf(view));
   useEffect(() => { onDirtyChange?.(!!changed); }, [changed, onDirtyChange]);
   const configuration = useInstanceConfigurationEditor('Self-management', { dirty: !!changed, busy: busy || loading, revision: view?.instanceRevision, blocked: !view ? 'Read current self-management before saving.' : undefined, save: async revision => { const updated = await save(undefined, revision); if (updated === undefined) throw new Error('Self-management could not be saved.'); return updated; }, discard: () => setDraft(view ? draftOf(view) : inherited), refresh: reload });
   const disabled = archived || loading || busy;
-  const builtinChoices = [{ value: 'inherit', label: 'Inherit' }, { value: 'enabled', label: 'Enabled' }, { value: 'disabled', label: 'Disabled' }];
   return <AgentConfigurationPanel title="Agent self-management" label="Agent self-management"
     description="Admin can always configure this Instance. Enabled Chat management uses the same owners, within selected areas and exact approvals." bodyGap="section">
     {loading && <Spin aria-label="Loading agent self-management" />}
@@ -70,32 +61,7 @@ export function SelfManagementSection({ instanceId, archived, onUpdated, onDirty
       {view.effective.frozen && <Alert type="info" showIcon title="Self-management is frozen" description="Only Admin can explicitly unfreeze. Normal tasks and retained Skills, resources and settings remain available." />}
       <Form layout="vertical" className="admin-config-form">
         <Flex vertical gap={token.padding}>
-          <Form.Item label="Self-management mode" extra="Off removes management tools and procedures. Assisted changes wait for approval; Managed uses only explicitly delegated safe changes.">
-            <Select aria-label="Self-management mode" value={draft.mode ?? 'inherit'} disabled={disabled} onChange={mode => setDraft(d => ({ ...d, mode: mode === 'inherit' ? null : mode as HarnessMode }))}
-              options={[{ value: 'inherit', label: `Inherit (${view.definitionDefaults.mode === 'Disabled' ? 'Off' : view.definitionDefaults.mode})` }, { value: 'Disabled', label: 'Off' }, { value: 'Assisted', label: 'Assisted' }, { value: 'Managed', label: 'Managed' }]} />
-          </Form.Item>
-          <Form.Item label="Allowed management areas" extra="These areas add a management gate. They cannot exceed Definition capability or host authority.">
-            <Flex vertical gap={token.paddingXS}>
-              <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => setDraft(d => ({ ...d, scopes: null }))}>Inherit areas</Button>
-              <Checkbox.Group aria-label="Allowed management areas" options={managementAreas} disabled={disabled}
-                value={draft.scopes ?? view.definitionDefaults.scopes} onChange={scopes => setDraft(d => ({ ...d, scopes: scopes as HarnessScope[] }))} />
-            </Flex>
-          </Form.Item>
-          {effectiveMode === 'Managed' && <Form.Item label="Managed automatic changes" extra="Capabilities, privacy, triggers, credentials and management widening always require exact approval.">
-            <Flex vertical gap={token.paddingXS}>
-              <Button disabled={disabled} style={{ alignSelf: 'flex-start' }} onClick={() => setDraft(d => ({ ...d, managedAutoApply: null }))}>Inherit automatic changes</Button>
-              <Checkbox.Group aria-label="Managed automatic changes" disabled={disabled} value={draft.managedAutoApply ?? view.definitionDefaults.managedAutoApply ?? []}
-                options={[{ label: 'Conversation preferences', value: 'ConversationPreferences' }, { label: 'New text resources', value: 'TextResources' }, { label: 'Skill create/update/enable', value: 'SkillChanges' }]}
-                onChange={values => setDraft(d => ({ ...d, managedAutoApply: values as ManagementAutoApply[] }))} />
-            </Flex>
-          </Form.Item>}
-          <Typography.Text strong>Built-in management procedures</Typography.Text>
-          <Typography.Text type="secondary">Read-only · On demand · version 1. Procedure enablement never grants authority; Off/Frozen suppresses both.</Typography.Text>
-          {(['configurationAssistance', 'harnessAuthoring'] as const).map(key => <Form.Item key={key} label={key === 'configurationAssistance' ? 'Configuration assistance' : 'Harness authoring'}>
-            <Select aria-label={key === 'configurationAssistance' ? 'Configuration assistance procedure' : 'Harness authoring procedure'} disabled={disabled}
-              value={draft[key] === null ? 'inherit' : draft[key] ? 'enabled' : 'disabled'} options={builtinChoices}
-              onChange={value => setDraft(d => ({ ...d, [key]: value === 'inherit' ? null : value === 'enabled' }))} />
-          </Form.Item>)}
+          <SelfManagementFields value={draft} defaults={view.definitionDefaults} disabled={disabled} onChange={setDraft} />
           <Typography.Text type="secondary">Changes apply to the next new Run in existing Sessions. Revocation and freeze take effect immediately.</Typography.Text>
           <Flex wrap gap={token.paddingXS}>
             {!configuration.managed && <Button type="primary" disabled={disabled || !changed} onClick={() => void save()}>Save self-management</Button>}

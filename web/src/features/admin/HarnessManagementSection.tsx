@@ -1,18 +1,14 @@
 import { AgentConfigurationPanel } from './AgentConfigurationLayout';
 import { AdminErrorNotice } from "./adminFailure";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { InfoCircleOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Checkbox, Collapse, Flex, Form, Select, Spin, Tag, Typography, theme } from "antd";
+import { Alert, App, Button, Collapse, Flex, Select, Spin, Tag, Typography, theme } from "antd";
 import { listInstanceSettings, listInstanceResources } from "../../services/instanceConfiguration";
 import { confirmAction } from "../../app/confirmAction";
-import { getHarnessReview, updateHarness, type HarnessReview, type HarnessMode, type HarnessScope } from "../../services/adminApi";
+import { getHarnessReview, updateHarness, type HarnessReview } from "../../services/adminApi";
 import { describeAdminError, type AdminFailureNotice } from "./adminErrors";
 import { DiagnosticDetails } from "../chat/DiagnosticDetails";
 
-export const harnessScopes: { label: string; value: HarnessScope }[] = [
-  { label: "Knowledge & resources", value: "KnowledgeResources" },
-  { label: "Agent instructions", value: "Instructions" }, { label: "Tool proposals", value: "ToolSelection" }
-];
 const evidenceLabels: Record<string, string> = { PartiallyVerified: "Partially verified", CannotVerify: "Cannot verify", RequiresExternalEvidence: "Requires external evidence" };
 
 export function HarnessManagementSection({ instanceId, onUpdated }: {
@@ -109,30 +105,4 @@ export function HarnessManagementSection({ instanceId, onUpdated }: {
         </Flex> }]} /> : <Typography.Text type="secondary">No harness changes yet. Start by teaching reusable knowledge or a procedure in Chat.</Typography.Text>}
       </> : null}
     </AgentConfigurationPanel>;
-}
-
-export function HarnessPolicyModeScopes({ mode, scopes, busy, onMode, onScopes }: {
-  mode: HarnessMode; scopes: HarnessScope[]; busy: boolean; onMode: (mode: HarnessMode) => void; onScopes: (scopes: HarnessScope[]) => void
-}) {
-  const { token } = theme.useToken();
-  const fieldId = useId();
-  const helpId = `${fieldId}-help`;
-  const scopesInvalid = mode !== "Disabled" && scopes.length === 0;
-  const help = mode === "Disabled"
-    ? "Harness changes stay manual."
-    : mode === "Assisted"
-      ? "Changes need your approval in Chat."
-      : "Allowed knowledge may auto-save. Instructions and tools need approval.";
-  return <Flex vertical gap={token.padding} className="harness-policy-fields">
-    <Form.Item label="Authoring mode" htmlFor={fieldId} extra={<Typography.Text id={helpId} type="secondary" style={{ color: token.colorTextSecondary }}>{help}</Typography.Text>}>
-      <Select id={fieldId} aria-label="Authoring mode" aria-describedby={helpId} value={mode} disabled={busy} onChange={onMode} options={[
-        { value: "Disabled", label: "Manual (off)" }, { value: "Assisted", label: "Assisted" }, { value: "Managed", label: "Managed" }
-      ]} />
-    </Form.Item>
-    {mode !== "Disabled" ? <Form.Item label="Areas the agent may manage" validateStatus={scopesInvalid ? "error" : undefined}
-      help={scopesInvalid ? <span id={`${fieldId}-scopes-help`}>Select at least one area.</span> : undefined}>
-      <Checkbox.Group className="harness-policy-scopes" style={{ gap: token.paddingXS }} aria-label="Areas the agent may manage"
-        aria-invalid={scopesInvalid || undefined} aria-describedby={scopesInvalid ? `${fieldId}-scopes-help` : undefined} options={harnessScopes} value={scopes} disabled={busy}
-      onChange={values => onScopes(values as HarnessScope[])} /></Form.Item> : null}
-  </Flex>;
 }

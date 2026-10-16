@@ -1761,17 +1761,11 @@ describe("AdminApp", () => {
     const dialog = within(screen.getByRole("dialog", { name: "New instance" }));
     expect(dialog.getByText("v5 · Durable · Published")).toBeInTheDocument();
     expect(dialog.queryByText(/is deprecated/)).not.toBeInTheDocument();
-    fireEvent.click(dialog.getByText("Harness management (optional)"));
-    fireEvent.mouseDown(dialog.getByRole("combobox", { name: "Authoring mode" }));
-    fireEvent.click(await screen.findByText("Managed", { selector: ".ant-select-item-option-content" }));
-    fireEvent.click(dialog.getByRole("checkbox", { name: "Knowledge & resources" }));
-    expect(dialog.getByRole("button", { name: "Create instance" })).toBeDisabled();
-    const areas = dialog.getByRole("group", { name: "Areas the agent may manage" });
-    expect(areas).toHaveAccessibleDescription("Select at least one area.");
-    expect(areas).toHaveAttribute("aria-invalid", "true");
-    fireEvent.mouseDown(dialog.getByRole("combobox", { name: "Authoring mode" }));
-    fireEvent.click(await screen.findByText("Manual (off)", { selector: ".ant-select-item-option-content" }));
-    expect(dialog.getByRole("button", { name: "Create instance" })).toBeEnabled();
+    await waitFor(() => expect(dialog.getByRole("button", { name: "Create instance" })).toBeEnabled());
+    fireEvent.click(dialog.getByText("Self-management (optional)"));
+    expect(dialog.getByRole("combobox", { name: "Self-management mode" })).toBeInTheDocument();
+    expect(dialog.getByRole("checkbox", { name: "Settings" })).not.toBeChecked();
+    expect(dialog.getByRole("checkbox", { name: "Automation preferences" })).toBeInTheDocument();
     fireEvent.click(dialog.getByRole("button", { name: "Create instance" }));
 
     await waitFor(() => {
