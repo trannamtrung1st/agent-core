@@ -99,9 +99,14 @@ test("Skill and event-source action buttons stay together across table widths", 
   }
   await checkActions(inspect.locator("xpath=ancestor::td"));
   await inspect.click();
-  await expect(page.getByRole("dialog", { name: "Definition Skill details", exact: true })).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Definition Skill details", exact: true })).toBeHidden();
+  const skillDetails = page.getByRole("dialog", { name: "Definition Skill details", exact: true });
+  await expect(skillDetails).toBeVisible();
+  // Visibility can precede the Drawer's autofocus transition on a busy runner.
+  const close = skillDetails.getByRole("button", { name: "Close", exact: true });
+  await close.focus();
+  await expect(close).toBeFocused();
+  await close.press("Escape");
+  await expect(skillDetails).toBeHidden();
   await skills.getByRole("button", { name: "Customize", exact: true }).first().click();
   const confirmation = page.getByRole("dialog", { name: "Customize Definition Skill?", exact: true });
   await expect(confirmation).toContainText("independent Instance Skill");
