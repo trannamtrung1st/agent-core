@@ -32,7 +32,7 @@ export function DefinitionStateIsolationPolicy({ candidate, savedCandidate = can
       </Form>
       {!readOnly && <Button style={{ alignSelf: 'flex-start' }} disabled={disabled || !candidate.stateIsolationPolicy} onClick={() => onChange?.({ ...candidate, stateIsolationPolicy: null })}>Use compatibility defaults</Button>}
       {details}
-      <Typography.Text type="secondary">Experience enablement and autonomous identity maintenance are Instance-owned opt-ins. Definition eligibility limits apply to their use. Shared accounts retain their own authority and external effects.</Typography.Text>
+      <Typography.Text type="secondary">These Definition permissions do not activate Experience or autonomous identity maintenance. Both start Off for each new Instance; enable them separately in that Instance’s State & Isolation page. Existing Instances keep their saved opt-ins when adopting a new Definition version. Shared accounts retain their own authority and external effects.</Typography.Text>
     </AgentConfigurationPanel>
     {!readOnly && <IsolationChangePreview changes={changes} notice="Changes stay in this Definition draft until saved and published. Existing Instances require explicit version adoption. Existing history, home files, browser profiles and Artifacts are retained. Working files remain until Session deletion unless safe terminal cleanup is selected." />}
   </Flex>;

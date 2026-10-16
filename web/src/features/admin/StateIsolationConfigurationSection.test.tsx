@@ -91,6 +91,17 @@ test('inheriting isolated Definition defaults is never labeled Persistent', () =
   expect(deriveIsolationPreset(defaults, { settings: [], experienceEnabled: false, allowMaintenance: false })).toBe('Stateless');
 });
 
+test('distinguishes independent Instance activation from inherited Definition permissions', async () => {
+  render(<ConfigProvider theme={{ token: { motion: false } }}><StateIsolationConfigurationSection instanceId="owner" active archived={false} onUpdated={() => {}} onDirtyChange={() => {}} /></ConfigProvider>);
+  for (const name of ['Allow Experience recording', 'Allow Experience recall', 'Use stored profile evidence', 'Use cross-Session continuity'])
+    expect(await screen.findByRole('switch', { name })).toBeChecked();
+  for (const name of ['Experience enablement', 'Autonomous identity maintenance']) {
+    const control = screen.getByRole('switch', { name });
+    expect(control).not.toBeChecked();
+    expect(control.closest('.ant-form-item')).toHaveTextContent('Instance-only opt-in. Starts Off for each new Instance and is not inherited from the Definition.');
+  }
+});
+
 test('Use Definition defaults requests a separate unsaved reset action', async () => {
   render(<ConfigProvider theme={{ token: { motion: false } }}><StateIsolationConfigurationSection instanceId="owner" active archived={false} onUpdated={() => {}} onDirtyChange={() => {}} /></ConfigProvider>);
   const reset = await screen.findByRole('button', { name: 'Use Definition defaults' });

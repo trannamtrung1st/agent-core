@@ -54,6 +54,7 @@ test('Definition presets remain editable drafts and replacement requires confirm
 
 test('published Definition preset and all policy controls stay read-only', () => {
   render(<DefinitionStateIsolationPolicy candidate={applyDefinitionIsolationPreset(saved, saved, 'Stateless')} readOnly />);
+  expect(screen.getByText(/These Definition permissions do not activate Experience or autonomous identity maintenance/)).toBeVisible();
   expect(screen.getByRole('combobox', { name: 'Isolation preset' })).toBeDisabled();
   expect(screen.getByRole('combobox', { name: 'Default agent state visibility' })).toBeDisabled();
   expect(screen.getByRole('combobox', { name: 'Maximum agent state visibility' })).toBeDisabled();

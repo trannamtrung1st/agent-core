@@ -41,9 +41,9 @@ function IsolationFields({ instanceId, active, archived }: { instanceId: string;
                 {!patch?.clear.includes(field) && (field in state.overrides || patch && field in patch.set) && <Button size="small" type="link" disabled={archived || busy} aria-label={`Inherit ${labels[field] ?? field}`} onClick={() => edit('stateIsolationPolicy', field, undefined)}>Inherit</Button>}</Flex>;
             }}>
               <StateIsolationToggleField label="Experience enablement" checked={draft.experienceEnabled} disabled={archived || busy}
-                extra="The existing Experience owner is updated in the same transaction." onChange={v => editFlag('experienceEnabled', v)} />
+                extra="Instance-only opt-in. Starts Off for each new Instance and is not inherited from the Definition. Recording and recall also require the permissions above." onChange={v => editFlag('experienceEnabled', v)} />
               <StateIsolationToggleField label="Autonomous identity maintenance" checked={draft.allowMaintenance} disabled={archived || busy}
-                extra="The existing maintenance owner is updated in the same transaction." onChange={v => editFlag('allowMaintenance', v)} />
+                extra="Instance-only opt-in. Starts Off for each new Instance and is not inherited from the Definition. Definition continuity and Memory permissions still apply." onChange={v => editFlag('allowMaintenance', v)} />
             </StateIsolationPolicyFields>
           </Flex>
         </Form>
