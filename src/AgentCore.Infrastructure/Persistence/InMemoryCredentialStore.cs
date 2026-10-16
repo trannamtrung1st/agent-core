@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Security;
 using AgentCore.Domain.Credentials;
 using AgentCore.Domain.Definitions;
 
@@ -60,7 +61,8 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
         }
     }
     public ValueTask<IReadOnlyList<AgentCredentialBinding>> ListBindingsAsync(Guid? instanceId = null, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) return ValueTask.FromResult<IReadOnlyList<AgentCredentialBinding>>(_bindings.Values.Where(b => instanceId is null || b.AgentInstanceId == instanceId).OrderBy(b => b.Reference).ToArray()); }
+    { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) return ValueTask.FromResult<IReadOnlyList<AgentCredentialBinding>>(_bindings.Values
+        .Where(b => !instances.IsTenantOwned(b.AgentInstanceId) && (instanceId is null || b.AgentInstanceId == instanceId)).OrderBy(b => b.Reference).ToArray()); }
     public ValueTask BindAsync(AgentCredentialBinding b, long expectedInstanceRevision, CancellationToken ct = default, AdminEventAppend? history = null)
     {
         ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
@@ -86,11 +88,23 @@ public sealed class InMemoryCredentialStore(InMemoryAgentInstanceStore instances
         }
     }
     public ValueTask DeleteBindingsAsync(Guid instanceId, CancellationToken ct = default)
-    { ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate) { foreach (var id in _bindings.Values.Where(b => b.AgentInstanceId == instanceId).Select(b => b.BindingId).ToArray()) _bindings.Remove(id); } return ValueTask.CompletedTask; }
+    {
+        ct.ThrowIfCancellationRequested(); lock (instances.CredentialGate)
+        {
+            RequireLegacyContext(instanceId);
+            foreach (var id in _bindings.Values.Where(b => b.AgentInstanceId == instanceId).Select(b => b.BindingId).ToArray()) _bindings.Remove(id);
+        }
+        return ValueTask.CompletedTask;
+    }
     private void RequireActive(Guid id, long revision)
     {
+        RequireLegacyContext(id);
         var instance = instances.FindAsync(id).Result ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
         if (instance.Lifecycle != AgentInstanceLifecycle.Active) throw AgentCoreErrors.Forbidden("Archived agent credentials are read-only.");
         if (instance.Revision != revision) throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
+    }
+    private void RequireLegacyContext(Guid id)
+    {
+        if (instances.IsTenantOwned(id)) throw new AccessDeniedException("tenant_context_required");
     }
 }

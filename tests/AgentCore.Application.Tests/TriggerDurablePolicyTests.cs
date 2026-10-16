@@ -386,6 +386,9 @@ public sealed class TriggerDurablePolicyTests
 
     private sealed class ConflictOnInsertInstanceStore(IAgentInstanceStore inner, AgentInstance racedWinner) : IAgentInstanceStore
     {
+        public ValueTask<bool> HasBackingInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
+            inner.HasBackingInstanceAsync(instanceId, cancellationToken);
+
         public ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default) =>
             inner.ListAsync(limit, cancellationToken);
 

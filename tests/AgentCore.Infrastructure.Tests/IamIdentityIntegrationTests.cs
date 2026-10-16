@@ -12,7 +12,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Infrastructure.Tests;
 
-public sealed class IamIdentityIntegrationTests
+public sealed partial class IamIdentityIntegrationTests
 {
     // Representative vertical scenario: one login, two separate tenant Users, independent agent IAM,
     // revocation, last-Owner safety, and persistence reopen. Both supported stores run this workflow.

@@ -56,6 +56,12 @@ public sealed partial class SqliteAgentInstanceStore(
     }
 
 
+    public async ValueTask<bool> HasBackingInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        return await db.AgentInstances.AnyAsync(item => item.InstanceId == instanceId.ToString("D"), cancellationToken).ConfigureAwait(false);
+    }
+
     public async ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default, IReadOnlyList<SkillSpec>? initialSkills = null)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);

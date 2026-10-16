@@ -144,6 +144,9 @@ public sealed class AdminReadServiceTests
 
     private sealed class SingleInstanceStore(AgentInstance instance) : IAgentInstanceStore
     {
+        public ValueTask<bool> HasBackingInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(instanceId == instance.InstanceId);
+
         public ValueTask<IReadOnlyList<AgentInstance>> ListAsync(int limit, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<IReadOnlyList<AgentInstance>>([instance]);
 

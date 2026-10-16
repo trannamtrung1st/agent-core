@@ -2,7 +2,9 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Admin;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Security;
 using AgentCore.Domain.Credentials;
+using AgentCore.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Persistence;
@@ -57,7 +59,9 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
     }
     public async ValueTask<IReadOnlyList<AgentCredentialBinding>> ListBindingsAsync(Guid? instanceId = null, CancellationToken ct = default)
     {
-        await using var db = await contexts.CreateDbContextAsync(ct); var query = db.AgentCredentialBindings.AsNoTracking();
+        await using var db = await contexts.CreateDbContextAsync(ct);
+        var query = db.AgentCredentialBindings.AsNoTracking()
+            .Where(b => !db.Set<IamSystemIdentityRow>().Any(i => i.AgentInstanceId == b.AgentInstanceId));
         if (instanceId is Guid id) query = query.Where(b => b.AgentInstanceId == id.ToString("D"));
         return (await query.OrderBy(b => b.Reference).ToArrayAsync(ct)).Select(b => new AgentCredentialBinding(Guid.Parse(b.BindingId), Guid.Parse(b.AgentInstanceId), Guid.Parse(b.CredentialId), b.Reference, b.Revision, DateTimeOffset.FromUnixTimeMilliseconds(b.CreatedAtUtc), DateTimeOffset.FromUnixTimeMilliseconds(b.UpdatedAtUtc))).ToArray();
     }
@@ -82,14 +86,26 @@ public sealed class SqliteCredentialStore(IDbContextFactory<AgentCoreDbContext> 
         await Save(db, ct); await transaction.CommitAsync(ct);
     }
     public async ValueTask DeleteBindingsAsync(Guid instanceId, CancellationToken ct = default)
-    { await using var db = await contexts.CreateDbContextAsync(ct); await db.AgentCredentialBindings.Where(b => b.AgentInstanceId == instanceId.ToString("D")).ExecuteDeleteAsync(ct); }
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await RequireLegacyContext(db, instanceId, ct);
+        await db.AgentCredentialBindings.Where(b => b.AgentInstanceId == instanceId.ToString("D")).ExecuteDeleteAsync(ct);
+        await transaction.CommitAsync(ct);
+    }
     private static async Task RequireActive(AgentCoreDbContext db, Guid id, long revision, CancellationToken ct)
     {
+        await RequireLegacyContext(db, id, ct);
         var row = await db.AgentInstances.SingleOrDefaultAsync(a => a.InstanceId == id.ToString("D"), ct) ?? throw AgentCoreErrors.NotFound("Agent instance was not found.");
         if (row.Lifecycle != "Active") throw AgentCoreErrors.Forbidden("Archived agent credentials are read-only.");
         if (row.Revision != revision) throw AgentCoreErrors.Conflict("Agent instance revision is stale.");
         row.Revision++;
         row.UpdatedAtUtc = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    }
+    private static async Task RequireLegacyContext(AgentCoreDbContext db, Guid id, CancellationToken ct)
+    {
+        if (await db.Set<IamSystemIdentityRow>().AnyAsync(i => i.AgentInstanceId == id.ToString("D"), ct))
+            throw new AccessDeniedException("tenant_context_required");
     }
     private static async Task Save(AgentCoreDbContext db, CancellationToken ct)
     { try { await db.SaveChangesAsync(ct); } catch (DbUpdateException) { throw AgentCoreErrors.Conflict("Credential or binding changed concurrently or is already bound."); } }

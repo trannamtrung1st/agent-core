@@ -31,6 +31,7 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
     private readonly Dictionary<Guid, AgentInstance> _instances = [];
     private readonly HashSet<Guid> _tenantOwnedInstances = [];
     internal void MarkTenantOwned(Guid instanceId) { lock (_gate) _tenantOwnedInstances.Add(instanceId); }
+    internal bool IsTenantOwned(Guid instanceId) { lock (_gate) return _tenantOwnedInstances.Contains(instanceId); }
 
     internal InMemoryTriggerStore? TriggerStore { get; set; }
 
@@ -111,6 +112,12 @@ public sealed partial class InMemoryAgentInstanceStore : IAgentInstanceStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate) return _tenantOwnedInstances.Contains(instanceId) ? ValueTask.FromResult<AgentInstance?>(null) : FindTenantBackingAsync(instanceId, cancellationToken);
+    }
+
+    public ValueTask<bool> HasBackingInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_gate) return ValueTask.FromResult(_instances.ContainsKey(instanceId));
     }
 
     internal ValueTask<AgentInstance?> FindTenantBackingAsync(Guid instanceId, CancellationToken cancellationToken = default)

@@ -19,6 +19,9 @@ public interface IAgentInstanceStore
 
     ValueTask<AgentInstance?> FindAsync(Guid instanceId, CancellationToken cancellationToken = default);
 
+    /// <summary>Cleanup protection only: includes every retained backing Instance, regardless of
+    /// tenant or lifecycle. This does not authorize access to its configuration or content.</summary>
+    ValueTask<bool> HasBackingInstanceAsync(Guid instanceId, CancellationToken cancellationToken = default);
 
     ValueTask InsertAsync(AgentInstance instance, CancellationToken cancellationToken = default, IReadOnlyList<SkillSpec>? initialSkills = null);
 

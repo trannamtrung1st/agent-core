@@ -87,7 +87,7 @@ public sealed class FileAgentInstanceWorkspaceStore(string workspaceRoot, IAgent
     // and verified process retirement. Do not recreate a missing owner on purge.
     public async ValueTask DeleteInstanceContentAsync(Guid instanceId, CancellationToken cancellationToken = default)
     {
-        if (await instances.FindAsync(instanceId, cancellationToken) is not null)
+        if (await instances.HasBackingInstanceAsync(instanceId, cancellationToken))
             throw AgentCoreErrors.Conflict("Existing Agent Instance content cannot be purged.");
         if ((await sandboxes.ListLeasesAsync(cancellationToken)).Any(lease => lease.AgentInstanceId == instanceId && lease.State != SandboxLeaseState.Terminated))
             throw AgentCoreErrors.Conflict("Live or uncertain sandbox mounts block Instance filesystem cleanup.");

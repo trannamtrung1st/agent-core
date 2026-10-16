@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+A [legacy-boundary review](docs/reports/tenant-legacy-boundary-review-2026-10-17.md) now excludes owned Instance credential bindings from global operations and preserves owned workspace bytes during deletion recovery and direct cleanup. Canonical tenant credential management and the broader conversion remain pending.
+
 The owner-requested Account/organization/IAM replacement is **in progress**. Its [UX contract](docs/19-multi-tenant-iam-ux.md) and [boundary inventory](docs/reports/multitenant-iam-boundary-inventory-2026-10-16.md) precede the new identity/store/HTTP foundation and [verified access UI](docs/reports/access-ui-polish-2026-10-16.md). [Delivery status and remaining gates](docs/reports/multitenant-iam-delivery-2026-10-16.md) distinguish passing foundation checks from the pending full resource/Hub/approval/UI cutover. New identity startup requires [explicit bootstrap](docs/17-observability-and-operations.md#explicit-identity-bootstrap-foundation); existing user data has not been reset. This intermediate source is not a multi-tenant deployment.
 
 Resource-scoped IAM now validates member, role and registered-agent ownership, rejects fabricated/cross-tenant targets, and prevents the same Agent Instance identity spanning tenants. [Focused ownership evidence and remaining cutover](docs/reports/tenant-resource-scope-verification-2026-10-16.md) distinguish these security records from the still-pending full resource stores and execution boundaries.

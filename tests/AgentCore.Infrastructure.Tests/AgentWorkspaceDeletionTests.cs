@@ -1,12 +1,15 @@
 using AgentCore.Application.Admin;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Sessions;
+using AgentCore.Application.Security;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Security;
 using AgentCore.Infrastructure.Admin;
 using AgentCore.Infrastructure.Definitions;
 using AgentCore.Infrastructure.Identity;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Security;
 using AgentCore.Infrastructure.Workspaces;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -71,17 +74,40 @@ public sealed class AgentWorkspaceDeletionTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Recovery_never_purges_an_existing_owner_even_with_an_old_deletion_receipt(bool sqlite)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Recovery_never_purges_an_existing_owner_even_with_an_old_deletion_receipt(bool sqlite, bool tenantOwned)
     {
         await using var fixture = await Fixture.CreateAsync(sqlite);
         await fixture.Deletion.DeleteInstanceAsync(fixture.Command);
         await fixture.Instances.InsertAsync(fixture.Instance with { Lifecycle = AgentInstanceLifecycle.Active });
         var item = await fixture.Home.WriteFileAsync(fixture.Owner, "/home/new.bin", BytesForNewOwner);
+        if (tenantOwned)
+        {
+            IIamStore iam = sqlite ? new SqliteIamStore(fixture.Contexts!)
+                : new InMemoryIamStore((InMemoryAgentInstanceStore)fixture.Instances, new InMemoryAgentDefinitionAdminStore(fixture.Ids), new InMemoryMemoryStore());
+            var identity = new IdentityService(iam, new AccountPasswordHasher(), new IdentityTokens(), fixture.Ids, TimeProvider.System);
+            var owner = await identity.BootstrapAsync("owner@example.test", "Owner", "strong-owner-password", "Alpha", "alpha");
+            var state = (await iam.ReadTenantAsync(owner.TenantId))!;
+            var principalId = fixture.Ids.NewId(); var identityId = fixture.Ids.NewId(); var now = DateTimeOffset.UtcNow;
+            Assert.True(await iam.TrySaveTenantAsync(state with
+            {
+                Tenant = state.Tenant with { Revision = state.Tenant.Revision + 1 },
+                Principals = state.Principals.Append(new(principalId, PrincipalKind.SystemIdentity, owner.TenantId, null, null, identityId, IdentityStatus.Active)).ToArray(),
+                SystemIdentities = state.SystemIdentities.Append(new(identityId, owner.TenantId, principalId, SystemIdentityKind.Agent, fixture.Owner, IdentityStatus.Active)).ToArray()
+            }, state.Tenant.Revision, new(fixture.Ids.NewId(), owner.TenantId, owner.OwnerPrincipalId, "agents.create", fixture.Owner.ToString("D"), "allowed", "fixture", now)));
+            Assert.Null(await fixture.Instances.FindAsync(fixture.Owner));
+        }
+        var contentPath = Path.Combine(AgentWorkspacePhysicalPaths.HomeDirectory(Path.Combine(fixture.Root, "home"), fixture.Owner), "new.bin");
         await fixture.Deletion.RecoverWorkspaceCleanupAsync();
-        Assert.Equal(BytesForNewOwner, (await fixture.Home.ReadAsync(fixture.Owner, item.LogicalPath)).Bytes);
+        Assert.Equal(BytesForNewOwner, await File.ReadAllBytesAsync(contentPath));
         await Assert.ThrowsAsync<AgentCoreException>(() => fixture.Deletion.DeleteInstanceAsync(fixture.Command).AsTask());
+        Assert.Equal(BytesForNewOwner, await File.ReadAllBytesAsync(contentPath));
+        if (!tenantOwned) Assert.Equal(BytesForNewOwner, (await fixture.Home.ReadAsync(fixture.Owner, item.LogicalPath)).Bytes);
+        await Assert.ThrowsAsync<AgentCoreException>(() => fixture.Home.DeleteInstanceContentAsync(fixture.Owner).AsTask());
+        Assert.Equal(BytesForNewOwner, await File.ReadAllBytesAsync(contentPath));
     }
 
     private static readonly byte[] BytesForNewOwner = [42, 0, 128];

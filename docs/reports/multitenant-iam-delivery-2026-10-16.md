@@ -22,6 +22,12 @@ Do not mark the goal complete or describe the application as multi-tenant until 
 
 Backend term Tenant, UI Organization. Global human Account → unique tenant User → Principal; tenant Agent Instance → own SystemIdentity → Principal. Explicit System/Tenant/Resource assignment scopes. No implicit platform superuser, requester-role intersection, temporary roles, Task table or owner-token fallback. Secure same-origin HttpOnly human sessions plus CSRF; purpose-specific OAuth/webhook authentication stays separate. Canonical tenant routes `/t/{tenantId}/…` and `/api/v2/tenants/{tenantId}/…`. Authoritative UX owns screen structure and states.
 
+## Legacy binding and cleanup review — 2026-10-17
+
+After `2a4f48dd`, review reproduced unscoped binding disclosure/raw mutation and physical cleanup confusing an owned Instance hidden by legacy lookup with a deleted owner. Both stores now exclude owned bindings and reject legacy binding writes/cleanup. The new backing-existence guard protects direct filesystem purge and InMemory deletion-receipt retry/sweep; retained exact bytes survive, while genuine legacy cleanup still succeeds. [Reproduction and verification](tenant-legacy-boundary-review-2026-10-17.md) records 103 passing related Infrastructure/Application/Synthetic HTTP cases and the documentation check.
+
+The full goal remains active. Tenant credential ownership/management/bind/use and OAuth correlation are still pending, along with other owning resource/effect families, Sandbox/decommission, complete UI/access/preview panels, Session/Run/Hub/tool/background tenancy, trusted lineage, durable approvals, obsolete authority removal and final schema/reset consolidation. No data reset, Real-host restart, deployment, CI or milestone acceptance occurred.
+
 ## Verification record
 
 Initial inspection only: `git status --short` clean; HEAD matches inspected proposal; route/store/tool source inventory generated. Impeccable context loaded successfully. No runtime acceptance or test result is claimed at this stage.

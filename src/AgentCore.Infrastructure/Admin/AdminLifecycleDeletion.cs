@@ -35,7 +35,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
         {
             WorkspaceDeletionRecovery.RequireMatchingReceipt(command, receipt.Operation.ToString(), receipt.TargetType,
                 receipt.TargetId, receipt.Revision, receipt.ActorKind.ToString());
-            if (await instances.FindAsync(command.InstanceId, cancellationToken) is not null)
+            if (await instances.HasBackingInstanceAsync(command.InstanceId, cancellationToken))
                 throw AgentCoreErrors.Conflict("Deleted instance id is already in use.");
             if (driveOperations is not null) await driveOperations.DeleteOwnerAsync(command.InstanceId, cancellationToken);
             if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(command.InstanceId, cancellationToken);
@@ -87,7 +87,7 @@ public sealed class InMemoryAdminLifecycleDeletion(
     public ValueTask RecoverWorkspaceCleanupAsync(CancellationToken cancellationToken = default) =>
         WorkspaceDeletionRecovery.PurgeAsync(events.DeletedInstanceIds, async (owner, ct) =>
         {
-            if (await instances.FindAsync(owner, ct) is null)
+            if (!await instances.HasBackingInstanceAsync(owner, ct))
             {
                 if (driveOperations is not null) await driveOperations.DeleteOwnerAsync(owner, ct);
                 if (credentialBindings is not null) await credentialBindings.DeleteBindingsAsync(owner, ct);
