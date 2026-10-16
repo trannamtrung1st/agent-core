@@ -2803,6 +2803,25 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("SystemIdentities", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantDefinitionRecord", b =>
+                {
+                    b.Property<string>("DefinitionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("DefinitionId");
+
+                    b.HasIndex("TenantId", "DefinitionId")
+                        .IsUnique();
+
+                    b.ToTable("TenantAgentDefinitions", (string)null);
+                });
+
             modelBuilder.Entity("AgentCore.Domain.Security.AuthenticationSession", b =>
                 {
                     b.HasOne("AgentCore.Domain.Security.Account", null)
@@ -3151,6 +3170,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantDefinitionRecord", b =>
+                {
+                    b.HasOne("AgentCore.Domain.Security.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AutomationRecord", b =>

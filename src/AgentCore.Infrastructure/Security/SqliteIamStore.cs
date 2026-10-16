@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgentCore.Infrastructure.Security;
 
-public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts) : IIamStore, ITenantAgentStore
+public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore
 {
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await db.Set<Account>().AsNoTracking().SingleOrDefaultAsync(a => a.LoginKey == loginKey, ct).ConfigureAwait(false); }
@@ -20,6 +20,8 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         AuthorizationAudit audit, CancellationToken ct = default)
     {
         tenant = IamStateRules.Freeze(tenant);
+        if (tenant.SystemIdentities.Count > 0 || tenant.Assignments.Any(a => a.Scope.Kind == AccessScopeKind.Resource))
+            throw new ArgumentException("Bootstrap cannot seed resource identities or grants.");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         if (await db.Set<IamBootstrapRow>().AnyAsync(ct).ConfigureAwait(false) || await db.Set<Account>().AnyAsync(ct).ConfigureAwait(false)) return false;
@@ -93,7 +95,7 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         await using var transaction = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         if (!await db.Set<IamBootstrapRow>().AnyAsync(ct).ConfigureAwait(false)) return false;
         await EnsureActiveAccountOwnerAsync(db, tenant, null, ct).ConfigureAwait(false);
-        await EnsureAgentOwnershipAsync(db, tenant, ct).ConfigureAwait(false);
+        await EnsureResourceOwnershipAsync(db, tenant, ct).ConfigureAwait(false);
         db.Add(tenant.Tenant); AddTenantChildren(db, tenant); db.Add(audit);
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await transaction.CommitAsync(ct).ConfigureAwait(false); return true; }
         catch (DbUpdateException ex) when (IsConstraint(ex)) { return false; }
@@ -109,7 +111,7 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         var previousIdentities = (await db.Set<IamSystemIdentityRow>().AsNoTracking().Where(i => i.TenantId == tenant.Tenant.TenantId).ToArrayAsync(ct).ConfigureAwait(false)).Select(IamPersistenceModel.Domain).ToArray();
         IamStateRules.ValidateAgentContinuity(previousIdentities, tenant);
         await EnsureActiveAccountOwnerAsync(db, tenant, null, ct).ConfigureAwait(false);
-        await EnsureAgentOwnershipAsync(db, tenant, ct).ConfigureAwait(false);
+        await EnsureResourceOwnershipAsync(db, tenant, ct).ConfigureAwait(false);
         db.Entry(current).CurrentValues.SetValues(tenant.Tenant);
         await ApplyTenantChildrenAsync(db, tenant, ct).ConfigureAwait(false);
         db.Add(audit);
@@ -153,8 +155,11 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
         if (!accounts.Any(a => (a.AccountId == changed?.AccountId ? changed.Status : a.Status) == IdentityStatus.Active))
             throw new SecurityConflictException("last_owner");
     }
-    private static async Task EnsureAgentOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
+    private static async Task EnsureResourceOwnershipAsync(AgentCoreDbContext db, TenantSecurityState state, CancellationToken ct, Guid? creatingInstance = null)
     {
+        foreach (var assignment in state.Assignments.Where(a => a.Scope.Kind == AccessScopeKind.Resource && a.Scope.ResourceType == "definition"))
+            if (!await db.Set<TenantDefinitionRecord>().AnyAsync(d => d.TenantId == state.Tenant.TenantId && d.DefinitionId == assignment.Scope.ResourceId, ct).ConfigureAwait(false))
+                throw new ArgumentException("A definition assignment requires an owned definition.");
         var instanceIds = state.SystemIdentities.Where(i => i.AgentInstanceId is not null).Select(i => i.AgentInstanceId!.Value.ToString("D")).ToArray();
         if (await db.Set<IamSystemIdentityRow>().AnyAsync(i => i.TenantId != state.Tenant.TenantId
             && i.AgentInstanceId != null && instanceIds.Contains(i.AgentInstanceId), ct).ConfigureAwait(false))

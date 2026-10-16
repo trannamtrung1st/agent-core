@@ -8,6 +8,7 @@ namespace AgentCore.Api.Security;
 public static class TenantAgentEndpoints
 {
     public sealed record CreateRequest(string TemplateId, int Version, long ExpectedRevision, AgentIdentity? Persona = null);
+    public sealed record PublicationCreateRequest(Guid DefinitionId, int Version, long ExpectedRevision, AgentIdentity? Persona = null);
     public sealed record LifecycleRequest(AgentInstanceLifecycle Lifecycle, long ExpectedRevision, long ExpectedInstanceRevision);
 
     public static void Map(WebApplication app)
@@ -24,6 +25,12 @@ public static class TenantAgentEndpoints
             var actor = IdentityHttp.TenantContext(http);
             var agent = await service.CreateAsync(actor.PrincipalId, actor.TenantId, body.TemplateId, body.Version, body.ExpectedRevision, body.Persona, ct).ConfigureAwait(false);
             return Results.Json(Safe(agent), statusCode: 201);
+        }));
+        group.MapPost("/agents/from-publication", (PublicationCreateRequest body, HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(Safe(await service.CreateFromPublicationAsync(actor.PrincipalId, actor.TenantId, body.DefinitionId,
+                body.Version, body.ExpectedRevision, body.Persona, ct).ConfigureAwait(false)), statusCode: 201);
         }));
         group.MapGet("/agents", (int? page, int? pageSize, HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

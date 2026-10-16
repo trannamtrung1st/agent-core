@@ -222,6 +222,9 @@ public sealed class SqliteDefinitionDraftEvaluationStore(
         CancellationToken cancellationToken = default)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        if (await db.AgentDefinitionDrafts.IgnoreQueryFilters().AnyAsync(d => d.DraftId == result.DraftId.ToString("D")
+            && db.Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().Any(owner => owner.DefinitionId == d.DefinitionId), cancellationToken).ConfigureAwait(false))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         var mapped = DefinitionDraftEvaluationPersistence.MapResult(result, ids.NewId());
         db.AgentDefinitionDraftEvaluationResults.Add(mapped);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

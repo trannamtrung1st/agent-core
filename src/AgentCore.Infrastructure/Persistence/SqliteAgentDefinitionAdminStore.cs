@@ -56,6 +56,10 @@ public sealed class SqliteAgentDefinitionAdminStore(
         }
 
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var ownershipTransaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var ownedId = Guid.TryParse(create.DefinitionId, out var resourceId) ? resourceId.ToString("D") : create.DefinitionId;
+        if (await db.Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().AnyAsync(d => d.DefinitionId == ownedId, cancellationToken).ConfigureAwait(false))
+            throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         if (create.OperationId != Guid.Empty)
         {
             var existingEvent = await AdminEventPersistence.TryGetByOperationIdAsync(
@@ -102,6 +106,7 @@ public sealed class SqliteAgentDefinitionAdminStore(
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await ownershipTransaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException)
         {

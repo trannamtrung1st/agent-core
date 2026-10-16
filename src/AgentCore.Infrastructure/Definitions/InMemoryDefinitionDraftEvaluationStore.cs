@@ -19,6 +19,13 @@ public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEva
         }
     }
 
+    internal (IReadOnlyList<DefinitionEvaluationScenario> Scenarios, IReadOnlyList<DefinitionEvaluationResult> Results) TenantEvidence(Guid id)
+    {
+        if (!_drafts.TryGetValue(id, out var state)) return ([], []);
+        lock (state.Gate) return (state.Scenarios.Values.ToArray(), state.Results.Values.SelectMany(r => r).OrderByDescending(r => r.RecordedAt).ToArray());
+    }
+    private bool IsTenantDraft(Guid id) => admin is InMemoryAgentDefinitionAdminStore store && store.IsTenantDraft(id);
+
     internal void DeleteDraftEvaluation(Guid draftId) =>
         _drafts.TryRemove(draftId, out _);
 
@@ -51,7 +58,7 @@ public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEva
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_drafts.TryGetValue(draftId, out var state))
+        if (IsTenantDraft(draftId) || !_drafts.TryGetValue(draftId, out var state))
         {
             return ValueTask.FromResult<IReadOnlyList<DefinitionEvaluationScenario>>([]);
         }
@@ -123,7 +130,7 @@ public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEva
                 throw AgentCoreErrors.Conflict("Draft revision is stale.");
             }
 
-            if (!_drafts.TryGetValue(draftId, out var state))
+            if (IsTenantDraft(draftId) || !_drafts.TryGetValue(draftId, out var state))
             {
                 throw AgentCoreErrors.NotFound("Evaluation scenario was not found.");
             }
@@ -155,7 +162,7 @@ public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEva
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_drafts.TryGetValue(draftId, out var state))
+        if (IsTenantDraft(draftId) || !_drafts.TryGetValue(draftId, out var state))
         {
             return ValueTask.FromResult<IReadOnlyList<DefinitionEvaluationResult>>([]);
         }
@@ -176,7 +183,7 @@ public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEva
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_drafts.TryGetValue(draftId, out var state))
+        if (IsTenantDraft(draftId) || !_drafts.TryGetValue(draftId, out var state))
         {
             return ValueTask.FromResult<DefinitionEvaluationResult?>(null);
         }
@@ -197,6 +204,7 @@ public sealed class InMemoryDefinitionDraftEvaluationStore : IDefinitionDraftEva
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (IsTenantDraft(result.DraftId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         var state = _drafts.GetOrAdd(result.DraftId, _ => new DraftEvaluationState());
         lock (state.Gate)
         {

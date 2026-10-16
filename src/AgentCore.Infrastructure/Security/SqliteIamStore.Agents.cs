@@ -43,9 +43,9 @@ public sealed partial class SqliteIamStore
         if (current is null || current.Revision != expectedSecurityRevision) return false;
         var before = (await ReadTenantAsync(db, current.TenantId, ct).ConfigureAwait(false))!;
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
-        await ValidateAgentActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
+        await ValidateTenantActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
         await EnsureActiveAccountOwnerAsync(db, next, null, ct).ConfigureAwait(false);
-        await EnsureAgentOwnershipAsync(db, next, ct, instance.InstanceId).ConfigureAwait(false);
+        await EnsureResourceOwnershipAsync(db, next, ct, instance.InstanceId).ConfigureAwait(false);
         db.AgentInstances.Add(SqliteAgentInstanceStore.Map(instance));
         await SqliteAgentInstanceStore.InitializeSkillsAsync(db, instance.InstanceId, skills, instance.UpdatedAt, ct).ConfigureAwait(false);
         db.Entry(current).CurrentValues.SetValues(next.Tenant);
@@ -65,8 +65,8 @@ public sealed partial class SqliteIamStore
         if (current is null || current.Revision != expectedSecurityRevision) return null;
         var before = (await ReadTenantAsync(db, current.TenantId, ct).ConfigureAwait(false))!;
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next);
-        await ValidateAgentActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
-        await EnsureAgentOwnershipAsync(db, next, ct).ConfigureAwait(false);
+        await ValidateTenantActorAsync(db, before, audit.ActorPrincipalId, ct).ConfigureAwait(false);
+        await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         var id = instanceId.ToString("D");
         if (!before.SystemIdentities.Any(i => i.AgentInstanceId == instanceId)) return null;
         var row = await db.AgentInstances.SingleOrDefaultAsync(i => i.InstanceId == id, ct).ConfigureAwait(false);
@@ -98,7 +98,7 @@ public sealed partial class SqliteIamStore
             select new AgentJoin { Identity = identity, Instance = instance };
     }
     private static TenantAgent Owned(AgentJoin row) => new(row.Identity.TenantId!.Value, row.Identity.SystemIdentityId, row.Identity.PrincipalId, SqliteAgentInstanceStore.Map(row.Instance));
-    private static async Task ValidateAgentActorAsync(AgentCoreDbContext db, TenantSecurityState before, Guid actorId, CancellationToken ct)
+    private static async Task ValidateTenantActorAsync(AgentCoreDbContext db, TenantSecurityState before, Guid actorId, CancellationToken ct)
     {
         var actor = before.Principals.SingleOrDefault(p => p.PrincipalId == actorId && p.Status == IdentityStatus.Active)
             ?? throw new AccessDeniedException("principal_unavailable");

@@ -7,7 +7,7 @@ using AgentCore.Domain.Definitions;
 
 namespace AgentCore.Infrastructure.Definitions;
 
-public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgentDefinitionAdminStore
+public sealed partial class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgentDefinitionAdminStore
 {
     private readonly ConcurrentDictionary<Guid, AgentDefinitionDraft> _drafts = new();
     private readonly ConcurrentDictionary<(string DefinitionId, int Version), AgentDefinitionPublication> _publications = new();
@@ -16,7 +16,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var items = _drafts.Values
+        var items = _drafts.Values.Where(d => !IsTenantDefinition(d.DefinitionId))
             .OrderBy(item => item.DefinitionId, StringComparer.Ordinal)
             .ThenByDescending(item => item.UpdatedAt)
             .Select(item => new AgentDefinitionDraftSummary(
@@ -33,7 +33,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
     public ValueTask<AgentDefinitionDraft?> GetDraftAsync(Guid draftId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_drafts.TryGetValue(draftId, out var draft))
+        if (!_drafts.TryGetValue(draftId, out var draft) || IsTenantDefinition(draft.DefinitionId))
         {
             return ValueTask.FromResult<AgentDefinitionDraft?>(null);
         }
@@ -41,9 +41,13 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         return ValueTask.FromResult<AgentDefinitionDraft?>(AgentDefinitionAdminSnapshots.Freeze(draft));
     }
 
-    public ValueTask<AgentDefinitionDraft> CreateDraftAsync(
-        AgentDefinitionDraftCreate create,
-        CancellationToken cancellationToken = default)
+    public ValueTask<AgentDefinitionDraft> CreateDraftAsync(AgentDefinitionDraftCreate create, CancellationToken cancellationToken = default)
+    {
+        lock (TenantGate) return CreateUnscopedDraft(create, cancellationToken);
+    }
+
+    private ValueTask<AgentDefinitionDraft> CreateUnscopedDraft(
+        AgentDefinitionDraftCreate create, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var candidate = AgentDefinitionAdminSnapshots.Freeze(create.Candidate);
@@ -52,6 +56,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         {
             throw AgentCoreErrors.Validation("definitionId must match the candidate definitionId.");
         }
+        if (IsTenantDefinition(create.DefinitionId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
 
         if (create.OperationId != Guid.Empty)
         {
@@ -146,7 +151,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
             throw AgentCoreErrors.Conflict("Draft created history is missing a draft target id.");
         }
 
-        if (!_drafts.TryGetValue(draftId, out var draft))
+        if (!_drafts.TryGetValue(draftId, out var draft) || IsTenantDefinition(draft.DefinitionId))
         {
             throw AgentCoreErrors.Conflict("Draft created history references a missing draft.");
         }
@@ -162,7 +167,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         var gate = DefinitionDraftLockRegistry.For(bump.DraftId);
         lock (gate)
         {
-            if (!_drafts.TryGetValue(bump.DraftId, out var current))
+            if (!_drafts.TryGetValue(bump.DraftId, out var current) || IsTenantDefinition(current.DefinitionId))
             {
                 throw AgentCoreErrors.NotFound("Draft was not found.");
             }
@@ -201,7 +206,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         var gate = DefinitionDraftLockRegistry.For(update.DraftId);
         lock (gate)
         {
-            if (!_drafts.TryGetValue(update.DraftId, out var current))
+            if (!_drafts.TryGetValue(update.DraftId, out var current) || IsTenantDefinition(current.DefinitionId))
             {
                 throw AgentCoreErrors.NotFound("Draft was not found.");
             }
@@ -244,7 +249,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         var gate = DefinitionDraftLockRegistry.For(delete.DraftId);
         lock (gate)
         {
-            if (!_drafts.TryGetValue(delete.DraftId, out var current))
+            if (!_drafts.TryGetValue(delete.DraftId, out var current) || IsTenantDefinition(current.DefinitionId))
             {
                 throw AgentCoreErrors.NotFound("Draft was not found.");
             }
@@ -289,7 +294,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         var gate = DefinitionDraftLockRegistry.For(publish.DraftId);
         lock (gate)
         {
-            if (!_drafts.TryGetValue(publish.DraftId, out var draft))
+            if (!_drafts.TryGetValue(publish.DraftId, out var draft) || IsTenantDefinition(draft.DefinitionId))
             {
                 throw AgentCoreErrors.NotFound("Draft was not found.");
             }
@@ -386,7 +391,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_publications.TryGetValue((definitionId, version), out var publication))
+        if (IsTenantDefinition(definitionId) || !_publications.TryGetValue((definitionId, version), out var publication))
         {
             return ValueTask.FromResult<AgentDefinitionPublication?>(null);
         }
@@ -399,7 +404,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var query = _publications.Values.AsEnumerable();
+        var query = _publications.Values.Where(p => !IsTenantDefinition(p.DefinitionId));
         if (definitionId is not null)
         {
             query = query.Where(item => string.Equals(item.DefinitionId, definitionId, StringComparison.Ordinal));
@@ -432,7 +437,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
         var gate = DefinitionPublicationLockRegistry.For(deprecate.DefinitionId, deprecate.Version);
         lock (gate)
         {
-            if (!_publications.TryGetValue((deprecate.DefinitionId, deprecate.Version), out var current))
+            if (IsTenantDefinition(deprecate.DefinitionId) || !_publications.TryGetValue((deprecate.DefinitionId, deprecate.Version), out var current))
             {
                 throw AgentCoreErrors.NotFound("Publication was not found.");
             }
@@ -495,6 +500,7 @@ public sealed class InMemoryAgentDefinitionAdminStore(IIdGenerator ids) : IAgent
     internal void PurgeLogicalDefinition(AdminDefinitionDeleteCommand command)
     {
         var definitionId = command.DefinitionId;
+        if (IsTenantDefinition(definitionId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         var drafts = _drafts.Values
             .Where(item => string.Equals(item.DefinitionId, definitionId, StringComparison.Ordinal))
             .ToArray();

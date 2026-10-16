@@ -2,10 +2,11 @@ using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
 using AgentCore.Infrastructure.Persistence;
+using AgentCore.Infrastructure.Definitions;
 
 namespace AgentCore.Infrastructure.Security;
 
-public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances) : IIamStore, ITenantAgentStore
+public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions) : IIamStore, ITenantAgentStore, ITenantDefinitionStore
 {
     private readonly object _gate = new();
     private readonly Dictionary<Guid, Account> _accounts = [];
@@ -24,6 +25,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     public ValueTask<bool> TryBootstrapAsync(Account account, SystemSecurityState system, TenantSecurityState tenant, AuthorizationAudit audit, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested(); tenant = IamStateRules.Freeze(tenant);
+        if (tenant.SystemIdentities.Count > 0 || tenant.Assignments.Any(a => a.Scope.Kind == AccessScopeKind.Resource))
+            throw new ArgumentException("Bootstrap cannot seed resource identities or grants.");
         lock (_gate)
         {
             if (_bootstrapped || _accounts.Count > 0 || _tenants.Count > 0) return ValueTask.FromResult(false);
@@ -116,6 +119,9 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
         if (audit.TenantId != state.Tenant.TenantId || state.Users.Any(u => !_accounts.ContainsKey(u.AccountId)))
             throw new ArgumentException("Invalid Account or audit ownership.");
         EnsureActiveAccountOwner(state);
+        if (state.Assignments.Any(a => a.Scope.Kind == AccessScopeKind.Resource && a.Scope.ResourceType == "definition"
+            && (!Guid.TryParseExact(a.Scope.ResourceId, "D", out var id) || definitions.TenantDefinitions.GetValueOrDefault(id)?.TenantId != state.Tenant.TenantId)))
+            throw new ArgumentException("A definition assignment requires an owned definition.");
         if (state.SystemIdentities.Any(i => i.AgentInstanceId != creatingInstance && instances.FindAsync(i.AgentInstanceId!.Value).Result is null))
             throw new ArgumentException("An agent identity requires a backing Instance.");
         if (state.SystemIdentities.Any(i => _tenants.Values.Any(t => t.Tenant.TenantId != state.Tenant.TenantId

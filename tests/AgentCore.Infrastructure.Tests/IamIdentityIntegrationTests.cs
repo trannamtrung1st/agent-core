@@ -444,7 +444,7 @@ public sealed class IamIdentityIntegrationTests
         }
         public static async Task<Fixture> CreateAsync(bool sqlite)
         {
-            if (!sqlite) { var instances = new InMemoryAgentInstanceStore(); return new(null, new InMemoryIamStore(instances), null, instances); }
+            if (!sqlite) { var instances = new InMemoryAgentInstanceStore(); return new(null, new InMemoryIamStore(instances, new InMemoryAgentDefinitionAdminStore(new SystemIdGenerator(TimeProvider.System))), null, instances); }
             var path = Path.Combine(Path.GetTempPath(), $"iam-security-{Guid.NewGuid():N}.db");
             var contexts = new ContextFactory(new DbContextOptionsBuilder<AgentCoreDbContext>().UseSqlite($"Data Source={path};Foreign Keys=True;Default Timeout=10").Options);
             await using (var db = contexts.CreateDbContext()) await db.Database.MigrateAsync();

@@ -4,6 +4,8 @@ namespace AgentCore.Application.Ports;
 
 public interface IIamStore
 {
+    // Resolves supported external resource families through their actual owning stores.
+    ValueTask<bool> OwnsResourceAsync(AccessScope scope, CancellationToken ct = default);
     ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default);
     ValueTask<Account?> ReadAccountAsync(Guid accountId, CancellationToken ct = default);
     ValueTask<bool> HasBootstrapAsync(CancellationToken ct = default);

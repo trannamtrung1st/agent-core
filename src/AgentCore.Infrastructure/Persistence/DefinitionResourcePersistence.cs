@@ -11,10 +11,12 @@ internal static class DefinitionResourcePersistence
         AgentCoreDbContext db,
         IDefinitionResourceContentStore content,
         Guid draftId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool includeTenant = false)
     {
         var draftKey = draftId.ToString("D");
-        var rows = await db.AgentDefinitionDraftResources.AsNoTracking()
+        var query = db.AgentDefinitionDraftResources.AsNoTracking();
+        if (includeTenant) query = query.IgnoreQueryFilters();
+        var rows = await query
             .Where(row => row.DraftId == draftKey)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -33,10 +35,12 @@ internal static class DefinitionResourcePersistence
         AgentCoreDbContext db,
         Guid draftId,
         string definitionId,
-        int version)
+        int version, bool includeTenant = false)
     {
         var draftKey = draftId.ToString("D");
-        var rows = db.AgentDefinitionDraftResources.AsNoTracking()
+        var query = db.AgentDefinitionDraftResources.AsNoTracking();
+        if (includeTenant) query = query.IgnoreQueryFilters();
+        var rows = query
             .Where(row => row.DraftId == draftKey)
             .ToList();
         foreach (var row in rows)

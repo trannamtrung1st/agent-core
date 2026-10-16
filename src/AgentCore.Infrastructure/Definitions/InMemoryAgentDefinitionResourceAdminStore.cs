@@ -137,6 +137,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (drafts.IsTenantDraft(upsert.DraftId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         var logicalPath = DefinitionResourcePolicies.NormalizeLogicalPath(upsert.LogicalPath);
         var mediaType = DefinitionResourcePolicies.NormalizeMediaType(upsert.MediaType);
         await DefinitionResourceStoredContent.RequireForBindingAsync(
@@ -200,6 +201,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (drafts.IsTenantDraft(bind.DraftId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         var prepared = await DefinitionResourceBatch.PrepareAsync(content, bind.Items, cancellationToken)
             .ConfigureAwait(false);
         var gate = DefinitionDraftLockRegistry.For(bind.DraftId);
@@ -245,6 +247,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (drafts.IsTenantDraft(remove.DraftId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         var gate = DefinitionDraftLockRegistry.For(remove.DraftId);
         lock (gate)
         {
@@ -287,7 +290,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_publicationResources.TryGetValue((definitionId, version), out var items))
+        if (drafts.IsTenantDefinition(definitionId) || !_publicationResources.TryGetValue((definitionId, version), out var items))
         {
             return ValueTask.FromResult<IReadOnlyList<AgentDefinitionPublicationResource>>([]);
         }
@@ -302,7 +305,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_publicationResources.TryGetValue((definitionId, version), out var items))
+        if (drafts.IsTenantDefinition(definitionId) || !_publicationResources.TryGetValue((definitionId, version), out var items))
         {
             return null;
         }
@@ -315,6 +318,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
 
     private IReadOnlyList<AgentDefinitionDraftResource> SnapshotDraftResources(Guid draftId)
     {
+        if (drafts.IsTenantDraft(draftId)) return [];
         var gate = DefinitionDraftLockRegistry.For(draftId);
         lock (gate)
         {
@@ -332,6 +336,7 @@ public sealed class InMemoryAgentDefinitionResourceAdminStore(
 
     private AgentDefinitionDraftResource? FindDraftResource(Guid draftId, Guid resourceId)
     {
+        if (drafts.IsTenantDraft(draftId)) return null;
         var gate = DefinitionDraftLockRegistry.For(draftId);
         lock (gate)
         {

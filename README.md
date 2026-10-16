@@ -6,6 +6,8 @@ Resource-scoped IAM now validates member, role and registered-agent ownership, r
 
 Canonical tenant-agent APIs now commit actual Instance creation and archive/restore with agent identity, security revision and audit. [Transaction and scoped-inventory evidence](docs/reports/tenant-agent-lifecycle-verification-2026-10-16.md) records local verification and the remaining Instance/resource/execution cutover.
 
+Tenant-owned definition draft/publication APIs now preserve immutable versions and publication gates, support scoped IAM reads and create owned Instances from exact active tenant publications. [Authoring verification and remaining boundaries](docs/reports/tenant-definition-verification-2026-10-16.md) separate this progress from pending resource/evaluation UI and tenant-aware runtime execution.
+
 Automatic Sandbox filesystem compatibility now prepares private owned roots and selects non-root execution in the trusted server without rebuilding the chosen image. Verification contract 4 attests exact mounts and real filesystem/Git behavior, accepting proven Docker Desktop metadata translation while retaining strict Linux ownership. [Root cause, local evidence and platform limits](docs/reports/automatic-sandbox-filesystem-compatibility-2026-10-16.md).
 
 Semantic response recovery now keeps initial background Work/Cleanup on the work.complete contract, reserves one durable correction, and exposes precise bounded recovery diagnostics. [Incident evidence and focused verification](docs/reports/semantic-response-reliability-verification-2026-10-16.md).

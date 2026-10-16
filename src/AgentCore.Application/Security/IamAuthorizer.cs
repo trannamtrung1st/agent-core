@@ -64,7 +64,8 @@ public sealed class IamAuthorizer(IIamStore store)
             return AccessDecision.Deny("identity_unavailable");
         if (target.Kind == AccessScopeKind.Resource)
         {
-            if (!IamResourceScopes.Exists(state, target)) return AccessDecision.Deny("resource_unavailable");
+            if (!IamResourceScopes.Exists(state, target) && !await store.OwnsResourceAsync(target, ct).ConfigureAwait(false))
+                return AccessDecision.Deny("resource_unavailable");
             if (!permission.AppliesToResource(target.ResourceType)) return AccessDecision.Deny("resource_type_mismatch");
         }
         return await EvaluateAsync(principalId, permission, target, state.Principals, state.Roles, state.Assignments, ct).ConfigureAwait(false);

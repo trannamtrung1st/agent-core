@@ -583,9 +583,12 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.Disposition });
             entity.HasIndex(row => new { row.Disposition, row.ClaimLeaseExpiresAtUtc });
         });
+        // Unscoped readers cannot expose tenant authoring content during the cutover. Canonical
+        // queries explicitly join the immutable owning root when bypassing these exclusion filters.
         modelBuilder.Entity<AgentDefinitionDraftRecord>(entity =>
         {
             entity.ToTable("AgentDefinitionDrafts");
+            entity.HasQueryFilter(row => !Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().Any(owner => owner.DefinitionId == row.DefinitionId));
             entity.HasKey(row => row.DraftId);
             entity.Property(row => row.DraftId).HasMaxLength(36);
             entity.Property(row => row.DefinitionId).HasMaxLength(128).IsRequired();
@@ -596,6 +599,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<AgentDefinitionPublicationRecord>(entity =>
         {
             entity.ToTable("AgentDefinitionPublications");
+            entity.HasQueryFilter(row => !Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().Any(owner => owner.DefinitionId == row.DefinitionId));
             entity.HasKey(row => new { row.DefinitionId, row.Version });
             entity.Property(row => row.DefinitionId).HasMaxLength(128);
             entity.Property(row => row.PayloadJson).IsRequired();
@@ -604,6 +608,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<AgentDefinitionDraftEvaluationScenarioRecord>(entity =>
         {
             entity.ToTable("AgentDefinitionDraftEvaluationScenarios");
+            entity.HasQueryFilter(row => !AgentDefinitionDrafts.IgnoreQueryFilters().Any(draft => draft.DraftId == row.DraftId
+                && Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().Any(owner => owner.DefinitionId == draft.DefinitionId)));
             entity.HasKey(row => new { row.DraftId, row.ScenarioId });
             entity.Property(row => row.DraftId).HasMaxLength(36);
             entity.Property(row => row.ScenarioId).HasMaxLength(128).IsRequired();
@@ -615,6 +621,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<AgentDefinitionDraftEvaluationResultRecord>(entity =>
         {
             entity.ToTable("AgentDefinitionDraftEvaluationResults");
+            entity.HasQueryFilter(row => !AgentDefinitionDrafts.IgnoreQueryFilters().Any(draft => draft.DraftId == row.DraftId
+                && Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().Any(owner => owner.DefinitionId == draft.DefinitionId)));
             entity.HasKey(row => row.ResultId);
             entity.Property(row => row.ResultId).HasMaxLength(36);
             entity.Property(row => row.DraftId).HasMaxLength(36).IsRequired();
@@ -627,6 +635,8 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<AgentDefinitionDraftResourceRecord>(entity =>
         {
             entity.ToTable("AgentDefinitionDraftResources");
+            entity.HasQueryFilter(row => !AgentDefinitionDrafts.IgnoreQueryFilters().Any(draft => draft.DraftId == row.DraftId
+                && Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().Any(owner => owner.DefinitionId == draft.DefinitionId)));
             entity.HasKey(row => new { row.DraftId, row.ResourceId });
             entity.Property(row => row.ResourceId).HasMaxLength(36);
             entity.Property(row => row.DraftId).HasMaxLength(36).IsRequired();
@@ -639,6 +649,7 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         modelBuilder.Entity<AgentDefinitionPublicationResourceRecord>(entity =>
         {
             entity.ToTable("AgentDefinitionPublicationResources");
+            entity.HasQueryFilter(row => !Set<AgentCore.Infrastructure.Security.TenantDefinitionRecord>().Any(owner => owner.DefinitionId == row.DefinitionId));
             entity.HasKey(row => new { row.DefinitionId, row.Version, row.ResourceId });
             entity.Property(row => row.DefinitionId).HasMaxLength(128);
             entity.Property(row => row.ResourceId).HasMaxLength(36);

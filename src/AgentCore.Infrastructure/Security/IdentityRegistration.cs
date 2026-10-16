@@ -29,8 +29,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<IIdentityTokens, IdentityTokens>();
         services.TryAddSingleton<IIamStore>(provider => provider.GetRequiredService<PersistenceOptions>().Provider.ToUpperInvariant() switch
         {
-            "SQLITE" => new SqliteIamStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()),
-            "INMEMORY" => new InMemoryIamStore(provider.GetRequiredService<InMemoryAgentInstanceStore>()),
+            "SQLITE" => new SqliteIamStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>(), provider.GetService<IDefinitionResourceContentStore>()),
+            "INMEMORY" => CreateInMemoryStore(provider),
             _ => throw new InvalidOperationException("Identity storage must explicitly select Sqlite or InMemory.")
         });
         services.TryAddSingleton<IdentityService>();
@@ -38,7 +38,15 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantAccessService>();
         services.TryAddSingleton<ITenantAgentStore>(provider => (ITenantAgentStore)provider.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantAgentService>();
+        services.TryAddSingleton<ITenantDefinitionStore>(provider => (ITenantDefinitionStore)provider.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantDefinitionService>();
         services.TryAddSingleton<AccountAdministrationService>();
         return services;
+    }
+    private static InMemoryIamStore CreateInMemoryStore(IServiceProvider provider)
+    {
+        var definitions = (AgentCore.Infrastructure.Definitions.InMemoryAgentDefinitionAdminStore)provider.GetRequiredService<IAgentDefinitionAdminStore>();
+        _ = provider.GetRequiredService<IDefinitionDraftEvaluationStore>();
+        return new(provider.GetRequiredService<InMemoryAgentInstanceStore>(), definitions);
     }
 }

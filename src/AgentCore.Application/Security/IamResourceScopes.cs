@@ -2,14 +2,14 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-// These resources have authoritative ownership in the tenant security aggregate. Other families
-// must acquire an owning-store resolver during their cutover; an arbitrary string is never an owner.
+// Member/role/agent ownership is in security state; definition ownership resolves through its
+// actual store. Other families fail closed. An arbitrary resource string is never an owner.
 public static class IamResourceScopes
 {
     public static AccessScope Create(Guid tenantId, string? resourceType, string? resourceId)
     {
         if (resourceType is null && resourceId is null) return AccessScope.ForTenant(tenantId);
-        if (tenantId == Guid.Empty || resourceType is not ("member" or "role" or "agent")
+        if (tenantId == Guid.Empty || resourceType is not ("member" or "role" or "agent" or "definition")
             || !Guid.TryParse(resourceId, out var id) || id == Guid.Empty)
             throw new AccessDeniedException("resource_unavailable");
         return AccessScope.ForResource(tenantId, resourceType, id.ToString("D"));
