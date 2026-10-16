@@ -108,7 +108,7 @@ test("Admin target and completion controls round-trip and reject a missing exact
   await page.keyboard.press("Escape");
   await details.getByRole("button", { name: "Run automation now", exact: true }).click();
   await page.goto(`/c/${parent}`);
-  await expect(page.locator(".chat-message-assistant").last()).toContainText("Background work completed", { timeout: 30_000 });
+  await expect(page.locator(".chat-message-assistant").last()).toContainText("Background work: An unresolved checkpoint needs the owner's attention.", { timeout: 30_000 });
   await page.getByRole("button", { name: /^Background work/ }).click();
   await expect(page.getByRole("dialog", { name: "Background work", exact: true })).toContainText("Completion: Reported");
   expect(errors).toEqual([]);
