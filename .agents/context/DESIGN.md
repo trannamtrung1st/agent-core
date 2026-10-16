@@ -1,6 +1,6 @@
 ---
 name: Agent Core
-description: Ant Design v6 dark operate UI for Chat and the shipped Admin configuration surface.
+description: Ant Design v6 dark operate UI for Chat, Admin and account/organization access.
 colors:
   primary: "#1668dc"
   primaryBg: "#15325b"
@@ -165,6 +165,19 @@ components:
     textColor: "{colors.text}"
     typography: "{typography.body}"
     padding: "{spacing.section}"
+  account-auth-form:
+    textColor: "{colors.text}"
+    typography: "{typography.body}"
+    width: "26rem"
+  access-editor-drawer:
+    backgroundColor: "{colors.elevated}"
+    textColor: "{colors.text}"
+    typography: "{typography.body}"
+    width: "736px"
+  organization-row:
+    textColor: "{colors.text}"
+    typography: "{typography.body}"
+    padding: "16px 0"
   feedback-toast:
     backgroundColor: "{colors.elevated}"
     textColor: "{colors.text}"
@@ -177,17 +190,17 @@ components:
 
 This file records the current Ant Design v6 presentation system. Screens, copy and behavior stay in [Frontend Implementation](../../docs/13-frontend-implementation-spec.md); `/docs` wins on conflicts. Resolved values come from `antdTheme`, `AppShell`, `app.css` and the product components, rather than an independent runtime token system.
 
-Synchronized on 2026-10-15 against the commit candidate based on `0f994232`, including contextual Session sandbox diagnostics. The companion [preview metadata](../../.impeccable/design.json) records candidate source hashes. [Sandbox diagnostics verification](../../docs/reports/sandbox-diagnostics-polish-verification-2026-10-15.md) records the new drawer and shared-popover checks; [feedback visibility verification](../../docs/reports/feedback-visibility-verification-2026-10-15.md) retains the earlier message-placement evidence. Ordinary-image guidance and its initialization copy are committed in `0ca35e86`. No milestone or hosted acceptance is renewed.
+Synchronized on 2026-10-16 against `cca9050d`, including the verified account/organization access foundation and its second polish pass. The companion [preview metadata](../../.impeccable/design.json) records source fingerprints for this documentation candidate. The [current documentation sync](../../docs/reports/design-system-access-sync-2026-10-16.md) records extraction and consistency checks; [access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) retains the actual browser/test evidence. Historical reports retain their original source and scope; no milestone or hosted acceptance is renewed.
 
 The [recent Git and UI review](../../docs/reports/recent-git-ui-design-review-2026-10-14.md) records the earlier attachment/artifact cards, compact pending uploads, FortuneSheet previews, Drive approvals and credential creation review on `d279abfe`. The [integrated verification](../../docs/reports/opensandbox-integration-verification.md#current-main-integration--2026-10-14) records the XLSX clipping-notice and Drive keyboard-rejection corrections. Historical reports retain their original source, hosted acceptance and manual verification gaps.
 
 ## Overview
 
-Current design sync: October 16, 2026. Theme values come from `antdTheme.ts` and the resolved `AppShell` bridge; compositions come from current product components. The [focused sync report](../../docs/reports/design-system-sync-2026-10-16.md) records inspected surfaces, responsive measurements and local checks. Earlier dated evidence remains tied to its original source.
+Current design sync: October 16, 2026, through `cca9050d`. Theme values come from `antdTheme.ts` and the resolved `AppShell` bridge; compositions come from current product components. The [current documentation sync](../../docs/reports/design-system-access-sync-2026-10-16.md) records source inspection and token/metadata checks. The [earlier rendered sync](../../docs/reports/design-system-sync-2026-10-16.md) and [access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) retain their measured layouts and executed journeys. This refresh does not repeat runtime acceptance.
 
 **Creative North Star: "Ant Design operate UI"**
 
-Agent Core is a personal-chat operate surface plus a shipped Admin configuration surface. Both use Ant Design v6. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone. Admin uses the same dark roles, type, and 8/12/16 spacing for definitions and instances. It does not borrow a navy enterprise sider or copy Chat's composer onto configuration screens.
+Agent Core combines personal Chat, Admin configuration and account/organization access in one Ant Design v6 operate UI. Impeccable refines layout, spacing, composition, hierarchy, and polish while preserving AntD primitives. ChatGPT/Codex are UX and hierarchy references for the conversational experience (quiet session rail, centered reading column, user bubbles, open assistant Markdown, bottom composer with inference controls, in-flow activity)—not a component dependency or pixel clone. Admin uses the same dark roles, type, and 8/12/16 spacing for definitions and instances. It does not borrow a navy enterprise sider or copy Chat's composer onto configuration screens.
 
 The shipped appearance is Ant Design `darkAlgorithm`: black layout, conversation container, elevated composer, and primary blue for Send and Voice-on. The theme seed remains `#1677ff`; Ant Design resolves the dark primary to `#1668dc`. `AppShell` maps resolved `theme.useToken()` roles to product CSS custom properties and publishes them on the document root so body portals (Dropdown, Drawer and Modal) share the same theme. Product CSS does not maintain independent color or spacing literals.
 
@@ -201,8 +214,8 @@ Shared source-owned previews inherit the same dark surfaces, typography and spac
 - Model catalog rows expose enabled vision, reasoning, tools, and structured-output capabilities as compact named icons. Queued drafts remain a compact local work list above the composer.
 - Assistant display Markdown stays primary for reading; persisted public speech text is a quieter **Spoken** inset first on the same turn when it differs (the TTS projection).
 - Background Work lists Sessions; shared Run details serve both Chat history and Admin inspection. Operational drawers use quiet headers, open rows, filled icon-and-text status chips, bounded reading regions and inline recovery. Automations retain their elevated schedule inset.
-- Admin collections use compact tables with local horizontal scrolling; Experience and Automations expand one record at a time. Read-only details share aligned labels on wider screens and stacked labels on mobile.
-
+- Admin collections use compact tables with local horizontal scrolling where needed; Experience and Automations expand one record at a time. Read-only details share aligned labels on wider screens and stacked labels on mobile.
+- Account and organization access inherit the shared AdminShell context, page headings, collection toolbar, navigation drawer, confirmation and feedback compositions.
 - Admin uses contextual creation dialogs, one shared sticky configuration action frame, shared conversation source selection and explicit time-zone previews. Failed submissions give immediate warning/error feedback alongside persistent field or local error details; invalid fields are revealed, scrolled into view and focused.
 - `AdminShell` and the typed registry own focused icon-and-label pages. Shared panels retain one inset; exact-owner controllers retain drafts across pages. Immutable inspectors keep their local read-only controls.
 - Structured composer choices use category icons and quiet type labels in one flat list; draft, queue and history share immutable chip labels, with pending and historical tooltips distinguished.
@@ -239,7 +252,7 @@ Dark operate neutrals with one primary accent and one success accent for live mi
 
 ### Hierarchy
 - **Headline** (600, 28px desktop / 22px below 768px): empty-chat “What do you want to work on?”. Admin task headings use a local 28px / 24px responsive variant, without changing the Chat role.
-- **Title** (600, 16px): Agent Core rail wordmark (line-height 1.4) and session header agent name (line-height 1.3). Admin branding uses 16px on wide screens and 14px below 768px, beside a secondary label-sized Admin marker.
+- **Title** (600, 16px): Agent Core rail wordmark (line-height 1.4) and session header agent name (line-height 1.3). Admin branding uses 16px on wide screens and 14px below 768px, beside a secondary label-sized Admin, Account or Access marker supplied by the shell context.
 - **Body** (400, 14px, line-height 1.57): conversation, composer field, rail titles. Structured editor/history text uses the local 1.85 line-height variant to accommodate wrapped inline chips; queue previews remain single-line. Reading column max width 52rem.
 - **Label** (400, 12px): timestamps, header subtitle, connection/profile, Spoken caption. Spoken icon matches this size.
 
@@ -260,6 +273,9 @@ One session: black rail + conversation column + sticky composer. Column is `min(
 - Admin: shared dark header and 8/12/16 rhythm. Global and contextual sidebar links replace collection-wide tabs; immutable inspectors retain their local read-only controls. Main content uses 16px desktop and 12px mobile outer insets. One inventory page heading contains its count and creation action; the collection owns search, compact rows and local scrolling. Numeric metadata stays in its column; ordinary cells wrap safely and bounded summaries retain full-text titles. Definition lifecycle uses Versions/Drafts destinations and a 20rem base-version selector beside Create draft. Immutable inspection remains in a 52rem/full-mobile Drawer.
 - Admin collection spacing has one owner: inventory toolbars use 12px block / 16px inline insets; toolbars inside a padded configuration panel add no second inset. Search fields cap at 28rem. Ant Design owns compact table cell padding; product CSS owns bounded cell wrapping, summary ellipsis, tabular numerals, inline action alignment and table-local overflow. Pagination uses 10/20/50 rows; expanded record content wraps and stays within the visible table width, including while the columns scroll horizontally.
 - Admin detail labels use `{components.admin-detail-label.width}` at 768px and above, with top alignment and wrapping content. Below 768px labels stack above their values. The same layout applies to Experience observations/provenance, Automation details, effective configuration, policy summaries, validation snapshots and version capabilities. Observation lists retain separate bullets and a 72ch maximum measure.
+
+- Account entry: the enclosing page owns one section inset and vertical overflow; the form owns a shrinking `{components.account-auth-form.width}` column and section gaps. Wide screens center it; below 768px it starts near the top. Account profile/current-access forms reuse the existing 48rem bound. Organization rows own section block padding and sibling gaps, tight summary spacing and a structural bottom hairline; names wrap rather than force page overflow. The switch dialog reuses that same list.
+- Access editors: member and role inspectors use the native large Drawer (`{components.access-editor-drawer.width}`), capped at `100vw`, with a locally scrolling body. The role footer owns 12px block / 16px inline padding and wrapping 8px action gaps. The body stack owns 16px sibling gaps; permission groups own 12px gaps. Below 768px, scoped buttons and outer text/password/search controls retain 40px height; do not add another height to an input inside an affix wrapper. Native dialogs keep their own Ant Design inset and responsive sizing.
 
 **The Docs Win Rule.** This file does not own Voice availability, Send/Queue/Stop behavior, or speech persistence. `/docs` does.
 
@@ -305,7 +321,22 @@ Inline/control/surface radii map to Ant Design `borderRadiusSM`/`borderRadius`/`
 
 ## Components
 
-Account and organization access inherit the shared AdminShell context, page headings, collection toolbar, navigation drawer, confirmation and feedback compositions. Account forms use one bounded column; organization rows wrap realistic long names and paginate server-filtered memberships. The organization selector opens the same list in a native dialog. Access tables keep a readable summary and a compact action column on phones. Member/role drawers cap their wrapper at the viewport, own scrolling and preserve reachable actions. Mobile controls use 40px outer hits without increasing the height of an input inside an affix wrapper. Each permission has a contextual accessible label and human-only rules have text. Dirty forms keep one confirmation owner across Escape and the native close transition. Lists without horizontal scrolling omit table-scroll guidance. Current server authority determines edit controls; permission-denied, last-Owner and stale-revision recovery remain distinct. [Access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) records this bounded extension; no palette, token or typography system is replaced.
+### Account and organization access
+
+Account and organization access inherit the shared AdminShell context, page headings, collection toolbar, navigation drawer, confirmation and feedback compositions. `AdminShellContext` supplies identity, area marker, current task, permitted navigation and header actions without duplicating the shell. The same sidebar uses a native navigation Drawer below 1024px; the account/organization header retains full accessible names when labels truncate.
+
+| Repeated relationship | Existing owner | Current presentation |
+| --- | --- | --- |
+| Authenticated page chrome | `AdminShell`, `AdminPageHeading` | One task heading, breadcrumb, responsive sidebar/drawer and shared content insets; Account/Access are shell contexts. |
+| Account entry forms | `AccountFormFrame` | One 26rem shrinking column, section gaps, labeled native inputs, inline recovery and a full-width submit action. |
+| Organization selection | `OrganizationsList`, reused by `TenantSwitcher` | Searchable paged list; wrapping name/identifier summary, content-width Open action and explicit current organization. |
+| Members, roles and invitation records | `AdminCollectionToolbar` and direct Ant Design Table | Wrapping summary plus compact action column; omit horizontal-scroll guidance where there is no table overflow. |
+| Member/role inspection | Native Drawer plus scoped access styles | Elevated surface, 736px large width capped at viewport, local scrolling, readable 72ch prose and reachable controls. |
+| Role permission choices | Direct Ant Design Collapse, Checkbox, Input and Empty | Grouped search, contextual accessible names, People only text and a selected count; no-result guidance includes Clear search without clearing selected permissions. |
+| Consequential actions and dirty drafts | `confirmAction`, `useAccessDraftGuard` | One pending confirmation owns nested Escape through close; Keep editing retains the draft. Role close restores its surviving trigger or the page heading; Clear search restores search focus. |
+| Invitation copy recovery | Native read-only TextArea, Button and Alert | Selectable one-time link, persistent inline manual-copy guidance on absent/denied Clipboard, success message and cleared error after retry. |
+
+Use the existing dark palette, native Ant Design control states and text alongside authority/status labels. Built-in roles remain visibly read-only. Current server permissions determine editable controls; permission-denied, last-Owner and stale-revision recovery remain distinct. Invitation copy explicitly does not imply email delivery. [Access UI verification](../../docs/reports/access-ui-polish-2026-10-16.md) owns actual interactions and responsive evidence; [Frontend](../../docs/13-frontend-implementation-spec.md) and the [IAM UX contract](../../docs/19-multi-tenant-iam-ux.md) own behavior. Tenant-aware Chat/resources, Agent Access and the durable approval inbox remain pending and must not appear as completed destinations.
 
 ### Conversational harness learning
 

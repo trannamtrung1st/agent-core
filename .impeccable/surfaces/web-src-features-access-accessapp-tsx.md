@@ -19,6 +19,8 @@ FORMS: Role authoring uses grouped searchable permissions with contextual access
 
 STATES: Real login failures, expired sessions, no organizations, search emptiness, read-only access, revoked membership, last-Owner and stale revision errors have named recovery. Do not suggest Reload for a last-Owner denial. Do not add horizontal-table guidance to a non-scrolling list. Success follows a committed response. Invitation links are shown once, remain purpose-bound and are transmitted in POST bodies after stripping the URL fragment; no email delivery is implied.
 
+RECOVERY: An unmatched permission search shows native Empty with Clear search; clearing returns focus to the search field and preserves selected permissions. Invitation Clipboard failure, including an absent browser API, keeps the one-time link selectable and shows persistent inline manual-copy guidance. Successful retry clears the error. Preserve the shared 16px parent stack, native controls and narrow viewport containment for these states.
+
 SWITCHING: Unmount/abort previous scoped reads before rendering a new context. Full document switching closes previous browser connection/audio resources. Fetch current effective tenant permissions on each destination. Cookie/CSRF material stays in browser-managed cookies or transient service memory, never durable client storage.
 
 VERIFICATION: The dated access UI report owns the bounded audit/correction/confirmation, real Synthetic browser interactions, widths 320/390/768/1024/1440 and exact checks. No durable Approval, agent access, tenant-aware Chat, full resource isolation or production acceptance is established by this foundation slice.
