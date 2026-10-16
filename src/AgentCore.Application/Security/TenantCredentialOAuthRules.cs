@@ -60,7 +60,7 @@ public static class TenantCredentialOAuthRules
             || value.Provider is null || value.Provider.ClientId is not { Length: > 0 and <= 2048 } || value.Provider.ClientId.Any(char.IsControl)
             || value.Provider.RedirectUri is not { Length: > 0 and <= 2048 }
             || !Uri.TryCreate(value.Provider.RedirectUri, UriKind.Absolute, out var redirect) || redirect.Scheme != "https" && !(redirect.Scheme == "http" && redirect.IsLoopback)
-            || redirect.UserInfo.Length > 0 || redirect.Fragment.Length > 0 || redirect.Query.Length > 0 || !value.Provider.Configured
+            || redirect.UserInfo.Length > 0 || redirect.Fragment.Length > 0 || redirect.Query.Length > 0 || !value.Provider.Configured || !value.Provider.HostEnabled
             || value.Revision != 1 || value.Outcome != CredentialOAuthOutcome.Pending || value.ClaimedAt is not null || value.CompletedAt is not null
             || value.ExpiresAt <= value.CreatedAt || value.ExpiresAt > value.CreatedAt.AddMinutes(5)) throw new ArgumentException("Invalid OAuth attempt.");
         return value;

@@ -48,6 +48,10 @@ public sealed partial class SqliteIamStore
             || !TenantCredentialOAuthRules.DigestMatches(row.StateHash, stateHash) || !TenantCredentialOAuthRules.DigestMatches(row.CorrelationHash, correlationHash)
             || !await db.Set<Tenant>().AnyAsync(t => t.TenantId == row.TenantId && t.Revision == expectedSecurityRevision, ct).ConfigureAwait(false)) return null;
         await RequireOAuthInitiatorAsync(db, row.TenantId, new(row.AccountId, row.AuthenticationSessionId, row.PrincipalId), ct).ConfigureAwait(false);
+        var credential = await OAuthCredentialAsync(db, row.TenantId, Guid.Parse(row.CredentialId), ct).ConfigureAwait(false);
+        var current = credential is null ? null : SqliteCredentialStore.Map(credential);
+        if (current is null || current.Revision != row.CredentialRevision || current.Purpose.ToString() != row.Purpose || current.Status != CredentialStatus.Active
+            || !TenantCredentialOAuthRules.IsOAuth(current) || TenantCredentialOAuthRules.Epoch(current) != row.AuthEpoch) return null;
         var proof = row.ProtectedProof;
         var claimed = row with { Outcome = CredentialOAuthOutcome.Claimed, ProtectedProof = "", ClaimedAt = now, Revision = checked(row.Revision + 1) };
         db.Entry(row).CurrentValues.SetValues(claimed);

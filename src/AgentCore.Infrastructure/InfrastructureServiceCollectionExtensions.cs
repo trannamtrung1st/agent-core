@@ -429,6 +429,7 @@ public static class InfrastructureServiceCollectionExtensions
         WebSearchProviderRegistration.AddPublicWeb(services, profile);
         EmailProviderRegistration.AddEmail(services, profile);
         AgentCore.Infrastructure.Drive.DriveRegistration.AddDrive(services, profile);
+        AgentCore.Infrastructure.Credentials.TenantOAuthRegistration.Add(services, profile);
         services.TryAddSingleton(browser.PrivacyAuthority());
         services.TryAddSingleton<BrowserPrivacyService>();
         services.TryAddSingleton(sp => new NativePlaywrightBrowser(

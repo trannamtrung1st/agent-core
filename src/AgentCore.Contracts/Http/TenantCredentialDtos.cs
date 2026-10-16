@@ -1,5 +1,7 @@
 namespace AgentCore.Contracts.Http;
 
+public sealed record TenantCredentialOAuthRequest(long ExpectedRevision, long ExpectedCredentialRevision);
+
 public sealed record TenantEmailProfileInput(string Preset, string EmailAddress, string ImapUsername = "", string SmtpUsername = "",
     MailEndpointDto? ImapEndpoint = null, MailEndpointDto? SmtpEndpoint = null);
 public sealed record TenantCredentialCreateRequest(string DisplayName, string Kind, string Purpose, long ExpectedRevision,

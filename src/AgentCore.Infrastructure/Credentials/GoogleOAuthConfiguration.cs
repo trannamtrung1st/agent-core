@@ -55,11 +55,14 @@ public static class GoogleOAuthRefreshGrant
 }
 public sealed class GoogleOAuthConfiguration
 {
+    // Canonical tenant consent never falls back to a legacy owner's integration client.
+    public GoogleOAuthClient? Tenant { get; }
     public Email.GoogleEmailOAuthOptions Email { get; }
     public Drive.GoogleDriveOAuthOptions Drive { get; }
     public GoogleOAuthConfiguration(IConfiguration configuration, ILogger<GoogleOAuthConfiguration>? logger = null)
     {
         var shared = Read(configuration, "GoogleOAuth", "GOOGLE_OAUTH");
+        Tenant = Client(shared);
         var email = Read(configuration, "GoogleEmailOAuth", "GOOGLE_EMAIL_OAUTH");
         var drive = Read(configuration, "GoogleDriveOAuth", "GOOGLE_DRIVE_OAUTH");
         var sharedPresent = Present(shared);

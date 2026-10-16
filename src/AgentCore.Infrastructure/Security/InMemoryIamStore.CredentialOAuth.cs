@@ -37,6 +37,9 @@ public sealed partial class InMemoryIamStore
             if (a is null || a.Outcome != CredentialOAuthOutcome.Pending || a.ExpiresAt <= now || _tenants.GetValueOrDefault(a.TenantId)?.Tenant.Revision != expectedSecurityRevision
                 || !TenantCredentialOAuthRules.DigestMatches(a.StateHash, stateHash) || !TenantCredentialOAuthRules.DigestMatches(a.CorrelationHash, correlationHash)) return ValueTask.FromResult<CredentialOAuthClaim?>(null);
             RequireOAuthInitiator(a.TenantId, new(a.AccountId, a.AuthenticationSessionId, a.PrincipalId));
+            var current = CredentialBacking().ReadTenantCredential(a.TenantId, a.CredentialId)?.Value;
+            if (current is null || current.Revision != a.CredentialRevision || current.Purpose != a.Purpose || current.Status != CredentialStatus.Active
+                || !TenantCredentialOAuthRules.IsOAuth(current) || TenantCredentialOAuthRules.Epoch(current) != a.AuthEpoch) return ValueTask.FromResult<CredentialOAuthClaim?>(null);
             var claimed = a with { ProtectedProof = "", ClaimedAt = now, Outcome = CredentialOAuthOutcome.Claimed, Revision = checked(a.Revision + 1) };
             _credentialOAuthAttempts[id] = claimed; return ValueTask.FromResult<CredentialOAuthClaim?>(new(claimed, a.ProtectedProof));
         }

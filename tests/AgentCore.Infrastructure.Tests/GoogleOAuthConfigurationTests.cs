@@ -12,6 +12,7 @@ public sealed class GoogleOAuthConfigurationTests
             ("GoogleEmailOAuth:ClientId", "old-email"), ("GoogleEmailOAuth:ClientSecret", "old-email-secret"), ("GoogleEmailOAuth:PublicAppUrl", "https://app.example.test"),
             ("GoogleDriveOAuth:ClientId", "old-drive"), ("GoogleDriveOAuth:ClientSecret", "old-drive-secret"), ("GoogleDriveOAuth:PublicAppUrl", "https://app.example.test"));
         Assert.True(config.Email.Configured); Assert.True(config.Drive.Configured); Assert.Equal(config.Email.Client, config.Drive.Client);
+        Assert.Equal("shared", config.Tenant!.ClientId);
         Assert.Equal("old-email", config.Email.RefreshGrant("unstamped-email", "email").Client.ClientId);
         Assert.Equal("old-drive", config.Drive.RefreshGrant("unstamped-drive", "drive").Client.ClientId);
         Assert.Equal("shared", config.Drive.RefreshGrant(GoogleOAuthRefreshGrant.Write("new-drive", "shared"), "drive").Client.ClientId);
@@ -40,5 +41,6 @@ public sealed class GoogleOAuthConfigurationTests
         var c = Config(("GoogleEmailOAuth:ClientId", "email"), ("GoogleEmailOAuth:ClientSecret", "email-secret"), ("GoogleEmailOAuth:PublicAppUrl", "https://app.example.test"),
             ("GoogleDriveOAuth:ClientId", "drive"), ("GoogleDriveOAuth:ClientSecret", "drive-secret"), ("GoogleDriveOAuth:PublicAppUrl", "https://app.example.test"));
         Assert.Equal("email", c.Email.Client!.ClientId); Assert.Equal("drive", c.Drive.Client!.ClientId);
+        Assert.Null(c.Tenant);
     }
 }
