@@ -24,6 +24,12 @@ public static class RunDiagnosticProjection
         var attempts = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint).FailedAttempts ?? [];
         var tools = messages!.Where(m => m.Role == ModelRole.Tool).ToArray();
         var recovery = AgentRunToolCallCheckpoint.ReadExecutionState(checkpoint).ProtocolRecovery;
+        // Older checkpoints also recorded general provider failures here. Keep their
+        // attempt diagnostics, but reserve the recovery panel for semantic protocol context.
+        if (recovery is { Strategy: null }
+            && recovery.Channel is not (ProviderResponseChannel.StructuredOutput or ProviderResponseChannel.ResponseFunction or ProviderResponseChannel.MarkerCompatibility)
+            && !(recovery.Channel is null && recovery.Reason is ProviderFailureReason.MissingDisplayText or ProviderFailureReason.InvalidBlocks))
+            recovery = null;
         if (run.IsTerminal && recovery is { Strategy: not null, Outcome: "started" or "retryPending" })
             recovery = recovery with { Outcome = run.Status == AgentRunStatus.Cancelled ? "cancelled" : "failed" };
         return new(checkpoint.RemainingOverallBudgetMs, tools.LastOrDefault()?.Name, tools.Length,

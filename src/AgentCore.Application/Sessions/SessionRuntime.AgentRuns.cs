@@ -319,7 +319,7 @@ public sealed partial class SessionRuntime
         { FailureReason: ProviderFailureReason.BackgroundCompletionRequired } => "completion-required",
         { FailureReason: ProviderFailureReason.BackgroundCompletionInvalid } => "completion-invalid",
         { FailureReason: ProviderFailureReason.IncompleteToolCall or ProviderFailureReason.ToolCallTruncated } => "tool-call-invalid",
-        { ResponseChannel: ProviderResponseChannel.StructuredOutput or ProviderResponseChannel.ResponseFunction, Code: ProviderErrorCode.InvalidResponse } => "semantic-response-invalid",
+        { ResponseChannel: ProviderResponseChannel.StructuredOutput or ProviderResponseChannel.ResponseFunction or ProviderResponseChannel.MarkerCompatibility, Code: ProviderErrorCode.InvalidResponse } => "semantic-response-invalid",
         _ => LegacyAgentRunFailureCode(failure)
     };
 
@@ -364,7 +364,13 @@ public sealed partial class SessionRuntime
             ProviderFailureReason.UnknownAction => "an unauthorized response action",
             _ => "an invalid semantic response"
         };
-        var channel = failure?.ResponseChannel == ProviderResponseChannel.ResponseFunction ? "response function" : "native structured output";
+        var channel = failure?.ResponseChannel switch
+        {
+            ProviderResponseChannel.ResponseFunction => "response function",
+            ProviderResponseChannel.StructuredOutput => "native structured output",
+            ProviderResponseChannel.MarkerCompatibility => "marker-compatible response",
+            _ => "the response channel"
+        };
         return $"The provider returned {reason} through {channel}. See Response recovery for the bounded correction result.";
     }
 

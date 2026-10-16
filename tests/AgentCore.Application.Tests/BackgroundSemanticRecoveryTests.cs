@@ -73,6 +73,47 @@ public sealed partial class AgentRunDurabilityTests
     }
 
     [Theory]
+    [InlineData(ProviderErrorCode.Authentication, ProviderFailureReason.TransportFailure)]
+    [InlineData(ProviderErrorCode.Timeout, ProviderFailureReason.TotalTimeout)]
+    [InlineData(ProviderErrorCode.InvalidRequest, ProviderFailureReason.TransportFailure)]
+    public async Task Unrelated_provider_failure_keeps_attempt_details_without_response_recovery_panel(ProviderErrorCode code, string reason)
+    {
+        var (snapshot, run, runs, memory, time) = await BackgroundRecoveryFixture();
+        var model = new BackgroundRecoveryModel(true, failure: new(code, "Provider request failed.", FailureReason: reason));
+        await using var runtime = CreateRuntime(new CapturingSessionOutput(), model, time, runs, memory, snapshot);
+        Assert.True(await runtime.DispatchAgentRunAsync(run.AgentRunId, headless: true));
+        await runtime.WaitUntilIdleAsync();
+        var terminal = (await runs.GetAsync(run.Owner, run.AgentRunId))!;
+        Assert.Equal(AgentRunStatus.Failed, terminal.Status);
+        Assert.Single(model.Requests);
+        // Historical checkpoint data remains intact; only the public read projection changes.
+        Assert.NotNull(AgentRunToolCallCheckpoint.ReadExecutionState(terminal.Checkpoint).ProtocolRecovery);
+        var diagnostic = RunDiagnosticProjection.From(terminal)!;
+        Assert.Null(diagnostic.ProtocolRecovery);
+        Assert.Equal(reason, Assert.Single(diagnostic.FailedAttempts).Reason);
+    }
+
+    [Theory]
+    [InlineData(ProviderResponseChannel.StructuredOutput, "native structured output")]
+    [InlineData(ProviderResponseChannel.ResponseFunction, "response function")]
+    [InlineData(ProviderResponseChannel.MarkerCompatibility, "marker-compatible response")]
+    public async Task Terminal_semantic_summary_names_the_actual_response_channel(string channel, string label)
+    {
+        var (snapshot, run, runs, memory, time) = await BackgroundRecoveryFixture();
+        var model = new BackgroundRecoveryModel(true, failure: new(ProviderErrorCode.InvalidResponse, "Malformed response.",
+            FailureReason: ProviderFailureReason.InvalidBlocks, ResponseChannel: channel), exhaust: true);
+        await using var runtime = CreateRuntime(new CapturingSessionOutput(), model, time, runs, memory, snapshot);
+        Assert.True(await runtime.DispatchAgentRunAsync(run.AgentRunId, headless: true));
+        await runtime.WaitUntilIdleAsync();
+        var terminal = (await runs.GetAsync(run.Owner, run.AgentRunId))!;
+        Assert.Equal(AgentRunStatus.Failed, terminal.Status);
+        Assert.Equal("semantic-response-invalid", terminal.Failure!.Code);
+        Assert.Contains("through " + label + ".", terminal.Failure.Summary);
+        Assert.Equal(channel, RunDiagnosticProjection.From(terminal)!.ProtocolRecovery!.Channel);
+        Assert.Equal(2, model.Requests.Count);
+    }
+
+    [Theory]
     [InlineData(ProviderErrorCode.Cancelled, ProviderFailureReason.InvalidJson, ProviderResponseChannel.StructuredOutput)]
     [InlineData(ProviderErrorCode.Authentication, ProviderFailureReason.InvalidJson, ProviderResponseChannel.StructuredOutput)]
     [InlineData(ProviderErrorCode.InvalidResponse, ProviderFailureReason.ModelSuppliedDestination, ProviderResponseChannel.StructuredOutput)]

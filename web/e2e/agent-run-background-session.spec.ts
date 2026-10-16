@@ -203,3 +203,46 @@ for (const exhausted of [false, true]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("unrelated provider failure keeps Run diagnostics without a Response recovery panel", async ({ page }) => {
+  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/");
+  await selectInstanceIdentity(page, { id: "general-assistant", version: 24 });
+  await expect(page.getByTestId("connection")).toHaveText("Ready");
+  await page.getByLabel("Message", { exact: true }).fill("[test:background-start] Check progress in the background.");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.locator(".conversation-scroll")).toContainText("Background work:", { timeout: 30_000 });
+  await waitForResponseSettled(page);
+  const parentUrl = page.url();
+  await page.getByRole("button", { name: /Background work/ }).click();
+  await page.getByRole("button", { name: "View original result", exact: true }).click();
+  await page.getByRole("button", { name: "Continue in chat", exact: true }).click();
+  await expect(page).not.toHaveURL(parentUrl);
+  await expect(page.getByTestId("connection")).toHaveText("Ready");
+  const sessionId = new URL(page.url()).pathname.split("/c/")[1];
+  const token = await page.evaluate(() => localStorage.getItem("agent-core.owner-capability"));
+  const headers = { "X-AgentCore-Owner-Capability": token! };
+  await page.getByLabel("Message", { exact: true }).fill("synthetic-fail-turn");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  let failed!: AgentRun;
+  await expect.poll(async () => {
+    const runs = await (await page.request.get(`/api/v2/sessions/${sessionId}/agent-runs`, { headers })).json() as CursorPage<AgentRun>;
+    failed = runs.items.find(run => run.activationKind === "UserTurn" && run.status === "failed")!;
+    return !!failed;
+  }, { timeout: 30_000 }).toBe(true);
+  expect(failed.executionDiagnostic?.protocolRecovery).toBeNull();
+  expect(failed.executionDiagnostic?.failedAttempts.length).toBeGreaterThan(0);
+  await waitForResponseSettled(page);
+  await page.getByRole("button", { name: /Background work/ }).click();
+  await page.getByRole("button", { name: "View original result", exact: true }).click();
+  const details = page.getByRole("dialog", { name: "Background progress check", exact: true });
+  await details.getByRole("button", { name: "Conversation run history", exact: true }).click();
+  await expect(details).toContainText("Attempt 3: Unavailable");
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(details.getByRole("region", { name: "Response recovery" })).toHaveCount(0);
+    await expect.poll(() => details.evaluate(d => d.scrollWidth <= d.clientWidth)).toBe(true);
+  }
+  await page.keyboard.press("Escape"); await expect(details).toBeHidden();
+  expect(errors).toEqual([]);
+});
