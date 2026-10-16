@@ -5,7 +5,7 @@ import { AdminDeletionBlockedAlert } from "../admin/adminDeletionBlocked";
 import { AgentRunDetails } from "./AgentRunDetails";
 import { fixtureRun } from "./agentRunFixtures";
 import { ChatMessage } from "./ChatMessage";
-import { diagnosticCopyText } from "./diagnosticCopy";
+import { allowlistedFailureReason, diagnosticCopyText } from "./diagnosticCopy";
 
 import type { HistoryEntry } from "../../state/sessionStore";
 
@@ -27,6 +27,10 @@ const failedEntry = (failure?: HistoryEntry["failure"]): HistoryEntry => ({
 });
 
 describe("diagnostic copy", () => {
+  it("preserves the bounded invalid background completion reason", () => {
+    expect(allowlistedFailureReason("backgroundCompletionInvalid")).toBe("backgroundCompletionInvalid");
+    expect(allowlistedFailureReason("backgroundCompletionInvalid private provider body")).toBeNull();
+  });
   it("omits absent lines and refuses an empty id", () => {
     expect(diagnosticCopyText({ category: "Provider", code: "Unavailable" })).toBeNull();
     expect(diagnosticCopyText({

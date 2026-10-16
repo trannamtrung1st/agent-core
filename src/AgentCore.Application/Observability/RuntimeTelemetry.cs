@@ -176,7 +176,7 @@ public static class RuntimeTelemetry
         var boundedReason = reason switch
         {
             null => "none",
-            "completion-required" or "semantic-response-invalid" or "tool-call-invalid" or "run-deadline" or "tool-timeout" or "tool-step-limit" or "tool-output-limit" => reason,
+            "completion-required" or "completion-invalid" or "semantic-response-invalid" or "tool-call-invalid" or "run-deadline" or "tool-timeout" or "tool-step-limit" or "tool-output-limit" => reason,
             "provider-unavailable" or "provider-ratelimited" or "provider-timeout" or "provider-invalidresponse" or "provider-authentication" => reason,
             _ => "other"
         };

@@ -22,6 +22,7 @@ export function detailLinesCopyText(header: string, lines: DetailLine[]): string
 
 const failureReasonTokens = new Set([
   "backgroundCompletionRequired",
+  "backgroundCompletionInvalid",
   "invalidJson",
   "responseTooLarge",
   "missingDisplayText",

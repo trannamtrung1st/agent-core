@@ -82,7 +82,7 @@ export function ChatMessage({
         ) : null}
         {backgroundSource ? (
           <Typography.Text type="secondary" className="chat-message-time chat-message-completion">
-            <span aria-hidden="true" className="chat-message-completion-separator">·</span>Background work completed{" "}
+            <span aria-hidden="true" className="chat-message-completion-separator">·</span>Background work result{" "}
             <ConversationDestination sessionId={backgroundSource} />
           </Typography.Text>
         ) : null}

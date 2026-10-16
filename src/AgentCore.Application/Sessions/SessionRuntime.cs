@@ -2757,10 +2757,11 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var overallDeadline = toolDeadline ? _time.GetUtcNow() + remainingBudget : (DateTimeOffset?)null;
         var generateToken = toolDeadline ? overallCts.Token : cancellationToken;
         var finalizationReason = executionState.FinalizationReason ?? RunFinalization.ObservedRecovery(messages);
+        var completionCorrectionAttempted = executionState.CompletionCorrectionAttempted;
         var cleanupPhase = executionState.Phase == RunPhase.Cleanup || executionState.CleanupStartedAtMessage is not null;
         var cleanupStartedAtMessage = executionState.CleanupStartedAtMessage;
         ToolLoopExecutionState State() => new(finalizationReason is not null ? RunPhase.Finalization : cleanupPhase ? RunPhase.Cleanup : RunPhase.Work,
-            finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId);
+            finalizationReason, cleanupStartedAtMessage, failedAttempts.ToArray(), latestManifest, request.ResponseId, completionCorrectionAttempted);
         var cleanupRequested = executionRun?.Admission.ExecutionBudget?.RequestedCleanup
             ?? AgentRunAdmissionFactory.RequestsCleanup(trigger.Text ?? "");
         var cleanupSteps = cleanupRequested ? budget.CleanupStepReserve : 0;
@@ -2967,9 +2968,10 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                             retryGeneration = true;
                             break;
                         }
-                        await RecordFailureAsync(RunFinalization.MissingCompletion()).ConfigureAwait(false);
+                        var completionFailure = completionCorrectionAttempted ? RunFinalization.InvalidCompletion() : RunFinalization.MissingCompletion();
+                        await RecordFailureAsync(completionFailure).ConfigureAwait(false);
                         await MailboxModelAsync(cause, request.ResponseId,
-                            new ModelFailed(RunFinalization.MissingCompletion()), generateToken).ConfigureAwait(false);
+                            new ModelFailed(completionFailure), generateToken).ConfigureAwait(false);
                         return;
                     }
                     if (evt is ModelToolCallEvent tool)
@@ -3483,12 +3485,20 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                                 }
                                 if (finalizationReason is not null)
                                 {
-                                    await RecordFailureAsync(RunFinalization.MissingCompletion()).ConfigureAwait(false);
-                                    await MailboxModelAsync(cause, request.ResponseId,
-                                        new ModelFailed(RunFinalization.MissingCompletion()), generateToken).ConfigureAwait(false);
-                                    return;
+                                    var correction = JsonSerializer.Serialize(new { error = "invalid", reason = "completion_validation",
+                                        message = rejection, summaryMaxLength = AgentCore.Application.Work.WorkCompletionRequest.MaxSummaryCharacters,
+                                        messageForNextCall = "Correct only work.complete. This is the last validation correction; do not repeat substantive tools." });
+                                    if (completionCorrectionAttempted || steps >= budget.MaxSteps || Encoding.UTF8.GetByteCount(correction) > resultBudget)
+                                    {
+                                        await RecordFailureAsync(RunFinalization.InvalidCompletion()).ConfigureAwait(false);
+                                        await MailboxModelAsync(cause, request.ResponseId,
+                                            new ModelFailed(RunFinalization.InvalidCompletion()), generateToken).ConfigureAwait(false);
+                                        return;
+                                    }
+                                    completionCorrectionAttempted = true;
+                                    executionResult = ToolExecutionResult.FromText(correction);
                                 }
-                                executionResult = ToolExecutionResult.FromText(JsonSerializer.Serialize(new { error = "invalid", message = rejection }));
+                                else executionResult = ToolExecutionResult.FromText(JsonSerializer.Serialize(new { error = "invalid", message = rejection }));
                             }
                             else if (string.Equals(call.Name, ToolCatalog.CapabilitiesLoad, StringComparison.Ordinal) && projectionContext is not null)
                             {
@@ -4742,6 +4752,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         var completionViolation = failure.ResponseChannel == ProviderResponseChannel.BackgroundCompletion;
         var category = completionViolation ? "execution" : "provider";
         var code = failure.FailureReason == ProviderFailureReason.BackgroundCompletionRequired ? "CompletionRequired"
+            : failure.FailureReason == ProviderFailureReason.BackgroundCompletionInvalid ? "CompletionInvalid"
             : completionViolation ? "CompletionProtocolViolation" : failure.Code.ToString();
         if (existingId is { } supplied && supplied != Guid.Empty)
         {

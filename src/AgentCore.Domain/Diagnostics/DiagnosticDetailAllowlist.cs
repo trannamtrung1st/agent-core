@@ -9,6 +9,7 @@ public static class DiagnosticDetailAllowlist
     public static readonly IReadOnlySet<string> FailureReasons = new HashSet<string>(StringComparer.Ordinal)
     {
         "backgroundCompletionRequired",
+        "backgroundCompletionInvalid",
         "invalidJson",
         "responseTooLarge",
         "missingDisplayText",

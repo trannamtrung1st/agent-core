@@ -318,6 +318,7 @@ public sealed partial class SessionRuntime
     private static string AgentRunFailureCode(ProviderFailure? failure) => failure switch
     {
         { FailureReason: ProviderFailureReason.BackgroundCompletionRequired } => "completion-required",
+        { FailureReason: ProviderFailureReason.BackgroundCompletionInvalid } => "completion-invalid",
         { FailureReason: ProviderFailureReason.IncompleteToolCall or ProviderFailureReason.ToolCallTruncated } => "tool-call-invalid",
         { ResponseChannel: ProviderResponseChannel.StructuredOutput or ProviderResponseChannel.ResponseFunction, Code: ProviderErrorCode.InvalidResponse } => "semantic-response-invalid",
         _ => LegacyAgentRunFailureCode(failure)
@@ -344,6 +345,7 @@ public sealed partial class SessionRuntime
         "tool-output-limit" => "Tool output limit reached.",
         "tool-deadline" => "Tool deadline reached.",
         "completion-required" => "Background work did not provide work.complete after bounded completion recovery. Verified work remains available.",
+        "completion-invalid" => "Background work returned an invalid work.complete outcome after bounded validation recovery. Verified work remains available.",
         "tool-call-invalid" => "The provider returned an incomplete tool call; no incomplete action was dispatched.",
         "semantic-response-invalid" => "The provider response violated the semantic response contract.",
         _ => "The model response failed."

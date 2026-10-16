@@ -343,6 +343,10 @@ public sealed class ReliabilityJourneyTests
     [InlineData("incomplete-tool", AgentRunStatus.Failed)]
     [InlineData("authentication", AgentRunStatus.Failed)]
     [InlineData("reserve", AgentRunStatus.Completed)]
+    [InlineData("oversized", AgentRunStatus.Completed)]
+    [InlineData("oversized-twice", AgentRunStatus.Failed)]
+    [InlineData("oversized-transport", AgentRunStatus.Completed)]
+    [InlineData("oversized-transport-twice", AgentRunStatus.Failed)]
     public async Task Background_completion_recovery_keeps_artifact_and_never_replays_work(string mode, AgentRunStatus expected)
     {
         var path = Path.Combine(Path.GetTempPath(), $"reliability-background-{Guid.NewGuid():N}.db");
@@ -361,9 +365,10 @@ public sealed class ReliabilityJourneyTests
             await s.ExecuteRunsAsync();
             var run = Assert.Single(await s.GetRequiredService<IAgentRunStore>().ListAsync(new(instanceId, LocalUserProfile.Id), 100));
             runId = run.AgentRunId; childSessionId = run.SessionId;
-            Assert.True(run.Status == (mode == "transport" ? AgentRunStatus.WaitingToRetry : expected),
+            Assert.True(run.Status == (mode.Contains("transport") ? AgentRunStatus.WaitingToRetry : expected),
                 $"Status={run.Status}; Failure={run.Failure?.Code}; Summary={run.Failure?.Summary}; Budget={run.Admission.ExecutionBudget}; Requests={model.RecoveryRequests.Count}");
             Assert.Equal(mode == "reserve" ? "runDeadline" : "completionRequired", AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).FinalizationReason);
+            Assert.Equal(mode.StartsWith("oversized"), AgentRunToolCallCheckpoint.ReadExecutionState(run.Checkpoint).CompletionCorrectionAttempted);
             Assert.True(AgentRunToolCallCheckpoint.TryRead(run.Checkpoint, out var interaction));
             Assert.DoesNotContain(interaction!, message => message.Role is ModelRole.System or ModelRole.Developer);
         }
@@ -372,7 +377,7 @@ public sealed class ReliabilityJourneyTests
         await reopened.Services.ExecuteRunsAsync();
         var retained = (await reopened.Services.GetRequiredService<IAgentRunStore>().GetAsync(new(instanceId, LocalUserProfile.Id), runId))!;
         Assert.Equal(expected, retained.Status);
-        Assert.Equal(mode == "transport" ? 2 : 1, retained.AttemptCount);
+        Assert.Equal(mode.Contains("transport") ? 2 : 1, retained.AttemptCount);
         Assert.Equal(1, model.Writes);
         Assert.Equal(1, model.Artifacts);
         var artifacts = await reopened.Services.GetRequiredService<IArtifactStore>().ListAsync(childSessionId);
@@ -380,16 +385,26 @@ public sealed class ReliabilityJourneyTests
         Assert.DoesNotContain(files, file => file.LogicalPath.EndsWith("/replay.txt", StringComparison.Ordinal));
         Assert.True(artifacts.Count == 1, string.Join("\n", model.RecoveryRequests.First().Messages.Where(m => m.Role == ModelRole.Tool).Select(m => m.Name + ": " + m.Text)));
         if (mode == "prose") Assert.Equal("completion-required", retained.Failure!.Code);
+        if (mode.EndsWith("twice")) Assert.Equal("completion-invalid", retained.Failure!.Code);
         if (mode == "semantic") Assert.Equal("semantic-response-invalid", retained.Failure!.Code);
         if (mode == "incomplete-tool") Assert.Equal("tool-call-invalid", retained.Failure!.Code);
         if (mode == "authentication") Assert.Equal("provider-authentication", retained.Failure!.Code);
         var diagnostics = RunDiagnosticProjection.From(retained)!;
-        if (mode == "transport") Assert.Equal("Unavailable", Assert.Single(diagnostics.FailedAttempts).Code);
+        if (mode.Contains("transport")) Assert.Contains(diagnostics.FailedAttempts, attempt => attempt.Code == "Unavailable");
         if (expected == AgentRunStatus.Failed)
         {
-            Assert.Single(diagnostics.FailedAttempts);
+            Assert.Equal(mode.Contains("transport") ? 2 : 1, diagnostics.FailedAttempts.Count);
             var history = (await reopened.Services.GetRequiredService<IMemoryStore>().LoadAsync(childSessionId))!;
             Assert.Equal(retained.Failure!.DiagnosticId, history.Entries.Last(e => e.Role == ConversationRole.Assistant).Failure!.DiagnosticId);
+        }
+        if (mode.StartsWith("oversized"))
+        {
+            Assert.Equal(mode.Contains("transport") ? 3 : 2, model.RecoveryRequests.Count);
+            Assert.Contains(model.RecoveryRequests[1].Messages, message => message.Role == ModelRole.Tool
+                && message.Name == ToolCatalog.WorkComplete && message.Text.Contains("2000"));
+            if (expected == AgentRunStatus.Completed)
+                Assert.Equal("Verified fixture saved.", retained.Result!.Text);
+            else Assert.Contains(diagnostics.FailedAttempts, attempt => attempt.Reason == "backgroundCompletionInvalid");
         }
         foreach (var recovery in model.RecoveryRequests)
         {
@@ -552,6 +567,23 @@ public sealed class ReliabilityJourneyTests
                 {
                     yield return new ModelTextDelta("This prose must never become a successful outcome.");
                     yield return new ModelCompleted(ModelStopReason.Completed);
+                    yield break;
+                }
+                if (mode.StartsWith("oversized"))
+                {
+                    var correcting = request.Messages.Any(message => message.Role == ModelRole.Tool && message.Name == ToolCatalog.WorkComplete);
+                    if (correcting && mode.Contains("transport") && !failed)
+                    {
+                        failed = true;
+                        yield return new ModelFailed(new(ProviderErrorCode.Unavailable, "Provider unavailable."));
+                        yield break;
+                    }
+                    yield return Call(ToolCatalog.WorkComplete, new
+                    {
+                        summary = !correcting || mode.EndsWith("twice") ? new string('x', 4442) : "Verified fixture saved.",
+                        attentionRequired = false, outcome = "Response"
+                    });
+                    yield return new ModelCompleted(ModelStopReason.ToolCalls);
                     yield break;
                 }
                 yield return mode == "wrong-tool" ? Call(ToolCatalog.WorkspaceWrite, new { path = "/working/replay.txt", content = "must not execute" })

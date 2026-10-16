@@ -10,6 +10,16 @@ namespace AgentCore.Application.Tests;
 public sealed class AgentRunToolCallCheckpointTests
 {
     [Fact]
+    public void Completion_validation_correction_is_retained_in_the_checkpoint()
+    {
+        var state = new ToolLoopExecutionState(RunPhase.Finalization, "completionRequired", CompletionCorrectionAttempted: true);
+        var payload = AgentRunToolCallCheckpoint.Write([], executionState: state);
+        Assert.True(AgentRunToolCallCheckpoint.ReadExecutionState(new(payload, 1, 0, 1000)).CompletionCorrectionAttempted);
+        Assert.False(AgentRunToolCallCheckpoint.ReadExecutionState(new(
+            AgentRunToolCallCheckpoint.Write([]), 0, 0, 1000)).CompletionCorrectionAttempted);
+    }
+
+    [Fact]
     public void Recovery_keeps_pending_call_order_and_reserved_steps_without_replaying_completed_calls()
     {
         ModelMessage[] messages = [new(ModelRole.Assistant, "", ToolCalls: [Call("first"), Call("second"), Call("third")]),

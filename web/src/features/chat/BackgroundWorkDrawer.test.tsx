@@ -354,6 +354,6 @@ describe("Completion accounting and wait presentation", () => {
     await waitFor(() => expect(getInstanceAgentRun).toHaveBeenCalledWith("instance", "handling-run"));
     // rc-util deliberately uses the same generated ID in NODE_ENV=test; scope by the actual drawer heading.
     await waitFor(() => expect(screen.getAllByRole("dialog").some(dialog => within(dialog).queryByText("Run details", { exact: true }) !== null)).toBe(true));
-    expect(screen.queryByText("Background work completed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Background work result")).not.toBeInTheDocument();
   });
 });

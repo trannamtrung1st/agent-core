@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.Application.Context;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tools;
 
@@ -27,6 +28,19 @@ internal static class BackgroundSessionScript
         }
         if (request.Messages.Any(message => message.Text.Contains("synthetic-background-prose", StringComparison.Ordinal)))
             return [new ModelTextDelta("Fixture prose without an explicit completion."), new ModelCompleted(ModelStopReason.Completed)];
+        var task = SyntheticTaskContext.Text(request);
+        if (request.Context?.Sections.Any(section => section.Id == ContextSectionId.CoreBackground) == true
+            && task.Contains("synthetic-background-completion-", StringComparison.Ordinal))
+        {
+            if (request.Context.Sections.All(section => section.Id != ContextSectionId.CoreBackgroundFinalization))
+                return [new ModelTextDelta("Collected fixture findings."), new ModelCompleted(ModelStopReason.Completed)];
+            var corrected = request.Messages.Any(message => message.Role == ModelRole.Tool && message.Name == ToolCatalog.WorkComplete);
+            return [new ModelToolCallEvent(new("completion-" + request.Messages.Count, ToolCatalog.WorkComplete,
+                JsonSerializer.Serialize(new { outcome = "Response", attentionRequired = false,
+                    summary = corrected && task.Contains("synthetic-background-completion-correct", StringComparison.Ordinal)
+                        ? "Collected digest; no further actions were taken." : new string('x', 4442) }))),
+                new ModelCompleted(ModelStopReason.ToolCalls)];
+        }
         // Background work never fans out, even when the original objective contains this fixture marker.
         if (request.Messages.Any(message => message.Role == ModelRole.System && message.Text.StartsWith("Bounded background Session task.", StringComparison.Ordinal))) return null;
         var prompt = SyntheticTaskContext.Text(request);
@@ -54,7 +68,13 @@ internal static class BackgroundSessionScript
                 return Call(ToolCatalog.CapabilitiesLoad, new { query = "start an immediate background task", limit = 1 });
             return [new ModelTextDelta("This Agent is not authorized to start background tasks."), new ModelCompleted(ModelStopReason.Completed)];
         }
-        return Call(ToolCatalog.BackgroundStart, new { objective = prompt.Contains("[test:opensandbox-background]", StringComparison.Ordinal) ? "synthetic-sandbox:demo" : prompt.Contains("[test:background-prose]", StringComparison.Ordinal) ? "synthetic-background-prose: verify bounded failure reporting" : prompt.Contains("[test:background-files]", StringComparison.Ordinal) ? "synthetic-background-files: create the original task report" : "synthetic-automation-attention: check the requested progress and report the outcome", title = "Background progress check", reportCompletion = true });
+        var objective = prompt.Contains("[test:background-completion-correct]", StringComparison.Ordinal) ? "synthetic-background-completion-correct: verify bounded summary correction"
+            : prompt.Contains("[test:background-completion-invalid]", StringComparison.Ordinal) ? "synthetic-background-completion-invalid: verify truthful validation failure"
+            : prompt.Contains("[test:opensandbox-background]", StringComparison.Ordinal) ? "synthetic-sandbox:demo"
+            : prompt.Contains("[test:background-prose]", StringComparison.Ordinal) ? "synthetic-background-prose: verify bounded failure reporting"
+            : prompt.Contains("[test:background-files]", StringComparison.Ordinal) ? "synthetic-background-files: create the original task report"
+            : "synthetic-automation-attention: check the requested progress and report the outcome";
+        return Call(ToolCatalog.BackgroundStart, new { objective, title = "Background progress check", reportCompletion = true });
     }
     private static IReadOnlyList<ModelGenerationEvent> Call(string name, object arguments) =>
         [new ModelToolCallEvent(new("background-fixture-" + name, name, JsonSerializer.Serialize(arguments))), new ModelCompleted(ModelStopReason.ToolCalls)];
