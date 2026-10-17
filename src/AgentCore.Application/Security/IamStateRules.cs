@@ -42,6 +42,10 @@ public static class IamStateRules
         var tenantId = state.Tenant.TenantId;
         void Require(bool ok) { if (!ok) throw new ArgumentException("Invalid tenant security aggregate.", nameof(state)); }
         Require(tenantId != Guid.Empty && state.Tenant.Revision >= 1 && Enum.IsDefined(state.Tenant.Status));
+        Require(state.OperationPolicies.Select(p => p.PermissionKey).Distinct(StringComparer.Ordinal).Count() == state.OperationPolicies.Count);
+        Require(state.OperationPolicies.All(p => p.TenantId == tenantId && p.Revision >= 1
+            && PermissionCatalog.TryGet(p.PermissionKey, out var metadata) && !metadata.SystemOnly
+            && new OperationReviewPolicy(p.Mode, p.IndependentReview).IsAtLeast(OperationReviewPolicy.Minimum(metadata.ApprovalClass))));
         Require(state.Users.All(u => u.TenantId == tenantId && u.AccountId != Guid.Empty && Enum.IsDefined(u.Status)));
         Require(state.Users.Select(u => u.AccountId).Distinct().Count() == state.Users.Count);
         Require(state.Principals.All(p => p.TenantId == tenantId && p.PrincipalId != Guid.Empty && Enum.IsDefined(p.Status) && Enum.IsDefined(p.Kind)));
@@ -88,7 +92,8 @@ public static class IamStateRules
             Users = Array.AsReadOnly(state.Users.ToArray()), Principals = Array.AsReadOnly(state.Principals.ToArray()),
             SystemIdentities = Array.AsReadOnly(state.SystemIdentities.ToArray()),
             Roles = Array.AsReadOnly(state.Roles.Select(r => r with { Permissions = Array.AsReadOnly(r.Permissions.ToArray()) }).ToArray()),
-            Assignments = Array.AsReadOnly(state.Assignments.ToArray()), Invitations = Array.AsReadOnly(state.Invitations.ToArray())
+            Assignments = Array.AsReadOnly(state.Assignments.ToArray()), Invitations = Array.AsReadOnly(state.Invitations.ToArray()),
+            OperationPolicies = Array.AsReadOnly(state.OperationPolicies.ToArray())
         };
     }
 }

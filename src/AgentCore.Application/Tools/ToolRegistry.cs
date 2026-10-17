@@ -7,6 +7,8 @@ public static class ToolRegistry
     private static readonly IReadOnlyDictionary<string, ToolDescriptor> Registered =
         new Dictionary<string, ToolDescriptor>(StringComparer.Ordinal)
         {
+            [ToolCatalog.IamCheckAccess] = IamToolContracts.Descriptor(ToolCatalog.IamCheckAccess),
+            [ToolCatalog.IamEffectivePermissions] = IamToolContracts.Descriptor(ToolCatalog.IamEffectivePermissions),
             ["drive.accounts"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.accounts"),
             ["drive.list"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.list"),
             ["drive.search"] = AgentCore.Application.Drive.DriveToolContracts.Descriptor("drive.search"),

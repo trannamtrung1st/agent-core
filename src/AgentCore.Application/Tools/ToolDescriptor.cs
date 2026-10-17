@@ -39,7 +39,7 @@ public sealed record ToolExecutionAdmission(
     string? WorkspaceCwd = null, Guid? OwnedSessionId = null,
     IReadOnlyList<AgentCore.Domain.Definitions.EffectiveSkill>? PinnedSkillCatalog = null,
     IReadOnlyList<string>? ActiveSkillKeys = null, IReadOnlyList<AgentCore.Domain.Credentials.AgentCredentialBinding>? PinnedCredentialBindings = null,
-    string? ConfigurationContinuationTarget = null);
+    string? ConfigurationContinuationTarget = null, Guid? TenantId = null);
 
 public sealed record ToolDescriptor(
     ModelToolDefinition ModelDefinition,

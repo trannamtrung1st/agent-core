@@ -17,6 +17,9 @@ public static class ToolPolicy
         {
             return ToolPolicyDecision.Deny;
         }
+        if (descriptor.OfferRule == ToolOfferRule.TenantExecutionAuthority)
+            return admission is { TenantId: not null, AgentRunId: not null, AgentInstanceId: not null, OwnedSessionId: not null, SupportsTools: true }
+                ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny;
 
         if (!IsolationAllows(definition, toolName))
             return ToolPolicyDecision.Deny;
@@ -167,6 +170,9 @@ public static class ToolPolicy
         AgentContext? context,
         IToolConfigurationGate configurationGate)
     {
+        if (descriptor.OfferRule == ToolOfferRule.TenantExecutionAuthority)
+            return context is { ModelSupportsTools: true, AgentInstanceId: not null, OwnedSessionId: not null, ExecutionContext: { } execution }
+                && execution.SessionId == context.OwnedSessionId;
         if (!IsolationAllows(definition, descriptor.Name)) return false;
         if (descriptor.Name == ToolCatalog.AgentStateInspect && context is not { AgentInstanceId: not null, OwnedSessionId: not null, ModelSupportsTools: true }) return false;
         if (descriptor.Name == ToolCatalog.SandboxExec && (definition.SandboxPolicy is null || definition.ExecutionSandboxProfile is null && !(definition.ExecutionSandboxProfiles?.Any(p => p.AdmittedForExecution != false) == true))) return false;

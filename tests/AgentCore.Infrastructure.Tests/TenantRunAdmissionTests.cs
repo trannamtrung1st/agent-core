@@ -152,6 +152,7 @@ public sealed partial class TenantRunAdmissionTests
         internal TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Proceed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TenantHumanRunAdmission? Prepared;
+        public ValueTask<TenantSessionRoot?> ResolveTenantSessionOwnerAsync(Guid session, CancellationToken ct = default) => inner.ResolveTenantSessionOwnerAsync(session, ct);
         public ValueTask<AgentRun?> FindTenantRunAsync(Guid tenant, Guid run, CancellationToken ct = default) => inner.FindTenantRunAsync(tenant, run, ct);
         public ValueTask<IReadOnlyList<Guid>> ListTenantRunIdsAsync(Guid tenant, Guid session, CancellationToken ct = default) => inner.ListTenantRunIdsAsync(tenant, session, ct);
         public ValueTask<AgentRun?> TryCancelTenantRunAsync(TenantSecurityState next, long expected, Guid run, long revision, TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)

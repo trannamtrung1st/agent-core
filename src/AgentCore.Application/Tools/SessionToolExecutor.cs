@@ -40,7 +40,7 @@ public sealed partial class SessionToolExecutor(
     AgentCore.Application.Credentials.CredentialService? credentials = null,
     AdminAutomationAuthoringService? automationAuthoring = null, AgentInstanceSkillService? instanceSkills = null, ICoreEventStore? eventCoverage = null, InheritedDefinitionResourceCatalog? inheritedResources = null, SelfManagementService? selfManagement = null,
     AgentInstanceSettingsService? instanceSettings = null, AgentInstanceResourceService? instanceResources = null, IAgentCredentialBindingStore? credentialBindings = null,
-    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, AgentCore.Application.Workspaces.SessionWorkingCleanupService? workingCleanup = null, Func<RuntimeStateService?>? runtimeState = null)
+    AdminAgentInstanceService? instanceAdmin = null, AgentCore.Application.Email.EmailAccountService? emailAccounts = null, IEmailStore? emailStore = null, IAgentRunStore? emailRuns = null, ILogger<SessionToolExecutor>? logger = null, IDiagnosticIdSource? diagnosticIds = null, IOfficeProcessor? officeProcessor = null, AgentCore.Application.Drive.DriveService? driveService = null, ISandboxService? sandboxService = null, ISandboxStore? sandboxStore = null, ISandboxImageAuthority? sandboxAuthority = null, ISandboxReadiness? sandboxReadiness = null, AgentCore.Application.Workspaces.SessionWorkingCleanupService? workingCleanup = null, Func<RuntimeStateService?>? runtimeState = null, AgentCore.Application.Security.TenantToolAuthorization? tenantAuthorization = null)
 {
     private readonly IAgentInstanceStore? _agentInstances = agentInstances;
     private readonly IAgentDefinitionStore? _agentDefinitions = agentDefinitions;
@@ -129,6 +129,8 @@ public sealed partial class SessionToolExecutor(
         ModelToolCall call, JsonElement args, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         if (admission?.OwnedSessionId is { } ownedSession && (ownedSession == Guid.Empty || ownedSession != sessionId)) return ToolPolicyDecision.Deny;
+        if (tenantAuthorization is not null && await tenantAuthorization.PolicyAsync(sessionId, call, admission, ct).ConfigureAwait(false) is { } tenantPolicy) return tenantPolicy;
+        if (admission?.TenantId is not null || IamToolContracts.IsInspection(call.Name)) return ToolPolicyDecision.Deny;
         if (admission?.AgentInstanceId is { } isolationOwner)
             definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, ct);
         if (ManagementTools.IsManagement(call.Name) && admission is not null)
@@ -199,6 +201,9 @@ public sealed partial class SessionToolExecutor(
         ToolExecutionAdmission? admission = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (tenantAuthorization is not null && await tenantAuthorization.ExecuteAsync(sessionId, call, admission, cancellationToken).ConfigureAwait(false) is { } tenantResult)
+            return FitResult(remainingOutputBytes, tenantResult);
+        if (admission?.TenantId is not null || IamToolContracts.IsInspection(call.Name)) return TextResult(Error("forbidden", "Trusted tenant execution is required."));
         if (admission?.AgentInstanceId is { } isolationOwner)
         {
             try { definition = await RestrictExecutionDefinitionAsync(definition, isolationOwner, cancellationToken); }

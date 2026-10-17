@@ -4,6 +4,7 @@ using System.Text.Json;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 using Microsoft.Extensions.DependencyInjection;
+using AgentCore.Application.Tools;
 
 namespace AgentCore.Api.Tests;
 
@@ -51,6 +52,9 @@ public sealed partial class TenantSessionAccessTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await legacy.GetAsync(api + $"/agent-runs/{runId}")).StatusCode);
         var stored = (await factory.Services.GetRequiredService<ITenantRunStore>().FindTenantRunAsync(tenant, runId))!;
         Assert.Null(stored.Owner.ProfileIdOrNull); Assert.Equal(AgentRunStatus.Queued, stored.Status);
+        using (var unframed = JsonDocument.Parse((await factory.Services.GetRequiredService<SessionToolExecutor>().ExecuteAsync(stored.Admission.Configuration!.Definition,
+            stored.SessionId, new("unframed", ToolCatalog.CredentialsList, "{}"), 2000)).Text))
+            Assert.Equal("tenant_context_required", unframed.RootElement.GetProperty("reasonCode").GetString());
         Assert.DoesNotContain(await factory.Services.GetRequiredService<IAgentRunStore>().ListRunnableAsync(DateTimeOffset.UtcNow, 100), r => r.AgentRunId == runId);
         var cancelRoute = api + $"/agent-runs/{runId}/cancel";
         var securityRevision = await Revision(owner, tenant);

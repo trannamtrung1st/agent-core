@@ -240,6 +240,33 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.ToTable("TenantInvitations", (string)null);
                 });
 
+            modelBuilder.Entity("AgentCore.Domain.Security.TenantOperationPolicy", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PermissionKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IndependentReview")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("TenantId", "PermissionKey");
+
+                    b.ToTable("TenantOperationPolicies", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TenantOperationPolicies_Values", "Mode IN (0,1,2) AND IndependentReview IN (0,1) AND Revision >= 1 AND length(PermissionKey) BETWEEN 1 AND 128");
+                        });
+                });
+
             modelBuilder.Entity("AgentCore.Domain.Security.TenantUser", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -3102,6 +3129,15 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AgentCore.Domain.Security.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("AgentCore.Domain.Security.TenantOperationPolicy", b =>
+                {
                     b.HasOne("AgentCore.Domain.Security.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")

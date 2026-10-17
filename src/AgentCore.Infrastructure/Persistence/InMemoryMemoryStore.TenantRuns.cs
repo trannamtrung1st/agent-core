@@ -6,6 +6,8 @@ namespace AgentCore.Infrastructure.Persistence;
 
 public sealed partial class InMemoryMemoryStore
 {
+    internal TenantSessionRoot? ResolveTenantSessionOwner(Guid sessionId)
+    { lock (_gate) return tenantSessions.GetValueOrDefault(sessionId); }
     internal AgentRun? CancelTenantRun(Guid tenant, Guid runId, long expectedRunRevision, DateTimeOffset at)
     {
         lock (_gate)

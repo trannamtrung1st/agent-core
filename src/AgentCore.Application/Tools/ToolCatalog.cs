@@ -6,6 +6,8 @@ namespace AgentCore.Application.Tools;
 
 public static class ToolCatalog
 {
+    public const string IamCheckAccess = "iam.check_access";
+    public const string IamEffectivePermissions = "iam.get_effective_permissions";
     public const string CredentialsList = "credentials.list";
     public const string KnowledgeRetrieve = "knowledge.retrieve";
     public const string AttachmentsRead = "attachments.read";
@@ -194,7 +196,7 @@ public static class ToolCatalog
         IToolConfigurationGate configurationGate)
     {
         foreach (var authority in ToolRegistry.All)
-            if (authority.OfferRule is ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority
+            if (authority.OfferRule is ToolOfferRule.CurrentExecutionCapability or ToolOfferRule.HarnessAuthority or ToolOfferRule.TenantExecutionAuthority
                 && ToolPolicy.IsOffered(authority, definition, context, configurationGate) && seen.Add(authority.Name))
                 offered.Add(authority.ModelDefinition);
         foreach (var name in new[] { CredentialsList, CapabilitiesLoad, ContinuitySearch, ContinuityGet, MemoryConsolidate, MemoryForget, ExperienceConsolidate, AgentCore.Application.Experience.ExperienceService.SourceTool, AgentCore.Application.Experience.ExperienceService.RecordTool })

@@ -19,6 +19,12 @@ internal static class IamPersistenceModel
         TenantDefinitionRecord.Configure(model);
         TenantCredentialRecord.Configure(model);
         TenantSessionRecord.Configure(model);
+        var policies = model.Entity<TenantOperationPolicy>();
+        policies.ToTable("TenantOperationPolicies", table => table.HasCheckConstraint("CK_TenantOperationPolicies_Values", "Mode IN (0,1,2) AND IndependentReview IN (0,1) AND Revision >= 1 AND length(PermissionKey) BETWEEN 1 AND 128"));
+        policies.HasKey(p => new { p.TenantId, p.PermissionKey });
+        policies.Property(p => p.PermissionKey).HasMaxLength(128);
+        policies.Property(p => p.Revision).IsConcurrencyToken();
+        policies.HasOne<Tenant>().WithMany().HasForeignKey(p => p.TenantId).OnDelete(DeleteBehavior.Restrict);
         CredentialOAuthAttemptRow.Configure(model);
         var accounts = model.Entity<Account>();
         accounts.ToTable("Accounts"); accounts.HasKey(x => x.AccountId);

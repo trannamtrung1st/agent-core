@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore
+    TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await db.Set<Account>().AsNoTracking().SingleOrDefaultAsync(a => a.LoginKey == loginKey, ct).ConfigureAwait(false); }
@@ -125,6 +125,7 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
     }
     private static async Task ApplyTenantChildrenAsync(AgentCoreDbContext db, TenantSecurityState tenant, CancellationToken ct)
     {
+        await ApplyAsync(db, db.Set<TenantOperationPolicy>().Where(p => p.TenantId == tenant.Tenant.TenantId), tenant.OperationPolicies, p => p.PermissionKey, ct).ConfigureAwait(false);
         await ApplyAsync(db, db.Set<Principal>().Where(p => p.TenantId == tenant.Tenant.TenantId), tenant.Principals, p => p.PrincipalId, ct).ConfigureAwait(false);
         await ApplyAsync(db, db.Set<TenantUser>().Where(u => u.TenantId == tenant.Tenant.TenantId), tenant.Users, u => u.UserId, ct).ConfigureAwait(false);
         await ApplyAsync(db, db.Set<IamSystemIdentityRow>().Where(i => i.TenantId == tenant.Tenant.TenantId), tenant.SystemIdentities.Select(IamPersistenceModel.Row).ToArray(), i => i.SystemIdentityId, ct).ConfigureAwait(false);
@@ -219,7 +220,8 @@ public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext>
             (await db.Set<IamSystemIdentityRow>().AsNoTracking().Where(i => i.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false)).Select(IamPersistenceModel.Domain).ToArray(),
             await RolesAsync(db, tenantId, ct).ConfigureAwait(false),
             (await db.Set<IamAssignmentRow>().AsNoTracking().Where(a => a.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false)).Select(IamPersistenceModel.Domain).ToArray(),
-            await db.Set<TenantInvitation>().AsNoTracking().Where(i => i.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false)));
+            await db.Set<TenantInvitation>().AsNoTracking().Where(i => i.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false))
+            { OperationPolicies = await db.Set<TenantOperationPolicy>().AsNoTracking().Where(p => p.TenantId == tenantId).ToArrayAsync(ct).ConfigureAwait(false) });
     }
     private static async Task ApplyAsync<T, TKey>(AgentCoreDbContext db, IQueryable<T> query, IReadOnlyList<T> next,
         Func<T, TKey> key, CancellationToken ct) where T : class where TKey : notnull

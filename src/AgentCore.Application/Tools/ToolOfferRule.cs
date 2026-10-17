@@ -11,5 +11,6 @@ public enum ToolOfferRule
     ExperienceAuthority,
     ContinuityAuthority,
     HarnessAuthority,
-    IdentityMaintenanceAuthority
+    IdentityMaintenanceAuthority,
+    TenantExecutionAuthority
 }

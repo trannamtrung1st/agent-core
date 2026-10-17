@@ -3,7 +3,7 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Security;
 
 public sealed record PermissionDefinition(string Key, string ResourceType, bool HumanOnly = false,
-    bool Delegatable = true, bool SystemOnly = false)
+    bool Delegatable = true, bool SystemOnly = false, PermissionApprovalClass ApprovalClass = PermissionApprovalClass.Mutation)
 {
     // Access inspection/assignment and exact-action decisions govern the target resource itself.
     // Ordinary operation permissions apply only to their catalog-owned resource family.
@@ -26,7 +26,10 @@ public static class PermissionCatalog
         void Add(string family, string resource, string actions, bool human = false, bool system = false, bool delegatable = true)
         {
             foreach (var action in actions.Split(' '))
-                result.Add(new($"{family}.{action}", resource, human, delegatable && !human, system));
+                result.Add(new($"{family}.{action}", resource, human, delegatable && !human, system,
+                    action == "read" ? PermissionApprovalClass.ReadOnly
+                        : action is "delete" or "send" or "execute" || family is "credentials" or "browser" or "sandbox"
+                            ? PermissionApprovalClass.Sensitive : PermissionApprovalClass.Mutation));
         }
         Add("system.tenants", "tenant", "create read manage", true, true);
         Add("system.accounts", "account", "manage", true, true);

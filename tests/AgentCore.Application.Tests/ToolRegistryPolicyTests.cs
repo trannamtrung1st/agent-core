@@ -161,6 +161,23 @@ public sealed class ToolRegistryPolicyTests
     }
 
     [Fact]
+    public void Iam_inspection_is_context_only_and_requires_the_actual_tenant_session_frame()
+    {
+        var definition = Definition("iam-test", 1, []); var context = Context(definition, true, []);
+        Assert.DoesNotContain(ToolCatalog.For(definition, context, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.IamCheckAccess);
+        var session = Guid.NewGuid(); var activation = Guid.NewGuid();
+        var trusted = context with { AgentInstanceId = Guid.NewGuid(), OwnedSessionId = session,
+            ExecutionContext = new AgentCore.Domain.Conversation.TrustedExecutionContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), session,
+                Guid.NewGuid(), activation, activation, null, null, AgentCore.Domain.Conversation.ExecutionOrigin.UserMessage) };
+        var offered = ToolCatalog.For(definition, trusted, ToolConfigurationGates.AllowAll);
+        Assert.Contains(offered, t => t.Name == ToolCatalog.IamCheckAccess);
+        Assert.Contains(offered, t => t.Name == ToolCatalog.IamEffectivePermissions);
+        Assert.DoesNotContain(ToolCatalog.For(definition, trusted with { OwnedSessionId = Guid.NewGuid() }, ToolConfigurationGates.AllowAll), t => t.Name == ToolCatalog.IamCheckAccess);
+        Assert.Empty(ToolCatalog.For(definition, trusted with { ModelSupportsTools = false }, ToolConfigurationGates.AllowAll));
+        Assert.False(ToolRegistry.Get(ToolCatalog.IamCheckAccess).DefinitionAuthorizable);
+    }
+
+    [Fact]
     public async Task Executor_rechecks_policy_for_unknown_and_role_forbidden_tools()
     {
         var executor = new SessionToolExecutor();

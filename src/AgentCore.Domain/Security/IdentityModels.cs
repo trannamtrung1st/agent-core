@@ -59,7 +59,10 @@ public sealed record AuthorizationAudit(Guid AuditId, Guid? TenantId, Guid Actor
 public sealed record TenantSecurityState(Tenant Tenant, IReadOnlyList<TenantUser> Users,
     IReadOnlyList<Principal> Principals, IReadOnlyList<SystemIdentity> SystemIdentities,
     IReadOnlyList<AccessRole> Roles, IReadOnlyList<RoleAssignment> Assignments,
-    IReadOnlyList<TenantInvitation> Invitations);
+    IReadOnlyList<TenantInvitation> Invitations)
+{
+    public IReadOnlyList<TenantOperationPolicy> OperationPolicies { get; init; } = [];
+}
 
 public sealed record SystemSecurityState(IReadOnlyList<Principal> Principals,
     IReadOnlyList<AccessRole> Roles, IReadOnlyList<RoleAssignment> Assignments);

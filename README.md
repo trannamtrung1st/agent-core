@@ -1,5 +1,7 @@
 # Agent Core MVP
 
+The [tenant operation gate and approval-policy prerequisite](docs/reports/tenant-operation-authorization-verification-2026-10-17.md) now resolve actual saved Run identity, current executor/requester IAM and qualified human review without merging permissions. Tenant policies persist above Core minimums; narrow self-inspection tools run through the shared executor. Unsupported tenant effects are fenced before legacy services. Actual tenant worker/effect dispatch and durable approval requests/grants remain pending.
+
 Canonical [tenant text/Run admission](docs/reports/tenant-run-admission-verification-2026-10-17.md) now saves the actual executor, authenticated per-message requester and root over existing entry/Activation/Run rows, without a global profile. Scoped metadata, queued cancellation and Session/Run-grant retirement are locally verified. Tenant worker execution, Hub/audio, trusted continuations/recovery, per-effect IAM and durable approvals remain pending.
 
 Explicit [execution-root lineage](docs/reports/activation-root-lineage-verification-2026-10-17.md) now follows actual user/signal admissions, immediate children, configuration continuations and completion reports. Independent turns receive new roots; retries and continuations retain theirs. This supplies a prerequisite for approval deduplication; tenant worker execution and durable approvals remain pending.

@@ -71,6 +71,7 @@ public sealed record AgentContext(
     public string? EffectiveSpeechLocale { get; init; }
     public AgentRunConfiguration? Configuration { get; init; }
     public AgentRunTaskIntent? RunTaskIntent { get; init; }
+    public TrustedExecutionContext? ExecutionContext { get; init; }
     public IReadOnlyList<Guid>? CurrentUserEntryIds { get; init; }
 }
 
