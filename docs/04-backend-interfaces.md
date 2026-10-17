@@ -1,5 +1,13 @@
 # Backend Interfaces
 
+## Tenant Instance child editor reads
+
+`TenantAgentReadService.ReadSkillEditorAsync` and `ReadResourceEditorAsync` compose the existing child-read owners under the original authenticated human/session and final Instance/security fence. Each returns the actual `TenantAgent`, readable paged items, visible matching total, page/page size, security revision, `CanCreate` and `AllReadable`. Skill items pair the existing `InstanceSkillView` with `CanManage`/`CanCustomize`; resource items pair `InstanceResourceView` with `CanManage`/`CanDelete`/`CanCopy`. The API maps the agent through the existing safe projection.
+
+Shared private catalogs preserve existing child read projections and dependency filtering. Authorization precedes search, count and pagination; case-insensitive metadata search is bounded to 128 UTF-16 units, page to 0–100000 and page size to 1–100 (default 30). Stable name/path and key ordering avoids page changes from incidental backing order. `AllReadable` describes inherited tenant-wide read permission, not hidden counts. No IAM-inspector permission or client-selected principal is needed for these advisory action hints.
+
+Hints reflect current Active lifecycle and the exact typed permission: manage for existing Skills/resources, independent delete for local resources, and tenant-wide typed read plus manage for new-child destinations. Only inherited Definition Skills expose Customize and only inherited resources expose Copy. A local item grant cannot create siblings; content immutability and dependency validation remain in existing commands. Archived items remain inspectable without write hints. These reads never mutate child state, audit or policy and do not authorize a subsequent write; existing original-human atomic commands reauthorize and require displayed witnesses. Browser delivery remains a separately verified frontend obligation.
+
 ## Tenant Instance version reads
 
 `TenantAgentReadService.ReadVersionsAsync` and `PreviewVersionAsync` use the existing original-human facade for exact owned Instance reads. `TenantAgentVersionCatalog` supplies bounded, newest-first versions from that Instance's exact owned Definition or immutable shipped source, the safe agent, security revision and advisory `CanAdopt`. Owned sources additionally require exact `agent-definitions.read`; shipped source lookup never falls back to global durable publications or requires unrelated Instance-creation authority.

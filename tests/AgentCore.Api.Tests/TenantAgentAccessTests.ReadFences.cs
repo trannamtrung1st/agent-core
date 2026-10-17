@@ -14,7 +14,7 @@ namespace AgentCore.Api.Tests;
 public sealed partial class TenantAgentAccessTests
 {
     public static IEnumerable<object[]> AgentReadLogoutCases =>
-        from read in new[] { "settings", "execution-budgets", "self-management", "effective-config", "skills", "resources", "editor", "configuration-controls", "versions", "active-version/preview?version=1", "agent", "inventory", "templates" }
+        from read in new[] { "settings", "execution-budgets", "self-management", "effective-config", "skills", "resources", "skills/editor", "resources/editor", "editor", "configuration-controls", "versions", "active-version/preview?version=1", "agent", "inventory", "templates" }
         from signInAgain in new[] { false, true }
         select new object[] { read, signInAgain };
 

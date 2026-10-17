@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Tenant Instance Skills and Resources prerequisite
+
+The canonical child editor APIs supply safe Instance identity, permission-filtered metadata search/paging, current witnesses and exact typed action hints without requiring IAM-inspector permissions. The [Skills/Resources interaction contract](19-multi-tenant-iam-ux.md#instance-skills-and-resources-interaction-contract) owns the separate scoped pages, shared Skill Drawer/resource fields, deliberate drafts/confirmations, inherited/local distinctions and responsive recovery. This backend prerequisite does not implement or visually accept the tenant Skills/Resources pages. Rich preview/bulk adapters require independent tenant boundaries; existing global routes must never supply a frontend fallback.
+
 ## Tenant Instance Definition version
 
 `/t/{tenantId}/admin/agents/{instanceId}/version` uses `TenantAgentVersion` with the original-human catalog/preview and existing explicit adoption command. Current identity/version uses `TenantAgentHeading`; the exact source ID remains in native disclosure. Ten-item source pages expose real Active/Deprecated choices. Paging clears the prior selection/review; current/deprecated versions cannot be selected, and no implicit latest or free numeric version is used. Read-only users can preview when source read is available; archived Instances explain their restriction.

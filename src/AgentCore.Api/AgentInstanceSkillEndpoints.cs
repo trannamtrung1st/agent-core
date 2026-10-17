@@ -23,10 +23,7 @@ internal static class AgentInstanceSkillEndpoints
         g.MapDelete("/{key}", (Guid instanceId, string key, long expectedRevision, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Write(s.WriteAsync(instanceId, "delete", key, expectedRevision, ct: ct))));
         g.MapPost("/{key}/customize", (Guid instanceId, string key, JsonElement body, AgentInstanceSkillService s, CancellationToken ct) => Respond(() => Customize(s.CustomizeAsync(instanceId, key, Revision(body), ct: ct))));
     }
-    private static AgentInstanceSkillResponse Wire(InstanceSkillView v) => new(v.Key, v.Origin.ToString(), v.Name, v.Description,
-        v.Procedure, v.Projection.ToString(), v.Enabled, v.RequiredCapabilities, v.Revision, v.DefinitionVersion,
-        v.SourceDefinitionId, v.SourceDefinitionVersion, v.SourceDefinitionSkillId, v.MissingCapabilities,
-        v.CreatedBy?.ToString(), v.CreatedAt, v.UpdatedAt, v.EnabledOverride, v.EnabledChoice);
+    private static AgentInstanceSkillResponse Wire(InstanceSkillView v) => Mapping.AdminHttpMapping.ToInstanceSkill(v);
     private static async ValueTask<AgentInstanceSkillResponse> Read(ValueTask<InstanceSkillView> action) => Wire(await action);
     private static async ValueTask<AgentInstanceSkillResponse> Write(ValueTask<InstanceSkillView> action) => Wire(await action);
     private static async ValueTask<AgentInstanceSkillCustomizeResponse> Customize(ValueTask<InstanceSkillCustomization> action)

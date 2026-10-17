@@ -1,5 +1,13 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Instance child editor reads
+
+`GET /api/v2/tenants/{tenantId}/agents/{instanceId}/skills/editor` and `/resources/editor` require the original current cookie human, exact `agents.read` and the existing item-scoped/inherited typed child reads. Query parameters are `page` (0–100000, default 0), `pageSize` (1–100, default 30) and optional trimmed `search` (at most 128 UTF-16 units). Invalid bounds return 400. Unauthorized items are removed before case-insensitive metadata search, stable ordering, totals and pagination. A search for an unreadable item cannot reveal its existence.
+
+Both no-store responses contain `{ agent, items, total, page, pageSize, securityRevision, canCreate, allReadable }`; `agent` is the existing safe tenant Instance projection and carries the Instance revision. Skill items are `{ skill, canManage, canCustomize }`, using the existing `AgentInstanceSkillResponse` wire fields with string origin/projection/author labels. Resource items are `{ resource, canManage, canDelete, canCopy }`, retaining the existing typed resource view/revision and numeric kind. Resource dependencies remain filtered by independent Skill-read permission. `allReadable` describes tenant-wide typed read coverage, not a hidden count. Empty/no-match totals concern readable items only; lack of any permitted child collection/item access denies.
+
+`canCreate` requires Active lifecycle plus tenant-wide typed read/manage. Exact item manage and independent local resource delete supply their own hints. Customize/Copy additionally require a new-child destination grant; inherited bytes/Built-in content remain read-only. No IAM-inspector requests, owner capability, global catalog fallback or new mutation route is introduced. These hints are advisory; existing child commands independently reauthorize with expected security/Instance/child witnesses. Original-human replacement/logout and concurrent security/Instance changes fail closed after protected I/O.
+
 ## Tenant Definition version review reads
 
 Under `/api/v2/tenants/{tenantId}/agents/{instanceId}`:

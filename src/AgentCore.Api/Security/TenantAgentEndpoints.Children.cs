@@ -14,6 +14,18 @@ public static partial class TenantAgentEndpoints
     public sealed record ResourceCopy(long ExpectedRevision, long ExpectedInstanceRevision, string LogicalPath);
     private static void MapChildren(RouteGroupBuilder group)
     {
+        group.MapGet("/agents/{instanceId:guid}/skills/editor", (Guid instanceId, int? page, int? pageSize, string? search, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var a = IdentityHttp.TenantContext(http);
+            var value = await service.ReadSkillEditorAsync(a.TenantId, instanceId, Human(http), page ?? 0, pageSize ?? 30, search, ct).ConfigureAwait(false);
+            return Results.Json(new { agent = Safe(value.Agent), items = value.Items.Select(item => new { skill = Mapping.AdminHttpMapping.ToInstanceSkill(item.Skill), item.CanManage, item.CanCustomize }), value.Total, value.Page, value.PageSize, value.SecurityRevision, value.CanCreate, value.AllReadable });
+        }));
+        group.MapGet("/agents/{instanceId:guid}/resources/editor", (Guid instanceId, int? page, int? pageSize, string? search, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var a = IdentityHttp.TenantContext(http);
+            var value = await service.ReadResourceEditorAsync(a.TenantId, instanceId, Human(http), page ?? 0, pageSize ?? 30, search, ct).ConfigureAwait(false);
+            return Results.Json(new { agent = Safe(value.Agent), value.Items, value.Total, value.Page, value.PageSize, value.SecurityRevision, value.CanCreate, value.AllReadable });
+        }));
         group.MapGet("/agents/{instanceId:guid}/skills", (Guid instanceId, int? page, int? pageSize, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http); return Results.Json(await service.ReadSkillsAsync(a.TenantId, instanceId, Human(http), page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false));

@@ -17,14 +17,20 @@ public sealed partial class TenantAgentConfigurationService
 {
     public async ValueTask<TenantAgentResources> ReadResourcesAsync(Guid actor, Guid tenant, Guid id, CancellationToken ct = default)
     {
+        var catalog = await ReadResourceCatalog(actor, tenant, id, ct).ConfigureAwait(false);
+        return new(new(catalog.Agent.Instance.Revision, catalog.Agent.Instance.DefinitionId, catalog.Agent.Instance.ActiveVersion,
+            catalog.Items), catalog.State.Tenant.Revision);
+    }
+
+    private async ValueTask<ChildCatalog<InstanceResourceView>> ReadResourceCatalog(Guid actor, Guid tenant, Guid id, CancellationToken ct)
+    {
         await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
         var (snapshot, baseline) = await BoundForRead(actor, tenant, id, ct).ConfigureAwait(false);
         var definition = EffectiveChildDefinition(snapshot, baseline);
         var views = AgentInstanceResourceService.Views(definition, await Resources(tenant, baseline, ct).ConfigureAwait(false), snapshot.Resources, snapshot.Skills);
         var state = await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
         var visible = await VisibleChildren(state, actor, tenant, id, "resources.read", views, r => r.Key, ct, true).ConfigureAwait(false);
-        return new(new(snapshot.Agent.Instance.Revision, baseline.Id, baseline.Version,
-            await SafeResourceViews(state, actor, tenant, id, visible.Items, ct).ConfigureAwait(false)), state.Tenant.Revision);
+        return new(snapshot.Agent, await SafeResourceViews(state, actor, tenant, id, visible.Items, ct).ConfigureAwait(false), state, visible.All);
     }
 
     public async ValueTask<TenantAgentResourceContent> ReadResourceContentAsync(Guid actor, Guid tenant, Guid id, string key, CancellationToken ct = default)

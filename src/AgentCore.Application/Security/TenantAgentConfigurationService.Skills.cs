@@ -14,6 +14,14 @@ public sealed partial class TenantAgentConfigurationService
 {
     public async ValueTask<TenantAgentSkillPage> ReadSkillsAsync(Guid actor, Guid tenant, Guid id, int page = 0, int pageSize = 30, CancellationToken ct = default)
     {
+        var catalog = await ReadSkillCatalog(actor, tenant, id, ct).ConfigureAwait(false);
+        page = Math.Clamp(page, 0, 100_000); pageSize = Math.Clamp(pageSize, 1, 100);
+        return new(catalog.Items.Skip(page * pageSize).Take(pageSize).ToArray(), catalog.Items.Length, page, pageSize,
+            catalog.Agent.Instance.Revision, catalog.State.Tenant.Revision);
+    }
+
+    private async ValueTask<ChildCatalog<InstanceSkillView>> ReadSkillCatalog(Guid actor, Guid tenant, Guid id, CancellationToken ct)
+    {
         await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
         var (snapshot, baseline) = await BoundForRead(actor, tenant, id, ct).ConfigureAwait(false);
         var definition = EffectiveChildDefinition(snapshot, baseline);
@@ -22,8 +30,7 @@ public sealed partial class TenantAgentConfigurationService
             .Select(s => s with { InstanceRevision = snapshot.Agent.Instance.Revision }).ToArray();
         var state = await ChildParentState(actor, tenant, id, ct).ConfigureAwait(false);
         var visible = await VisibleChildren(state, actor, tenant, id, "skills.read", items, s => s.Key, ct, true).ConfigureAwait(false);
-        page = Math.Clamp(page, 0, 100_000); pageSize = Math.Clamp(pageSize, 1, 100);
-        return new(visible.Items.Skip(page * pageSize).Take(pageSize).ToArray(), visible.Items.Length, page, pageSize, snapshot.Agent.Instance.Revision, state.Tenant.Revision);
+        return new(snapshot.Agent, visible.Items, state, visible.All);
     }
 
     public ValueTask<TenantAgentSkillSaved> WriteSkillAsync(Guid actor, Guid tenant, Guid id, string operation,

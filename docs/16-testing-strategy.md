@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Tenant Instance child editor read regression
+
+Verify coherent original-human Skill/resource editor reads through InMemory/SQLite and authenticated HTTP. Assert permission filtering before search/count/paging, deterministic ordering, exact action hints without IAM-inspector permission, independent local resource delete, no sibling creation from item grants, inherited Customize/Copy destination requirements, readable dependency filtering and archived inspection without writes. Read → stale command → refresh → explicit save must preserve exact witnesses. Logout/replacement login and concurrent parent/security changes must reject a captured editor projection. Empty/no-match and invalid query bounds need distinct evidence. These backend checks do not establish tenant Skills/Resources browser acceptance; the [interaction contract](19-multi-tenant-iam-ux.md#instance-skills-and-resources-interaction-contract) precedes that frontend work.
+
 ## Tenant Instance version UI focused regression
 
 Use component tests for explicit reviewed witnesses, stale/mixed preview rejection, target retention, acknowledged-response read recovery without replay, read-only/partial detail, transient retry, selection/paging invalidation and late-scope abort. The existing administrative adoption case covers the shared change-summary consumer. Build the frontend.

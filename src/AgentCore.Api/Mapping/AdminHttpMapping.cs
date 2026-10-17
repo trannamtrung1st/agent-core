@@ -10,6 +10,11 @@ namespace AgentCore.Api.Mapping;
 
 internal static class AdminHttpMapping
 {
+    public static AgentInstanceSkillResponse ToInstanceSkill(InstanceSkillView value) => new(value.Key, value.Origin.ToString(), value.Name, value.Description,
+        value.Procedure, value.Projection.ToString(), value.Enabled, value.RequiredCapabilities, value.Revision, value.DefinitionVersion,
+        value.SourceDefinitionId, value.SourceDefinitionVersion, value.SourceDefinitionSkillId, value.MissingCapabilities,
+        value.CreatedBy?.ToString(), value.CreatedAt, value.UpdatedAt, value.EnabledOverride, value.EnabledChoice);
+
     public static AdminDefinitionInventoryItemResponse ToDefinitionItem(AdminDefinitionInventoryItem item) =>
         new(item.DefinitionId, item.Version, item.Source, item.Status, item.DisplayName, item.DraftCount);
 

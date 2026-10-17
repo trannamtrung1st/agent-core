@@ -1,5 +1,11 @@
 # Backend Implementation Specification
 
+## Tenant Instance child editor composition
+
+The original-human read facade adds bounded Skill/resource editor entry points over shared private catalogs in `TenantAgentConfigurationService`. Existing raw child reads and the editor compositions use the same snapshot, permission filtering, effective fields and readable dependency redaction. Editor search/count/paging runs after that filtering; exact item action hints use the captured security state and actual child addresses. Active lifecycle, tenant typed read/manage for new destinations and independent resource delete remain explicit. No store schema, new DI lifetime, authority engine or mutation adapter is introduced.
+
+The HTTP layer maps the Instance safely and shares the existing `AgentInstanceSkillResponse` mapper with the administrative consumer, retaining string origin/projection/author labels for the new Skill editor. Original-human and final parent/security checks surround every protected read, including permission-hint lookups. Commands continue through existing child preparation/validation and original-human atomic stores with exact witnesses. The [Skills/Resources interaction contract](19-multi-tenant-iam-ux.md#instance-skills-and-resources-interaction-contract) precedes frontend implementation; these backend reads do not establish browser acceptance.
+
 ## Tenant version catalog and adoption preview
 
 The existing singleton agent read facade now owns canonical version-list and exact-target preview entry points. Configuration uses tenant-owned publication summaries for GUID sources and immutable built-ins for shipped sources, filtering by the exact current Definition before sorting/paging. Owned Definition read is independent of Instance read/update. Both endpoints retain original-session and final security/Instance freshness checks; no new DI lifetime, table or resolver is introduced.
