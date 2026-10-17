@@ -110,7 +110,8 @@ public sealed partial class TenantCredentialIntegrationTests
         public TenantAccessService Access => new(Iam, Authorizer, Identity, Tokens, Ids, Clock);
         public LocalCredentialProtector Protector => new(Path.Combine(Root, "keys"));
         public TenantCredentialService Service => new(Iam, Credentials, Authorizer, Protector, Ids, Clock);
-        public TenantCredentialBindingService BindingService => new(Iam, (ITenantAgentStore)Iam, Credentials, (ITenantCredentialBindingStore)Iam, Authorizer,
+        public TenantCredentialBindingService BindingService => BindingServiceFor((ITenantCredentialBindingStore)Iam);
+        public TenantCredentialBindingService BindingServiceFor(ITenantCredentialBindingStore bindings) => new(Iam, (ITenantAgentStore)Iam, Credentials, bindings, Authorizer, Identity,
             BuiltIns, (ITenantDefinitionStore)Iam, Ids, TimeProvider.System);
         public TenantAgentService Agents => new(Iam, (ITenantAgentStore)Iam, BuiltIns, Authorizer, Ids, TimeProvider.System, ownedDefinitions: (ITenantDefinitionStore)Iam);
         private IBuiltInAgentDefinitionStore? _builtIns;

@@ -14,17 +14,27 @@ public sealed record TenantCredentialBindingSaved(CredentialBindingView Binding,
 public sealed record TenantCredentialBindingRemoved(long InstanceRevision, long SecurityRevision);
 
 public sealed class TenantCredentialBindingService(IIamStore security, ITenantAgentStore agents, ITenantCredentialStore credentials,
-    ITenantCredentialBindingStore bindings, IamAuthorizer authorizer, IBuiltInAgentDefinitionStore builtIns, ITenantDefinitionStore definitions,
+    ITenantCredentialBindingStore bindings, IamAuthorizer authorizer, IdentityService identity, IBuiltInAgentDefinitionStore builtIns, ITenantDefinitionStore definitions,
     IIdGenerator ids, TimeProvider time, AdminLifecycleCoordinator? lifecycleGate = null)
 {
-    public async ValueTask<TenantCredentialBindingPage> ListAsync(Guid actor, Guid tenant, Guid instance, int page = 0, int pageSize = 30, CancellationToken ct = default)
+    public ValueTask<TenantCredentialBindingPage> ListAsync(Guid actor, Guid tenant, Guid instance, int page = 0, int pageSize = 30, CancellationToken ct = default) =>
+        ListCoreAsync(actor, tenant, instance, page, pageSize, null, ct);
+    public ValueTask<TenantCredentialBindingPage> ListForHumanAsync(Guid tenant, Guid instance, TenantSessionInitiator human,
+        int page = 0, int pageSize = 30, CancellationToken ct = default) =>
+        ListCoreAsync(human.PrincipalId, tenant, instance, page, pageSize, human, ct);
+    private async ValueTask<TenantCredentialBindingPage> ListCoreAsync(Guid actor, Guid tenant, Guid instance, int page, int pageSize,
+        HumanSessionReference? human, CancellationToken ct)
     {
-        var state = await ParentState(actor, tenant, instance, false, ct).ConfigureAwait(false);
+        var state = await ParentState(actor, tenant, instance, false, ct, human).ConfigureAwait(false);
         var snapshot = await Snapshot(tenant, instance, ct).ConfigureAwait(false);
         var visible = await authorizer.VisibleResourcesAsync(state, actor, "credentials.read", snapshot.Bindings,
             item => TenantCredentialRules.Scope(tenant, item.Binding.CredentialId), ct).ConfigureAwait(false);
         page = Math.Clamp(page, 0, 100_000); pageSize = Math.Clamp(pageSize, 1, 100);
         var items = visible.Items.OrderBy(item => item.Binding.Reference, StringComparer.Ordinal).ToArray();
+        // Snapshot I/O and item checks may yield across revocation or a configuration write.
+        // Never pair an old projection with a newer security witness or a retired human session.
+        var current = await ParentState(actor, tenant, instance, false, ct, human).ConfigureAwait(false);
+        if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
         return new(items.Skip(page * pageSize).Take(pageSize).Select(View).ToArray(), items.Length, page, pageSize, visible.All,
             snapshot.Agent.Instance.Revision, state.Tenant.Revision);
     }
@@ -64,9 +74,11 @@ public sealed class TenantCredentialBindingService(IIamStore security, ITenantAg
                 now, Audit(actor, tenant, binding, "unbind", now), token).ConfigureAwait(false) ?? throw new SecurityConflictException("stale_revision");
             return new TenantCredentialBindingRemoved(updated.Instance.Revision, state.Tenant.Revision + 1);
         }, ct);
-    private async ValueTask<TenantSecurityState> ParentState(Guid actor, Guid tenant, Guid instance, bool write, CancellationToken ct)
+    private async ValueTask<TenantSecurityState> ParentState(Guid actor, Guid tenant, Guid instance, bool write, CancellationToken ct, HumanSessionReference? human = null)
     {
-        var state = await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable");
+        var state = human is null
+            ? await security.ReadTenantAsync(tenant, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("tenant_unavailable")
+            : await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
         foreach (var key in write ? new[] { "agents.read", "agents.update" } : new[] { "agents.read" })
         {
             var decision = await authorizer.CheckTenantAsync(state, actor, PermissionCatalog.Get(key), TenantAgentServiceScope(tenant, instance), ct).ConfigureAwait(false);
