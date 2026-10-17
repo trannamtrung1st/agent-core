@@ -21,6 +21,7 @@ public sealed class PromptContextBuilderTests
             ApprovalOutcome = new(tenant, run, Guid.NewGuid(), Guid.NewGuid(), instance, activation,
                 AgentCore.Domain.Security.TenantApprovalStatus.Approved, AgentCore.Domain.Security.TenantOperationOutcome.Denied, "management_unavailable", 3, 1)
         };
+        context = context with { RequesterContext = new(context.ExecutionContext!, "Organization", "Requester", [], false, 1, DateTimeOffset.UnixEpoch) };
         var builder = new PromptContextBuilder(); var snapshot = builder.BuildContext(context);
         var outcome = Assert.Single(snapshot.Sections, s => s.Id == ContextSectionId.ApprovalOutcome);
         Assert.Equal(ContextLayer.Evidence, outcome.Layer); Assert.Equal(ModelRole.User, outcome.Message.Role);

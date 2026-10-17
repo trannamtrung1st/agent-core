@@ -72,6 +72,7 @@ public sealed record AgentContext(
     public AgentRunConfiguration? Configuration { get; init; }
     public AgentRunTaskIntent? RunTaskIntent { get; init; }
     public TrustedExecutionContext? ExecutionContext { get; init; }
+    public Security.TenantRequesterContext? RequesterContext { get; init; }
     public Security.TenantApprovalOutcome? ApprovalOutcome { get; init; }
     public IReadOnlyList<Guid>? CurrentUserEntryIds { get; init; }
 }

@@ -48,11 +48,13 @@ public sealed partial class TenantSessionAccessTests
         public TaskCompletionSource? ApprovalResponseGate { get; set; }
         public TaskCompletionSource ApprovalResponseEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ConcurrentQueue<ModelRequest> Requests { get; } = new();
+        public Func<ModelRequest, CancellationToken, Task>? BeforeGenerate { get; set; }
         public ModelCapabilities Capabilities => _inner.Capabilities;
         public async IAsyncEnumerable<ModelGenerationEvent> GenerateAsync(ModelRequest request,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Requests.Enqueue(request);
+            if (BeforeGenerate is { } beforeGenerate) await beforeGenerate(request, cancellationToken);
             if (ApprovalResponseGate is { } gate && request.Context?.Sections.Any(s => s.Id == ContextSectionId.ApprovalOutcome) == true)
             { ApprovalResponseEntered.TrySetResult(); await gate.Task.WaitAsync(cancellationToken); }
             if (ProposedPreferenceAuthorization is { } authorizedPreferences && request.Context?.Sections.All(s => s.Id != ContextSectionId.ApprovalOutcome) == true

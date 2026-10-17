@@ -12,17 +12,17 @@ public enum ContextSourceKind { AgentCore, Definition, Instance, Environment, Se
 public enum ContextSectionId
 {
     CoreToolUse, CoreWorkspace, CoreMemory, CoreReferences, CoreContinuity, CoreBackground, CoreAutomation, CoreBackgroundReport, CoreConfigurationContinuation, CoreBrowserLifecycle, CoreCleanup, CoreFinalization, CoreBackgroundFinalization, CoreSandboxRecovery, CoreInvalidStrategies, CoreCheckpointCapacity, CoreBackgroundCheckpointCapacity, CoreTerminalBrowser, CoreChallengedBrowser, CoreDialog, CoreRepeatedDialog, CoreBrowserObservation, CoreInitiative, CoreCompletion, CoreCompaction, CoreDraftEvaluation, CoreProtocolRepair, CoreSemanticResponse,
-    OperatingContract, BrowserRecoveryRules, CoreVoiceOutput, CoreAttachmentReading, CoreAttachmentReread, CoreStateObservation,
+    OperatingContract, CoreTenantAuthority, BrowserRecoveryRules, CoreVoiceOutput, CoreAttachmentReading, CoreAttachmentReread, CoreStateObservation,
     CoreConfigurationAssistance, CoreHarnessAuthoring, CoreNoProgressBrowser, CoreTriggerAuthorization, CoreAutomationHistory, CoreScheduling, CoreMemoryReceipts, CoreInitiativePlan,
     AgentIdentity, AgentInstructions, Policies, Session, Environment, RunTask, Capabilities, SkillCatalog, Skills, InstanceSkills,
-    Scheduling, ExecutionFacts, ExecutionPhase, PreviousExecution,
+    Scheduling, ExecutionFacts, ExecutionPhase, PreviousExecution, TenantRequester,
     Summary, Profile, Memory, MemoryReceipts, SchedulingEvidence, Experience, Continuity, References, Attachments, Trigger, History, CurrentUserTask, ToolResults, ApprovalOutcome
 }
 
 /// <summary>Only platform-selected procedures can create Core sections. No arbitrary content factory exists for Core.</summary>
 public enum CoreProcedure
 {
-    OperatingContract, ToolUse, Workspace, Memory, References, Continuity, Background, Automation,
+    OperatingContract, TenantAuthority, ToolUse, Workspace, Memory, References, Continuity, Background, Automation,
     BackgroundReport, ConfigurationContinuation, BrowserLifecycle, Cleanup, Finalization, BackgroundFinalization,
     SandboxRecovery, InvalidStrategies, CheckpointCapacity, BackgroundCheckpointCapacity, TerminalBrowser,
     ChallengedBrowser, Dialog, RepeatedDialog, BrowserObservation, Initiative, Completion, Compaction, DraftEvaluation,
@@ -92,6 +92,7 @@ public sealed record ContextSection
             ContextSectionId.RunTask => source is ContextSourceKind.Automation or ContextSourceKind.AgentRun,
             ContextSectionId.Environment => source is ContextSourceKind.Definition or ContextSourceKind.Environment && semantics == ContextSemantics.TrustedFact,
             ContextSectionId.Session => source == ContextSourceKind.Session && semantics == ContextSemantics.TrustedFact,
+            ContextSectionId.TenantRequester => source == ContextSourceKind.AgentRun && semantics == ContextSemantics.TrustedFact,
             ContextSectionId.Capabilities or ContextSectionId.SkillCatalog or ContextSectionId.Scheduling or ContextSectionId.ExecutionFacts
                 or ContextSectionId.ExecutionPhase or ContextSectionId.PreviousExecution => source is ContextSourceKind.AgentRun or ContextSourceKind.Session && semantics == ContextSemantics.TrustedFact,
             _ => false

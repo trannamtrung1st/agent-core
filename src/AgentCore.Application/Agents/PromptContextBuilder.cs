@@ -86,6 +86,7 @@ public sealed class PromptContextBuilder(
         var visible = ManagementBuiltInSkills.Visible(context.PinnedSkillCatalog ?? [], context.Harness, initial: false);
         var keys = (context.ActiveSkillKeys ?? []).Where(k => visible.Any(s => s.Key == k)).ToArray();
         var snapshot = new EffectiveContextSnapshot(sections, fieldSources: context.Configuration?.FieldSources);
+        snapshot = WithRequesterContext(snapshot, context.ExecutionContext, context.RequesterContext);
         snapshot = WithSkills(snapshot, visible, keys,
             ManagementBuiltInSkills.Visible(context.PinnedSkillCatalog ?? [], context.Harness, initial: true), context.ModelSupportsTools);
         void Evidence(ContextSectionId id, ContextSourceKind source, string? text)
@@ -165,6 +166,18 @@ public sealed class PromptContextBuilder(
 
     public ModelRequest Build(AgentContext context, Guid responseId, InitiativePlan? initiativePlan = null) =>
         ContextAssembler.Create(responseId, BuildContext(context, initiativePlan), maxOutputTokens: context.Definition.ConversationPolicy.MaxOutputTokens, reasoningEffort: context.ReasoningEffort);
+
+    internal static EffectiveContextSnapshot WithRequesterContext(EffectiveContextSnapshot snapshot, TrustedExecutionContext? execution,
+        AgentCore.Application.Security.TenantRequesterContext? requester)
+    {
+        if (execution is null)
+        {
+            if (requester is not null) throw new InvalidOperationException("Requester facts require their actual tenant execution.");
+            return snapshot.Remove(ContextSectionId.TenantRequester).Remove(ContextSectionId.CoreTenantAuthority);
+        }
+        if (requester is null) throw new InvalidOperationException("Tenant model context requires current verified requester facts.");
+        return snapshot.Upsert(ContextSection.Core(CoreProcedure.TenantAuthority)).Upsert(requester.Section(execution));
+    }
 
     public static EffectiveContextSnapshot WithSkills(EffectiveContextSnapshot snapshot, IReadOnlyList<EffectiveSkill> catalog,
         IReadOnlyList<string> active, IReadOnlyList<EffectiveSkill>? metadata = null, bool includeMetadata = true)

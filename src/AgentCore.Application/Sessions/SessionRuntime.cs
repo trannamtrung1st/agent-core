@@ -226,7 +226,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         if (runtimeOwner is { } tenantOwner)
         {
             AgentCore.Application.Security.TenantRuntimeRules.RequireOwner(tenantOwner);
-            if (snapshot.ProfileId is not null || snapshot.AgentInstanceId != tenantOwner.AgentInstanceId || runAuthority is null)
+            if (snapshot.ProfileId is not null || snapshot.AgentInstanceId != tenantOwner.AgentInstanceId || runAuthority is not ITenantRunContext)
                 throw new InvalidOperationException("Tenant Runtime requires its owned snapshot and current execution authority.");
         }
         _runAuthority = runAuthority;
@@ -2507,6 +2507,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     EffectiveSpeechLocale = SpeechLocale.Resolve(capturedSnapshot).Effective,
                     Configuration = capturedRun?.Admission.Configuration ?? resolved?.Configuration,
                     ExecutionContext = capturedRun?.Admission.ExecutionContext,
+                    RequesterContext = await RequesterContextAsync(capturedRun, evaluationToken).ConfigureAwait(false),
                     ApprovalOutcome = capturedApprovalOutcome,
                     RunTaskIntent = capturedRun?.Admission.TaskIntent,
                     CurrentUserEntryIds = trigger.Kind == TriggerKind.UserTurn ? capturedRun?.Admission.Activation.SourceEntryIds : null
@@ -2964,6 +2965,8 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                         (_browserLease as IBrowser)?.HostPolicy.Limits.CapturesPerScope ?? BrowserOperationalLimits.Default.CapturesPerScope,
                         working.Tools?.Select(t => t.Name) ?? []) is { } semanticRecovery)
                     working = working with { Context = working.Context!.Upsert(semanticRecovery) };
+                working = working with { Context = PromptContextBuilder.WithRequesterContext(working.Context!, _boundAgentRun?.Admission.ExecutionContext,
+                    await RequesterContextAsync(_boundAgentRun, generateToken).ConfigureAwait(false)) };
                 working = ContextAssembler.Project(working, transcript: (request.Interaction ?? []).Concat(messages).ToArray());
                 working = model.PrepareRequest(working);
                 latestManifest = working.ContextManifest;
