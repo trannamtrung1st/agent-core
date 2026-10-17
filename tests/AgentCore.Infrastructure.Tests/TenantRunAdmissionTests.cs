@@ -155,8 +155,8 @@ public sealed partial class TenantRunAdmissionTests
         public ValueTask<TenantSessionRoot?> ResolveTenantSessionOwnerAsync(Guid session, CancellationToken ct = default) => inner.ResolveTenantSessionOwnerAsync(session, ct);
         public ValueTask<AgentRun?> FindTenantRunAsync(Guid tenant, Guid run, CancellationToken ct = default) => inner.FindTenantRunAsync(tenant, run, ct);
         public ValueTask<IReadOnlyList<Guid>> ListTenantRunIdsAsync(Guid tenant, Guid session, CancellationToken ct = default) => inner.ListTenantRunIdsAsync(tenant, session, ct);
-        public ValueTask<AgentRun?> TryCancelTenantRunAsync(TenantSecurityState next, long expected, Guid run, long revision, TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
-            => inner.TryCancelTenantRunAsync(next, expected, run, revision, initiator, at, audit, ct);
+        public ValueTask<AgentRun?> TryCancelTenantRunAsync(TenantSecurityState next, long expected, Guid run, long revision, TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, ConversationEntry? response = null)
+            => inner.TryCancelTenantRunAsync(next, expected, run, revision, initiator, at, audit, ct, response);
         public async ValueTask<TenantRunAdmissionResult?> TryAdmitTenantHumanRunAsync(TenantSecurityState next, long expected, TenantHumanRunAdmission admission,
             TenantSessionInitiator initiator, AuthorizationAudit audit, CancellationToken ct = default)
         { Prepared = admission; Entered.TrySetResult(); await Proceed.Task.WaitAsync(ct); return await inner.TryAdmitTenantHumanRunAsync(next, expected, admission, initiator, audit, ct); }

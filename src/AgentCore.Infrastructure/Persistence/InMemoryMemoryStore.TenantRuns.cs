@@ -55,15 +55,16 @@ public sealed partial class InMemoryMemoryStore
             AgentRuns.Runs[runId] = run.ResumeDurableApproval(run.Revision, requestId, at); return true;
         }
     }
-    internal AgentRun? CancelTenantRun(Guid tenant, Guid runId, long expectedRunRevision, DateTimeOffset at)
+    internal AgentRun? CancelTenantRun(Guid tenant, Guid runId, long expectedRunRevision, DateTimeOffset at, ConversationEntry? response = null)
     {
         lock (_gate)
         {
             var run = ReadTenantRun(tenant, runId); if (run is null || run.Revision != expectedRunRevision) return null;
             var saved = TenantRunCancellationRules.Cancel(run, at);
-            var entries = _entries.GetValueOrDefault(run.SessionId, []).Select(e => TenantRunCancellationRules.Interrupt(e, run, at)).ToArray();
+            var entries = TenantRunCancellationRules.ResponseEntries(_entries.GetValueOrDefault(run.SessionId, []), run, response, at);
             if (!entries.SequenceEqual(_entries.GetValueOrDefault(run.SessionId, [])))
-                Store(_sessions[run.SessionId] with { Revision = checked(_sessions[run.SessionId].Revision + 1), UpdatedAt = at, Entries = entries });
+                Store(_sessions[run.SessionId] with { Revision = checked(_sessions[run.SessionId].Revision + 1), UpdatedAt = at, Entries = entries,
+                    LastEntrySequence = Math.Max(_sessions[run.SessionId].DurableLastEntrySequence, entries.Max(e => e.Sequence)) });
             AgentRuns.Runs[runId] = saved; return saved;
         }
     }

@@ -15,7 +15,7 @@ public sealed partial class SqliteIamStore
         return (await db.Set<TenantSessionRecord>().AsNoTracking().SingleOrDefaultAsync(s => s.SessionId == sessionId.ToString("D"), ct).ConfigureAwait(false))?.Domain();
     }
     public async ValueTask<AgentRun?> TryCancelTenantRunAsync(TenantSecurityState next, long expectedSecurityRevision, Guid runId, long expectedRunRevision,
-        TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, ConversationEntry? response = null)
     {
         if (audit.ActorPrincipalId != initiator.PrincipalId || audit.Action != "agent-runs.cancel" || audit.Target != runId.ToString("D"))
             throw new ArgumentException("Invalid Run cancellation transaction.");
@@ -43,13 +43,23 @@ public sealed partial class SqliteIamStore
                 var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == next.Tenant.TenantId && g.RequestId == approvalId, ct).ConfigureAwait(false);
                 if (grant is { Status: OperationGrantStatus.Available }) db.Entry(grant).CurrentValues.SetValues(grant with { Status = OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) });
             }
-            var entries = await db.Entries.Where(e => e.SessionId == row.SessionId && e.ResponseId == run.ResponseId!.Value.ToString("D") && e.Status == nameof(EntryStatus.Streaming)).ToArrayAsync(ct).ConfigureAwait(false);
-            if (entries.Length > 0)
+            var responseEntryId = response?.EntryId.ToString("D"); var responseSequence = response?.Sequence;
+            var entries = await db.Entries.Where(e => e.SessionId == row.SessionId && (e.ResponseId == run.ResponseId!.Value.ToString("D")
+                || responseEntryId != null && (e.EntryId == responseEntryId || e.EntrySequence == responseSequence))).ToArrayAsync(ct).ConfigureAwait(false);
+            var beforeEntries = entries.Select(SqliteMemoryStore.ToEntry).ToArray();
+            var values = TenantRunCancellationRules.ResponseEntries(beforeEntries, run, response, at);
+            if (!values.SequenceEqual(beforeEntries))
             {
-                foreach (var entry in entries) db.Entry(entry).CurrentValues.SetValues(SqliteMemoryStore.ToRecord(row.SessionId, TenantRunCancellationRules.Interrupt(SqliteMemoryStore.ToEntry(entry), run, at)));
+                foreach (var entry in values)
+                {
+                    var prior = entries.SingleOrDefault(e => e.EntryId == entry.EntryId.ToString("D"));
+                    var mapped = SqliteMemoryStore.ToRecord(row.SessionId, entry);
+                    if (prior is null) db.Entries.Add(mapped); else db.Entry(prior).CurrentValues.SetValues(mapped);
+                }
                 var session = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == row.SessionId, ct).ConfigureAwait(false);
                 var snapshot = SqliteMemoryStore.ToSnapshot(session, []);
-                SqliteMemoryStore.ApplySession(session, snapshot with { Revision = checked(snapshot.Revision + 1), UpdatedAt = at });
+                SqliteMemoryStore.ApplySession(session, snapshot with { Revision = checked(snapshot.Revision + 1), UpdatedAt = at,
+                    LastEntrySequence = Math.Max(snapshot.DurableLastEntrySequence, values.Max(e => e.Sequence)) });
             }
             AgentRunStoreMapping.Apply(row, saved); return true;
         }, ct).ConfigureAwait(false);

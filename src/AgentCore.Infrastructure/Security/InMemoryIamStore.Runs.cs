@@ -10,7 +10,7 @@ public sealed partial class InMemoryIamStore
     public ValueTask<TenantSessionRoot?> ResolveTenantSessionOwnerAsync(Guid sessionId, CancellationToken ct = default)
     { ct.ThrowIfCancellationRequested(); lock (_gate) return ValueTask.FromResult(sessionBacking.ResolveTenantSessionOwner(sessionId)); }
     public ValueTask<AgentRun?> TryCancelTenantRunAsync(TenantSecurityState next, long expectedSecurityRevision, Guid runId, long expectedRunRevision,
-        TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default)
+        TenantSessionInitiator initiator, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default, ConversationEntry? response = null)
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         if (next.Tenant.Revision != checked(expectedSecurityRevision + 1) || audit.TenantId != next.Tenant.TenantId || audit.ActorPrincipalId != initiator.PrincipalId
@@ -25,7 +25,7 @@ public sealed partial class InMemoryIamStore
             var request = run.ApprovalRequestId is { } id ? _approvals.GetValueOrDefault(id) : null;
             var source = request is not null && request.RunId != runId ? sessionBacking.ReadTenantRun(request.TenantId, request.RunId) : null;
             var closed = TenantRunCancellationRules.Approval(request, run, source, at);
-            var saved = sessionBacking.CancelTenantRun(next.Tenant.TenantId, runId, expectedRunRevision, at);
+            var saved = sessionBacking.CancelTenantRun(next.Tenant.TenantId, runId, expectedRunRevision, at, response);
             if (saved is not null)
             {
                 if (closed is not null && closed != request)

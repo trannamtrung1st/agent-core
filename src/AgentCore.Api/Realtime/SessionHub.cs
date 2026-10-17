@@ -1,14 +1,50 @@
 using AgentCore.Application.Ports;
 using AgentCore.Contracts.Http;
 using AgentCore.Contracts.Realtime;
+using AgentCore.Api.Security;
+using AgentCore.Application.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace AgentCore.Api.Realtime;
 
-public sealed class SessionHub(SessionHost host) : Hub
+public sealed class SessionHub(SessionHost host, TenantSessionLiveDelivery tenants, IdentityService identity, IdentityHttpOptions policy, TimeProvider time) : Hub
 {
+    [Authorize]
+    public async Task<CommandAck> AttachTenant(ClientCommand<TenantAttachPayload> command)
+    {
+        var validation = SessionHost.Validate(command, attach: true, expectedType: "session.attach");
+        if (!validation.Accepted) return validation;
+        try
+        {
+            var http = Context.GetHttpContext() ?? throw new AccessDeniedException("tenant_connection_unavailable");
+            var origin = http.Request.Headers.Origin;
+            if (!http.Request.IsHttps && (!policy.AllowInsecureLocalHttp || !Http.TrustedLocalCaller.IsLoopback(http)))
+                throw new AccessDeniedException("https_required");
+            if (origin.Count != 1 || string.IsNullOrWhiteSpace(origin[0])
+                || !string.Equals(origin[0], $"{http.Request.Scheme}://{http.Request.Host}", StringComparison.OrdinalIgnoreCase)
+                    && !policy.AllowedOrigins.Contains(origin[0], StringComparer.OrdinalIgnoreCase))
+                throw new AccessDeniedException("origin_not_allowed");
+            if (!Guid.TryParse(command.Payload?.TenantId, out var tenant) || tenant == Guid.Empty
+                || IdentityHttp.AccountId(Context.User) is not { } account || IdentityHttp.SessionId(Context.User) is not { } authentication)
+                throw new AccessDeniedException("initiator_unavailable");
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5), time);
+            using var bounded = CancellationTokenSource.CreateLinkedTokenSource(Context.ConnectionAborted, deadline.Token);
+            var user = await identity.ResolveUserAsync(account, tenant, bounded.Token).ConfigureAwait(false) ?? throw new AccessDeniedException("not_member");
+            // A connection cannot remain in both authority registries after switching to tenant transport.
+            await host.DetachAsync(Context.ConnectionId).ConfigureAwait(false);
+            await tenants.AttachAsync(Context.ConnectionId, tenant, Guid.Parse(command.SessionId), new(account, authentication, user.PrincipalId), bounded.Token).ConfigureAwait(false);
+            return validation;
+        }
+        catch (AccessDeniedException ex) { tenants.Detach(Context.ConnectionId); return Denied(command.EventId, ex.ReasonCode); }
+        catch (SecurityConflictException ex) { tenants.Detach(Context.ConnectionId); return Denied(command.EventId, ex.ReasonCode); }
+        catch (OperationCanceledException) { tenants.Detach(Context.ConnectionId); return Denied(command.EventId, "tenant_connection_unavailable"); }
+    }
+    private static CommandAck Denied(string eventId, string reason) => new() { EventId = eventId, Accepted = false,
+        Error = new() { Category = "Authorization", Code = reason, Message = "Tenant subscription is unavailable.", Fatal = false } };
     public Task<CommandAck> Attach(ClientCommand<AttachPayload> command)
     {
+        tenants.Detach(Context.ConnectionId);
         command.Payload ??= new AttachPayload();
         if (string.IsNullOrEmpty(command.Payload.OwnerCapability))
         {
@@ -78,6 +114,7 @@ public sealed class SessionHub(SessionHost host) : Hub
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        tenants.Detach(Context.ConnectionId);
         await host.DetachAsync(Context.ConnectionId).ConfigureAwait(false);
         await base.OnDisconnectedAsync(exception).ConfigureAwait(false);
     }

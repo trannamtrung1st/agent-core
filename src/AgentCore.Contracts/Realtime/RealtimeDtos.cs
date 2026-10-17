@@ -95,6 +95,13 @@ public sealed class ClientCommand<TPayload> : IRealtimeCommand
 }
 
 [MessagePackObject]
+public sealed class TenantAttachPayload
+{
+    [Key("tenantId")]
+    public string TenantId { get; set; } = "";
+}
+
+[MessagePackObject]
 public sealed class AttachPayload
 {
     [Key("lastServerSequence")]

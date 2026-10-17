@@ -1967,7 +1967,7 @@ public sealed partial class SessionHost : ISessionOutput, ISessionAudioOutput, I
             .ConfigureAwait(false);
     }
 
-    private static CommandAck Validate(IRealtimeCommand command, bool attach, string expectedType)
+    internal static CommandAck Validate(IRealtimeCommand command, bool attach, string expectedType)
     {
         if (command.CorrelationId is not null || command.CausationId is not null)
         {

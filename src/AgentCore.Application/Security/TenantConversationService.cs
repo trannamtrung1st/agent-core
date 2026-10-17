@@ -8,10 +8,21 @@ namespace AgentCore.Application.Security;
 
 public sealed record TenantConversationHistory(IReadOnlyList<PublicHistoryEntry> Items, long NextAfter, bool HasMore,
     bool HasOlder, long? NextBefore, long SessionRevision, long SecurityRevision);
+public sealed record TenantConversationRecipient(TenantSessionRoot Owner, long SessionRevision, long SecurityRevision,
+    SessionMode Mode, SessionStatus Status, SessionLifecycleStatus LifecycleStatus, PublicAgentDescriptor Agent);
 
 public sealed class TenantConversationService(IIamStore security, ITenantSessionStore sessions, ITenantConversationStore content,
     IdentityService identity, IamAuthorizer authorizer)
 {
+    public async ValueTask<TenantConversationRecipient> AuthorizeRecipientAsync(Guid tenant, Guid session, TenantSessionInitiator human, CancellationToken ct = default)
+    {
+        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        var saved = await RequireAsync(state, session, human, ct).ConfigureAwait(false);
+        var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        if (current.Tenant.Revision != state.Tenant.Revision) throw new SecurityConflictException("stale_revision");
+        return new(saved.Owner, saved.Snapshot.Revision, state.Tenant.Revision, saved.Snapshot.Mode, saved.Snapshot.Status,
+            saved.Snapshot.LifecycleStatus, PublicHistory.FromSnapshot(saved.Snapshot, voiceAvailable: false));
+    }
     public async ValueTask<TenantConversationHistory> ReadAsync(Guid tenant, Guid session, TenantSessionInitiator human,
         long? after = null, long? before = null, int limit = 50, CancellationToken ct = default)
     {

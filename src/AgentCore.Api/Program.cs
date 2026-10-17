@@ -111,6 +111,7 @@ builder.Services.AddHostedService<EmailWatchHostedService>();
 builder.Services.AddHostedService<BackgroundOccurrenceIntakeHostedService>();
 builder.Services.AddSingleton<IAgentRunDispatcher, AgentRunDispatcher>();
 builder.Services.AddSingleton<ITenantRunDispatcher, TenantSessionRuntimeHost>();
+builder.Services.AddSingleton<TenantSessionLiveDelivery>();
 builder.Services.AddSingleton<ITenantRunControl>(p => (ITenantRunControl)p.GetRequiredService<ITenantRunDispatcher>());
 builder.Services.AddSingleton<ITenantRunExecution, TenantRunExecution>();
 builder.Services.AddHostedService<AgentRunHostedService>();

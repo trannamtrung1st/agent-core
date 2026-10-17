@@ -29,7 +29,9 @@ public sealed partial class SessionRuntime
             if (_runtimeOwner != request.Owner || request.SessionId != SessionId
                 || _boundAgentRun is { } bound && (bound.AgentRunId != request.RunId || bound.Claim?.Generation != request.Generation))
                 throw new AccessDeniedException("tenant_context_mismatch");
-            saved = await input.Service.CommitAsync(request, ct).ConfigureAwait(false);
+            if (_activeEntryId is not null && !_responseTerminal) UpdateStreamingAssistant();
+            var response = _activeEntryId is { } entry ? _snapshot.Entries.FirstOrDefault(e => e.EntryId == entry) : null;
+            saved = await input.Service.CommitAsync(request, ct, response).ConfigureAwait(false);
         }
         catch (Exception ex) { input.Completed.TrySetException(ex); return; }
 

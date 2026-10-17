@@ -25,7 +25,7 @@ public sealed class TenantRunCancellationService(IIamStore security, ITenantRunS
         if (run.IsTerminal) throw new SecurityConflictException("run_in_use");
         return new(run.Owner, run.SessionId, run.AgentRunId, run.Claim?.Generation, initiator, expectedSecurityRevision, expectedRunRevision);
     }
-    public async ValueTask<AgentRun> CommitAsync(TenantRunCancellation request, CancellationToken ct = default)
+    public async ValueTask<AgentRun> CommitAsync(TenantRunCancellation request, CancellationToken ct = default, ConversationEntry? response = null)
     {
         var tenant = request.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");
         if (await PrepareAsync(tenant, request.RunId, request.Initiator, request.ExpectedSecurityRevision, request.ExpectedRunRevision, ct).ConfigureAwait(false) != request)
@@ -35,13 +35,37 @@ public sealed class TenantRunCancellationService(IIamStore security, ITenantRunS
         var at = time.GetUtcNow();
         var audit = new AuthorizationAudit(ids.NewId(), tenant, request.Initiator.PrincipalId, "agent-runs.cancel", request.RunId.ToString("D"), "allowed", "run_cancelled", at);
         return await runs.TryCancelTenantRunAsync(state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } },
-            state.Tenant.Revision, request.RunId, request.ExpectedRunRevision, request.Initiator, at, audit, ct).ConfigureAwait(false)
+            state.Tenant.Revision, request.RunId, request.ExpectedRunRevision, request.Initiator, at, audit, ct, response).ConfigureAwait(false)
             ?? throw new SecurityConflictException("stale_revision");
     }
 }
 
 public static class TenantRunCancellationRules
 {
+    public static ConversationEntry[] ResponseEntries(IReadOnlyList<ConversationEntry> before, AgentRun run, ConversationEntry? response, DateTimeOffset at)
+    {
+        var entries = before.ToList();
+        if (response is not null)
+        {
+            if (run.Status != AgentRunStatus.Running || run.Claim is null || response.Role != ConversationRole.Assistant || response.ResponseId != run.ResponseId
+                || response.Sequence < 1 || response.EntryId == Guid.Empty || response.ReceivedTextEndExclusive < 0 || response.HeardTextEndExclusive < 0
+                || response.ReceivedTextEndExclusive > response.Text.Length
+                || entries.Any(e => e.EntryId != response.EntryId && (e.Sequence == response.Sequence || e.Role == ConversationRole.Assistant && e.ResponseId == response.ResponseId)))
+                throw new SecurityConflictException("cancellation_response_mismatch");
+            var index = entries.FindIndex(e => e.EntryId == response.EntryId);
+            if (index < 0) entries.Add(response);
+            else
+            {
+                var prior = entries[index];
+                if (prior.Role != response.Role || prior.ResponseId != response.ResponseId || prior.Sequence != response.Sequence
+                    || !response.Text.StartsWith(prior.Text, StringComparison.Ordinal) || response.ReceivedTextEndExclusive < prior.ReceivedTextEndExclusive
+                    || response.HeardTextEndExclusive < prior.HeardTextEndExclusive)
+                    throw new SecurityConflictException("cancellation_response_mismatch");
+                if (prior.Status == EntryStatus.Streaming) entries[index] = response;
+            }
+        }
+        return entries.Select(e => Interrupt(e, run, at)).ToArray();
+    }
     public static AgentRun Cancel(AgentRun run, DateTimeOffset at)
     {
         if (run.IsTerminal) throw new SecurityConflictException("run_in_use");

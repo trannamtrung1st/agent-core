@@ -8,15 +8,17 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Api.Realtime;
 
-// Canonical runtimes never enter SessionHost's legacy connection/control lookup or SignalR output path.
+// Canonical runtimes never enter SessionHost's legacy connection/control registry; recipient delivery is separately authenticated.
 public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITenantRuntimeStore storage, ITenantRunStore runs,
     TenantRunExecutionAuthority authority, TenantToolAuthorization tools, SessionHost capacity, IIdGenerator ids, TimeProvider time,
-    ILogger<TenantSessionRuntimeHost> logger, TenantRunContinuationService continuations, TenantRunCancellationService cancellations) : ITenantRunDispatcher, IAsyncDisposable
+    ILogger<TenantSessionRuntimeHost> logger, TenantRunContinuationService continuations, TenantRunCancellationService cancellations,
+    TenantSessionLiveDelivery delivery) : ITenantRunDispatcher, IAsyncDisposable
 {
-    private sealed class Live(AgentRun run, SessionRuntime runtime)
+    private sealed class Live(AgentRun run, SessionRuntime runtime, TenantSessionLiveDelivery.Source output)
     {
         public AgentRun Run { get; } = run;
         public SessionRuntime Runtime { get; } = runtime;
+        public TenantSessionLiveDelivery.Source Output { get; } = output;
         public CancellationTokenSource Lifetime { get; } = new();
         public CancellationTokenSource OperationStop { get; } = new();
         public TaskCompletionSource<bool> Accepted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -26,8 +28,6 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
     private readonly Dictionary<Guid, Live> _live = [];
     private readonly Dictionary<(Guid Run, Guid Generation), TaskCompletionSource<bool>> _dispatching = [];
     private bool _stopping;
-    private sealed class PrivateOutput : ISessionOutput
-    { public ValueTask PublishAsync(SessionOutput output, CancellationToken cancellationToken = default) => ValueTask.CompletedTask; }
 
     public ValueTask<bool> AdmitCompletionAsync(BackgroundCompletionCandidate source, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
     public ValueTask<bool> RepairPendingInputsAsync(Guid sessionId, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
@@ -92,7 +92,12 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
             else if (!capacity.TryReserveTenantRuntime()) refused = true;
             else
             {
-                try { admitted = new(run, factory.CreateTenant(snapshot, new PrivateOutput(), frame, storage, runs, authority, tools)); _live.Add(run.SessionId, admitted); }
+                try
+                {
+                    var output = delivery.CreateSource(run);
+                    admitted = new(run, factory.CreateTenant(snapshot, output, frame, storage, runs, authority, tools), output);
+                    _live.Add(run.SessionId, admitted);
+                }
                 catch { capacity.ReleaseTenantRuntime(); throw; }
             }
         }
@@ -105,6 +110,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
         var live = admitted ?? throw new InvalidOperationException("Tenant Runtime admission was not resolved.");
         try
         {
+            live.Output.Activate();
             using var dispatch = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, live.Lifetime.Token, live.OperationStop.Token);
             try { await continuations.PrepareExternalEffectAsync(run, dispatch.Token).ConfigureAwait(false); }
             catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException)
@@ -174,6 +180,7 @@ public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory facto
             catch (Exception ex) { DiagnosticLog.Warning(logger, ex, ids.NewId(), "Tenant Runtime disposal failed.", new(AgentRunId: live.Run.AgentRunId)); }
             finally
             {
+                await live.Output.CloseAsync().ConfigureAwait(false);
                 lock (_gate) { if (_live.GetValueOrDefault(sessionId) == live) _live.Remove(sessionId); }
                 capacity.ReleaseTenantRuntime(); live.OperationStop.Dispose(); live.Lifetime.Dispose();
                 live.Stopped.TrySetResult();

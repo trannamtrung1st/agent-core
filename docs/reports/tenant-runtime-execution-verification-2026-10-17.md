@@ -54,3 +54,5 @@ Trusted continuation/autonomous admissions, complete approval/effect consumption
 Subsequent [active Run cancellation verification](tenant-active-run-cancellation-verification-2026-10-17.md) implements HTTP-to-mailbox stop and both-store hosted control evidence. Live message ingress/delivery/audio remain separate gaps; earlier pending statements describe this historical execution checkpoint.
 
 Subsequent [protected tenant history verification](tenant-conversation-history-verification-2026-10-17.md) adds authenticated persisted conversation readback. Live delivery/Hub/voice and delivery receipts remain separate; earlier pending-history statements describe their original checkpoint.
+
+Subsequent [authenticated live text verification](tenant-live-text-delivery-verification-2026-10-17.md) adds tenant text subscriptions and preserves a mailbox response atomically during cancellation before its first checkpoint. Earlier private-output/saved-row-only statements describe their original checkpoints; frontend, Hub commands/receipts and voice remain separate.

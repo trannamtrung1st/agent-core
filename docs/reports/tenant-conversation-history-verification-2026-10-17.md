@@ -41,3 +41,5 @@ The API build passed with zero warnings/errors. Changed Markdown local-link targ
 ## Remaining proposal work
 
 The Runtime still discards transport events. Authenticated tenant Hub/live text and voice, delivery acknowledgements, Chat frontend/tenant switching, original-Chat approval links/notifications, complete rich-resource read/effect integration, trusted autonomous origins and obsolete-authority/schema removal remain required. HTTP readback is not a durable delivery acknowledgement or proof of heard context. No frontend code changed, so browser verification belongs to the upcoming frontend integration. CI, deployment and Real-provider acceptance were not run. The full goal remains active.
+
+Subsequent [authenticated live text verification](tenant-live-text-delivery-verification-2026-10-17.md) adds tenant text subscriptions and preserves a mailbox response atomically during cancellation before its first checkpoint. Earlier private-output/saved-row-only statements describe their original checkpoints; frontend, Hub commands/receipts and voice remain separate.
