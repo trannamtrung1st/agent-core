@@ -100,7 +100,7 @@ public sealed partial class SessionRuntime
                 input.Completed.TrySetResult(new(true, text));
         }
     }
-    private void ApplyTenantApprovalPrepared(TenantApprovalPrepared input)
+    private async Task ApplyTenantApprovalPreparedAsync(TenantApprovalPrepared input, CancellationToken ct)
     {
         if (!ReferenceEquals(_tenantApprovalRequest, input.Request))
         { input.Request.Completed.TrySetResult(new(true, "{\"error\":\"superseded\"}")); return; }
@@ -114,6 +114,8 @@ public sealed partial class SessionRuntime
             _responseTerminal = true; _activeResponseId = null; _activeEntryId = null; _outputActivity = OutputActivity.Idle;
             input.Request.Completed.TrySetResult(new(true, input.Text));
             _responseCts?.Cancel();
+            if (run is { Status: AgentRunStatus.WaitingForApproval, ApprovalRequestId: { } request })
+                await _output.PublishAsync(new(WorkerContext(input.Context), input.Request.ResponseId, new DurableApprovalPendingOutput(request, run.AgentRunId)), ct).ConfigureAwait(false);
         }
         else input.Request.Completed.TrySetResult(new(false, input.Text));
     }

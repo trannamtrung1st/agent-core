@@ -420,6 +420,9 @@ public sealed record SpeechProjectionOutput(ResponseSpeechMode Mode, string Text
 
 public sealed record TextCompletedOutput(int TextLength) : OutputPayload;
 
+// A durable request has released generation; it is neither response completion nor live-only consent.
+public sealed record DurableApprovalPendingOutput(Guid RequestId, Guid RunId) : OutputPayload;
+
 public sealed record BlockUpsertOutput(
     string BlockId,
     string Kind,

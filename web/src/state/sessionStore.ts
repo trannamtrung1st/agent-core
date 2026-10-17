@@ -716,9 +716,9 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
       const history = historyFromPayload(payload.history);
       const streaming = [...history].reverse().find((entry) =>
         entry.role === "assistant" && entry.status === "streaming" && entry.responseId != null);
-      const activeResponseId = payload.activeResponseId == null
+      const activeResponseId = payload.activeResponseId == null && !Object.prototype.hasOwnProperty.call(payload, 'tenantId')
         ? streaming?.responseId ?? null
-        : asString(payload.activeResponseId);
+        : payload.activeResponseId == null ? null : asString(payload.activeResponseId);
       const outputState = asString(payload.outputState) || "idle";
       const hasOlderHistory = Boolean(payload.hasOlderHistory);
       const historyBeforeSequence = payload.historyBeforeSequence == null
@@ -1030,6 +1030,11 @@ export function applyServerEvent(state: SessionView, event: ServerEvent): Sessio
               }
             : entry)
       };
+    }
+    case "agent.approval.pending": {
+      const current = event.responseId != null && event.responseId === state.liveResponseId && event.payload.runId === state.agentRunId;
+      return { ...state, lastServerSequence: event.sequence,
+        ...(current ? { liveResponseId: null, agentRunId: null, outputState: 'idle', activeProgress: null } : {}) };
     }
     case "session.state.changed": {
       const mode = asString(event.payload.mode) === "voice" ? "voice" : "text";

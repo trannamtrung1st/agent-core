@@ -17,6 +17,18 @@ function event(partial: Partial<ServerEvent> & Pick<ServerEvent, "type" | "seque
 }
 
 describe("applyServerEvent", () => {
+  it('releases only the exact Run waiting for a durable approval without completing or tombstoning its response', () => {
+    const state = { ...emptySession(), sessionId: 's1', attachmentId: 'a1', liveResponseId: 'r1', agentRunId: 'run-two', outputState: 'agentGenerating' };
+    const old = applyServerEvent(state, event({ type: 'agent.approval.pending', sequence: 1, responseId: 'r1', payload: { runId: 'run-one', requestId: 'approval' } }));
+    expect(old.liveResponseId).toBe('r1');
+    const waiting = applyServerEvent(old, event({ type: 'agent.approval.pending', sequence: 2, responseId: 'r1', payload: { runId: 'run-two', requestId: 'approval' } }));
+    expect(waiting.liveResponseId).toBeNull(); expect(waiting.outputState).toBe('idle'); expect(waiting.tombstones).toEqual({});
+  });
+  it('uses an authoritative null active response for tenant ready even when saved history has a waiting streaming row', () => {
+    const ready = applyServerEvent({ ...emptySession(), attachmentId: 'a1' }, event({ type: 'session.ready', sequence: 1,
+      payload: { tenantId: 'tenant', activeResponseId: null, history: [{ entryId: 'reply', sequence: 1, role: 'assistant', responseId: 'r1', text: '', status: 'streaming' }] } }));
+    expect(ready.liveResponseId).toBeNull(); expect(ready.entries[0]?.status).toBe('streaming');
+  });
   it.each(["interrupted", "failed", "completed"])("preserves settled %s status and time against conflicting terminal events", (status) => {
     const completedAt = "2026-09-15T00:03:00.000Z";
     const restored = applyServerEvent({ ...emptySession(), attachmentId: "a1" }, event({

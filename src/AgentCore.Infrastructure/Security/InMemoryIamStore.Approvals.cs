@@ -24,6 +24,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
         lock (_gate)
         {
             var rows = _approvals.Values.Where(r => r.TenantId == tenantId
+                && (page.SessionId is null || r.SessionId == page.SessionId)
                 && (allowedRequests is null || allowedRequests.Contains(r.RequestId)) && (r.ResourceType != "agent" || allowedInstances is null || allowedInstances.Contains(r.Operation.InstanceId))
                 && (r.ResourceType != "credential" || allowedCredentials is null || allowedCredentials.Contains(r.Operation.CredentialCheck!.CredentialId))
                 && (page.Status is null || r.Status == page.Status) && (page.Kind is null || r.Kind == page.Kind)).ToArray();

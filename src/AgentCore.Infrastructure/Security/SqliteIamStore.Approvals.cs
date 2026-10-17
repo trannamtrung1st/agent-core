@@ -35,6 +35,7 @@ public sealed partial class SqliteIamStore : ITenantApprovalStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var query = db.Set<TenantApprovalRecord>().AsNoTracking().Where(r => r.TenantId == tenantId);
+        if (page.SessionId is { } session) query = query.Where(r => r.SessionId == session.ToString("D"));
         if (allowedRequests is not null) query = query.Where(r => allowedRequests.Contains(r.RequestId));
         if (allowedInstances is not null)
         { var ids = allowedInstances.Select(id => id.ToString("D")).ToArray(); query = query.Where(r => r.ResourceType != "agent" || ids.Contains(r.InstanceId)); }

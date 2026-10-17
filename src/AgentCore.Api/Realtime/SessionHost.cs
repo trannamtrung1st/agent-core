@@ -2574,6 +2574,10 @@ public static class SessionEventMapper
             {
                 ["textLength"] = completed.TextLength
             }),
+            DurableApprovalPendingOutput pending => ("agent.approval.pending", new Dictionary<string, object?>
+            {
+                ["requestId"] = pending.RequestId.ToString("D"), ["runId"] = pending.RunId.ToString("D")
+            }),
             BlockUpsertOutput block => ("agent.block.upsert", new Dictionary<string, object?>
             {
                 ["blockId"] = block.BlockId,

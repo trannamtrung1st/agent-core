@@ -279,11 +279,22 @@ async function invoke(
     && !['receipt_unavailable', 'receipt_out_of_bounds', 'UnknownResponse', 'tenant_runtime_unavailable'].includes(result.error.code ?? '')) {
     // A queued receipt can lose to Stop's interrupted-row commit. That refusal (and an
     // unknown response target) says nothing about this human's access to the conversation.
-    const draft = useSessionStore.getState().draft || pendingUserText?.text || '';
-    retirePrivateChat(); syncBrowserSessionPath(null, 'replace');
-    useSessionStore.setState({ draft, connection: 'failed', error: 'Your access to this conversation changed. Reload your organization or choose another chat.', errorFatal: false });
+    retireUnavailableTenantChat();
   }
   return result;
+}
+
+export function retireUnavailableTenantChat(): void {
+  const draft = useSessionStore.getState().draft || pendingUserText?.text || '';
+  retirePrivateChat(); syncBrowserSessionPath(null, 'replace');
+  useSessionStore.setState({ draft, connection: 'failed', error: 'Your access to this conversation changed. Reload your organization or choose another chat.', errorFatal: false });
+}
+export function releaseDurableApprovalWait(session: string, response: string, run: string): void {
+  const current = useSessionStore.getState();
+  if (current.sessionId !== session || current.liveResponseId !== response || current.agentRunId !== run) return;
+  clearAwaitingAgentResponseStart(); stopReceipts();
+  useSessionStore.setState({ liveResponseId: null, agentRunId: null, outputState: 'idle', activeProgress: null });
+  void maybeAutoDispatchQueueHead();
 }
 
 type HubCommandAck = { accepted?: boolean; error?: WireError; result?: Record<string, unknown> };
@@ -902,6 +913,10 @@ function handleEvent(raw: ServerEvent): void {
   }
   if (raw.type === "agent.response.completed" && String(raw.payload.status ?? "completed") === "completed") {
     void maybeAutoDispatchQueueHead();
+  }
+  if (chatTenantId && raw.type === 'agent.approval.pending') {
+    if (raw.responseId === prior.liveResponseId && raw.payload.runId === prior.agentRunId) { clearAwaitingAgentResponseStart(); stopReceipts(); void maybeAutoDispatchQueueHead(); }
+    window.dispatchEvent(new Event('agentcore:approval-updated'));
   }
   if (raw.type === "session.state.changed") {
     const status = String(raw.payload.status ?? "");
@@ -2202,6 +2217,8 @@ export async function beginNewChat(options?: { syncUrl?: boolean; urlMode?: "pus
   if (options?.syncUrl !== false) {
     syncBrowserSessionPath(null, options?.urlMode ?? "push");
   }
+  // A completed approved effect may have advanced the Instance since the previous Chat.
+  if (chatTenantId) await loadChatAgentInstances();
 }
 
 export function clearRouteNotice(): void {
@@ -2391,7 +2408,7 @@ export async function openCatalogSession(
   useSessionStore.setState({ routeNotice: null });
 
   try {
-    if (item.status !== "attached" && requiresExplicitResume(item.pauseReason)) {
+    if (!chatTenantId && item.status !== "attached" && requiresExplicitResume(item.pauseReason)) {
       await reopenSession(item.sessionId);
     }
     await startConnection(item.sessionId, { syncUrl: "none" });
@@ -2605,7 +2622,7 @@ async function showEndedSession(
     }
 
     if (view.status !== "ended") {
-      if (view.status !== "attached" && requiresExplicitResume(view.pauseReason)) {
+      if (!chatTenantId && view.status !== "attached" && requiresExplicitResume(view.pauseReason)) {
         await reopenSession(sessionId);
       }
       await startConnection(sessionId, { syncUrl: "none" });

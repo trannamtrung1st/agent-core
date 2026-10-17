@@ -3,12 +3,12 @@ using AgentCore.Domain.Security;
 namespace AgentCore.Application.Ports;
 
 public sealed record TenantApprovalContinuationIds(Guid ActivationId, Guid RunId);
-public sealed record TenantApprovalQuery(int Page = 0, int PageSize = 20, TenantApprovalStatus? Status = null, ApprovalKind? Kind = null)
+public sealed record TenantApprovalQuery(int Page = 0, int PageSize = 20, TenantApprovalStatus? Status = null, ApprovalKind? Kind = null, Guid? SessionId = null)
 {
     public void Validate()
     {
         if (Page is < 0 or > 100000 || PageSize is < 1 or > 100 || Status is { } status && !Enum.IsDefined(status)
-            || Kind is { } kind && !Enum.IsDefined(kind)) throw new ArgumentException("Invalid approval inventory query.");
+            || Kind is { } kind && !Enum.IsDefined(kind) || SessionId == Guid.Empty) throw new ArgumentException("Invalid approval inventory query.");
     }
 }
 public sealed record TenantApprovalPage(IReadOnlyList<TenantApprovalRequest> Items, int Total, int Page, int PageSize);

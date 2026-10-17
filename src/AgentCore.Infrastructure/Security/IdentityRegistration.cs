@@ -52,6 +52,7 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantSessionStore>(p => (ITenantSessionStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<ITenantConversationStore>(p => (ITenantConversationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantConversationService>();
+        services.TryAddSingleton<TenantConversationApprovalService>();
         services.TryAddSingleton<TenantChatService>();
         services.TryAddSingleton<ITenantDeliveryReceiptStore>(p => (ITenantDeliveryReceiptStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<ITenantRunStore>(p => (ITenantRunStore)p.GetRequiredService<IIamStore>());

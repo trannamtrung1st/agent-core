@@ -150,6 +150,7 @@ test('local queue drains once and Stop cancels the delivered canonical Run', asy
 test('Chat-only member has no management controls and revoked Chat clears protected content', async ({ page }) => {
   const f = await fixture();
   try {
+    await call(f.api, `${f.prefix}/agents/${f.agent}/self-management`, { expectedRevision: await f.revision(), expectedInstanceRevision: 1, overrides: { mode: { value: 'Assisted' }, scopes: { value: ['Settings'] } } }, 'PUT');
     const nonce = crypto.randomUUID().slice(0, 8), email = `chat-member-${nonce}@example.test`, secret = 'synthetic-chat-member-password';
     const role = await call<{ roleId: string }>(f.api, `${f.prefix}/roles`, { name: `Chat member ${nonce}`, permissions: ['sessions.read', 'sessions.create'], expectedRevision: await f.revision() });
     const invitation = await call<{ invitationId: string; token: string }>(f.api, `${f.prefix}/members/invite`, { login: email, roleId: role.roleId, expectedRevision: await f.revision() });
@@ -160,12 +161,63 @@ test('Chat-only member has no management controls and revoked Chat clears protec
     const grant = await call<{ assignmentId: string }>(f.api, `${f.prefix}/role-assignments`, { principalId, roleId: chat.roleId, resourceType: 'agent', resourceId: f.agent, expectedRevision: await f.revision() });
     const observed = watch(page); await signIn(page, email, secret); await page.goto(f.path);
     await send(page, 'Protected member transcript'); await reply(page);
+    await send(page, 'synthetic approval review');
+    const minimal = page.getByRole('region', { name: 'Conversation approvals', exact: true });
+    await expect(minimal.getByText('Waiting for review', { exact: true })).toBeVisible();
+    await expect(minimal.getByRole('link', { name: 'Review details', exact: true })).toHaveCount(0);
+    await expect(minimal.getByText('vi', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'End', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Actions for / })).toHaveCount(0);
     await call(f.api, `${f.prefix}/role-assignments/${grant.assignmentId}?expectedRevision=${await f.revision()}`, undefined, 'DELETE');
     await send(page, 'Keep my rejected draft');
     await expect(page.locator('body')).not.toContainText('Protected member transcript');
     await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+    expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
+  } finally { await f.api.dispose(); }
+});
+
+for (const decision of ['approve', 'reject'] as const) test(`original Chat recovers a durable ${decision} decision and remains usable while waiting`, async ({ page }) => {
+  const f = await fixture(); const observed = watch(page);
+  try {
+    await call(f.api, `${f.prefix}/agents/${f.agent}/self-management`, { expectedRevision: await f.revision(), expectedInstanceRevision: 1, overrides: { mode: { value: 'Assisted' }, scopes: { value: ['Settings'] } } }, 'PUT');
+    await signIn(page); await page.goto(f.path); await send(page, 'synthetic approval review');
+    let panel = page.getByRole('region', { name: 'Conversation approvals', exact: true });
+    await expect(panel.getByText('Waiting for review', { exact: true })).toBeVisible();
+    if (decision === 'approve') {
+      await page.route('**/sessions/*/approvals?*', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ reasonCode: 'unavailable' }) }), { times: 1 });
+      await panel.getByRole('button', { name: 'Refresh approvals', exact: true }).click();
+      await expect(panel.getByRole('alert')).toBeVisible(); await expect(panel.getByText('Waiting for review', { exact: true })).toBeVisible();
+      await panel.getByRole('button', { name: 'Refresh approvals', exact: true }).click(); await expect(panel.getByRole('alert')).toHaveCount(0);
+    }
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
+    const url = page.url(), id = url.split('/').pop()!;
+    await page.reload(); await expect(panel.getByText('Waiting for review', { exact: true })).toBeVisible();
+    await send(page, 'Independent work remains usable'); await reply(page);
+    await panel.getByRole('link', { name: 'Review details', exact: true }).click();
+    let detail = page.getByRole('dialog', { name: 'Approval details', exact: true });
+    await expect(detail.getByRole('region', { name: 'Exact saved changes', exact: true })).toContainText('vi');
+    expect(page.url()).toBe(url);
+    if (decision === 'approve') {
+      // A distinct, authenticated fixture session represents the authorized second device.
+      const feed = await call<{ items: { requestId: string }[] }>(f.api, `${f.prefix}/sessions/${id}/approvals`);
+      const saved = await call<{ preparedAction: { actionHash: string }; requestRevision: number }>(f.api, `${f.prefix}/approvals/${feed.items[0].requestId}`);
+      await call(f.api, `${f.prefix}/approvals/${feed.items[0].requestId}/decision`, { decision, actionHash: saved.preparedAction.actionHash, expectedRevision: await f.revision(), expectedRequestRevision: saved.requestRevision });
+      await detail.getByRole('button', { name: 'Refresh details', exact: true }).click();
+    } else {
+      await detail.getByRole('button', { name: 'Reject', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Reject?', exact: true }).getByRole('button', { name: 'Reject', exact: true }).click();
+    }
+    await detail.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(panel.getByRole('link', { name: 'Review details', exact: true })).toBeFocused();
+    await expect(panel.getByText(decision === 'approve' ? 'Approved' : 'Rejected', { exact: true })).toBeVisible();
+    if (decision === 'approve') await expect(panel.getByText('Applied', { exact: true })).toBeVisible();
+    else await expect(panel.getByText('Applied', { exact: true })).toHaveCount(0);
+    await page.reload(); await expect(panel.getByText(decision === 'approve' ? 'Applied' : 'Rejected', { exact: true })).toBeVisible();
+    await expect(page.getByText('Independent work remains usable', { exact: true })).toHaveCount(1);
+    if (decision === 'approve') {
+      await page.getByRole('link', { name: 'Start a new chat', exact: true }).click();
+      await send(page, 'New Chat after the approved configuration change'); await reply(page);
+    }
     expect(observed.errors).toEqual([]); expect(observed.legacy).toEqual([]);
   } finally { await f.api.dispose(); }
 });

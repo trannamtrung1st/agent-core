@@ -1,5 +1,7 @@
 # Event Model
 
+`DurableApprovalPendingOutput(RequestId, RunId)` reports a persisted tenant Run wait through the existing Runtime output channel. It carries no protected operation preview or decision authority. The tenant recipient adapter validates the actual saved request/Run and current recipient, publishes `agent.approval.pending` on the original response, then retires the live generation. This is not response completion, interruption, received/heard credit, a human decision or a new Automation event. Reconnect recovers minimal status by an authorized durable read; existing `ApprovalProcessedSignal` and operation receipts still own continuation/effect semantics. [Protocol](14-api-and-realtime-protocol.md#canonical-original-chat-approvals), [verification](reports/tenant-chat-approvals-verification-2026-10-17.md).
+
 ## Three separate contracts
 
 Tenant persona effects and canonical tenant Instance configuration retain tenant audit/receipts without fabricating `LocalUserProfile` Core Event attribution. The old `CoreEventPersistence.Instance` envelope has no tenant owner, so tenant configuration writes do not publish it. Legacy non-tenant Instance events retain their existing behavior. Tenant-aware Core Event ownership, authorized delivery and Automation admission remain part of the complete cutover; an internal exact-effect receipt is not an Automation trigger. See [approved persona effect verification](reports/tenant-approved-persona-effect-verification-2026-10-17.md).

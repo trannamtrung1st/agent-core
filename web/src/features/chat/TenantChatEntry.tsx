@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Flex, Tooltip } from 'antd';
 import { LogoutOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
 import { ChatApp } from './ChatApp';
+import { TenantApprovalNotification } from './TenantConversationApprovals';
 import { chatTenantId } from '../../services/tenantChat';
 import { identityRequest, resetIdentityCsrf, tenantApi, type TenantContext } from '../../services/identity';
 import { retirePrivateChat } from '../../services/realtime';
@@ -32,6 +33,7 @@ export function TenantChatEntry({ tenantId }: { tenantId: string }) {
   const context = tenant.data;
   return <ChatApp tenantContext={context} tenantError={error} tenantActions={<Flex align="center" wrap gap="var(--ac-space-compact)">
     <TenantSwitcher tenantId={tenantId} name={context.tenant.name} chat />
+    <TenantApprovalNotification tenant={tenantId} />
     <Tooltip title="Organization"><Button type="text" className="chat-header-icon-action" href={tenantAccessPath(tenantId)} aria-label="Organization administration" icon={<SettingOutlined />} /></Tooltip>
     <Tooltip title="Your account"><Button type="text" className="chat-header-icon-action" href="/account/profile" aria-label="Your account" icon={<UserOutlined />} /></Tooltip>
     <Tooltip title="Sign out"><Button type="text" className="chat-header-icon-action" aria-label="Sign out" loading={signingOut} onClick={() => void signOut()} icon={<LogoutOutlined />} /></Tooltip>

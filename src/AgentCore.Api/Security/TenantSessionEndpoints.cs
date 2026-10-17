@@ -15,6 +15,19 @@ public static class TenantSessionEndpoints
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions").RequireAuthorization();
+        group.MapGet("/{sessionId:guid}/approvals", (Guid sessionId, int? page, int? pageSize, HttpContext http,
+            TenantConversationApprovalService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var result = await service.ListAsync(actor.TenantId, sessionId, Initiator(http, actor), page ?? 0, pageSize ?? 20, ct).ConfigureAwait(false);
+            return Results.Json(new { items = result.Items.Select(item => new { item.RequestId, item.RunId, item.ResponseId,
+                operation = item.Operation switch { AgentCore.Domain.Security.TenantOperationKind.Persona => "update_persona",
+                    AgentCore.Domain.Security.TenantOperationKind.ConversationPreferences => "update_preferences", _ => "check_credential_connection" },
+                kind = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(item.Kind.ToString()),
+                status = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(item.Status.ToString()), item.CreatedAt, item.ExpiresAt,
+                item.Waiting, item.CanInspect, outcome = item.Outcome is { } outcome ? System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()) : null }),
+                result.Total, result.Page, result.PageSize });
+        }));
         group.MapGet("/{sessionId:guid}/conversation", (Guid sessionId, HttpContext http, TenantConversationService service, IModelCatalog models, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http); var view = await service.ReadViewAsync(actor.TenantId, sessionId, Initiator(http, actor), ct).ConfigureAwait(false);

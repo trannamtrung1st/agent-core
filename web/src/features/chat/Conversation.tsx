@@ -30,7 +30,7 @@ export function Conversation({
   empty,
   hasOlder = false,
   olderLoading = false,
-  onLoadOlder
+  onLoadOlder, afterEntries
 }: {
   agentName: string;
   sessionId: string | null;
@@ -43,6 +43,7 @@ export function Conversation({
   hasOlder?: boolean;
   olderLoading?: boolean;
   onLoadOlder?: () => void;
+  afterEntries?: ReactNode;
 }) {
   const [completionSources, setCompletionSources] = useState<Record<string, string>>({});
   const settledHistoryKey = entries.filter(entry => entry.role === "assistant" && entry.status !== "streaming").map(entry => entry.responseId).join(",");
@@ -271,6 +272,7 @@ export function Conversation({
           </li>
         ) : null}
       </ol>
+      {afterEntries}
       {activity.kind !== "idle" ? (
         <div className="agent-turn-activity">
           {placeholderEntry ? (

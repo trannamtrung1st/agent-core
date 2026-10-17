@@ -73,6 +73,14 @@ All screens support 320, 390, 768, 1024 and 1440 widths, long names, localized d
 
 ## Journeys and state transitions
 
+### Original Chat approval status and review
+
+The original conversation shows compact durable action statuses beside its history, without opening a blocking approval modal. Current Session-read and exact agent-Chat access permit only request identity, generic operation/type, status, expiry and a closed execution-result label. They do not expose prepared arguments, resource references, names from protected resources, action hashes or grant witnesses. **Review details** is available only when the existing approval-read plus underlying action checks permit the full saved preview; otherwise explain that a qualified person must review. The shared approval inspector retains its independent current read/decision checks. It may open from Chat without changing the conversation route, with Close/Escape returning focus to the opener; closing it never submits a decision. **Open original conversation** from the inbox rechecks conversation access independently.
+
+A durable wait releases the busy response indicator and local queue without marking the response completed, heard or interrupted. Independent new messages remain usable. Approval status and operation result remain separate: approved with no receipt says execution is pending/unrecorded; a completed check says Check completed, a completed mutation says Applied, definite denial says Not applied and uncertain external outcome says Outcome uncertain. A minimal tenant event announces a saved wait; scoped reads restore current status after reload, disconnect or a decision on another device. Refresh never replays an action. Failed refresh retains last known safe status with explicit stale/retry copy; authority loss clears protected state. The organization header links to the existing filtered inbox, with a current authorized pending count rather than repeated popup notifications. Polling pauses while hidden and on retirement. All of this extends the existing Ant Design shell, compact rows, shared inspector and 8/12/16 spacing owners at the documented widths.
+
+The supported original Chat status/inspector/inbox-attention slice now has [focused Synthetic verification](reports/tenant-chat-approvals-verification-2026-10-17.md). Broader proposal and milestone acceptance remain separate.
+
 | Journey | User actions | Observable contract / recovery |
 | --- | --- | --- |
 | First operator | Run explicit CLI bootstrap using operator-supplied secret; then sign in | Bootstrap is disabled after success; no public create-admin route, no credentials echoed |

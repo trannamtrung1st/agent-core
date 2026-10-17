@@ -143,6 +143,9 @@ body,
 
 .chat-header-session-actions {
   flex: 0 0 auto;
+  min-width: 0;
+  max-inline-size: 100%;
+  flex-wrap: wrap;
 }
 
 .chat-header-icon-action.ant-btn {

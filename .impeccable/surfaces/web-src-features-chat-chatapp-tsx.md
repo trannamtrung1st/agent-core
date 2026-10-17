@@ -109,3 +109,18 @@ FIRST VIEWPORT: Existing Session rail beside one reading column; identity/profil
 FORM: Code-led established Chat extension; the pinned incumbent composition supplies the form, so no new concept seed or comp applies. Signature interaction: switch organization without carrying its transcript, draft or transport into the next scope. Existing native motion remains.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+
+## Original Chat approvals direction contract (2026-10-17)
+
+THESIS: Make a saved approval and its separate execution result understandable in the original conversation while independent work stays usable.
+
+OWN-WORLD: Existing dark Ant Design v6 Operate shell, compact native status rows, shared exact-action Drawer, system typography and 8/12/16 spacing. No new theme, control kit or raster assets.
+
+STORY: An actual model request waits durably; Chat releases busy output, links qualified readers to the existing inspector and displays the recorded decision/effect. Reload and another-device decisions refresh from scoped durable reads. Chat-only readers see minimal status, with no protected preview.
+
+FIRST VIEWPORT: Preserve the rail, reading column and reachable composer; compact approval statuses sit with conversation history, and the organization header links the authorized pending inbox count. Narrow headers wrap deliberately, and the existing Drawer caps at viewport width with reachable actions.
+
+FORM: Code-led ordinary extension of the incumbent Chat and Approval detail. No new world, concept seed or approved comp. Reuse one inspector from inbox and Chat; close restores focus without navigating or deciding.
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

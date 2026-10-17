@@ -149,7 +149,9 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
             if (_sources.GetValueOrDefault((source.Run.Owner.TenantId!.Value, source.Run.SessionId)) != source) return;
             var current = await runs.FindTenantRunAsync(source.Run.Owner.TenantId.Value, source.Run.AgentRunId, ct).ConfigureAwait(false);
             if (current is null || current.Owner != source.Run.Owner || current.ResponseId != source.Run.ResponseId) return;
-            if (!current.IsTerminal && (current.Status != AgentRunStatus.Running || current.Claim?.Generation != source.Run.Claim!.Generation
+            var durableWait = safe is DurableApprovalPendingOutput pending && current.Status == AgentRunStatus.WaitingForApproval
+                && current.ApprovalRequestId == pending.RequestId && current.AgentRunId == pending.RunId;
+            if (!current.IsTerminal && !durableWait && (current.Status != AgentRunStatus.Running || current.Claim?.Generation != source.Run.Claim!.Generation
                 || current.CancellationRequested || current.Claim.LeaseExpiresAtUtc <= time.GetUtcNow())) return;
             if (current.IsTerminal && safe is not (ResponseCompletedOutput or ResponseInterruptedOutput or StateChangedOutput)) return;
             if (current.Status == AgentRunStatus.Cancelled && safe is not (ResponseCompletedOutput { InterruptReason: not null } or ResponseInterruptedOutput or StateChangedOutput)) return;
@@ -158,7 +160,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
                 case ResponseStartedOutput started: source.Started = started; source.Prefix = ""; source.Resync = false; source.Terminal = false; break;
                 case TextDeltaOutput delta when delta.TextStart == source.Prefix.Length: source.Prefix += delta.Text; break;
                 case TextDeltaOutput: source.Resync = true; break;
-                case ResponseCompletedOutput or ResponseInterruptedOutput: source.Terminal = true; break;
+                case ResponseCompletedOutput or ResponseInterruptedOutput or DurableApprovalPendingOutput: source.Terminal = true; break;
             }
             if (source.Resync && safe is TextDeltaOutput or TextCompletedOutput or BlockUpsertOutput) return;
             var visible = output with { Payload = safe };
@@ -202,7 +204,7 @@ public sealed partial class TenantSessionLiveDelivery(TenantConversationService 
     }
     private static OutputPayload? Safe(OutputPayload payload) => payload switch
     {
-        ResponseStartedOutput or TextDeltaOutput or TextCompletedOutput or ResponseInterruptedOutput or StateChangedOutput => payload,
+        ResponseStartedOutput or TextDeltaOutput or TextCompletedOutput or ResponseInterruptedOutput or StateChangedOutput or DurableApprovalPendingOutput => payload,
         BlockUpsertOutput { Kind: "markdown", AttachmentId: null, ArtifactId: null } => payload,
         ResponseCompletedOutput completed => completed with { MemoryReceipts = null, EffectReceipts = null },
         _ => null // Rich resource, approval, provider and voice payloads require their own recipient-aware conversion.

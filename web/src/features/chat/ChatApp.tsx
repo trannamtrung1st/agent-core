@@ -1,4 +1,5 @@
 import { tenantMayManageSession, tenantCanCreateChat, tenantRunControl } from '../../services/tenantChat';
+import { TenantConversationApprovals } from './TenantConversationApprovals';
 import type { TenantContext } from '../../services/identity';
 import { AccessError } from '../access/AccessFeedback';
 import { newChatPath } from '../../app/sessionRoute';
@@ -441,6 +442,7 @@ export function ChatApp({ onOpenAdmin, returnToActivity, returnToActivityHref, t
               <div className="conversation-scroll">
                 <div className="conversation-column">
                   <Conversation
+                afterEntries={organization && tenantContext && state.sessionId ? <TenantConversationApprovals key={`${tenantContext.tenant.tenantId}:${state.sessionId}`} tenant={tenantContext.tenant.tenantId} organization={tenantContext.tenant.name} session={state.sessionId} /> : undefined}
                     agentName={state.agentName}
                     sessionId={state.sessionId}
                     entries={state.entries}

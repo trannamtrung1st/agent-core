@@ -1045,7 +1045,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                     FailTenantApprovalBarrier(failedApproval);
                     break;
                 case TenantApprovalPrepared preparedApproval:
-                    ApplyTenantApprovalPrepared(preparedApproval);
+                    await ApplyTenantApprovalPreparedAsync(preparedApproval, cancellationToken).ConfigureAwait(false);
                     break;
                 case UserTextReceived user:
                     await HandleUserTextAsync(user, cancellationToken).ConfigureAwait(false);

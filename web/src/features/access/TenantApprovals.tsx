@@ -51,7 +51,7 @@ function resultLabel(item: TenantApproval) {
   return item.operationResult?.outcome === 'completed' ? item.preparedAction.operation === 'check_credential_connection' ? 'Check completed' : 'Applied'
     : item.operationResult?.outcome === 'denied' ? 'Not applied' : 'Outcome uncertain';
 }
-const date = (value: string) => <time dateTime={value}>{new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value))}</time>;
+export const approvalDate = (value: string) => <time dateTime={value}>{new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value))}</time>;
 function StatusTag({ status }: { status: Status }) { return <Tag color={status === 'pending' ? 'warning' : status === 'approved' ? 'success' : status === 'rejected' ? 'error' : undefined}>{statuses[status]}</Tag>; }
 const kindLabel = (kind: TenantApproval['kind']) => kind === 'exceptionalGrant' ? 'One-time authorization' : 'Review';
 
@@ -75,16 +75,16 @@ export function TenantApprovals({ context, requestId }: { context: TenantContext
       columns={[
         { title: 'Action', render: (_, item) => <Flex vertical align="start" gap="var(--ac-space-tight)">
           <Typography.Link href={tenantApprovalPath(tenant, item.requestId)} onClick={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigateToAppPath(tenantApprovalPath(tenant, item.requestId)); } }}>{item.summary}</Typography.Link>
-          <Typography.Text>{item.review.agentName}</Typography.Text><Typography.Text type="secondary">{kindLabel(item.kind)} · {date(item.createdAt)}</Typography.Text>
+          <Typography.Text>{item.review.agentName}</Typography.Text><Typography.Text type="secondary">{kindLabel(item.kind)} · {approvalDate(item.createdAt)}</Typography.Text>
           <Flex wrap gap="var(--ac-space-tight)"><StatusTag status={item.status} />{item.operationResult && <Tag>{resultLabel(item)}</Tag>}</Flex>
         </Flex> },
         { title: 'Requested by', responsive: ['md'], render: (_, item) => item.review.requesterName ?? 'No original person' }
       ]} />}
-    {requestId && <ApprovalDetail key={`${tenant}:${requestId}`} tenant={tenant} organization={context.tenant.name} id={requestId} onChanged={state.reload} />}
+    {requestId && <TenantApprovalDetail key={`${tenant}:${requestId}`} tenant={tenant} organization={context.tenant.name} id={requestId} onChanged={state.reload} onClose={() => navigateToAppPath(tenantApprovalPath(tenant))} />}
   </Flex>;
 }
 
-function ApprovalDetail({ tenant, organization, id, onChanged }: { tenant: string; organization: string; id: string; onChanged: () => void }) {
+export function TenantApprovalDetail({ tenant, organization, id, onChanged, onClose }: { tenant: string; organization: string; id: string; onChanged: () => void; onClose: () => void }) {
   const { modal } = App.useApp(); const layout = useAdminDetailLayout(); const command = useTenantCommand();
   const [data, setData] = useState<TenantApproval>(); const [error, setError] = useState<unknown>(); const [fresh, setFresh] = useState(false);
   const [loading, setLoading] = useState(true); const [version, setVersion] = useState(0); const [expired, setExpired] = useState(false);
@@ -126,7 +126,7 @@ function ApprovalDetail({ tenant, organization, id, onChanged }: { tenant: strin
   };
   const status = acknowledged ?? data?.status;
   return <Drawer open title="Approval details" aria-label="Approval details" className="access-editor-drawer" size="large" styles={{ wrapper: { maxWidth: '100vw' } }} destroyOnHidden
-    onClose={() => { if (!busy) navigateToAppPath(tenantApprovalPath(tenant)); }} closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
+    onClose={() => { if (!busy) onClose(); }} closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
     footer={<Flex wrap gap="var(--ac-space-compact)" justify="end">
       <Button onClick={reload} disabled={busy} loading={loading} icon={<ReloadOutlined aria-hidden />}>Refresh details</Button>
       {status === 'pending' && <><Button danger disabled={blocked || !data?.review.canCancel} onClick={() => decide('cancel')}>Cancel request</Button><Button danger disabled={blocked || !data?.review.canDecide} onClick={() => decide('reject')}>Reject</Button><Button type="primary" disabled={blocked || !data?.review.canDecide} onClick={() => decide('approve')}>{data?.kind === 'exceptionalGrant' ? 'Authorize once' : 'Approve'}</Button></>}
@@ -141,9 +141,9 @@ function ApprovalDetail({ tenant, organization, id, onChanged }: { tenant: strin
         <Descriptions {...layout} column={1} size="small" items={[
           { key: 'organization', label: 'Organization', children: organization },
           { key: 'requester', label: 'Requested by', children: data.review.requesterName ?? 'No original person' },
-          { key: 'created', label: 'Requested', children: date(data.createdAt) },
-          { key: 'expiry', label: 'Expires', children: date(data.expiresAt) },
-          ...(data.decision ? [{ key: 'reviewer', label: 'Decided by', children: data.review.reviewerName ?? 'Unavailable member' }, { key: 'decided', label: 'Decided', children: date(data.decision.decidedAt) }] : [])
+          { key: 'created', label: 'Requested', children: approvalDate(data.createdAt) },
+          { key: 'expiry', label: 'Expires', children: approvalDate(data.expiresAt) },
+          ...(data.decision ? [{ key: 'reviewer', label: 'Decided by', children: data.review.reviewerName ?? 'Unavailable member' }, { key: 'decided', label: 'Decided', children: approvalDate(data.decision.decidedAt) }] : [])
         ]} />
         <section aria-label="Exact saved changes"><Typography.Title level={5}>Exact saved changes</Typography.Title>
           <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
@@ -156,11 +156,12 @@ function ApprovalDetail({ tenant, organization, id, onChanged }: { tenant: strin
           {(expired || data.review.decisionUnavailableReason) && <Alert type="warning" showIcon title="Decision unavailable" description={expired ? reasons.approval_expired : reasons[data.review.decisionUnavailableReason!] ?? 'Current authority or configuration does not permit this decision. Refresh details or ask an owner.'} />}
           {!fresh && <Typography.Text role="status" type="secondary">Refresh details before deciding. A saved decision is never submitted again automatically.</Typography.Text>}
         </>}
-        <section aria-label="Operation result"><Typography.Title level={5}>Operation result</Typography.Title>{data.operationResult ? <Alert showIcon type={data.operationResult.outcome === 'completed' ? 'success' : 'warning'} title={resultLabel(data)} description={<>{reasons[data.operationResult.reasonCode] ?? 'The exact operation result was recorded.'} {date(data.operationResult.recordedAt)}</>} /> : <Typography.Text type="secondary">{status === 'approved' ? 'No effect result recorded yet. Approval does not mean the action has run. Refresh details to check.' : status === 'pending' ? 'Waiting for a human decision.' : 'This request did not authorize the action.'}</Typography.Text>}</section>
+        <section aria-label="Operation result"><Typography.Title level={5}>Operation result</Typography.Title>{data.operationResult ? <Alert showIcon type={data.operationResult.outcome === 'completed' ? 'success' : 'warning'} title={resultLabel(data)} description={<>{reasons[data.operationResult.reasonCode] ?? 'The exact operation result was recorded.'} {approvalDate(data.operationResult.recordedAt)}</>} /> : <Typography.Text type="secondary">{status === 'approved' ? 'No effect result recorded yet. Approval does not mean the action has run. Refresh details to check.' : status === 'pending' ? 'Waiting for a human decision.' : 'This request did not authorize the action.'}</Typography.Text>}</section>
         <Collapse items={[{ key: 'technical', label: 'Technical references', children: <Descriptions {...layout} column={1} size="small" items={[
           { key: 'request', label: 'Request', children: data.requestId }, { key: 'run', label: 'Source Run', children: data.runId }, { key: 'session', label: 'Session', children: data.sessionId }, { key: 'root', label: 'Execution root', children: data.rootActivationId },
           { key: 'hash', label: 'Exact action hash', children: data.preparedAction.actionHash }, { key: 'revision', label: 'Request revision', children: data.requestRevision }, { key: 'access', label: 'Access revision', children: data.securityRevision }
         ]} /> }]} />
+        <Typography.Link href={`/t/${tenant}/c/${data.sessionId}`}>Open original conversation</Typography.Link>
       </>}
     </Flex>
   </Drawer>;
