@@ -10,3 +10,6 @@ public sealed record TenantSandboxProfileSaveRequest(long ExpectedRevision, long
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TenantSandboxVerificationRequest(long ExpectedRevision, long ExpectedProfileRevision);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record TenantSandboxInstanceVerificationRequest(long ExpectedRevision, long ExpectedInstanceRevision, string ProfileId, long ExpectedProfileRevision);

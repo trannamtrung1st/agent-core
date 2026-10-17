@@ -23,7 +23,7 @@ public sealed partial class OpenSandboxService
         return VerifyProfileCoreAsync(profile, ct, imageOnly, Guid.CreateVersion7(), null);
     }
     private async ValueTask<SandboxProfileVerification> VerifyProfileCoreAsync(SandboxProfile profile, CancellationToken ct, bool imageOnly,
-        Guid id, Func<CancellationToken, ValueTask>? require)
+        Guid id, Func<CancellationToken, ValueTask>? require, Guid? instanceId = null)
     {
         var hostScope = profile.TenantId is null ? null : HostScope;
         var started = time.GetUtcNow(); var stdout = new BoundedText(32768); var stderr = new BoundedText(32768);
@@ -33,7 +33,8 @@ public sealed partial class OpenSandboxService
             new(profile.Id, profile.Revision, time.GetUtcNow(), passed, message, code, exit, stdout.Text, stderr.Text, stdout.Truncated || stderr.Truncated,
                 Math.Max(0, (long)(time.GetUtcNow() - started).TotalMilliseconds), passed ? null : Guid.CreateVersion7().ToString("D"),
                 SandboxProfileVerification.CurrentContractVersion, profile.RegistryCredentialId, profile.TenantId is null ? source.CredentialRevision : profile.RegistryCredentialRevision,
-                profile.TenantId is null ? source.SecretRevision : profile.RegistrySecretRevision, profile.TenantId, !imageOnly, hostScope);
+                profile.TenantId is null ? source.SecretRevision : profile.RegistrySecretRevision, profile.TenantId, !imageOnly, hostScope,
+                instanceId, instanceId is null ? null : profile.InstanceRevision);
         if (source.Status != "SourceAuthorized") return Observation(false, source.Message, "sourceAuthority");
         if (profile.TenantId is not null && (source.CredentialRevision != profile.RegistryCredentialRevision || source.SecretRevision != profile.RegistrySecretRevision))
             return Observation(false, "Source authority changed before verification.", "authority_changed");

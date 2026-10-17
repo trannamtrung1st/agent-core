@@ -2,6 +2,7 @@ using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Conversation;
 using AgentCore.Domain.Definitions;
+using AgentCore.Application.Agents;
 
 namespace AgentCore.Application.Security;
 
@@ -17,13 +18,16 @@ public static class TenantSandboxVerificationRules
             || attempt.CleanupClaimExpiresAt is not null || attempt.LeaseExpiresAt != attempt.StartedAt + MaximumLease
             || attempt.AccountId != human.AccountId || attempt.AuthenticationSessionId != human.AuthenticationSessionId || attempt.PrincipalId != human.PrincipalId
             || attempt.SecurityRevision != checked(expectedSecurityRevision + 1) || attempt.HostScope.Length != 64 || attempt.HostScope.Any(c => !char.IsAsciiHexDigit(c))
-            || attempt.RegistryCredentialId != profile.RegistryCredentialId || attempt.RegistryCredentialRevision != profile.RegistryCredentialRevision || attempt.RegistrySecretRevision != profile.RegistrySecretRevision)
+            || attempt.RegistryCredentialId != profile.RegistryCredentialId || attempt.RegistryCredentialRevision != profile.RegistryCredentialRevision || attempt.RegistrySecretRevision != profile.RegistrySecretRevision
+            || attempt.InstanceId == Guid.Empty || (attempt.InstanceId is null ? attempt.InstanceRevision is not null || profile.InstanceRevision is not null || profile.InstanceInitializationScript is not null
+                : attempt.InstanceRevision is not > 0 || profile.InstanceRevision != attempt.InstanceRevision))
             throw new ArgumentException("Invalid disposable verification ownership.");
     }
     public static void ValidateOutcome(SandboxVerificationAttempt attempt, SandboxVerificationOutcome outcome)
     {
         var r = outcome.Result;
         if (r.HostScope != attempt.HostScope || r.TenantId != attempt.TenantId || r.ProfileId != attempt.ProfileId || r.ProfileRevision != attempt.ProfileRevision
+            || r.InstanceId != attempt.InstanceId || r.InstanceRevision != attempt.InstanceRevision
             || r.RegistryCredentialId != attempt.RegistryCredentialId || r.RegistryCredentialRevision != attempt.RegistryCredentialRevision
             || r.RegistrySecretRevision != attempt.RegistrySecretRevision || r.IncludesInitialization == attempt.ImageOnly
             || r.ContractVersion != SandboxProfileVerification.CurrentContractVersion || r.VerifiedAt < attempt.StartedAt
@@ -37,6 +41,16 @@ public static class TenantSandboxVerificationRules
         if (current is null || profile != (current with { RegistryCredentialRevision = profile.RegistryCredentialRevision, RegistrySecretRevision = profile.RegistrySecretRevision }))
             throw new SecurityConflictException("stale_revision");
     }
+    public static void RequireSetup(SandboxVerificationAttempt attempt, SandboxProfile prepared, SandboxProfile? current, AgentInstance? instance)
+    {
+        if (attempt.InstanceId is { } id)
+        {
+            if (instance?.InstanceId != id || instance.Lifecycle != AgentInstanceLifecycle.Active || instance.Revision != attempt.InstanceRevision)
+                throw new SecurityConflictException("stale_revision");
+            if (current is not null) current = SandboxSetupResolver.Resolve(current, instance.SettingsOverrides, instance.Revision, rejectExpansion: true);
+        }
+        RequireCurrent(prepared, current);
+    }
     public static SandboxVerificationAttempt Complete(SandboxVerificationAttempt current, SandboxVerificationOutcome outcome, bool authority, DateTimeOffset at)
     {
         ValidateOutcome(current, outcome);
@@ -45,6 +59,7 @@ public static class TenantSandboxVerificationRules
                 : outcome.Result.Passed ? SandboxVerificationStatus.Succeeded : SandboxVerificationStatus.Failed,
             LeaseExpiresAt = at, CleanupClaim = null, CleanupClaimExpiresAt = null };
     }
-    public static bool AcceptObservation(SandboxVerificationAttempt a) => !a.ImageOnly && a.Status is SandboxVerificationStatus.Succeeded or SandboxVerificationStatus.Failed;
+    public static bool AcceptFullResult(SandboxVerificationAttempt a) => !a.ImageOnly && a.Status is SandboxVerificationStatus.Succeeded or SandboxVerificationStatus.Failed;
+    public static bool AcceptObservation(SandboxVerificationAttempt a) => a.InstanceId is null && AcceptFullResult(a);
     public static bool CleanupDue(SandboxVerificationAttempt a, DateTimeOffset at) => a.Active && a.LeaseExpiresAt <= at && (a.CleanupClaimExpiresAt is null || a.CleanupClaimExpiresAt <= at);
 }

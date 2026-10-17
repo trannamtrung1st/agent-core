@@ -24,7 +24,7 @@ public sealed record SandboxExecution(Guid Id, Guid SessionId, Guid AgentInstanc
 
 // Verification is an observation of one exact immutable configuration revision.
 public sealed record SandboxProfileVerification(string ProfileId, long ProfileRevision,
-    DateTimeOffset VerifiedAt, bool Passed, string Message, string? FailureCode = null, int? ExitCode = null, string Stdout = "", string Stderr = "", bool Truncated = false, long DurationMs = 0, string? DiagnosticId = null, int ContractVersion = 0, Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null, Guid? TenantId = null, bool IncludesInitialization = true, string? HostScope = null)
+    DateTimeOffset VerifiedAt, bool Passed, string Message, string? FailureCode = null, int? ExitCode = null, string Stdout = "", string Stderr = "", bool Truncated = false, long DurationMs = 0, string? DiagnosticId = null, int ContractVersion = 0, Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null, Guid? TenantId = null, bool IncludesInitialization = true, string? HostScope = null, Guid? InstanceId = null, long? InstanceRevision = null)
 {
     public const int CurrentContractVersion = 4;
 }

@@ -2415,7 +2415,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("SandboxProfileVerifications", null, t =>
                         {
-                            t.HasCheckConstraint("CK_SandboxVerification_TenantJson", "(TenantId IS NULL AND AttemptId IS NULL AND json_extract(Json, '$.tenantId') IS NULL) OR (TenantId IS NOT NULL AND AttemptId IS NOT NULL AND json_type(Json, '$.tenantId') IS 'text' AND lower(json_extract(Json, '$.tenantId')) = lower(TenantId))");
+                            t.HasCheckConstraint("CK_SandboxVerification_TenantJson", "((TenantId IS NULL AND AttemptId IS NULL AND json_extract(Json, '$.tenantId') IS NULL) OR (TenantId IS NOT NULL AND AttemptId IS NOT NULL AND json_type(Json, '$.tenantId') IS 'text' AND lower(json_extract(Json, '$.tenantId')) = lower(TenantId))) AND json_extract(Json, '$.instanceId') IS NULL AND json_extract(Json, '$.instanceRevision') IS NULL");
                         });
                 });
 
@@ -3495,10 +3495,19 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("AcceptedFull")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("Active")
                         .HasColumnType("INTEGER");
 
                     b.Property<long?>("CleanupClaimExpiresAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("InstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("InstanceRevision")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Json")
@@ -3534,13 +3543,24 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ProfileId", "ProfileRevision");
 
+                    b.HasIndex("TenantId", "InstanceId")
+                        .IsUnique()
+                        .HasFilter("Active = 1 AND InstanceId IS NOT NULL");
+
                     b.HasIndex("TenantId", "ProfileId")
                         .IsUnique()
-                        .HasFilter("Active = 1");
+                        .HasFilter("Active = 1 AND InstanceId IS NULL");
 
                     b.HasIndex("TenantId", "ProfileId", "SecurityRevision");
 
-                    b.ToTable("TenantSandboxVerificationAttempts", (string)null);
+                    b.HasIndex("TenantId", "InstanceId", "ProfileId", "SecurityRevision");
+
+                    b.HasIndex("TenantId", "InstanceId", "InstanceRevision", "ProfileId", "ProfileRevision", "AcceptedFull", "SecurityRevision");
+
+                    b.ToTable("TenantSandboxVerificationAttempts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SandboxAttempt_InstanceJson", "(InstanceId IS NULL AND InstanceRevision IS NULL AND json_extract(Json, '$.instanceId') IS NULL AND json_extract(Json, '$.instanceRevision') IS NULL) OR (InstanceId IS NOT NULL AND InstanceRevision IS NOT NULL AND InstanceRevision > 0 AND json_type(Json, '$.instanceId') IS 'text' AND lower(json_extract(Json, '$.instanceId')) = lower(InstanceId) AND json_type(Json, '$.instanceRevision') IS 'integer' AND json_extract(Json, '$.instanceRevision') = InstanceRevision)");
+                        });
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Security.TenantSessionRecord", b =>
@@ -4231,6 +4251,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ProfileId", "ProfileRevision")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Security.IamSystemIdentityRow", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "InstanceId")
+                        .HasPrincipalKey("TenantId", "AgentInstanceId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgentCore.Infrastructure.Security.TenantSandboxProfileRecord", null)
                         .WithMany()

@@ -7,7 +7,8 @@ public sealed record SandboxVerificationAttempt(Guid AttemptId, Guid TenantId, s
     bool ImageOnly, long Revision, SandboxVerificationStatus Status, DateTimeOffset StartedAt, DateTimeOffset LeaseExpiresAt,
     Guid AccountId, Guid AuthenticationSessionId, Guid PrincipalId, long SecurityRevision, string HostScope,
     Guid? RegistryCredentialId = null, long? RegistryCredentialRevision = null, long? RegistrySecretRevision = null,
-    SandboxProfileVerification? Result = null, Guid? CleanupClaim = null, DateTimeOffset? CleanupClaimExpiresAt = null)
+    SandboxProfileVerification? Result = null, Guid? CleanupClaim = null, DateTimeOffset? CleanupClaimExpiresAt = null,
+    Guid? InstanceId = null, long? InstanceRevision = null)
 {
     public bool Active => Status is SandboxVerificationStatus.Running or SandboxVerificationStatus.CleanupPending;
 }

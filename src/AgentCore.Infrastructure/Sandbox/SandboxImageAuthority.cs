@@ -62,6 +62,7 @@ public sealed class SandboxImageAuthority(OpenSandboxOptions options, ISandboxSt
         if (evidence?.Pending == true) return new("VerificationPending", "Verification or exact cleanup is still in progress. Wait for cleanup before another attempt.", false, revision, secretRevision);
         var observation = profile.TenantId is null ? await profiles.GetVerificationAsync(profile.Id, profile.Revision, ct) : evidence?.Observation;
         if (observation?.ContractVersion != SandboxProfileVerification.CurrentContractVersion || observation.TenantId != profile.TenantId || !observation.IncludesInitialization
+            || observation.InstanceId is not null || observation.InstanceRevision is not null
             || profile.TenantId is not null && (verificationHost is null || observation.HostScope != verificationHost.Scope) || observation.RegistryCredentialId != profile.RegistryCredentialId
             || observation.RegistryCredentialRevision != revision || observation.RegistrySecretRevision != secretRevision)
             return new("NeedsVerification", "Verify this exact saved revision under current source authority before using commands.", false, revision, secretRevision);

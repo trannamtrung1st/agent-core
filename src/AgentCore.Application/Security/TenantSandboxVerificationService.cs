@@ -40,27 +40,32 @@ public sealed class TenantSandboxVerificationService(IIamStore security, ITenant
             next.Tenant.Revision, verifier.HostScope, profile.RegistryCredentialId, profile.RegistryCredentialRevision, profile.RegistrySecretRevision);
         if (!await store.TryBeginSandboxVerificationAsync(next, expectedSecurityRevision, attempt, profile, human, Audit(attempt, "sandbox.verification.begin"), ct).ConfigureAwait(false))
             throw new SecurityConflictException("stale_revision");
+        await CompleteAsync(attempt, profile, proof with { SecurityRevision = next.Tenant.Revision }, ct).ConfigureAwait(false);
+        return await ReadAsync(tenant, profileId, human, attempt.AttemptId, ct).ConfigureAwait(false);
+    }
+    internal async ValueTask CompleteAsync(SandboxVerificationAttempt attempt, AgentCore.Domain.Definitions.SandboxProfile profile, SandboxImageAuthorization proof, CancellationToken ct)
+    {
         SandboxVerificationOutcome outcome;
         try
         {
-            outcome = await verifier.VerifyAsync(attempt, profile, proof with { SecurityRevision = next.Tenant.Revision }, ct).ConfigureAwait(false);
+            outcome = await verifier.VerifyAsync(attempt, profile, proof, ct).ConfigureAwait(false);
             TenantSandboxVerificationRules.ValidateOutcome(attempt, outcome);
         }
         catch
         {
             // Unknown dispatch/adapter failures retain exact cleanup ownership. Recovery never
             // repeats initialization and cannot treat a missing response as successful verification.
-            outcome = new(new(profileId, profile.Revision, time.GetUtcNow(), false, "Verification did not return trusted completion evidence. Exact cleanup must be confirmed before retrying.",
+            outcome = new(new(profile.Id, profile.Revision, time.GetUtcNow(), false, "Verification did not return trusted completion evidence. Exact cleanup must be confirmed before retrying.",
                 "cleanup", ContractVersion: SandboxProfileVerification.CurrentContractVersion, RegistryCredentialId: attempt.RegistryCredentialId,
                 RegistryCredentialRevision: attempt.RegistryCredentialRevision, RegistrySecretRevision: attempt.RegistrySecretRevision,
-                TenantId: tenant, IncludesInitialization: !imageOnly, HostScope: attempt.HostScope), false);
+                TenantId: attempt.TenantId, IncludesInitialization: !attempt.ImageOnly, HostScope: attempt.HostScope, InstanceId: attempt.InstanceId, InstanceRevision: attempt.InstanceRevision), false);
         }
         using (var settle = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
-            _ = await store.FinishSandboxVerificationAsync(tenant, attempt.AttemptId, attempt.Revision, outcome, time.GetUtcNow(), Audit(attempt, "sandbox.verification.finish"), settle.Token).ConfigureAwait(false);
+            _ = await store.FinishSandboxVerificationAsync(attempt.TenantId, attempt.AttemptId, attempt.Revision, outcome, time.GetUtcNow(),
+                Audit(attempt, attempt.InstanceId is null ? "sandbox.verification.finish" : "agents.sandbox.verification.finish"), settle.Token).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
-        return await ReadAsync(tenant, profileId, human, attempt.AttemptId, ct).ConfigureAwait(false);
     }
-    private AuthorizationAudit Audit(SandboxVerificationAttempt a, string action) => new(ids.NewId(), a.TenantId, a.PrincipalId, action, a.ProfileId, "allowed", "sandbox_verification", time.GetUtcNow());
+    private AuthorizationAudit Audit(SandboxVerificationAttempt a, string action) => new(ids.NewId(), a.TenantId, a.PrincipalId, action, a.InstanceId?.ToString("D") ?? a.ProfileId, "allowed", "sandbox_verification", time.GetUtcNow());
 }
 
 public sealed class TenantSandboxVerificationCleanup(ITenantSandboxVerificationStore store, ITenantSandboxVerifier verifier, IIdGenerator ids, TimeProvider time)

@@ -49,8 +49,10 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantSandboxProfileStore>(p => (ITenantSandboxProfileStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantSandboxProfileService>();
         services.TryAddSingleton<TenantSandboxImageAuthorization>();
+        services.TryAddSingleton<TenantSandboxSetupResolver>();
         services.TryAddSingleton<ITenantSandboxVerificationStore>(p => (ITenantSandboxVerificationStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantSandboxVerificationService>();
+        services.TryAddSingleton<TenantSandboxInstanceVerificationService>();
         services.TryAddSingleton<TenantSandboxVerificationCleanup>();
         services.AddHostedService<TenantSandboxVerificationCleanupWorker>();
         services.TryAddSingleton<ITenantCredentialBindingStore>(provider => (ITenantCredentialBindingStore)provider.GetRequiredService<IIamStore>());

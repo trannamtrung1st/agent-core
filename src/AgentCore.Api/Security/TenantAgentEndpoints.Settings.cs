@@ -14,6 +14,7 @@ public static partial class TenantAgentEndpoints
     public sealed record FreezeRequest(long ExpectedRevision, long ExpectedInstanceRevision);
     private static void MapSettings(RouteGroupBuilder group)
     {
+        MapSandboxVerification(group);
         group.MapGet("/agents/{instanceId:guid}/sandbox", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);

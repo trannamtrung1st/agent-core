@@ -41,11 +41,11 @@ public static class TenantSandboxProfileEndpoints
     });
     private static object SafeVerification(TenantSandboxVerificationView view)
     {
-        var a = view.Attempt;
-        return new { attempt = a is null ? null : new { a.AttemptId, a.ProfileId, a.ProfileRevision, a.ImageOnly, status = a.Status.ToString(), a.StartedAt,
-            a.Active, accepted = a.Status == SandboxVerificationStatus.Succeeded && !a.ImageOnly, result = a.Result is null ? null : Verification(a.Result) }, view.CurrentProfileRevision, view.SecurityRevision };
+        return new { attempt = SafeAttempt(view.Attempt), view.CurrentProfileRevision, view.SecurityRevision };
     }
-    private static SandboxSetupVerificationResponse Verification(SandboxProfileVerification r) => new(r.Passed, r.Message, r.ProfileId, r.ProfileRevision, null, r.VerifiedAt,
+    internal static object? SafeAttempt(SandboxVerificationAttempt? a) => a is null ? null : new { a.AttemptId, a.ProfileId, a.ProfileRevision, a.InstanceId, a.InstanceRevision, a.ImageOnly, status = a.Status.ToString(), a.StartedAt,
+        a.Active, accepted = a.Status == SandboxVerificationStatus.Succeeded && !a.ImageOnly, result = a.Result is null ? null : Verification(a.Result) };
+    internal static SandboxSetupVerificationResponse Verification(SandboxProfileVerification r) => new(r.Passed, r.Message, r.ProfileId, r.ProfileRevision, r.InstanceRevision, r.VerifiedAt,
         r.ExitCode, r.Stdout, r.Stderr, r.Truncated, r.DurationMs, r.DiagnosticId);
     private static Task<IResult> Save(string? id, TenantSandboxProfileSaveRequest body, HttpContext http, TenantSandboxProfileService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
     {

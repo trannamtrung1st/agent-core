@@ -71,7 +71,7 @@ public sealed class SqliteSandboxStore(IDbContextFactory<AgentCoreDbContext> fac
     }
     public async ValueTask SaveVerificationAsync(SandboxProfileVerification verification, CancellationToken ct = default)
     {
-        if (verification.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
+        if (verification.TenantId is not null || verification.InstanceId is not null || verification.InstanceRevision is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
         await _gate.WaitAsync(ct);
         try
         {

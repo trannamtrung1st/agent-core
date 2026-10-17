@@ -7,6 +7,8 @@ using AgentCore.Domain.Security;
 using AgentCore.Infrastructure.Persistence;
 using AgentCore.Infrastructure.Sandbox;
 using AgentCore.Infrastructure.Security;
+using AgentCore.Infrastructure.Definitions;
+using AgentCore.Infrastructure.Providers;
 
 namespace AgentCore.Infrastructure.Tests;
 
@@ -21,20 +23,41 @@ public sealed partial class TenantDefinitionIntegrationTests
     private sealed class SetupVerifier(string scope) : ITenantSandboxVerifier
     {
         public string HostScope => scope;
-        public ValueTask<SandboxVerificationOutcome> VerifyAsync(SandboxVerificationAttempt attempt, SandboxProfile profile, SandboxImageAuthorization proof, CancellationToken ct = default) =>
-            ValueTask.FromResult(new SandboxVerificationOutcome(new(profile.Id, profile.Revision, DateTimeOffset.UtcNow, true, "Synthetic setup prerequisite", ContractVersion: SandboxProfileVerification.CurrentContractVersion,
-                TenantId: attempt.TenantId, IncludesInitialization: !attempt.ImageOnly, HostScope: scope), true));
-        public ValueTask<bool> CleanupAsync(SandboxVerificationCleanup claim, CancellationToken ct = default) => ValueTask.FromResult(true);
+        public int Calls { get; private set; }
+        public SandboxProfile? LastProfile { get; private set; }
+        public Func<Task>? During { get; set; }
+        public bool Clean { get; set; } = true;
+        public int CleanupCalls { get; private set; }
+        public Func<SandboxVerificationOutcome, SandboxVerificationOutcome>? Transform { get; set; }
+        public async ValueTask<SandboxVerificationOutcome> VerifyAsync(SandboxVerificationAttempt attempt, SandboxProfile profile, SandboxImageAuthorization proof, CancellationToken ct = default)
+        {
+            Calls++; LastProfile = profile; if (During is { } action) await action();
+            var result = new SandboxVerificationOutcome(new(profile.Id, profile.Revision, DateTimeOffset.UtcNow, true, "Synthetic setup prerequisite", Stdout: attempt.InstanceId is null ? "" : "bounded instance output",
+                ContractVersion: SandboxProfileVerification.CurrentContractVersion, TenantId: attempt.TenantId, IncludesInitialization: !attempt.ImageOnly, HostScope: scope,
+                InstanceId: attempt.InstanceId, InstanceRevision: attempt.InstanceRevision, RegistryCredentialId: attempt.RegistryCredentialId,
+                RegistryCredentialRevision: attempt.RegistryCredentialRevision, RegistrySecretRevision: attempt.RegistrySecretRevision), Clean);
+            return Transform?.Invoke(result) ?? result;
+        }
+        public ValueTask<bool> CleanupAsync(SandboxVerificationCleanup claim, CancellationToken ct = default) { CleanupCalls++; return ValueTask.FromResult(true); }
     }
     private static async Task<HumanSessionReference> SetupHuman(Fixture f, Guid account, Guid principal, string login = "owner@example.test", string password = "strong-owner-password") =>
         new(account, (await f.Identity.SignInAsync(login, password))!.Session.SessionId, principal);
-    private static (TenantSandboxProfileService Profiles, TenantSandboxVerificationService Verify, SandboxImageAuthority Images, SetupReadiness Ready) SetupProfiles(Fixture f)
+    private static (TenantSandboxProfileService Profiles, TenantSandboxVerificationService Verify, SandboxImageAuthority Images, SetupReadiness Ready, SetupVerifier Runner, SandboxVerificationHost Host, OpenSandboxOptions Options) SetupProfiles(Fixture f, OpenSandboxOptions? options = null)
     {
-        var options = new OpenSandboxOptions(); var store = (ITenantSandboxProfileStore)f.Iam; var verification = (ITenantSandboxVerificationStore)f.Iam;
-        var guard = new TenantSandboxImageAuthorization(f.Iam, store, f.Identity, f.Authorizer); var host = new SandboxVerificationHost(options);
-        var images = new SandboxImageAuthority(options, new InMemorySandboxStore(), TimeProvider.System, tenantAuthorization: guard, tenantVerifications: verification, verificationHost: host);
+        options ??= new OpenSandboxOptions(); var store = (ITenantSandboxProfileStore)f.Iam; var verification = (ITenantSandboxVerificationStore)f.Iam;
+        var guard = new TenantSandboxImageAuthorization(f.Iam, store, f.Identity, f.Authorizer, SetupResolver(f)); var host = new SandboxVerificationHost(options);
+        var images = new SandboxImageAuthority(options, new InMemorySandboxStore(), TimeProvider.System, tenantCredentials: (ITenantCredentialStore)f.Iam,
+            tenantAuthorization: guard, tenantVerifications: verification, verificationHost: host);
         var profiles = new TenantSandboxProfileService(f.Iam, store, f.Identity, f.Authorizer, images, f.Ids, TimeProvider.System, verification);
-        return (profiles, new(f.Iam, verification, profiles, guard, images, new SetupVerifier(host.Scope), f.Identity, f.Authorizer, f.Ids, TimeProvider.System), images, new());
+        var runner = new SetupVerifier(host.Scope);
+        return (profiles, new(f.Iam, verification, profiles, guard, images, runner, f.Identity, f.Authorizer, f.Ids, TimeProvider.System), images, new(), runner, host, options);
+    }
+    private static TenantSandboxSetupResolver SetupResolver(Fixture f)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
+        return new((ITenantAgentStore)f.Iam, (ITenantDefinitionStore)f.Iam,
+            new FileAgentDefinitionStore(Path.Combine(directory!.FullName, "agents"), SyntheticProviderAliases.Default), (ITenantSandboxProfileStore)f.Iam);
     }
     private static TenantSandboxProfileInput SetupInput(string name, double cpu = 1) => new(name, name + " private description", true, "ghcr.io/acme/tool@sha256:" + new string('a', 64), Cpu: cpu);
 

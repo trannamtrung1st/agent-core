@@ -19,8 +19,10 @@ public sealed partial class OpenSandboxService
     {
         if (attempt.TenantId != profile.TenantId || attempt.ProfileId != profile.Id || attempt.ProfileRevision != profile.Revision || attempt.HostScope != HostScope
             || proof.SecurityRevision != attempt.SecurityRevision || proof.ExpectedProfileRevision != attempt.ProfileRevision
-            || proof.Human != TenantSandboxVerificationRules.Human(attempt)) throw new AccessDeniedException("verification_unavailable");
-        var current = tenantVerifications is null ? null : await tenantVerifications.FindSandboxVerificationAsync(attempt.TenantId, attempt.ProfileId, attempt.AttemptId, ct);
+            || proof.InstanceId != attempt.InstanceId || proof.ExpectedInstanceRevision != attempt.InstanceRevision
+            || proof.Human.AccountId != attempt.AccountId || proof.Human.AuthenticationSessionId != attempt.AuthenticationSessionId
+            || proof.Human.PrincipalId != attempt.PrincipalId) throw new AccessDeniedException("verification_unavailable");
+        var current = tenantVerifications is null ? null : await tenantVerifications.FindSandboxVerificationAsync(attempt.TenantId, attempt.ProfileId, attempt.AttemptId, ct, attempt.InstanceId);
         if (current != attempt || current.Status != SandboxVerificationStatus.Running || current.LeaseExpiresAt <= time.GetUtcNow()) throw new AccessDeniedException("verification_unavailable");
         await (verificationAuthority ?? throw new AccessDeniedException("verification_unavailable")).RequireAsync(profile, proof, ct);
     }
@@ -33,15 +35,15 @@ public sealed partial class OpenSandboxService
             return new(new(profile.Id, profile.Revision, time.GetUtcNow(), false, "Verification authority was unavailable before dispatch.", "authority_changed",
                 ContractVersion: SandboxProfileVerification.CurrentContractVersion, RegistryCredentialId: attempt.RegistryCredentialId,
                 RegistryCredentialRevision: attempt.RegistryCredentialRevision, RegistrySecretRevision: attempt.RegistrySecretRevision,
-                TenantId: attempt.TenantId, IncludesInitialization: !attempt.ImageOnly, HostScope: attempt.HostScope), true);
+                TenantId: attempt.TenantId, IncludesInitialization: !attempt.ImageOnly, HostScope: attempt.HostScope, InstanceId: attempt.InstanceId, InstanceRevision: attempt.InstanceRevision), true);
         }
         var result = await VerifyProfileCoreAsync(profile, ct, attempt.ImageOnly, attempt.AttemptId,
-            token => RequireVerificationAsync(attempt, profile, proof, token));
+            token => RequireVerificationAsync(attempt, profile, proof, token), attempt.InstanceId);
         return new(result, result.FailureCode != "cleanup");
     }
     public async ValueTask<bool> CleanupAsync(SandboxVerificationCleanup claim, CancellationToken ct = default)
     {
-        var current = tenantVerifications is null ? null : await tenantVerifications.FindSandboxVerificationAsync(claim.TenantId, claim.ProfileId, claim.AttemptId, ct);
+        var current = tenantVerifications is null ? null : await tenantVerifications.FindSandboxVerificationAsync(claim.TenantId, claim.ProfileId, claim.AttemptId, ct, claim.InstanceId);
         if (current?.Revision != claim.Revision || current.Status != SandboxVerificationStatus.CleanupPending || current.CleanupClaim != claim.ClaimId
             || current.CleanupClaimExpiresAt is not { } expires || expires <= time.GetUtcNow() || current.HostScope != claim.HostScope || HostScope != claim.HostScope) return false;
         var owner = VerificationOwner(claim.TenantId, claim.AttemptId);

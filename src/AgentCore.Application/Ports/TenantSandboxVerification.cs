@@ -6,7 +6,7 @@ namespace AgentCore.Application.Ports;
 
 public sealed record SandboxVerificationOutcome(SandboxProfileVerification Result, bool CleanupConfirmed);
 public sealed record SandboxVerificationEvidence(SandboxProfileVerification? Observation, bool Pending);
-public sealed record SandboxVerificationCleanup(Guid TenantId, string ProfileId, Guid AttemptId, long Revision, string HostScope, Guid ClaimId);
+public sealed record SandboxVerificationCleanup(Guid TenantId, string ProfileId, Guid AttemptId, long Revision, string HostScope, Guid ClaimId, Guid? InstanceId = null);
 
 public interface ISandboxVerificationHost
 {
@@ -23,8 +23,9 @@ public interface ITenantSandboxVerifier
 
 public interface ITenantSandboxVerificationStore
 {
-    ValueTask<SandboxVerificationAttempt?> FindSandboxVerificationAsync(Guid tenant, string profileId, Guid? attemptId = null, CancellationToken ct = default);
+    ValueTask<SandboxVerificationAttempt?> FindSandboxVerificationAsync(Guid tenant, string profileId, Guid? attemptId = null, CancellationToken ct = default, Guid? instanceId = null);
     ValueTask<SandboxVerificationEvidence> ReadSandboxVerificationAsync(Guid tenant, string profileId, long revision, CancellationToken ct = default);
+    ValueTask<SandboxVerificationEvidence> ReadSandboxInstanceVerificationAsync(Guid tenant, Guid instanceId, long instanceRevision, string profileId, long profileRevision, CancellationToken ct = default);
     ValueTask<bool> TryBeginSandboxVerificationAsync(TenantSecurityState next, long expectedSecurityRevision,
         SandboxVerificationAttempt attempt, SandboxProfile profile, HumanSessionReference human, AuthorizationAudit audit, CancellationToken ct = default);
     ValueTask<SandboxVerificationAttempt?> FinishSandboxVerificationAsync(Guid tenant, Guid attemptId, long expectedRevision,

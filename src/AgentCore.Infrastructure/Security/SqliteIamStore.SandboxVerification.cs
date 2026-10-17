@@ -11,10 +11,11 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore
 {
-    public async ValueTask<SandboxVerificationAttempt?> FindSandboxVerificationAsync(Guid tenant, string profileId, Guid? attemptId = null, CancellationToken ct = default)
+    public async ValueTask<SandboxVerificationAttempt?> FindSandboxVerificationAsync(Guid tenant, string profileId, Guid? attemptId = null, CancellationToken ct = default, Guid? instanceId = null)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var row = await db.Set<TenantSandboxVerificationRecord>().AsNoTracking().Where(a => a.TenantId == tenant && a.ProfileId == profileId && (attemptId == null || a.AttemptId == attemptId))
+        var instance = instanceId?.ToString("D");
+        var row = await db.Set<TenantSandboxVerificationRecord>().AsNoTracking().Where(a => a.TenantId == tenant && a.ProfileId == profileId && a.InstanceId == instance && (attemptId == null || a.AttemptId == attemptId))
             .OrderByDescending(a => a.SecurityRevision).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         return row?.Domain();
     }
@@ -22,12 +23,22 @@ public sealed partial class SqliteIamStore
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         if (!await OwnedSandboxProfiles(db, tenant).AnyAsync(p => p.Id == profileId && p.Revision == revision, ct).ConfigureAwait(false)) return new(null, false);
-        var pending = await db.Set<TenantSandboxVerificationRecord>().AnyAsync(a => a.TenantId == tenant && a.ProfileId == profileId && a.Active, ct).ConfigureAwait(false);
+        var pending = await db.Set<TenantSandboxVerificationRecord>().AnyAsync(a => a.TenantId == tenant && a.ProfileId == profileId && a.InstanceId == null && a.Active, ct).ConfigureAwait(false);
         var row = await db.Set<SandboxVerificationRow>().AsNoTracking().SingleOrDefaultAsync(v => v.TenantId == tenant && v.ProfileId == profileId && v.ProfileRevision == revision, ct).ConfigureAwait(false);
         var value = row is null ? null : JsonSerializer.Deserialize<SandboxProfileVerification>(row.Json, SandboxJson);
         if (value is not null && (value.TenantId != tenant || value.ProfileId != profileId || value.ProfileRevision != revision))
             throw AgentCore.Application.Sessions.AgentCoreErrors.Persistence("Verification ownership is invalid.");
         return new(value, pending);
+    }
+    public async ValueTask<SandboxVerificationEvidence> ReadSandboxInstanceVerificationAsync(Guid tenant, Guid instanceId, long instanceRevision, string profileId, long profileRevision, CancellationToken ct = default)
+    {
+        await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); var instance = instanceId.ToString("D");
+        if (!await OwnedAgents(db, tenant).AnyAsync(a => a.Instance.InstanceId == instance, ct).ConfigureAwait(false)
+            || !await OwnedSandboxProfiles(db, tenant).AnyAsync(p => p.Id == profileId && p.Revision == profileRevision, ct).ConfigureAwait(false)) return new(null, false);
+        var pending = await db.Set<TenantSandboxVerificationRecord>().AnyAsync(a => a.TenantId == tenant && a.InstanceId == instance && a.Active, ct).ConfigureAwait(false);
+        var row = await db.Set<TenantSandboxVerificationRecord>().AsNoTracking().Where(a => a.TenantId == tenant && a.InstanceId == instance && a.InstanceRevision == instanceRevision
+            && a.ProfileId == profileId && a.ProfileRevision == profileRevision && a.AcceptedFull).OrderByDescending(a => a.SecurityRevision).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return new(row?.Domain().Result, pending);
     }
     public ValueTask<bool> TryBeginSandboxVerificationAsync(TenantSecurityState next, long expectedSecurityRevision,
         SandboxVerificationAttempt attempt, SandboxProfile profile, HumanSessionReference human, AuthorizationAudit audit, CancellationToken ct = default)
@@ -38,8 +49,11 @@ public sealed partial class SqliteIamStore
         return WriteTenantResourceAsync(next, expectedSecurityRevision, audit, async db =>
         {
             var row = await OwnedSandboxProfiles(db, attempt.TenantId).Where(p => p.Id == profile.Id).OrderByDescending(p => p.Revision).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-            TenantSandboxVerificationRules.RequireCurrent(profile, row is null ? null : SandboxValue(row));
-            if (await db.Set<TenantSandboxVerificationRecord>().AnyAsync(a => a.TenantId == attempt.TenantId && a.ProfileId == profile.Id && a.Active, ct).ConfigureAwait(false))
+            var instanceId = attempt.InstanceId?.ToString("D");
+            var instance = instanceId is null ? null : await OwnedAgents(db, attempt.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == instanceId, ct).ConfigureAwait(false);
+            if (instanceId is not null && instance?.Identity.Status != IdentityStatus.Active) throw new AccessDeniedException("resource_unavailable");
+            TenantSandboxVerificationRules.RequireSetup(attempt, profile, row is null ? null : SandboxValue(row), instance is null ? null : SqliteAgentInstanceStore.Map(instance.Instance));
+            if (await db.Set<TenantSandboxVerificationRecord>().AnyAsync(a => a.TenantId == attempt.TenantId && a.InstanceId == instanceId && (instanceId != null || a.ProfileId == profile.Id) && a.Active, ct).ConfigureAwait(false))
                 throw new SecurityConflictException("verification_in_progress");
             if (profile.RegistryCredentialId is { } credential)
             {
@@ -62,6 +76,13 @@ public sealed partial class SqliteIamStore
         var tenant = await db.Set<Tenant>().SingleAsync(t => t.TenantId == tenantId, ct).ConfigureAwait(false);
         var latest = await OwnedSandboxProfiles(db, tenantId).Where(p => p.Id == current.ProfileId).OrderByDescending(p => p.Revision).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         var allowed = current.LeaseExpiresAt > at && tenant.Revision == current.SecurityRevision && latest?.Revision == current.ProfileRevision;
+        if (current.InstanceId is { } instance)
+        {
+            var key = instance.ToString("D");
+            var agent = await OwnedAgents(db, tenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == key, ct).ConfigureAwait(false);
+            allowed &= agent is not null && agent.Instance.Revision == current.InstanceRevision && agent.Instance.Lifecycle == AgentInstanceLifecycle.Active.ToString()
+                && agent.Identity.Status == IdentityStatus.Active;
+        }
         try { await RequireAgentHumanAsync(db, tenantId, current.PrincipalId, TenantSandboxVerificationRules.Human(current), ct).ConfigureAwait(false); }
         catch (AccessDeniedException) { allowed = false; }
         if (allowed && current.RegistryCredentialId is { } credential)
@@ -95,7 +116,7 @@ public sealed partial class SqliteIamStore
         foreach (var row in rows)
         {
             var a = row.Domain(); var next = a with { Revision = checked(a.Revision + 1), Status = SandboxVerificationStatus.CleanupPending, CleanupClaim = claimId, CleanupClaimExpiresAt = at.AddSeconds(45) };
-            db.Entry(row).CurrentValues.SetValues(TenantSandboxVerificationRecord.Row(next)); result.Add(new(a.TenantId, a.ProfileId, a.AttemptId, next.Revision, a.HostScope, claimId));
+            db.Entry(row).CurrentValues.SetValues(TenantSandboxVerificationRecord.Row(next)); result.Add(new(a.TenantId, a.ProfileId, a.AttemptId, next.Revision, a.HostScope, claimId, a.InstanceId));
         }
         try { await db.SaveChangesAsync(ct).ConfigureAwait(false); await tx.CommitAsync(ct).ConfigureAwait(false); return result; }
         catch (DbUpdateConcurrencyException) { return []; }
@@ -105,7 +126,7 @@ public sealed partial class SqliteIamStore
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var row = await db.Set<TenantSandboxVerificationRecord>().SingleOrDefaultAsync(a => a.TenantId == claim.TenantId && a.AttemptId == claim.AttemptId && a.ProfileId == claim.ProfileId, ct).ConfigureAwait(false);
         if (row is null) return false; var a = row.Domain();
-        if (a.HostScope != claim.HostScope || a.Revision != claim.Revision || a.Status != SandboxVerificationStatus.CleanupPending || a.CleanupClaim != claim.ClaimId || a.CleanupClaimExpiresAt is not { } expires || expires <= at) return false;
+        if (a.InstanceId != claim.InstanceId || a.HostScope != claim.HostScope || a.Revision != claim.Revision || a.Status != SandboxVerificationStatus.CleanupPending || a.CleanupClaim != claim.ClaimId || a.CleanupClaimExpiresAt is not { } expires || expires <= at) return false;
         var next = a with { Revision = checked(a.Revision + 1), Status = confirmed ? SandboxVerificationStatus.Retired : SandboxVerificationStatus.CleanupPending,
             CleanupClaim = null, CleanupClaimExpiresAt = null, LeaseExpiresAt = at.AddSeconds(15) };
         db.Entry(row).CurrentValues.SetValues(TenantSandboxVerificationRecord.Row(next));

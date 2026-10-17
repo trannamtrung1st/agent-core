@@ -2,6 +2,12 @@
 
 Baseline `38b8288230854b9044b69100c4f99bb4c259d2d1`, clean checkout. Every row below is a cutover obligation, **not an enforcement claim**. [Delivery status](multitenant-iam-delivery-2026-10-16.md).
 
+## Effective Instance Sandbox verification successor — 2026-10-18
+
+The [effective verification evidence](tenant-instance-sandbox-verification-2026-10-18.md) advances explicit saved setup verification and exact/latest human reads over the existing disposable receipt/SDK runner. It resolves actual tenant-owned Instance/profile and immutable Definition source, pins saved script/limits and independent original-human/agent/profile/Credential authority, and fences current evidence by Instance/profile/source/host revisions. Optional Instance receipt/FK/JSON/active indexes separate scope and block reusable or sibling evidence reuse. Exact technical cleanup carries Instance scope and never reruns initialization.
+
+This supersedes the earlier effective Instance setup verification obligation only. Tenant Session generation/execution/process/reset/mount/cleanup, runtime tools, Sandbox UI, other resource/effect families and obsolete authority/schema removal remain open. Actual HTTP, both-store/retained migration and loopback SDK recovery have evidence; live Docker initialization and full tenant isolation are not accepted. The full proposal remains active.
+
 ## Instance Sandbox configuration successor — 2026-10-18
 
 The [selection evidence](tenant-instance-sandbox-selection-verification-2026-10-18.md) advances canonical exact setup reads and sparse selection/script/limit/reset writes through the existing original-human facade and actual Instance/security/audit store transaction. Exact agent and profile scopes, Definition subset, full source eligibility/host readiness, every profile's ceilings and captured security/Instance witnesses protect configuration. Partial readers cannot recover hidden defaults or metadata; narrowing permits a safe readable setup. No command, verification or script is dispatched by configuration.

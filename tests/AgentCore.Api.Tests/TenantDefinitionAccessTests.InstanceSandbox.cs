@@ -63,7 +63,9 @@ public sealed partial class TenantDefinitionAccessTests
         {
             Calls++;
             return ValueTask.FromResult(new SandboxVerificationOutcome(new(profile.Id, profile.Revision, DateTimeOffset.UtcNow, true, "Synthetic setup prerequisite",
-                ContractVersion: SandboxProfileVerification.CurrentContractVersion, TenantId: attempt.TenantId, IncludesInitialization: !attempt.ImageOnly, HostScope: host.Scope), true));
+                ContractVersion: SandboxProfileVerification.CurrentContractVersion, TenantId: attempt.TenantId, IncludesInitialization: !attempt.ImageOnly, HostScope: host.Scope,
+                InstanceId: attempt.InstanceId, InstanceRevision: attempt.InstanceRevision, RegistryCredentialId: attempt.RegistryCredentialId,
+                RegistryCredentialRevision: attempt.RegistryCredentialRevision, RegistrySecretRevision: attempt.RegistrySecretRevision), true));
         }
         public ValueTask<bool> CleanupAsync(SandboxVerificationCleanup claim, CancellationToken ct = default) => ValueTask.FromResult(true);
     }

@@ -1,5 +1,19 @@
 # HTTP API and Realtime Protocol
 
+## Tenant effective Instance Sandbox verification HTTP
+
+Under `/api/v2/tenants/{tenantId}/agents/{instanceId}/sandbox`:
+
+| Method | Suffix | Contract |
+| --- | --- | --- |
+| POST | `/verify` | Strict `{expectedRevision, expectedInstanceRevision, profileId, expectedProfileRevision}`; exact saved allowed setup, full initialization check |
+| GET | `/verification?profileId={id}` | Latest attempt for this exact Instance/profile scope, or null |
+| GET | `/verification/{attemptId}?profileId={id}` | Exact saved scoped attempt; missing/foreign/sibling/profile-only mismatch denies |
+
+The response is `{instanceId, attempt, observation, status, canVerify, currentInstanceRevision, currentProfileRevision, securityRevision}`. The shared bounded attempt projection additionally includes optional `instanceId`/`instanceRevision`; result `instanceRevision` is pinned too. `accepted` describes successful full acceptance at settlement, while `observation` and `status` describe current exact setup evidence. Status can be NeedsVerification, Verified, VerificationFailed, VerificationPending, Disabled, Inactive, ServerUnavailable or a safe current source restriction. `canVerify` is an advisory current permission/configuration hint independent of settings `canManage`; it does not authorize execution or assert server readiness.
+
+Cookie/CSRF/no-store and original live human checks apply. Verify requires agent `agents.read` plus `sandbox.read/manage`, exact profile `sandbox.read` and independent private-source Credential read/bind/use. It requires neither profile manage nor agent configuration update. Only saved scripts/limits are used; arbitrary script, actor, tenant, host, source epoch and cleanup ownership fields are rejected. Stale witnesses and an active per-Instance attempt return canonical 409; current permission denial precedes stale reporting. Reads require current agent/profile read even for completed facts and omit human/session IDs, Credential epochs, physical paths, host fingerprint and cleanup nonce. Config edits invalidate current setup observations. Instance verification never changes reusable profile compatibility, appears in profile-only history or grants sibling access. [Focused evidence](reports/tenant-instance-sandbox-verification-2026-10-18.md).
+
 ## Tenant Instance Sandbox configuration HTTP
 
 `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/sandbox` uses the original-human read facade and exact agent `agents.read` plus `sandbox.read`. It returns `{instanceId, instanceRevision, lifecycle, section, profiles, completeCatalog, canManage, securityRevision}`. `profiles` contains only exact readable Definition-authorized tenant entries (`id`, `revision`, `name`, `description`, `imageReference`, current safe `availability`/`message`). The optional section is the shared settings projection. It is absent when an effective allowed choice is inaccessible; after narrowing to readable choices it can return with hidden inherited defaults/constraint choices redacted and `completeCatalog: false`. `canManage` describes current agent-level read/update/Sandbox manage and active lifecycle, not a grant over profiles or execution.
@@ -28,7 +42,7 @@ Exact reads/saves return `{profile, canManage, securityRevision}`; collections r
 
 Verification POST bodies are strict `{expectedRevision, expectedProfileRevision}`; type/mode comes from the route. Unknown fields, client ownership, source epochs, host/claim evidence and arbitrary scripts are rejected. Commands require exact read/manage and separate current Credential read/bind/use when applicable, before stale witness reporting. An active attempt returns 409 `verification_in_progress`; there is no automatic retry. Full/image-only results do not increment the profile configuration revision.
 
-Verification reads/commands return `{attempt, currentProfileRevision, securityRevision}`. The nullable `attempt` contains `attemptId`, `profileId`, `profileRevision`, `imageOnly`, `status` (Running/Succeeded/Failed/Retired/CleanupPending), `startedAt`, `active`, `accepted` and optional bounded `SandboxSetupVerificationResponse` result. `accepted` means a successful full completion was accepted at settlement; current profile availability must still be checked and it grants no execution permission. Result reads require current original-human/scoped authority even after completion. No human/session IDs, Credential epochs, physical paths, host fingerprint or cleanup nonce are exposed. Image-only results never replace accepted full evidence; retired/uncertain facts remain distinguishable. [Focused evidence](reports/tenant-sandbox-verification-2026-10-18.md).
+Verification reads/commands return `{attempt, currentProfileRevision, securityRevision}`. The nullable `attempt` contains `attemptId`, `profileId`, `profileRevision`, optional `instanceId`/`instanceRevision` (null for reusable checks), `imageOnly`, `status` (Running/Succeeded/Failed/Retired/CleanupPending), `startedAt`, `active`, `accepted` and optional bounded `SandboxSetupVerificationResponse` result. `accepted` means a successful full completion was accepted at settlement; current profile availability must still be checked and it grants no execution permission. Result reads require current original-human/scoped authority even after completion. No human/session IDs, Credential epochs, physical paths, host fingerprint or cleanup nonce are exposed. Image-only results never replace accepted full evidence; retired/uncertain facts remain distinguishable. [Focused evidence](reports/tenant-sandbox-verification-2026-10-18.md).
 
 ## Tenant Instance exact resource and Office preview reads
 
