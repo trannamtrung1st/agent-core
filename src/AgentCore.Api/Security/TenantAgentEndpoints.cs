@@ -11,6 +11,12 @@ public static partial class TenantAgentEndpoints
     public sealed record PublicationCreateRequest(Guid DefinitionId, int Version, long ExpectedRevision, AgentIdentity? Persona = null);
     public sealed record LifecycleRequest(AgentInstanceLifecycle Lifecycle, long ExpectedRevision, long ExpectedInstanceRevision);
 
+    private static TenantSessionInitiator Human(HttpContext http)
+    {
+        var actor = IdentityHttp.TenantContext(http);
+        return new(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
+    }
+
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}").RequireAuthorization();
@@ -34,10 +40,10 @@ public static partial class TenantAgentEndpoints
             var human = new TenantSessionInitiator(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
             return Results.Json(await service.ListAgentsAsync(actor.TenantId, human, page ?? 0, pageSize ?? 30, ct, q).ConfigureAwait(false));
         }));
-        group.MapGet("/agent-templates", (HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agent-templates", (HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            var templates = await service.ListTemplatesAsync(actor.PrincipalId, actor.TenantId, ct).ConfigureAwait(false);
+            var templates = await service.ListTemplatesAsync(actor.TenantId, Human(http), ct).ConfigureAwait(false);
             return Results.Json(new { items = templates.Select(t => new { t.Id, t.Version, t.Identity }) });
         }));
         group.MapPost("/agents", (CreateRequest body, HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
@@ -52,16 +58,16 @@ public static partial class TenantAgentEndpoints
             return Results.Json(Safe(await service.CreateFromPublicationAsync(actor.PrincipalId, actor.TenantId, body.DefinitionId,
                 body.Version, body.ExpectedRevision, body.Persona, ct).ConfigureAwait(false)), statusCode: 201);
         }));
-        group.MapGet("/agents", (int? page, int? pageSize, HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents", (int? page, int? pageSize, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            var result = await service.ListAsync(actor.PrincipalId, actor.TenantId, page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false);
+            var result = await service.ListAsync(actor.TenantId, Human(http), page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false);
             return Results.Json(new { items = result.Items.Select(agent => Safe(agent)), result.Total, result.Page, result.PageSize });
         }));
-        group.MapGet("/agents/{instanceId:guid}", (Guid instanceId, HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents/{instanceId:guid}", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
-            return Results.Json(Safe(await service.ReadAsync(actor.PrincipalId, actor.TenantId, instanceId, ct).ConfigureAwait(false)));
+            return Results.Json(Safe(await service.ReadAgentAsync(actor.TenantId, instanceId, Human(http), ct).ConfigureAwait(false)));
         }));
         group.MapPut("/agents/{instanceId:guid}/lifecycle", (Guid instanceId, LifecycleRequest body, HttpContext http, TenantAgentService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

@@ -14,10 +14,10 @@ public static partial class TenantAgentEndpoints
     public sealed record FreezeRequest(long ExpectedRevision, long ExpectedInstanceRevision);
     private static void MapSettings(RouteGroupBuilder group)
     {
-        group.MapGet("/agents/{instanceId:guid}/settings", (Guid instanceId, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents/{instanceId:guid}/settings", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            return Results.Json(await service.ReadSettingsAsync(a.PrincipalId, a.TenantId, instanceId, ct).ConfigureAwait(false));
+            return Results.Json(await service.ReadSettingsAsync(a.TenantId, instanceId, Human(http), ct).ConfigureAwait(false));
         }));
         group.MapPatch("/agents/{instanceId:guid}/settings/{section}", (Guid instanceId, string section, SettingsRequest body, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -25,10 +25,10 @@ public static partial class TenantAgentEndpoints
             return Results.Json(Safe(await service.PatchSettingsAsync(a.PrincipalId, a.TenantId, instanceId, section, body.ExpectedRevision,
                 body.ExpectedInstanceRevision, body.Set, body.Clear, ct).ConfigureAwait(false), checked(body.ExpectedRevision + 1)));
         }));
-        group.MapGet("/agents/{instanceId:guid}/execution-budgets", (Guid instanceId, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents/{instanceId:guid}/execution-budgets", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            return Results.Json(await service.ReadBudgetsAsync(a.PrincipalId, a.TenantId, instanceId, ct).ConfigureAwait(false));
+            return Results.Json(await service.ReadBudgetsAsync(a.TenantId, instanceId, Human(http), ct).ConfigureAwait(false));
         }));
         group.MapPut("/agents/{instanceId:guid}/execution-budgets", (Guid instanceId, BudgetsRequest body, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
@@ -42,10 +42,10 @@ public static partial class TenantAgentEndpoints
             return Results.Json(Safe(await service.UpdateUnattendedModelAsync(a.PrincipalId, a.TenantId, instanceId, body.ExpectedRevision,
                 body.ExpectedInstanceRevision, body.CatalogKey, body.ReasoningEffort, ct).ConfigureAwait(false)));
         }));
-        group.MapGet("/agents/{instanceId:guid}/self-management", (Guid instanceId, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents/{instanceId:guid}/self-management", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            return Results.Json(await service.ReadManagementAsync(a.PrincipalId, a.TenantId, instanceId, ct).ConfigureAwait(false));
+            return Results.Json(await service.ReadManagementAsync(a.TenantId, instanceId, Human(http), ct).ConfigureAwait(false));
         }));
         group.MapPut("/agents/{instanceId:guid}/self-management", (Guid instanceId, ManagementRequest body, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {

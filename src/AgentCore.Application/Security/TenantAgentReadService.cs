@@ -1,0 +1,79 @@
+using AgentCore.Application.Admin;
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Security;
+
+namespace AgentCore.Application.Security;
+
+public sealed record TenantAgentEditorState(TenantAgent Agent, IReadOnlyList<InstanceSettingsSection> Settings,
+    long SecurityRevision, bool CanUpdate, IReadOnlyList<string> UnavailableSettings);
+
+// Current original-human boundary over the existing owning services, including post-I/O read fences.
+public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore agents, TenantAgentConfigurationService configuration,
+    IdentityService identity, IamAuthorizer authorizer, TenantAgentService directory)
+{
+    public ValueTask<TenantAgent> ReadAgentAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, agent, _) => ValueTask.FromResult(agent!), ct);
+
+    public ValueTask<TenantAgentPage> ListAsync(Guid tenant, TenantSessionInitiator human, int page = 0, int pageSize = 30, CancellationToken ct = default) =>
+        Fenced(tenant, null, human, (_, _, token) => directory.ListAsync(human.PrincipalId, tenant, page, pageSize, token), ct);
+
+    public ValueTask<IReadOnlyList<AgentDefinition>> ListTemplatesAsync(Guid tenant, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced(tenant, null, human, (_, _, token) => directory.ListTemplatesAsync(human.PrincipalId, tenant, token), ct);
+
+    public ValueTask<TenantAgentEffectiveConfiguration> ReadConfigurationAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadAsync(human.PrincipalId, tenant, instance, token), ct);
+
+    public ValueTask<TenantAgentSettings> ReadSettingsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadSettingsAsync(human.PrincipalId, tenant, instance, token), ct);
+
+    public ValueTask<TenantAgentBudgets> ReadBudgetsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadBudgetsAsync(human.PrincipalId, tenant, instance, token), ct);
+
+    public ValueTask<TenantAgentManagement> ReadManagementAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadManagementAsync(human.PrincipalId, tenant, instance, token), ct);
+
+    public ValueTask<TenantAgentSkillPage> ReadSkillsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, int page = 0, int pageSize = 30, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadSkillsAsync(human.PrincipalId, tenant, instance, page, pageSize, token), ct);
+
+    public ValueTask<TenantAgentResources> ReadResourcesAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadResourcesAsync(human.PrincipalId, tenant, instance, token), ct);
+
+    public ValueTask<TenantAgentResourceContent> ReadResourceContentAsync(Guid tenant, Guid instance, TenantSessionInitiator human, string key, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadResourceContentAsync(human.PrincipalId, tenant, instance, key, token), ct);
+
+    public ValueTask<TenantAgentEditorState> ReadEditorAsync(Guid tenant, Guid instance, TenantSessionInitiator human, CancellationToken ct = default) =>
+        Fenced<TenantAgentEditorState>(tenant, instance, human, async (state, agent, token) =>
+        {
+            var settings = await configuration.ReadSettingsAsync(human.PrincipalId, tenant, instance, token).ConfigureAwait(false);
+            var canUpdate = (await authorizer.CheckTenantAsync(state, human.PrincipalId, PermissionCatalog.Get("agents.update"), Scope(tenant, instance), token).ConfigureAwait(false)).Allowed;
+            if (settings.SecurityRevision != state.Tenant.Revision || settings.Items.Any(item => item.InstanceRevision != agent!.Instance.Revision))
+                throw new SecurityConflictException("stale_revision");
+            // Its tenant profile catalog/effects have not been cut over. Never use a global catalog fallback.
+            return new(agent!, settings.Items.Where(item => item.Section != "sandboxPolicy").ToArray(), state.Tenant.Revision, canUpdate, ["sandboxPolicy"]);
+        }, ct);
+
+    private async ValueTask<T> Fenced<T>(Guid tenant, Guid? instance, TenantSessionInitiator human,
+        Func<TenantSecurityState, TenantAgent?, CancellationToken, ValueTask<T>> read, CancellationToken ct)
+    {
+        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        await RequireRead(state);
+        var agent = instance is { } id ? await agents.FindTenantAgentAsync(tenant, id, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable") : null;
+        var result = await read(state, agent, ct).ConfigureAwait(false);
+        var currentAgent = instance is { } currentId ? await agents.FindTenantAgentAsync(tenant, currentId, ct).ConfigureAwait(false) : null;
+        var current = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
+        await RequireRead(current);
+        if (state.Tenant.Revision != current.Tenant.Revision || agent is not null
+            && (currentAgent?.Instance.Revision != agent.Instance.Revision || currentAgent.PrincipalId != agent.PrincipalId))
+            throw new SecurityConflictException("stale_revision");
+        return result;
+
+        async ValueTask RequireRead(TenantSecurityState value)
+        {
+            if (instance is not { } target) return; // Catalog services retain their own create/list permission rules.
+            var decision = await authorizer.CheckTenantAsync(value, human.PrincipalId, PermissionCatalog.Get("agents.read"), Scope(tenant, target), ct).ConfigureAwait(false);
+            if (!decision.Allowed) throw new AccessDeniedException(decision.ReasonCode);
+        }
+    }
+    private static AccessScope Scope(Guid tenant, Guid instance) => AccessScope.ForResource(tenant, "agent", instance.ToString("D"));
+}

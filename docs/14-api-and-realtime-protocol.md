@@ -1,5 +1,9 @@
 # HTTP API and Realtime Protocol
 
+## Canonical agent GET freshness
+
+All canonical agent reads derive the original human from the authenticated cookie and tenant context, then revalidate that same Account/session/Principal after protected I/O. This applies to `/agent-templates`, `/agents`, `/agents/{id}`, and the exact Instance `/effective-config`, `/settings`, `/execution-budgets`, `/self-management`, `/skills`, `/resources`, `/resources/{key}/content` and `/editor` suffixes under `/api/v2/tenants/{tenantId}`. Logout or replacement of the original session during a read returns `403 initiator_unavailable`; concurrent security/Instance changes return `409 stale_revision` rather than a mixed snapshot. Clients recover with an explicit new read using current authentication. Existing JSON/file shapes, paging, no-store headers and permission requirements are preserved. The fence does not authorize a write or retry a mutation.
+
 ## Tenant Instance editor HTTP read
 
 `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/editor` uses the current cookie human/session and exact `agents.read`. The no-store response is `{ agent, settings, securityRevision, canUpdate, unavailableSettings }`; `agent` uses the existing safe agent/Instance projection, `settings` uses existing typed sections with matching Instance revisions, and `canUpdate` checks exact `agents.update` without IAM-inspection permission. `unavailableSettings` currently contains `sandboxPolicy`, absent from `settings`. Stale composed reads return `409 stale_revision`; unavailable human/read authority fails closed.

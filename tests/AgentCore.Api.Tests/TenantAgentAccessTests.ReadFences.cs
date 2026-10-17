@@ -1,0 +1,150 @@
+using System.Net;
+using System.Net.Http.Json;
+using AgentCore.Application.Ports;
+using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Security;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
+namespace AgentCore.Api.Tests;
+
+public sealed partial class TenantAgentAccessTests
+{
+    public static IEnumerable<object[]> AgentReadLogoutCases =>
+        from read in new[] { "settings", "execution-budgets", "self-management", "effective-config", "skills", "resources", "editor", "agent", "inventory", "templates" }
+        from signInAgain in new[] { false, true }
+        select new object[] { read, signInAgain };
+
+    [Theory]
+    [MemberData(nameof(AgentReadLogoutCases))]
+    public async Task Agent_read_does_not_release_captured_data_after_original_session_logout(string read, bool signInAgain)
+    {
+        await using var factory = new AgentReadFenceFactory();
+        using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
+        await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
+        var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid();
+        var agent = await Json(await owner.PostAsJsonAsync($"/api/v2/tenants/{tenant}/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
+        var id = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+        factory.CaptureAt = read switch { "agent" => "agent", "inventory" => "inventory", "templates" => "templates", _ => "definition" };
+        factory.AfterCapture = async () =>
+        {
+            Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync("/api/v2/auth/logout", null)).StatusCode);
+            if (signInAgain) await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
+        };
+        var path = read switch { "agent" => $"agents/{id}", "inventory" => "agents", "templates" => "agent-templates", _ => $"agents/{id}/{read}" };
+        var response = await owner.GetAsync($"/api/v2/tenants/{tenant}/{path}");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("initiator_unavailable", (await Json(response)).GetProperty("reasonCode").GetString());
+        Assert.Null(factory.AfterCapture);
+        if (signInAgain) Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync($"/api/v2/tenants/{tenant}/{path}")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("agent")]
+    [InlineData("inventory")]
+    [InlineData("templates")]
+    public async Task Directory_reads_reject_a_capture_when_tenant_security_changes_and_recover_explicitly(string read)
+    {
+        await using var factory = new AgentReadFenceFactory();
+        using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
+        await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
+        var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var prefix = $"/api/v2/tenants/{tenant}";
+        var agent = await Json(await owner.PostAsJsonAsync(prefix + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
+        var id = agent.GetProperty("instance").GetProperty("instanceId").GetGuid();
+        factory.CaptureAt = read; factory.AfterCapture = async () => Assert.Equal(HttpStatusCode.Created,
+            (await owner.PostAsJsonAsync(prefix + "/roles", new { name = "Concurrent inventory role", permissions = new[] { "agents.read" }, expectedRevision = await Revision(owner, tenant) })).StatusCode);
+        var path = prefix + "/" + (read switch { "agent" => $"agents/{id}", "inventory" => "agents", _ => "agent-templates" });
+        var result = await owner.GetAsync(path);
+        Assert.Equal(HttpStatusCode.Conflict, result.StatusCode); Assert.Equal("stale_revision", (await Json(result)).GetProperty("reasonCode").GetString()); Assert.Null(factory.AfterCapture);
+        Assert.Equal(HttpStatusCode.OK, (await owner.GetAsync(path)).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("logout")]
+    [InlineData("relogin")]
+    [InlineData("security")]
+    public async Task Resource_download_fences_original_human_and_security_after_actual_byte_IO(string change)
+    {
+        await using var factory = new AgentReadFenceFactory();
+        using var owner = factory.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });
+        await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
+        var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var prefix = $"/api/v2/tenants/{tenant}";
+        var agent = await Json(await owner.PostAsJsonAsync(prefix + "/agents", new { templateId = "examiner", version = 1, expectedRevision = await Revision(owner, tenant) }));
+        var id = agent.GetProperty("instance").GetProperty("instanceId").GetGuid(); var root = prefix + $"/agents/{id}";
+        var bytes = System.Text.Encoding.UTF8.GetBytes("Original session protected download sentinel.");
+        var saved = await Json(await owner.PostAsJsonAsync(root + "/resources", new { expectedRevision = await Revision(owner, tenant), expectedInstanceRevision = 1,
+            input = new { logicalPath = "protected.txt", kind = 2, mediaType = "text/plain", content = bytes } }));
+        var path = root + "/resources/" + Uri.EscapeDataString(saved.GetProperty("resource").GetProperty("key").GetString()!) + "/content";
+        factory.CaptureAt = "bytes"; factory.AfterCapture = async () =>
+        {
+            if (change == "security") Assert.Equal(HttpStatusCode.Created, (await owner.PostAsJsonAsync(prefix + "/roles", new { name = "Concurrent harmless role", permissions = new[] { "agents.read" }, expectedRevision = await Revision(owner, tenant) })).StatusCode);
+            else
+            {
+                Assert.Equal(HttpStatusCode.NoContent, (await owner.PostAsync("/api/v2/auth/logout", null)).StatusCode);
+                if (change == "relogin") await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
+            }
+        };
+        var result = await owner.GetAsync(path);
+        Assert.Equal(change == "security" ? HttpStatusCode.Conflict : HttpStatusCode.Forbidden, result.StatusCode);
+        Assert.DoesNotContain("protected download sentinel", await result.Content.ReadAsStringAsync()); Assert.Null(factory.AfterCapture);
+        if (change != "logout") Assert.Equal(bytes, await owner.GetByteArrayAsync(path));
+    }
+
+    private sealed class AgentReadFenceFactory : AgentCoreApiFactory
+    {
+        public Func<Task>? AfterCapture;
+        public string CaptureAt = "definition";
+        public async Task Captured(string kind)
+        {
+            if (CaptureAt == kind && Interlocked.Exchange(ref AfterCapture, null) is { } action) await action();
+        }
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureTestServices(services =>
+            {
+                var descriptor = services.Single(d => d.ServiceType == typeof(IBuiltInAgentDefinitionStore));
+                services.Replace(ServiceDescriptor.Singleton<IBuiltInAgentDefinitionStore>(provider => new AgentReadDefinitions(
+                    Resolve<IBuiltInAgentDefinitionStore>(descriptor, provider), this)));
+                var content = services.Single(d => d.ServiceType == typeof(IDefinitionResourceContentStore));
+                services.Replace(ServiceDescriptor.Singleton<IDefinitionResourceContentStore>(provider => new AgentReadContent(Resolve<IDefinitionResourceContentStore>(content, provider), this)));
+                services.Replace(ServiceDescriptor.Singleton<ITenantAgentStore>(provider => new AgentReadStore((ITenantAgentStore)provider.GetRequiredService<IIamStore>(), this)));
+            });
+        }
+        private static T Resolve<T>(ServiceDescriptor descriptor, IServiceProvider provider) =>
+            (T)(descriptor.ImplementationInstance ?? descriptor.ImplementationFactory?.Invoke(provider) ?? ActivatorUtilities.CreateInstance(provider, descriptor.ImplementationType!));
+    }
+    private sealed class AgentReadContent(IDefinitionResourceContentStore inner, AgentReadFenceFactory factory) : IDefinitionResourceContentStore
+    {
+        public ValueTask StoreVerifiedAsync(string hash, byte[] content, CancellationToken ct = default) => inner.StoreVerifiedAsync(hash, content, ct);
+        public async ValueTask<byte[]?> ReadAsync(string hash, CancellationToken ct = default)
+        { var bytes = await inner.ReadAsync(hash, ct); await factory.Captured("bytes"); return bytes; }
+    }
+    private sealed class AgentReadDefinitions(IBuiltInAgentDefinitionStore inner, AgentReadFenceFactory factory) : IBuiltInAgentDefinitionStore
+    {
+        public async ValueTask<IReadOnlyList<AgentDefinition>> ListAsync(CancellationToken ct = default)
+        {
+            var result = await inner.ListAsync(ct); await factory.Captured("templates"); return result;
+        }
+        public async ValueTask<AgentDefinition?> GetAsync(string id, int? version = null, CancellationToken ct = default)
+        {
+            var captured = await inner.GetAsync(id, version, ct);
+            await factory.Captured("definition");
+            return captured;
+        }
+    }
+    private sealed class AgentReadStore(ITenantAgentStore inner, AgentReadFenceFactory factory) : ITenantAgentStore
+    {
+        public async ValueTask<TenantAgent?> FindTenantAgentAsync(Guid tenant, Guid id, CancellationToken ct = default)
+        { var result = await inner.FindTenantAgentAsync(tenant, id, ct); await factory.Captured("agent"); return result; }
+        public async ValueTask<TenantAgentPage> ListTenantAgentsAsync(Guid tenant, IReadOnlyList<Guid>? allowed, int page, int pageSize, CancellationToken ct = default)
+        { var result = await inner.ListTenantAgentsAsync(tenant, allowed, page, pageSize, ct); await factory.Captured("inventory"); return result; }
+        public ValueTask<TenantAgentConfigurationSnapshot?> ReadTenantAgentConfigurationAsync(Guid tenant, Guid id, CancellationToken ct = default) => inner.ReadTenantAgentConfigurationAsync(tenant, id, ct);
+        public ValueTask<TenantAgent?> TryChangeTenantAgentConfigurationAsync(TenantSecurityState next, long revision, TenantAgentConfigurationChange change, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) => inner.TryChangeTenantAgentConfigurationAsync(next, revision, change, at, audit, ct);
+        public ValueTask<bool> TryCreateTenantAgentAsync(TenantSecurityState next, long revision, AgentInstance instance, IReadOnlyList<SkillSpec> skills, AuthorizationAudit audit, CancellationToken ct = default) => inner.TryCreateTenantAgentAsync(next, revision, instance, skills, audit, ct);
+        public ValueTask<TenantAgent?> TrySetTenantAgentLifecycleAsync(TenantSecurityState next, long revision, Guid id, long instanceRevision, AgentInstanceLifecycle lifecycle, DateTimeOffset at, AuthorizationAudit audit, CancellationToken ct = default) => inner.TrySetTenantAgentLifecycleAsync(next, revision, id, instanceRevision, lifecycle, at, audit, ct);
+    }
+}

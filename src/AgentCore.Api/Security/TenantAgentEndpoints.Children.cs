@@ -14,22 +14,22 @@ public static partial class TenantAgentEndpoints
     public sealed record ResourceCopy(long ExpectedRevision, long ExpectedInstanceRevision, string LogicalPath);
     private static void MapChildren(RouteGroupBuilder group)
     {
-        group.MapGet("/agents/{instanceId:guid}/skills", (Guid instanceId, int? page, int? pageSize, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents/{instanceId:guid}/skills", (Guid instanceId, int? page, int? pageSize, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            var a = IdentityHttp.TenantContext(http); return Results.Json(await service.ReadSkillsAsync(a.PrincipalId, a.TenantId, instanceId, page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false));
+            var a = IdentityHttp.TenantContext(http); return Results.Json(await service.ReadSkillsAsync(a.TenantId, instanceId, Human(http), page ?? 0, pageSize ?? 30, ct).ConfigureAwait(false));
         }));
         group.MapPost("/agents/{instanceId:guid}/skills/commands", (Guid instanceId, SkillCommand body, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http); return Results.Json(await service.WriteSkillAsync(a.PrincipalId, a.TenantId, instanceId, body.Operation,
                 body.ExpectedRevision, body.ExpectedInstanceRevision, body.Key, body.ExpectedSkillRevision, body.Input, body.Enabled, ct).ConfigureAwait(false));
         })).WithMetadata(new RequestSizeLimitAttribute(64 * 1024));
-        group.MapGet("/agents/{instanceId:guid}/resources", (Guid instanceId, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents/{instanceId:guid}/resources", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            var a = IdentityHttp.TenantContext(http); return Results.Json(await service.ReadResourcesAsync(a.PrincipalId, a.TenantId, instanceId, ct).ConfigureAwait(false));
+            var a = IdentityHttp.TenantContext(http); return Results.Json(await service.ReadResourcesAsync(a.TenantId, instanceId, Human(http), ct).ConfigureAwait(false));
         }));
-        group.MapGet("/agents/{instanceId:guid}/resources/{key}/content", (Guid instanceId, string key, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents/{instanceId:guid}/resources/{key}/content", (Guid instanceId, string key, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
-            var a = IdentityHttp.TenantContext(http); var file = await service.ReadResourceContentAsync(a.PrincipalId, a.TenantId, instanceId, key, ct).ConfigureAwait(false);
+            var a = IdentityHttp.TenantContext(http); var file = await service.ReadResourceContentAsync(a.TenantId, instanceId, Human(http), key, ct).ConfigureAwait(false);
             return Results.File(file.Bytes, file.Resource.MediaType, Path.GetFileName(file.Resource.LogicalPath));
         }));
         group.MapPost("/agents/{instanceId:guid}/resources", (Guid instanceId, ResourceUpsert body, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>

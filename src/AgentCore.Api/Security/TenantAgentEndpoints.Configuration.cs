@@ -15,17 +15,17 @@ public static partial class TenantAgentEndpoints
     {
         MapSettings(group);
         MapChildren(group);
-        group.MapGet("/agents/{instanceId:guid}/editor", (Guid instanceId, HttpContext http, TenantAgentEditorService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents/{instanceId:guid}/editor", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
             var human = new TenantSessionInitiator(a.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), a.PrincipalId);
-            var value = await service.ReadAsync(a.TenantId, instanceId, human, ct).ConfigureAwait(false);
+            var value = await service.ReadEditorAsync(a.TenantId, instanceId, human, ct).ConfigureAwait(false);
             return Results.Json(new { agent = Safe(value.Agent), value.Settings, value.SecurityRevision, value.CanUpdate, value.UnavailableSettings });
         }));
-        group.MapGet("/agents/{instanceId:guid}/effective-config", (Guid instanceId, HttpContext http, TenantAgentConfigurationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        group.MapGet("/agents/{instanceId:guid}/effective-config", (Guid instanceId, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);
-            var value = await service.ReadAsync(a.PrincipalId, a.TenantId, instanceId, ct).ConfigureAwait(false);
+            var value = await service.ReadConfigurationAsync(a.TenantId, instanceId, Human(http), ct).ConfigureAwait(false);
             // Configuration eligibility is not tenant execution admission or an IAM grant.
             // Do not export the legacy Admin projection's CanAcceptNewTriggeredWork flag here.
             return Results.Json(new { agent = Safe(value.Agent), value.Definition,

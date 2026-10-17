@@ -1,5 +1,9 @@
 # Testing Strategy
 
+## Original-human agent read races
+
+Use one-shot test-store interception after actual Definition, directory or byte I/O. Across all canonical agent GETs, logout during I/O must release no protected result; a new same-Account login cannot substitute for the request’s retired session. A subsequent explicit read with the new session succeeds. For effective configuration/settings/budgets/management/Skills/resources/editor, execute persona and security changes during Definition resolution against InMemory and SQLite: reject mixed captures, then explicitly recover a current read. Resource download tests inspect actual captured bytes but require a safe denial/conflict response containing no sentinel, and separately verify authorized recovery returns the original bytes. No sleeps or public debug endpoints are needed. [Executed evidence](reports/tenant-agent-read-fence-verification-2026-10-17.md).
+
 ## Tenant Instance Profile and Settings focused regression
 
 Exercise coherent original-human editor reads in InMemory and SQLite, including concurrent configuration/security changes and logout during Definition I/O. HTTP tests cover scoped read-only/revoked access, stale persona/settings witnesses, explicit fresh save and reset without unrelated mutation. Frontend checks cover strict Form/JSON, canonical witness payloads, retained stale drafts, permission-loss clearing, independent settings drafts, acknowledged-response failure recovery and model-read retry. Run `pnpm run test:e2e:tenant-instance-editor` with separate free `TENANT_CHAT_API_PORT`/`TENANT_CHAT_WEB_PORT`; its disposable Synthetic fixture covers 320px guarded navigation, stale recovery, independent save/reset, read-only inspection and revocation. Playwright MCP supplies actual manual interactions and rendered responsive evidence. [Executed scope](reports/tenant-instance-editor-ui-verification-2026-10-17.md) is distinct from full proposal/milestone acceptance.
