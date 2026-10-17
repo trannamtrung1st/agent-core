@@ -2296,6 +2296,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("ApprovalRequestId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ApprovedActionHash")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("ExecutorPrincipalId")
                         .HasColumnType("TEXT");
 
@@ -2304,6 +2310,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("LeaseSessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("OperationId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("OwnedRunId")
@@ -2328,6 +2337,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("LeaseSessionId");
 
+                    b.HasIndex("OperationId")
+                        .IsUnique()
+                        .HasFilter("OperationId IS NOT NULL");
+
                     b.HasIndex("OwnedRunId", "SessionId");
 
                     b.HasIndex("SessionId", "AgentRunId", "ToolCallId")
@@ -2337,8 +2350,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "SessionId", "AgentRunId", "ToolCallId");
 
+                    b.HasIndex("TenantId", "ApprovalRequestId", "ExecutorPrincipalId", "OperationId", "ApprovedActionHash");
+
                     b.ToTable("SandboxExecutions", null, t =>
                         {
+                            t.HasCheckConstraint("CK_SandboxExecution_Approval", "(ApprovalRequestId IS NULL AND OperationId IS NULL AND ApprovedActionHash IS NULL AND json_extract(Json, '$.approvalRequestId') IS NULL AND json_extract(Json, '$.operationId') IS NULL) OR (TenantId IS NOT NULL AND ApprovalRequestId IS NOT NULL AND OperationId IS NOT NULL AND ApprovedActionHash IS NOT NULL AND json_type(Json, '$.approvalRequestId') IS 'text' AND lower(json_extract(Json, '$.approvalRequestId')) = lower(ApprovalRequestId) AND json_type(Json, '$.operationId') IS 'text' AND lower(json_extract(Json, '$.operationId')) = lower(OperationId) AND json_extract(Json, '$.actionHash') IS ApprovedActionHash)");
+
                             t.HasCheckConstraint("CK_SandboxExecution_TenantJson", "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND AgentInstanceId IS NULL AND OwnedRunId IS NULL AND LeaseSessionId IS NULL AND Revision = 0 AND json_extract(Json, '$.tenantId') IS NULL AND json_extract(Json, '$.executorPrincipalId') IS NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND AgentInstanceId IS NOT NULL AND OwnedRunId IS NOT NULL AND OwnedRunId = AgentRunId AND LeaseSessionId IS NOT NULL AND LeaseSessionId = SessionId AND Revision > 0 AND json_type(Json, '$.tenantId') IS 'text' AND lower(json_extract(Json, '$.tenantId')) = lower(TenantId) AND json_type(Json, '$.executorPrincipalId') IS 'text' AND lower(json_extract(Json, '$.executorPrincipalId')) = lower(ExecutorPrincipalId) AND json_type(Json, '$.agentInstanceId') IS 'text' AND lower(json_extract(Json, '$.agentInstanceId')) = lower(AgentInstanceId) AND json_extract(Json, '$.revision') IS Revision)");
                         });
                 });
@@ -3287,6 +3304,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("SandboxProfileId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("SandboxProfileRevision")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("SessionId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -3306,9 +3329,13 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RunId", "SessionId");
 
+                    b.HasIndex("SandboxProfileId", "SandboxProfileRevision");
+
                     b.HasIndex("TenantId", "CredentialId");
 
                     b.HasIndex("TenantId", "OriginalInitiatorPrincipalId");
+
+                    b.HasIndex("TenantId", "SandboxProfileId");
 
                     b.HasIndex("Status", "ExpiresAt", "RequestId");
 
@@ -3323,7 +3350,7 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.ToTable("TenantApprovalRequests", null, t =>
                         {
-                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", "Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64 AND ((Permission = 'agents.update' AND ResourceType = 'agent' AND ResourceId = InstanceId AND CredentialId IS NULL) OR (Permission = 'credentials.use' AND ResourceType = 'credential' AND CredentialId IS NOT NULL AND ResourceId = CredentialId)) AND length(PayloadJson) <= 131072");
+                            t.HasCheckConstraint("CK_TenantApprovalRequest_Values", "Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64 AND ((Permission = 'agents.update' AND ResourceType = 'agent' AND ResourceId = InstanceId AND CredentialId IS NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL AND length(PayloadJson) <= 131072) OR (Permission = 'credentials.use' AND ResourceType = 'credential' AND CredentialId IS NOT NULL AND ResourceId = CredentialId AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL AND length(PayloadJson) <= 131072) OR (Permission = 'sandbox.execute' AND Kind = 0 AND ResourceType = 'agent' AND ResourceId = InstanceId AND CredentialId IS NULL AND SandboxProfileId IS NOT NULL AND SandboxProfileRevision IS NOT NULL AND SandboxProfileRevision > 0 AND json_type(PayloadJson, '$.Operation.SandboxCommand.ProfileId') IS 'text' AND json_extract(PayloadJson, '$.Operation.SandboxCommand.ProfileId') IS SandboxProfileId AND json_extract(PayloadJson, '$.Operation.SandboxCommand.ProfileRevision') IS SandboxProfileRevision AND length(PayloadJson) <= 1048576))");
                         });
                 });
 
@@ -4040,6 +4067,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
                         .HasPrincipalKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantApprovalRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ApprovalRequestId", "ExecutorPrincipalId", "OperationId", "ApprovedActionHash")
+                        .HasPrincipalKey("TenantId", "RequestId", "ExecutorPrincipalId", "OperationId", "Fingerprint")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.SandboxLeaseRow", b =>
@@ -4216,6 +4249,11 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AgentCore.Infrastructure.Persistence.SandboxProfileRow", null)
+                        .WithMany()
+                        .HasForeignKey("SandboxProfileId", "SandboxProfileRevision")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgentCore.Infrastructure.Security.TenantCredentialRecord", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "CredentialId")
@@ -4226,6 +4264,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "OriginalInitiatorPrincipalId")
                         .HasPrincipalKey("TenantId", "PrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSandboxProfileRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SandboxProfileId")
+                        .HasPrincipalKey("TenantId", "ProfileId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)

@@ -20,12 +20,15 @@ export interface TenantApproval {
   decision: { principalId: string; status: Status; decidedAt: string } | null;
   operationResult: { outcome: string; reasonCode: string; recordedAt: string } | null;
   review: { agentName: string; requesterName: string | null; reviewerName: string | null;
-    changes: { field: string; before: string | boolean | null; after: string | boolean | null; beforeAvailable: boolean; afterAvailable: boolean; restoresDefault: boolean }[];
+    changes: { field: string; before: string | number | boolean | null; after: string | number | boolean | null; beforeAvailable: boolean; afterAvailable: boolean; restoresDefault: boolean }[];
     canDecide: boolean; canCancel: boolean; decisionUnavailableReason: string | null; independentReview: boolean; serverNow: string; executionState: string };
 }
 interface ApprovalPage { items: TenantApproval[]; total: number; page: number; pageSize: number }
 const statuses: Record<Status, string> = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled', expired: 'Expired' };
-const fields: Record<string, string> = { name: 'Name', role: 'Role', description: 'Description', tone: 'Tone', responseLength: 'Response length', language: 'Language', askOneQuestionAtATime: 'Ask one question at a time', credential: 'Credential', bindingReference: 'Bound reference', connectionCheck: 'Connection check' };
+const fields: Record<string, string> = { name: 'Name', role: 'Role', description: 'Description', tone: 'Tone', responseLength: 'Response length', language: 'Language', askOneQuestionAtATime: 'Ask one question at a time', credential: 'Credential', bindingReference: 'Bound reference', connectionCheck: 'Connection check',
+  sandboxProfile: 'Sandbox profile', image: 'Image', command: 'Command', workingDirectory: 'Working directory', timeoutSeconds: 'Timeout (seconds)', background: 'Run in background',
+  homeAccess: 'Home access', cpu: 'CPU cores', memoryMiB: 'Memory (MiB)', storageBytes: 'Storage (bytes)', initializationRequired: 'Initialization required',
+  profileInitialization: 'Profile initialization script', instanceInitialization: 'Instance initialization script' };
 const reasons: Record<string, string> = {
   approval_expired: 'This request has expired. Ask the agent to prepare a new action.',
   executor_unavailable: 'The agent is unavailable.', run_unavailable: 'The source work can no longer accept this decision.',
@@ -45,7 +48,11 @@ const reasons: Record<string, string> = {
   credential_reconnect_required: 'The check completed and the credential requires reconnection.',
   credential_check_in_progress: 'Another check already reserved this credential. This request did not run a provider check.',
   credential_check_uncertain: 'The provider outcome is uncertain. This operation will not run again. Reconnect the credential before another check.',
-  credential_check_target_changed: 'The credential changed while the check was in progress. The newer credential was retained. This operation will not run again.'
+  credential_check_target_changed: 'The credential changed while the check was in progress. The newer credential was retained. This operation will not run again.',
+  sandbox_operation_witness_changed: 'The saved Sandbox environment or configuration changed. Ask the agent to prepare a new command.',
+  sandbox_source_unavailable: 'The saved Sandbox image source changed or is unavailable. Restore the source and prepare a new command.',
+  sandbox_recovery_required: 'The saved Sandbox environment requires recovery. Resolve its state before preparing a new command.',
+  sandbox_profile_not_admitted: 'This Sandbox profile was not available to the source work. Prepare a new command in new work with an allowed profile.'
 };
 function resultLabel(item: TenantApproval) {
   return item.operationResult?.outcome === 'completed' ? item.preparedAction.operation === 'check_credential_connection' ? 'Check completed' : 'Applied'
@@ -125,6 +132,7 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
     });
   };
   const status = acknowledged ?? data?.status;
+  const sandboxCommand = data?.preparedAction.operation === 'run_sandbox_command';
   return <Drawer open title="Approval details" aria-label="Approval details" className="access-editor-drawer" size="large" styles={{ wrapper: { maxWidth: '100vw' } }} destroyOnHidden
     onClose={() => { if (!busy) onClose(); }} closable={!busy} mask={{ closable: !busy }} keyboard={!busy}
     footer={<Flex wrap gap="var(--ac-space-compact)" justify="end">
@@ -145,11 +153,11 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
           { key: 'expiry', label: 'Expires', children: approvalDate(data.expiresAt) },
           ...(data.decision ? [{ key: 'reviewer', label: 'Decided by', children: data.review.reviewerName ?? 'Unavailable member' }, { key: 'decided', label: 'Decided', children: approvalDate(data.decision.decidedAt) }] : [])
         ]} />
-        <section aria-label="Exact saved changes"><Typography.Title level={5}>Exact saved changes</Typography.Title>
-          <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
+        <section aria-label={sandboxCommand ? 'Exact saved command' : 'Exact saved changes'}><Typography.Title level={5}>{sandboxCommand ? 'Exact saved command' : 'Exact saved changes'}</Typography.Title>
+          {sandboxCommand ? <Descriptions {...layout} column={1} size="small" items={data.review.changes.map(change => ({ key: change.field, label: fields[change.field] ?? 'Saved field', children: change.afterAvailable ? value(change.after) : 'Not recorded for this request' }))} /> : <Flex vertical gap="var(--ac-space-section)">{data.review.changes.map(change => <Descriptions key={change.field} {...layout} title={fields[change.field] ?? 'Saved field'} column={1} size="small" items={[
             { key: 'before', label: 'Before', children: change.beforeAvailable ? value(change.before) : 'Not recorded for this request' },
             { key: 'after', label: 'After', children: <Flex vertical gap="var(--ac-space-tight)">{change.afterAvailable ? value(change.after) : 'Definition default was not recorded'}{change.restoresDefault && <Typography.Text type="secondary">Restore the Definition default</Typography.Text>}</Flex> }
-          ]} />)}</Flex>
+          ]} />)}</Flex>}
         </section>
         {status === 'pending' && <>
           {data.review.independentReview && <Typography.Text type="secondary">Independent review is required. The original requester cannot decide.</Typography.Text>}
@@ -166,4 +174,4 @@ export function TenantApprovalDetail({ tenant, organization, id, onChanged, onCl
     </Flex>
   </Drawer>;
 }
-function value(content: string | boolean | null) { return <Typography.Text style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{typeof content === 'boolean' ? content ? 'Yes' : 'No' : content ?? 'Not set'}</Typography.Text>; }
+function value(content: string | number | boolean | null) { return <Typography.Text style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{typeof content === 'boolean' ? content ? 'Yes' : 'No' : content ?? 'Not set'}</Typography.Text>; }

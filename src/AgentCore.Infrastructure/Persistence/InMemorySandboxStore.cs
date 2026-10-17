@@ -89,7 +89,7 @@ public sealed partial class InMemorySandboxStore(InMemoryAdminEventStore? events
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
-            if (execution.TenantId is not null || execution.ExecutorPrincipalId is not null || execution.Revision != 0 || OwnedSession(execution.SessionId) || OwnedInstance(execution.AgentInstanceId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
+            if (execution.ApprovalRequestId is not null || execution.OperationId is not null || execution.TenantId is not null || execution.ExecutorPrincipalId is not null || execution.Revision != 0 || OwnedSession(execution.SessionId) || OwnedInstance(execution.AgentInstanceId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
             var old = _executions.GetValueOrDefault(execution.Id);
             if (create ? old is not null || _executions.Values.Any(e => e.SessionId == execution.SessionId && e.AgentRunId == execution.AgentRunId && e.ToolCallId == execution.ToolCallId)
                 : old is null || old.SessionId != execution.SessionId || old.Generation != execution.Generation || old.ActionHash != execution.ActionHash)

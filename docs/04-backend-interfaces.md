@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant approved Sandbox command ports
+
+`TenantApprovalService.PrepareSandboxAsync` accepts a trusted Run reference, exact admitted profile, typed `SandboxCommandRequest` and expected Run/claim witnesses. Core canonicalizes the command, pins the actual Session/profile/source/lease/home witnesses and derives Review kind from the central nondelegatable Sensitive `sandbox.execute` catalog entry. No browser-editable prepared command is accepted.
+
+`TenantSandboxApprovedOperationService.ReserveAsync` accepts only a trusted `TenantRuntimeFrame` and saved request ID. `ITenantSandboxRuntimeStore.TryReserveApprovedSandboxExecutionAsync` receives the exact request/decision/hash and security/Run witnesses. Both adapters recheck current owned sources and independent grantor/requester/executor authority, then atomically reserve the existing Ready generation, receipt and Run external-effect fence. `Reserved=true` identifies the sole newly acquired fence; duplicates return the saved receipt with `Reserved=false`. A reservation is not a completed operation result or an SDK dispatch. Initial generation provisioning, the SDK transport and eventual outcome settlement remain separate integration obligations. [Focused evidence](reports/tenant-sandbox-command-approval-verification-2026-10-18.md).
+
 ## Current tenant execution policy resolution
 
 `TenantRunConfigurationResolver.CurrentPolicyAsync` resolves only actual current Instance, exact owned or immutable shipped publication and sparse settings/self-management policy. It deliberately does not refresh execution resources, credential bindings or image eligibility. `TenantRunExecutionAuthority.CurrentDefinitionAsync` uses that result between fresh exact claimed Run/requester/security checks and fails closed when the captured security witness changes. Callers retain the separate admitted Definition; they must apply both admitted and current ceilings rather than replace the Run payload.

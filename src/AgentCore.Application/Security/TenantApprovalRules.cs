@@ -9,7 +9,7 @@ using AgentCore.Domain.Security;
 
 namespace AgentCore.Application.Security;
 
-public static class TenantApprovalRules
+public static partial class TenantApprovalRules
 {
     public static PreparedTenantOperation Prepare(Guid operationId, Guid instance, AgentIdentity persona, long instanceRevision, long personaRevision)
     {
@@ -44,11 +44,12 @@ public static class TenantApprovalRules
         return new(operationId, instance, null, instanceRevision, personaRevision, json, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(json))), CredentialCheck: check);
     }
 
-    public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => (op.Persona, op.Preferences, op.CredentialCheck) switch
+    public static PreparedTenantOperation Rebuild(PreparedTenantOperation op) => (op.Persona, op.Preferences, op.CredentialCheck, op.SandboxCommand) switch
     {
-        ({ } persona, null, null) => Prepare(op.OperationId, op.InstanceId, persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        (null, { } preferences, null) => PreparePreferences(op.OperationId, op.InstanceId, preferences, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
-        (null, null, { } check) => PrepareCredentialCheck(op.OperationId, op.InstanceId, check, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        ({ } persona, null, null, null) => Prepare(op.OperationId, op.InstanceId, persona, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        (null, { } preferences, null, null) => PreparePreferences(op.OperationId, op.InstanceId, preferences, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        (null, null, { } check, null) => PrepareCredentialCheck(op.OperationId, op.InstanceId, check, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
+        (null, null, null, { } sandbox) => PrepareSandbox(op.OperationId, op.InstanceId, sandbox, op.ExpectedInstanceRevision, op.ExpectedPersonaRevision),
         _ => throw new ArgumentException("Exactly one supported operation payload is required.")
     };
 
@@ -61,7 +62,7 @@ public static class TenantApprovalRules
             || request.RootActivationId != context.RootActivationId || request.ExecutorPrincipalId != context.AgentPrincipalId
             || request.OriginalInitiatorPrincipalId != context.OriginalInitiatorPrincipalId || op.InstanceId != run.AgentInstanceId
             || target.TenantId != request.TenantId || target.Instance.InstanceId != op.InstanceId || target.PrincipalId != context.AgentPrincipalId
-            || !Enum.IsDefined(request.Kind) || !Enum.IsDefined(request.Status) || request.Revision < 1
+            || !Enum.IsDefined(request.Kind) || request.Operation.SandboxCommand is not null && request.Kind != ApprovalKind.Review || !Enum.IsDefined(request.Status) || request.Revision < 1
             || request.CreatedAt.Offset != TimeSpan.Zero || request.ExpiresAt.Offset != TimeSpan.Zero
             || request.ExpiresAt <= request.CreatedAt || request.ExpiresAt - request.CreatedAt > TimeSpan.FromDays(1)
             || Rebuild(op) != op)

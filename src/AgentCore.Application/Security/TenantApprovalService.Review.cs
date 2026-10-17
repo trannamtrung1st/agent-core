@@ -66,6 +66,8 @@ public sealed partial class TenantApprovalService
                         PermissionCatalog.Get("credentials.read"), scope, ct).ConfigureAwait(false);
                     if (!read.Allowed) unavailable = "executor_read_required";
                 }
+                else if (op.SandboxCommand is not null)
+                    await (sandboxTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(r, run, ct).ConfigureAwait(false);
                 else unavailable = TenantLocalEffectRules.Eligibility(run, effective.Agent, effective.Configuration.Configuration.Definition);
                 if (unavailable is null)
                 {
@@ -90,6 +92,21 @@ public sealed partial class TenantApprovalService
 
     private static IReadOnlyList<TenantApprovalFieldChange> Changes(PreparedTenantOperation op, TenantApprovalSnapshot? snapshot)
     {
+        if (op.SandboxCommand is { } sandbox)
+        {
+            var command = TenantApprovalRules.SandboxCommand(sandbox);
+            return [new("sandboxProfile", null, snapshot?.Sandbox?.ProfileName, false, snapshot?.Sandbox is not null),
+                new("image", null, snapshot?.Sandbox?.ImageReference, false, snapshot?.Sandbox is not null),
+                new("command", null, command.Command ?? System.Text.Json.JsonSerializer.Serialize(command.Argv), false),
+                new("workingDirectory", null, command.Cwd, false), new("timeoutSeconds", null, command.TimeoutSeconds, false), new("background", null, command.Background, false),
+                new("homeAccess", null, sandbox.HomeAccess.ToString(), false),
+                new("cpu", null, snapshot?.Sandbox?.Cpu, false, snapshot?.Sandbox is not null),
+                new("memoryMiB", null, snapshot?.Sandbox?.MemoryMiB, false, snapshot?.Sandbox is not null),
+                new("storageBytes", null, snapshot?.Sandbox?.StorageBytes, false, snapshot?.Sandbox is not null),
+                new("initializationRequired", null, snapshot?.Sandbox?.WillInitialize, false, snapshot?.Sandbox is not null),
+                new("profileInitialization", null, snapshot?.Sandbox?.ProfileInitializationScript, false, snapshot?.Sandbox is not null),
+                new("instanceInitialization", null, snapshot?.Sandbox?.InstanceInitializationScript, false, snapshot?.Sandbox is not null)];
+        }
         if (op.CredentialCheck is { } check)
             return [new("credential", snapshot?.Credential?.DisplayName, snapshot?.Credential?.DisplayName, snapshot?.Credential is not null, snapshot?.Credential is not null),
                 new("bindingReference", check.Reference, check.Reference),

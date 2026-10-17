@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Sandbox exact command review regression
+
+In both stores, admit and claim a real owned Run with a controlled Ready generation, prepare an exact Sandbox command, inspect and approve it as a qualified human, resume/claim the source and reserve once. Assert a durable wait, no role/exceptional grant, one exact receipt/Run effect fence/lease pointer set and no completed effect result. Concurrent and repeated consumers must observe one winner and never promote raw metadata to approved authority.
+
+Exercise rejection, stale/changed generation, expired environment, independent profile/Session/execution read filters before counts, grantor revocation and private registry rotation (including valid initial secret revision zero). Invalid complete/partial source epochs must fail validation. Use actual SQLite constraints, retained persona approval bytes across down/up migration and reopen. Through authenticated HTTP, check the safe typed projection, anonymous/foreign access denial and approval with an unrecorded effect. [Recorded evidence](reports/tenant-sandbox-command-approval-verification-2026-10-18.md) separates these boundaries from unexecuted initial provisioning, actual SDK commands, mounts/process/reset/cleanup and full Sandbox UI acceptance.
+
 ## Tenant current execution policy regression
 
 Admit and claim an owned Run, publish/adopt a different Definition with removed execution capability and tighter isolation, then resolve current authority. Assert the actual current policy is returned while saved Run instructions/version/capabilities stay unchanged. Through the real Synthetic HTTP/Runtime path, complete text after adoption and inspect model context for only admitted instructions. Change tenant security or cancel the Run during source I/O: captured policy must be discarded, and only an explicit fresh still-authorized lookup may recover. Keep affected requester, direct-preference, approval and text-dispatch checks.

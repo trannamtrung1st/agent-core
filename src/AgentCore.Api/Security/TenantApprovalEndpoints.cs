@@ -49,6 +49,7 @@ public static class TenantApprovalEndpoints
             TenantOperationKind.Persona => ("Update agent persona", "update_persona"),
             TenantOperationKind.ConversationPreferences => ("Update conversation preferences", "update_preferences"),
             TenantOperationKind.CredentialConnectionCheck => ("Check credential connection", "check_credential_connection"),
+            TenantOperationKind.SandboxCommand => ("Run exact Sandbox command", "run_sandbox_command"),
             _ => throw new InvalidOperationException("Unsupported prepared operation.") };
         return new(r.RequestId, r.TenantId, r.RunId, r.SessionId, r.RootActivationId, r.ExecutorPrincipalId, r.OriginalInitiatorPrincipalId,
             Camel(r.Kind), Camel(r.Status), r.Revision, view.SecurityRevision, r.CreatedAt, r.ExpiresAt,
@@ -56,7 +57,9 @@ public static class TenantApprovalEndpoints
             new(r.ResourceType, r.ResourceId), new(op.OperationId, operation,
                 p is null ? null : new(p.Name, p.Role, p.Description, p.Tone), pref is null ? null : new(pref.ResponseLength, pref.Language, pref.AskOneQuestionAtATime,
                     pref.ClearResponseLength, pref.ClearLanguage, pref.ClearAskOneQuestionAtATime), op.ExpectedInstanceRevision, op.ExpectedPersonaRevision, op.ActionHash,
-                op.CredentialCheck is { } check ? new(check.CredentialId, check.BindingId, check.Reference, check.BindingRevision, check.CredentialRevision) : null),
+                op.CredentialCheck is { } check ? new(check.CredentialId, check.BindingId, check.Reference, check.BindingRevision, check.CredentialRevision) : null,
+                op.SandboxCommand is { } sandbox ? new(sandbox.SessionId, sandbox.ProfileId, sandbox.ProfileRevision, sandbox.CommandJson,
+                    sandbox.ExpectedLeaseRevision, sandbox.ExpectedGeneration, sandbox.HomeAccess.ToString()) : null),
             view.Decision is { } d ? new(d.HumanPrincipalId, Camel(d.Status), d.DecidedAt) : null,
             view.OperationResult is { } result ? new(result.OperationId, Camel(result.Outcome), result.ReasonCode, result.InstanceRevision, result.PersonaRevision, result.RecordedAt) : null,
             review is null ? null : new(review.AgentName, review.RequesterName, review.ReviewerName,

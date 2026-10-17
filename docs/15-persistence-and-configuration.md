@@ -1,5 +1,11 @@
 # Persistence and Configuration
 
+## Tenant Sandbox exact review persistence
+
+Migration `20261017220217_TenantSandboxCommandApprovals` extends the existing approval and Sandbox execution tables. Sandbox review rows index exact owned profile ID/revision, reference the actual tenant profile root/revision and require the typed Review permission/payload relationship. Sandbox payloads allow up to 1 MiB for bounded escaped command/scripts; older operation bounds remain unchanged. Existing persona/preference/credential approval JSON bytes are retained without rewriting.
+
+Sandbox execution rows add nullable approval request/operation/action-hash references, a unique nonnull OperationId and a composite FK to the exact owned approval operation. JSON/index constraints require complete matching references; global/unapproved rows keep null references. Atomic approved reservation also rechecks current authority/source/lease/request witnesses, updates the existing Run external-effect fence and lease receipt pointers, and appends a safe authorization audit. InMemory mirrors these rules over its shared backing. Factual updates preserve immutable approval markers; metadata/global writers cannot invent them. Disposable migration, constraint and reopen evidence is recorded in [the verification report](reports/tenant-sandbox-command-approval-verification-2026-10-18.md); no user database migration or reset was performed.
+
 ## Current Sandbox policy at reservation
 
 Lease and execution reservation now resolves the actual current publication and sparse Instance policy inside the existing store operation. SQLite reads the owned publication through the transaction's tenant/Definition relation; InMemory holds the existing Definition gate with its other backing gates. The shared rule requires current execution capability/allowed profile, admitted resource values within current effective ceilings, unchanged Instance initialization script and compatible admitted/current home access for any recorded mount. A new security witness cannot bypass those checks. No schema or serialized Run payload changes are introduced; factual settlement after authority retirement remains available. [Focused evidence](reports/tenant-current-execution-policy-verification-2026-10-18.md).

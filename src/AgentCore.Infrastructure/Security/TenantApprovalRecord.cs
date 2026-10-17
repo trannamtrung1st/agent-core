@@ -21,6 +21,8 @@ public sealed class TenantApprovalRecord
     public string ResourceType { get; set; } = "";
     public string ResourceId { get; set; } = "";
     public string? CredentialId { get; set; }
+    public string? SandboxProfileId { get; set; }
+    public long? SandboxProfileRevision { get; set; }
     public int Kind { get; set; }
     public int Status { get; set; }
     public long Revision { get; set; }
@@ -34,7 +36,7 @@ public sealed class TenantApprovalRecord
         RootActivationId = r.RootActivationId.ToString("D"), ExecutorPrincipalId = r.ExecutorPrincipalId, OriginalInitiatorPrincipalId = r.OriginalInitiatorPrincipalId,
         // This legacy column is the exact grant/receipt FK witness, not semantic root correlation.
         OperationId = r.Operation.OperationId, Fingerprint = r.Operation.ActionHash, Permission = r.Permission,
-        ResourceType = r.ResourceType, ResourceId = r.ResourceId, CredentialId = r.Operation.CredentialCheck?.CredentialId.ToString("D"), Kind = (int)r.Kind, Status = (int)r.Status, Revision = r.Revision,
+        ResourceType = r.ResourceType, ResourceId = r.ResourceId, SandboxProfileId = r.Operation.SandboxCommand?.ProfileId, SandboxProfileRevision = r.Operation.SandboxCommand?.ProfileRevision, CredentialId = r.Operation.CredentialCheck?.CredentialId.ToString("D"), Kind = (int)r.Kind, Status = (int)r.Status, Revision = r.Revision,
         CreatedAt = r.CreatedAt.ToUnixTimeMilliseconds(), ExpiresAt = r.ExpiresAt.ToUnixTimeMilliseconds(), PayloadJson = JsonSerializer.Serialize(r)
     };
 
@@ -53,7 +55,7 @@ public sealed class TenantApprovalRecord
         if (n.RequestId != RequestId || n.TenantId != TenantId || n.RunId != RunId || n.SessionId != SessionId || n.InstanceId != InstanceId
             || n.RootActivationId != RootActivationId || n.ExecutorPrincipalId != ExecutorPrincipalId || n.OriginalInitiatorPrincipalId != OriginalInitiatorPrincipalId
             || n.OperationId != OperationId || n.Fingerprint != Fingerprint || n.Permission != Permission || n.ResourceType != ResourceType || n.ResourceId != ResourceId
-            || n.CredentialId != CredentialId || n.Kind != Kind || n.Status != Status || n.Revision != Revision || n.CreatedAt != CreatedAt || n.ExpiresAt != ExpiresAt)
+            || n.SandboxProfileId != SandboxProfileId || n.SandboxProfileRevision != SandboxProfileRevision || n.CredentialId != CredentialId || n.Kind != Kind || n.Status != Status || n.Revision != Revision || n.CreatedAt != CreatedAt || n.ExpiresAt != ExpiresAt)
             throw new InvalidOperationException("Approval indexed identity disagrees with prepared operation state.");
         return r;
     }
@@ -65,7 +67,7 @@ public sealed class TenantApprovalRecord
         run.HasAlternateKey(r => new { r.AgentRunId, r.RootActivationId });
         var e = model.Entity<TenantApprovalRecord>();
         e.ToTable("TenantApprovalRequests", t => t.HasCheckConstraint("CK_TenantApprovalRequest_Values",
-            "Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64 AND ((Permission = 'agents.update' AND ResourceType = 'agent' AND ResourceId = InstanceId AND CredentialId IS NULL) OR (Permission = 'credentials.use' AND ResourceType = 'credential' AND CredentialId IS NOT NULL AND ResourceId = CredentialId)) AND length(PayloadJson) <= 131072"));
+            "Kind IN (0,1) AND Status IN (0,1,2,3,4) AND Revision >= 1 AND ExpiresAt > CreatedAt AND length(Fingerprint) = 64 AND ((Permission = 'agents.update' AND ResourceType = 'agent' AND ResourceId = InstanceId AND CredentialId IS NULL AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL AND length(PayloadJson) <= 131072) OR (Permission = 'credentials.use' AND ResourceType = 'credential' AND CredentialId IS NOT NULL AND ResourceId = CredentialId AND SandboxProfileId IS NULL AND SandboxProfileRevision IS NULL AND length(PayloadJson) <= 131072) OR (Permission = 'sandbox.execute' AND Kind = 0 AND ResourceType = 'agent' AND ResourceId = InstanceId AND CredentialId IS NULL AND SandboxProfileId IS NOT NULL AND SandboxProfileRevision IS NOT NULL AND SandboxProfileRevision > 0 AND json_type(PayloadJson, '$.Operation.SandboxCommand.ProfileId') IS 'text' AND json_extract(PayloadJson, '$.Operation.SandboxCommand.ProfileId') IS SandboxProfileId AND json_extract(PayloadJson, '$.Operation.SandboxCommand.ProfileRevision') IS SandboxProfileRevision AND length(PayloadJson) <= 1048576))"));
         e.HasKey(r => r.RequestId); e.HasAlternateKey(r => new { r.TenantId, r.RequestId });
         e.HasAlternateKey(r => new { r.TenantId, r.RequestId, r.ExecutorPrincipalId, r.OperationId, r.Fingerprint });
         e.HasIndex(r => new { r.TenantId, r.RootActivationId, r.ExecutorPrincipalId, r.Fingerprint }).IsUnique();
@@ -80,6 +82,10 @@ public sealed class TenantApprovalRecord
             .HasPrincipalKey(r => new { r.TenantId, r.SessionId, r.AgentInstanceId, r.ExecutorPrincipalId }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<TenantUser>().WithMany().HasForeignKey(r => new { r.TenantId, r.OriginalInitiatorPrincipalId }).HasPrincipalKey(r => new { r.TenantId, r.PrincipalId }).OnDelete(DeleteBehavior.Restrict);
         e.HasOne<TenantCredentialRecord>().WithMany().HasForeignKey(r => new { r.TenantId, r.CredentialId }).HasPrincipalKey(r => new { r.TenantId, r.CredentialId }).OnDelete(DeleteBehavior.Restrict);
+
+        e.HasOne<TenantSandboxProfileRecord>().WithMany().HasForeignKey(r => new { r.TenantId, r.SandboxProfileId })
+            .HasPrincipalKey(r => new { r.TenantId, r.ProfileId }).OnDelete(DeleteBehavior.Restrict);
+        e.HasOne<SandboxProfileRow>().WithMany().HasForeignKey(r => new { r.SandboxProfileId, r.SandboxProfileRevision }).OnDelete(DeleteBehavior.Restrict);
 
         var decision = model.Entity<TenantApprovalDecision>();
         decision.ToTable("TenantApprovalDecisions"); decision.HasKey(r => r.DecisionId); decision.HasIndex(r => r.RequestId).IsUnique();

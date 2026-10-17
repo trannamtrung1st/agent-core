@@ -110,3 +110,26 @@ it('describes a completed credential health check without claiming a configurati
   expect(within(dialog).getByText(/credential requires reconnection/)).toBeVisible();
   expect(within(dialog).queryByText('Applied', { exact: true })).not.toBeInTheDocument();
 });
+
+it('inspects exact Sandbox parameters with units and escaped scripts while approved execution remains unrecorded', async () => {
+  view({ ...request, kind: 'review', status: 'approved', summary: 'Run exact Sandbox command',
+    preparedAction: { ...request.preparedAction, operation: 'run_sandbox_command' },
+    review: { ...request.review, changes: [
+      { field: 'command', before: null, after: 'printf "<script>alert(1)</script>"', beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'memoryMiB', before: null, after: 512, beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'background', before: null, after: false, beforeAvailable: false, afterAvailable: true, restoresDefault: false },
+      { field: 'profileInitialization', before: null, after: 'echo <img src=x onerror=alert(1)>', beforeAvailable: false, afterAvailable: true, restoresDefault: false }
+    ] } });
+  const dialog = await screen.findByRole('dialog');
+  const saved = await within(dialog).findByRole('region', { name: 'Exact saved command' });
+  expect(within(saved).getByText('Command', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('Memory (MiB)', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('512', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('No', { exact: true })).toBeVisible();
+  expect(within(saved).getByText('echo <img src=x onerror=alert(1)>', { exact: true })).toBeVisible();
+  expect(saved.querySelector('script, img')).toBeNull();
+  expect(within(saved).queryByText('Before', { exact: true })).not.toBeInTheDocument();
+  expect(within(saved).queryByText('Saved field', { exact: true })).not.toBeInTheDocument();
+  expect(within(dialog).getByText(/No effect result recorded yet/)).toBeVisible();
+  expect(within(dialog).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+});

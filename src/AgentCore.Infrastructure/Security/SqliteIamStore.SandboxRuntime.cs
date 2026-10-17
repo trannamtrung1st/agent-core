@@ -82,6 +82,7 @@ public sealed partial class SqliteIamStore
     }
     public async ValueTask<bool> TryReserveTenantSandboxExecutionAsync(TenantSandboxRuntimeWrite write, SandboxExecution execution, DateTimeOffset at, CancellationToken ct = default)
     {
+        if (execution.ApprovalRequestId is not null || execution.OperationId is not null) throw new AccessDeniedException("sandbox_approval_context_required");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         var tenant = write.Runtime.Owner.TenantId ?? throw new AccessDeniedException("tenant_context_required");

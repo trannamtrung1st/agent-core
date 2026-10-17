@@ -22,7 +22,7 @@ public static class TenantSessionEndpoints
             var result = await service.ListAsync(actor.TenantId, sessionId, Initiator(http, actor), page ?? 0, pageSize ?? 20, ct).ConfigureAwait(false);
             return Results.Json(new { items = result.Items.Select(item => new { item.RequestId, item.RunId, item.ResponseId,
                 operation = item.Operation switch { AgentCore.Domain.Security.TenantOperationKind.Persona => "update_persona",
-                    AgentCore.Domain.Security.TenantOperationKind.ConversationPreferences => "update_preferences", _ => "check_credential_connection" },
+                    AgentCore.Domain.Security.TenantOperationKind.ConversationPreferences => "update_preferences", AgentCore.Domain.Security.TenantOperationKind.SandboxCommand => "run_sandbox_command", _ => "check_credential_connection" },
                 kind = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(item.Kind.ToString()),
                 status = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(item.Status.ToString()), item.CreatedAt, item.ExpiresAt,
                 item.Waiting, item.CanInspect, outcome = item.Outcome is { } outcome ? System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()) : null }),

@@ -9,7 +9,7 @@ import { useApprovalUpdates } from '../access/useApprovalUpdates';
 
 type Approval = { requestId: string; runId: string; responseId: string | null; operation: string; kind: string; status: string;
   createdAt: string; expiresAt: string; waiting: boolean; canInspect: boolean; outcome: string | null };
-const titles: Record<string, string> = { update_persona: 'Update agent persona', update_preferences: 'Update conversation preferences', check_credential_connection: 'Check credential connection' };
+const titles: Record<string, string> = { update_persona: 'Update agent persona', update_preferences: 'Update conversation preferences', check_credential_connection: 'Check credential connection', run_sandbox_command: 'Run exact Sandbox command' };
 const statuses: Record<string, string> = { pending: 'Waiting for review', approved: 'Approved', rejected: 'Rejected', expired: 'Expired', cancelled: 'Cancelled' };
 const result = (item: Approval) => item.outcome === 'completed' ? item.operation === 'check_credential_connection' ? 'Check completed' : 'Applied' : item.outcome === 'denied' ? 'Not applied' : 'Outcome uncertain';
 export function TenantConversationApprovals({ tenant, organization, session }: { tenant: string; organization: string; session: string }) {

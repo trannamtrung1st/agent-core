@@ -1,5 +1,11 @@
 # System Architecture
 
+## Tenant exact Sandbox command review and reservation
+
+The trusted tenant approval owner can now prepare an exact typed Sandbox command against an admitted Run and save a nondelegatable Sensitive Review. Command arguments, Session/profile identity, effective home access and mutable source/generation witnesses are captured separately from the safe human review snapshot. A wait releases the matching claimed Run; approval records consent without claiming an effect. Current executor, requester, independent reviewer, Session, profile, policy and registry epochs are checked again before a new reservation.
+
+`TenantSandboxApprovedOperationService` consumes only saved command parameters. The existing store transaction/shared gates atomically bind the approved request/decision/hash to one existing Ready generation, execution receipt, Run InFlight fence, lease pointers and safe audit. A duplicate observes that receipt and cannot own dispatch again. Raw metadata reservations and global writers cannot manufacture approval markers. This extends the earlier ownership/current-policy prerequisites; it does not dispatch a command. Initial provisioning/review binding, actual SDK transport and outcome settlement, mounts/process/reset/cleanup and tenant Sandbox UI remain open. [Focused evidence](reports/tenant-sandbox-command-approval-verification-2026-10-18.md).
+
 ## Current tenant execution policy and Sandbox reservations
 
 `TenantRunExecutionAuthority` now resolves the actual current owned/shipped publication and sparse Instance policy between fresh Run/requester/security checks. Its current Definition result constrains effects; the admitted Run remains the immutable source of instructions, persona, selected capabilities and setup. No current policy lookup rereads resource bytes, credential bindings or image availability. A policy relaxation never substitutes a larger Run admission.

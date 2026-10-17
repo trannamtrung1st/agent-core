@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Sandbox command approval projection
+
+Existing tenant approval GET/detail/decision/cancel routes now recognize `run_sandbox_command` with summary “Run exact Sandbox command”. The prepared action adds nullable `sandboxCommand` containing Session/profile revision, canonical command JSON, expected lease revision/generation and effective home access. Registry Credential epochs, provider identities, host paths and source authorization are omitted. Existing operation shapes remain valid.
+
+The protected review changes show profile/image, exact shell or argv text, working directory, timeout, background flag, home access, CPU/memory/storage and whether Profile/Instance initialization is required, with both saved scripts available for exact inspection. Numeric values remain JSON numbers. Reads require independent approval, underlying agent execution, exact profile and Session access. Decision uses the existing action hash/security/request revision CAS body. Approval alone returns no `operationResult`; a reserved receipt is not a completed effect. Original-conversation status uses the same operation identifier. No public command preparation/dispatch endpoint is added. [Focused HTTP evidence](reports/tenant-sandbox-command-approval-verification-2026-10-18.md).
+
 ## Tenant Session Sandbox stored observations HTTP
 
 Authenticated GET `/api/v2/tenants/{tenantId}/sessions/{sessionId}/sandbox` returns `{sessionId, environment, execution, sessionRevision, securityRevision, liveAuthorityConfirmed:false}`. `environment` and `execution` may be null. GET suffix `/executions/{executionId}` reads one exact receipt in the same Session; missing/foreign scope denies. These endpoints perform no SDK inspection or mutation and expose no command/reset/process operation.

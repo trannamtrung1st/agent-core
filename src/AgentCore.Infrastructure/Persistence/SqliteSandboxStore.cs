@@ -13,7 +13,7 @@ public sealed class SandboxProfileRow { public string SearchText { get; set; } =
 public sealed class SandboxVerificationRow { public Guid? TenantId { get; set; } public Guid? AttemptId { get; set; } public string ProfileId { get; set; } = ""; public long ProfileRevision { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxInstanceVerificationRow { public string InstanceId { get; set; } = ""; public long InstanceRevision { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxLeaseRow { public Guid? TenantId { get; set; } public Guid? ExecutorPrincipalId { get; set; } public string? ProfileId { get; set; } public long? ProfileRevision { get; set; } public string SessionId { get; set; } = ""; public string AgentInstanceId { get; set; } = ""; public long Revision { get; set; } public long ExpiresAt { get; set; } public int State { get; set; } public string Json { get; set; } = ""; }
-public sealed class SandboxExecutionRow { public Guid? TenantId { get; set; } public Guid? ExecutorPrincipalId { get; set; } public string? AgentInstanceId { get; set; } public string? OwnedRunId { get; set; } public string? LeaseSessionId { get; set; } public long Revision { get; set; } public string Id { get; set; } = ""; public string SessionId { get; set; } = ""; public string AgentRunId { get; set; } = ""; public string ToolCallId { get; set; } = ""; public string Json { get; set; } = ""; }
+public sealed class SandboxExecutionRow { public Guid? ApprovalRequestId { get; set; } public Guid? OperationId { get; set; } public string? ApprovedActionHash { get; set; } public Guid? TenantId { get; set; } public Guid? ExecutorPrincipalId { get; set; } public string? AgentInstanceId { get; set; } public string? OwnedRunId { get; set; } public string? LeaseSessionId { get; set; } public long Revision { get; set; } public string Id { get; set; } = ""; public string SessionId { get; set; } = ""; public string AgentRunId { get; set; } = ""; public string ToolCallId { get; set; } = ""; public string Json { get; set; } = ""; }
 
 public sealed partial class SqliteSandboxStore(IDbContextFactory<AgentCoreDbContext> factory) : ISandboxStore
 {
@@ -168,7 +168,7 @@ public sealed partial class SqliteSandboxStore(IDbContextFactory<AgentCoreDbCont
         {
             await using var db = await factory.CreateDbContextAsync(ct);
             await using var tx = await db.Database.BeginTransactionAsync(ct);
-            if (execution.TenantId is not null || execution.ExecutorPrincipalId is not null || execution.Revision != 0 || await TenantSession(db, execution.SessionId, ct)
+            if (execution.ApprovalRequestId is not null || execution.OperationId is not null || execution.TenantId is not null || execution.ExecutorPrincipalId is not null || execution.Revision != 0 || await TenantSession(db, execution.SessionId, ct)
                 || await TenantInstance(db, execution.AgentInstanceId, ct)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
             var row = await db.Set<SandboxExecutionRow>().SingleOrDefaultAsync(r => r.Id == execution.Id.ToString("D"), ct);
             if (row?.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");

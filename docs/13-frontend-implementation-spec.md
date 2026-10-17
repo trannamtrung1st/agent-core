@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Tenant Sandbox command approval inspection
+
+The existing tenant approval inspector recognizes `run_sandbox_command`, presents an exact parameter list with named units, escaped wrapped scripts and no meaningless before/after rows, and preserves independent consent versus recorded effect status. Chat uses the same operation title and shared inspector. The existing 736px viewport-capped Ant Design Drawer, responsive Descriptions, 16px section gaps, footer/confirmation and explicit refresh/focus recovery remain the owners. [Focused evidence](reports/tenant-sandbox-command-approval-verification-2026-10-18.md) separates actual preference-review interactions from controlled Sandbox projection checks. This does not add a tenant Sandbox command screen or model/SDK dispatch path.
+
 ## Tenant Session Sandbox observation boundary
 
 The backend now exposes protected bounded stored generation/receipt observations with `liveAuthorityConfirmed=false`; [ownership evidence](reports/tenant-sandbox-runtime-ownership-verification-2026-10-18.md) owns that prerequisite. No tenant Sandbox screen or command/reset/process/cleanup interaction is accepted by this change. Future presentation must distinguish stored state and bounded outcomes from current provider readiness or permission, preserve independent Session/agent/profile read scopes and recover explicitly from stale or retired original-human reads. The existing Ant Design v6 component and layout owners remain authoritative.

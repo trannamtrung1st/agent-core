@@ -1,4 +1,5 @@
 using AgentCore.Domain.Definitions;
+using System.Text;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Security;
 
@@ -18,11 +19,23 @@ public static class TenantApprovalSnapshotRules
     {
         if (request.Snapshot is not { } s)
         {
-            if (!request.Operation.IsLocalConfiguration) throw new ArgumentException("Credential checks require saved review evidence.");
+            if (!request.Operation.IsLocalConfiguration) throw new ArgumentException("External operations require saved review evidence.");
             return; // Earlier local requests may lack display evidence; never invent it.
         }
         if (string.IsNullOrWhiteSpace(s.AgentName) || s.AgentName.Length > 256)
             throw new ArgumentException("Invalid approval display identity.");
+        if (request.Operation.Kind == TenantOperationKind.SandboxCommand)
+        {
+            if (s.BeforePersona is not null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null
+                || s.Sandbox is not { } sandbox || string.IsNullOrWhiteSpace(sandbox.ProfileName) || sandbox.ProfileName.Length > 120
+                || !double.IsFinite(sandbox.Cpu) || sandbox.Cpu is < .25 or > 2 || sandbox.MemoryMiB is < 256 or > 2048
+                || sandbox.MaxCommandSeconds is < 1 or > 180 || sandbox.IdleTtlSeconds is < 60 or > 3600
+                || sandbox.MaxLifetimeSeconds < sandbox.IdleTtlSeconds || sandbox.MaxLifetimeSeconds > 86400 || sandbox.StorageBytes is < 1 or > SandboxProfile.MaximumStorageBytes
+                || OciImageReference.Parse(sandbox.ImageReference).Value != sandbox.ImageReference || !Script(sandbox.ProfileInitializationScript) || !Script(sandbox.InstanceInitializationScript))
+                throw new ArgumentException("Invalid Sandbox command review snapshot.");
+            return;
+        }
+        if (s.Sandbox is not null) throw new ArgumentException("Unexpected Sandbox review evidence.");
         if (request.Operation.Kind == TenantOperationKind.Persona)
         {
             if (s.BeforePersona is null || s.PreferenceDefaults is not null || s.PreferenceOverrides is not null || s.Credential is not null || s.BeforePersona.Name != s.AgentName)
@@ -40,6 +53,11 @@ public static class TenantApprovalSnapshotRules
             || c.DisplayName != AgentCore.Domain.Credentials.CredentialRules.DisplayName(c.DisplayName)
             || c.Purpose is not ("EmailAccount" or "GoogleDriveAccount") || c.ConnectionStatus != "Connected")
             throw new ArgumentException("Invalid credential check snapshot.");
+        static bool Script(string? value)
+        {
+            try { return value is null || !value.Contains('\0') && new UTF8Encoding(false, true).GetByteCount(value) <= 16384; }
+            catch (EncoderFallbackException) { return false; }
+        }
         static bool Language(string value) => !string.IsNullOrWhiteSpace(value) && value.Length <= 64 && !value.Any(char.IsControl);
     }
 

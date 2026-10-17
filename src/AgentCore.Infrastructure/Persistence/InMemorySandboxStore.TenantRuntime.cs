@@ -24,6 +24,7 @@ public sealed partial class InMemorySandboxStore
     private static SandboxLease FreezeLease(SandboxLease lease) => lease with { BaselineProcesses = lease.BaselineProcesses?.ToArray() };
     internal void SaveTenantLease(SandboxLease lease) => _leases[lease.SessionId] = FreezeLease(lease);
     internal void SaveTenantExecution(SandboxExecution execution) => _executions[execution.Id] = execution;
+    internal SandboxExecution? ApprovalOperation(Guid operation) => _executions.Values.SingleOrDefault(e => e.OperationId == operation);
     internal bool HasLease(Guid session) => _leases.ContainsKey(session);
     internal bool HasExecution(Guid execution) => _executions.ContainsKey(execution);
     internal bool HasOperation(Guid session, Guid run, string call) => _executions.Values.Any(e => e.SessionId == session && e.AgentRunId == run && e.ToolCallId == call);

@@ -99,6 +99,7 @@ public static class TenantSandboxRuntimeRules
     public static void ValidateExecution(SandboxExecution value)
     {
         if (value.Id == Guid.Empty || value.TenantId is null || value.TenantId == Guid.Empty || value.ExecutorPrincipalId is null || value.ExecutorPrincipalId == Guid.Empty
+            || (value.ApprovalRequestId is null) != (value.OperationId is null) || value.ApprovalRequestId == Guid.Empty || value.OperationId == Guid.Empty
             || value.Revision < 1 || value.Generation == Guid.Empty || value.SessionId == Guid.Empty || value.AgentInstanceId == Guid.Empty || value.AgentRunId == Guid.Empty
             || value.ClaimGeneration == Guid.Empty || string.IsNullOrWhiteSpace(value.ToolCallId) || value.ToolCallId.Length > 128 || value.ToolCallId.Any(char.IsControl)
             || value.ActionHash is not { Length: 64 } || value.ActionHash.Any(c => !char.IsAsciiHexDigit(c)) || !Enum.IsDefined(value.State)
@@ -129,6 +130,7 @@ public static class TenantSandboxRuntimeRules
         ValidateExecution(next);
         if (before.TenantId != next.TenantId || before.ExecutorPrincipalId != next.ExecutorPrincipalId || before.SessionId != next.SessionId || before.AgentInstanceId != next.AgentInstanceId
             || before.Generation != next.Generation || before.Id != next.Id || before.AgentRunId != next.AgentRunId || before.ClaimGeneration != next.ClaimGeneration
+            || before.ApprovalRequestId != next.ApprovalRequestId || before.OperationId != next.OperationId
             || before.ToolCallId != next.ToolCallId || before.ActionHash != next.ActionHash || before.CommandText != next.CommandText || before.StartedAt != next.StartedAt
             || before.ProfileId != next.ProfileId || before.ProfileRevision != next.ProfileRevision || before.Background != next.Background || before.DeadlineAt != next.DeadlineAt
             || next.Revision != checked(before.Revision + 1) || before.ProviderCommandId is not null && next.ProviderCommandId != before.ProviderCommandId

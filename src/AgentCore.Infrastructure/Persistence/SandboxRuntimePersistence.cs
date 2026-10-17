@@ -23,6 +23,10 @@ internal static class SandboxRuntimePersistence
         lease.HasOne<SandboxProfileRow>().WithMany().HasForeignKey(x => new { x.ProfileId, x.ProfileRevision })
             .HasPrincipalKey(x => new { x.Id, x.Revision }).OnDelete(DeleteBehavior.Restrict);
         var execution = model.Entity<SandboxExecutionRow>(); execution.ToTable("SandboxExecutions", t => t.HasCheckConstraint("CK_SandboxExecution_TenantJson", ExecutionScope));
+        execution.ToTable("SandboxExecutions", t => t.HasCheckConstraint("CK_SandboxExecution_Approval", "(ApprovalRequestId IS NULL AND OperationId IS NULL AND ApprovedActionHash IS NULL AND json_extract(Json, '$.approvalRequestId') IS NULL AND json_extract(Json, '$.operationId') IS NULL) OR (TenantId IS NOT NULL AND ApprovalRequestId IS NOT NULL AND OperationId IS NOT NULL AND ApprovedActionHash IS NOT NULL AND json_type(Json, '$.approvalRequestId') IS 'text' AND lower(json_extract(Json, '$.approvalRequestId')) = lower(ApprovalRequestId) AND json_type(Json, '$.operationId') IS 'text' AND lower(json_extract(Json, '$.operationId')) = lower(OperationId) AND json_extract(Json, '$.actionHash') IS ApprovedActionHash)"));
+        execution.HasIndex(x => x.OperationId).IsUnique().HasFilter("OperationId IS NOT NULL");
+        execution.HasOne<TenantApprovalRecord>().WithMany().HasForeignKey(x => new { x.TenantId, x.ApprovalRequestId, x.ExecutorPrincipalId, x.OperationId, x.ApprovedActionHash })
+            .HasPrincipalKey(x => new { x.TenantId, x.RequestId, x.ExecutorPrincipalId, x.OperationId, x.Fingerprint }).OnDelete(DeleteBehavior.Restrict);
         execution.Property(x => x.Revision).IsConcurrencyToken(); execution.HasIndex(x => new { x.TenantId, x.SessionId, x.AgentRunId, x.ToolCallId });
         execution.HasOne<TenantSessionRecord>().WithMany().HasForeignKey(x => new { x.TenantId, x.SessionId, x.AgentInstanceId, x.ExecutorPrincipalId })
             .HasPrincipalKey(x => new { x.TenantId, x.SessionId, x.AgentInstanceId, x.ExecutorPrincipalId }).OnDelete(DeleteBehavior.Restrict);
@@ -46,14 +50,15 @@ internal static class SandboxRuntimePersistence
             catch (ArgumentException) { throw AgentCoreErrors.Persistence("Sandbox generation evidence is invalid."); }
         return v;
     }
-    internal static SandboxExecutionRow Row(SandboxExecution value) => new() { TenantId = value.TenantId, ExecutorPrincipalId = value.ExecutorPrincipalId,
+    internal static SandboxExecutionRow Row(SandboxExecution value) => new() { ApprovalRequestId = value.ApprovalRequestId, OperationId = value.OperationId, ApprovedActionHash = value.OperationId is null ? null : value.ActionHash, TenantId = value.TenantId, ExecutorPrincipalId = value.ExecutorPrincipalId,
         AgentInstanceId = value.TenantId is null ? null : value.AgentInstanceId.ToString("D"), OwnedRunId = value.TenantId is null ? null : value.AgentRunId.ToString("D"),
         LeaseSessionId = value.TenantId is null ? null : value.SessionId.ToString("D"), Revision = value.Revision,
         Id = value.Id.ToString("D"), SessionId = value.SessionId.ToString("D"), AgentRunId = value.AgentRunId.ToString("D"), ToolCallId = value.ToolCallId, Json = JsonSerializer.Serialize(value, Json) };
     internal static SandboxExecution Value(SandboxExecutionRow row)
     {
         var v = JsonSerializer.Deserialize<SandboxExecution>(row.Json, Json);
-        if (v is null || v.TenantId != row.TenantId || v.ExecutorPrincipalId != row.ExecutorPrincipalId || v.Id.ToString("D") != row.Id || v.SessionId.ToString("D") != row.SessionId
+        if (v is null || v.ApprovalRequestId != row.ApprovalRequestId || v.OperationId != row.OperationId || row.OperationId is not null && v.ActionHash != row.ApprovedActionHash
+            || v.TenantId != row.TenantId || v.ExecutorPrincipalId != row.ExecutorPrincipalId || v.Id.ToString("D") != row.Id || v.SessionId.ToString("D") != row.SessionId
             || v.AgentRunId.ToString("D") != row.AgentRunId || v.ToolCallId != row.ToolCallId || v.Revision != row.Revision
             || row.TenantId is not null && (v.AgentInstanceId.ToString("D") != row.AgentInstanceId || row.OwnedRunId != row.AgentRunId || row.LeaseSessionId != row.SessionId))
             throw AgentCoreErrors.Persistence("Sandbox execution ownership is invalid.");

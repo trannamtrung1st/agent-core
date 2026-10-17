@@ -9,27 +9,32 @@ namespace AgentCore.Domain.Security;
 public enum TenantApprovalStatus { Pending, Approved, Rejected, Expired, Cancelled }
 public enum OperationGrantStatus { Available, Claimed, Consumed, Revoked, Indeterminate }
 
-public enum TenantOperationKind { Persona, ConversationPreferences, CredentialConnectionCheck }
+public enum TenantOperationKind { Persona, ConversationPreferences, CredentialConnectionCheck, SandboxCommand }
 public sealed record PreparedConversationPreferences(string? ResponseLength, string? Language, bool? AskOneQuestionAtATime,
     bool ClearResponseLength = false, bool ClearLanguage = false, bool ClearAskOneQuestionAtATime = false);
 public sealed record PreparedCredentialConnectionCheck(Guid CredentialId, Guid BindingId, string Reference,
     long BindingRevision, long CredentialRevision, long SecretRevision, long AuthEpoch);
 
+public sealed record PreparedSandboxCommand(Guid SessionId, string ProfileId, long ProfileRevision, string CommandJson,
+    long ExpectedLeaseRevision, Guid? ExpectedGeneration, Guid? RegistryCredentialId, long? RegistryCredentialRevision,
+    long? RegistrySecretRevision, HomeAccess HomeAccess);
+
 // Exactly one typed payload is allowed. No credential or bearer authority is part of this shape.
 public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, AgentIdentity? Persona,
     long ExpectedInstanceRevision, long ExpectedPersonaRevision, string CanonicalActionJson, string ActionHash,
-    PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null)
+    PreparedConversationPreferences? Preferences = null, PreparedCredentialConnectionCheck? CredentialCheck = null, PreparedSandboxCommand? SandboxCommand = null)
 {
     [JsonIgnore]
-    public TenantOperationKind Kind => (Persona, Preferences, CredentialCheck) switch {
-        (not null, null, null) => TenantOperationKind.Persona,
-        (null, not null, null) => TenantOperationKind.ConversationPreferences,
-        (null, null, not null) => TenantOperationKind.CredentialConnectionCheck,
+    public TenantOperationKind Kind => (Persona, Preferences, CredentialCheck, SandboxCommand) switch {
+        (not null, null, null, null) => TenantOperationKind.Persona,
+        (null, not null, null, null) => TenantOperationKind.ConversationPreferences,
+        (null, null, not null, null) => TenantOperationKind.CredentialConnectionCheck,
+        (null, null, null, not null) => TenantOperationKind.SandboxCommand,
         _ => throw new ArgumentException("Exactly one supported operation payload is required.") };
     [JsonIgnore] public bool IsLocalConfiguration => Kind is TenantOperationKind.Persona or TenantOperationKind.ConversationPreferences;
-    [JsonIgnore] public string Permission => IsLocalConfiguration ? "agents.update" : "credentials.use";
-    [JsonIgnore] public string ResourceType => IsLocalConfiguration ? "agent" : "credential";
-    [JsonIgnore] public string ResourceId => (IsLocalConfiguration ? InstanceId : CredentialCheck!.CredentialId).ToString("D");
+    [JsonIgnore] public string Permission => Kind == TenantOperationKind.SandboxCommand ? "sandbox.execute" : IsLocalConfiguration ? "agents.update" : "credentials.use";
+    [JsonIgnore] public string ResourceType => Kind != TenantOperationKind.CredentialConnectionCheck ? "agent" : "credential";
+    [JsonIgnore] public string ResourceId => (Kind != TenantOperationKind.CredentialConnectionCheck ? InstanceId : CredentialCheck!.CredentialId).ToString("D");
 
     // Root correlation excludes mutable witnesses; grants still bind ActionHash exactly.
     [JsonIgnore]
@@ -42,6 +47,9 @@ public sealed record PreparedTenantOperation(Guid OperationId, Guid InstanceId, 
             resourceType = ResourceType, resourceId = ResourceId, preferences = Preferences }),
         TenantOperationKind.CredentialConnectionCheck => JsonSerializer.Serialize(new { operation = "credentials.connection.check", permission = Permission,
             resourceType = ResourceType, resourceId = ResourceId }),
+        TenantOperationKind.SandboxCommand => JsonSerializer.Serialize(new { operation = "sandbox.command.execute", permission = Permission,
+            resourceType = ResourceType, resourceId = ResourceId, sessionId = SandboxCommand!.SessionId,
+            profileId = SandboxCommand.ProfileId, commandJson = SandboxCommand.CommandJson }),
         _ => throw new ArgumentException("Exactly one supported operation payload is required.")
     };
     [JsonIgnore]

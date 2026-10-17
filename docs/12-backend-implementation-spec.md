@@ -1,5 +1,11 @@
 # Backend Implementation Specification
 
+## Tenant typed Sandbox review boundary
+
+The approval owner now persists canonical exact Sandbox commands through the existing durable wait, root suppression, review, decision and wakeup path. `TenantSandboxOperationTarget` resolves actual current owned Session/Instance/profile sources, the immutable admitted setup and current policy/readiness/source epochs. Changed generation, expired environment, incompatible setup or rotated registry source invalidates the saved review. Cancellation remains available without reauthorizing a stale effect.
+
+Both adapters implement approved reservation under their existing transaction/gates: current raw executor permissions, exact qualified human decision and original requester access must still hold. Request/decision/action hash, source Run continuation, exact Ready generation, receipt, Run InFlight fence, lease pointers and a bounded audit commit together. No exceptional grant or role assignment is created. Repeated/concurrent consumers cannot acquire another dispatch fence. Approval inventories independently filter exact agent execution, profile read and Session read scopes before count/paging. This is a reservation prerequisite; no model tool offering, production SDK command path, provisioning or completed-effect settlement is enabled. [Focused evidence](reports/tenant-sandbox-command-approval-verification-2026-10-18.md).
+
 ## Tenant current-policy enforcement
 
 The tenant Runtime authority now reads actual current publication/Instance policy rather than returning the Run's admitted Definition as its current authority. Fresh exact Run/requester/security checks surround source lookup. Context and model execution still use immutable admitted instructions and payload. The existing per-tool current Definition checks therefore see later capability removal without expanding the original admission.

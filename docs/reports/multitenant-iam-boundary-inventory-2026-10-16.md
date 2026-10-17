@@ -2,6 +2,10 @@
 
 Baseline `38b8288230854b9044b69100c4f99bb4c259d2d1`, clean checkout. Every row below is a cutover obligation, **not an enforcement claim**. [Delivery status](multitenant-iam-delivery-2026-10-16.md).
 
+## Exact Sandbox command review successor — 2026-10-18
+
+Tenant Sandbox commands now have exact typed durable Review, permission-filtered inspection and atomic one-time reservation over an existing Ready generation. The shared approval inspector names command parameters and units while preserving consent versus effect status. [Focused evidence](tenant-sandbox-command-approval-verification-2026-10-18.md) covers both stores, migration/reopen, HTTP and bounded browser adapter checks. This supersedes earlier typed-command-pending notes only for preparation/review/reservation. Initial provisioning/review binding, actual SDK dispatch and outcome settlement, mounts/process/reset/cleanup and tenant Sandbox UI remain open, alongside the other proposal families and final authority/schema consolidation. The full proposal and earlier SQLite preference reliability follow-up remain active.
+
 ## Current execution policy correction — 2026-10-18
 
 The [current policy evidence](tenant-current-execution-policy-verification-2026-10-18.md) corrects tenant Runtime authority to resolve current owned/shipped publication and sparse Instance policy through fresh claimed Run/requester/security fences, while preserving immutable admission and instructions. Sandbox reservations also enforce current capability/allowed profile, resource/script ceilings and restricted admitted/current home access under their existing backing transaction/gates. Refreshed security witnesses alone cannot authorize an obsolete setup; later relaxation cannot expand an admitted mount.

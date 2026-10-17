@@ -18,14 +18,17 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     private TenantApprovalRequest? RootApproval(Guid tenant, Guid root, Guid executor, string hash) => _approvals.Values.Where(r => r.TenantId == tenant && r.RootActivationId == root && r.ExecutorPrincipalId == executor && r.Fingerprint == hash)
         .OrderBy(r => r.Status is TenantApprovalStatus.Rejected or TenantApprovalStatus.Expired or TenantApprovalStatus.Cancelled ? 0 : r.Status == TenantApprovalStatus.Pending ? 1 : 2)
         .ThenBy(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId).FirstOrDefault();
-    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null)
+    public ValueTask<TenantApprovalPage> ListApprovalsAsync(Guid tenantId, IReadOnlyList<Guid>? allowedRequests, IReadOnlyList<Guid>? allowedInstances, TenantApprovalQuery page, CancellationToken ct = default, IReadOnlyList<Guid>? allowedCredentials = null, TenantSandboxApprovalVisibility? sandboxVisibility = null)
     {
         ct.ThrowIfCancellationRequested(); page.Validate();
         lock (_gate)
         {
             var rows = _approvals.Values.Where(r => r.TenantId == tenantId
                 && (page.SessionId is null || r.SessionId == page.SessionId)
-                && (allowedRequests is null || allowedRequests.Contains(r.RequestId)) && (r.ResourceType != "agent" || allowedInstances is null || allowedInstances.Contains(r.Operation.InstanceId))
+                && (allowedRequests is null || allowedRequests.Contains(r.RequestId)) && (r.Permission != "agents.update" || allowedInstances is null || allowedInstances.Contains(r.Operation.InstanceId))
+                && (r.Permission != "sandbox.execute" || (sandboxVisibility?.Instances is null || sandboxVisibility.Instances.Contains(r.Operation.InstanceId))
+                    && (sandboxVisibility?.Profiles is null || sandboxVisibility.Profiles.Contains(r.Operation.SandboxCommand!.ProfileId))
+                    && (sandboxVisibility?.Sessions is null || sandboxVisibility.Sessions.Contains(r.SessionId)))
                 && (r.ResourceType != "credential" || allowedCredentials is null || allowedCredentials.Contains(r.Operation.CredentialCheck!.CredentialId))
                 && (page.Status is null || r.Status == page.Status) && (page.Kind is null || r.Kind == page.Kind)).ToArray();
             return ValueTask.FromResult(new TenantApprovalPage(rows.OrderByDescending(r => r.CreatedAt.ToUnixTimeMilliseconds()).ThenBy(r => r.RequestId)
@@ -42,7 +45,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
         if (request.TenantId != next.Tenant.TenantId || request.Status != TenantApprovalStatus.Pending || request.Revision != 1
             || next.Tenant.Revision != checked(expectedSecurityRevision + 1) || audit.ActorPrincipalId != request.ExecutorPrincipalId
             || audit.TenantId != request.TenantId || audit.Action != "approvals.request" || audit.Target != request.RequestId.ToString("D")) throw new ArgumentException("Invalid approval request transaction.");
-        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (sandboxBacking.TenantGate)
         {
             if (!_tenants.TryGetValue(request.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<TenantApprovalRequest?>(null);
             var duplicate = RootApproval(request.TenantId, request.RootActivationId, request.ExecutorPrincipalId, request.Fingerprint);
@@ -53,6 +56,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (run is null || agent is null) return ValueTask.FromResult<TenantApprovalRequest?>(null);
             TenantApprovalRules.Validate(request, run, agent); TenantSessionRules.RequireExecutor(before, agent);
             if (request.Operation.CredentialCheck is not null) RequireCredentialOperation(request, run, agent);
+            if (request.Operation.SandboxCommand is not null) RequireSandboxOperation(request, run, agent);
             ValidateAgentActor(before, request.ExecutorPrincipalId);
             if (request.OriginalInitiatorPrincipalId is { } requester) ValidateAgentActor(before, requester);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);
@@ -76,7 +80,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
     {
         ct.ThrowIfCancellationRequested(); next = IamStateRules.Freeze(next);
         if (next.Tenant.TenantId != request.TenantId || next.Tenant.Revision != checked(expectedSecurityRevision + 1)) throw new ArgumentException("Invalid approval decision transaction.");
-        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate)
+        lock (_gate) lock (sessionBacking.AdmissionGate) lock (instances.CredentialGate) lock (definitions.TenantGate) lock (sandboxBacking.TenantGate)
         {
             if (!_tenants.TryGetValue(request.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision
                 || !_approvals.TryGetValue(request.RequestId, out var old) || old.Revision != expectedRequestRevision || old.Status != TenantApprovalStatus.Pending) return ValueTask.FromResult(false);
@@ -93,6 +97,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovalStore
             if (run is null || agent is null || run.ApprovalRequestId != request.RequestId || run.Status != AgentCore.Domain.Conversation.AgentRunStatus.WaitingForApproval) return ValueTask.FromResult(false);
             TenantApprovalRules.Validate(request, run, agent, request.Status != TenantApprovalStatus.Cancelled);
             if (request.Operation.CredentialCheck is not null && request.Status != TenantApprovalStatus.Cancelled) RequireCredentialOperation(request, run, agent);
+            if (request.Operation.SandboxCommand is not null && request.Status != TenantApprovalStatus.Cancelled) RequireSandboxOperation(request, run, agent);
             if (request.Status != TenantApprovalStatus.Cancelled) TenantSessionRules.RequireExecutor(before, agent);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct); ct.ThrowIfCancellationRequested();
             if (_approvalSignals.ContainsKey(signal.SignalId) || _approvalDecisions.Values.Any(d => d.DecisionId == decision.DecisionId)

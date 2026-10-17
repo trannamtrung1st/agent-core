@@ -16,7 +16,7 @@ public sealed record TenantApprovalView(TenantApprovalRequest Request, long Secu
 public sealed partial class TenantApprovalService(IIamStore security, ITenantApprovalStore approvals, ITenantAgentStore agents,
     TenantOperationAuthorizer operations, IamAuthorizer authorizer, IdentityService identity, IIdGenerator ids, TimeProvider time,
     TenantRunConfigurationResolver configuration, IModelCatalog models, ProviderAliasSet aliases,
-    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null)
+    ITenantApprovedOperationStore? effects = null, TenantCredentialOperationTarget? credentialTargets = null, TenantSandboxOperationTarget? sandboxTargets = null)
 {
     // Trusted internal typed preparation. No model-supplied tenant, principal, permission, grant or arbitrary action JSON.
     public ValueTask<TenantApprovalPreparationResult> PreparePersonaAsync(TenantRunReference reference, AgentIdentity persona,
@@ -158,7 +158,10 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         var credentialIds = await VisibleIds(before, human.PrincipalId, "credentials.use", "credential", ct).ConfigureAwait(false);
         var credentialRead = await VisibleIds(before, human.PrincipalId, "credentials.read", "credential", ct).ConfigureAwait(false);
         credentialIds = credentialIds is null ? credentialRead : credentialRead is null ? credentialIds : credentialIds.Intersect(credentialRead).ToArray();
-        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds).ConfigureAwait(false);
+        var sandboxIds = await VisibleIds(before, human.PrincipalId, "sandbox.execute", "agent", ct).ConfigureAwait(false);
+        var sandboxSessions = await VisibleIds(before, human.PrincipalId, "sessions.read", "session", ct).ConfigureAwait(false);
+        var sandboxProfiles = await VisibleSandboxProfiles(before, human.PrincipalId, ct).ConfigureAwait(false);
+        var requests = await approvals.ListApprovalsAsync(tenant, requestIds, instanceIds, query, ct, credentialIds, new(sandboxIds, sandboxProfiles, sandboxSessions)).ConfigureAwait(false);
         var metadata = new List<TenantApprovalView>();
         foreach (var request in requests.Items) metadata.Add(await Metadata(request, ct).ConfigureAwait(false));
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct).ConfigureAwait(false);
@@ -207,6 +210,20 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
         return visible;
     }
 
+    private async ValueTask<IReadOnlyList<string>?> VisibleSandboxProfiles(TenantSecurityState state, Guid human, CancellationToken ct)
+    {
+        var metadata = PermissionCatalog.Get("sandbox.read");
+        var inherited = await authorizer.CheckTenantAsync(state, human, metadata, AccessScope.ForTenant(state.Tenant.TenantId), ct).ConfigureAwait(false);
+        if (inherited.Allowed) return null;
+        if (inherited.ReasonCode != "permission_denied") throw new AccessDeniedException(inherited.ReasonCode);
+        var scopes = state.Assignments.Where(a => a.PrincipalId == human && a.Scope.ResourceType == "sandbox-profile"
+            && state.Roles.Any(r => r.RoleId == a.RoleId && r.Permissions.Contains("sandbox.read", StringComparer.Ordinal))).Select(a => a.Scope).Distinct();
+        var visible = new List<string>();
+        foreach (var scope in scopes)
+            if ((await authorizer.CheckTenantAsync(state, human, metadata, scope, ct).ConfigureAwait(false)).Allowed) visible.Add(scope.ResourceId!);
+        return visible;
+    }
+
     public ValueTask<TenantApprovalRequest> DecideAsync(Guid tenant, Guid requestId, TenantSessionInitiator human,
         bool approve, string actionHash, long expectedSecurityRevision, long expectedRequestRevision, CancellationToken ct = default)
         => ChangeAsync(tenant, requestId, human, approve ? TenantApprovalStatus.Approved : TenantApprovalStatus.Rejected, actionHash, expectedSecurityRevision, expectedRequestRevision, ct);
@@ -248,6 +265,8 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
                     AccessScope.ForResource(tenant, "credential", request.ResourceId), ct).ConfigureAwait(false);
                 if (!read.Allowed) throw new AccessDeniedException("executor_read_required");
             }
+            if (request.Operation.SandboxCommand is not null)
+                await (sandboxTargets ?? throw new AccessDeniedException("tenant_effect_unavailable")).RequireAsync(request, run, ct).ConfigureAwait(false);
             var target = AccessScope.ForResource(tenant, request.ResourceType, request.ResourceId);
             var eligibility = await operations.Check(state, run, request.Permission, target, ct, purpose: ExecutionAuthorizationPurpose.ApprovalDecision).ConfigureAwait(false);
             if (eligibility.Decision == OperationDecisionKind.Denied || request.Kind == ApprovalKind.Review && eligibility.ApprovalKind == ApprovalKind.ExceptionalGrant)
@@ -287,6 +306,13 @@ public sealed partial class TenantApprovalService(IIamStore security, ITenantApp
             var read = await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get("credentials.read"),
                 AccessScope.ForResource(request.TenantId, "credential", request.ResourceId), ct).ConfigureAwait(false);
             if (!read.Allowed) throw new AccessDeniedException("approval_unavailable");
+        }
+        if (request.Operation.SandboxCommand is { } sandbox)
+        {
+            foreach (var target in new[] { ("sessions.read", TenantSessionRules.Scope(request.TenantId, request.SessionId)),
+                ("sandbox.read", TenantSandboxProfileRules.Scope(request.TenantId, sandbox.ProfileId)) })
+                if (!(await authorizer.CheckTenantAsync(state, human, PermissionCatalog.Get(target.Item1), target.Item2, ct).ConfigureAwait(false)).Allowed)
+                    throw new AccessDeniedException("approval_unavailable");
         }
         foreach (var pair in new[] { ("approvals.read", AccessScope.ForResource(request.TenantId, "approval", request.RequestId.ToString("D"))),
             (request.Permission, AccessScope.ForResource(request.TenantId, request.ResourceType, request.ResourceId)) })
