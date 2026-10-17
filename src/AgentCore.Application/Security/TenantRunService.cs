@@ -12,7 +12,7 @@ public sealed record TenantRunReceipt(bool Created, Guid RunId, Guid EntryId, Gu
 public sealed record TenantRunMetadata(TrustedExecutionContext Context, Guid AgentInstanceId, AgentRunStatus Status, long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, Guid? ContinuationRunId = null, AgentRunOutcomeKind? OutcomeKind = null);
 
 public sealed class TenantRunService(IIamStore security, ITenantSessionStore sessions, ITenantRunStore runs,
-    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time)
+    TenantRunConfigurationResolver configurations, IdentityService identity, IamAuthorizer authorizer, IModelCatalog models, IIdGenerator ids, TimeProvider time, TenantRunCancellationService? cancellations = null, ITenantRunControl? control = null)
 {
     public async ValueTask<TenantRunReceipt> SubmitTextAsync(Guid tenant, Guid sessionId, TenantSessionInitiator initiator,
         Guid messageId, string text, long expectedSecurityRevision, long expectedSessionRevision, CancellationToken ct = default)
@@ -62,19 +62,10 @@ public sealed class TenantRunService(IIamStore security, ITenantSessionStore ses
     }
     public async ValueTask<TenantRunMetadata> CancelAsync(Guid tenant, Guid runId, TenantSessionInitiator initiator, long expectedSecurityRevision, long expectedRunRevision, CancellationToken ct = default)
     {
-        var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, initiator, ct).ConfigureAwait(false);
-        var run = await runs.FindTenantRunAsync(tenant, runId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
-        await Require(state, initiator.PrincipalId, "agent-runs.cancel", TenantRunRules.Scope(tenant, runId), ct).ConfigureAwait(false);
-        await Require(state, initiator.PrincipalId, "agent-runs.read", TenantRunRules.Scope(tenant, runId), ct).ConfigureAwait(false);
-        await Require(state, initiator.PrincipalId, "sessions.read", TenantSessionRules.Scope(tenant, run.SessionId), ct).ConfigureAwait(false);
-        await Require(state, initiator.PrincipalId, "agents.chat", AccessScope.ForResource(tenant, "agent", run.AgentInstanceId.ToString("D")), ct).ConfigureAwait(false);
-        if (state.Tenant.Revision != expectedSecurityRevision || run.Revision != expectedRunRevision) throw new SecurityConflictException("stale_revision");
-        if (run.Status is not (AgentRunStatus.Queued or AgentRunStatus.WaitingToRetry)) throw new SecurityConflictException("run_in_use");
-        var at = DateTimeOffset.FromUnixTimeMilliseconds(time.GetUtcNow().ToUnixTimeMilliseconds());
-        var next = state with { Tenant = state.Tenant with { Revision = checked(state.Tenant.Revision + 1) } };
-        var audit = new AuthorizationAudit(ids.NewId(), tenant, initiator.PrincipalId, "agent-runs.cancel", runId.ToString("D"), "allowed", "queued_run_cancelled", at);
-        var saved = await runs.TryCancelTenantRunAsync(next, state.Tenant.Revision, runId, expectedRunRevision, initiator, at, audit, ct).ConfigureAwait(false)
-            ?? throw new SecurityConflictException("stale_revision");
+        var service = cancellations ?? new TenantRunCancellationService(security, runs, identity, authorizer, ids, time);
+        var request = await service.PrepareAsync(tenant, runId, initiator, expectedSecurityRevision, expectedRunRevision, ct).ConfigureAwait(false);
+        var saved = control is null ? await service.CommitAsync(request, ct).ConfigureAwait(false)
+            : await control.CancelAsync(request, ct).ConfigureAwait(false);
         return new(saved.Admission.ExecutionContext!, saved.AgentInstanceId, saved.Status, saved.Revision, saved.CreatedAtUtc, saved.UpdatedAtUtc);
     }
     private async ValueTask Require(TenantSecurityState state, Guid actor, string permission, AccessScope scope, CancellationToken ct)

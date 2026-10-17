@@ -1173,6 +1173,9 @@ public sealed partial class SessionRuntime : IAsyncDisposable
                 case CancelResponseReceived cancel:
                     await HandleCancelAsync(cancel, cancellationToken).ConfigureAwait(false);
                     break;
+                case TenantRunCancellationReceived tenantCancel:
+                    await HandleTenantRunCancellationAsync(tenantCancel, cancellationToken).ConfigureAwait(false);
+                    break;
                 case ApprovalResponseReceived approval:
                     await HandleApprovalResponseAsync(approval, cancellationToken).ConfigureAwait(false);
                     break;
@@ -6324,7 +6327,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
         AgentRun? admittedRun = null,
         AgentRunOutcomeCommit? runOutcome = null, Guid? completionSourceRunId = null, Action<AgentRun>? onAdmitted = null, IReadOnlyList<Guid>? completionSourceRunIds = null, bool tenantApprovalBarrier = false)
     {
-        if ((_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
+        if (_tenantCancellationCommitted || (_tenantApprovalPending || _tenantApprovalSuspended) && !tenantApprovalBarrier)
         { ended?.TrySetResult(false); return; }
         if (snapshot.Entries.Count > 1000)
         {
@@ -6369,7 +6372,7 @@ public sealed partial class SessionRuntime : IAsyncDisposable
             }
 
             RuntimeTelemetry.Record("persist", RuntimeTelemetry.ElapsedMs(job.Started));
-            if (input.Superseded)
+            if (input.Superseded || _tenantCancellationCommitted)
             {
                 job.Ended?.TrySetResult(false);
                 return;

@@ -20,8 +20,25 @@ public sealed partial class InMemoryIamStore
             if (!_tenants.TryGetValue(next.Tenant.TenantId, out var before) || before.Tenant.Revision != expectedSecurityRevision) return ValueTask.FromResult<AgentRun?>(null);
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); ValidateAgentActor(before, initiator.PrincipalId); EnsureReferences(next, audit, ct: ct);
             RequireHumanSession(next.Tenant.TenantId, initiator); ct.ThrowIfCancellationRequested();
+            var run = sessionBacking.ReadTenantRun(next.Tenant.TenantId, runId);
+            if (run is null || run.Revision != expectedRunRevision) return ValueTask.FromResult<AgentRun?>(null);
+            var request = run.ApprovalRequestId is { } id ? _approvals.GetValueOrDefault(id) : null;
+            var source = request is not null && request.RunId != runId ? sessionBacking.ReadTenantRun(request.TenantId, request.RunId) : null;
+            var closed = TenantRunCancellationRules.Approval(request, run, source, at);
             var saved = sessionBacking.CancelTenantRun(next.Tenant.TenantId, runId, expectedRunRevision, at);
-            if (saved is not null) { _tenants[next.Tenant.TenantId] = next; _audit.Add(audit); }
+            if (saved is not null)
+            {
+                if (closed is not null && closed != request)
+                {
+                    _approvals[closed.RequestId] = closed;
+                    if (closed.Status == TenantApprovalStatus.Cancelled)
+                        _approvalDecisions.Add(closed.RequestId, new(audit.AuditId, closed.RequestId, closed.TenantId, initiator.PrincipalId,
+                            closed.Status, closed.Operation.ActionHash, closed.Revision, at));
+                }
+                if (run.ApprovalRequestId is { } approvalId && _operationGrants.GetValueOrDefault(approvalId) is { Status: OperationGrantStatus.Available } grant)
+                    _operationGrants[approvalId] = grant with { Status = OperationGrantStatus.Revoked, Revision = checked(grant.Revision + 1) };
+                _tenants[next.Tenant.TenantId] = next; _audit.Add(audit);
+            }
             return ValueTask.FromResult(saved);
         }
     }

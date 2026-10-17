@@ -31,15 +31,19 @@ public sealed partial class TenantCredentialAccessTests
             await foreach (var item in inner.GenerateAsync(request, cancellationToken)) yield return item;
         }
     }
-    private sealed class HostedCredentialVerifier(bool uncertain) : ITenantCredentialOAuthVerifier
+    private sealed class HostedCredentialVerifier(bool uncertain, bool hold = false) : ITenantCredentialOAuthVerifier
     {
         public int Calls;
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public CredentialOAuthDescriptor Describe(CredentialPurpose purpose) => new("agent-core.tenant.synthetic", "http://localhost/callback", true, true);
-        public ValueTask<CredentialOAuthCheck> CheckAsync(Credential current, CancellationToken ct)
+        public async ValueTask<CredentialOAuthCheck> CheckAsync(Credential current, CancellationToken ct)
         {
             Interlocked.Increment(ref Calls);
             Assert.Equal(CredentialPurpose.GoogleDriveAccount, current.Purpose); Assert.True(current.DriveAccount!.Synthetic);
-            return uncertain ? ValueTask.FromException<CredentialOAuthCheck>(new IOException("private-provider-body")) : ValueTask.FromResult(new CredentialOAuthCheck());
+            Entered.TrySetResult(); if (hold) await Release.Task.WaitAsync(ct);
+            if (uncertain) throw new IOException("private-provider-body");
+            return new CredentialOAuthCheck();
         }
     }
     private static async Task<AgentRun> AwaitCredentialRun(ITenantRunStore runs, Guid tenant, Guid id, bool waiting)
@@ -64,10 +68,12 @@ public sealed partial class TenantCredentialAccessTests
     [InlineData(true, "restart", false)]
     [InlineData(false, "checkpoint-mismatch", false)] [InlineData(true, "checkpoint-mismatch", false)]
     [InlineData(false, "budget-exhausted", false)] [InlineData(true, "budget-exhausted", false)]
+    [InlineData(false, "cancel-inflight", false)] [InlineData(true, "cancel-inflight", false)]
     public async Task Model_credential_check_waits_for_exact_human_consent_and_consumes_one_successor_Run_receipt(bool sqlite, string choice, bool use)
     {
-        var model = new CredentialModel(); var verifier = new HostedCredentialVerifier(choice == "uncertain");
+        var model = new CredentialModel(); var verifier = new HostedCredentialVerifier(choice == "uncertain", choice == "cancel-inflight");
         await using var factory = new OAuthFactory(sqlite: sqlite, preserve: choice == "restart", checkOverride: verifier, execute: true, model: model); using var owner = Client(factory);
+        factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgentCore.Api.Realtime.AgentCoreOptions>>().Value.MaxActiveSessions = 1;
         await Login(owner, "owner@example.test", "explicit-synthetic-test-password");
         var tenant = (await Json(await owner.GetAsync("/api/v2/account/tenants"))).GetProperty("items")[0].GetProperty("tenantId").GetGuid(); var api = $"/api/v2/tenants/{tenant}";
         var principal = (await Json(await owner.GetAsync(api + "/access/me"))).GetProperty("principalId").GetGuid();
@@ -95,6 +101,14 @@ public sealed partial class TenantCredentialAccessTests
         var runs = factory.Services.GetRequiredService<ITenantRunStore>(); var waiting = await AwaitCredentialRun(runs, tenant, sourceId, true);
         Assert.True(waiting.Status == AgentRunStatus.WaitingForApproval, $"{waiting.Status}: {waiting.Failure?.Code}: {waiting.Failure?.Summary}");
         Volatile.Write(ref factory.TenantExecutionEnabled, false);
+        // A durable wait precedes supervisor cleanup. Prove the sole Runtime slot was released
+        // before manually dispatching a successor in the negative-path cases below.
+        var capacity = factory.Services.GetRequiredService<AgentCore.Api.Realtime.SessionHost>();
+        using (var drained = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
+        {
+            while (!capacity.TryReserveTenantRuntime()) await Task.Delay(25, drained.Token);
+            capacity.ReleaseTenantRuntime();
+        }
         Assert.Equal(0, verifier.Calls); Assert.Null(waiting.Claim);
         var request = (await factory.Services.GetRequiredService<ITenantApprovalStore>().FindApprovalAsync(tenant, waiting.ApprovalRequestId!.Value))!;
         Assert.Equal(TenantOperationKind.CredentialConnectionCheck, request.Operation.Kind); Assert.Equal(use ? ApprovalKind.Review : ApprovalKind.ExceptionalGrant, request.Kind);
@@ -138,6 +152,28 @@ public sealed partial class TenantCredentialAccessTests
             return;
         }
         Volatile.Write(ref executionFactory.TenantExecutionEnabled, true);
+        if (choice == "cancel-inflight")
+        {
+            await verifier.Entered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            var source = (await runs.FindTenantRunAsync(tenant, sourceId))!;
+            var active = (await runs.FindTenantRunAsync(tenant, source.Result!.ContinuationRunId!.Value))!;
+            var approved = executionFactory.Services.GetRequiredService<ITenantApprovalStore>();
+            Assert.Equal(OperationGrantStatus.Claimed, (await approved.FindOperationGrantAsync(tenant, request.RequestId))!.Status);
+            Assert.Equal(HttpStatusCode.OK, (await executionOwner.PostAsJsonAsync(api + $"/agent-runs/{active.AgentRunId}/cancel", new {
+                expectedRevision = await Revision(executionOwner, tenant), expectedRunRevision = active.Revision })).StatusCode);
+            TenantOperationReceipt? settled;
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var receipts = executionFactory.Services.GetRequiredService<ITenantApprovedOperationStore>();
+            while ((settled = await receipts.FindOperationReceiptAsync(tenant, request.Operation.OperationId, deadline.Token)) is null) await Task.Delay(25, deadline.Token);
+            Assert.Equal(TenantOperationOutcome.Indeterminate, settled.Outcome); Assert.Equal(active.AgentRunId, settled.RunId);
+            Assert.Equal(AgentRunStatus.Cancelled, (await runs.FindTenantRunAsync(tenant, active.AgentRunId))!.Status);
+            Assert.Equal(OperationGrantStatus.Indeterminate, (await approved.FindOperationGrantAsync(tenant, request.RequestId))!.Status);
+            Assert.Equal(settled, await executionFactory.Services.GetRequiredService<TenantCredentialCheckService>().ExecuteAsync(new(tenant, active.AgentRunId),
+                request.RequestId, request.Operation.OperationId, active.Claim!.Generation, request.Operation.ActionHash));
+            Assert.Equal(1, verifier.Calls); Assert.Single(model.Requests);
+            Safe(await Json(await executionOwner.GetAsync(route))); Assert.Equal(0, executionFactory.Outbound);
+            return;
+        }
         var finished = await AwaitCredentialRun(runs, tenant, sourceId, false);
         Assert.NotEqual(sourceId, finished.AgentRunId); Assert.Equal(ActivationKind.ApprovalContinuation, finished.Admission.Activation.Kind);
         Assert.Equal(waiting.ResponseId, finished.ResponseId); Assert.Equal(waiting.Admission.ExecutionContext!.OriginalInitiatorPrincipalId, finished.Admission.ExecutionContext!.OriginalInitiatorPrincipalId);

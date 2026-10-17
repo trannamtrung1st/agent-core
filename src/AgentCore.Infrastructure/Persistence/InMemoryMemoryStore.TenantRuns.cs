@@ -60,9 +60,11 @@ public sealed partial class InMemoryMemoryStore
         lock (_gate)
         {
             var run = ReadTenantRun(tenant, runId); if (run is null || run.Revision != expectedRunRevision) return null;
-            if (_sessions[run.SessionId].Status is SessionStatus.Attached or SessionStatus.Ending) throw new SecurityConflictException("session_in_use");
-            if (run.Status is not (AgentRunStatus.Queued or AgentRunStatus.WaitingToRetry)) throw new SecurityConflictException("run_in_use");
-            var saved = run.RequestCancellation(run.Revision, null, at); AgentRuns.Runs[runId] = saved; return saved;
+            var saved = TenantRunCancellationRules.Cancel(run, at);
+            var entries = _entries.GetValueOrDefault(run.SessionId, []).Select(e => TenantRunCancellationRules.Interrupt(e, run, at)).ToArray();
+            if (!entries.SequenceEqual(_entries.GetValueOrDefault(run.SessionId, [])))
+                Store(_sessions[run.SessionId] with { Revision = checked(_sessions[run.SessionId].Revision + 1), UpdatedAt = at, Entries = entries });
+            AgentRuns.Runs[runId] = saved; return saved;
         }
     }
     internal AgentRun? ReadTenantRun(Guid tenant, Guid runId)

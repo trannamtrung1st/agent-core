@@ -9,15 +9,16 @@ using AgentCore.Domain.Conversation;
 namespace AgentCore.Api.Realtime;
 
 // Canonical runtimes never enter SessionHost's legacy connection/control lookup or SignalR output path.
-public sealed class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITenantRuntimeStore storage, ITenantRunStore runs,
+public sealed partial class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITenantRuntimeStore storage, ITenantRunStore runs,
     TenantRunExecutionAuthority authority, TenantToolAuthorization tools, SessionHost capacity, IIdGenerator ids, TimeProvider time,
-    ILogger<TenantSessionRuntimeHost> logger, TenantRunContinuationService continuations) : ITenantRunDispatcher, IAsyncDisposable
+    ILogger<TenantSessionRuntimeHost> logger, TenantRunContinuationService continuations, TenantRunCancellationService cancellations) : ITenantRunDispatcher, IAsyncDisposable
 {
     private sealed class Live(AgentRun run, SessionRuntime runtime)
     {
         public AgentRun Run { get; } = run;
         public SessionRuntime Runtime { get; } = runtime;
         public CancellationTokenSource Lifetime { get; } = new();
+        public CancellationTokenSource OperationStop { get; } = new();
         public TaskCompletionSource<bool> Accepted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Stopped { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
@@ -82,7 +83,8 @@ public sealed class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITen
         lock (_gate)
         {
             if (_stopping) return false;
-            if (_live.TryGetValue(run.SessionId, out var raced))
+            if (_cancelling.Contains((run.Owner.TenantId!.Value, run.AgentRunId))) refused = true;
+            else if (_live.TryGetValue(run.SessionId, out var raced))
             {
                 if (raced.Run.AgentRunId == run.AgentRunId && raced.Run.Claim!.Generation == claim.Generation) existing = raced;
                 else { collision = raced; refused = true; }
@@ -103,7 +105,7 @@ public sealed class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITen
         var live = admitted ?? throw new InvalidOperationException("Tenant Runtime admission was not resolved.");
         try
         {
-            using var dispatch = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, live.Lifetime.Token);
+            using var dispatch = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, live.Lifetime.Token, live.OperationStop.Token);
             try { await continuations.PrepareExternalEffectAsync(run, dispatch.Token).ConfigureAwait(false); }
             catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException)
             {
@@ -130,7 +132,8 @@ public sealed class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITen
     {
         var current = await runs.FindTenantRunAsync(candidate.Run.Owner.TenantId!.Value, candidate.Run.AgentRunId, ct).ConfigureAwait(false);
         if (current is { Status: AgentRunStatus.Running, Claim: { } claim } && claim.Generation == candidate.Run.Claim!.Generation) return;
-        lock (_gate) { if (_live.GetValueOrDefault(candidate.Run.SessionId) == candidate) candidate.Lifetime.Cancel(); }
+        bool currentLive; lock (_gate) currentLive = _live.GetValueOrDefault(candidate.Run.SessionId) == candidate;
+        if (currentLive) StopTokens(candidate);
     }
     private async ValueTask DeferUnacceptedAsync(AgentRun run, CancellationToken ct)
     {
@@ -172,14 +175,15 @@ public sealed class TenantSessionRuntimeHost(SessionRuntimeFactory factory, ITen
             finally
             {
                 lock (_gate) { if (_live.GetValueOrDefault(sessionId) == live) _live.Remove(sessionId); }
-                capacity.ReleaseTenantRuntime(); live.Lifetime.Dispose();
+                capacity.ReleaseTenantRuntime(); live.OperationStop.Dispose(); live.Lifetime.Dispose();
                 live.Stopped.TrySetResult();
             }
         }
     }
     public async ValueTask DisposeAsync()
     {
-        Live[] pending; lock (_gate) { _stopping = true; pending = _live.Values.ToArray(); foreach (var live in pending) live.Lifetime.Cancel(); }
+        Live[] pending; lock (_gate) { _stopping = true; pending = _live.Values.ToArray(); }
+        foreach (var live in pending) StopTokens(live);
         await Task.WhenAll(pending.Select(l => l.Stopped.Task)).ConfigureAwait(false);
     }
 }

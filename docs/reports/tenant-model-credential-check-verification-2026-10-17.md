@@ -42,4 +42,6 @@ Commands are `dotnet test tests/AgentCore.<project>.Tests --no-restore --filter 
 
 ## Remaining boundaries
 
-No frontend source changed. Existing inspector browser evidence remains separate; this work verifies the backend journey through actual HTTP/model/worker execution. Live tenant Chat/output, original-Chat approval links/notifications, active tenant Run cancellation, live Google acceptance, other credential/external operations and the remaining tenant resource/transport/obsolete-authority/schema cutover are still required. No optional CI, deployment, installed-data migration/reset or Real-host operation was performed. The full goal remains active.
+No frontend source changed. Existing inspector browser evidence remains separate; this work verifies the backend journey through actual HTTP/model/worker execution. Live tenant Chat/output, original-Chat approval links/notifications, live Google acceptance, other credential/external operations and the remaining tenant resource/transport/obsolete-authority/schema cutover are still required. No optional CI, deployment, installed-data migration/reset or Real-host operation was performed. The full goal remains active.
+
+Subsequent [active cancellation verification](tenant-active-run-cancellation-verification-2026-10-17.md) adds whole-Run stop and cancellation during a claimed credential check. The 480-check evidence in this report remains the historical credential-continuation checkpoint.

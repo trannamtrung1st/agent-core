@@ -57,9 +57,9 @@ public sealed partial class TenantRunAdmissionTests
         var sessionId = setup.Session.ToString("D");
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Sessions SET Status = 'Attached' WHERE SessionId = {sessionId}");
         var securityRevision = (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision;
-        var inUse = await Assert.ThrowsAsync<SecurityConflictException>(() => f.RunService().CancelAsync(setup.Tenant, receipt.RunId, setup.Owner, securityRevision, 1).AsTask());
-        Assert.Equal("session_in_use", inUse.ReasonCode);
-        Assert.Equal(AgentRunStatus.Queued, (await ((ITenantRunStore)f.Iam).FindTenantRunAsync(setup.Tenant, receipt.RunId))!.Status);
+        var cancelled = await f.RunService().CancelAsync(setup.Tenant, receipt.RunId, setup.Owner, securityRevision, 1);
+        Assert.Equal(AgentRunStatus.Cancelled, cancelled.Status);
+        Assert.Equal(SessionStatus.Attached, (await ((ITenantSessionStore)f.Iam).FindTenantSessionAsync(setup.Tenant, setup.Session))!.Snapshot.Status);
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Sessions SET Status = 'Created' WHERE SessionId = {sessionId}");
         var row = await db.AgentRuns.SingleAsync(r => r.AgentRunId == run);
         var payload = JsonNode.Parse(row.PayloadJson)!;
