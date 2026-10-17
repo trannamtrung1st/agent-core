@@ -52,8 +52,21 @@ public sealed class TenantAgentReadService(IIamStore security, ITenantAgentStore
     public ValueTask<TenantAgentSkillDetail> ReadSkillDetailAsync(Guid tenant, Guid instance, TenantSessionInitiator human, string key, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadSkillDetailAsync(human.PrincipalId, tenant, instance, key, token), ct);
 
+    public ValueTask<TenantAgentResourceDetail> ReadResourceDetailAsync(Guid tenant, Guid instance, TenantSessionInitiator human, string key, CancellationToken ct = default) =>
+        Fenced(tenant, instance, human, (_, _, token) => configuration.ReadResourceDetailAsync(human.PrincipalId, tenant, instance, key, token), ct);
+
     public ValueTask<TenantAgentResourceContent> ReadResourceContentAsync(Guid tenant, Guid instance, TenantSessionInitiator human, string key, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadResourceContentAsync(human.PrincipalId, tenant, instance, key, token), ct);
+
+    // Parsing/render preparation can outlive a logout or revocation, just like byte I/O. Keep both
+    // inside the same original-human/Instance/security fence; projection never authorizes its source.
+    public ValueTask<T> ProjectResourceContentAsync<T>(Guid tenant, Guid instance, TenantSessionInitiator human, string key,
+        Func<InstanceResourceView, int> maximumBytes, Func<TenantAgentResourceContent, CancellationToken, ValueTask<T>> project, CancellationToken ct = default) =>
+        Fenced<T>(tenant, instance, human, async (_, _, token) =>
+        {
+            var source = await configuration.ReadResourceContentAsync(human.PrincipalId, tenant, instance, key, token, maximumBytes).ConfigureAwait(false);
+            return await project(source, token).ConfigureAwait(false);
+        }, ct);
 
     public ValueTask<TenantAgentVersionCatalog> ReadVersionsAsync(Guid tenant, Guid instance, TenantSessionInitiator human, int page = 0, int pageSize = 30, CancellationToken ct = default) =>
         Fenced(tenant, instance, human, (_, _, token) => configuration.ReadVersionsAsync(human.PrincipalId, tenant, instance, page, pageSize, token), ct);

@@ -1,5 +1,17 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Instance exact resource and Office preview reads
+
+Under `/api/v2/tenants/{tenantId}`:
+
+| GET suffix | Contract |
+| --- | --- |
+| `/agents/{instanceId}/resources/{key}/editor` | Original cookie human, exact `agents.read` and exact/inherited `resources.read`. Returns `{ agent, item:{resource,canManage,canDelete,canCopy}, securityRevision }`, with the same safe agent and resource view/action hints as the paged editor. Independent of collection filters/pages; dependencies remain permission-filtered. Missing/unreadable keys deny. URL-encode the complete origin-qualified key. |
+| `/agents/{instanceId}/resources/{key}/office-preview?sheet=Sales&range=A1:J50` | Same independent parent/resource read checks. Uses verified exact bytes and the shared bounded `OfficePreviewResponse`: DOCX format/hash/warnings/empty-body proof, or XLSX format/hash/warnings/sheets/selection/range/typed rows/presentation. Formulas remain inert metadata; no base64 source or public URL. Effective byte limits apply before blob allocation; structural/window limits apply during projection. Unsupported/malformed packages return safe 400; size/window limits return 413. Downloads retain the original bytes. |
+| `/file-preview/options` | Authenticated current organization member; returns the effective host preview limits used by the existing rich-file components. Reveals no private resource inventory and grants no content or mutation access. |
+
+All are no-store cookie-authenticated reads with no owner-capability or global-route fallback. Resource detail and successful Office projection retain the original-session and final Instance/security fence through all protected I/O and parsing. Logout/replacement login returns `403 initiator_unavailable`; captured Instance/security drift returns 409 (`resource_changed` when the byte owner detects a changed Instance, otherwise `stale_revision`). Exact access loss denies; no captured preview is released. Preview also returns `X-Content-Type-Options: nosniff`. Recovery is a new authorized read, never a mutation replay. These routes do not establish delivery of tenant resource frontend/rich-file/bulk adapters or cut over other file-source families.
+
 ## Tenant Instance child editor reads
 
 `GET /api/v2/tenants/{tenantId}/agents/{instanceId}/skills/{key}/editor` returns `{ agent, item, securityRevision }` for one exact readable Skill, with the same safe agent and `{ skill, canManage, canCustomize }` item shape below. URL-encode the complete origin-qualified key. This read is independent of collection search/paging, retains the original-human and final Instance/security fence, and denies missing/unreadable keys without revealing their content. It supports explicit refresh of an open draft; the response grants no write authority.
@@ -33,7 +45,7 @@ Canonical human agent mutations retain the original cookie-derived Account/sessi
 
 ## Canonical agent GET freshness
 
-All canonical agent reads derive the original human from the authenticated cookie and tenant context, then revalidate that same Account/session/Principal after protected I/O. This applies to `/agent-templates`, `/agents`, `/agents/{id}`, and the exact Instance `/effective-config`, `/settings`, `/execution-budgets`, `/self-management`, `/skills`, `/resources`, `/resources/{key}/content`, `/editor`, `/configuration-controls`, `/versions` and `/active-version/preview` suffixes under `/api/v2/tenants/{tenantId}`. Logout or replacement of the original session during a read returns `403 initiator_unavailable`; concurrent security/Instance changes return `409 stale_revision` rather than a mixed snapshot. Clients recover with an explicit new read using current authentication. Existing JSON/file shapes, paging, no-store headers and permission requirements are preserved. The fence does not authorize a write or retry a mutation.
+All canonical agent reads derive the original human from the authenticated cookie and tenant context, then revalidate that same Account/session/Principal after protected I/O. This applies to `/agent-templates`, `/agents`, `/agents/{id}`, and the exact Instance `/effective-config`, `/settings`, `/execution-budgets`, `/self-management`, `/skills`, `/skills/editor`, `/skills/{key}/editor`, `/resources`, `/resources/editor`, `/resources/{key}/editor`, `/resources/{key}/content`, `/resources/{key}/office-preview`, `/editor`, `/configuration-controls`, `/versions` and `/active-version/preview` suffixes under `/api/v2/tenants/{tenantId}`. Logout or replacement of the original session during a read returns `403 initiator_unavailable`; concurrent security/Instance changes return `409 stale_revision` rather than a mixed snapshot. Clients recover with an explicit new read using current authentication. Existing JSON/file shapes, paging, no-store headers and permission requirements are preserved. The fence does not authorize a write or retry a mutation.
 
 ## Tenant Instance editor HTTP read
 

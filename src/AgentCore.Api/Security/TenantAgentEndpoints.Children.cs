@@ -14,6 +14,29 @@ public static partial class TenantAgentEndpoints
     public sealed record ResourceCopy(long ExpectedRevision, long ExpectedInstanceRevision, string LogicalPath);
     private static void MapChildren(RouteGroupBuilder group)
     {
+        group.MapGet("/file-preview/options", (FilePreviewOptions policy) => Results.Json(policy));
+        group.MapGet("/agents/{instanceId:guid}/resources/{key}/editor", (Guid instanceId, string key, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var a = IdentityHttp.TenantContext(http);
+            var value = await service.ReadResourceDetailAsync(a.TenantId, instanceId, Human(http), key, ct).ConfigureAwait(false);
+            return Results.Json(new { agent = Safe(value.Agent), value.Item, value.SecurityRevision });
+        }));
+        group.MapGet("/agents/{instanceId:guid}/resources/{key}/office-preview", (Guid instanceId, string key, string? sheet, string? range, HttpContext http,
+            TenantAgentReadService service, IOfficeProcessor office, FilePreviewOptions policy, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var a = IdentityHttp.TenantContext(http);
+            http.Response.Headers.XContentTypeOptions = "nosniff";
+            try
+            {
+                return await service.ProjectResourceContentAsync(a.TenantId, instanceId, Human(http), key,
+                    item => policy.OfficeLimit(item.LogicalPath, item.MediaType),
+                    (source, token) => ValueTask.FromResult(OfficePreviewEndpoints.Project(Path.GetFileName(source.Resource.LogicalPath),
+                        source.Resource.MediaType, source.Bytes, sheet, range, office, policy, token)), ct).ConfigureAwait(false);
+            }
+            catch (AgentCore.Application.Sessions.AgentCoreException ex) { return OfficePreviewEndpoints.Problem(ex); }
+            catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException or System.Xml.XmlException)
+            { return Results.Problem(statusCode: 400, title: "invalid_office_package", detail: "This Office package could not be interpreted safely. Download the original."); }
+        }));
         group.MapGet("/agents/{instanceId:guid}/skills/{key}/editor", (Guid instanceId, string key, HttpContext http, TenantAgentReadService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var a = IdentityHttp.TenantContext(http);

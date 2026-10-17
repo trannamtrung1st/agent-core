@@ -8,7 +8,7 @@ public sealed partial class TenantDefinitionIntegrationTests
 {
     public static IEnumerable<object[]> AgentConfigurationReadRaces =>
         from sqlite in new[] { false, true }
-        from read in new[] { "effective", "settings", "budgets", "management", "skills", "resources", "editor", "controls", "versions", "version-preview", "skill-editor", "resource-editor", "skill-detail" }
+        from read in new[] { "effective", "settings", "budgets", "management", "skills", "resources", "editor", "controls", "versions", "version-preview", "skill-editor", "resource-editor", "skill-detail", "resource-detail" }
         from change in new[] { "persona", "security", "logout" }
         select new object[] { sqlite, read, change };
 
@@ -21,11 +21,18 @@ public sealed partial class TenantDefinitionIntegrationTests
         var (agents, configuration) = ConfigurationServices(f);
         async Task<long> Revision() => (await f.Iam.ReadTenantAsync(owner.TenantId))!.Tenant.Revision;
         var agent = await agents.CreateAsync(owner.OwnerPrincipalId, owner.TenantId, "examiner", 1, await Revision()); var id = agent.Instance.InstanceId;
+        string? resourceKey = null;
+        if (read == "resource-detail")
+        {
+            var saved = await configuration.UpsertResourceAsync(owner.OwnerPrincipalId, owner.TenantId, id, await Revision(), 1,
+                new(null, null, "protected.txt", AgentCore.Domain.Definitions.AgentDefinitionResourceKind.Reference, "text/plain", "Private evidence."u8.ToArray()));
+            resourceKey = saved.Resource!.Key; agent = (await ((ITenantAgentStore)f.Iam).FindTenantAgentAsync(owner.TenantId, id))!;
+        }
         var login = (await f.Identity.SignInAsync("owner@example.test", "strong-owner-password"))!.Session;
         var human = new TenantSessionInitiator(owner.AccountId, login.SessionId, owner.OwnerPrincipalId);
         var gated = ConfigurationServices(f, wrapBuiltIns: inner => new AfterEditorDefinition(inner, async () =>
         {
-            if (change == "persona") await configuration.UpdatePersonaAsync(owner.OwnerPrincipalId, owner.TenantId, id, agent.Instance.Persona with { Name = "Concurrent persona" }, await Revision(), 1, 1);
+            if (change == "persona") await configuration.UpdatePersonaAsync(owner.OwnerPrincipalId, owner.TenantId, id, agent.Instance.Persona with { Name = "Concurrent persona" }, await Revision(), agent.Instance.Revision, agent.Instance.PersonaRevision);
             else if (change == "security") await f.Access.SaveRoleAsync(owner.OwnerPrincipalId, owner.TenantId, null, "Concurrent role", ["agents.read"], await Revision());
             else await f.Identity.SignOutAsync(login.SessionId);
         }));
@@ -42,6 +49,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 case "skill-detail": await reads.ReadSkillDetailAsync(owner.TenantId, id, human, "builtin:configuration-assistance.v1"); break;
                 case "skill-editor": await reads.ReadSkillEditorAsync(owner.TenantId, id, human); break;
                 case "resource-editor": await reads.ReadResourceEditorAsync(owner.TenantId, id, human); break;
+                case "resource-detail": await reads.ReadResourceDetailAsync(owner.TenantId, id, human, resourceKey!); break;
                 case "resources": await reads.ReadResourcesAsync(owner.TenantId, id, human); break;
                 case "versions": await reads.ReadVersionsAsync(owner.TenantId, id, human); break;
                 case "version-preview": await reads.PreviewVersionAsync(owner.TenantId, id, human, 1); break;

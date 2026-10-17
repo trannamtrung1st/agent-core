@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Instance resource detail and Office preview regression
+
+Verify exact resource editor reads independently of collection filters/pages through InMemory/SQLite and authenticated HTTP, including local independent delete, inherited read-only/copy destination hints, permission-filtered dependencies, archived inspection and unreadable keys. Inject parent/security changes and original logout during Definition I/O; stale captures must fail and an explicit current read recover.
+
+Use the real `IOfficeProcessor` through Synthetic HTTP for local and owned-publication resources. Check exact resource-only readers without IAM inspection, hidden sibling/foreign/anonymous denial, unchanged download bytes and revisions, no-store/nosniff, DOCX validation proof, XLSX values/window recovery, unsupported/malformed safe errors and byte thresholds before blob I/O. Intercept after actual byte reads and after real DOCX/XLSX processing; original logout/relogin, parent/security drift and exact grant revocation must release no captured projection. A new current read succeeds only while authority remains. These backend checks do not establish rendered tenant resource/rich-preview/bulk-import journeys; those still require focused browser interactions and bounded visual review.
+
 ## Tenant Instance Skills focused browser regression
 
 Use `pnpm run test:e2e:tenant-instance-skills` with free isolated Synthetic ports. Cover inherited paging/search, inspection/Escape/focus, choices/reset, atomic Customize, local create/edit/delete, dirty Keep editing, stale exact-item refresh with retained draft and permitted read-only/revoked content without IAM-inspector requests. No owner/global fallback requests or forced clicks are permitted. Include saved-feedback obstruction at narrow row actions: use the shared feedback-placement owner's `data-feedback-actions` markers instead of page offsets. Component checks cover acknowledged malformed results/read recovery without replay, discard and late scope abort; retain shared Drawer/feedback consumers and build verification. [Executed evidence](reports/tenant-instance-skills-ui-verification-2026-10-18.md) separates actual functional checks, bounded captures and remaining visual/full-proposal gaps.

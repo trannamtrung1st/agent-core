@@ -93,9 +93,11 @@ public sealed partial class TenantAgentAccessTests
         if (change != "logout") Assert.Equal(bytes, await owner.GetByteArrayAsync(path));
     }
 
-    private sealed class AgentReadFenceFactory : AgentCoreApiFactory
+    private sealed class AgentReadFenceFactory(IReadOnlyDictionary<string, string?>? settings = null) : AgentCoreApiFactory
     {
+        protected override IReadOnlyDictionary<string, string?> ExtraConfiguration => settings ?? new Dictionary<string, string?>();
         public Func<Task>? AfterCapture;
+        public int ContentReads;
         public string CaptureAt = "definition";
         public async Task Captured(string kind)
         {
@@ -111,6 +113,8 @@ public sealed partial class TenantAgentAccessTests
                     Resolve<IBuiltInAgentDefinitionStore>(descriptor, provider), this)));
                 var content = services.Single(d => d.ServiceType == typeof(IDefinitionResourceContentStore));
                 services.Replace(ServiceDescriptor.Singleton<IDefinitionResourceContentStore>(provider => new AgentReadContent(Resolve<IDefinitionResourceContentStore>(content, provider), this)));
+                var office = services.Single(d => d.ServiceType == typeof(IOfficeProcessor));
+                services.Replace(ServiceDescriptor.Singleton<IOfficeProcessor>(provider => new AgentReadOffice(Resolve<IOfficeProcessor>(office, provider), this)));
                 services.Replace(ServiceDescriptor.Singleton<ITenantAgentStore>(provider => new AgentReadStore((ITenantAgentStore)provider.GetRequiredService<IIamStore>(), this)));
             });
         }
@@ -121,7 +125,20 @@ public sealed partial class TenantAgentAccessTests
     {
         public ValueTask StoreVerifiedAsync(string hash, byte[] content, CancellationToken ct = default) => inner.StoreVerifiedAsync(hash, content, ct);
         public async ValueTask<byte[]?> ReadAsync(string hash, CancellationToken ct = default)
-        { var bytes = await inner.ReadAsync(hash, ct); await factory.Captured("bytes"); return bytes; }
+        { factory.ContentReads++; var bytes = await inner.ReadAsync(hash, ct); await factory.Captured("bytes"); return bytes; }
+    }
+    private sealed class AgentReadOffice(IOfficeProcessor inner, AgentReadFenceFactory factory) : IOfficeProcessor
+    {
+        public OfficeProcessedFile CreateDocument(OfficeDocumentSpec spec, CancellationToken ct) => inner.CreateDocument(spec, ct);
+        public OfficeProcessedFile CreateWorkbook(OfficeWorkbookSpec spec, CancellationToken ct) => inner.CreateWorkbook(spec, ct);
+        public OfficeDocumentInspection InspectDocument(ReadOnlyMemory<byte> bytes, int offset, int limit, CancellationToken ct)
+        { var result = inner.InspectDocument(bytes, offset, limit, ct); factory.Captured("office").GetAwaiter().GetResult(); return result; }
+        public OfficeWorkbookInspection PreviewWorkbook(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct)
+        { var result = inner.PreviewWorkbook(bytes, sheet, range, ct); factory.Captured("office").GetAwaiter().GetResult(); return result; }
+        public OfficeProcessedFile EditDocument(ReadOnlyMemory<byte> bytes, IReadOnlyList<OfficeDocumentEdit> operations, CancellationToken ct) => inner.EditDocument(bytes, operations, ct);
+        public OfficeWorkbookInspection InspectWorkbook(ReadOnlyMemory<byte> bytes, string? sheet, string? range, CancellationToken ct) => inner.InspectWorkbook(bytes, sheet, range, ct);
+        public OfficeSparseWorkbookInspection ReadWorkbookContent(ReadOnlyMemory<byte> bytes, string? sheet, string? cursor, CancellationToken ct) => inner.ReadWorkbookContent(bytes, sheet, cursor, ct);
+        public OfficeProcessedFile EditWorkbook(ReadOnlyMemory<byte> bytes, IReadOnlyList<OfficeSpreadsheetEdit> operations, CancellationToken ct) => inner.EditWorkbook(bytes, operations, ct);
     }
     private sealed class AgentReadDefinitions(IBuiltInAgentDefinitionStore inner, AgentReadFenceFactory factory) : IBuiltInAgentDefinitionStore
     {

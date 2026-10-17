@@ -11,6 +11,7 @@ public sealed record TenantAgentSkillDetail(TenantAgent Agent, TenantAgentSkillI
 public sealed record TenantAgentSkillEditor(TenantAgent Agent, IReadOnlyList<TenantAgentSkillItem> Items, int Total,
     int Page, int PageSize, long SecurityRevision, bool CanCreate, bool AllReadable);
 public sealed record TenantAgentResourceItem(InstanceResourceView Resource, bool CanManage, bool CanDelete, bool CanCopy);
+public sealed record TenantAgentResourceDetail(TenantAgent Agent, TenantAgentResourceItem Item, long SecurityRevision);
 public sealed record TenantAgentResourceEditor(TenantAgent Agent, IReadOnlyList<TenantAgentResourceItem> Items, int Total,
     int Page, int PageSize, long SecurityRevision, bool CanCreate, bool AllReadable);
 
@@ -56,6 +57,16 @@ public sealed partial class TenantAgentConfigurationService
                 resource.Origin == "Instance" && await CanChangeChild(catalog.State, actor, catalog.Agent, "resources.delete", resource.Key, ct).ConfigureAwait(false),
                 resource.Origin == "Definition" && canCreate));
         return new(catalog.Agent, items, visible.Length, page, pageSize, catalog.State.Tenant.Revision, canCreate, catalog.AllReadable);
+    }
+
+    public async ValueTask<TenantAgentResourceDetail> ReadResourceDetailAsync(Guid actor, Guid tenant, Guid id, string key, CancellationToken ct = default)
+    {
+        var catalog = await ReadResourceCatalog(actor, tenant, id, ct).ConfigureAwait(false);
+        var resource = catalog.Items.SingleOrDefault(item => item.Key == key) ?? throw new AccessDeniedException("resource_unavailable");
+        return new(catalog.Agent, new(resource,
+            await CanChangeChild(catalog.State, actor, catalog.Agent, "resources.manage", key, ct).ConfigureAwait(false),
+            resource.Origin == "Instance" && await CanChangeChild(catalog.State, actor, catalog.Agent, "resources.delete", key, ct).ConfigureAwait(false),
+            resource.Origin == "Definition" && await CanCreateChild(catalog.State, actor, catalog.Agent, "resources", ct).ConfigureAwait(false)), catalog.State.Tenant.Revision);
     }
 
     private async ValueTask<bool> CanCreateChild(TenantSecurityState state, Guid actor, TenantAgent agent, string family, CancellationToken ct) =>

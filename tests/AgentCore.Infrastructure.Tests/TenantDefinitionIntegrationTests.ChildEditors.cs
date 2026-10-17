@@ -37,6 +37,9 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.Equal(skill.Skill.Procedure, exact.Item.Skill.Procedure); Assert.True(exact.Item.CanManage);
         var s = Assert.Single(skills.Items); Assert.True(s.CanManage); Assert.False(s.CanCustomize); Assert.Equal(skill.Skill.Key, s.Skill.Key);
         var r = Assert.Single(resources.Items); Assert.True(r.CanManage); Assert.True(r.CanDelete); Assert.False(r.CanCopy); Assert.Equal(file.Resource!.Key, r.Resource.Key);
+        var exactResource = await reads.ReadResourceDetailAsync(owner.TenantId, id, human, r.Resource.Key);
+        Assert.Equal(resources.SecurityRevision, exactResource.SecurityRevision); Assert.Equal(resources.Agent.Instance.Revision, exactResource.Agent.Instance.Revision);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(r), System.Text.Json.JsonSerializer.Serialize(exactResource.Item));
         Assert.Equal(1, skills.Total); Assert.Equal(1, resources.Total);
         Assert.Empty((await reads.ReadSkillEditorAsync(owner.TenantId, id, human, 1, 1, "regional")).Items);
         Assert.Empty((await reads.ReadResourceEditorAsync(owner.TenantId, id, human, 1, 1, "zulu")).Items);
@@ -98,6 +101,10 @@ public sealed partial class TenantDefinitionIntegrationTests
         var inherited = resources.Items.Single(r => r.Resource.Key == sourceKey); Assert.False(inherited.CanManage); Assert.False(inherited.CanCopy); Assert.False(inherited.CanDelete);
         Assert.Equal(new[] { "definition:visible" }, inherited.Resource.Dependencies);
         var deletable = resources.Items.Single(r => r.Resource.Key == local.Resource.Key); Assert.False(deletable.CanManage); Assert.True(deletable.CanDelete);
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(deletable), System.Text.Json.JsonSerializer.Serialize((await reads.ReadResourceDetailAsync(owner.TenantId, id, human, local.Resource.Key)).Item));
+        Assert.Equal(System.Text.Json.JsonSerializer.Serialize(inherited), System.Text.Json.JsonSerializer.Serialize((await reads.ReadResourceDetailAsync(owner.TenantId, id, human, sourceKey)).Item));
+        var hiddenKey = "definition:" + bound.Resources.Single(r => r.LogicalPath == "private-sentinel.txt").ResourceId.ToString("D");
+        Assert.Equal("resource_unavailable", (await Assert.ThrowsAsync<AccessDeniedException>(() => reads.ReadResourceDetailAsync(owner.TenantId, id, human, hiddenKey).AsTask())).ReasonCode);
         Assert.Empty((await reads.ReadResourceEditorAsync(owner.TenantId, id, human, search: "private-sentinel")).Items);
         Assert.DoesNotContain("private-sentinel", System.Text.Json.JsonSerializer.Serialize(resources));
         await Assert.ThrowsAsync<AccessDeniedException>(() => configuration.WriteSkillAsync(user.PrincipalId, owner.TenantId, id, "customize",
@@ -123,6 +130,8 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.False(skills.CanCreate); Assert.False(resources.CanCreate);
         Assert.All(skills.Items, item => { Assert.False(item.CanManage); Assert.False(item.CanCustomize); });
         Assert.All(resources.Items, item => { Assert.False(item.CanManage); Assert.False(item.CanDelete); Assert.False(item.CanCopy); });
+        var archived = (await reads.ReadResourceDetailAsync(owner.TenantId, id, human, local.Resource.Key)).Item;
+        Assert.False(archived.CanManage); Assert.False(archived.CanDelete); Assert.False(archived.CanCopy);
         await f.Access.RevokeAssignmentAsync(owner.OwnerPrincipalId, owner.TenantId, parent.AssignmentId, await Revision());
         await Assert.ThrowsAsync<AccessDeniedException>(() => reads.ReadSkillEditorAsync(owner.TenantId, id, human).AsTask());
         await Assert.ThrowsAsync<AccessDeniedException>(() => reads.ReadResourceEditorAsync(owner.TenantId, id, human).AsTask());

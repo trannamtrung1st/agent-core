@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant Instance exact resource and preview reads
+
+`TenantAgentReadService.ReadResourceDetailAsync` returns `TenantAgentResourceDetail`: the safe Instance, one exact readable `TenantAgentResourceItem` and current security revision. It shares the permission-filtered catalog and typed manage/delete/copy hints with the paged resource editor, independently of that editor's filters or page. Missing/unreadable keys deny; dependencies include only independently readable Skills. Archived resources remain inspectable with no mutation hints.
+
+`ProjectResourceContentAsync<T>` composes the existing exact byte reader and a trusted server projection inside the same original-human/Instance/security fence. The caller's byte-limit function receives fresh authorized `InstanceResourceView` metadata before blob allocation; the owning service still verifies actual length/hash and current exact resource read after I/O. The final facade check runs after projection, so logout/replacement login, revocation and parent/security drift during Office processing cannot release the captured result. The projection callback and limit are server code, never request-selected authority. Ordinary downloads retain their existing byte limits and original bytes. No store/schema or provider DTO changes are introduced.
+
 ## Tenant Instance child editor reads
 
 `ReadSkillDetailAsync` supplies one exact readable Skill with safe Instance/current security witnesses and the same action hints, independently of list search/paging. It uses the shared filtered catalog under the original-human/final revision fence. Missing or unreadable keys deny without exposing a protected item. An open frontend draft can refresh this exact item without depending on the collection page.

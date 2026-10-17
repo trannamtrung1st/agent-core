@@ -33,10 +33,14 @@ public sealed partial class TenantAgentConfigurationService
         return new(snapshot.Agent, await SafeResourceViews(state, actor, tenant, id, visible.Items, ct).ConfigureAwait(false), state, visible.All);
     }
 
-    public async ValueTask<TenantAgentResourceContent> ReadResourceContentAsync(Guid actor, Guid tenant, Guid id, string key, CancellationToken ct = default)
+    public async ValueTask<TenantAgentResourceContent> ReadResourceContentAsync(Guid actor, Guid tenant, Guid id, string key, CancellationToken ct = default,
+        Func<InstanceResourceView, int>? maximumBytes = null)
     {
         var catalog = await ReadResourcesAsync(actor, tenant, id, ct).ConfigureAwait(false);
         var view = catalog.Catalog.Resources.SingleOrDefault(r => r.Key == key) ?? throw new AccessDeniedException("resource_unavailable");
+        // Evaluate a preview's limit against this fresh, authorized item before allocating its blob.
+        if (maximumBytes is not null && view.ByteLength > maximumBytes(view))
+            throw new AgentCoreException("preview_too_large", "The file exceeds its effective preview limit. Download the original.", 413);
         var bytes = await Content(view, ct).ConfigureAwait(false);
         await ChildReadState(actor, tenant, id, "resources.read", ct, key).ConfigureAwait(false);
         var current = await Snapshot(tenant, id, ct).ConfigureAwait(false);

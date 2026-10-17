@@ -31,7 +31,7 @@ public sealed partial class TenantAgentAccessTests
             ir = value.GetProperty("instanceRevision").GetInt64(); return value.GetProperty("resource");
         }
         var visibleSkill = await Skill("visible"); await Skill("private-sentinel");
-        var visibleResource = await File("regional/visible.txt"); await File("private-sentinel.txt");
+        var visibleResource = await File("regional/visible.txt"); var hiddenResource = await File("private-sentinel.txt");
         var before = await Revision(owner, tenant);
         foreach (var family in new[] { "skills", "resources" })
         {
@@ -74,6 +74,10 @@ public sealed partial class TenantAgentAccessTests
         Assert.Equal("Instance", skills.GetProperty("items")[0].GetProperty("skill").GetProperty("origin").GetString());
         Assert.Equal("OnDemand", skills.GetProperty("items")[0].GetProperty("skill").GetProperty("projection").GetString());
         Assert.False(resources.GetProperty("items")[0].GetProperty("canManage").GetBoolean()); Assert.True(resources.GetProperty("items")[0].GetProperty("canDelete").GetBoolean());
+        var resourceDetail = await Json(await member.GetAsync(agent + "/resources/" + Uri.EscapeDataString(visibleResource.GetProperty("key").GetString()!) + "/editor"));
+        Assert.Equal(resources.GetProperty("securityRevision").GetInt64(), resourceDetail.GetProperty("securityRevision").GetInt64());
+        Assert.Equal(resources.GetProperty("items")[0].GetRawText(), resourceDetail.GetProperty("item").GetRawText());
+        Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync(agent + "/resources/" + Uri.EscapeDataString(hiddenResource.GetProperty("key").GetString()!) + "/editor")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await member.GetAsync(root + "/roles")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await member.PostAsJsonAsync(agent + "/skills/commands", new { operation = "set_enabled", key = visibleSkill.GetProperty("key").GetString(), enabled = false,
             expectedRevision = skills.GetProperty("securityRevision").GetInt64(), expectedInstanceRevision = ir, expectedSkillRevision = visibleSkill.GetProperty("revision").GetInt64() })).StatusCode);
