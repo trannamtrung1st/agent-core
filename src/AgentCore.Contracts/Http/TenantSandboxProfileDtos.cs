@@ -7,3 +7,6 @@ public sealed record TenantSandboxProfileSaveRequest(long ExpectedRevision, long
     string Name, string Description, bool Enabled, string ImageReference, string? InitializationScript = null,
     double Cpu = 1, int MemoryMiB = 1024, int Pids = 64, int MaxCommandSeconds = 120, int IdleTtlSeconds = 1800,
     int MaxLifetimeSeconds = 7200, long StorageBytes = 250L * 1024 * 1024, Guid? RegistryCredentialId = null);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record TenantSandboxVerificationRequest(long ExpectedRevision, long ExpectedProfileRevision);

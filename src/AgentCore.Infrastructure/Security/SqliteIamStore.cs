@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore(IDbContextFactory<AgentCoreDbContext> contexts, IDefinitionResourceContentStore? definitionContent = null,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    TimeProvider? clock = null) : IIamStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
+    TimeProvider? clock = null) : IIamStore, ITenantSandboxVerificationStore, ITenantSandboxProfileStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore, ITenantOperationPolicyStore
 {
     public async ValueTask<Account?> FindAccountAsync(string loginKey, CancellationToken ct = default)
     { await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false); return await db.Set<Account>().AsNoTracking().SingleOrDefaultAsync(a => a.LoginKey == loginKey, ct).ConfigureAwait(false); }

@@ -56,7 +56,7 @@ public sealed partial class InMemorySandboxStore(InMemoryAdminEventStore? events
     {
         ct.ThrowIfCancellationRequested(); lock (_gate)
         {
-            if (_tenantProfiles.ContainsKey(verification.ProfileId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
+            if (verification.TenantId is not null || _tenantProfiles.ContainsKey(verification.ProfileId)) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
             if (!_profiles.ContainsKey((verification.ProfileId, verification.ProfileRevision))) throw AgentCoreErrors.NotFound("Verified profile revision was not found.");
             _verifications[(verification.ProfileId, verification.ProfileRevision)] = verification;
         }

@@ -247,7 +247,12 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
     {
         AgentCore.Infrastructure.Security.IamPersistenceModel.Configure(modelBuilder);
         modelBuilder.Entity<SandboxInstanceVerificationRow>(e => { e.ToTable("SandboxInstanceVerifications"); e.HasKey(r => new { r.InstanceId, r.InstanceRevision }); });
-        modelBuilder.Entity<SandboxVerificationRow>(e => { e.ToTable("SandboxProfileVerifications"); e.HasKey(r => new { r.ProfileId, r.ProfileRevision }); });
+        AgentCore.Infrastructure.Security.TenantSandboxVerificationRecord.Configure(modelBuilder);
+        modelBuilder.Entity<SandboxVerificationRow>(e => { e.ToTable("SandboxProfileVerifications", t => t.HasCheckConstraint("CK_SandboxVerification_TenantJson",
+                "(TenantId IS NULL AND AttemptId IS NULL AND json_extract(Json, '$.tenantId') IS NULL) OR (TenantId IS NOT NULL AND AttemptId IS NOT NULL AND json_type(Json, '$.tenantId') IS 'text' AND lower(json_extract(Json, '$.tenantId')) = lower(TenantId))"));
+            e.HasKey(r => new { r.ProfileId, r.ProfileRevision });
+            e.HasOne<AgentCore.Infrastructure.Security.TenantSandboxVerificationRecord>().WithMany().HasForeignKey(r => new { r.TenantId, r.ProfileId, r.ProfileRevision, r.AttemptId })
+                .HasPrincipalKey(r => new { r.TenantId, r.ProfileId, r.ProfileRevision, r.AttemptId }).OnDelete(DeleteBehavior.Restrict); });
         AgentCore.Infrastructure.Security.TenantSandboxProfileRecord.Configure(modelBuilder);
         modelBuilder.Entity<SandboxProfileRow>(e => { e.ToTable("SandboxProfiles", t => t.HasCheckConstraint("CK_SandboxProfiles_TenantJson", "(TenantId IS NULL AND json_extract(Json, '$.tenantId') IS NULL) OR (TenantId IS NOT NULL AND json_type(Json, '$.tenantId') IS 'text' AND lower(json_extract(Json, '$.tenantId')) = lower(TenantId))")); e.HasKey(r => new { r.Id, r.Revision });
             e.Property(r => r.SearchText).HasDefaultValue("");

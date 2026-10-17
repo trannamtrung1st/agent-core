@@ -21,7 +21,8 @@ namespace AgentCore.Infrastructure.Sandbox;
 /// <summary>One SDK adapter; authoritative files and durable ownership remain in Core.</summary>
 public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISandboxStore store,
     ISessionWorkspace workspace, IMemoryStore sessions, IAgentRunStore runs, TimeProvider time, IAgentInstanceStore? instances = null,
-    ILogger<OpenSandboxService>? logger = null, SandboxImageAuthority? imageAuthority = null, IAgentRunAuthority? runAuthority = null, IAgentDefinitionStore? definitions = null) : ISandboxService
+    ILogger<OpenSandboxService>? logger = null, SandboxImageAuthority? imageAuthority = null, IAgentRunAuthority? runAuthority = null, IAgentDefinitionStore? definitions = null, ITenantSandboxVerificationStore? tenantVerifications = null,
+    AgentCore.Application.Security.TenantSandboxImageAuthorization? verificationAuthority = null) : ISandboxService, ITenantSandboxVerifier
 {
     private SandboxImageAuthority Images => imageAuthority ?? new(options, store, time);
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gates = new();

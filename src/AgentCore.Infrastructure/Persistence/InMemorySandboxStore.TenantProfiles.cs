@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Definitions;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Infrastructure.Persistence;
 
@@ -20,6 +21,9 @@ public sealed partial class InMemorySandboxStore
             .OrderBy(p => p.Id, StringComparer.Ordinal).ToArray();
         return new(all.Skip(page * size).Take(size).ToArray(), all.Length, page, size);
     }
+    internal SandboxProfileVerification? TenantVerification(Guid tenant, string id, long revision) => OwnsTenantProfile(tenant, id)
+        && _verifications.GetValueOrDefault((id, revision)) is { } value && value.TenantId == tenant ? value : null;
+    internal void SaveTenantVerification(SandboxProfileVerification value) => _verifications[(value.ProfileId, value.ProfileRevision)] = value;
     internal bool SaveTenantProfile(TenantSandboxProfileRoot root, SandboxProfile value, long expected)
     {
         TenantSandboxProfileRules.Validate(root, value, expected);

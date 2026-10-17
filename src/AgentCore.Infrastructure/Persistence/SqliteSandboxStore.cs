@@ -9,7 +9,7 @@ using AgentCore.Application.Admin;
 namespace AgentCore.Infrastructure.Persistence;
 
 public sealed class SandboxProfileRow { public string SearchText { get; set; } = ""; public Guid? TenantId { get; set; } public string Id { get; set; } = ""; public long Revision { get; set; } public string Json { get; set; } = ""; }
-public sealed class SandboxVerificationRow { public string ProfileId { get; set; } = ""; public long ProfileRevision { get; set; } public string Json { get; set; } = ""; }
+public sealed class SandboxVerificationRow { public Guid? TenantId { get; set; } public Guid? AttemptId { get; set; } public string ProfileId { get; set; } = ""; public long ProfileRevision { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxInstanceVerificationRow { public string InstanceId { get; set; } = ""; public long InstanceRevision { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxLeaseRow { public string SessionId { get; set; } = ""; public string AgentInstanceId { get; set; } = ""; public long Revision { get; set; } public long ExpiresAt { get; set; } public int State { get; set; } public string Json { get; set; } = ""; }
 public sealed class SandboxExecutionRow { public string Id { get; set; } = ""; public string SessionId { get; set; } = ""; public string AgentRunId { get; set; } = ""; public string ToolCallId { get; set; } = ""; public string Json { get; set; } = ""; }
@@ -71,6 +71,7 @@ public sealed class SqliteSandboxStore(IDbContextFactory<AgentCoreDbContext> fac
     }
     public async ValueTask SaveVerificationAsync(SandboxProfileVerification verification, CancellationToken ct = default)
     {
+        if (verification.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
         await _gate.WaitAsync(ct);
         try
         {

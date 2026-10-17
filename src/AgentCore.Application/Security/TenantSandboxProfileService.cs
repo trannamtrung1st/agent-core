@@ -1,17 +1,18 @@
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Definitions;
 using AgentCore.Domain.Security;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Application.Security;
 
 public sealed record TenantSandboxProfileInput(string Name, string Description, bool Enabled, string ImageReference,
     string? InitializationScript = null, double Cpu = 1, int MemoryMiB = 1024, int Pids = 64, int MaxCommandSeconds = 120,
     int IdleTtlSeconds = 1800, int MaxLifetimeSeconds = 7200, long StorageBytes = 250L * 1024 * 1024, Guid? RegistryCredentialId = null);
-public sealed record TenantSandboxProfileView(SandboxProfile Profile, bool CanManage, long SecurityRevision);
+public sealed record TenantSandboxProfileView(SandboxProfile Profile, bool CanManage, long SecurityRevision, SandboxImageAvailability? Availability = null, SandboxProfileVerification? Verification = null);
 public sealed record TenantSandboxCatalog(IReadOnlyList<TenantSandboxProfileView> Items, int Total, int Page, int PageSize, bool CanCreate, bool AllReadable, long SecurityRevision);
 
 public sealed class TenantSandboxProfileService(IIamStore security, ITenantSandboxProfileStore profiles, IdentityService identity,
-    IamAuthorizer authorizer, ISandboxImageAuthority images, IIdGenerator ids, TimeProvider time)
+    IamAuthorizer authorizer, ISandboxImageAuthority images, IIdGenerator ids, TimeProvider time, ITenantSandboxVerificationStore? verifications = null, ISandboxReadiness? readiness = null)
 {
     public async ValueTask<TenantSandboxCatalog> ListAsync(Guid tenant, HumanSessionReference human,
         int page = 0, int pageSize = 30, string? search = null, CancellationToken ct = default)
@@ -29,7 +30,7 @@ public sealed class TenantSandboxProfileService(IIamStore security, ITenantSandb
         }
         var result = await profiles.ListTenantSandboxProfilesAsync(tenant, allowed, page, pageSize, query, ct).ConfigureAwait(false);
         var items = new List<TenantSandboxProfileView>();
-        foreach (var profile in result.Items) items.Add(new(profile, (await Check(state, human.PrincipalId, "sandbox.manage", TenantSandboxProfileRules.Scope(tenant, profile.Id), ct).ConfigureAwait(false)).Allowed, state.Tenant.Revision));
+        foreach (var profile in result.Items) items.Add(await Project(profile, (await Check(state, human.PrincipalId, "sandbox.manage", TenantSandboxProfileRules.Scope(tenant, profile.Id), ct).ConfigureAwait(false)).Allowed, state.Tenant.Revision, ct).ConfigureAwait(false));
         var create = all.Allowed && (await Check(state, human.PrincipalId, "sandbox.manage", AccessScope.ForTenant(tenant), ct).ConfigureAwait(false)).Allowed;
         await Fence(state, human, ct).ConfigureAwait(false);
         return new(items, result.Total, result.Page, result.PageSize, create, all.Allowed, state.Tenant.Revision);
@@ -41,8 +42,9 @@ public sealed class TenantSandboxProfileService(IIamStore security, ITenantSandb
         await Require(state, human.PrincipalId, "sandbox.read", scope, ct).ConfigureAwait(false);
         var value = await profiles.FindTenantSandboxProfileAsync(tenant, id, revision, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         var manage = (await Check(state, human.PrincipalId, "sandbox.manage", scope, ct).ConfigureAwait(false)).Allowed;
+        var result = await Project(value, manage, state.Tenant.Revision, ct).ConfigureAwait(false);
         await Fence(state, human, ct, scope).ConfigureAwait(false);
-        return new(value, manage, state.Tenant.Revision);
+        return result;
     }
     public async ValueTask<TenantSandboxProfileView> SaveAsync(Guid tenant, string? id, HumanSessionReference human, TenantSandboxProfileInput input,
         long expectedSecurityRevision, long expectedProfileRevision, CancellationToken ct = default)
@@ -67,7 +69,7 @@ public sealed class TenantSandboxProfileService(IIamStore security, ITenantSandb
             if (input.RegistryCredentialId is { } credential)
                 foreach (var key in new[] { "credentials.read", "credentials.bind", "credentials.use" })
                     await Require(state, human.PrincipalId, key, TenantCredentialRules.Scope(tenant, credential), ct).ConfigureAwait(false);
-            profile = await images.ResolveAsync(profile, new SandboxImageAuthorization(human, state.Tenant.Revision), ct).ConfigureAwait(false);
+            profile = await images.ResolveAsync(profile, new SandboxImageAuthorization(human, state.Tenant.Revision, expectedProfileRevision), ct).ConfigureAwait(false);
         }
         profile.Validate();
         var root = new TenantSandboxProfileRoot(tenant, profile.Id, time.GetUtcNow());
@@ -78,6 +80,14 @@ public sealed class TenantSandboxProfileService(IIamStore security, ITenantSandb
             new(ids.NewId(), tenant, human.PrincipalId, "sandbox.profile.save", profile.Id, "allowed", "sandbox_profile_changed", at), ct).ConfigureAwait(false))
             throw new SecurityConflictException("stale_revision");
         return new(profile, true, next.Tenant.Revision);
+    }
+    private async ValueTask<TenantSandboxProfileView> Project(SandboxProfile value, bool manage, long revision, CancellationToken ct)
+    {
+        var availability = await images.InspectAsync(value, ct).ConfigureAwait(false);
+        var observation = verifications is null ? null : (await verifications.ReadSandboxVerificationAsync(value.TenantId!.Value, value.Id, value.Revision, ct).ConfigureAwait(false)).Observation;
+        if (availability.Eligible && readiness is not null && readiness.State != "Ready")
+            availability = availability with { Eligible = false, Status = "ServerUnavailable", Message = "This saved revision is verified, but the private server is unavailable or disabled." };
+        return new(value, manage, revision, availability, observation);
     }
     private ValueTask<TenantSecurityState> Human(Guid tenant, HumanSessionReference human, CancellationToken ct) => TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, human, ct);
     private async ValueTask Fence(TenantSecurityState state, HumanSessionReference human, CancellationToken ct, AccessScope? scope = null, bool manage = false)

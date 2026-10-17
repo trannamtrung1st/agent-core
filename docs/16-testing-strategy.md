@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Sandbox disposable verification regression
+
+Through actual Synthetic HTTP create a saved profile, reject stale revision and unknown mode fields without a receipt/security write, verify with the actual disabled-host adapter, then read exact/latest facts and current availability. Anonymous, foreign, legacy/global, exact read-only and revoked callers must fail at their own boundary; result projections omit internal human, Credential epoch, host and cleanup proof. Image-only stays distinct from full verification.
+
+Use both actual InMemory/SQLite adapters and disposable reopen for full/image evidence, original logout/replacement login during dispatch, changed Credential epochs, overlapping claims, expired leases, late completion, malformed/foreign evidence, host mapping invalidation and explicit fresh recovery. Assert no retired/image-only promotion, no initialization replay and no script/secret content in audit. A real SDK loopback cleanup fixture checks zero RPC for wrong ownership/nonce/host, technical cleanup after logout, exact disposable directory purge and sibling retention. Keep affected OCI source, registry probe, Sandbox store/API and cleanup regressions. Scripted success is application/store evidence, not proof of live Docker mount or initialization compatibility. [Executed evidence](reports/tenant-sandbox-verification-2026-10-18.md).
+
 ## Tenant Sandbox profile catalog regression
 
 Exercise canonical Synthetic HTTP create/read/history/search/update, no-store, anonymous/owner-token/foreign denial, strict unexpected ownership fields, stale-write rejection and explicit current save. Exact profile grants must work through the real assignment route, filter before count/paging, permit only their item and never grant sibling creation or agent execution.

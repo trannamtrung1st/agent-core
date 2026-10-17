@@ -4,7 +4,7 @@ namespace AgentCore.Application.Ports;
 
 public sealed record SandboxImageAvailability(string Status, string Message, bool Eligible,
     long? CredentialRevision = null, long? SecretRevision = null);
-public sealed record SandboxImageAuthorization(HumanSessionReference Human, long SecurityRevision);
+public sealed record SandboxImageAuthorization(HumanSessionReference Human, long SecurityRevision, long? ExpectedProfileRevision = null);
 
 /// <summary>Safe current host/source authority. Protected values and SDK auth stay in Infrastructure.</summary>
 public interface ISandboxImageAuthority

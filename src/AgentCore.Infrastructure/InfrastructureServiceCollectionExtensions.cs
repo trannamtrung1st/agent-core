@@ -66,12 +66,14 @@ public static class InfrastructureServiceCollectionExtensions
             options.CanonicalWorkspaceRoot = persistence.WorkspaceRoot;
             options.ValidatePolicy(); return options;
         });
+        services.TryAddSingleton<ISandboxVerificationHost, SandboxVerificationHost>();
         services.TryAddSingleton<SandboxImageAuthority>();
         services.TryAddSingleton<ISandboxImageAuthority>(provider => provider.GetRequiredService<SandboxImageAuthority>());
         services.TryAddSingleton<ISandboxStore>(provider => string.Equals(persistence.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase)
             ? new SqliteSandboxStore(provider.GetRequiredService<IDbContextFactory<AgentCoreDbContext>>()) : new InMemorySandboxStore(provider.GetRequiredService<InMemoryAdminEventStore>()));
         services.TryAddSingleton<OpenSandboxService>();
         services.TryAddSingleton<ISandboxService>(provider => provider.GetRequiredService<OpenSandboxService>());
+        services.TryAddSingleton<ITenantSandboxVerifier>(provider => provider.GetRequiredService<OpenSandboxService>());
         services.TryAddSingleton<OpenSandboxReadiness>();
         services.TryAddSingleton<ISandboxReadiness>(provider => provider.GetRequiredService<OpenSandboxReadiness>());
         if (speech is not null)

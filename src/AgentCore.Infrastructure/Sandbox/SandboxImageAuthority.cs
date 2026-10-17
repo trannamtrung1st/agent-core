@@ -10,7 +10,7 @@ namespace AgentCore.Infrastructure.Sandbox;
 
 public sealed class SandboxImageAuthority(OpenSandboxOptions options, ISandboxStore profiles, TimeProvider time,
     ICredentialStore? credentials = null, ICredentialProtector? protector = null, ITenantCredentialStore? tenantCredentials = null,
-    TenantSandboxImageAuthorization? tenantAuthorization = null) : ISandboxImageAuthority
+    TenantSandboxImageAuthorization? tenantAuthorization = null, ITenantSandboxVerificationStore? tenantVerifications = null, ISandboxVerificationHost? verificationHost = null) : ISandboxImageAuthority
 {
     public ValueTask<SandboxProfile> ResolveAsync(SandboxProfile profile, CancellationToken ct = default)
     {
@@ -57,9 +57,12 @@ public sealed class SandboxImageAuthority(OpenSandboxOptions options, ISandboxSt
         }
         if (!requireVerification) return new("SourceAuthorized", "Source authority is valid; image compatibility still requires a disposable check.", false, revision, secretRevision);
         if (!profile.Enabled) return new("Disabled", "Profile is disabled. Enabling appends a revision that requires verification.", false, revision, secretRevision);
-        // Owned profile verification is supplied by its canonical tenant operation, never a global observation.
-        var observation = profile.TenantId is null ? await profiles.GetVerificationAsync(profile.Id, profile.Revision, ct) : null;
-        if (observation?.ContractVersion != SandboxProfileVerification.CurrentContractVersion || observation.RegistryCredentialId != profile.RegistryCredentialId
+        var evidence = profile.TenantId is { } tenant && tenantVerifications is not null
+            ? await tenantVerifications.ReadSandboxVerificationAsync(tenant, profile.Id, profile.Revision, ct) : null;
+        if (evidence?.Pending == true) return new("VerificationPending", "Verification or exact cleanup is still in progress. Wait for cleanup before another attempt.", false, revision, secretRevision);
+        var observation = profile.TenantId is null ? await profiles.GetVerificationAsync(profile.Id, profile.Revision, ct) : evidence?.Observation;
+        if (observation?.ContractVersion != SandboxProfileVerification.CurrentContractVersion || observation.TenantId != profile.TenantId || !observation.IncludesInitialization
+            || profile.TenantId is not null && (verificationHost is null || observation.HostScope != verificationHost.Scope) || observation.RegistryCredentialId != profile.RegistryCredentialId
             || observation.RegistryCredentialRevision != revision || observation.RegistrySecretRevision != secretRevision)
             return new("NeedsVerification", "Verify this exact saved revision under current source authority before using commands.", false, revision, secretRevision);
         return observation.Passed ? new("Eligible", "Verified for the current image and credential revision.", true, revision, secretRevision)

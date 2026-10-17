@@ -2,6 +2,7 @@ using AgentCore.Application.Security;
 using AgentCore.Application.Ports;
 using AgentCore.Contracts.Http;
 using AgentCore.Domain.Security;
+using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Api.Security;
 
@@ -23,7 +24,29 @@ public static class TenantSandboxProfileEndpoints
         }));
         group.MapPost("", (TenantSandboxProfileSaveRequest body, HttpContext http, TenantSandboxProfileService service, CancellationToken ct) => Save(null, body, http, service, ct));
         group.MapPut("/{profileId}", (string profileId, TenantSandboxProfileSaveRequest body, HttpContext http, TenantSandboxProfileService service, CancellationToken ct) => Save(profileId, body, http, service, ct));
+        group.MapGet("/{profileId}/verification", (string profileId, HttpContext http, TenantSandboxVerificationService service, CancellationToken ct) => ReadVerification(profileId, null, http, service, ct));
+        group.MapGet("/{profileId}/verification/{attemptId:guid}", (string profileId, Guid attemptId, HttpContext http, TenantSandboxVerificationService service, CancellationToken ct) => ReadVerification(profileId, attemptId, http, service, ct));
+        group.MapPost("/{profileId}/verify", (string profileId, TenantSandboxVerificationRequest body, HttpContext http, TenantSandboxVerificationService service, CancellationToken ct) => Verify(profileId, false, body, http, service, ct));
+        group.MapPost("/{profileId}/check-image", (string profileId, TenantSandboxVerificationRequest body, HttpContext http, TenantSandboxVerificationService service, CancellationToken ct) => Verify(profileId, true, body, http, service, ct));
     }
+    private static Task<IResult> ReadVerification(string id, Guid? attemptId, HttpContext http, TenantSandboxVerificationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+    {
+        var actor = IdentityHttp.TenantContext(http);
+        return Results.Json(SafeVerification(await service.ReadAsync(actor.TenantId, id, Human(http), attemptId, ct).ConfigureAwait(false)));
+    });
+    private static Task<IResult> Verify(string id, bool imageOnly, TenantSandboxVerificationRequest body, HttpContext http, TenantSandboxVerificationService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+    {
+        var actor = IdentityHttp.TenantContext(http);
+        return Results.Json(SafeVerification(await service.VerifyAsync(actor.TenantId, id, Human(http), body.ExpectedRevision, body.ExpectedProfileRevision, imageOnly, ct).ConfigureAwait(false)));
+    });
+    private static object SafeVerification(TenantSandboxVerificationView view)
+    {
+        var a = view.Attempt;
+        return new { attempt = a is null ? null : new { a.AttemptId, a.ProfileId, a.ProfileRevision, a.ImageOnly, status = a.Status.ToString(), a.StartedAt,
+            a.Active, accepted = a.Status == SandboxVerificationStatus.Succeeded && !a.ImageOnly, result = a.Result is null ? null : Verification(a.Result) }, view.CurrentProfileRevision, view.SecurityRevision };
+    }
+    private static SandboxSetupVerificationResponse Verification(SandboxProfileVerification r) => new(r.Passed, r.Message, r.ProfileId, r.ProfileRevision, null, r.VerifiedAt,
+        r.ExitCode, r.Stdout, r.Stderr, r.Truncated, r.DurationMs, r.DiagnosticId);
     private static Task<IResult> Save(string? id, TenantSandboxProfileSaveRequest body, HttpContext http, TenantSandboxProfileService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
     {
         var actor = IdentityHttp.TenantContext(http);
@@ -41,8 +64,9 @@ public static class TenantSandboxProfileEndpoints
     {
         var p = value.Profile;
         return new { profile = new SandboxProfileResponse(p.Id, p.Revision, p.Name, p.Description, p.Enabled, p.ImageReference, p.InitializationScript,
-            p.Cpu, p.MemoryMiB, p.Pids, p.MaxCommandSeconds, p.IdleTtlSeconds, p.MaxLifetimeSeconds, p.StorageBytes, null, null,
-            RegistryCredentialId: p.RegistryCredentialId, Availability: p.Enabled ? "NeedsVerification" : "Disabled",
-            AvailabilityMessage: "Catalog configuration does not authorize execution. Tenant verification and Instance selection are separate operations."), value.CanManage, value.SecurityRevision };
+            p.Cpu, p.MemoryMiB, p.Pids, p.MaxCommandSeconds, p.IdleTtlSeconds, p.MaxLifetimeSeconds, p.StorageBytes, value.Verification?.VerifiedAt, value.Verification?.Message,
+            Verification: value.Verification is null ? null : Verification(value.Verification), RegistryCredentialId: p.RegistryCredentialId,
+            Availability: !p.Enabled ? "Disabled" : value.Availability?.Status ?? "NeedsVerification",
+            AvailabilityMessage: value.Availability?.Message ?? "Catalog configuration grants no execution authority."), value.CanManage, value.SecurityRevision };
     }
 }

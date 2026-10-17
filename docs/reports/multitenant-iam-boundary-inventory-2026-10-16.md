@@ -2,6 +2,12 @@
 
 Baseline `38b8288230854b9044b69100c4f99bb4c259d2d1`, clean checkout. Every row below is a cutover obligation, **not an enforcement claim**. [Delivery status](multitenant-iam-delivery-2026-10-16.md).
 
+## Sandbox disposable verification successor — 2026-10-18
+
+The [focused verification evidence](tenant-sandbox-verification-2026-10-18.md) extends the reusable catalog with canonical exact/latest attempt reads and explicit full/image-only checks. Actual IAM/profile stores own durable reservation, original-human/source/host/lease acceptance and technical nonce/revision cleanup. The existing SDK runner reuses bounded disposable checks with combined tenant/attempt metadata; an independent worker cleans exact receipts without rerunning initialization. Global verification cannot consume owned profiles or supply their accepted evidence.
+
+This supersedes the catalog checkpoint's disposable **profile** verification pending statement only. Instance setup verification/selection, Session generations/commands/process/reset/mounts and cleanup, every runtime `sandbox.*` tool, readiness/options UI and final legacy authority/schema removal remain obligations. Loopback SDK cleanup is exercised; live Docker full initialization/attestation is not accepted. No full boundary inventory or proposal acceptance is claimed.
+
 ## Sandbox catalog successor — 2026-10-18
 
 The [focused Sandbox profile evidence](tenant-sandbox-profiles-verification-2026-10-18.md) advances only the reusable human catalog boundary. [TenantSandboxProfileEndpoints](../../src/AgentCore.Api/Security/TenantSandboxProfileEndpoints.cs) supplies canonical collection GET/POST and exact current/historical GET/PUT under `/api/v2/tenants/{tenantId}/sandbox-profiles`. `TenantSandboxProfileService`, `ITenantSandboxProfileStore` and the actual InMemory/SQLite IAM adapters own profile tenancy, filtered search/count/paging, exact read/manage, original-human post-I/O/commit fences, immutable revisions and atomic security/audit. Registry preparation additionally requires current scoped Credential read/bind/use and original-human proof before protected dispatch. Existing global catalog/write/verification methods exclude or reject owned IDs.

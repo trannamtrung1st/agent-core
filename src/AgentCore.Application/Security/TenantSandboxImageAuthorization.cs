@@ -13,6 +13,7 @@ public sealed class TenantSandboxImageAuthorization(IIamStore security, ITenantS
         if (profile.TenantId is not { } tenant || tenant == Guid.Empty) throw new AccessDeniedException("tenant_scope_required");
         var state = await TenantHumanSessionAuthority.RequireAsync(security, identity, tenant, proof.Human, ct).ConfigureAwait(false);
         var existing = await profiles.FindTenantSandboxProfileAsync(tenant, profile.Id, ct: ct).ConfigureAwait(false);
+        if (proof.ExpectedProfileRevision is { } revision && (existing?.Revision ?? 0) != revision) throw new SecurityConflictException("stale_revision");
         var target = existing is null ? AgentCore.Domain.Security.AccessScope.ForTenant(tenant) : TenantSandboxProfileRules.Scope(tenant, profile.Id);
         foreach (var key in new[] { "sandbox.read", "sandbox.manage" })
             await authorizer.RequireAsync(proof.Human.PrincipalId, key, target, ct).ConfigureAwait(false);
