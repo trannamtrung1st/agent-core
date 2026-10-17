@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Instance version UI focused regression
+
+Use component tests for explicit reviewed witnesses, stale/mixed preview rejection, target retention, acknowledged-response read recovery without replay, read-only/partial detail, transient retry, selection/paging invalidation and late-scope abort. The existing administrative adoption case covers the shared change-summary consumer. Build the frontend.
+
+`pnpm run test:e2e:tenant-instance-version` uses isolated Synthetic hosts with free `TENANT_CHAT_API_PORT`/`TENANT_CHAT_WEB_PORT`. It covers twelve-version paging at 320px, guarded navigation, Escape/Cancel and post-attempt focus, stale save/reload/new review, explicit adoption with preserved settings, independent source permission, exact read-only preview without IAM-inspector requests and revocation during re-preview. Canonical browser traffic must not issue owner-capability/global-admin requests. Keep Preview's accessible name stable while its native loading icon changes. Playwright MCP additionally checks real mouse interactions, shared administrative preview, archived/read-only/denied views, long inherited keys and 1440/1024/768/390/320 containment. [Executed evidence](reports/tenant-instance-version-ui-verification-2026-10-18.md) does not claim full proposal/milestone acceptance.
+
 ## Tenant version review backend regression
 
 Verify exact-source, bounded version catalogs and non-mutating previews through the original-human agent read facade. Include InMemory/SQLite preview→explicit adoption→reopen, retained overrides, changed management defaults, independently scoped child visibility, required owned-Definition read, deprecated targets, invalid pages/versions, incompatible retained configuration and non-mutating Automation planning. HTTP checks exercise catalog/preview, stale reviewed witnesses, explicit refreshed adoption, foreign and unauthenticated access, no-store, scoped reader/revocation and logout/relogin during protected I/O. Existing administrative preview consumers retain shared pure-diff coverage. This backend prerequisite does not establish the tenant version UI or full proposal acceptance.

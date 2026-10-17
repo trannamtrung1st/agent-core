@@ -1,3 +1,4 @@
+import { InstanceVersionChanges } from './InstanceVersionChanges';
 import { InstancePersonaFields } from './InstancePersonaFields';
 import { useInstanceConfigurationEditor } from './InstanceConfigurationActions';
 import { Alert, App, Button, Flex, Select, Tag, Typography } from "antd";
@@ -173,15 +174,7 @@ export function InstanceManagedControls({
       if (preview.instanceRevision !== config.instanceRevision) throw new Error("Instance changed. Reload and preview again.");
       confirmAction(modal, {
         title: `Adopt Definition v${version}?`,
-        content: <Flex vertical gap={8}>
-          <Typography.Paragraph>{preview.activationNotice}</Typography.Paragraph>
-          <Typography.Text>Changed defaults: {preview.changedDefinitionFields.join(', ') || 'None'}</Typography.Text>
-          <Typography.Text>Preserved Instance overrides: {preview.preservedInstanceOverrides.join(', ') || 'None'}</Typography.Text>
-          <Typography.Text>New inherited items: {preview.newInheritedItems.join(', ') || 'None'}</Typography.Text>
-          <Typography.Text>Changed inherited items: {preview.changedInheritedItems?.join(', ') || 'None'}</Typography.Text>
-          <Typography.Text>Removed inherited items: {preview.removedInheritedItems.join(', ') || 'None'}</Typography.Text>
-          <Typography.Text>Compatible Skill enablement choices, local resources and class budget overrides are retained.</Typography.Text>
-        </Flex>, okText: 'Adopt version', onOk: async () => {
+        content: <InstanceVersionChanges preview={preview} />, okText: 'Adopt version', onOk: async () => {
           await updateAdminAgentInstanceActiveVersion(ownerId, preview.instanceRevision, version);
           message.success(`Instance adopted v${version}.`); onUpdated();
         }

@@ -1,6 +1,14 @@
 # Frontend Implementation Specification
 
-The tenant version-review backend supplies exact-source `/versions` and `/active-version/preview` reads with original-human/revision fences and filtered child details. The separate tenant version page is still pending; implement the [version interaction contract](19-multi-tenant-iam-ux.md#instance-definition-version-interaction-contract) using these reads and the existing explicit adoption command. Backend verification does not establish browser acceptance.
+## Tenant Instance Definition version
+
+`/t/{tenantId}/admin/agents/{instanceId}/version` uses `TenantAgentVersion` with the original-human catalog/preview and existing explicit adoption command. Current identity/version uses `TenantAgentHeading`; the exact source ID remains in native disclosure. Ten-item source pages expose real Active/Deprecated choices. Paging clears the prior selection/review; current/deprecated versions cannot be selected, and no implicit latest or free numeric version is used. Read-only users can preview when source read is available; archived Instances explain their restriction.
+
+`InstanceVersionChanges` shares readable default/override labels, inherited keys and activation guidance with the existing administrative confirmation. Item keys wrap through the existing owning class; partial child access explains filtered detail without asserting hidden counts. Preview must match the displayed catalog's security/Instance witnesses and the exact selected target. Selection, reload, failed command and scope retirement invalidate the old preview. Stale commands retain the target for Reload/new review; acknowledged writes retire it and recover by read alone without replay.
+
+Exact-target confirmation names agent, organization and current/target versions. Cancel/Escape returns focus to the enabled opener; a submitted attempt retires that preview and returns focus to Reload. Preview retains a stable accessible name through its loading icon. Scoped cancellation/epoch checks prevent retired results or confirmations from acting in another Instance. Existing bounded panels, Ant Design controls and token-owned spacing remain unchanged. [Interaction contract](19-multi-tenant-iam-ux.md#instance-definition-version-interaction-contract), [executed verification](reports/tenant-instance-version-ui-verification-2026-10-18.md). Skills/resources and broader tenant cutover remain separate obligations.
+
+The tenant version-review backend supplies exact-source `/versions` and `/active-version/preview` reads with original-human/revision fences and filtered child details. The frontend successor above implements the [version interaction contract](19-multi-tenant-iam-ux.md#instance-definition-version-interaction-contract) using these reads and the existing explicit adoption command. Its browser evidence remains separate from backend verification.
 
 ## Tenant Instance execution controls
 

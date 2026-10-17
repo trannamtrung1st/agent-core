@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-17T17:32:43.759919+00:00",
+  "generatedAt": "2026-10-17T18:17:49.644612+00:00",
   "title": "Design System: Agent Core",
   "extensions": {
     "colorMeta": {
@@ -449,6 +449,29 @@
         "captureReview": "Parent implementation reviewer and fresh finish reviewer each individually opened all 18 current captures. Three canonical pages, shared heading and native field/layout reuse, 16px parent section gap/48rem bound, responsive wrapping through 320px. Report owns exact runtime and verification outcomes; documentation pass took no captures and ran no app checks.",
         "visualAcceptanceLimits": "Loading, denied, archived, error and stale states were not visually accepted from the current captures. Functional recovery and authority boundaries are separately scoped by the verification report.",
         "openScope": "Version adoption, Skills/resources, tenant Sandbox cutover, other resource/effect families, voice/rich delivery, autonomous origins and final obsolete-authority/schema consolidation."
+      },
+      "definitionVersionDocumentationRefresh": {
+        "refreshedAt": "2026-10-17T18:17:49.644612+00:00",
+        "scope": "Bounded October 18 merge of tenant Instance Definition version review/adoption presentation and shared legacy change facts. Normative frontmatter tokens, component previews, prior source hashes and provenance, and global buildPath remain unchanged. No broad drift repair, re-extraction or runtime acceptance was performed by this documentation pass.",
+        "sourceSha256": {
+          ".agents/context/DESIGN.md": "c1077f2c68b3cbd1b2fded0960f173f760ca71492ef95f7a88465ae4f8431f72",
+          ".agents/context/PRODUCT.md": "9843c30fc52ae872b6d53495cbc94e6f07d9eb859a2529fc399f1691b48f3ff8",
+          ".impeccable/surfaces/web-src-features-access-tenantagentversion-tsx.md": "8c539b49a3e50b88ba05123a5192ce1642db08e56ed78e378382c6f9f280a440",
+          "web/src/features/access/TenantAgentVersion.tsx": "f00e5e00a2de5071a1f9f751f8d977ffc1af55daca8574258c0fb69c67d05227",
+          "web/src/features/access/TenantAgentHeading.tsx": "0139d069f8516c078c4a6ae608a92f0b26cebe4ae57abd8eedc56745e6c27904",
+          "web/src/features/admin/InstanceVersionChanges.tsx": "a7ed9c4c6c372842d131f6767523a4152e20e5b144507cd12f0f1e48173fe449",
+          "web/src/features/admin/InstanceProfile.tsx": "5059180aabd4b27cb738c8e5d1a42cf14f0b6c9f5ab48d385902f8834deb637a",
+          "web/src/features/admin/AgentConfigurationLayout.tsx": "b36bde3bb2f8a11cc14abb20f29df25656b9ee2ee5490b1663d724513589e73b",
+          "web/src/app.css": "3b86dd330de8b074f0bc2f5231e8caac428147e8e9d1a56a2485495a46b63a5f",
+          "web/src/app/antdTheme.ts": "64f582375261f51bb82b2041b8fef9f872e13929b309ad3978011619f5ac2e66"
+        },
+        "evidenceRecords": [
+          "docs/reports/tenant-instance-version-ui-verification-2026-10-18.md"
+        ],
+        "captureDirectory": ".playwright-mcp/tenant-version-ui-20261018",
+        "captureReview": "Implementation and fresh finish reviewers inspected all 19 existing current captures: top/lower review at 1440/1024/768/390/320px, desktop/narrow confirmation and legacy shared preview, 320px archived, desktop/narrow read-only and 320px revoked-source. Existing 48rem column, 16px section gap, compact headings/actions and full key wrapping; no horizontal page overflow at the five review widths. Documenter sampled shipped source and took no new captures or app checks.",
+        "visualAcceptanceLimits": "Loading, transient errors, malformed acknowledgements and stale presentation were not visually accepted from these captures. Functional checks, malformed-ack recovery and stale/revocation journeys are separately scoped by the verification report.",
+        "openScope": "Skills/resources UI, Sandbox/resource/effect families, voice/rich delivery, autonomous origins and obsolete-authority/schema consolidation. Full proposal remains active; no CI or milestone acceptance is claimed."
       }
     }
   },

@@ -1,5 +1,5 @@
 import type { AdminAgentInstance, ExecutionBudgetPolicy, ExecutionBudgetLimits, SelfManagementView } from './adminApi';
-import type { SettingsSection, SettingValue } from './instanceConfiguration';
+import type { SettingsSection, SettingValue, VersionPreview } from './instanceConfiguration';
 import { identityRequest, tenantApi } from './identity';
 
 export type TenantAgentEditor = { agent: { principalId: string; systemIdentityId: string; instance: AdminAgentInstance & { persona: { name: string; role: string; description: string; tone: string } } }; settings: SettingsSection[]; securityRevision: number; canUpdate: boolean; unavailableSettings: string[] };
@@ -15,3 +15,7 @@ export async function patchTenantAgentSettings(tenant: string, id: string, secti
     body: { expectedRevision: section.securityRevision, expectedInstanceRevision: section.instanceRevision, set, clear } });
   return { ...section, instanceRevision: saved.instance.revision, securityRevision: saved.securityRevision };
 }
+
+export type TenantAgentVersion = { version: number; status: string; metadataRevision: number | null };
+export type TenantAgentVersionCatalog = Pick<TenantAgentEditor, 'agent' | 'securityRevision'> & { items: TenantAgentVersion[]; total: number; page: number; pageSize: number; canAdopt: boolean };
+export type TenantAgentVersionPreview = { preview: VersionPreview; securityRevision: number; targetPublicationRevision: number | null; canAdopt: boolean; childAccess: { skills: boolean; resources: boolean; allSkills: boolean; allResources: boolean } };
