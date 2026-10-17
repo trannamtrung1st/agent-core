@@ -14,7 +14,7 @@ public static class BackgroundSessionAdmissionFactory
             objective, null, EntryStatus.Completed, SessionMode.Text, 0, objective.Length, now);
         var key = $"background:{toolCallId}";
         var activation = new Activation(activationId, sessionId, ActivationKind.ImmediateBackground, [entryId],
-            entry.SourceEventId, null, parent.SessionId, source.AgentRunId, key, now);
+            entry.SourceEventId, null, parent.SessionId, source.AgentRunId, key, now, source.Admission.Activation.RootActivationId, source.ActivationId);
         var configuration = resolved?.Configuration ?? source.Admission.Configuration ?? new(parent.Definition, 0, parent.PinnedPersonaRevision ?? 0, []);
         var persona = resolved?.Persona ?? source.PinnedPersona;
         var model = currentModel ?? source.PinnedModel;
@@ -41,7 +41,7 @@ public static class BackgroundSessionAdmissionFactory
         AgentRunModelPin model, IReadOnlyList<EffectiveSkill> skills, string key, string objective, string title, DateTimeOffset now, AgentRunConfiguration? configuration = null)
     {
         var entry = new ConversationEntry(entryId, 1, activationId, ConversationRole.User, objective, null, EntryStatus.Completed, SessionMode.Text, 0, objective.Length, now);
-        var activation = new Activation(activationId, sessionId, ActivationKind.ManualBackground, [entryId], activationId, null, null, null, key, now);
+        var activation = Activation.Start(activationId, sessionId, ActivationKind.ManualBackground, [entryId], activationId, null, null, null, key, now);
         var run = AgentRun.Create(runId, new(instance.InstanceId, profileId), new(activation, definition.Id, definition.Version, persona, responseId, AgentRunOutputContract.BackgroundOutcome,
                 ExecutionBudgetResolver.Resolve(definition, instance.ExecutionBudgets, false), configuration ?? new(definition, 0, instance.PersonaRevision, []), taskIntent: new(objective, AgentRunTaskSource.AgentRun, instance.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture))),
             model, AgentRunLimits.DefaultMaxAttempts, now, skills, skills.Where(skill => skill.Projection == SkillProjection.Always).Select(skill => skill.Key).ToArray());
@@ -73,7 +73,7 @@ public static class BackgroundSessionAdmissionFactory
             + $"Task and trigger evidence:\n{occurrence.EvidenceJson}";
         var entry = new ConversationEntry(entryId, 1, occurrence.SourceEventId, ConversationRole.User,
             text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, admittedAtUtc);
-        var activation = new Activation(activationId, sessionId, kind, [entryId], occurrence.SourceEventId,
+        var activation = Activation.Start(activationId, sessionId, kind, [entryId], occurrence.SourceEventId,
             occurrence.OccurrenceId, null, null, occurrence.DedupeKey, admittedAtUtc, occurrence.EvidenceJson);
         var run = AgentRun.Create(agentRunId,
             new AgentRunOwner(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),

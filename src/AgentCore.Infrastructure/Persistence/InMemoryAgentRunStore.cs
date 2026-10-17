@@ -170,6 +170,7 @@ public sealed partial class InMemoryAgentRunStore : IAgentRunStore
                 && sourceSession.Status is not (SessionStatus.Ended or SessionStatus.Ending)
                 && !SessionLifecycle.IsTerminal(sourceSession.LifecycleStatus)
                 && sourceSession.AgentInstanceId == run.AgentInstanceId && sourceSession.ProfileId == run.ProfileId);
+            AgentRunStoreMapping.ValidateLineage(run, source);
             if (run.Admission.Activation.SourceEntryIds.Any(id => State.BySourceEntry.ContainsKey((run.SessionId, id))))
                 throw AgentCoreErrors.Conflict("Accepted input is already owned by another Activation.");
             // This synchronous store shares the gate. Validation completes before either graph is committed.

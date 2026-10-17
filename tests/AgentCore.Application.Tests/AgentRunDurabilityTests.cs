@@ -269,6 +269,9 @@ public sealed partial class AgentRunDurabilityTests
         var childRun = Assert.Single(await runs.ListForSessionAsync(owner, childId));
         Assert.Equal(AgentRunStatus.Queued, childRun.Status);
         Assert.Equal(ActivationKind.ImmediateBackground, childRun.Admission.Activation.Kind);
+        var parentRun = Assert.Single(await runs.ListForSessionAsync(owner, runtime.SessionId));
+        Assert.Equal(parentRun.ActivationId, childRun.Admission.Activation.RootActivationId);
+        Assert.Equal(parentRun.ActivationId, childRun.Admission.Activation.ParentActivationId);
         Assert.Equal(AgentRunStatus.Completed, Assert.Single(await runs.ListForSessionAsync(owner, runtime.SessionId)).Status);
         var now = time.GetUtcNow();
         childRun = await runs.ApplyAsync(owner, childRun.AgentRunId, new AgentCore.Application.Execution.AgentRunCommand.Claim(
@@ -290,6 +293,8 @@ public sealed partial class AgentRunDurabilityTests
         await runtime.WaitUntilIdleAsync();
         Assert.Empty(await runs.ListUnreportedCompletionsAsync(8));
         var report = Assert.Single(await runs.ListForSessionAsync(owner, runtime.SessionId), item => item.Admission.Activation.Kind == ActivationKind.BackgroundCompleted);
+        Assert.Equal(parentRun.ActivationId, report.Admission.Activation.RootActivationId);
+        Assert.Equal(childRun.ActivationId, report.Admission.Activation.ParentActivationId);
         report = await runs.ApplyAsync(owner, report.AgentRunId, new AgentCore.Application.Execution.AgentRunCommand.Claim(
             report.Revision, now, Guid.NewGuid(), now.AddMinutes(5)));
         Assert.True(await runtime.DispatchAgentRunAsync(report.AgentRunId, headless: false));
@@ -300,6 +305,9 @@ public sealed partial class AgentRunDurabilityTests
         Assert.True(await childRuntime.SubmitPersistedUserTextAsync("Continue the completed task", Guid.NewGuid()));
         await childRuntime.WaitUntilIdleAsync();
         Assert.Empty(await runs.ListUnreportedCompletionsAsync(8));
+        var nextUserTurn = Assert.Single(await runs.ListForSessionAsync(owner, childRun.SessionId), run => run.Admission.Activation.Kind == ActivationKind.UserTurn);
+        Assert.Equal(nextUserTurn.ActivationId, nextUserTurn.Admission.Activation.RootActivationId);
+        Assert.NotEqual(childRun.Admission.Activation.RootActivationId, nextUserTurn.Admission.Activation.RootActivationId);
         Assert.Equal(2, (await runs.ListForSessionAsync(owner, runtime.SessionId)).Count);
     }
 
@@ -352,7 +360,7 @@ public sealed partial class AgentRunDurabilityTests
             SessionMode.Text, null, SessionStatus.Created, [input], "", 0, null, null, now, now,
             AgentInstanceId: Guid.NewGuid(), ModelSelection: new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.Host, null),
             Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId), Surfaces: SessionSurface.BackgroundWork));
-        var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId],
+        var activation = Activation.Start(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId],
             input.SourceEventId, null, null, null, "manual:test", now);
         var run = AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value),
             new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId, AgentRunOutputContract.BackgroundOutcome, configuration: new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, [])),
@@ -399,7 +407,7 @@ public sealed partial class AgentRunDurabilityTests
             SessionMode.Text, null, SessionStatus.Created, [input], "", 0, null, null, now, now,
             AgentInstanceId: Guid.NewGuid(), ModelSelection: new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.Host, null),
             Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId), Surfaces: SessionSurface.BackgroundWork));
-        var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId],
+        var activation = Activation.Start(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId],
             input.SourceEventId, null, null, null, "manual:test", now);
         var run = AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value),
             new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, responseId, AgentRunOutputContract.BackgroundOutcome, configuration: new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, [])),

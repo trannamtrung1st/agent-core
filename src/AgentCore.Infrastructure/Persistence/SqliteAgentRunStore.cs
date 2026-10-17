@@ -148,6 +148,12 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
                 && sourceSession.AgentInstanceId == run.AgentInstanceId.ToString("D")
                 && sourceSession.Snapshot?.ProfileId == run.ProfileId.ToString("D"));
         }
+        if (run.Admission.Activation.ParentActivationId is not null)
+        {
+            var parentId = run.Admission.Activation.SourceAgentRunId!.Value.ToString("D");
+            var parentRow = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(row => row.AgentRunId == parentId, cancellationToken).ConfigureAwait(false);
+            AgentRunStoreMapping.ValidateLineage(run, parentRow is null ? null : AgentRunStoreMapping.ToDomain(parentRow));
+        }
         if (run.Admission.Activation.Kind == ActivationKind.ImmediateBackground)
         {
             var rows = await db.AgentRuns.AsNoTracking().Where(row => row.AgentInstanceId == run.AgentInstanceId.ToString("D")
@@ -220,7 +226,7 @@ public sealed partial class SqliteAgentRunStore(IDbContextFactory<AgentCoreDbCon
         var row = await db.Activations.AsNoTracking().SingleOrDefaultAsync(row => row.ActivationId == activationId.ToString("D")
             && row.AgentInstanceId == owner.AgentInstanceId.ToString("D") && row.ProfileId == owner.ProfileId.ToString("D"),
             cancellationToken).ConfigureAwait(false);
-        return row is null ? null : JsonSerializer.Deserialize<Activation>(row.PayloadJson, AgentRunStoreMapping.Json);
+        return row is null ? null : AgentRunStoreMapping.ToActivation(row);
     }
 
     public async ValueTask<IReadOnlyList<AgentRun>> ListForSessionAsync(AgentRunOwner owner, Guid sessionId,

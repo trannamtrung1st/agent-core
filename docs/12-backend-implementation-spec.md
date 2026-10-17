@@ -1,5 +1,9 @@
 # Backend Implementation Specification
 
+## Execution-root propagation
+
+Every independent accepted user batch, manual invocation, scheduled occurrence or external/Core event starts a new Activation root. Immediate background children, verified configuration continuations and completion reports carry the authoritative source root and parent Activation; retries keep their original admission. Runtime completion batching selects only children with a common root, while stores reject mixed-root batches atomically. Prompt text and evidence cannot supply these references. Tenant-owned Sessions remain excluded from legacy Run admission until trusted tenant executor/requester and live execution integration are complete. [Executed lineage evidence](reports/activation-root-lineage-verification-2026-10-17.md).
+
 ## Canonical tenant Session ownership
 
 Quiescent Session management now supports typed rename, archive/restore, pause/resume, complete/cancel and logical delete. The Application service checks independent exact read/manage or delete authority and never accepts a replacement snapshot or caller-selected lifecycle source. Resume also requires exact agent chat and current active Instance/executor. Stored completion/cancellation policy remains authoritative; terminal Sessions cannot resume and archive restoration does not resurrect them. Safe metadata reports transport status, lifecycle status and archive time separately.

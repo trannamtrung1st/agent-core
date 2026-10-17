@@ -25,7 +25,7 @@ public sealed class CanonicalSchemaRefusalTests
                 new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync().AsTask());
             Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
             await using var verify = await factory.CreateDbContextAsync();
-            Assert.Equal(["20261015154322_CanonicalFilesystemBaseline"], await verify.Database.GetAppliedMigrationsAsync());
+            Assert.Equal(verify.Database.GetMigrations(), await verify.Database.GetAppliedMigrationsAsync());
         }
         finally
         {
@@ -66,7 +66,7 @@ public sealed class CanonicalSchemaRefusalTests
                 new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync().AsTask());
             Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
             await using var verify = await factory.CreateDbContextAsync();
-            Assert.Equal(["20261015154322_CanonicalFilesystemBaseline"], await verify.Database.GetAppliedMigrationsAsync());
+            Assert.Equal(verify.Database.GetMigrations(), await verify.Database.GetAppliedMigrationsAsync());
         }
         finally
         {
@@ -146,7 +146,7 @@ public sealed class CanonicalSchemaRefusalTests
             Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
 
             await using var verify = await factory.CreateDbContextAsync();
-            Assert.Equal(["20261015154322_CanonicalFilesystemBaseline"], await verify.Database.GetAppliedMigrationsAsync());
+            Assert.Equal(verify.Database.GetMigrations(), await verify.Database.GetAppliedMigrationsAsync());
             Assert.False(await ColumnIsNullableAsync(verify, "Sessions", "PinnedPersonaRevision"));
         }
         finally
@@ -184,7 +184,7 @@ public sealed class CanonicalSchemaRefusalTests
             Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
 
             await using var verify = await factory.CreateDbContextAsync();
-            Assert.Equal(["20261015154322_CanonicalFilesystemBaseline"], await verify.Database.GetAppliedMigrationsAsync());
+            Assert.Equal(verify.Database.GetMigrations(), await verify.Database.GetAppliedMigrationsAsync());
             Assert.True(await ColumnIsNullableAsync(verify, "AgentInstances", "PersonaRevision"));
         }
         finally
@@ -216,7 +216,7 @@ public sealed class CanonicalSchemaRefusalTests
             Assert.Contains("reset", error.Message, StringComparison.OrdinalIgnoreCase);
             await using var verify = await factory.CreateDbContextAsync();
             Assert.False(await IndexExistsAsync(verify, "IX_AdminEvents_OperationId"));
-            Assert.Equal(["20261015154322_CanonicalFilesystemBaseline"], await verify.Database.GetAppliedMigrationsAsync());
+            Assert.Equal(verify.Database.GetMigrations(), await verify.Database.GetAppliedMigrationsAsync());
         }
         finally
         {

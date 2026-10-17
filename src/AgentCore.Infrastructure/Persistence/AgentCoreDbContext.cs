@@ -342,8 +342,14 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
         });
         modelBuilder.Entity<ActivationRecord>(entity =>
         {
-            entity.ToTable("Activations");
+            entity.ToTable("Activations", table => table.HasCheckConstraint("CK_Activations_Lineage",
+                "length(RootActivationId) = 36 AND (ParentActivationId IS NOT NULL OR RootActivationId = ActivationId) AND (ParentActivationId IS NULL OR (ParentActivationId <> ActivationId AND RootActivationId <> ActivationId))"));
             entity.HasKey(row => row.ActivationId);
+            entity.HasAlternateKey(row => new { row.ActivationId, row.RootActivationId });
+            entity.HasIndex(row => row.RootActivationId);
+            entity.HasOne<ActivationRecord>().WithMany().HasForeignKey(row => row.RootActivationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ActivationRecord>().WithMany().HasForeignKey(row => new { row.ParentActivationId, row.RootActivationId })
+                .HasPrincipalKey(row => new { row.ActivationId, row.RootActivationId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(row => new { row.SessionId, row.DedupeKey }).IsUnique();
             entity.HasIndex(row => new { row.AgentInstanceId, row.ProfileId, row.BackgroundSourceKey })
                 .IsUnique().HasFilter("BackgroundSourceKey IS NOT NULL");
@@ -354,8 +360,11 @@ public sealed class AgentCoreDbContext(DbContextOptions<AgentCoreDbContext> opti
             entity.HasIndex(row => row.SessionId).IsUnique().HasFilter("Status IN (1, 2, 7)").HasDatabaseName("IX_AgentRuns_SessionExecution");
             entity.ToTable("AgentRuns");
             entity.HasKey(row => row.AgentRunId);
+            entity.HasIndex(row => new { row.RootActivationId, row.CreatedAtUtc, row.AgentRunId });
+            entity.HasOne<ActivationRecord>().WithMany().HasForeignKey(row => row.RootActivationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(row => row.ActivationId).IsUnique();
-            entity.HasOne<ActivationRecord>().WithOne().HasForeignKey<AgentRunRecord>(row => row.ActivationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ActivationRecord>().WithOne().HasForeignKey<AgentRunRecord>(row => new { row.ActivationId, row.RootActivationId })
+                .HasPrincipalKey<ActivationRecord>(row => new { row.ActivationId, row.RootActivationId }).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<SessionRecord>().WithMany().HasForeignKey(row => row.SessionId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(row => row.Revision).IsConcurrencyToken();
             entity.HasIndex(row => new { row.Status, row.NextRetryAtUtc, row.CreatedAtUtc });

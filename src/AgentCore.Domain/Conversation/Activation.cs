@@ -32,6 +32,8 @@ public sealed class Activation
         Guid? sourceAgentRunId,
         string dedupeKey,
         DateTimeOffset admittedAtUtc,
+        Guid rootActivationId,
+        Guid? parentActivationId,
         string? evidenceJson = null)
     {
         if (activationId == Guid.Empty || sessionId == Guid.Empty || !Enum.IsDefined(kind))
@@ -47,6 +49,12 @@ public sealed class Activation
         AgentRunText.RequireOptionalId(triggerOccurrenceId, "Trigger occurrence");
         AgentRunText.RequireOptionalId(sourceSessionId, "Source Session");
         AgentRunText.RequireOptionalId(sourceAgentRunId, "Source AgentRun");
+        AgentRunText.RequireOptionalId(parentActivationId, "Parent Activation");
+        var continuation = kind is ActivationKind.ImmediateBackground or ActivationKind.BackgroundCompleted or ActivationKind.ConfigurationContinuation;
+        if (rootActivationId == Guid.Empty || continuation && (parentActivationId is null || parentActivationId == activationId
+                || rootActivationId == activationId || sourceAgentRunId is null || sourceSessionId is null)
+            || !continuation && (rootActivationId != activationId || parentActivationId is not null || sourceAgentRunId is not null || sourceSessionId is not null))
+            throw new ArgumentException("Independent Activations own their root; continuations require a distinct root and parent.");
         if (kind == ActivationKind.ConfigurationContinuation && (sourceSessionId != sessionId || sourceAgentRunId is null
             || sourceEventId is null || entries.Length != 0 || evidenceJson is null))
             throw new ArgumentException("Configuration continuation requires its source Run in the same Session, bounded task evidence and no newly owned inputs.");
@@ -71,15 +79,27 @@ public sealed class Activation
         TriggerOccurrenceId = triggerOccurrenceId;
         SourceSessionId = sourceSessionId;
         SourceAgentRunId = sourceAgentRunId;
+        RootActivationId = rootActivationId;
+        ParentActivationId = parentActivationId;
         DedupeKey = AgentRunText.RequireDedupeKey(dedupeKey);
         AdmittedAtUtc = admittedAtUtc;
-        var fingerprint = $"{sessionId:D}\n{kind}\n{string.Join(',', entries.Select(id => id.ToString("D")))}\n{sourceEventId:D}\n{triggerOccurrenceId:D}\n{sourceSessionId:D}\n{sourceAgentRunId:D}\n{EvidenceJson}";
+        // Independent replay may propose fresh execution IDs; inherited lineage must match exactly.
+        var inheritedRoot = parentActivationId is null ? (Guid?)null : rootActivationId;
+        var fingerprint = $"{sessionId:D}\n{kind}\n{string.Join(',', entries.Select(id => id.ToString("D")))}\n{sourceEventId:D}\n{triggerOccurrenceId:D}\n{sourceSessionId:D}\n{sourceAgentRunId:D}\n{inheritedRoot:D}\n{parentActivationId:D}\n{EvidenceJson}";
         SourceFingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint))).ToLowerInvariant();
     }
 
     public string? EvidenceJson { get; }
 
+    public static Activation Start(Guid activationId, Guid sessionId, ActivationKind kind, IReadOnlyList<Guid> sourceEntryIds,
+        Guid? sourceEventId, Guid? triggerOccurrenceId, Guid? sourceSessionId, Guid? sourceAgentRunId,
+        string dedupeKey, DateTimeOffset admittedAtUtc, string? evidenceJson = null) =>
+        new(activationId, sessionId, kind, sourceEntryIds, sourceEventId, triggerOccurrenceId, sourceSessionId, sourceAgentRunId,
+            dedupeKey, admittedAtUtc, activationId, null, evidenceJson);
+
     public Guid ActivationId { get; }
+    public Guid RootActivationId { get; }
+    public Guid? ParentActivationId { get; }
     public Guid SessionId { get; }
     public ActivationKind Kind { get; }
     public IReadOnlyList<Guid> SourceEntryIds { get; }

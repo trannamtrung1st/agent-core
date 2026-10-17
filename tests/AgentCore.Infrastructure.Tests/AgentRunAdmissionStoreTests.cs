@@ -14,7 +14,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace AgentCore.Infrastructure.Tests;
 
-public sealed class AgentRunAdmissionStoreTests
+public sealed partial class AgentRunAdmissionStoreTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 8, 0, 0, 0, TimeSpan.Zero);
     private static readonly AgentRunOwner Owner = new(Guid.Parse("019944af-0009-7000-8000-0000000000a1"), Guid.Parse("019944af-0009-7000-8000-0000000000b1"));
@@ -102,7 +102,7 @@ public sealed class AgentRunAdmissionStoreTests
         await using var f = await Fixture.CreateAsync(sqlite);
         var snapshot = Snapshot(Guid.NewGuid(), []);
         await f.Memory.SaveAsync(snapshot, 0);
-        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "state-count", Now);
+        var activation = Activation.Start(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "state-count", Now);
         var run = NewRun(activation);
         await f.Runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
         var initial = await f.Runs.ReadStateAsync(Owner);
@@ -158,7 +158,7 @@ public sealed class AgentRunAdmissionStoreTests
         await using var f = await Fixture.CreateAsync(sqlite);
         var snapshot = Snapshot(Guid.NewGuid(), []);
         await f.Memory.SaveAsync(snapshot, 0);
-        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "repair-pin", Now);
+        var activation = Activation.Start(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "repair-pin", Now);
         var run = AgentRun.Create(Guid.NewGuid(), Owner, new(activation, Definition.Id, Definition.Version, Definition.Identity,
             Guid.NewGuid(), AgentRunOutputContract.ConversationResponse), new("synthetic", "synthetic", "synthetic", null), 3, Now);
         await f.Runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
@@ -191,7 +191,7 @@ public sealed class AgentRunAdmissionStoreTests
         await using var f = await Fixture.CreateAsync(sqlite);
         var snapshot = Snapshot(Guid.NewGuid(), []);
         await f.Memory.SaveAsync(snapshot, 0);
-        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "budget-pin", Now);
+        var activation = Activation.Start(Guid.NewGuid(), snapshot.SessionId, ActivationKind.Initiative, [], Guid.NewGuid(), null, null, null, "budget-pin", Now);
         var pin = ExecutionBudgetPolicy.Resolve(ExecutionBudgetClass.InteractiveBrowser,
             new(InteractiveBrowser: ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.Extended)), null)
             with { RequestedCleanup = true, CleanupIntent = new(true, false) };
@@ -223,7 +223,7 @@ public sealed class AgentRunAdmissionStoreTests
         var snapshot = Snapshot(Guid.NewGuid(), []);
         await f.Memory.SaveAsync(snapshot, 0);
         var occurrence = await PrepareLive(f, snapshot.SessionId);
-        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ApplicationEvent, [],
+        var activation = Activation.Start(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ApplicationEvent, [],
             occurrence.OccurrenceId, occurrence.OccurrenceId, null, null, $"signal:{occurrence.OccurrenceId:D}", Now, "{}");
         var run = NewRun(activation);
         var stale = snapshot with { Revision = 3 };
@@ -240,7 +240,7 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.Equal(run.AgentRunId, receipt.AcceptedAgentRunId);
         Assert.Equal(Now, receipt.LiveEvaluationCompletedAtUtc);
         Assert.Empty(await f.Triggers.ListUnsettledLiveAsync(8));
-        var replay = NewRun(new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ApplicationEvent, [],
+        var replay = NewRun(Activation.Start(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ApplicationEvent, [],
             occurrence.OccurrenceId, occurrence.OccurrenceId, null, null, activation.DedupeKey, Now, "{}"));
         var duplicate = await f.Runs.AdmitAsync(committed, 1, replay);
         Assert.False(duplicate.Created);
@@ -568,7 +568,7 @@ public sealed class AgentRunAdmissionStoreTests
             new(TriggerAuthorizationOrigin.AdminOwner, null, null, Now, Now), null,
             executionTarget: AutomationExecutionTarget.Existing(user.Snapshot.SessionId), completionDelivery: AutomationCompletionDelivery.None));
         var occurrence = await AwaitingOccurrence(f, automation);
-        var activation = new Activation(Guid.NewGuid(), user.Snapshot.SessionId, ActivationKind.ScheduledWork, [],
+        var activation = Activation.Start(Guid.NewGuid(), user.Snapshot.SessionId, ActivationKind.ScheduledWork, [],
             occurrence.SourceEventId, occurrence.OccurrenceId, null, null, $"automation:{occurrence.OccurrenceId:D}", Now, "{}");
         var first = NewRun(activation);
         var metadata = user.Snapshot with { Entries = [] };
@@ -611,7 +611,7 @@ public sealed class AgentRunAdmissionStoreTests
         var entry = new ConversationEntry(Guid.NewGuid(), 1, occurrence.SourceEventId, ConversationRole.User,
             "Check this occurrence", null, EntryStatus.Completed, SessionMode.Text, 0, 21, Now);
         var session = Snapshot(Guid.NewGuid(), [entry]);
-        var activation = new Activation(Guid.NewGuid(), session.SessionId, ActivationKind.ScheduledWork,
+        var activation = Activation.Start(Guid.NewGuid(), session.SessionId, ActivationKind.ScheduledWork,
             [entry.EntryId], occurrence.SourceEventId, occurrence.OccurrenceId, null, null, occurrence.DedupeKey, Now);
         var run = NewRun(activation);
         var origin = new SessionOrigin(SessionOriginKind.AutomationOccurrence, initialBackgroundAgentRunId: run.AgentRunId,
@@ -649,9 +649,9 @@ public sealed class AgentRunAdmissionStoreTests
         var parent = await ParentTurn(f);
         var parentSessionId = parent.SessionId;
         var parentRunId = parent.AgentRunId;
-        var first = BackgroundTurn(parentSessionId, parentRunId);
+        var first = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(first.Snapshot, first.Run, parent.Claim!.Generation);
-        var candidates = Enumerable.Range(0, 6).Select(_ => BackgroundTurn(parentSessionId, parentRunId)).ToArray();
+        var candidates = Enumerable.Range(0, 6).Select(_ => BackgroundTurn(parent)).ToArray();
         var results = await Task.WhenAll(candidates.Select(candidate => f.Runs.AdmitImmediateAsync(candidate.Snapshot, candidate.Run, parent.Claim!.Generation).AsTask()));
         Assert.All(results, result => { Assert.False(result.Created); Assert.Equal(first.Run.AgentRunId, result.Run.AgentRunId); });
         foreach (var candidate in candidates) Assert.Null(await f.Memory.LoadAsync(candidate.Snapshot.SessionId));
@@ -659,7 +659,7 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.Equal(SessionOriginKind.ImmediateBackground, child!.Origin.Kind);
         Assert.Equal(first.Run.AgentRunId, child.Origin.InitialBackgroundAgentRunId);
         Assert.Equal(SessionSurface.BackgroundWork, child.Surfaces);
-        var changed = BackgroundTurn(parentSessionId, parentRunId, "Different objective");
+        var changed = BackgroundTurn(parent, "Different objective");
         Assert.Equal("Conflict", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitImmediateAsync(changed.Snapshot, changed.Run, parent.Claim!.Generation).AsTask())).Code);
         Assert.Null(await f.Memory.LoadAsync(changed.Snapshot.SessionId));
     }
@@ -728,7 +728,7 @@ public sealed class AgentRunAdmissionStoreTests
         await f.Runs.AdmitAsync(first.Snapshot, 0, first.Run);
         var input = new ConversationEntry(Guid.NewGuid(), 3, null, ConversationRole.User, "A later turn", null,
             EntryStatus.Completed, SessionMode.Text, 0, 12, Now.AddSeconds(1));
-        var activation = new Activation(Guid.NewGuid(), first.Snapshot.SessionId, ActivationKind.UserTurn,
+        var activation = Activation.Start(Guid.NewGuid(), first.Snapshot.SessionId, ActivationKind.UserTurn,
             [input.EntryId], null, null, null, null, "later-turn", Now.AddSeconds(1));
         var later = AgentRun.Create(Guid.NewGuid(), Owner,
             new(activation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), AgentRunOutputContract.ConversationResponse),
@@ -804,7 +804,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var task = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var task = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(task.Snapshot, task.Run, parent.Claim!.Generation);
         var run = await Claim(f, task.Run);
         await f.Runs.ApplyAsync(Owner, run.AgentRunId, new AgentRunCommand.Complete(run.Revision,
@@ -820,7 +820,7 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.Equal(SessionSurface.BackgroundWork | SessionSurface.ChatList, reopened.Surfaces);
         var user = new ConversationEntry(Guid.NewGuid(), 2, null, ConversationRole.User, "Check B too", null,
             EntryStatus.Completed, SessionMode.Text, 0, 11, Now.AddSeconds(3));
-        var nextActivation = new Activation(Guid.NewGuid(), child.SessionId, ActivationKind.UserTurn, [user.EntryId],
+        var nextActivation = Activation.Start(Guid.NewGuid(), child.SessionId, ActivationKind.UserTurn, [user.EntryId],
             null, null, null, null, "user:next", Now.AddSeconds(3));
         var nextRun = AgentRun.Create(Guid.NewGuid(), Owner,
             new AgentRunAdmission(nextActivation, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), AgentRunOutputContract.ConversationResponse),
@@ -874,7 +874,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var task = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var task = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(task.Snapshot, task.Run, parent.Claim!.Generation);
         var changed = task.Snapshot with { Revision = 2, Origin = SessionOrigin.UserChat, UpdatedAt = Now.AddSeconds(1) };
         Assert.Equal("Conflict", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Memory.SaveAsync(changed, 1).AsTask())).Code);
@@ -896,7 +896,7 @@ public sealed class AgentRunAdmissionStoreTests
         await using var f = await Fixture.CreateAsync(sqlite);
         var turn = UserTurn();
         var precise = Now.AddTicks(1234);
-        var a = new Activation(Guid.NewGuid(), turn.Snapshot.SessionId, ActivationKind.UserTurn,
+        var a = Activation.Start(Guid.NewGuid(), turn.Snapshot.SessionId, ActivationKind.UserTurn,
             turn.Run.Admission.Activation.SourceEntryIds, null, null, null, null, "precise:batch", precise);
         var run = AgentRun.Create(Guid.NewGuid(), Owner,
             new AgentRunAdmission(a, Definition.Id, Definition.Version, Definition.Identity, Guid.NewGuid(), AgentRunOutputContract.ConversationResponse),
@@ -983,7 +983,7 @@ public sealed class AgentRunAdmissionStoreTests
         await using var f = await Fixture.CreateAsync(sqlite);
         var turn = UserTurn();
         await f.Runs.AdmitAsync(turn.Snapshot, 0, turn.Run);
-        var a = new Activation(Guid.NewGuid(), turn.Snapshot.SessionId, ActivationKind.UserTurn,
+        var a = Activation.Start(Guid.NewGuid(), turn.Snapshot.SessionId, ActivationKind.UserTurn,
             turn.Run.Admission.Activation.SourceEntryIds, null, null, null, null, "different:key", Now);
         var duplicate = NewRun(a);
         Assert.Equal("Conflict", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitAsync(turn.Snapshot, 0, duplicate).AsTask())).Code);
@@ -997,11 +997,11 @@ public sealed class AgentRunAdmissionStoreTests
     public async Task Missing_foreign_or_cancelled_parent_cannot_admit_a_background_child(bool sqlite)
     {
         await using var f = await Fixture.CreateAsync(sqlite);
-        var missing = BackgroundTurn(Guid.NewGuid(), Guid.NewGuid());
+        var missing = BackgroundTurn(NewRun(Activation.Start(Guid.NewGuid(), Guid.NewGuid(), ActivationKind.Initiative, [], null, null, null, null, "missing", Now)));
         Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitImmediateAsync(missing.Snapshot, missing.Run, Guid.NewGuid()).AsTask())).Code);
         Assert.Null(await f.Memory.LoadAsync(missing.Snapshot.SessionId));
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         var foreign = new AgentRunOwner(Guid.NewGuid(), Owner.ProfileId);
         var foreignRun = AgentRun.Create(child.Run.AgentRunId, foreign, child.Run.Admission, child.Run.PinnedModel, 3, Now);
         var foreignSnapshot = child.Snapshot with { AgentInstanceId = foreign.AgentInstanceId };
@@ -1019,7 +1019,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var first = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var first = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(first.Snapshot, first.Run, parent.Claim!.Generation);
         await CompleteChild(f, first, quiet: false);
         await f.Runs.SkipCompletionReportAsync(Owner, first.Run.AgentRunId, "parent-unavailable", Now);
@@ -1027,7 +1027,7 @@ public sealed class AgentRunAdmissionStoreTests
         var snapshot = (await f.Memory.LoadAsync(first.Snapshot.SessionId))!;
         var input = new ConversationEntry(Guid.NewGuid(), 3, null, ConversationRole.User, "Continue", null,
             EntryStatus.Completed, SessionMode.Text, 0, 8, Now);
-        var continuation = NewRun(new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.UserTurn,
+        var continuation = NewRun(Activation.Start(Guid.NewGuid(), snapshot.SessionId, ActivationKind.UserTurn,
             [input.EntryId], null, null, null, null, "continued-child", Now));
         await f.Runs.AdmitAsync(snapshot with { Revision = snapshot.Revision + 1, Entries = snapshot.Entries.Append(input).ToArray() },
             snapshot.Revision, continuation);
@@ -1036,7 +1036,7 @@ public sealed class AgentRunAdmissionStoreTests
             Now.AddSeconds(1), continuation.Claim!.Generation, "fixture-failure", "Continuation failed", false, null));
 
         var secondParent = await ParentTurn(f);
-        var second = BackgroundTurn(secondParent.SessionId, secondParent.AgentRunId, "Another independent task");
+        var second = BackgroundTurn(secondParent, "Another independent task");
         await f.Runs.AdmitImmediateAsync(second.Snapshot, second.Run, secondParent.Claim!.Generation);
         var running = await Claim(f, second.Run);
         await f.Runs.ApplyAsync(Owner, running.AgentRunId, new AgentRunCommand.Fail(running.Revision,
@@ -1052,7 +1052,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var completed = await CompleteChild(f, child, quiet: false);
         var source = Assert.Single(await f.Runs.ListUnreportedCompletionsAsync(8));
@@ -1060,11 +1060,16 @@ public sealed class AgentRunAdmissionStoreTests
         await CompleteParent(f, parent);
         var parentSnapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
         AgentRun Report() => NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.BackgroundCompleted, [],
-            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:one", Now, "{\"summary\":\"Done\"}"));
+            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:one", Now, child.Run.Admission.Activation.RootActivationId, child.Run.ActivationId, "{\"summary\":\"Done\"}"));
         var proposed = Report();
         var first = await f.Runs.AdmitCompletionReportAsync(parentSnapshot with { Revision = parentSnapshot.Revision + 1 }, parentSnapshot.Revision, proposed, completed.AgentRunId);
         Assert.True(first.Created);
+        Assert.Equal(parent.ActivationId, first.Run.Admission.Activation.RootActivationId);
+        Assert.Equal(child.Run.ActivationId, first.Run.Admission.Activation.ParentActivationId);
         await f.ReopenAsync();
+        var savedActivation = (await f.Runs.GetActivationAsync(Owner, first.Run.ActivationId))!;
+        Assert.Equal(parent.ActivationId, savedActivation.RootActivationId);
+        Assert.Equal(child.Run.ActivationId, savedActivation.ParentActivationId);
         var replay = await f.Runs.AdmitCompletionReportAsync(parentSnapshot with { Revision = parentSnapshot.Revision + 1 }, parentSnapshot.Revision, Report(), completed.AgentRunId);
         Assert.False(replay.Created);
         Assert.Equal(first.Run.AgentRunId, replay.Run.AgentRunId);
@@ -1081,7 +1086,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var completed = await CompleteChild(f, child, quiet: false);
         await CompleteParent(f, parent);
@@ -1089,7 +1094,7 @@ public sealed class AgentRunAdmissionStoreTests
         var definition = Definition with { Voice = Definition.Voice with { Enabled = false },
             StateIsolationPolicy = new(ConversationContextScope.CurrentRequest) };
         AgentRun Report() => NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.BackgroundCompleted, [],
-            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:strict", Now, "{}"),
+            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:strict", Now, child.Run.Admission.Activation.RootActivationId, child.Run.ActivationId, "{}"),
             new AgentRunConfiguration(definition, 0, 0, []));
         var report = Report(); var proposed = snapshot with { Revision = snapshot.Revision + 1 };
         Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitAsync(proposed, snapshot.Revision, report).AsTask())).Code);
@@ -1113,12 +1118,12 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var completed = await CompleteChild(f, child, quiet: true);
         var parentSnapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
         var report = NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.BackgroundCompleted, [],
-            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:quiet", Now, "{}"));
+            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:quiet", Now, child.Run.Admission.Activation.RootActivationId, child.Run.ActivationId, "{}"));
         Assert.Equal("Conflict", (await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitCompletionReportAsync(
             parentSnapshot with { Revision = parentSnapshot.Revision + 1 }, parentSnapshot.Revision, report, completed.AgentRunId).AsTask())).Code);
         Assert.Equal(parentSnapshot.Revision, (await f.Memory.LoadAsync(parent.SessionId))!.Revision);
@@ -1136,7 +1141,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() =>
             f.Runs.AdmitAsync(child.Snapshot, 0, child.Run).AsTask())).Code);
         Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() =>
@@ -1148,7 +1153,7 @@ public sealed class AgentRunAdmissionStoreTests
         await CompleteChild(f, child, quiet: false);
         var snapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
         var report = NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.BackgroundCompleted, [],
-            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:bypass", Now, "{}"));
+            child.Run.AgentRunId, null, child.Snapshot.SessionId, child.Run.AgentRunId, "completion:bypass", Now, child.Run.Admission.Activation.RootActivationId, child.Run.ActivationId, "{}"));
         Assert.Equal("ValidationError", (await Assert.ThrowsAsync<AgentCoreException>(() =>
             f.Runs.AdmitAsync(snapshot with { Revision = snapshot.Revision + 1 }, snapshot.Revision, report).AsTask())).Code);
         Assert.False(await f.Runs.HasCompletionReceiptAsync(Owner, child.Run.AgentRunId));
@@ -1258,7 +1263,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var claimed = await Claim(f, child.Run);
         await f.Runs.ApplyAsync(Owner, claimed.AgentRunId, new AgentRunCommand.Fail(claimed.Revision,
@@ -1266,7 +1271,7 @@ public sealed class AgentRunAdmissionStoreTests
         var snapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
         var report = NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.BackgroundCompleted,
             [], claimed.AgentRunId, null, child.Run.SessionId, child.Run.AgentRunId,
-            $"completion:{child.Run.SessionId:D}:{child.Run.AgentRunId:D}", Now, "{}"));
+            $"completion:{child.Run.SessionId:D}:{child.Run.AgentRunId:D}", Now, child.Run.Admission.Activation.RootActivationId, child.Run.ActivationId, "{}"));
         var error = await Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitCompletionReportAsync(
             snapshot with { Revision = snapshot.Revision + 1 }, snapshot.Revision, report, child.Run.AgentRunId).AsTask());
         Assert.Equal("Conflict", error.Code);
@@ -1282,7 +1287,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         await CompleteChild(f, child, false);
         await f.ReopenAsync();
@@ -1319,7 +1324,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         await CompleteChild(f, child, false);
         var item = Assert.Single(await f.Runs.ListCompletionInboxAsync(Owner, parent.SessionId, 20, Now));
@@ -1343,7 +1348,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var call = new ModelToolCall("wait-1", "execution.wait", "{}");
         var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])], executionState: new(TranscriptId: parent.ResponseId)), 1, 0, 15000);
@@ -1378,12 +1383,12 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var busy = await ParentTurn(f);
-        var busyChild = BackgroundTurn(busy.SessionId, busy.AgentRunId);
+        var busyChild = BackgroundTurn(busy);
         await f.Runs.AdmitImmediateAsync(busyChild.Snapshot, busyChild.Run, busy.Claim!.Generation);
         await CompleteChild(f, busyChild, false);
         var parent = await ParentTurn(f);
-        var first = BackgroundTurn(parent.SessionId, parent.AgentRunId);
-        var second = BackgroundTurn(parent.SessionId, parent.AgentRunId, "Second result", "background-2");
+        var first = BackgroundTurn(parent);
+        var second = BackgroundTurn(parent, "Second result", "background-2");
         await f.Runs.AdmitImmediateAsync(first.Snapshot, first.Run, parent.Claim!.Generation);
         await f.Runs.AdmitImmediateAsync(second.Snapshot, second.Run, parent.Claim.Generation);
         await CompleteChild(f, first, false); await CompleteChild(f, second, false);
@@ -1392,7 +1397,7 @@ public sealed class AgentRunAdmissionStoreTests
         Assert.NotEqual(busyChild.Run.AgentRunId, Assert.Single(await f.Runs.ListDeliveryCandidatesAsync(1, Now)).Run.AgentRunId);
         var snapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
         var report = NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.BackgroundCompleted, [], first.Run.AgentRunId,
-            null, first.Run.SessionId, first.Run.AgentRunId, "completion:batch", Now, "{}"));
+            null, first.Run.SessionId, first.Run.AgentRunId, "completion:batch", Now, first.Run.Admission.Activation.RootActivationId, first.Run.ActivationId, "{}"));
         var admitted = await f.Runs.AdmitCompletionReportBatchAsync(snapshot with { Revision = snapshot.Revision + 1 }, snapshot.Revision, report, [first.Run.AgentRunId, second.Run.AgentRunId]);
         await f.ReopenAsync();
         var inbox = await f.Runs.ListCompletionInboxAsync(Owner, parent.SessionId, 20, Now);
@@ -1412,7 +1417,7 @@ public sealed class AgentRunAdmissionStoreTests
     public async Task Wait_timeout_is_normal_and_cancelled_wait_cannot_be_resurrected(bool sqlite, bool cancel)
     {
         await using var f = await Fixture.CreateAsync(sqlite); var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var call = new ModelToolCall("wait", "execution.wait", "{}");
         var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([new ModelMessage(ModelRole.Assistant, "", ToolCalls: [call])], executionState: new(TranscriptId: parent.ResponseId)), 1, 0, 15000);
@@ -1444,7 +1449,7 @@ public sealed class AgentRunAdmissionStoreTests
     public async Task A_claim_without_successful_acknowledged_answer_releases_after_terminal(bool sqlite, bool cancel)
     {
         await using var f = await Fixture.CreateAsync(sqlite);
-        var parent = await ParentTurn(f); var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var parent = await ParentTurn(f); var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         await CompleteChild(f, child, false);
         var item = (await f.Runs.GetCompletionInboxAsync(Owner, parent.SessionId, child.Run.AgentRunId, Now))!;
@@ -1478,11 +1483,11 @@ public sealed class AgentRunAdmissionStoreTests
                 await CompleteParent(f, parent);
                 var snapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
                 var entry = new ConversationEntry(Guid.NewGuid(), snapshot.LastEntrySequence + 1, null, ConversationRole.User, "Next evidence batch", null, EntryStatus.Completed, SessionMode.Text, 0, 19, Now);
-                var next = NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.UserTurn, [entry.EntryId], null, null, null, null, $"page-parent-{index}", Now));
+                var next = NewRun(Activation.Start(Guid.NewGuid(), parent.SessionId, ActivationKind.UserTurn, [entry.EntryId], null, null, null, null, $"page-parent-{index}", Now));
                 await f.Runs.AdmitAsync(snapshot with { Revision = snapshot.Revision + 1, Entries = snapshot.Entries.Append(entry).ToArray(), LastEntrySequence = entry.Sequence }, snapshot.Revision, next);
                 parent = await Claim(f, next);
             }
-            var child = BackgroundTurn(parent.SessionId, parent.AgentRunId, "Evidence", $"background-{index}");
+            var child = BackgroundTurn(parent, "Evidence", $"background-{index}");
             await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
             await CompleteChild(f, child, false); admitted.Add(child.Run.AgentRunId);
         }
@@ -1508,12 +1513,12 @@ public sealed class AgentRunAdmissionStoreTests
     public async Task Take_and_report_race_has_one_owner_and_busy_parent_report_cannot_steal(bool sqlite)
     {
         await using var f = await Fixture.CreateAsync(sqlite); var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation); await CompleteChild(f, child, false);
         var item = (await f.Runs.GetCompletionInboxAsync(Owner, parent.SessionId, child.Run.AgentRunId, Now))!;
         var snapshot = (await f.Memory.LoadAsync(parent.SessionId))!;
         var report = NewRun(new Activation(Guid.NewGuid(), parent.SessionId, ActivationKind.BackgroundCompleted, [], child.Run.AgentRunId, null,
-            child.Run.SessionId, child.Run.AgentRunId, $"completion:{child.Run.AgentRunId:D}", Now, "{}"));
+            child.Run.SessionId, child.Run.AgentRunId, $"completion:{child.Run.AgentRunId:D}", Now, child.Run.Admission.Activation.RootActivationId, child.Run.ActivationId, "{}"));
         var take = f.Runs.TakeCompletionAsync(Owner, parent.AgentRunId, parent.Claim.Generation, child.Run.AgentRunId, item.Revision, "racing-take", Guid.NewGuid(), Now).AsTask();
         var delivery = Assert.ThrowsAsync<AgentCoreException>(() => f.Runs.AdmitCompletionReportAsync(snapshot with { Revision = snapshot.Revision + 1 }, snapshot.Revision, report, child.Run.AgentRunId).AsTask());
         Assert.Equal("Conflict", (await delivery).Code); Assert.Equal(CompletionInboxStatus.Claimed, (await take).Status);
@@ -1528,7 +1533,7 @@ public sealed class AgentRunAdmissionStoreTests
     public async Task Wait_denies_self_foreign_child_and_preserves_the_running_parent(bool sqlite)
     {
         await using var f = await Fixture.CreateAsync(sqlite); var parent = await ParentTurn(f); var other = await ParentTurn(f);
-        var child = BackgroundTurn(other.SessionId, other.AgentRunId);
+        var child = BackgroundTurn(other);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, other.Claim!.Generation);
         foreach (var target in new[] { parent.SessionId, child.Run.SessionId, Guid.NewGuid() })
         {
@@ -1548,7 +1553,7 @@ public sealed class AgentRunAdmissionStoreTests
     public async Task Stale_successful_answer_rolls_back_handled_accounting_and_preserves_provisional_ack(bool sqlite)
     {
         await using var f = await Fixture.CreateAsync(sqlite); var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation); await CompleteChild(f, child, false);
         var item = (await f.Runs.GetCompletionInboxAsync(Owner, parent.SessionId, child.Run.AgentRunId, Now))!;
         item = await f.Runs.TakeCompletionAsync(Owner, parent.AgentRunId, parent.Claim.Generation, child.Run.AgentRunId, item.Revision, "take", Guid.NewGuid(), Now);
@@ -1575,7 +1580,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         await CompleteChild(f, child, false);
         var item = (await f.Runs.GetCompletionInboxAsync(Owner, parent.SessionId, child.Run.AgentRunId, Now))!;
@@ -1618,7 +1623,7 @@ public sealed class AgentRunAdmissionStoreTests
     {
         await using var f = await Fixture.CreateAsync(sqlite);
         var parent = await ParentTurn(f);
-        var child = BackgroundTurn(parent.SessionId, parent.AgentRunId);
+        var child = BackgroundTurn(parent);
         await f.Runs.AdmitImmediateAsync(child.Snapshot, child.Run, parent.Claim!.Generation);
         var call = new ModelToolCall("wait-unavailable", "execution.wait", "{}");
         var checkpoint = new AgentRunCheckpoint(AgentRunToolCallCheckpoint.Write([
@@ -1705,7 +1710,7 @@ public sealed class AgentRunAdmissionStoreTests
             var evidence = kind == ActivationKind.UserTurn
                 ? "{\"triggerContext\":{\"causation\":{\"triggerDepth\":4,\"visitedAutomationIds\":[]}}}"
                 : "{\"Text\":\"Native plain signal\"}";
-            var activation = new Activation(Guid.NewGuid(), Guid.NewGuid(), kind, [Guid.NewGuid()], null,
+            var activation = Activation.Start(Guid.NewGuid(), Guid.NewGuid(), kind, [Guid.NewGuid()], null,
                 kind == ActivationKind.ApplicationEvent ? Guid.NewGuid() : null, null, null, "test", Now, evidence);
             var run = NewRun(activation).TakeClaim(Guid.NewGuid(), Now, Now.AddMinutes(1));
             var failed = run.Fail(run.Revision, run.Claim!.Generation, "safe-failure", "Safe fixture", false, Now, null, Guid.NewGuid);
@@ -1722,7 +1727,7 @@ public sealed class AgentRunAdmissionStoreTests
         var evidence = System.Text.Json.JsonSerializer.Serialize(new { triggerContext = new { causation = new
         { rootAgentRunId = root, triggerDepth = 2, visitedAutomationIds = visited.Concat(visited).ToArray() } } });
         if (wrapped) evidence = System.Text.Json.JsonSerializer.Serialize(new { Text = evidence });
-        var activation = new Activation(Guid.NewGuid(), Guid.NewGuid(), ActivationKind.CoreEvent, [Guid.NewGuid()],
+        var activation = Activation.Start(Guid.NewGuid(), Guid.NewGuid(), ActivationKind.CoreEvent, [Guid.NewGuid()],
             null, Guid.NewGuid(), null, null, "bucket:fixture", Now, evidence);
         var run = NewRun(activation).TakeClaim(Guid.NewGuid(), Now, Now.AddMinutes(1));
         var failed = run.Fail(run.Revision, run.Claim!.Generation, "safe-failure", "Safe fixture", false, Now, null, Guid.NewGuid);
@@ -1737,20 +1742,20 @@ public sealed class AgentRunAdmissionStoreTests
         var entries = new[] { "Check A", "Check B" }.Select((text, index) => new ConversationEntry(Guid.NewGuid(), index + 1,
             null, ConversationRole.User, text, null, EntryStatus.Completed, SessionMode.Text, 0, text.Length, Now)).ToArray();
         var snapshot = Snapshot(sessionId ?? Guid.NewGuid(), entries);
-        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.UserTurn,
+        var activation = Activation.Start(Guid.NewGuid(), snapshot.SessionId, ActivationKind.UserTurn,
             entries.Select(entry => entry.EntryId).ToArray(), null, null, null, null, "user:batch", Now);
         return (snapshot, NewRun(activation));
     }
 
-    private static (SessionSnapshot Snapshot, AgentRun Run) BackgroundTurn(Guid parentSessionId, Guid parentRunId, string objective = "Check the site", string callKey = "background-1")
+    private static (SessionSnapshot Snapshot, AgentRun Run) BackgroundTurn(AgentRun parent, string objective = "Check the site", string callKey = "background-1")
     {
         var entry = new ConversationEntry(Guid.NewGuid(), 1, null, ConversationRole.User, objective, null,
             EntryStatus.Completed, SessionMode.Text, 0, objective.Length, Now);
         var sessionId = Guid.NewGuid();
         var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ImmediateBackground, [entry.EntryId],
-            null, null, parentSessionId, parentRunId, $"tool:{callKey}", Now);
+            null, null, parent.SessionId, parent.AgentRunId, $"tool:{callKey}", Now, parent.Admission.Activation.RootActivationId, parent.ActivationId);
         var run = NewRun(activation);
-        var origin = new SessionOrigin(SessionOriginKind.ImmediateBackground, parentSessionId, parentRunId, run.AgentRunId,
+        var origin = new SessionOrigin(SessionOriginKind.ImmediateBackground, parent.SessionId, parent.AgentRunId, run.AgentRunId,
             reportCompletionToOrigin: true);
         return (Snapshot(sessionId, [entry]) with { Origin = origin, Surfaces = origin.InitialSurface }, run);
     }
@@ -1842,6 +1847,7 @@ public sealed class AgentRunAdmissionStoreTests
     }
     private sealed class Fixture : IAsyncDisposable
     {
+        internal IDbContextFactory<AgentCoreDbContext>? Contexts => _factory;
         internal ICoreEventStore CoreEvents => _factory is null ? ((InMemoryMemoryStore)Memory).CoreEvents : new SqliteCoreEventStore(_factory);
         private string? _path;
         private Factory? _factory;

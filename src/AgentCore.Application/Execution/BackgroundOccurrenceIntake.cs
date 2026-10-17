@@ -103,7 +103,7 @@ public sealed class BackgroundOccurrenceIntake(
                 TriggerSourceKind.CoreEvent => ActivationKind.CoreEvent, TriggerSourceKind.ApplicationEvent => ActivationKind.ApplicationEvent, _ => ActivationKind.ManualBackground };
             var evidence = System.Text.Json.JsonSerializer.Serialize(new AgentRunAdmissionFactory.SignalInput(triggerKind,
                 occurrence.EvidenceJson, null));
-            var activation = new Activation(ids.NewId(), targetId, activationKind, [], occurrence.SourceEventId,
+            var activation = Activation.Start(ids.NewId(), targetId, activationKind, [], occurrence.SourceEventId,
                 occurrence.OccurrenceId, null, null, $"automation:{occurrence.OccurrenceId:D}", time.GetUtcNow(), evidence);
             var run = AgentRun.Create(ids.NewId(), new(occurrence.Owner.AgentInstanceId, occurrence.Owner.ProfileId),
                 new(activation, target.Definition.Id, target.Definition.Version, target.PinnedPersona ?? target.Definition.Identity,

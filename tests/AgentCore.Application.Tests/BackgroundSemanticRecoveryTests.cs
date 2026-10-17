@@ -261,7 +261,7 @@ public sealed partial class AgentRunDurabilityTests
             null, SessionStatus.Created, [input], "", 0, null, null, now, now, AgentInstanceId: Guid.NewGuid(),
             ModelSelection: new("synthetic-offline/scripted", "primary-llm", "scripted", ModelSelectionSource.Host, null),
             Origin: new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId), Surfaces: SessionSurface.BackgroundWork));
-        var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId], input.SourceEventId,
+        var activation = Activation.Start(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [input.EntryId], input.SourceEventId,
             null, null, null, "manual:semantic", now);
         var run = AgentRun.Create(runId, new(snapshot.AgentInstanceId, snapshot.ProfileId!.Value),
             new(activation, snapshot.Definition.Id, snapshot.Definition.Version, snapshot.PinnedPersona!, Guid.NewGuid(), AgentRunOutputContract.BackgroundOutcome,

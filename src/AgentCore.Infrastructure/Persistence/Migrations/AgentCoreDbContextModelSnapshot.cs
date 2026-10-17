@@ -297,11 +297,18 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ParentActivationId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("PayloadJson")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ProfileId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RootActivationId")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
@@ -311,6 +318,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasKey("ActivationId");
 
+                    b.HasIndex("RootActivationId");
+
+                    b.HasIndex("ParentActivationId", "RootActivationId");
+
                     b.HasIndex("SessionId", "DedupeKey")
                         .IsUnique();
 
@@ -318,7 +329,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("BackgroundSourceKey IS NOT NULL");
 
-                    b.ToTable("Activations", (string)null);
+                    b.ToTable("Activations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Activations_Lineage", "length(RootActivationId) = 36 AND (ParentActivationId IS NOT NULL OR RootActivationId = ActivationId) AND (ParentActivationId IS NULL OR (ParentActivationId <> ActivationId AND RootActivationId <> ActivationId))");
+                        });
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationSourceEntryRecord", b =>
@@ -952,6 +966,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("RootActivationId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("SessionId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -971,6 +989,11 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_AgentRuns_SessionExecution")
                         .HasFilter("Status IN (1, 2, 7)");
+
+                    b.HasIndex("ActivationId", "RootActivationId")
+                        .IsUnique();
+
+                    b.HasIndex("RootActivationId", "CreatedAtUtc", "AgentRunId");
 
                     b.HasIndex("Status", "NextRetryAtUtc", "CreatedAtUtc");
 
@@ -3076,11 +3099,23 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationRecord", b =>
                 {
+                    b.HasOne("AgentCore.Infrastructure.Persistence.ActivationRecord", null)
+                        .WithMany()
+                        .HasForeignKey("RootActivationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", null)
                         .WithMany()
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.ActivationRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ParentActivationId", "RootActivationId")
+                        .HasPrincipalKey("ActivationId", "RootActivationId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationSourceEntryRecord", b =>
@@ -3164,14 +3199,21 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AgentRunRecord", b =>
                 {
                     b.HasOne("AgentCore.Infrastructure.Persistence.ActivationRecord", null)
-                        .WithOne()
-                        .HasForeignKey("AgentCore.Infrastructure.Persistence.AgentRunRecord", "ActivationId")
+                        .WithMany()
+                        .HasForeignKey("RootActivationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("AgentCore.Infrastructure.Persistence.SessionRecord", null)
                         .WithMany()
                         .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgentCore.Infrastructure.Persistence.ActivationRecord", null)
+                        .WithOne()
+                        .HasForeignKey("AgentCore.Infrastructure.Persistence.AgentRunRecord", "ActivationId", "RootActivationId")
+                        .HasPrincipalKey("AgentCore.Infrastructure.Persistence.ActivationRecord", "ActivationId", "RootActivationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

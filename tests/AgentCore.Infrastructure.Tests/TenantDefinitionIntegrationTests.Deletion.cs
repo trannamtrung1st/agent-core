@@ -168,6 +168,7 @@ public sealed partial class TenantDefinitionIntegrationTests
         Assert.Equal("definition_in_use", error.ReasonCode);
         var activation = new ActivationRecord { ActivationId = f.Ids.NewId().ToString("D"), SessionId = sessionId.ToString("D"),
             AgentInstanceId = missingInstance.ToString("D"), DedupeKey = "retained-history", AdmissionHash = "test", ProfileId = "", PayloadJson = "{}", AdmittedAtUtc = now.ToUnixTimeMilliseconds() };
+        activation.RootActivationId = activation.ActivationId;
         if (f.Contexts is { } contexts)
         {
             await using var db = contexts.CreateDbContext();

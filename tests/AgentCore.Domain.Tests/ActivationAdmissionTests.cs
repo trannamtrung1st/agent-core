@@ -18,6 +18,8 @@ public sealed class ActivationAdmissionTests
         Assert.Equal(original, activation.SourceEntryIds);
         Assert.Throws<NotSupportedException>(() => ((IList<Guid>)activation.SourceEntryIds)[0] = Guid.NewGuid());
         Assert.Equal(activation.ActivationId, run.ActivationId);
+        Assert.Equal(activation.ActivationId, activation.RootActivationId);
+        Assert.Null(activation.ParentActivationId);
         Assert.Equal(activation.SessionId, run.SessionId);
         Assert.NotNull(run.ResponseId);
         var reordered = UserActivation(activation.SessionId, original.Reverse().ToArray());
@@ -41,6 +43,7 @@ public sealed class ActivationAdmissionTests
         var continued = NewRun(UserActivation(initial.SessionId, [Guid.NewGuid()]));
         Assert.Equal(initial.SessionId, continued.SessionId);
         Assert.NotEqual(initial.ActivationId, continued.ActivationId);
+        Assert.NotEqual(initial.Admission.Activation.RootActivationId, continued.Admission.Activation.RootActivationId);
         Assert.NotEqual(initial.AgentRunId, continued.AgentRunId);
         Assert.NotEqual(initial.ResponseId, continued.ResponseId);
     }
@@ -55,9 +58,9 @@ public sealed class ActivationAdmissionTests
         Assert.Throws<ArgumentException>(() => UserActivation(sessionId, [Guid.Empty]));
         Assert.Throws<ArgumentException>(() => UserActivation(sessionId,
             Enumerable.Range(0, Activation.MaxSourceEntries + 1).Select(_ => Guid.NewGuid()).ToArray()));
-        Assert.Throws<ArgumentException>(() => new Activation(Guid.NewGuid(), sessionId,
+        Assert.Throws<ArgumentException>(() => Activation.Start(Guid.NewGuid(), sessionId,
             ActivationKind.ImmediateBackground, [], null, null, sessionId, Guid.NewGuid(), "start", Now));
-        Assert.Throws<ArgumentException>(() => new Activation(Guid.NewGuid(), sessionId,
+        Assert.Throws<ArgumentException>(() => Activation.Start(Guid.NewGuid(), sessionId,
             ActivationKind.ScheduledWork, [], null, null, null, null, "scheduled", Now));
     }
 
@@ -145,7 +148,19 @@ public sealed class ActivationAdmissionTests
     }
 
     private static Activation UserActivation(Guid sessionId, IReadOnlyList<Guid> sources) =>
-        new(Guid.NewGuid(), sessionId, ActivationKind.UserTurn, sources, null, null, null, null, "user:batch", Now);
+        Activation.Start(Guid.NewGuid(), sessionId, ActivationKind.UserTurn, sources, null, null, null, null, "user:batch", Now);
+
+    [Fact]
+    public void Missing_roots_and_independent_turns_claiming_foreign_roots_are_rejected()
+    {
+        var activation = UserActivation(Guid.NewGuid(), [Guid.NewGuid()]);
+        foreach (var root in new[] { Guid.Empty, Guid.NewGuid() })
+            Assert.Throws<ArgumentException>(() => new Activation(activation.ActivationId, activation.SessionId,
+                activation.Kind, activation.SourceEntryIds, null, null, null, null, "invalid-root", Now, root, null));
+        var json = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(activation))!;
+        json.AsObject().Remove("RootActivationId");
+        Assert.Throws<ArgumentException>(() => System.Text.Json.JsonSerializer.Deserialize<Activation>(json.ToJsonString()));
+    }
 
     [Fact]
     public void Idempotent_effect_acknowledgements_still_reject_stale_generation()

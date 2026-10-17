@@ -224,7 +224,7 @@ public sealed class BrowserLifecycleTests
         snapshot = snapshot with { Origin = new(SessionOriginKind.ManualBackground, initialBackgroundAgentRunId: runId),
             Surfaces = SessionSurface.BackgroundWork };
         var input = snapshot.Entries.Single();
-        var activation = new Activation(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ManualBackground, [input.EntryId],
+        var activation = Activation.Start(Guid.NewGuid(), snapshot.SessionId, ActivationKind.ManualBackground, [input.EntryId],
             input.SourceEventId, null, null, null, "manual:browser-budget", now);
         var run = AgentRun.Create(runId, owner, new(activation, snapshot.Definition.Id, snapshot.Definition.Version,
             snapshot.PinnedPersona!, Guid.NewGuid(), AgentRunOutputContract.BackgroundOutcome, configuration: new(snapshot.Definition, 0, snapshot.PinnedPersonaRevision ?? 0, [])), new("scripted-alpha", "primary-llm", "scripted-alpha", null), 3, now);

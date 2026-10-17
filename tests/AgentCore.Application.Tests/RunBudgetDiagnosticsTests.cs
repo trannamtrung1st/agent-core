@@ -155,7 +155,7 @@ public sealed class RunBudgetDiagnosticsTests
 
     private static AgentRun NewRun()
     {
-        var now = DateTimeOffset.UtcNow; var activation = new Activation(Guid.NewGuid(), Guid.NewGuid(), ActivationKind.UserTurn, [Guid.NewGuid()], null, null, null, null, "budget-test", now, "{}");
+        var now = DateTimeOffset.UtcNow; var activation = Activation.Start(Guid.NewGuid(), Guid.NewGuid(), ActivationKind.UserTurn, [Guid.NewGuid()], null, null, null, null, "budget-test", now, "{}");
         return AgentRun.Create(Guid.NewGuid(), new(Guid.NewGuid(), Guid.NewGuid()), new(activation, "general-assistant", 1,
             new AgentIdentity("Test", "Role", "desc", "Tone"), Guid.NewGuid(), AgentRunOutputContract.ConversationResponse,
             new(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetProfile.For(ExecutionBudgetClass.InteractiveBrowser, ExecutionBudgetPreset.Standard), "system", true)),

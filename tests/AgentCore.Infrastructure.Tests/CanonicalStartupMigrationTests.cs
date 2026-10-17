@@ -19,7 +19,7 @@ public sealed class CanonicalStartupMigrationTests
                 await db.Database.ExecuteSqlRawAsync("INSERT INTO UserProfiles (ProfileId, PreferencesJson, Revision, UpdatedAtUtc) VALUES ('preserved-owner', '{{}}', 7, 123456)");
             await new SqliteMemoryStore(factory, TimeProvider.System).EnsureCreatedAsync();
             await using var reopened = factory.CreateDbContext();
-            Assert.Equal(["20261015154322_CanonicalFilesystemBaseline"], await reopened.Database.GetAppliedMigrationsAsync());
+            Assert.Equal(reopened.Database.GetMigrations(), await reopened.Database.GetAppliedMigrationsAsync());
             var profile = await reopened.Profiles.SingleAsync();
             Assert.Equal(7, profile.Revision); Assert.Equal("{}",profile.PreferencesJson); Assert.Equal(123456,profile.UpdatedAtUtc);
             Assert.DoesNotContain(reopened.Model.GetEntityTypes(), type => type.GetTableName() == "AgentWorkspaceItems");

@@ -49,7 +49,7 @@ public sealed partial class SessionRuntime
             foreach (var item in pending.Where(i => i.Status == CompletionInboxStatus.Pending && i.ChildAgentRunId != child.AgentRunId))
             {
                 var other = await _agentRuns.GetAsync(RunOwner, item.ChildAgentRunId, ct).ConfigureAwait(false);
-                if (other is null || other.Result?.OutcomeKind == AgentRunOutcomeKind.NoAction
+                if (other is null || other.Admission.Activation.RootActivationId != child.Admission.Activation.RootActivationId || other.Result?.OutcomeKind == AgentRunOutcomeKind.NoAction
                     || _runAuthority is not null && await _runAuthority.CurrentDefinitionAsync(other, ct).ConfigureAwait(false) is null) continue;
                 var first = await _store.ReadHistoryAsync(other.SessionId, 0, 1, ct).ConfigureAwait(false);
                 batch.Add((other, first.FirstOrDefault()?.Text ?? "Background task"));
@@ -60,7 +60,7 @@ public sealed partial class SessionRuntime
             var evidence = batch.Count == 1 ? BackgroundCompletionProjection.Build(primary, batch[0].Objective,
                 await _tools.CompletionArtifactsAsync(primary.SessionId, ct).ConfigureAwait(false)) : BackgroundCompletionProjection.BuildBatch(batch);
             var activation = new Activation(_ids.NewId(), SessionId, ActivationKind.BackgroundCompleted, [], primary.AgentRunId,
-                null, primary.SessionId, primary.AgentRunId, "completion:" + string.Join(":", batch.Select(b => b.Run.AgentRunId.ToString("D"))), now, evidence);
+                null, primary.SessionId, primary.AgentRunId, "completion:" + string.Join(":", batch.Select(b => b.Run.AgentRunId.ToString("D"))), now, primary.Admission.Activation.RootActivationId, primary.ActivationId, evidence);
             var skills = resolved.Skills;
             var report = AgentRun.Create(_ids.NewId(), RunOwner, new(activation, projection.Definition.Id, projection.Definition.Version,
                 resolved.Persona, _ids.NewId(), AgentRunOutputContract.CompletionReport,

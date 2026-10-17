@@ -35,7 +35,7 @@ public sealed class BackgroundCompletionProjectionTests
     {
         var now = DateTimeOffset.UtcNow;
         var sessionId = Guid.NewGuid();
-        var activation = new Activation(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [Guid.NewGuid()], null,
+        var activation = Activation.Start(Guid.NewGuid(), sessionId, ActivationKind.ManualBackground, [Guid.NewGuid()], null,
             null, null, null, "projection:test", now);
         var run = AgentRun.Create(Guid.NewGuid(), new(Guid.NewGuid(), Guid.NewGuid()),
             new(activation, "assistant", 1, new AgentIdentity("Alex", "Assistant", "Help", "Calm"), Guid.NewGuid(), AgentRunOutputContract.ConversationResponse),

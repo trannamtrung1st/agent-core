@@ -571,7 +571,7 @@ public sealed class AgentRunContractTests
     private static AgentRun NewItem(Guid? id = null, Guid? sourceId = null, int maxAttempts = 3,
         ActivationKind kind = ActivationKind.ScheduledWork) =>
         AgentRun.Create(id ?? AgentRunId, new AgentRunOwner(InstanceId, ProfileId),
-            new AgentRunAdmission(new Activation(sourceId ?? SourceId,
+            new AgentRunAdmission(Activation.Start(sourceId ?? SourceId,
                 Guid.Parse("019944af-0008-7000-8000-000000000092"), kind, [], null,
                 sourceId ?? SourceId, null, null, "registration|1|1758600000000", Now),
                 "general-assistant", 10, new AgentIdentity("Alex", "Assistant", "Help", "Calm"),

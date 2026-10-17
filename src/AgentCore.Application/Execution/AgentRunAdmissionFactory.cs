@@ -38,7 +38,7 @@ public static class AgentRunAdmissionFactory
             + "\nUse this accountRef for the email task. It is a selection hint only; Core still requires admitted bindings and live account authorization.";
         var activation = new Activation(activationId, snapshot.SessionId, ActivationKind.ConfigurationContinuation,
             [], source.ActivationId, null, snapshot.SessionId, source.AgentRunId,
-            $"configuration-continuation:{source.AgentRunId:D}", now, JsonSerializer.Serialize(new { TriggerKind = TriggerKind.UserTurn, Text = text, EnvironmentKind = emailContinuation ? "email-account" : "configuration", ContinuationTarget = task.Target, SelectedAccountId = emailSelection?.SelectedAccountId, SelectedAccountRef = emailSelection?.SelectedAccountRef }));
+            $"configuration-continuation:{source.AgentRunId:D}", now, source.Admission.Activation.RootActivationId, source.ActivationId, JsonSerializer.Serialize(new { TriggerKind = TriggerKind.UserTurn, Text = text, EnvironmentKind = emailContinuation ? "email-account" : "configuration", ContinuationTarget = task.Target, SelectedAccountId = emailSelection?.SelectedAccountId, SelectedAccountRef = emailSelection?.SelectedAccountRef }));
         var selection = snapshot.ModelSelection ?? throw AgentCoreErrors.Validation("Continuation requires a resolved model.");
         return AgentRun.Create(runId, source.Owner, new(activation, configuration.Definition.Id, configuration.Definition.Version,
             snapshot.PinnedPersona!, responseId, AgentRunOutputContract.ConversationResponse, budget, configuration),
@@ -58,7 +58,7 @@ public static class AgentRunAdmissionFactory
             TriggerKind.ManualInvocation => ActivationKind.ManualBackground,
             _ => ActivationKind.Initiative
         };
-        var activation = new Activation(activationId, snapshot.SessionId, kind, [], trigger.EventId,
+        var activation = Activation.Start(activationId, snapshot.SessionId, kind, [], trigger.EventId,
             ToolResources.IsOccurrence(trigger.Kind) ? trigger.EventId : null, null, null,
             $"signal:{trigger.EventId:D}", atUtc, JsonSerializer.Serialize(new SignalInput(trigger.Kind, trigger.Text, trigger.EnvironmentKind)));
         var model = occurrenceModel is { } pin
@@ -101,7 +101,7 @@ public static class AgentRunAdmissionFactory
         // Stable across crash/replay even if the proposal receives fresh execution IDs.
         var batchKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             string.Join(',', users.Select(entry => entry.EntryId.ToString("D")))))).ToLowerInvariant();
-        var activation = new Activation(activationId, snapshot.SessionId, ActivationKind.UserTurn,
+        var activation = Activation.Start(activationId, snapshot.SessionId, ActivationKind.UserTurn,
             users.Select(entry => entry.EntryId).ToArray(), users[0].SourceEventId ?? users[0].EntryId,
             null, null, null, $"user-batch:{batchKey}", admittedAtUtc);
         if (budget is not null) budget = WithCleanupIntent(budget, string.Join("\n", users.Select(user => user.Text)));

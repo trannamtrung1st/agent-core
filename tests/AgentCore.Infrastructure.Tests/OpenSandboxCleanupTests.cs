@@ -198,7 +198,7 @@ public sealed class OpenSandboxCleanupTests
         var snapshot = new SessionSnapshot(1,Guid.NewGuid(),1,definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId);
         var memory = new InMemoryMemoryStore(); await memory.SaveAsync(snapshot, 0);
         var runs = new InMemoryAgentRunStore(memory, new SystemDiagnosticIdSource());
-        var activation = new Activation(Guid.NewGuid(),snapshot.SessionId,ActivationKind.Initiative,[],Guid.NewGuid(),null,null,null,"sandbox-test",now);
+        var activation = Activation.Start(Guid.NewGuid(),snapshot.SessionId,ActivationKind.Initiative,[],Guid.NewGuid(),null,null,null,"sandbox-test",now);
         var run = AgentRun.Create(Guid.NewGuid(),owner,new(activation,definition.Id,1,definition.Identity,Guid.NewGuid(),AgentRunOutputContract.ConversationResponse),new("synthetic","synthetic","synthetic",null),3,now);
         await runs.AdmitAsync(snapshot with { Revision = 2 }, 1, run);
         run = await runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));

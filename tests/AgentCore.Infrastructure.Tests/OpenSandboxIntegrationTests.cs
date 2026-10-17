@@ -856,7 +856,7 @@ public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHe
             f.Session = new(1,Guid.NewGuid(),1,f.Definition,SessionMode.Text,null,SessionStatus.Created,[],"",0,null,owner.ProfileId,now,now,owner.AgentInstanceId,PinnedPersona:f.Definition.Identity);
             await f._memory.SaveAsync(f.Session,0);
             f._runs = new(f._factory,f._memory,new SystemDiagnosticIdSource());
-            var activation = new Activation(Guid.NewGuid(),f.Session.SessionId,ActivationKind.Initiative,[],Guid.NewGuid(),null,null,null,"sandbox-test",now);
+            var activation = Activation.Start(Guid.NewGuid(),f.Session.SessionId,ActivationKind.Initiative,[],Guid.NewGuid(),null,null,null,"sandbox-test",now);
             var run = AgentRun.Create(Guid.NewGuid(),owner,new(activation,f.Definition.Id,1,f.Definition.Identity,Guid.NewGuid(),AgentRunOutputContract.ConversationResponse),new("synthetic","synthetic","synthetic",null),3,now);
             await f._runs.AdmitAsync(f.Session with {Revision=2},1,run);
             f.Run = await f._runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));
@@ -888,7 +888,7 @@ public sealed class OpenSandboxIntegrationTests(Xunit.Abstractions.ITestOutputHe
             var sibling = Session with { SessionId=Guid.NewGuid(), Revision=1, CreatedAt=now, UpdatedAt=now };
             await _memory.SaveAsync(sibling,0);
             var owner=new AgentRunOwner(Session.AgentInstanceId,Session.ProfileId!.Value);
-            var activation=new Activation(Guid.NewGuid(),sibling.SessionId,ActivationKind.Initiative,[],Guid.NewGuid(),null,null,null,"sandbox-test",now);
+            var activation=Activation.Start(Guid.NewGuid(),sibling.SessionId,ActivationKind.Initiative,[],Guid.NewGuid(),null,null,null,"sandbox-test",now);
             var run=AgentRun.Create(Guid.NewGuid(),owner,new(activation,Definition.Id,1,Definition.Identity,Guid.NewGuid(),AgentRunOutputContract.ConversationResponse),new("synthetic","synthetic","synthetic",null),3,now);
             await _runs.AdmitAsync(sibling with {Revision=2},1,run);
             run=await _runs.ApplyAsync(owner,run.AgentRunId,new AgentRunCommand.Claim(1,now,Guid.NewGuid(),now.AddMinutes(15)));

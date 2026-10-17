@@ -107,10 +107,32 @@ internal static class AgentRunStoreMapping
         return row;
     }
 
+    public static void ValidateLineage(AgentRun run, AgentRun? parent)
+    {
+        var activation = run.Admission.Activation;
+        if (activation.ParentActivationId is null) return;
+        if (parent is null || parent.Owner != run.Owner || parent.SessionId != activation.SourceSessionId
+            || parent.ActivationId != activation.ParentActivationId
+            || parent.Admission.Activation.RootActivationId != activation.RootActivationId)
+            throw AgentCoreErrors.Conflict("Activation lineage must match its stored source Run.");
+    }
+
+    public static Activation ToActivation(ActivationRecord row)
+    {
+        var activation = JsonSerializer.Deserialize<Activation>(row.PayloadJson, Json)
+            ?? throw AgentCoreErrors.Persistence("Activation state is missing.");
+        if (activation.ActivationId.ToString("D") != row.ActivationId || activation.SessionId.ToString("D") != row.SessionId
+            || activation.RootActivationId.ToString("D") != row.RootActivationId
+            || activation.ParentActivationId?.ToString("D") != row.ParentActivationId)
+            throw AgentCoreErrors.Persistence("Activation identity does not match its stored lineage.");
+        return activation;
+    }
+
     public static void Apply(AgentRunRecord row, AgentRun run)
     {
         row.AgentRunId = run.AgentRunId.ToString("D");
         row.ActivationId = run.ActivationId.ToString("D");
+        row.RootActivationId = run.Admission.Activation.RootActivationId.ToString("D");
         row.SessionId = run.SessionId.ToString("D");
         row.AgentInstanceId = run.AgentInstanceId.ToString("D");
         row.ProfileId = run.ProfileId.ToString("D");
@@ -133,7 +155,8 @@ internal static class AgentRunStoreMapping
         var p = JsonSerializer.Deserialize<RunPayload>(row.PayloadJson, Json)
             ?? throw AgentCoreErrors.Persistence("AgentRun state is missing.");
         if (p.Admission.Activation.ActivationId.ToString("D") != row.ActivationId
-            || p.Admission.Activation.SessionId.ToString("D") != row.SessionId)
+            || p.Admission.Activation.SessionId.ToString("D") != row.SessionId
+            || p.Admission.Activation.RootActivationId.ToString("D") != row.RootActivationId)
             throw AgentCoreErrors.Persistence("AgentRun identity does not match its admission.");
         return new AgentRun(Guid.Parse(row.AgentRunId),
             new AgentRunOwner(Guid.Parse(row.AgentInstanceId), Guid.Parse(row.ProfileId)),
@@ -148,6 +171,8 @@ internal static class AgentRunStoreMapping
     public static ActivationRecord ToActivationRecord(SessionSnapshot snapshot, AgentRun run) => new()
     {
         ActivationId = run.ActivationId.ToString("D"), SessionId = run.SessionId.ToString("D"),
+        RootActivationId = run.Admission.Activation.RootActivationId.ToString("D"),
+        ParentActivationId = run.Admission.Activation.ParentActivationId?.ToString("D"),
         AgentInstanceId = run.AgentInstanceId.ToString("D"), ProfileId = run.ProfileId.ToString("D"),
         DedupeKey = run.Admission.Activation.DedupeKey, BackgroundSourceKey = BackgroundSourceKey(snapshot, run),
         AdmissionHash = AdmissionHash(snapshot, run),
@@ -180,6 +205,7 @@ internal static class AgentRunStoreMapping
         var payload = JsonSerializer.Serialize(new
         {
             run.Owner, run.Admission.OutputContract, a.Kind, a.EvidenceJson, a.SourceEventId, a.TriggerOccurrenceId, a.SourceSessionId, a.SourceAgentRunId,
+            InheritedRootActivationId = a.ParentActivationId is null ? (Guid?)null : a.RootActivationId, a.ParentActivationId,
             SourceFingerprint = BackgroundSourceKey(snapshot, run) is null ? a.SourceFingerprint : null,
             run.DefinitionId, run.DefinitionVersion, run.PinnedPersona, run.PinnedModel, run.PinnedSkillCatalog,
             run.Admission.Configuration, run.Admission.ExecutionBudget, run.Admission.TaskIntent,
@@ -244,6 +270,8 @@ internal static class AgentRunStoreMapping
     {
         if (report.Admission.Activation.Kind != ActivationKind.BackgroundCompleted || child is null || childSession is null
             || !child.IsTerminal || child.Result?.OutcomeKind == AgentRunOutcomeKind.NoAction
+            || report.Admission.Activation.RootActivationId != child.Admission.Activation.RootActivationId
+            || primary && report.Admission.Activation.ParentActivationId != child.ActivationId
             || child.Owner != report.Owner || childSession.AgentInstanceId != report.AgentInstanceId || childSession.ProfileId != report.ProfileId
             || !childSession.Origin.MayReportCompletion(child.AgentRunId) || childSession.Origin.OriginatingSessionId != parent.SessionId
             || primary && (report.Admission.Activation.SourceSessionId != child.SessionId || report.Admission.Activation.SourceAgentRunId != child.AgentRunId)

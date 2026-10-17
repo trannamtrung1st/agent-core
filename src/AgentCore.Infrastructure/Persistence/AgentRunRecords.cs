@@ -3,6 +3,8 @@ namespace AgentCore.Infrastructure.Persistence;
 public sealed class ActivationRecord
 {
     public string ActivationId { get; set; } = "";
+    public string RootActivationId { get; set; } = "";
+    public string? ParentActivationId { get; set; }
     public string SessionId { get; set; } = "";
     public string DedupeKey { get; set; } = "";
     public string? BackgroundSourceKey { get; set; }
@@ -16,6 +18,7 @@ public sealed class ActivationRecord
 public sealed class AgentRunRecord
 {
     public string AgentRunId { get; set; } = "";
+    public string RootActivationId { get; set; } = "";
     public string ActivationId { get; set; } = "";
     public string SessionId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
