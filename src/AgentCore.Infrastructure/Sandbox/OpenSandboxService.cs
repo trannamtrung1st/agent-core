@@ -22,7 +22,9 @@ namespace AgentCore.Infrastructure.Sandbox;
 public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISandboxStore store,
     ISessionWorkspace workspace, IMemoryStore sessions, IAgentRunStore runs, TimeProvider time, IAgentInstanceStore? instances = null,
     ILogger<OpenSandboxService>? logger = null, SandboxImageAuthority? imageAuthority = null, IAgentRunAuthority? runAuthority = null, IAgentDefinitionStore? definitions = null, ITenantSandboxVerificationStore? tenantVerifications = null,
-    AgentCore.Application.Security.TenantSandboxImageAuthorization? verificationAuthority = null) : ISandboxService, ITenantSandboxVerifier
+    AgentCore.Application.Security.TenantSandboxImageAuthorization? verificationAuthority = null,
+    ITenantSandboxRuntimeStore? tenantRuntime = null, AgentCore.Application.Security.TenantSandboxApprovedOperationService? approvedSandbox = null,
+    AgentCore.Application.Security.TenantSandboxExecutionAuthority? tenantExecutionAuthority = null, ITenantRunStore? tenantRuns = null) : ISandboxService, ITenantSandboxVerifier, ITenantSandboxCommandExecutor
 {
     private SandboxImageAuthority Images => imageAuthority ?? new(options, store, time);
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _gates = new();
@@ -30,10 +32,18 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
     internal Action<SandboxExecution>? ExecutionReceiptFault { get; set; }
     internal Action<string>? FinalizationCheckpoint { get; set; }
     internal sealed class FinalizationCrash : Exception { }
-    private ValueTask SaveReceiptAsync(SandboxExecution execution, bool create, CancellationToken ct)
+    private async ValueTask<SandboxExecution> SaveReceiptAsync(SandboxExecution execution, bool create, CancellationToken ct)
     {
         ExecutionReceiptFault?.Invoke(execution);
-        return store.SaveExecutionAsync(execution, create, ct);
+        if (execution.TenantId is { } tenant)
+        {
+            if (create) throw new AgentCore.Application.Security.AccessDeniedException("sandbox_approval_context_required");
+            var next = execution with { Revision = checked(execution.Revision + 1) };
+            if (!await TenantRuntime.TrySaveTenantSandboxExecutionFactsAsync(tenant, next, execution.Revision, ct))
+                throw new AgentCore.Application.Security.SecurityConflictException("stale_revision");
+            return next;
+        }
+        await store.SaveExecutionAsync(execution, create, ct); return execution;
     }
     private ConnectionConfig Connection()
     {
@@ -84,6 +94,7 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
 
     public async ValueTask<SandboxCommandResult> ExecuteAsync(SandboxAccess access, SandboxCommandRequest command, CancellationToken ct = default)
     {
+        if (access.Profile.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_scope_required");
         SandboxCommands.Validate(command);
         var gate = Gate(access.SessionId);
         if (!await gate.WaitAsync(0, ct))
@@ -139,70 +150,10 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
                 access.AgentRunId, access.ClaimGeneration, access.ToolCallId, hash, SandboxExecutionState.Dispatching, time.GetUtcNow(), Background: command.Background, ProfileId: lease.Profile.Id, ProfileRevision: lease.Profile.Revision, Phase: "dispatch",
                 DeadlineAt: time.GetUtcNow().AddSeconds(timeout), FilesystemEffectsMayHaveOccurred: true,
                 CommandText: command.Command ?? JsonSerializer.Serialize(command.Argv, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
-            await SaveReceiptAsync(receipt, true, ct);
+            receipt = await SaveReceiptAsync(receipt, true, ct);
             lease = await SaveAsync(lease with { State = SandboxLeaseState.Executing, ActiveExecutionId = receipt.Id, LastExecutionId = receipt.Id, LastActivityAt = time.GetUtcNow(), AdmissionRunId = access.AgentRunId, AdmissionToolCallId = access.ToolCallId }, ct);
-            var stdout = new BoundedText(32768); var stderr = new BoundedText(32768);
-            var lastOutputSave = time.GetUtcNow().AddSeconds(-1);
-            async Task SaveOutputAsync()
-            {
-                if (time.GetUtcNow() - lastOutputSave < TimeSpan.FromSeconds(1)) return;
-                lastOutputSave = time.GetUtcNow();
-                receipt = receipt with { Stdout = stdout.Text, Stderr = stderr.Text, Truncated = stdout.Truncated || stderr.Truncated };
-                await SaveReceiptAsync(receipt, false, ct);
-            }
-            try
-            {
-                var handlers = new ExecutionHandlers {
-                    SkipAccumulation = true,
-                    OnStdout = async m => { stdout.Append(m.Text); await SaveOutputAsync(); },
-                    OnStderr = async m => { stderr.Append(m.Text); await SaveOutputAsync(); },
-                    OnInit = async init => {
-                        receipt = receipt with { ProviderCommandId = init.Id, State = SandboxExecutionState.Running, Phase = "execution" };
-                        await SaveReceiptAsync(receipt, false, ct);
-                    }
-                };
-                var opts = CommandOptions(lease, command.Cwd, timeout, command.Background);
-                var execution = await GuardCommandStorageAsync(lease, token => command.Command is { } shell
-                    ? sdk.Commands.RunAsync(SandboxCommandPermissions.Shell(shell), opts, handlers, token)
-                    : sdk.Commands.RunAsync(SandboxCommandPermissions.Argv(command.Argv!), opts, handlers, token), ct);
-                if (!command.Background && (execution.ExitCode is null or < 0 or > 255
-                    || execution.Error?.Name?.Contains("Timeout",StringComparison.OrdinalIgnoreCase) == true))
-                    throw execution.Error?.Name?.Contains("Timeout", StringComparison.OrdinalIgnoreCase) == true
-                        ? new TimeoutException("Command timeout; termination requires confirmation.")
-                        : new InvalidOperationException("Command termination was not confirmed.");
-                receipt = receipt with { ProviderCommandId = execution.Id ?? receipt.ProviderCommandId, Stdout = stdout.Text, Stderr = stderr.Text,
-                    Truncated = stdout.Truncated || stderr.Truncated, State = command.Background ? SandboxExecutionState.Running : SandboxExecutionState.Completed,
-                    ExitCode = execution.ExitCode, FinishedAt = command.Background ? null : time.GetUtcNow() };
-                if (!command.Background) receipt = receipt with { DurationMs = Math.Max(0, execution.Complete?.ExecutionTimeMs ?? (long)(time.GetUtcNow() - receipt.StartedAt).TotalMilliseconds) };
-                if (!command.Background)
-                {
-                    receipt = receipt with { Phase = "processInspection" };
-                    await SaveReceiptAsync(receipt, false, ct); // Completion survives a crash before retirement.
-                    FinalizationCheckpoint?.Invoke("commandCompleted");
-                    (lease, receipt) = await FinalizeCompletedExecutionAsync(sdk, lease, receipt, access.Definition, token => ValidateAccessAsync(access, token), ct);
-                    return FinalizedResult(lease, receipt);
-                }
-                await SaveReceiptAsync(receipt, false, ct);
-                return Result(receipt);
-            }
-            catch (Exception error) when (error is not FinalizationCrash)
-            {
-                if (error is AgentCoreException core) stderr.Append("\n" + core.Message);
-                else stderr.Append("\nSandbox finalization could not be confirmed. Inspect the retained command and cleanup evidence; do not replay automatically.");
-                try
-                {
-                    (lease, receipt) = await AbortExecutionFinalizationAsync(lease, receipt, error);
-                    receipt = receipt with { Stdout = stdout.Text, Stderr = stderr.Text, Truncated = stdout.Truncated || stderr.Truncated };
-                    await SaveReceiptAsync(receipt, false, CancellationToken.None);
-                }
-                catch
-                {
-                    if (error is OperationCanceledException) throw;
-                    return await UnsettledFailureResultAsync(lease, receipt);
-                }
-                if (error is OperationCanceledException) throw;
-                return Result(receipt);
-            }
+            return await ExecuteReservedCommandAsync(sdk, lease, receipt, command, access.Definition,
+                token => ValidateAccessAsync(access, token), ct);
         }
         finally { gate.Release(); }
     }
@@ -357,6 +308,11 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         await sdk.RenewAsync(Math.Max(1, (int)(target - now).TotalSeconds), ct);
         return target;
     }
+    private static bool MatchesGeneration(SandboxLease lease, IReadOnlyDictionary<string, string>? metadata) =>
+        metadata?.GetValueOrDefault("agent-core-generation") == lease.Generation.ToString("N")
+        && (lease.TenantId is null || metadata.GetValueOrDefault("agent-core-tenant") == lease.TenantId.Value.ToString("N")
+            && metadata.GetValueOrDefault("agent-core-session") == lease.SessionId.ToString("N")
+            && metadata.GetValueOrDefault("agent-core-executor") == lease.ExecutorPrincipalId?.ToString("N"));
     private async Task<SdkSandbox> ConnectAsync(SandboxLease lease, CancellationToken ct)
     {
         if (lease.MountAuthority is null) throw CanonicalSandboxMountResolver.Incompatible("Environment mount authority is absent; reset and reverify the profile.");
@@ -365,14 +321,23 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
         try
         {
             var info = await sdk.GetInfoAsync(ct);
-            if (info.Metadata?.GetValueOrDefault("agent-core-generation") != lease.Generation.ToString("N"))
+            if (!MatchesGeneration(lease, info.Metadata))
                 throw AgentCoreErrors.NotFound("Sandbox generation was not found.");
             return sdk;
         }
         catch { await sdk.DisposeAsync(); throw; }
     }
     private async ValueTask<SandboxLease> SaveAsync(SandboxLease lease, CancellationToken ct)
-    { var next = lease with { Revision = lease.Revision + 1 }; await store.SaveLeaseAsync(next, lease.Revision, ct); return next; }
+    {
+        var next = lease with { Revision = checked(lease.Revision + 1) };
+        if (lease.TenantId is { } tenant)
+        {
+            if (!await TenantRuntime.TrySaveTenantSandboxLeaseFactsAsync(tenant, next, lease.Revision, ct))
+                throw new AgentCore.Application.Security.SecurityConflictException("stale_revision");
+        }
+        else await store.SaveLeaseAsync(next, lease.Revision, ct);
+        return next;
+    }
     private Task<bool> TryTerminateAsync(SandboxLease lease, CancellationToken ct) => TryTerminateRemoteAsync(lease, ct);
     private async Task<bool> TryTerminateRemoteAsync(SandboxLease lease, CancellationToken ct)
     {
@@ -389,6 +354,15 @@ public sealed partial class OpenSandboxService(OpenSandboxOptions options, ISand
             try
             {
                 await using var manager = SandboxManager.Create(new SandboxManagerOptions { ConnectionConfig = Connection() });
+                if (lease.TenantId is not null)
+                {
+                    try
+                    {
+                        var info = await manager.GetSandboxInfoAsync(lease.ProviderId, request.Token);
+                        if (!MatchesGeneration(lease, info.Metadata)) { failure = "ownership"; break; }
+                    }
+                    catch (SandboxApiException e) when (e.StatusCode == 404) { return true; }
+                }
                 try { await manager.KillSandboxAsync(lease.ProviderId, request.Token); }
                 catch (SandboxApiException e) when (e.StatusCode == 404) { /* Confirmed absent; local cleanup is still required. */ }
                 return true;

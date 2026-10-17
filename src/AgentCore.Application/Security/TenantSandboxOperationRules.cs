@@ -23,7 +23,7 @@ public static class TenantSandboxOperationRules
             profile.InstanceInitializationScript, lease is null || lease.State == SandboxLeaseState.Terminated, profile.Cpu, profile.MemoryMiB,
             profile.MaxCommandSeconds, profile.IdleTtlSeconds, profile.MaxLifetimeSeconds, profile.StorageBytes));
     public static void Require(PreparedSandboxCommand value, AgentRun run, TenantAgent agent, TenantSession session,
-        AgentDefinition baseline, SandboxProfile source, SandboxLease? lease, DateTimeOffset at)
+        AgentDefinition baseline, SandboxProfile source, SandboxLease? lease, DateTimeOffset at, SandboxExecution? reserved = null)
     {
         var command = TenantApprovalRules.SandboxCommand(value); var profile = Profile(run, value.ProfileId);
         var current = InstanceSettingsResolver.Resolve(baseline, agent.Instance.SettingsOverrides);
@@ -37,14 +37,18 @@ public static class TenantSandboxOperationRules
             || value.ProfileRevision != profile.Revision || command.TimeoutSeconds > profile.MaxCommandSeconds
             || value.RegistryCredentialId != profile.RegistryCredentialId || value.RegistryCredentialRevision != profile.RegistryCredentialRevision
             || value.RegistrySecretRevision != profile.RegistrySecretRevision || value.HomeAccess != home
-            || (lease?.Revision ?? 0) != value.ExpectedLeaseRevision || lease?.Generation != value.ExpectedGeneration)
+            || reserved is null && (lease?.Revision ?? 0) != value.ExpectedLeaseRevision || lease?.Generation != value.ExpectedGeneration)
             throw new SecurityConflictException("sandbox_operation_witness_changed");
         TenantSandboxRuntimeRules.RequireCurrentPolicy(run, agent, baseline, profile, source, lease?.MountAuthority);
         StateIsolationAccess.RequireHome(new(HomeAccess: home), command.Cwd, false);
-        if (lease is not null && (lease.State == SandboxLeaseState.Ready && lease.ExpiresAt <= at
+        if (reserved is not null && (lease is null || reserved.Generation != lease.Generation || reserved.AgentRunId != run.AgentRunId
+            || reserved.SessionId != run.SessionId || reserved.TenantId != run.Owner.TenantId || reserved.ExecutorPrincipalId != run.Owner.ExecutorPrincipalId
+            || lease.ActiveExecutionId != reserved.Id || lease.State != SandboxLeaseState.Executing || lease.Revision <= value.ExpectedLeaseRevision))
+            throw new SecurityConflictException("sandbox_operation_witness_changed");
+        if (lease is not null && ((lease.State == SandboxLeaseState.Ready || reserved is not null) && lease.ExpiresAt <= at
             || lease.State == SandboxLeaseState.Terminated && lease.Initialization?.State is "Running" or "Failed" && lease.CleanupReason != "reset"
-            || lease.State is not (SandboxLeaseState.Ready or SandboxLeaseState.Terminated) || lease.ActiveExecutionId is not null
-            || lease.State == SandboxLeaseState.Ready && (lease.Profile with { InstanceRevision = profile.InstanceRevision }) != profile))
+            || reserved is null && (lease.State is not (SandboxLeaseState.Ready or SandboxLeaseState.Terminated) || lease.ActiveExecutionId is not null)
+            || (lease.State == SandboxLeaseState.Ready || reserved is not null) && (lease.Profile with { InstanceRevision = profile.InstanceRevision }) != profile))
             throw new AccessDeniedException("sandbox_recovery_required");
     }
 }

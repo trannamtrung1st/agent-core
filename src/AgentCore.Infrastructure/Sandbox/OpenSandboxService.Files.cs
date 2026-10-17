@@ -26,6 +26,17 @@ public sealed partial class OpenSandboxService
 
     private async ValueTask CheckMountedAuthorityAsync(SandboxLease lease, CancellationToken ct)
     {
+        if (lease.TenantId is not null)
+        {
+            var ownedExecutionId = lease.ActiveExecutionId ?? throw new AgentCore.Application.Security.AccessDeniedException("sandbox_approval_context_required");
+            var ownedRun = await TenantRuntimeRun(lease.TenantId.Value, lease.AdmissionRunId ?? Guid.Empty, ct)
+                ?? throw new AgentCore.Application.Security.AccessDeniedException("run_unavailable");
+            var authority = await TenantExecution.RequireAsync(new(ownedRun.Owner, lease.SessionId, ownedRun.AgentRunId,
+                ownedRun.Claim?.Generation ?? Guid.Empty), ownedExecutionId, ct);
+            if (authority.Lease.Generation != lease.Generation || authority.Lease.MountAuthority != lease.MountAuthority)
+                throw new AgentCore.Application.Security.SecurityConflictException("sandbox_operation_witness_changed");
+            _ = ResolveMounts(lease); return;
+        }
         var session = await sessions.LoadMetadataAsync(lease.SessionId, ct);
         if (session?.AgentInstanceId != lease.AgentInstanceId || session.DurablyDeletedAt is not null || session.ArchivedAt is not null
             || session.Status is SessionStatus.Ended or SessionStatus.Ending)

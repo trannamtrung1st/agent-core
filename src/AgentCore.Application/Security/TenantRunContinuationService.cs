@@ -29,7 +29,7 @@ public static class TenantRunContinuationRules
 
 public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantApprovalStore approvals,
     TenantApprovedOperationService effects, TimeProvider time, ITenantRuntimeStore? runtimeStore = null, IIdGenerator? ids = null,
-    TenantCredentialCheckService? credentialChecks = null)
+    TenantCredentialCheckService? credentialChecks = null, ITenantSandboxCommandExecutor? sandboxCommands = null)
 {
     // Called by the shared-capacity host before mailbox dispatch. ResumeAsync consumes receipts only for external effects.
     public async ValueTask PrepareExternalEffectAsync(AgentRun dispatched, CancellationToken ct = default)
@@ -40,10 +40,9 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         var request = await approvals.FindApprovalAsync(tenant, requestId, ct).ConfigureAwait(false);
         var source = run.Admission.ApprovalResume is { } resume ? await runs.FindTenantRunAsync(tenant, resume.SourceRunId, ct).ConfigureAwait(false) : null;
         TenantRunContinuationRules.Require(run, request, source);
-        ValidateAuthorizationCheckpoint(run, request!, request!.Operation.Kind == TenantOperationKind.CredentialConnectionCheck
+        ValidateAuthorizationCheckpoint(run, request!, (request!.Operation.Kind is TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand)
             && run.Admission.ApprovalResume is not null && run.SideEffect.ToolCallId != "operation:" + request.Operation.OperationId.ToString("D"));
-        if (request!.Status != TenantApprovalStatus.Approved || request.Operation.Kind != TenantOperationKind.CredentialConnectionCheck) return;
-        if (credentialChecks is null) throw new AccessDeniedException("tenant_effect_unavailable");
+        if (request!.Status != TenantApprovalStatus.Approved || request.Operation.Kind is not (TenantOperationKind.CredentialConnectionCheck or TenantOperationKind.SandboxCommand)) return;
         var remaining = run.Checkpoint?.PauseBudgetClock(time.GetUtcNow()).RemainingOverallBudgetMs
             ?? (run.Admission.ExecutionBudget?.Profile.DurationSeconds ?? 180) * 1000;
         if (remaining <= 0) throw new AccessDeniedException("execution_budget_exhausted");
@@ -51,7 +50,10 @@ public sealed class TenantRunContinuationService(ITenantRunStore runs, ITenantAp
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, budget.Token);
         try
         {
-            await credentialChecks.ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
+            if (request.Operation.Kind == TenantOperationKind.SandboxCommand)
+                await (sandboxCommands ?? throw new AccessDeniedException("tenant_effect_unavailable")).ExecuteApprovedAsync(
+                    new(run.Owner, run.SessionId, run.AgentRunId, run.Claim!.Generation), requestId, linked.Token).ConfigureAwait(false);
+            else await (credentialChecks ?? throw new AccessDeniedException("tenant_effect_unavailable")).ExecuteAsync(new(tenant, run.AgentRunId), requestId, request.Operation.OperationId,
                 run.Claim!.Generation, request.Operation.ActionHash, linked.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (budget.IsCancellationRequested && !ct.IsCancellationRequested) { }

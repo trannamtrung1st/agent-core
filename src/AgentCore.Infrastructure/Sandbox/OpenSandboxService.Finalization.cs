@@ -31,7 +31,7 @@ public sealed partial class OpenSandboxService
         if (!execution.RemoteTerminationConfirmed && !await CompletedGenerationIsQuiescentAsync(sdk, lease, ct))
         {
             execution = execution with { Phase = "retirementRequested", GenerationRecycled = true };
-            await SaveReceiptAsync(execution, false, ct);
+            execution = await SaveReceiptAsync(execution, false, ct);
             lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminating, CleanupReason = "executionRecycle" }, ct);
             FinalizationCheckpoint?.Invoke("retirementRequested");
             if (!await TryTerminateRemoteAsync(lease, ct))
@@ -42,13 +42,13 @@ public sealed partial class OpenSandboxService
             }
             FinalizationCheckpoint?.Invoke("remoteTerminated");
             execution = execution with { RemoteTerminationConfirmed = true, TerminationConfirmed = true, Phase = "completed" };
-            await SaveReceiptAsync(execution, false, CancellationToken.None);
+            execution = await SaveReceiptAsync(execution, false, CancellationToken.None);
             lease = await SaveAsync(lease with { State = SandboxLeaseState.Terminated, ActiveExecutionId = null }, CancellationToken.None);
             return (lease, execution);
         }
         await fence(ct);
-        execution = execution with { Phase = "completed" };
-        await SaveReceiptAsync(execution, false, ct);
+        execution = execution with { Phase = "completed", TerminationConfirmed = true };
+        execution = await SaveReceiptAsync(execution, false, ct);
         if (sdk is null) throw AgentCoreErrors.Conflict("Live generation ownership could not be confirmed.");
         lease = await SaveAsync(lease with { State = SandboxLeaseState.Ready, ActiveExecutionId = null,
             LastActivityAt = time.GetUtcNow(), ExpiresAt = await RenewIdleAsync(sdk, lease, ct) }, ct);
@@ -63,7 +63,7 @@ public sealed partial class OpenSandboxService
     private async ValueTask<SandboxCommandResult> UnsettledFailureResultAsync(SandboxLease lease, SandboxExecution fallback)
     {
         SandboxExecution execution;
-        try { execution = await store.GetExecutionAsync(lease.SessionId, fallback.Id, CancellationToken.None) ?? fallback; }
+        try { execution = await ReadReceiptAsync(lease, fallback.Id, CancellationToken.None) ?? fallback; }
         catch { execution = fallback; }
         return Result(execution) with { Error = "recovery_required", EnvironmentState = "NeedsReconciliation", EnvironmentGeneration = lease.Generation,
             Recovery = "Receipt persistence or process cleanup was interrupted. Inspect durable evidence and current files; never replay an uncertain command." };
@@ -72,11 +72,13 @@ public sealed partial class OpenSandboxService
     private async ValueTask<(SandboxLease Lease, SandboxExecution Execution)> AbortExecutionFinalizationAsync(
         SandboxLease lease, SandboxExecution execution, Exception error)
     {
-        execution = await store.GetExecutionAsync(lease.SessionId, execution.Id, CancellationToken.None) ?? execution;
-        lease = await store.GetLeaseAsync(lease.SessionId, CancellationToken.None) ?? lease;
+        execution = await ReadReceiptAsync(lease, execution.Id, CancellationToken.None) ?? execution;
+        lease = await ReadLeaseAsync(lease, CancellationToken.None) ?? lease;
         using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         var remote = execution.RemoteTerminationConfirmed || await TryTerminateRemoteAsync(lease, cleanup.Token);
-        var runCancelled = await RunCancellationRequestedAsync(lease.SessionId, lease.AgentInstanceId, execution.AgentRunId, CancellationToken.None);
+        var runCancelled = lease.TenantId is { } tenant
+            ? (await TenantRuntime.ReadTenantSandboxExecutionFactsAsync(tenant, lease.SessionId, execution.Id, CancellationToken.None))?.RunCancellationRequested == true
+            : await RunCancellationRequestedAsync(lease.SessionId, lease.AgentInstanceId, execution.AgentRunId, CancellationToken.None);
         var cancelled = error is OperationCanceledException || runCancelled;
         execution = execution with {
             State = execution.ExitCode is not null && execution.State is SandboxExecutionState.Completed or SandboxExecutionState.Canceled ? execution.State
@@ -85,7 +87,7 @@ public sealed partial class OpenSandboxService
             FailureCategory = cancelled ? "cancellation" : ClassifyFailure(error, execution.Phase),
             CancellationReason = cancelled ? runCancelled ? "runCancellation" : "requestCancellation" : execution.CancellationReason,
             DiagnosticId = execution.DiagnosticId ?? Guid.CreateVersion7().ToString("D"), RemoteTerminationConfirmed = remote, TerminationConfirmed = remote };
-        await SaveReceiptAsync(execution, false, CancellationToken.None);
+        execution = await SaveReceiptAsync(execution, false, CancellationToken.None);
         lease = await SaveAsync(lease with { State = remote ? SandboxLeaseState.Terminated : SandboxLeaseState.NeedsReconciliation,
             ActiveExecutionId = remote ? null : execution.Id, DiagnosticId = execution.DiagnosticId,
             CleanupReason = cancelled ? "cancelled" : "executionFailed", SafeMessage = remote

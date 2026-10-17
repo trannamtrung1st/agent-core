@@ -1,5 +1,11 @@
 # Backend Implementation Specification
 
+## Tenant Sandbox SDK execution and outcome integration
+
+`OpenSandboxService.CommandExecution` shares command streaming, bounded output, storage monitoring and finalization for legacy and canonical tenant callers. Tenant storage branches explicitly use `ITenantSandboxRuntimeStore` with exact receipt/lease revisions; they do not supply a legacy Profile. Before dispatch and in the existing watcher, `TenantSandboxExecutionAuthority` checks the fresh claimed Run, original requester, raw scoped executor authority, saved qualified human decision, admitted/current policy and exact source epochs. The saved deadline remains fixed while current claim renewal is checked dynamically.
+
+Before connection, actual canonical root identities and cwd are validated. SDK provider metadata binds tenant, Session, executor and generation. A new command fence alone owns dispatch; repeated observations settle existing terminal facts without network replay. Cleanup uses bounded exact provider identity plus metadata verification or confirmed absence, independently of retired human/Run authority. Factual reads/writes and result settlement remain possible after logical deletion; public reads remain closed. No new scheduler, execution engine or durable dispatch table is added. First-generation preparation/provisioning and the complete tenant process/reset/cleanup/UI/model paths remain open. [Focused evidence](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md).
+
 ## Tenant typed Sandbox review boundary
 
 The approval owner now persists canonical exact Sandbox commands through the existing durable wait, root suppression, review, decision and wakeup path. `TenantSandboxOperationTarget` resolves actual current owned Session/Instance/profile sources, the immutable admitted setup and current policy/readiness/source epochs. Changed generation, expired environment, incompatible setup or rotated registry source invalidates the saved review. Cancellation remains available without reauthorizing a stale effect.

@@ -88,13 +88,13 @@ public sealed partial class OpenSandboxService
             execution = execution with { State = stop ? SandboxExecutionState.Canceled : SandboxExecutionState.Completed,
                 ExitCode = status.ExitCode, FinishedAt = time.GetUtcNow(), Phase = "processInspection",
                 FailureCategory = stop ? "cancellation" : null, CancellationReason = stop ? "processStop" : null };
-            await SaveReceiptAsync(execution, false, ct);
+            execution = await SaveReceiptAsync(execution, false, ct);
             FinalizationCheckpoint?.Invoke("commandCompleted");
             (lease, execution) = await FinalizeCompletedExecutionAsync(sdk, lease, execution, session.Definition,
                 token => ValidateProcessAuthorityAsync(lease, execution, token), ct);
             return FinalizedResult(lease, execution);
         }
-        await SaveReceiptAsync(execution, false, ct); return Result(execution);
+        execution = await SaveReceiptAsync(execution, false, ct); return Result(execution);
     }
     private async ValueTask ValidateProcessAuthorityAsync(SandboxLease lease, SandboxExecution execution, CancellationToken ct)
     {

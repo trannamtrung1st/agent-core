@@ -1,5 +1,15 @@
 # Persistence and Configuration
 
+## Failed multi-step downgrade recovery
+
+A refused lossy older migration does not undo already completed safe newer Down steps. Inspect retained data with schema-appropriate reads, then apply the normal forward migrations before opening stores with the current EF model. The focused credential migration regression now verifies unchanged retained payload at the intermediate schema, refusal of the protected Credential target and successful forward recovery before typed reads. This uses only a disposable test database; it adds no compatibility fallback or user-data conversion. [Recovery evidence](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md).
+
+## Tenant Sandbox SDK factual settlement
+
+SDK execution reuses existing owned lease/receipt rows and the exact approval/operation references introduced by `TenantSandboxCommandApprovals`; no new migration or dispatch table is required. Streaming/finalization saves retain increasing receipt/lease revisions and immutable command, owner, generation, approval and action hash. Confirmed quiescence is recorded before clearing the active receipt; unknown cleanup retains reconciliation state.
+
+A dedicated exact technical read uses retained relational Session/Run ownership after logical deletion. Factual result settlement derives its outcome from the actual receipt and atomically appends the existing immutable `TenantOperationReceipt`, updates the matching still-live Run external-effect state and records safe audit. It does not change grants or security revision. Retired Runs stay retired. Duplicate operation results are stable, and no settlement may dispatch another command. [Both-store SDK/reopen evidence](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md) describes the tested boundary; initial provisioning, worker recovery lifecycle and final schema consolidation remain open.
+
 ## Tenant Sandbox exact review persistence
 
 Migration `20261017220217_TenantSandboxCommandApprovals` extends the existing approval and Sandbox execution tables. Sandbox review rows index exact owned profile ID/revision, reference the actual tenant profile root/revision and require the typed Review permission/payload relationship. Sandbox payloads allow up to 1 MiB for bounded escaped command/scripts; older operation bounds remain unchanged. Existing persona/preference/credential approval JSON bytes are retained without rewriting.

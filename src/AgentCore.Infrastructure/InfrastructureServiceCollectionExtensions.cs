@@ -74,6 +74,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<OpenSandboxService>();
         services.TryAddSingleton<ISandboxService>(provider => provider.GetRequiredService<OpenSandboxService>());
         services.TryAddSingleton<ITenantSandboxVerifier>(provider => provider.GetRequiredService<OpenSandboxService>());
+        services.TryAddSingleton<ITenantSandboxCommandExecutor>(provider => provider.GetRequiredService<OpenSandboxService>());
         services.TryAddSingleton<OpenSandboxReadiness>();
         services.TryAddSingleton<ISandboxReadiness>(provider => provider.GetRequiredService<OpenSandboxReadiness>());
         if (speech is not null)

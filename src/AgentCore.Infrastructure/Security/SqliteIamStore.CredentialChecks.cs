@@ -9,7 +9,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class SqliteIamStore : ITenantCredentialCheckStore
 {
-    private static IQueryable<AgentRunRecord> RetainedCredentialCheckRuns(AgentCoreDbContext db, Guid tenant) => db.AgentRuns.Where(r => r.TenantId == tenant
+    private static IQueryable<AgentRunRecord> RetainedTenantOperationRuns(AgentCoreDbContext db, Guid tenant) => db.AgentRuns.Where(r => r.TenantId == tenant
         && db.Set<TenantSessionRecord>().Any(s => s.TenantId == tenant && s.SessionId == r.SessionId && s.AgentInstanceId == r.AgentInstanceId && s.ExecutorPrincipalId == r.ExecutorPrincipalId));
     public async ValueTask<TenantCredentialCheckDispatch?> FindCredentialCheckDispatchAsync(Guid tenantId, Guid operationId, CancellationToken ct = default)
     {
@@ -107,10 +107,10 @@ public sealed partial class SqliteIamStore : ITenantCredentialCheckStore
         if (ledger?.Domain() != dispatch || dispatch.CompletedAt is not null || tenant is null || tenant.Revision != expectedSecurityRevision) return null;
         var before = (await ReadTenantAsync(db, tenant.TenantId, ct).ConfigureAwait(false))!;
         var requestRow = await db.Set<TenantApprovalRecord>().AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenant.TenantId && r.RequestId == dispatch.RequestId, ct).ConfigureAwait(false);
-        var row = await RetainedCredentialCheckRuns(db, tenant.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == dispatch.RunId.ToString("D"), ct).ConfigureAwait(false);
+        var row = await RetainedTenantOperationRuns(db, tenant.TenantId).SingleOrDefaultAsync(r => r.AgentRunId == dispatch.RunId.ToString("D"), ct).ConfigureAwait(false);
         if (requestRow is null || row is null) return null;
         var request = requestRow.Domain(); var run = AgentRunStoreMapping.ToDomain(row);
-        var sourceRow = request.RunId == run.AgentRunId ? null : await RetainedCredentialCheckRuns(db, tenant.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false);
+        var sourceRow = request.RunId == run.AgentRunId ? null : await RetainedTenantOperationRuns(db, tenant.TenantId).AsNoTracking().SingleOrDefaultAsync(r => r.AgentRunId == request.RunId.ToString("D"), ct).ConfigureAwait(false);
         var grant = await db.Set<TenantOperationGrant>().SingleOrDefaultAsync(g => g.TenantId == tenant.TenantId && g.RequestId == request.RequestId, ct).ConfigureAwait(false);
         TenantCredentialCheckRules.RequireDispatch(dispatch, request, run, grant, sourceRow is null ? null : AgentRunStoreMapping.ToDomain(sourceRow));
         TenantCredentialCheckRules.Transaction(next, expectedSecurityRevision, request, audit, false);

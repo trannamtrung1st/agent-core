@@ -2,6 +2,10 @@
 
 Baseline `38b8288230854b9044b69100c4f99bb4c259d2d1`, clean checkout. Every row below is a cutover obligation, **not an enforcement claim**. [Delivery status](multitenant-iam-delivery-2026-10-16.md).
 
+## Approved Sandbox SDK successor — 2026-10-18
+
+The existing SDK adapter now executes an exact approved tenant Sandbox command once against an existing owned Ready generation, with current authority checks, scoped provider metadata, bounded output/cleanup and immutable effect settlement. [Focused evidence](tenant-sandbox-sdk-execution-verification-2026-10-18.md) separates actual SDK protocol and continuation tests from unrun Docker provisioning. Initial provisioning/review binding and tenant workspace preparation, complete process/reset/cleanup workers, model offering and tenant Sandbox UI remain open, alongside other proposal families and final authority/schema consolidation. This supersedes earlier SDK-pending notes only for the supported Ready-generation path. The full proposal and prior SQLite preference reliability follow-up remain active.
+
 ## Exact Sandbox command review successor — 2026-10-18
 
 Tenant Sandbox commands now have exact typed durable Review, permission-filtered inspection and atomic one-time reservation over an existing Ready generation. The shared approval inspector names command parameters and units while preserving consent versus effect status. [Focused evidence](tenant-sandbox-command-approval-verification-2026-10-18.md) covers both stores, migration/reopen, HTTP and bounded browser adapter checks. This supersedes earlier typed-command-pending notes only for preparation/review/reservation. Initial provisioning/review binding, actual SDK dispatch and outcome settlement, mounts/process/reset/cleanup and tenant Sandbox UI remain open, alongside the other proposal families and final authority/schema consolidation. The full proposal and earlier SQLite preference reliability follow-up remain active.

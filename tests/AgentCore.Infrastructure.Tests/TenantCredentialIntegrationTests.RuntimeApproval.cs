@@ -213,7 +213,13 @@ public sealed partial class TenantCredentialIntegrationTests
         var check = (await service.PrepareCredentialCheckAsync(new(setup.Tenant, run.AgentRunId), "work-drive", run.Revision, run.Claim!.Generation)).Request!;
         await using (var db = await f.Contexts!.CreateDbContextAsync())
         {
+            var payload = await db.Database.SqlQuery<string>($"SELECT PayloadJson AS Value FROM TenantApprovalRequests WHERE RequestId={check.RequestId}").SingleAsync();
             await Assert.ThrowsAsync<SqliteException>(() => db.GetService<IMigrator>().MigrateAsync("20261017071356_TenantExecutionAuthorizationAudit"));
+            // Completed safe Down steps remain applied when an older lossy step refuses.
+            Assert.Equal(payload, await db.Database.SqlQuery<string>($"SELECT PayloadJson AS Value FROM TenantApprovalRequests WHERE RequestId={check.RequestId}").SingleAsync());
+            Assert.Contains("20261017090143_TenantCredentialApprovalTargets", await db.Database.GetAppliedMigrationsAsync());
+            await db.GetService<IMigrator>().MigrateAsync();
+            Assert.False(db.Database.HasPendingModelChanges());
         }
         Assert.Equal(check, await ((ITenantApprovalStore)f.Iam).FindApprovalAsync(setup.Tenant, check.RequestId));
         await using (var db = await f.Contexts!.CreateDbContextAsync())

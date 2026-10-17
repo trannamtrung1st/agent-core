@@ -1,5 +1,11 @@
 # System Architecture
 
+## Tenant approved Sandbox SDK execution
+
+The existing `OpenSandboxService` now implements the trusted tenant command executor over a pre-existing owned Ready generation. The existing approved reservation is the one dispatch fence; repeat observers cannot send another SDK command. The command comes only from the saved typed Review. `TenantSandboxExecutionAuthority` rechecks current Run/requester/executor/grantor, exact Session/profile/source/setup/home and receipt ownership before SDK work and throughout the existing storage watcher. Provider metadata must match the exact tenant, Session, executor and generation.
+
+Tenant facts use the canonical owned store; no legacy Profile or global storage fallback is introduced. The SDK command/output/finalization mechanics are shared with the existing adapter. Exact remote cleanup works after initiating authority retires and verifies ownership before deletion; uncertainty remains non-replayable. An immutable operation receipt, the matching live Run effect state and safe audit settle under the existing owning transaction/gates. Background launch completion is distinct from process completion. Initial provisioning/review binding, tenant workspace preparation and full process/reset/cleanup worker lifecycle, model offering and tenant Sandbox UI remain open. [Verification and limits](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md).
+
 ## Tenant exact Sandbox command review and reservation
 
 The trusted tenant approval owner can now prepare an exact typed Sandbox command against an admitted Run and save a nondelegatable Sensitive Review. Command arguments, Session/profile identity, effective home access and mutable source/generation witnesses are captured separately from the safe human review snapshot. A wait releases the matching claimed Run; approval records consent without claiming an effect. Current executor, requester, independent reviewer, Session, profile, policy and registry epochs are checked again before a new reservation.

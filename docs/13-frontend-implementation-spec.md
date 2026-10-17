@@ -1,5 +1,9 @@
 # Frontend Implementation Specification
 
+## Tenant Sandbox SDK backend boundary
+
+The [SDK execution successor](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md) advances trusted command execution and recorded effect meanings over existing Ready generations. It adds no model command offering or new tenant Sandbox screen. Existing approval inspection remains shared; a recorded background launch is distinct from process completion, and uncertain or pending cleanup must remain separate from consent and known exit evidence. First-generation setup and the complete tenant Sandbox interaction/delivery path remain open.
+
 ## Tenant Sandbox command approval inspection
 
 The existing tenant approval inspector recognizes `run_sandbox_command`, presents an exact parameter list with named units, escaped wrapped scripts and no meaningless before/after rows, and preserves independent consent versus recorded effect status. Chat uses the same operation title and shared inspector. The existing 736px viewport-capped Ant Design Drawer, responsive Descriptions, 16px section gaps, footer/confirmation and explicit refresh/focus recovery remain the owners. [Focused evidence](reports/tenant-sandbox-command-approval-verification-2026-10-18.md) separates actual preference-review interactions from controlled Sandbox projection checks. This does not add a tenant Sandbox command screen or model/SDK dispatch path.

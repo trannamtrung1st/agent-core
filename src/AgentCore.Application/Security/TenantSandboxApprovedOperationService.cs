@@ -11,6 +11,21 @@ public sealed class TenantSandboxApprovedOperationService(ITenantRunStore runs, 
     ITenantApprovedOperationStore decisions, ITenantSandboxRuntimeStore runtime, TenantSandboxOperationTarget targets,
     TenantOperationAuthorizer operations, IIdGenerator ids, TimeProvider time)
 {
+    public async ValueTask<TenantOperationReceipt?> SettleAsync(Guid tenant, Guid session, Guid executionId, CancellationToken ct = default)
+    {
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            var saved = await runtime.ReadTenantSandboxExecutionFactsAsync(tenant, session, executionId, ct).ConfigureAwait(false);
+            if (saved?.Execution is not { ApprovalRequestId: not null, OperationId: not null } execution)
+                throw new AccessDeniedException("resource_unavailable");
+            if (TenantSandboxEffectRules.Outcome(execution) is null) return null;
+            var audit = new AuthorizationAudit(ids.NewId(), tenant, saved.Owner.ExecutorPrincipalId, "sandbox.command.result",
+                execution.OperationId.Value.ToString("D"), "allowed", "sandbox_command_completed", time.GetUtcNow());
+            var receipt = await runtime.TrySettleApprovedSandboxExecutionAsync(tenant, session, executionId, execution.Revision, audit, ct).ConfigureAwait(false);
+            if (receipt is not null) return receipt;
+        }
+        throw new SecurityConflictException("sandbox_execution_unsettled");
+    }
     // The saved typed request supplies all command parameters. Only Reserved=true owns a new dispatch fence.
     public async ValueTask<TenantSandboxExecutionStart> ReserveAsync(TenantRuntimeFrame frame, Guid requestId, CancellationToken ct = default)
     {

@@ -1,5 +1,11 @@
 # Testing Strategy
 
+## Tenant Sandbox actual SDK execution regression
+
+Using actual tenant Definition/Instance/Session/Run/Review owners in both stores, reserve a controlled Ready generation over real disposable canonical directories and execute through the production SDK against an authenticated loopback server. Assert exact command argv, cwd, UID/GID and timeout, bounded streamed output, one dispatch, current execution checks and immutable effect receipt/Run/audit settlement. Invoke the normal external-effect preparation and receipt-consuming continuation, then repeat the command and verify no further provider calls.
+
+Exercise background-launch versus process completion, uncertain responses, initial foreign provider metadata, revocation after reservation and during the command, caller cancellation, logical Session deletion during SDK I/O, foreign cleanup metadata and confirmed provider absence. Cleanup may settle factual evidence after authority retirement but must never delete another owner or replay a command. Keep shared legacy cleanup/finalization, owned approval/current-policy and credential continuation regressions. [Recorded evidence](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md) distinguishes controlled SDK protocol execution from unrun tenant Docker provisioning, physical mount attestation, full process/reset/cleanup workers, model offering and UI acceptance.
+
 ## Tenant Sandbox exact command review regression
 
 In both stores, admit and claim a real owned Run with a controlled Ready generation, prepare an exact Sandbox command, inspect and approve it as a qualified human, resume/claim the source and reserve once. Assert a durable wait, no role/exceptional grant, one exact receipt/Run effect fence/lease pointer set and no completed effect result. Concurrent and repeated consumers must observe one winner and never promote raw metadata to approved authority.

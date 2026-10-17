@@ -9,7 +9,7 @@ public sealed partial class OpenSandboxService
     private async ValueTask<SandboxCommandResult> RecoveryRequiredAsync(SandboxLease lease, CancellationToken ct)
     {
         var executionId = lease.ActiveExecutionId ?? lease.LastExecutionId;
-        var evidence = executionId is { } id ? await store.GetExecutionAsync(lease.SessionId, id, ct) : null;
+        var evidence = executionId is { } id ? await ReadReceiptAsync(lease, id, ct) : null;
         var result = evidence is null ? new SandboxCommandResult(Guid.Empty, lease.State.ToString(), null, "", "", false, 0, false) : Result(evidence);
         return result with { Stdout = "", Stderr = "", Error = "recovery_required", EnvironmentState = lease.State.ToString(), EnvironmentGeneration = lease.Generation,
             Phase = lease.FailurePhase ?? lease.TransitionPhase ?? result.Phase, FailureCategory = lease.FailureCategory ?? result.FailureCategory,
@@ -53,7 +53,7 @@ public sealed partial class OpenSandboxService
         var settled = execution with { TerminationConfirmed = true, RemoteTerminationConfirmed = true, Phase = "completed",
             State = execution.State is SandboxExecutionState.Dispatching or SandboxExecutionState.Running ? SandboxExecutionState.Indeterminate : execution.State,
             FinishedAt = execution.FinishedAt ?? time.GetUtcNow() };
-        await SaveReceiptAsync(settled, false, ct);
+        settled = await SaveReceiptAsync(settled, false, ct);
         await SaveAsync(lease with { State = SandboxLeaseState.Terminated, ActiveExecutionId = null }, ct);
     }
 }

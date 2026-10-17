@@ -1,5 +1,11 @@
 # HTTP API and Realtime Protocol
 
+## Tenant Sandbox recorded effect meanings
+
+Existing approval `operationResult` can now record Sandbox outcomes from canonical SDK receipts: `sandbox_command_completed` means foreground process completion with bounded exit evidence and confirmed quiescence/retirement; `sandbox_command_started` means an acknowledged background launch whose process may still be Running; `sandbox_command_not_dispatched` means preflight failed before dispatch; `sandbox_command_uncertain` preserves an uncertain possibly dispatched command without replay. Completed shell transport does not guarantee the semantic success of arbitrary shell work; the exact execution receipt retains its exit/output facts.
+
+The operation result remains separate from approval status and Session environment/process state. A background launch result is not a completed process, and pending or foreign cleanup is not confirmed absence. No new public prepare/execute endpoint, browser-supplied command proof or model Sandbox authorization offering is enabled here. Existing protected inspection mappings continue to omit provider IDs, host paths, source authorization and secrets. [Focused backend evidence](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md).
+
 ## Tenant Sandbox command approval projection
 
 Existing tenant approval GET/detail/decision/cancel routes now recognize `run_sandbox_command` with summary “Run exact Sandbox command”. The prepared action adds nullable `sandboxCommand` containing Session/profile revision, canonical command JSON, expected lease revision/generation and effective home access. Registry Credential epochs, provider identities, host paths and source authorization are omitted. Existing operation shapes remain valid.

@@ -24,11 +24,14 @@ public sealed class TenantSandboxOperationTarget(ITenantSessionStore sessions, I
         var saved = await runtime.ReadTenantSandboxRuntimeAsync(tenant, run.SessionId, ct: ct).ConfigureAwait(false) ?? throw new AccessDeniedException("resource_unavailable");
         return (agent, session, baseline, source, saved.Lease);
     }
-    public async ValueTask RequireAsync(TenantApprovalRequest request, AgentRun run, CancellationToken ct)
+    public async ValueTask RequireAsync(TenantApprovalRequest request, AgentRun run, CancellationToken ct, SandboxExecution? reserved = null)
     {
         var value = request.Operation.SandboxCommand ?? throw new ArgumentException("Sandbox operation required.");
         var target = await ResolveAsync(run, value.ProfileId, ct).ConfigureAwait(false);
-        TenantSandboxOperationRules.Require(value, run, target.Agent, target.Session, target.Baseline, target.Profile, target.Lease, time.GetUtcNow());
+        if (target.Agent.Instance.Revision != request.Operation.ExpectedInstanceRevision
+            || target.Agent.Instance.PersonaRevision != request.Operation.ExpectedPersonaRevision)
+            throw new SecurityConflictException("sandbox_operation_witness_changed");
+        TenantSandboxOperationRules.Require(value, run, target.Agent, target.Session, target.Baseline, target.Profile, target.Lease, time.GetUtcNow(), reserved);
         if (request.Snapshot != TenantSandboxOperationRules.Snapshot(target.Agent, TenantSandboxOperationRules.Profile(run, value.ProfileId), target.Lease))
             throw new SecurityConflictException("sandbox_operation_witness_changed");
     }

@@ -1,5 +1,11 @@
 # Backend Interfaces
 
+## Tenant Sandbox SDK and factual completion ports
+
+`ITenantSandboxCommandExecutor.ExecuteApprovedAsync` takes only a trusted `TenantRuntimeFrame` and saved request ID. The shared SDK adapter acquires the existing Session gate and one approved reservation, loads the exact saved command, revalidates current execution authority and dispatches once. A retained reservation is an observation/factual settlement path and never permission to repeat SDK dispatch. This path currently requires an existing owned Ready generation.
+
+`ReadTenantSandboxExecutionFactsAsync` is an exact technical read over retained Session/Run/receipt roots, including cancellation facts after logical deletion. It grants no human read, current Runtime admission or effect authority. `TrySettleApprovedSandboxExecutionAsync` derives an immutable operation result from the actual canonical receipt; the caller cannot supply an outcome or command. Receipt, matching still-live Run effect state and safe audit commit together. Shared-capacity external-effect preparation invokes the executor before mailbox dispatch; ordinary continuation then consumes its saved receipt. [Evidence](reports/tenant-sandbox-sdk-execution-verification-2026-10-18.md) separates this integration from initial provisioning and model offering.
+
 ## Tenant approved Sandbox command ports
 
 `TenantApprovalService.PrepareSandboxAsync` accepts a trusted Run reference, exact admitted profile, typed `SandboxCommandRequest` and expected Run/claim witnesses. Core canonicalizes the command, pins the actual Session/profile/source/lease/home witnesses and derives Review kind from the central nondelegatable Sensitive `sandbox.execute` catalog entry. No browser-editable prepared command is accepted.
