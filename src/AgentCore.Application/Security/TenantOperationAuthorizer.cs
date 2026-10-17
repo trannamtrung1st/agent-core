@@ -10,28 +10,61 @@ public sealed record OperationAuthorizationDecision(OperationDecisionKind Decisi
     AccessScope Resource, ApprovalKind? ApprovalKind = null);
 
 // Decisions are current inspection results, not capabilities or operation grants. Effects must revalidate at commit.
-public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore runs, ITenantAgentStore agents, IamAuthorizer authorizer)
+public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore runs, ITenantAgentStore agents, IamAuthorizer authorizer, TenantOperationAudit audit)
 {
     public async ValueTask<OperationAuthorizationDecision> CheckAsync(TenantRunReference reference, string permission, string resourceType, string resourceId, CancellationToken ct = default)
     {
-        var (run, state) = await ResolveAsync(reference, ct).ConfigureAwait(false);
+        var (run, state) = await ResolveForDecisionAsync(reference, permission, ExecutionAuthorizationPurpose.Inspection, ct).ConfigureAwait(false);
         AccessScope target;
         try { target = IamResourceScopes.Create(reference.TenantId, resourceType, resourceId); }
-        catch (AccessDeniedException) { return new(OperationDecisionKind.Denied, "resource_unavailable", permission, AccessScope.ForTenant(reference.TenantId)); }
-        return await Check(state, run.Admission.ExecutionContext!, permission, target, ct).ConfigureAwait(false);
+        catch (AccessDeniedException)
+        {
+            var unavailable = new OperationAuthorizationDecision(OperationDecisionKind.Denied, "resource_unavailable", permission, AccessScope.ForTenant(reference.TenantId));
+            await audit.RecordAsync(state, run, unavailable, ExecutionAuthorizationPurpose.Inspection, ct).ConfigureAwait(false); return unavailable;
+        }
+        return await Check(state, run, permission, target, ct, purpose: ExecutionAuthorizationPurpose.Inspection).ConfigureAwait(false);
     }
     public async ValueTask<IReadOnlyList<OperationAuthorizationDecision>> EffectiveAsync(TenantRunReference reference, string resourceType, string resourceId, CancellationToken ct = default)
     {
-        var (run, state) = await ResolveAsync(reference, ct).ConfigureAwait(false);
-        var target = IamResourceScopes.Create(reference.TenantId, resourceType, resourceId);
+        var (run, state) = await ResolveForDecisionAsync(reference, "", ExecutionAuthorizationPurpose.Inspection, ct).ConfigureAwait(false);
+        AccessScope target;
+        try { target = IamResourceScopes.Create(reference.TenantId, resourceType, resourceId); }
+        catch (AccessDeniedException)
+        {
+            await audit.RecordAsync(state, run, new(OperationDecisionKind.Denied, "resource_unavailable", "", AccessScope.ForTenant(reference.TenantId)), ExecutionAuthorizationPurpose.Inspection, ct).ConfigureAwait(false);
+            throw;
+        }
+        if (target.Kind == AccessScopeKind.Resource && !IamResourceScopes.Exists(state, target)
+            && (!IamResourceScopes.ExternalShape(target) || !await store.OwnsResourceAsync(target, ct).ConfigureAwait(false)))
+        {
+            await audit.RecordAsync(state, run, new(OperationDecisionKind.Denied, "resource_unavailable", "", target), ExecutionAuthorizationPurpose.Inspection, ct).ConfigureAwait(false);
+            return [];
+        }
         var result = new List<OperationAuthorizationDecision>();
         foreach (var permission in PermissionCatalog.All.Where(p => !p.SystemOnly && !p.HumanOnly && p.AppliesToResource(target.ResourceType)))
         {
             if (!(await authorizer.CheckTenantAsync(state, run.Admission.ExecutionContext!.AgentPrincipalId, permission, target, ct).ConfigureAwait(false)).Allowed) continue;
-            var decision = await Check(state, run.Admission.ExecutionContext!, permission.Key, target, ct).ConfigureAwait(false);
+            var decision = await Check(state, run, permission.Key, target, ct, purpose: ExecutionAuthorizationPurpose.Inspection).ConfigureAwait(false);
             if (decision.Decision != OperationDecisionKind.Denied && decision.ApprovalKind != ApprovalKind.ExceptionalGrant) result.Add(decision);
         }
+        await audit.RecordAsync(state, run, new(OperationDecisionKind.Allowed, "effective_permissions_inspected", "", target), ExecutionAuthorizationPurpose.Inspection, ct).ConfigureAwait(false);
         return result;
+    }
+    internal async ValueTask<(AgentRun Run, TenantSecurityState State)> ResolveForDecisionAsync(TenantRunReference reference, string permission, ExecutionAuthorizationPurpose purpose, CancellationToken ct)
+    {
+        try { return await ResolveAsync(reference, ct).ConfigureAwait(false); }
+        catch (AccessDeniedException ex)
+        { await RecordFailureAsync(reference, permission, ex.ReasonCode, purpose, ct).ConfigureAwait(false); throw; }
+    }
+    internal async ValueTask RecordFailureAsync(TenantRunReference reference, string permission, string reason,
+        ExecutionAuthorizationPurpose purpose, CancellationToken ct, Guid? requiredSession = null)
+    {
+        var run = await runs.FindTenantRunAsync(reference.TenantId, reference.RunId, ct).ConfigureAwait(false);
+        if (run?.Admission.ExecutionContext is not { } context || context.TenantId != reference.TenantId
+            || requiredSession is { } session && run.SessionId != session) return;
+        var state = await store.ReadTenantAsync(reference.TenantId, ct).ConfigureAwait(false);
+        if (state is not null) await audit.RecordAsync(state, run,
+            new(OperationDecisionKind.Denied, reason, permission, AccessScope.ForTenant(reference.TenantId)), purpose, ct).ConfigureAwait(false);
     }
     internal async ValueTask<(AgentRun Run, TenantSecurityState State)> ResolveAsync(TenantRunReference reference, CancellationToken ct)
     {
@@ -54,7 +87,16 @@ public sealed class TenantOperationAuthorizer(IIamStore store, ITenantRunStore r
             }
         return (run, state);
     }
-    internal async ValueTask<OperationAuthorizationDecision> Check(TenantSecurityState state, TrustedExecutionContext context, string key, AccessScope target, CancellationToken ct, bool managementReviewRequired = false)
+    internal async ValueTask<OperationAuthorizationDecision> Check(TenantSecurityState state, AgentRun run, string key, AccessScope target, CancellationToken ct,
+        bool managementReviewRequired = false, ExecutionAuthorizationPurpose purpose = ExecutionAuthorizationPurpose.EffectEligibility)
+    {
+        var decision = await Evaluate(state, run.Admission.ExecutionContext!, key, target, ct, managementReviewRequired).ConfigureAwait(false);
+        await audit.RecordAsync(state, run, decision, purpose, ct).ConfigureAwait(false); return decision;
+    }
+    internal ValueTask RecordAsync(TenantSecurityState state, AgentRun run, OperationAuthorizationDecision decision,
+        ExecutionAuthorizationPurpose purpose, CancellationToken ct) => audit.RecordAsync(state, run, decision, purpose, ct);
+
+    private async ValueTask<OperationAuthorizationDecision> Evaluate(TenantSecurityState state, TrustedExecutionContext context, string key, AccessScope target, CancellationToken ct, bool managementReviewRequired)
     {
         OperationAuthorizationDecision Deny(string code) => new(OperationDecisionKind.Denied, code, key, target);
         if (!PermissionCatalog.TryGet(key, out var permission)) return Deny("unknown_permission");

@@ -37,6 +37,7 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     private readonly TaskCompletionSource? _compactionStarted;
     private readonly Queue<IReadOnlyList<MemoryProposal>> _memoryTurns;
     private readonly ConcurrentDictionary<Guid, ScheduleScratch> _scheduleScratchByKey = new();
+    public const string AuthorizationAuditMarker = "synthetic authorization audit:";
     private const string DiagnosticFailureMarker = "synthetic-fail-turn";
 
     private sealed class ScheduleScratch
@@ -492,6 +493,30 @@ public sealed class ScriptedLanguageModel : ILanguageModel
             yield return new ModelTextDelta(HistoricalImageRereadAnswer);
             yield return new ModelCompleted(ModelStopReason.Completed);
             yield break;
+        }
+
+        if (lastUser.Contains(AuthorizationAuditMarker, StringComparison.OrdinalIgnoreCase)
+            && request.Tools?.Any(t => t.Name == ToolCatalog.IamCheckAccess) == true)
+        {
+            if (toolRounds == 0)
+            {
+                var arguments = lastUser[(lastUser.IndexOf(AuthorizationAuditMarker, StringComparison.OrdinalIgnoreCase) + AuthorizationAuditMarker.Length)..].Split('\n', 2)[0]
+                    .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (arguments.Length != 2 || arguments[0].Length > 128 || !Guid.TryParseExact(arguments[1], "D", out var resource) || resource == Guid.Empty)
+                {
+                    yield return new ModelTextDelta("Synthetic authorization check requires a permission and resource GUID.");
+                    yield return new ModelCompleted(ModelStopReason.Completed); yield break;
+                }
+                yield return new ModelToolCallEvent(new("synthetic-authorization-check", ToolCatalog.IamCheckAccess,
+                    JsonSerializer.Serialize(new { permission = arguments[0], resourceType = "agent", resourceId = resource.ToString("D") })));
+                yield return new ModelCompleted(ModelStopReason.ToolCalls); yield break;
+            }
+            var recorded = false;
+            try { using var result = JsonDocument.Parse(lastTool); recorded = result.RootElement.TryGetProperty("decision", out _); }
+            catch (JsonException) { }
+            yield return new ModelTextDelta(recorded ? "Synthetic authorization check completed. Its result is recorded in the organization audit."
+                : "Synthetic authorization check did not complete.");
+            yield return new ModelCompleted(ModelStopReason.Completed); yield break;
         }
 
         if (TryScriptDefinitionEvaluation(request, toolRounds, out var definitionEvaluationEvents))
@@ -1176,7 +1201,8 @@ public sealed class ScriptedLanguageModel : ILanguageModel
     {
         var lastUser = SyntheticTaskContext.Text(request);
         if (_chunks.Any(c => c.Contains("[[speech:", StringComparison.Ordinal))) return false;
-        return lastUser.Contains("support case", StringComparison.OrdinalIgnoreCase)
+        return lastUser.Contains(AuthorizationAuditMarker, StringComparison.OrdinalIgnoreCase)
+            || lastUser.Contains("support case", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("order 91", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("retention", StringComparison.OrdinalIgnoreCase)
             || lastUser.Contains("compliance case", StringComparison.OrdinalIgnoreCase)

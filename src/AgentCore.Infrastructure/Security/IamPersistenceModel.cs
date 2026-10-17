@@ -1,4 +1,5 @@
 using AgentCore.Domain.Security;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -80,7 +81,12 @@ internal static class IamPersistenceModel
         sessions.HasIndex(x => new { x.AccountId, x.ExpiresAt });
         sessions.HasOne<Account>().WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
         var audit = model.Entity<AuthorizationAudit>();
-        audit.ToTable("AuthorizationAudit"); audit.HasKey(x => x.AuditId); audit.HasIndex(x => new { x.TenantId, x.At, x.AuditId });
+        audit.ToTable("AuthorizationAudit", table => table.HasCheckConstraint("CK_AuthorizationAudit_Execution",
+            "ExecutionJson IS NULL OR (length(ExecutionJson) <= 4096 AND json_valid(ExecutionJson))"));
+        audit.HasKey(x => x.AuditId); audit.HasIndex(x => new { x.TenantId, x.At, x.AuditId });
+        audit.Property(x => x.Execution).HasColumnName("ExecutionJson").HasConversion(
+            value => value == null ? null : JsonSerializer.Serialize(value, (JsonSerializerOptions?)null),
+            value => value == null ? null : JsonSerializer.Deserialize<ExecutionAuthorizationAudit>(value, (JsonSerializerOptions?)null));
         audit.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         var bootstrap = model.Entity<IamBootstrapRow>();
         bootstrap.ToTable("IdentityBootstrap", table => table.HasCheckConstraint("CK_IdentityBootstrap_One", "Id = 1")); bootstrap.HasKey(x => x.Id);

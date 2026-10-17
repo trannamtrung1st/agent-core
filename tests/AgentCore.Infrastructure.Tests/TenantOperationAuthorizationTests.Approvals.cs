@@ -72,6 +72,6 @@ public sealed partial class TenantOperationAuthorizationTests
     {
         var current = security ?? f.Iam; var authorizer = new IamAuthorizer(current);
         return new(current, store ?? (ITenantApprovalStore)current, (ITenantAgentStore)current,
-            new(current, (ITenantRunStore)current, (ITenantAgentStore)current, authorizer), authorizer, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), AgentCore.Application.Ports.SyntheticProviderAliases.Default, current as ITenantApprovedOperationStore);
+            new(current, (ITenantRunStore)current, (ITenantAgentStore)current, authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), authorizer, f.Identity, f.Ids, f.Clock, f.RunConfiguration(), AgentCore.Infrastructure.Providers.ModelCatalogFactory.Synthetic(), AgentCore.Application.Ports.SyntheticProviderAliases.Default, current as ITenantApprovedOperationStore);
     }
 }

@@ -36,6 +36,7 @@ public sealed partial class InMemoryIamStore : ITenantPreferenceOperationStore
             IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); EnsureReferences(next, audit, ct: ct);
             at = (clock ?? TimeProvider.System).GetUtcNow();
             _ = TenantPreferenceOperationRules.Apply(run, target, commit, at);
+            audit = TenantOperationAuditRules.WithLocalEffectResult(audit, before, run, commit.OperationId);
             var savedRun = run.RecordDirectLocalEffect(run.Revision, commit.Generation, commit.OperationId, commit.ActionHash, at);
             var receipt = new TenantOperationReceipt(commit.OperationId, null, before.Tenant.TenantId, run.AgentRunId, run.SessionId,
                 run.Admission.ExecutionContext.RootActivationId, target.PrincipalId, run.AgentInstanceId, commit.ActionHash, TenantOperationOutcome.Completed,

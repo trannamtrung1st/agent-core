@@ -63,6 +63,7 @@ public sealed partial class SqliteIamStore : ITenantApprovedOperationStore
         at = (clock ?? TimeProvider.System).GetUtcNow();
         commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
         audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
+        audit = TenantOperationAuditRules.WithLocalEffectResult(audit, before, run, commit.OperationId, request.RequestId, grant?.GrantId);
         var complete = commit.Outcome == TenantOperationOutcome.Completed;
         var updated = complete ? TenantAgentConfigurationRules.Apply(target.Instance,
             TenantLocalEffectRules.Change(request, target.Instance), at) : target.Instance;

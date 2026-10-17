@@ -15,10 +15,10 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantPreferenceOperationTests
 {
     private sealed record Environment(Guid Tenant, TenantSessionInitiator Owner, TenantAgent Agent, AgentRun Run);
-    private static TenantPreferenceOperationService Service(Fixture f, IIamStore? store = null, ITenantPreferenceOperationStore? effects = null)
+    private static TenantPreferenceOperationService Service(Fixture f, IIamStore? store = null, ITenantPreferenceOperationStore? effects = null, ITenantAuthorizationAuditStore? audits = null)
     {
         var current = store ?? f.Iam;
-        return new(effects ?? (ITenantPreferenceOperationStore)current, new(current, (ITenantRunStore)current, (ITenantAgentStore)current, new(current)),
+        return new(effects ?? (ITenantPreferenceOperationStore)current, new(current, (ITenantRunStore)current, (ITenantAgentStore)current, new(current), new(audits ?? (ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)),
             f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, f.Ids, f.Clock, (ITenantApprovalStore)current);
     }
     private static async Task<Environment> Setup(Fixture f, bool permissions = true, bool update = true,

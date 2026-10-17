@@ -15,7 +15,7 @@ public sealed partial class TenantOperationAuthorizationTests
     public async Task Shared_tool_boundary_uses_actual_executor_roles_and_rechecks_revoke_without_borrowing_requester_authority(bool sqlite)
     {
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
-        var operations = new TenantOperationAuthorizer(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer);
+        var operations = new TenantOperationAuthorizer(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock));
         var tools = new SessionToolExecutor(tenantAuthorization: new((ITenantRunStore)f.Iam, operations));
         var frame = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: setup.Agent.Instance.InstanceId, AgentRunId: setup.Run.AgentRunId,
             OwnedSessionId: setup.Run.SessionId, TenantId: setup.Tenant);

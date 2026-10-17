@@ -49,6 +49,7 @@ public sealed partial class InMemoryIamStore : ITenantApprovedOperationStore
             at = (clock ?? TimeProvider.System).GetUtcNow();
             commit = TenantLocalEffectRules.AtCommit(commit, request, grant, run, target, at, source);
             audit = audit with { Decision = commit.Outcome == TenantOperationOutcome.Completed ? "allowed" : "denied", ReasonCode = commit.ReasonCode, At = at };
+            audit = TenantOperationAuditRules.WithLocalEffectResult(audit, before, run, commit.OperationId, request.RequestId, grant?.GrantId);
             var complete = commit.Outcome == TenantOperationOutcome.Completed;
             var savedRun = run.RecordApprovedLocalEffect(run.Revision, commit.Generation, request.RequestId, commit.OperationId, commit.ActionHash, complete, at);
             var change = complete ? TenantLocalEffectRules.Change(request, target.Instance) : null;

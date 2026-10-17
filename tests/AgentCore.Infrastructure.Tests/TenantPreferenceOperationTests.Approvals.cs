@@ -18,13 +18,13 @@ namespace AgentCore.Infrastructure.Tests;
 public sealed partial class TenantPreferenceOperationTests
 {
     private static TenantApprovalService Approvals(Fixture f) => new(f.Iam, (ITenantApprovalStore)f.Iam, (ITenantAgentStore)f.Iam,
-        new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer), f.Authorizer, f.Identity, f.Ids, f.Clock,
+        new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), f.Authorizer, f.Identity, f.Ids, f.Clock,
         f.RunConfiguration(), ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default, (ITenantApprovedOperationStore)f.Iam);
     private static TenantApprovedOperationService ApprovedEffects(Fixture f, IIamStore? store = null)
     {
         var current = store ?? f.Iam;
         return new(current, (ITenantRunStore)current, (ITenantAgentStore)current, (ITenantApprovalStore)current, (ITenantApprovedOperationStore)current,
-            new(current, (ITenantRunStore)current, (ITenantAgentStore)current, new(current)), f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default);
+            new(current, (ITenantRunStore)current, (ITenantAgentStore)current, new(current), new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), f.RunConfiguration(), f.Ids, f.Clock, ModelCatalogFactory.Synthetic(), SyntheticProviderAliases.Default);
     }
     private static async Task<(Environment Environment, TenantApprovalRequest Request, AgentRun Claimed)> ApprovedPreference(Fixture f, bool review)
     {

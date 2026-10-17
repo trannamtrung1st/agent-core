@@ -99,6 +99,9 @@ public sealed partial class TenantPreferenceOperationTests
             else { Assert.Equal(OperationDecisionKind.Denied, result.Decision); Assert.Equal("approval_rate_limited", result.ReasonCode); Assert.Null(result.Request); Assert.Equal(before, await Revision()); }
         }
         Assert.Equal(TenantApprovalLimits.Operation, (await f.Iam.ReadAuditAsync(setup.Tenant, 200)).Count(a => a.Action == "approvals.request"));
+        var throttle = Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "authorization.operation" && a.ReasonCode == "approval_rate_limited");
+        Assert.Equal("denied", throttle.Decision); Assert.Equal(current.AgentRunId, throttle.Execution!.Context.RunId);
+
         clock.Advance(TimeSpan.FromMinutes(2));
         Assert.Equal("approval_rate_limited", (await service.PreparePreferencesAsync(new(setup.Tenant, current.AgentRunId), parameters, current.Revision)).ReasonCode);
         var duplicate = await service.PreparePreferencesAsync(new(setup.Tenant, requests[0].RunId), parameters, 1);
@@ -134,6 +137,9 @@ public sealed partial class TenantPreferenceOperationTests
         Assert.Equal(OperationDecisionKind.Denied, limited.Decision); Assert.Equal("approval_root_limit", limited.ReasonCode); Assert.Null(limited.Request);
         var duplicate = await service.PreparePersonaAsync(new(setup.Tenant, current.AgentRunId), first!.Operation.Persona!, current.Revision);
         Assert.Equal("previously_rejected", duplicate.ReasonCode); Assert.Equal(first.RequestId, duplicate.Request!.RequestId);
+        var ceiling = Assert.Single(await f.Iam.ReadAuditAsync(setup.Tenant, 200), a => a.Action == "authorization.operation" && a.ReasonCode == "approval_root_limit");
+        Assert.Equal("denied", ceiling.Decision); Assert.Equal(current.AgentRunId, ceiling.Execution!.Context.RunId);
+
         Assert.Equal(revision, (await f.Iam.ReadTenantAsync(setup.Tenant))!.Tenant.Revision);
         var unchanged = (await runs.FindTenantRunAsync(setup.Tenant, current.AgentRunId))!;
         Assert.Equal(current.Revision, unchanged.Revision); Assert.Equal(current.Status, unchanged.Status); Assert.Equal(current.ApprovalRequestId, unchanged.ApprovalRequestId);

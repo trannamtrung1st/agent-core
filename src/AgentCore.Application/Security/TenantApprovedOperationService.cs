@@ -15,6 +15,17 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
     public async ValueTask<TenantOperationReceipt> ExecuteAsync(TenantRunReference reference, Guid requestId, Guid operationId,
         Guid generation, string actionHash, CancellationToken ct = default)
     {
+        try { return await ExecuteCoreAsync(reference, requestId, operationId, generation, actionHash, ct).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is AccessDeniedException or SecurityConflictException)
+        {
+            var reason = ex is AccessDeniedException denied ? denied.ReasonCode : ((SecurityConflictException)ex).ReasonCode;
+            await operations.RecordFailureAsync(reference, TenantApprovalRequest.Permission, reason, ExecutionAuthorizationPurpose.EffectEligibility, ct).ConfigureAwait(false);
+            throw;
+        }
+    }
+    private async ValueTask<TenantOperationReceipt> ExecuteCoreAsync(TenantRunReference reference, Guid requestId, Guid operationId,
+        Guid generation, string actionHash, CancellationToken ct)
+    {
         var run = await runs.FindTenantRunAsync(reference.TenantId, reference.RunId, ct).ConfigureAwait(false) ?? throw new AccessDeniedException("run_unavailable");
         var context = run.Admission.ExecutionContext;
         if (context is null || context.TenantId != reference.TenantId || run.IsTerminal) throw new AccessDeniedException("run_unavailable");
@@ -52,7 +63,7 @@ public sealed class TenantApprovedOperationService(IIamStore security, ITenantRu
         }
         if (reason is null)
         {
-            var eligibility = await operations.Check(state, context, TenantApprovalRequest.Permission, target, ct).ConfigureAwait(false);
+            var eligibility = await operations.Check(state, run, TenantApprovalRequest.Permission, target, ct).ConfigureAwait(false);
             if (eligibility.Decision == OperationDecisionKind.Denied || request.Kind == ApprovalKind.Review && eligibility.ApprovalKind == ApprovalKind.ExceptionalGrant)
                 reason = "operation_authority_changed";
         }

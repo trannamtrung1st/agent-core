@@ -40,6 +40,7 @@ public sealed partial class SqliteIamStore : ITenantPreferenceOperationStore
         TenantPreferenceOperationRules.Transaction(next, expectedSecurityRevision, run, audit);
         IamStateRules.ValidateAgentContinuity(before.SystemIdentities, next); await EnsureResourceOwnershipAsync(db, next, ct).ConfigureAwait(false);
         at = (clock ?? TimeProvider.System).GetUtcNow(); _ = TenantPreferenceOperationRules.Apply(run, target, commit, at);
+        audit = TenantOperationAuditRules.WithLocalEffectResult(audit, before, run, commit.OperationId);
         var savedRun = run.RecordDirectLocalEffect(run.Revision, commit.Generation, commit.OperationId, commit.ActionHash, at);
         db.Attach(owned.Instance); owned.Instance.SettingsOverridesJson = JsonSerializer.Serialize(candidate.SettingsOverrides, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         owned.Instance.Revision = candidate.Revision; owned.Instance.UpdatedAtUtc = at.ToUnixTimeMilliseconds();

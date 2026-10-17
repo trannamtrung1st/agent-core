@@ -146,6 +146,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Execution")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ExecutionJson");
+
                     b.Property<string>("ReasonCode")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -161,7 +165,10 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "At", "AuditId");
 
-                    b.ToTable("AuthorizationAudit", (string)null);
+                    b.ToTable("AuthorizationAudit", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AuthorizationAudit_Execution", "ExecutionJson IS NULL OR (length(ExecutionJson) <= 4096 AND json_valid(ExecutionJson))");
+                        });
                 });
 
             modelBuilder.Entity("AgentCore.Domain.Security.Principal", b =>

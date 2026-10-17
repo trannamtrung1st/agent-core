@@ -68,7 +68,7 @@ public sealed partial class TenantOperationAuthorizationTests
     }
 
     private static TenantOperationPolicyService Policies(Fixture f, ITenantOperationPolicyStore? store = null) => new(f.Iam, store ?? (ITenantOperationPolicyStore)f.Iam, f.Authorizer, f.Identity, f.Ids, f.Clock);
-    private static TenantOperationAuthorizer Operations(Fixture f) => new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer);
+    private static TenantOperationAuthorizer Operations(Fixture f) => new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock));
     private static async Task<TenantSessionInitiator> User(Fixture f, Environment setup, string login, string[] permissions)
     {
         var account = await f.Identity.RegisterAsync(login, "User", "strong-operation-password");

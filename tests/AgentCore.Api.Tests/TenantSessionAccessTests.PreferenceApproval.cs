@@ -151,6 +151,21 @@ public sealed partial class TenantSessionAccessTests
             Assert.True(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.TryRead(completed.Checkpoint, out var messages));
             Assert.DoesNotContain(AgentCore.Application.Execution.AgentRunToolCallCheckpoint.PendingCalls(messages!), c => c.Name == ToolCatalog.RequestAuthorization);
             Assert.Equal(decision == "approve" ? 1 : 0, (await factory.Services.GetRequiredService<IIamStore>().ReadAuditAsync(tenant, 200)).Count(a => a.Action == "operations.preferences.apply"));
+            var auditResponse = await owner.GetAsync(api + "/audit?limit=200"); Assert.Equal(HttpStatusCode.OK, auditResponse.StatusCode);
+            var auditRows = (await Json(auditResponse)).GetProperty("items").EnumerateArray().ToArray();
+            var preparation = Assert.Single(auditRows, a => a.GetProperty("action").GetString() == "authorization.operation"
+                && a.GetProperty("execution").GetProperty("purpose").GetString() == "ApprovalPreparation");
+            var preparedContext = preparation.GetProperty("execution").GetProperty("context");
+            Assert.Equal(runId, preparedContext.GetProperty("runId").GetGuid()); Assert.Equal(waiting.Admission.ExecutionContext!.RootActivationId, preparedContext.GetProperty("rootActivationId").GetGuid());
+            Assert.Equal(before.PrincipalId, preparation.GetProperty("actorPrincipalId").GetGuid());
+            if (decision == "approve")
+            {
+                var effectAudit = Assert.Single(auditRows, a => a.GetProperty("action").GetString() == "operations.preferences.apply").GetProperty("execution");
+                Assert.Equal("EffectResult", effectAudit.GetProperty("purpose").GetString()); Assert.Equal(completed.AgentRunId, effectAudit.GetProperty("context").GetProperty("runId").GetGuid());
+                Assert.Equal(runId, effectAudit.GetProperty("context").GetProperty("parentRunId").GetGuid()); Assert.Equal(request.RequestId, effectAudit.GetProperty("approvalRequestId").GetGuid());
+                Assert.Equal(request.Operation.OperationId, effectAudit.GetProperty("operationId").GetGuid());
+                if (grant is not null) Assert.Equal(grant.GrantId, effectAudit.GetProperty("grantId").GetGuid());
+            }
             Assert.Null(completed.Owner.ProfileIdOrNull);
         }
         finally { if (capacityHeld) reservedCapacity!.ReleaseTenantRuntime(); SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }

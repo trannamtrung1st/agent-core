@@ -1,6 +1,7 @@
 using AgentCore.Application.Ports;
 using AgentCore.Application.Security;
 using AgentCore.Domain.Security;
+using AgentCore.Contracts.Http;
 
 namespace AgentCore.Api.Security;
 
@@ -135,8 +136,17 @@ public static class TenantAccessEndpoints
         {
             var actor = IdentityHttp.TenantContext(http);
             await authorizer.RequireAsync(actor.PrincipalId, "security.audit.read", AccessScope.ForTenant(actor.TenantId), ct).ConfigureAwait(false);
-            return Results.Json(new { items = await store.ReadAuditAsync(actor.TenantId, limit ?? 50, ct).ConfigureAwait(false) });
+            return Results.Json(new { items = (await store.ReadAuditAsync(actor.TenantId, limit ?? 50, ct).ConfigureAwait(false)).Select(AuditEntry) });
         }));
+    }
+    private static TenantAuditEntryDto AuditEntry(AuthorizationAudit audit)
+    {
+        var e = audit.Execution; var c = e?.Context;
+        return new(audit.AuditId, audit.TenantId, audit.ActorPrincipalId, audit.Action, audit.Target, audit.Decision, audit.ReasonCode, audit.At,
+            e is null ? null : new(new(c!.TenantId, c.AgentPrincipalId, c.OriginalInitiatorPrincipalId, c.SessionId, c.RunId, c.ActivationId,
+                c.RootActivationId, c.ParentRunId, c.ParentActivationId, c.Origin.ToString()), e.RunRevision, e.SecurityRevision, e.ClaimGeneration,
+                e.Permission, new(e.Resource.Kind.ToString(), e.Resource.TenantId, e.Resource.ResourceType, e.Resource.ResourceId),
+                e.ApprovalKind?.ToString(), e.Purpose.ToString(), e.ApprovalRequestId, e.OperationId, e.GrantId));
     }
     private static Task<IResult> SaveRole(Guid? roleId, RoleRequest body, HttpContext http, TenantAccessService access, CancellationToken ct) => IdentityHttp.Respond(async () =>
     {

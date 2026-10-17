@@ -37,11 +37,13 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
                 && run.Status == AgentCore.Domain.Conversation.AgentRunStatus.Running && run.Claim?.Generation == admission.AgentRunGeneration;
             return new(true, allowed, reference, allowed ? "allowed" : "tenant_effect_unavailable");
         }
-        catch (AccessDeniedException ex) { return new(true, false, null, ex.ReasonCode); }
+        catch (AccessDeniedException ex) { return new(true, false, reference, ex.ReasonCode); }
     }
     public async ValueTask<ToolPolicyDecision?> PolicyAsync(Guid session, ModelToolCall call, ToolExecutionAdmission? admission, CancellationToken ct)
     {
         var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
+        if (boundary.Tenant && !boundary.Allowed && boundary.Reference is { } failed)
+            await authorizer.RecordFailureAsync(failed, "", boundary.Reason, AgentCore.Domain.Security.ExecutionAuthorizationPurpose.ToolBoundary, ct, session).ConfigureAwait(false);
         return boundary.Tenant || IsTenantTool(call.Name) || admission?.TenantId is not null
             ? boundary.Allowed ? ToolPolicyDecision.Allow : ToolPolicyDecision.Deny : null;
     }
@@ -49,7 +51,12 @@ public sealed class TenantToolAuthorization(ITenantRunStore runs, TenantOperatio
     {
         var boundary = await Resolve(session, admission, call.Name, ct).ConfigureAwait(false);
         if (!boundary.Tenant && !IsTenantTool(call.Name) && admission?.TenantId is null) return null;
-        if (!boundary.Allowed) return Error("forbidden", boundary.Reason);
+        if (!boundary.Allowed)
+        {
+            if (boundary.Tenant && boundary.Reference is { } failed)
+                await authorizer.RecordFailureAsync(failed, "", boundary.Reason, AgentCore.Domain.Security.ExecutionAuthorizationPurpose.ToolBoundary, ct, session).ConfigureAwait(false);
+            return Error("forbidden", boundary.Reason);
+        }
         if (call.Name == ToolCatalog.RequestAuthorization) return Error("invalid", "authorization_requires_runtime_suspension");
         try
         {

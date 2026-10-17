@@ -1,10 +1,11 @@
 import { appMessageConfig } from '../../app/appFeedback';
 import { TenantDefinitions } from './TenantDefinitions';
 import { TenantCredentials } from './TenantCredentials';
+import { TenantAudit } from './TenantAudit';
 import { TenantDefinitionDetail } from './TenantDefinitionDetail';
 import { TenantDefinitionEditor } from './TenantDefinitionEditor';
 import { useEffect, useState } from 'react';
-import { App as AntdApp, Alert, Button, Collapse, Empty, Flex, Table, Tag, Typography } from 'antd';
+import { App as AntdApp, Alert, Button, Collapse, Empty, Flex, Tag, Typography } from 'antd';
 import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import { approveAppNavigation, navigateToAppPath } from '../../app/appRoute';
 import { AdminShell, type AdminShellContext } from '../admin/AdminShell';
@@ -21,7 +22,7 @@ import { useIdentityQuery } from './useIdentityQuery';
 
 const page = (id: string, label: string, description: string, group = 'Account'): NavigationPage => ({ id, path: id, label, description, group, aliases: [] });
 const accountPages = [page('organizations', 'My organizations', 'Choose an organization. Membership and access are separate in each one.'), page('profile', 'Your account', 'Your global account connects your organization memberships.')];
-const tenantPages = [page('definitions', 'Definitions', 'Create and publish Definitions owned by this organization.', 'Agents'), page('credentials', 'Credentials', 'Manage protected accounts and values owned by this organization.', 'Integrations'), page('access', 'Your access', 'Inspect your current organization roles and permissions.', 'Access & Security'), page('members', 'Members', 'Invite people and manage their access to this organization.', 'Access & Security'), page('roles', 'Roles & permissions', 'Define authority separately from agent instructions and capabilities.', 'Access & Security'), page('audit', 'Audit', 'Inspect recorded changes to organization access.', 'Access & Security')];
+const tenantPages = [page('definitions', 'Definitions', 'Create and publish Definitions owned by this organization.', 'Agents'), page('credentials', 'Credentials', 'Manage protected accounts and values owned by this organization.', 'Integrations'), page('access', 'Your access', 'Inspect your current organization roles and permissions.', 'Access & Security'), page('members', 'Members', 'Invite people and manage their access to this organization.', 'Access & Security'), page('roles', 'Roles & permissions', 'Define authority separately from agent instructions and capabilities.', 'Access & Security'), page('audit', 'Audit', 'Inspect authorization decisions and recorded organization changes.', 'Access & Security')];
 const pagePermission: Record<string, string> = { members: 'members.read', roles: 'iam.roles.read', audit: 'security.audit.read' };
 
 export function AccessApp({ route }: { route: AccessRoute }) { return <AntdApp component={false} message={appMessageConfig}><AccessContent route={route} /></AntdApp>; }
@@ -51,7 +52,7 @@ function AccessContent({ route }: { route: AccessRoute }) {
   const allowed = route.view !== 'tenant' || !pagePermission[route.page] || tenantContext?.permissions.includes(pagePermission[route.page]);
   return <AdminShell route={{ area: 'admin', view: 'home' }} context={context} headingActions={route.view === 'account' && route.page === 'organizations' && account.data.systemPermissions.includes('system.tenants.create') ? <CreateOrganization onCreated={() => setOrganizationsVersion(value => value + 1)} /> : undefined}>
     {logoutError !== undefined && <AccessError error={logoutError} />}
-    {route.view === 'tenant' ? tenant.loading ? <AccessLoading /> : tenant.error ? <AccessError error={tenant.error} retry={tenant.reload} /> : !tenantContext || !allowed ? <AccessUnavailable /> : route.page === 'credentials' ? <TenantCredentials key={route.tenantId} context={tenantContext} /> : route.page === 'definitions' ? route.draftId && route.definitionId ? <TenantDefinitionEditor key={`${route.tenantId}:${route.draftId}`} context={tenantContext} id={route.definitionId} draftId={route.draftId} page={route.draftPage ?? 'overview'} /> : route.definitionId ? <TenantDefinitionDetail key={`${route.tenantId}:${route.definitionId}`} context={tenantContext} id={route.definitionId} /> : <TenantDefinitions key={route.tenantId} context={tenantContext} /> : route.page === 'members' ? <Members context={tenantContext} /> : route.page === 'roles' ? <Roles context={tenantContext} /> : route.page === 'audit' ? <Audit context={tenantContext} /> : <OwnAccess context={tenantContext} /> : route.view === 'account' ? route.page === 'profile' ? <AccountProfile context={account.data} /> : <OrganizationsList key={organizationsVersion} /> : <AccessUnavailable />}
+    {route.view === 'tenant' ? tenant.loading ? <AccessLoading /> : tenant.error ? <AccessError error={tenant.error} retry={tenant.reload} /> : !tenantContext || !allowed ? <AccessUnavailable /> : route.page === 'credentials' ? <TenantCredentials key={route.tenantId} context={tenantContext} /> : route.page === 'definitions' ? route.draftId && route.definitionId ? <TenantDefinitionEditor key={`${route.tenantId}:${route.draftId}`} context={tenantContext} id={route.definitionId} draftId={route.draftId} page={route.draftPage ?? 'overview'} /> : route.definitionId ? <TenantDefinitionDetail key={`${route.tenantId}:${route.definitionId}`} context={tenantContext} id={route.definitionId} /> : <TenantDefinitions key={route.tenantId} context={tenantContext} /> : route.page === 'members' ? <Members context={tenantContext} /> : route.page === 'roles' ? <Roles context={tenantContext} /> : route.page === 'audit' ? <TenantAudit key={route.tenantId} context={tenantContext} /> : <OwnAccess context={tenantContext} /> : route.view === 'account' ? route.page === 'profile' ? <AccountProfile context={account.data} /> : <OrganizationsList key={organizationsVersion} /> : <AccessUnavailable />}
   </AdminShell>;
 }
 function OwnAccess({ context }: { context: TenantContext }) {
@@ -61,14 +62,4 @@ function OwnAccess({ context }: { context: TenantContext }) {
     <Typography.Title level={4}>Your organization permissions</Typography.Title><Typography.Paragraph type="secondary">These permissions apply across {context.tenant.name}. Additional access may be assigned on individual resources.</Typography.Paragraph>
     {groups.length ? <Collapse items={groups.map(group => ({ key: group, label: group, children: <Flex vertical gap="var(--ac-space-compact)">{context.permissions.filter(key => permissionFamily(key) === group).map(key => <Typography.Text key={key}>{permissionLabel(key)}</Typography.Text>)}</Flex> }))} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No organization-wide permissions. Contact an owner if you need more access." />}
   </Flex>;
-}
-function Audit({ context }: { context: TenantContext }) {
-  const state = useIdentityQuery<{ items: { auditId: string; action: string; at: string; decision: string }[] }>(tenantApi(context.tenant.tenantId, '/audit?limit=100'));
-  if (state.loading) return <AccessLoading />;
-  if (state.error) return <AccessError error={state.error} retry={state.reload} />;
-  const names: Record<string, string> = { 'iam.roles.assign': 'Role assigned', 'iam.roles.revoke': 'Role revoked', 'iam.roles.manage': 'Role saved', 'members.invite': 'Member invited', 'members.accept_invitation': 'Invitation accepted', 'members.status': 'Membership status changed', 'members.revoke_invitation': 'Invitation revoked' };
-  return <><Typography.Paragraph type="secondary">The latest 100 access changes in this organization.</Typography.Paragraph><Table className="admin-collection-table" rowKey="auditId" dataSource={state.data?.items} pagination={{ pageSize: 10, responsive: true, showSizeChanger: false }} columns={[
-    { title: 'Change', render: (_, item) => <Flex vertical><Typography.Text>{names[item.action] ?? 'Organization access updated'}</Typography.Text><Typography.Text type="secondary"><time dateTime={item.at}>{new Date(item.at).toLocaleString()}</time></Typography.Text></Flex> },
-    { title: 'Result', width: 100, render: () => <Tag>Recorded</Tag> }
-  ]} /></>;
 }

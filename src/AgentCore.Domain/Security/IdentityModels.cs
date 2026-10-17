@@ -52,7 +52,8 @@ public sealed record AuthenticationSession(Guid SessionId, Guid AccountId, strin
     DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, DateTimeOffset? RevokedAt = null);
 
 public sealed record AuthorizationAudit(Guid AuditId, Guid? TenantId, Guid ActorPrincipalId,
-    string Action, string Target, string Decision, string ReasonCode, DateTimeOffset At);
+    string Action, string Target, string Decision, string ReasonCode, DateTimeOffset At,
+    ExecutionAuthorizationAudit? Execution = null);
 
 // One tenant security revision protects membership, role, identity, invitation and Owner changes.
 // Stores commit this immutable aggregate and its audit atomically; it is not a permission snapshot.

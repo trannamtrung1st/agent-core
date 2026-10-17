@@ -56,6 +56,8 @@ public static class IdentityRegistration
         services.TryAddSingleton<ITenantOperationPolicyStore>(p => (ITenantOperationPolicyStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantOperationPolicyService>();
         services.TryAddSingleton<TenantOperationAuthorizer>();
+        services.TryAddSingleton<ITenantAuthorizationAuditStore>(p => (ITenantAuthorizationAuditStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantOperationAudit>();
         services.TryAddSingleton<TenantToolAuthorization>();
         services.TryAddSingleton<ITenantApprovalStore>(p => (ITenantApprovalStore)p.GetRequiredService<IIamStore>());
         services.TryAddSingleton<TenantApprovalService>();

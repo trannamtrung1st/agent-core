@@ -135,7 +135,7 @@ public sealed partial class TenantPreferenceOperationTests
     {
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f);
         var gate = new TenantToolAuthorization((ITenantRunStore)f.Iam,
-            new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer), preferences: Service(f));
+            new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), preferences: Service(f));
         var tools = new SessionToolExecutor(tenantAuthorization: gate);
         var frame = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: setup.Run.AgentInstanceId, AgentRunId: setup.Run.AgentRunId,
             OwnedSessionId: setup.Run.SessionId, TenantId: setup.Tenant, AgentRunGeneration: setup.Run.Claim!.Generation);

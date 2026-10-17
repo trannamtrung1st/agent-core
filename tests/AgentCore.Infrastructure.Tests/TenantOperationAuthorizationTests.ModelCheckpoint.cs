@@ -85,7 +85,7 @@ public sealed partial class TenantOperationAuthorizationTests
         await using var f = await Fixture.Create(sqlite); var setup = await Setup(f); var at = f.Clock.GetUtcNow();
         var run = await ((ITenantRuntimeStore)f.Iam).ApplyTenantRuntimeCommandAsync(setup.Run.Owner, setup.Run.AgentRunId,
             new AgentRunCommand.Claim(setup.Run.Revision, at, f.Ids.NewId(), at.AddMinutes(5)), f.Ids.NewId());
-        var gate = new TenantToolAuthorization((ITenantRunStore)f.Iam, new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer), ApprovalService(f), f.RunConfiguration());
+        var gate = new TenantToolAuthorization((ITenantRunStore)f.Iam, new(f.Iam, (ITenantRunStore)f.Iam, (ITenantAgentStore)f.Iam, f.Authorizer, new((ITenantAuthorizationAuditStore)f.Iam, f.Ids, f.Clock)), ApprovalService(f), f.RunConfiguration());
         var executor = new SessionToolExecutor(tenantAuthorization: gate);
         var call = new ModelToolCall("request", ToolCatalog.RequestAuthorization, "{}");
         var frame = new ToolExecutionAdmission(false, TriggerKind.UserTurn, AgentInstanceId: run.AgentInstanceId, AgentRunId: run.AgentRunId,
