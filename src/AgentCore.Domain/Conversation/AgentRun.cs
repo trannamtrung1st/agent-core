@@ -168,7 +168,16 @@ public sealed class AgentRun
         }
 
         AgentRunId = agentRunId;
-        Owner = new AgentRunOwner(owner.AgentInstanceId, owner.ProfileId);
+        Owner = new AgentRunOwner(owner.AgentInstanceId, owner.ProfileIdOrNull, owner.TenantId, owner.ExecutorPrincipalId);
+        var context = admission.ExecutionContext;
+        if (owner.TenantId is null ? context is not null : context is null || context.TenantId != owner.TenantId
+            || context.AgentPrincipalId != owner.ExecutorPrincipalId || context.RunId != agentRunId
+            || context.SessionId != admission.Activation.SessionId || context.ActivationId != admission.Activation.ActivationId
+            || context.RootActivationId != admission.Activation.RootActivationId || context.ParentRunId != admission.Activation.SourceAgentRunId
+            || context.ParentActivationId != admission.Activation.ParentActivationId
+            || !Enum.TryParse<ActivationKind>(context.Origin switch { ExecutionOrigin.UserMessage => "UserTurn", ExecutionOrigin.CompletionReport => "BackgroundCompleted", ExecutionOrigin.ScheduledOccurrence => "ScheduledWork", ExecutionOrigin.ManualInvocation => "ManualBackground", _ => context.Origin.ToString() }, out var expectedKind)
+            || expectedKind != admission.Activation.Kind)
+            throw new ArgumentException("Run admission disagrees with trusted execution identity.");
         Admission = admission;
         PinnedModel = pinnedModel;
         Status = status;

@@ -8,7 +8,7 @@ namespace AgentCore.Infrastructure.Security;
 
 public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instances, InMemoryAgentDefinitionAdminStore definitions, InMemoryMemoryStore definitionReferences,
     IBuiltInAgentDefinitionStore? builtIns = null, AgentCore.Application.Agents.InheritedDefinitionResourceCatalog? inheritedResources = null,
-    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore
+    InMemoryCredentialStore? credentials = null, TimeProvider? clock = null) : IIamStore, ITenantAgentStore, ITenantDefinitionStore, ITenantCredentialStore, ITenantCredentialBindingStore, ITenantCredentialOAuthStore, ITenantSessionStore, ITenantRunStore
 {
     private readonly InMemoryMemoryStore sessionBacking = definitionReferences.BindTenantInstances(instances);
     private readonly object _gate = new();
@@ -120,6 +120,8 @@ public sealed partial class InMemoryIamStore(InMemoryAgentInstanceStore instance
     }
     private void EnsureReferences(TenantSecurityState state, AuthorizationAudit audit, Guid? creatingInstance = null, CancellationToken ct = default)
     {
+        if (state.Assignments.Any(a => TenantRunRules.TryId(a.Scope, out var run) && sessionBacking.ReadTenantRun(state.Tenant.TenantId, run) is null))
+            throw new ArgumentException("A Run assignment requires a current owned Run.");
         if (state.Assignments.Any(a => TenantSessionRules.TryId(a.Scope, out var session) && !sessionBacking.OwnsTenantSession(state.Tenant.TenantId, session)))
             throw new ArgumentException("A Session assignment requires a current owned Session.");
         if (state.Assignments.Any(a => TenantCredentialRules.TryId(a.Scope, out var id) && credentials?.OwnsTenantCredential(state.Tenant.TenantId, id) != true))

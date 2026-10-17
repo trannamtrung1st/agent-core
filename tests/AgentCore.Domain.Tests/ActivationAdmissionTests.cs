@@ -163,6 +163,28 @@ public sealed class ActivationAdmissionTests
     }
 
     [Fact]
+    public void Tenant_execution_has_no_global_profile_and_retains_immutable_attribution_across_retry()
+    {
+        var baseline = NewRun(UserActivation(Guid.NewGuid(), [Guid.NewGuid()])); var a = baseline.Admission.Activation;
+        var tenant = Guid.NewGuid(); var executor = Guid.NewGuid(); var requester = Guid.NewGuid();
+        var context = new TrustedExecutionContext(tenant, executor, requester, a.SessionId, baseline.AgentRunId, a.ActivationId, a.RootActivationId, null, null, ExecutionOrigin.UserMessage);
+        var owner = AgentRunOwner.ForTenant(tenant, baseline.AgentInstanceId, executor);
+        var admission = new AgentRunAdmission(a, baseline.DefinitionId, baseline.DefinitionVersion, baseline.PinnedPersona, baseline.ResponseId,
+            baseline.Admission.OutputContract, executionContext: context);
+        var run = AgentRun.Create(baseline.AgentRunId, owner, admission, baseline.PinnedModel, 3, Now);
+        Assert.Null(run.Owner.ProfileIdOrNull); Assert.Throws<InvalidOperationException>(() => run.ProfileId);
+        var claimed = run.TakeClaim(Guid.NewGuid(), Now, Now.AddMinutes(1));
+        var retry = claimed.Fail(claimed.Revision, claimed.Claim!.Generation, "temporary", "Temporary", true, Now.AddSeconds(1), Now.AddSeconds(2));
+        var resumed = retry.TakeClaim(Guid.NewGuid(), Now.AddSeconds(2), Now.AddMinutes(2));
+        Assert.Same(context, resumed.Admission.ExecutionContext); Assert.Equal(owner, resumed.Owner);
+        Assert.Throws<ArgumentException>(() => AgentRun.Create(baseline.AgentRunId, default, baseline.Admission, baseline.PinnedModel, 3, Now));
+        Assert.Throws<ArgumentException>(() => AgentRun.Create(baseline.AgentRunId, owner, baseline.Admission, baseline.PinnedModel, 3, Now));
+        Assert.Throws<ArgumentException>(() => new AgentRunOwner(baseline.AgentInstanceId, Guid.NewGuid(), tenant, executor));
+        Assert.Throws<ArgumentException>(() => new TrustedExecutionContext(tenant, executor, requester, a.SessionId, baseline.AgentRunId,
+            a.ActivationId, a.RootActivationId, null, null, ExecutionOrigin.ScheduledOccurrence));
+    }
+
+    [Fact]
     public void Idempotent_effect_acknowledgements_still_reject_stale_generation()
     {
         var run = NewRun(UserActivation(Guid.NewGuid(), [Guid.NewGuid()]))

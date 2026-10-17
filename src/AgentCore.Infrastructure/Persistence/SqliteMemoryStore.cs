@@ -417,7 +417,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
     {
         MaterializedEntryRows = 0;
         await using var db = await contexts.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-        var openRunRows = await db.AgentRuns.AsNoTracking().Where(run => run.Status != (int)AgentRunStatus.Completed
+        var openRunRows = await db.AgentRuns.AsNoTracking().Where(run => run.TenantId == null && run.Status != (int)AgentRunStatus.Completed
             && run.Status != (int)AgentRunStatus.Failed && run.Status != (int)AgentRunStatus.Cancelled)
             .ToArrayAsync(cancellationToken).ConfigureAwait(false);
         var openResponses = openRunRows.Select(AgentRunStoreMapping.ToDomain).GroupBy(run => run.SessionId)
@@ -745,7 +745,7 @@ public sealed class SqliteMemoryStore(IDbContextFactory<AgentCoreDbContext> cont
         return row;
     }
 
-    private static EntryRecord ToRecord(string sessionId, ConversationEntry entry)
+    internal static EntryRecord ToRecord(string sessionId, ConversationEntry entry)
     {
         var row = new EntryRecord { EntryId = entry.EntryId.ToString("D"), SessionId = sessionId };
         ApplyEntry(row, entry);

@@ -11,7 +11,7 @@ public sealed record AgentRunTaskIntent(string Text, AgentRunTaskSource Source, 
 public sealed class AgentRunAdmission
 {
     public AgentRunAdmission(Activation activation, string definitionId, int definitionVersion,
-        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null, AgentRunTaskIntent? taskIntent = null)
+        AgentIdentity pinnedPersona, Guid? responseId, AgentRunOutputContract outputContract, EffectiveExecutionBudget? executionBudget = null, AgentRunConfiguration? configuration = null, ComposerRunInput? composerInput = null, AgentRunTaskIntent? taskIntent = null, TrustedExecutionContext? executionContext = null)
     {
         ArgumentNullException.ThrowIfNull(activation);
         ArgumentNullException.ThrowIfNull(pinnedPersona);
@@ -33,6 +33,7 @@ public sealed class AgentRunAdmission
             || taskIntent.Text.Length > AgentRunLimits.MaxBackgroundObjectiveCharacters || taskIntent.SourceRevision?.Length > 128))
             throw new ArgumentException("Run task intent is invalid.");
         TaskIntent = taskIntent;
+        ExecutionContext = executionContext;
         Configuration = configuration;
         ExecutionBudget = executionBudget;
         OutputContract = outputContract;
@@ -44,6 +45,7 @@ public sealed class AgentRunAdmission
     }
 
     public AgentRunTaskIntent? TaskIntent { get; }
+    public TrustedExecutionContext? ExecutionContext { get; }
     public ComposerRunInput? ComposerInput { get; }
     public AgentRunConfiguration? Configuration { get; }
     public EffectiveExecutionBudget? ExecutionBudget { get; }

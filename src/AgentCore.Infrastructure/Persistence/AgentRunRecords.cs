@@ -10,7 +10,10 @@ public sealed class ActivationRecord
     public string? BackgroundSourceKey { get; set; }
     public string AdmissionHash { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
-    public string ProfileId { get; set; } = "";
+    public string? ProfileId { get; set; }
+    public Guid? TenantId { get; set; }
+    public Guid? ExecutorPrincipalId { get; set; }
+    public Guid? OriginalInitiatorPrincipalId { get; set; }
     public string PayloadJson { get; set; } = "";
     public long AdmittedAtUtc { get; set; }
 }
@@ -22,7 +25,10 @@ public sealed class AgentRunRecord
     public string ActivationId { get; set; } = "";
     public string SessionId { get; set; } = "";
     public string AgentInstanceId { get; set; } = "";
-    public string ProfileId { get; set; } = "";
+    public string? ProfileId { get; set; }
+    public Guid? TenantId { get; set; }
+    public Guid? ExecutorPrincipalId { get; set; }
+    public Guid? OriginalInitiatorPrincipalId { get; set; }
     public int Status { get; set; }
     public long Revision { get; set; }
     public long? NextRetryAtUtc { get; set; }

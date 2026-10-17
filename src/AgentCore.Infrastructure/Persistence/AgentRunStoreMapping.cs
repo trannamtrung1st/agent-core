@@ -12,6 +12,7 @@ namespace AgentCore.Infrastructure.Persistence;
 
 internal static class AgentRunStoreMapping
 {
+    internal static string? ProfileKey(AgentRunOwner owner) => owner.ProfileIdOrNull?.ToString("D");
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     internal static void ObserveAdmission(SessionSnapshot session, AgentRun run, bool created)
@@ -135,7 +136,9 @@ internal static class AgentRunStoreMapping
         row.RootActivationId = run.Admission.Activation.RootActivationId.ToString("D");
         row.SessionId = run.SessionId.ToString("D");
         row.AgentInstanceId = run.AgentInstanceId.ToString("D");
-        row.ProfileId = run.ProfileId.ToString("D");
+        row.ProfileId = run.Owner.ProfileIdOrNull?.ToString("D");
+        row.TenantId = run.Owner.TenantId; row.ExecutorPrincipalId = run.Owner.ExecutorPrincipalId;
+        row.OriginalInitiatorPrincipalId = run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId;
         row.Status = (int)run.Status;
         row.Revision = run.Revision;
         row.NextRetryAtUtc = run.NextRetryAtUtc?.ToUnixTimeMilliseconds();
@@ -156,10 +159,13 @@ internal static class AgentRunStoreMapping
             ?? throw AgentCoreErrors.Persistence("AgentRun state is missing.");
         if (p.Admission.Activation.ActivationId.ToString("D") != row.ActivationId
             || p.Admission.Activation.SessionId.ToString("D") != row.SessionId
-            || p.Admission.Activation.RootActivationId.ToString("D") != row.RootActivationId)
+            || p.Admission.Activation.RootActivationId.ToString("D") != row.RootActivationId
+            || p.Admission.ExecutionContext?.TenantId != row.TenantId
+            || p.Admission.ExecutionContext?.AgentPrincipalId != row.ExecutorPrincipalId
+            || p.Admission.ExecutionContext?.OriginalInitiatorPrincipalId != row.OriginalInitiatorPrincipalId)
             throw AgentCoreErrors.Persistence("AgentRun identity does not match its admission.");
         return new AgentRun(Guid.Parse(row.AgentRunId),
-            new AgentRunOwner(Guid.Parse(row.AgentInstanceId), Guid.Parse(row.ProfileId)),
+            new AgentRunOwner(Guid.Parse(row.AgentInstanceId), row.ProfileId is null ? null : Guid.Parse(row.ProfileId), row.TenantId, row.ExecutorPrincipalId),
             p.Admission, p.PinnedModel, (AgentRunStatus)row.Status, row.Revision, p.AttemptCount, p.MaxAttempts,
             row.NextRetryAtUtc is { } retry ? DateTimeOffset.FromUnixTimeMilliseconds(retry) : null,
             p.Claim, p.CancellationRequested, p.CancellationRequestedAtUtc, p.KnownEffectSummary,
@@ -173,7 +179,9 @@ internal static class AgentRunStoreMapping
         ActivationId = run.ActivationId.ToString("D"), SessionId = run.SessionId.ToString("D"),
         RootActivationId = run.Admission.Activation.RootActivationId.ToString("D"),
         ParentActivationId = run.Admission.Activation.ParentActivationId?.ToString("D"),
-        AgentInstanceId = run.AgentInstanceId.ToString("D"), ProfileId = run.ProfileId.ToString("D"),
+        AgentInstanceId = run.AgentInstanceId.ToString("D"), ProfileId = run.Owner.ProfileIdOrNull?.ToString("D"),
+        TenantId = run.Owner.TenantId, ExecutorPrincipalId = run.Owner.ExecutorPrincipalId,
+        OriginalInitiatorPrincipalId = run.Admission.ExecutionContext?.OriginalInitiatorPrincipalId,
         DedupeKey = run.Admission.Activation.DedupeKey, BackgroundSourceKey = BackgroundSourceKey(snapshot, run),
         AdmissionHash = AdmissionHash(snapshot, run),
         PayloadJson = JsonSerializer.Serialize(run.Admission.Activation, Json),
@@ -234,6 +242,7 @@ internal static class AgentRunStoreMapping
 
     public static void ValidateAdmission(SessionSnapshot snapshot, AgentRun run)
     {
+        if (run.Owner.TenantId is not null) throw new AgentCore.Application.Security.AccessDeniedException("tenant_context_required");
         if (!run.IsInitialQueued || snapshot.SessionId != run.SessionId
             || snapshot.AgentInstanceId != run.AgentInstanceId || snapshot.ProfileId != run.ProfileId
             || snapshot.Definition.Id != run.DefinitionId

@@ -55,12 +55,12 @@ public sealed partial class InMemoryAgentRunStore
                 .OrderByDescending(c => c.Run.CreatedAtUtc).ThenByDescending(c => c.Run.AgentRunId).Take(limit).ToArray());
     }
 
-    private IReadOnlyList<AgentCore.Application.Ports.BackgroundCompletionCandidate> WaitChildren(IReadOnlyList<Guid>? sessionIds = null) => State.Runs.Values.Where(r => sessionIds is null || sessionIds.Contains(r.SessionId)).Select(r =>
+    private IReadOnlyList<AgentCore.Application.Ports.BackgroundCompletionCandidate> WaitChildren(IReadOnlyList<Guid>? sessionIds = null) => State.Runs.Values.Where(r => r.Owner.TenantId is null).Where(r => sessionIds is null || sessionIds.Contains(r.SessionId)).Select(r =>
         new AgentCore.Application.Ports.BackgroundCompletionCandidate(r, sessions.LoadMetadataAsync(r.SessionId).GetAwaiter().GetResult()!)).Where(c => c.Session is not null).ToArray();
 
     private void RepairInbox(DateTimeOffset now)
     {
-        foreach (var run in State.Runs.Values.Where(r => r.IsTerminal))
+        foreach (var run in State.Runs.Values.Where(r => r.Owner.TenantId is null).Where(r => r.IsTerminal))
         {
             if (State.CompletionReceipts.ContainsKey(run.AgentRunId)) continue;
             var child = sessions.LoadMetadataAsync(run.SessionId).GetAwaiter().GetResult();
@@ -68,7 +68,7 @@ public sealed partial class InMemoryAgentRunStore
                 State.CompletionReceipts.Add(run.AgentRunId, CompletionInboxMapping.Create(run, child));
         }
         foreach (var row in State.CompletionReceipts.Values)
-            CompletionInboxMapping.Write(row, CompletionInboxMapping.Refresh(CompletionInboxMapping.Read(row), State.Runs.Values.ToArray(), now));
+            CompletionInboxMapping.Write(row, CompletionInboxMapping.Refresh(CompletionInboxMapping.Read(row), State.Runs.Values.Where(r => r.Owner.TenantId is null).ToArray(), now));
     }
 
     private void SettleInbox(AgentRun updated, Guid? generation)
@@ -102,7 +102,7 @@ public sealed partial class InMemoryAgentRunStore
         ct.ThrowIfCancellationRequested();
         lock (sessions.AdmissionGate)
         {
-            State.Runs.TryGetValue(parentRunId, out var parent);
+            TryGetLegacyRun(parentRunId, out var parent);
             CompletionInboxMapping.RequireParent(parent, owner, generation, now);
             RepairInbox(now);
             if (!State.CompletionReceipts.TryGetValue(childRunId, out var row)) throw AgentCoreErrors.NotFound("Completion was not found.");

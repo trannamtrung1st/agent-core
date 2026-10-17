@@ -94,8 +94,12 @@ public sealed partial class TenantCredentialIntegrationTests
         public IAgentInstanceStore Instances { get; private set; } = null!;
         public IMemoryStore Memory { get; private set; } = null!;
         public TenantSessionService Sessions => SessionService((ITenantSessionStore)Iam);
-        public TenantSessionService SessionService(ITenantSessionStore sessions) => new(Iam, (ITenantAgentStore)Iam, sessions, (ITenantDefinitionStore)Iam, BuiltIns,
+        public TenantSessionService SessionService(ITenantSessionStore sessions) => new(Iam, (ITenantAgentStore)Iam, sessions, (ITenantRunStore)Iam, (ITenantDefinitionStore)Iam, BuiltIns,
             Identity, Authorizer, ModelCatalogFactory.Create("Synthetic", null, null), new(), Ids, Clock);
+        public IDefinitionResourceContentStore RunContent { get; } = new InMemoryDefinitionResourceContentStore();
+        public TenantRunService RunService(ITenantRunStore? runs = null) => new(Iam, (ITenantSessionStore)Iam, runs ?? (ITenantRunStore)Iam,
+            new((ITenantAgentStore)Iam, (ITenantDefinitionStore)Iam, BuiltIns, RunResourceCatalog(), (ITenantCredentialBindingStore)Iam),
+            Identity, Authorizer, ModelCatalogFactory.Synthetic(), Ids, Clock);
         public IIdGenerator Ids { get; } = new SystemIdGenerator(TimeProvider.System);
         public IIdentityTokens Tokens { get; } = new IdentityTokens();
         public IamAuthorizer Authorizer => new(Iam);
@@ -107,6 +111,14 @@ public sealed partial class TenantCredentialIntegrationTests
             BuiltIns, (ITenantDefinitionStore)Iam, Ids, TimeProvider.System);
         public TenantAgentService Agents => new(Iam, (ITenantAgentStore)Iam, BuiltIns, Authorizer, Ids, TimeProvider.System, ownedDefinitions: (ITenantDefinitionStore)Iam);
         private IBuiltInAgentDefinitionStore? _builtIns;
+        private AgentCore.Application.Agents.InheritedDefinitionResourceCatalog RunResourceCatalog()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "agents"))) directory = directory.Parent;
+            var root = Path.Combine(directory!.FullName, "agents");
+            return new(new InMemoryAgentDefinitionResourceAdminStore(new InMemoryAgentDefinitionAdminStore(Ids), RunContent, Ids),
+                BuiltIns, new FileApprovedKnowledgeCatalog(root), RunContent);
+        }
         private IBuiltInAgentDefinitionStore BuiltIns => _builtIns ??= LoadBuiltIns();
         private static IBuiltInAgentDefinitionStore LoadBuiltIns()
         {

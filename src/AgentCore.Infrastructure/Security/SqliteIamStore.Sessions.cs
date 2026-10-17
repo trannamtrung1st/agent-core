@@ -23,7 +23,12 @@ public sealed partial class SqliteIamStore
             var row = await db.Sessions.Include(s => s.Snapshot).SingleAsync(s => s.SessionId == root.SessionId, ct).ConfigureAwait(false);
             if (row.Revision != change.ExpectedSessionRevision) return false;
             if (await db.AgentRuns.AnyAsync(r => r.SessionId == root.SessionId && r.Status != (int)AgentRunStatus.Completed && r.Status != (int)AgentRunStatus.Cancelled && r.Status != (int)AgentRunStatus.Failed, ct).ConfigureAwait(false)) throw new SecurityConflictException("session_in_use");
-            if (change.Action == TenantSessionAction.Delete && next.Assignments.Any(a => a.Scope == TenantSessionRules.Scope(root.TenantId, change.SessionId))) throw new ArgumentException("Deleting a Session must retire its direct grants.");
+            if (change.Action == TenantSessionAction.Delete)
+            {
+                var runIds = await db.AgentRuns.Where(r => r.TenantId == root.TenantId && r.SessionId == root.SessionId).Select(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
+                if (next.Assignments.Any(a => a.Scope == TenantSessionRules.Scope(root.TenantId, change.SessionId)
+                    || TenantRunRules.TryId(a.Scope, out var runId) && runIds.Contains(runId.ToString("D")))) throw new ArgumentException("Deleting a Session must retire its direct and Run grants.");
+            }
             if (change.Action == TenantSessionAction.Resume)
             {
                 var parent = await OwnedAgents(db, root.TenantId).SingleOrDefaultAsync(a => a.Instance.InstanceId == root.AgentInstanceId, ct).ConfigureAwait(false);

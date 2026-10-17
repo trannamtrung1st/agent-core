@@ -10,9 +10,29 @@ public static class TenantSessionEndpoints
     public sealed record CreateRequest(Guid AgentInstanceId, long ExpectedRevision, long ExpectedInstanceRevision, string Mode = "text", string? ModelKey = null, string? ReasoningEffort = null);
     public sealed record Witness(long ExpectedRevision, long ExpectedSessionRevision);
     public sealed record RenameRequest(string Title, long ExpectedRevision, long ExpectedSessionRevision);
+    public sealed record MessageRequest(Guid MessageId, string Text, long ExpectedRevision, long ExpectedSessionRevision);
+    public sealed record RunWitness(long ExpectedRevision, long ExpectedRunRevision);
     public static void Map(WebApplication app)
     {
         var group = app.MapGroup("/api/v2/tenants/{tenantId:guid}/sessions").RequireAuthorization();
+        group.MapPost("/{sessionId:guid}/messages", (Guid sessionId, MessageRequest body, HttpContext http, TenantRunService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var receipt = await service.SubmitTextAsync(actor.TenantId, sessionId, Initiator(http, actor), body.MessageId, body.Text,
+                body.ExpectedRevision, body.ExpectedSessionRevision, ct).ConfigureAwait(false);
+            return Results.Json(receipt, statusCode: receipt.Created ? StatusCodes.Status202Accepted : StatusCodes.Status200OK);
+        }));
+        app.MapGet("/api/v2/tenants/{tenantId:guid}/agent-runs/{runId:guid}", (Guid runId, HttpContext http, TenantRunService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            var result = await service.ReadAsync(actor.TenantId, runId, Initiator(http, actor), ct).ConfigureAwait(false);
+            return Results.Json(Safe(result));
+        })).RequireAuthorization();
+        app.MapPost("/api/v2/tenants/{tenantId:guid}/agent-runs/{runId:guid}/cancel", (Guid runId, RunWitness body, HttpContext http, TenantRunService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
+        {
+            var actor = IdentityHttp.TenantContext(http);
+            return Results.Json(Safe(await service.CancelAsync(actor.TenantId, runId, Initiator(http, actor), body.ExpectedRevision, body.ExpectedRunRevision, ct).ConfigureAwait(false)));
+        })).RequireAuthorization();
         group.MapPatch("/{sessionId:guid}", (Guid sessionId, RenameRequest body, HttpContext http, TenantSessionService service, CancellationToken ct) => IdentityHttp.Respond(async () =>
         {
             var actor = IdentityHttp.TenantContext(http);
@@ -50,6 +70,13 @@ public static class TenantSessionEndpoints
     }
     private static TenantSessionInitiator Initiator(HttpContext http, AuthenticatedTenant actor) =>
         new(actor.AccountId, IdentityHttp.SessionId(http.User) ?? throw new AccessDeniedException("initiator_unavailable"), actor.PrincipalId);
+    private static object Safe(TenantRunMetadata result)
+    {
+        var c = result.Context;
+        return new { context = new { c.TenantId, c.AgentPrincipalId, c.OriginalInitiatorPrincipalId, c.SessionId, c.RunId,
+            c.ActivationId, c.RootActivationId, c.ParentRunId, c.ParentActivationId, origin = System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(c.Origin.ToString()) },
+            result.AgentInstanceId, status = result.Status.ToString().ToLowerInvariant(), result.Revision, result.CreatedAt, result.UpdatedAt };
+    }
     private static object Safe(TenantSessionMetadata item) => new { item.Owner.TenantId, item.Owner.SessionId, item.Owner.AgentInstanceId,
         item.Owner.ExecutorPrincipalId, item.Owner.CreatedByPrincipalId, item.Title, mode = item.Mode.ToString().ToLowerInvariant(),
         status = item.Status.ToString().ToLowerInvariant(), item.Revision, item.CreatedAt, item.UpdatedAt,

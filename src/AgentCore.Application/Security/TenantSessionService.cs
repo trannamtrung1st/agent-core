@@ -12,7 +12,7 @@ public sealed record TenantSessionMetadata(TenantSessionRoot Owner, string Title
     long Revision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, SessionLifecycleStatus LifecycleStatus, DateTimeOffset? ArchivedAt);
 public sealed record TenantSessionMetadataPage(IReadOnlyList<TenantSessionMetadata> Items, int Total, int Page, int PageSize);
 
-public sealed partial class TenantSessionService(IIamStore security, ITenantAgentStore agents, ITenantSessionStore sessions,
+public sealed partial class TenantSessionService(IIamStore security, ITenantAgentStore agents, ITenantSessionStore sessions, ITenantRunStore runs,
     ITenantDefinitionStore definitions, IBuiltInAgentDefinitionStore builtIns, IdentityService identity, IamAuthorizer authorizer,
     IModelCatalog models, VoiceAvailability voice, IIdGenerator ids, TimeProvider time)
 {

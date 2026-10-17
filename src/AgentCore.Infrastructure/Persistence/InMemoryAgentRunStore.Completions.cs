@@ -31,7 +31,7 @@ public sealed partial class InMemoryAgentRunStore
                 .OrderBy(i => i.SourceFinishedAtUtc).ThenBy(i => i.ChildAgentRunId)
                 .Select(i => new BackgroundCompletionCandidate(State.Runs[i.ChildAgentRunId], sessions.LoadMetadataAsync(i.ChildSessionId, ct).GetAwaiter().GetResult()!))
                 .Where(c => c.Run.Result?.OutcomeKind == AgentRunOutcomeKind.NoAction ||
-                    !State.Runs.Values.Any(r => r.SessionId == c.Session.Origin.OriginatingSessionId && !r.IsTerminal)
+                    !State.Runs.Values.Where(r => r.Owner.TenantId is null).Any(r => r.SessionId == c.Session.Origin.OriginatingSessionId && !r.IsTerminal)
                     && sessions.LoadMetadataAsync(c.Session.Origin.OriginatingSessionId!.Value, ct).GetAwaiter().GetResult()?.PendingAgentInputIds.Count is not > 0)
                 .Take(limit).ToArray();
             return ValueTask.FromResult<IReadOnlyList<BackgroundCompletionCandidate>>(candidates);
@@ -45,7 +45,7 @@ public sealed partial class InMemoryAgentRunStore
         lock (sessions.AdmissionGate)
         {
             RepairInbox(DateTimeOffset.MinValue);
-            var result = State.Runs.Values.Where(run => run.IsTerminal
+            var result = State.Runs.Values.Where(r => r.Owner.TenantId is null).Where(run => run.IsTerminal
                 && State.CompletionReceipts.TryGetValue(run.AgentRunId, out var inbox) && CompletionInboxMapping.Read(inbox).Status == CompletionInboxStatus.Pending).OrderBy(run => run.UpdatedAtUtc).ThenBy(run => run.AgentRunId)
                 .Select(run => new BackgroundCompletionCandidate(run, sessions.LoadMetadataAsync(run.SessionId, ct).GetAwaiter().GetResult()!))
                 .Where(candidate => candidate.Session is not null && candidate.Session.Origin.MayReportCompletion(candidate.Run.AgentRunId))
@@ -59,10 +59,10 @@ public sealed partial class InMemoryAgentRunStore
         ct.ThrowIfCancellationRequested();
         lock (sessions.AdmissionGate)
         {
-            if (!State.Runs.TryGetValue(childRunId, out var child) || child.Owner != owner) throw AgentCoreErrors.NotFound("Child run was not found.");
+            if (!TryGetLegacyRun(childRunId, out var child) || child.Owner != owner) throw AgentCoreErrors.NotFound("Child run was not found.");
             var session = sessions.LoadMetadataAsync(child.SessionId, ct).GetAwaiter().GetResult() ?? throw AgentCoreErrors.NotFound("Child Session was not found.");
             State.CompletionReceipts.TryGetValue(childRunId, out var receipt);
-            var report = receipt?.ParentActivationId is { } id ? State.Runs.Values.SingleOrDefault(r => r.ActivationId.ToString("D") == id && r.Owner == owner) : null;
+            var report = receipt?.ParentActivationId is { } id ? State.Runs.Values.Where(r => r.Owner.TenantId is null).SingleOrDefault(r => r.ActivationId.ToString("D") == id && r.Owner == owner) : null;
             if (receipt is not null)
             {
                 var item = CompletionInboxMapping.Read(receipt);
@@ -85,7 +85,7 @@ public sealed partial class InMemoryAgentRunStore
         ct.ThrowIfCancellationRequested();
         lock (sessions.AdmissionGate)
         {
-            if (!State.Runs.TryGetValue(childRunId, out var child) || child.Owner != owner || !child.IsTerminal)
+            if (!TryGetLegacyRun(childRunId, out var child) || child.Owner != owner || !child.IsTerminal)
                 throw AgentCoreErrors.NotFound("Completed child run was not found.");
             RepairInbox(now);
             var inserted = State.CompletionReceipts.TryGetValue(childRunId, out var row) && CompletionInboxMapping.Read(row).Status == CompletionInboxStatus.Pending;

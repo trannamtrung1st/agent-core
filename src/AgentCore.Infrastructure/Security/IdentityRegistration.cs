@@ -50,6 +50,9 @@ public static class IdentityRegistration
         services.TryAddSingleton<TenantCredentialOAuthService>();
         services.TryAddSingleton<TenantCredentialOAuthCheckService>();
         services.TryAddSingleton<ITenantSessionStore>(p => (ITenantSessionStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<ITenantRunStore>(p => (ITenantRunStore)p.GetRequiredService<IIamStore>());
+        services.TryAddSingleton<TenantRunConfigurationResolver>();
+        services.TryAddSingleton<TenantRunService>();
         services.TryAddSingleton<TenantSessionService>();
         services.AddHostedService<CredentialOAuthExpiryWorker>();
         services.TryAddSingleton<AccountAdministrationService>();

@@ -29,12 +29,12 @@ public sealed partial class SqliteAgentRunStore
         await RepairInboxAsync(db, now, ct).ConfigureAwait(false);
         await SaveAsync(db, ct).ConfigureAwait(false);
         var items = await db.BackgroundCompletionReceipts.AsNoTracking().Where(i => i.Status == (int)CompletionInboxStatus.Pending
-            && (db.AgentRuns.Any(c => c.AgentRunId == i.ChildAgentRunId && c.PayloadJson.Contains("\"outcomeKind\":1"))
-                || !db.AgentRuns.Any(p => p.SessionId == i.ParentSessionId && p.Status != (int)AgentRunStatus.Completed && p.Status != (int)AgentRunStatus.Failed && p.Status != (int)AgentRunStatus.Cancelled)
+            && (LegacyRuns(db).Any(c => c.AgentRunId == i.ChildAgentRunId && c.PayloadJson.Contains("\"outcomeKind\":1"))
+                || !LegacyRuns(db).Any(p => p.SessionId == i.ParentSessionId && p.Status != (int)AgentRunStatus.Completed && p.Status != (int)AgentRunStatus.Failed && p.Status != (int)AgentRunStatus.Cancelled)
                     && !db.Sessions.Any(p => p.SessionId == i.ParentSessionId && p.PendingAgentInputIdsJson != "[]")))
             .OrderBy(i => i.CreatedAtUtc).ThenBy(i => i.ChildAgentRunId).Take(limit).ToArrayAsync(ct).ConfigureAwait(false);
         var ids = items.Select(i => i.ChildAgentRunId).ToArray();
-        var rows = await db.AgentRuns.AsNoTracking().Where(r => ids.Contains(r.AgentRunId)).OrderBy(r => r.UpdatedAtUtc).ThenBy(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
+        var rows = await LegacyRuns(db).AsNoTracking().Where(r => ids.Contains(r.AgentRunId)).OrderBy(r => r.UpdatedAtUtc).ThenBy(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
         var result = new List<BackgroundCompletionCandidate>();
         foreach (var row in rows)
@@ -55,7 +55,7 @@ public sealed partial class SqliteAgentRunStore
         await SaveAsync(db, ct).ConfigureAwait(false);
         var pending = (await db.BackgroundCompletionReceipts.AsNoTracking().Where(r => r.Status == (int)CompletionInboxStatus.Pending).OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.ChildAgentRunId).Take(limit).ToArrayAsync(ct).ConfigureAwait(false))
             .Where(r => CompletionInboxMapping.Read(r).Status == CompletionInboxStatus.Pending).Take(limit).Select(r => r.ChildAgentRunId).ToArray();
-        var rows = await db.AgentRuns.AsNoTracking().Where(r => pending.Contains(r.AgentRunId)).OrderBy(r => r.UpdatedAtUtc).ThenBy(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
+        var rows = await LegacyRuns(db).AsNoTracking().Where(r => pending.Contains(r.AgentRunId)).OrderBy(r => r.UpdatedAtUtc).ThenBy(r => r.AgentRunId).ToArrayAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
         var result = new List<BackgroundCompletionCandidate>();
         foreach (var row in rows)
@@ -73,8 +73,8 @@ public sealed partial class SqliteAgentRunStore
         var session = await sessions.LoadMetadataAsync(child.SessionId, ct).ConfigureAwait(false) ?? throw AgentCoreErrors.NotFound("Child Session was not found.");
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var receipt = await db.BackgroundCompletionReceipts.AsNoTracking().SingleOrDefaultAsync(r => r.ChildAgentRunId == childRunId.ToString("D")
-            && r.AgentInstanceId == owner.AgentInstanceId.ToString("D") && r.ProfileId == owner.ProfileId.ToString("D"), ct).ConfigureAwait(false);
-        var reportRow = receipt?.ParentActivationId is { } id ? await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(r => r.ActivationId == id, ct).ConfigureAwait(false) : null;
+            && r.AgentInstanceId == owner.AgentInstanceId.ToString("D") && r.ProfileId == AgentRunStoreMapping.ProfileKey(owner), ct).ConfigureAwait(false);
+        var reportRow = receipt?.ParentActivationId is { } id ? await LegacyRuns(db).AsNoTracking().SingleOrDefaultAsync(r => r.ActivationId == id, ct).ConfigureAwait(false) : null;
         if (receipt is not null)
         {
             var item = CompletionInboxMapping.Read(receipt);
@@ -89,14 +89,14 @@ public sealed partial class SqliteAgentRunStore
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
         var receipt = await db.BackgroundCompletionReceipts.AsNoTracking().SingleOrDefaultAsync(receipt => receipt.ChildAgentRunId == childRunId.ToString("D")
-            && receipt.AgentInstanceId == owner.AgentInstanceId.ToString("D") && receipt.ProfileId == owner.ProfileId.ToString("D"), ct).ConfigureAwait(false);
+            && receipt.AgentInstanceId == owner.AgentInstanceId.ToString("D") && receipt.ProfileId == AgentRunStoreMapping.ProfileKey(owner), ct).ConfigureAwait(false);
         return receipt is not null && CompletionInboxMapping.Read(receipt).IsAccounted;
     }
     public async ValueTask SkipCompletionReportAsync(AgentRunOwner owner, Guid childRunId, string reason, DateTimeOffset now, CancellationToken ct = default)
     {
         await using var db = await contexts.CreateDbContextAsync(ct).ConfigureAwait(false);
-        var row = await db.AgentRuns.AsNoTracking().SingleOrDefaultAsync(row => row.AgentRunId == childRunId.ToString("D")
-            && row.AgentInstanceId == owner.AgentInstanceId.ToString("D") && row.ProfileId == owner.ProfileId.ToString("D"), ct).ConfigureAwait(false);
+        var row = await LegacyRuns(db).AsNoTracking().SingleOrDefaultAsync(row => row.AgentRunId == childRunId.ToString("D")
+            && row.AgentInstanceId == owner.AgentInstanceId.ToString("D") && row.ProfileId == AgentRunStoreMapping.ProfileKey(owner), ct).ConfigureAwait(false);
         if (row is null || !AgentRunStoreMapping.ToDomain(row).IsTerminal) throw AgentCoreErrors.NotFound("Completed child run was not found.");
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         await RepairInboxAsync(db, now, ct).ConfigureAwait(false);

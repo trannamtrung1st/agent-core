@@ -297,6 +297,12 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("ExecutorPrincipalId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("OriginalInitiatorPrincipalId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ParentActivationId")
                         .HasColumnType("TEXT");
 
@@ -305,7 +311,6 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ProfileId")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("RootActivationId")
@@ -314,6 +319,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("SessionId")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("TenantId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("ActivationId");
@@ -325,12 +333,20 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("SessionId", "DedupeKey")
                         .IsUnique();
 
+                    b.HasIndex("TenantId", "OriginalInitiatorPrincipalId");
+
                     b.HasIndex("AgentInstanceId", "ProfileId", "BackgroundSourceKey")
                         .IsUnique()
                         .HasFilter("BackgroundSourceKey IS NOT NULL");
 
+                    b.HasIndex("TenantId", "RootActivationId", "ActivationId");
+
+                    b.HasIndex("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId");
+
                     b.ToTable("Activations", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Activations_ExecutionOwner", "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND OriginalInitiatorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL)");
+
                             t.HasCheckConstraint("CK_Activations_Lineage", "length(RootActivationId) = 36 AND (ParentActivationId IS NOT NULL OR RootActivationId = ActivationId) AND (ParentActivationId IS NULL OR (ParentActivationId <> ActivationId AND RootActivationId <> ActivationId))");
                         });
                 });
@@ -948,18 +964,23 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<long>("CreatedAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("ExecutorPrincipalId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long?>("LeaseExpiresAtUtc")
                         .HasColumnType("INTEGER");
 
                     b.Property<long?>("NextRetryAtUtc")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("OriginalInitiatorPrincipalId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("PayloadJson")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ProfileId")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<long>("Revision")
@@ -977,6 +998,9 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("UpdatedAtUtc")
                         .HasColumnType("INTEGER");
 
@@ -993,13 +1017,22 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                     b.HasIndex("ActivationId", "RootActivationId")
                         .IsUnique();
 
+                    b.HasIndex("TenantId", "OriginalInitiatorPrincipalId");
+
                     b.HasIndex("RootActivationId", "CreatedAtUtc", "AgentRunId");
 
                     b.HasIndex("Status", "NextRetryAtUtc", "CreatedAtUtc");
 
                     b.HasIndex("AgentInstanceId", "ProfileId", "SessionId", "CreatedAtUtc");
 
-                    b.ToTable("AgentRuns", (string)null);
+                    b.HasIndex("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId");
+
+                    b.HasIndex("TenantId", "SessionId", "CreatedAtUtc", "AgentRunId");
+
+                    b.ToTable("AgentRuns", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AgentRuns_ExecutionOwner", "(TenantId IS NULL AND ExecutorPrincipalId IS NULL AND OriginalInitiatorPrincipalId IS NULL AND ProfileId IS NOT NULL) OR (TenantId IS NOT NULL AND ExecutorPrincipalId IS NOT NULL AND ProfileId IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ArtifactRecordRow", b =>
@@ -3116,6 +3149,18 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ParentActivationId", "RootActivationId")
                         .HasPrincipalKey("ActivationId", "RootActivationId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Domain.Security.TenantUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OriginalInitiatorPrincipalId")
+                        .HasPrincipalKey("TenantId", "PrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .HasPrincipalKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.ActivationSourceEntryRecord", b =>
@@ -3216,6 +3261,18 @@ namespace AgentCore.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("AgentCore.Infrastructure.Persistence.ActivationRecord", "ActivationId", "RootActivationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("AgentCore.Domain.Security.TenantUser", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OriginalInitiatorPrincipalId")
+                        .HasPrincipalKey("TenantId", "PrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgentCore.Infrastructure.Security.TenantSessionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .HasPrincipalKey("TenantId", "SessionId", "AgentInstanceId", "ExecutorPrincipalId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("AgentCore.Infrastructure.Persistence.AutomationTriggerRecordEntity", b =>

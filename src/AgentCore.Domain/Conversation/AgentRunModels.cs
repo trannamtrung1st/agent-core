@@ -95,25 +95,32 @@ public sealed class AgentRunTransitionException : Exception
 public readonly record struct AgentRunOwner
 {
     [System.Text.Json.Serialization.JsonConstructor]
-    public AgentRunOwner(Guid agentInstanceId, Guid profileId)
+    public AgentRunOwner(Guid agentInstanceId, Guid? profileIdOrNull, Guid? tenantId = null, Guid? executorPrincipalId = null)
     {
         if (agentInstanceId == Guid.Empty)
         {
             throw new ArgumentException("AgentRun owner requires an Agent Instance.", nameof(agentInstanceId));
         }
 
-        if (profileId == Guid.Empty)
+        if (tenantId is null ? profileIdOrNull is null || profileIdOrNull == Guid.Empty || executorPrincipalId is not null
+            : tenantId == Guid.Empty || executorPrincipalId is null || executorPrincipalId == Guid.Empty || profileIdOrNull is not null)
         {
-            throw new ArgumentException("AgentRun owner requires a trusted profile.", nameof(profileId));
+            throw new ArgumentException("AgentRun owner requires either tenant executor identity or a trusted profile.");
         }
 
         AgentInstanceId = agentInstanceId;
-        ProfileId = profileId;
+        ProfileIdOrNull = profileIdOrNull; TenantId = tenantId; ExecutorPrincipalId = executorPrincipalId;
     }
 
     public Guid AgentInstanceId { get; }
 
-    public Guid ProfileId { get; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Guid ProfileId => ProfileIdOrNull ?? throw new InvalidOperationException("Tenant execution has no global profile.");
+    [System.Text.Json.Serialization.JsonPropertyName("profileId")]
+    public Guid? ProfileIdOrNull { get; }
+    public Guid? TenantId { get; }
+    public Guid? ExecutorPrincipalId { get; }
+    public static AgentRunOwner ForTenant(Guid tenantId, Guid instanceId, Guid executorPrincipalId) => new(instanceId, null, tenantId, executorPrincipalId);
 }
 
 public sealed class AgentRunModelPin

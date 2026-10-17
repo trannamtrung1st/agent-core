@@ -193,7 +193,7 @@ public sealed partial class TenantDefinitionIntegrationTests
                 var admin = new InMemoryAgentDefinitionAdminStore(f.Ids); var resources = new InMemoryAgentDefinitionResourceAdminStore(admin, f.Content, f.Ids);
                 admin.ResourceStore = resources; f.Admin = admin; f.Resources = resources; f.Evaluation = new InMemoryDefinitionDraftEvaluationStore(admin);
                 var instances = new InMemoryAgentInstanceStore(); var sessions = new InMemoryMemoryStore();
-                f.Instances = instances; f.SessionStore = sessions; f.Iam = new InMemoryIamStore(instances, admin, sessions);
+                f.Instances = instances; f.SessionStore = sessions; f.Iam = new InMemoryIamStore(instances, admin, sessions, credentials: new InMemoryCredentialStore(instances));
             }
             return f;
         }

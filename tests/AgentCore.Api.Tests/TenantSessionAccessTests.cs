@@ -8,7 +8,7 @@ using AgentCore.Domain.Conversation;
 
 namespace AgentCore.Api.Tests;
 
-public sealed class TenantSessionAccessTests
+public sealed partial class TenantSessionAccessTests
 {
     [Fact]
     public async Task Canonical_Session_HTTP_pins_authenticated_creator_and_actual_executor_and_excludes_legacy_routes()
